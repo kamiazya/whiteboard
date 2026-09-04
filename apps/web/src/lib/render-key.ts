@@ -134,6 +134,19 @@ export function isMemoisableKey(key: RenderKey): boolean {
 }
 
 /**
+ * The path a worker may store this answer under, or `undefined` when it may
+ * not remember it at all.
+ *
+ * Derived from `isMemoisableKey` rather than decided again, so the in-memory
+ * map and the persistent tier cannot disagree about which entries are safe.
+ * They must not: an entry the map refuses because it could not notice its
+ * document changing would, on disk, outlive the tab as well.
+ */
+export function cacheKeyFor(key: RenderKey): string | undefined {
+  return isMemoisableKey(key) ? renderKeyPath(key) : undefined
+}
+
+/**
  * One path segment, unambiguous whatever the value contains.
  *
  * Both `documentId` and the version are opaque strings from a keeper — the
@@ -156,12 +169,23 @@ function segment(value: string): string {
  * build's whole cache one directory removal rather than a scan.
  */
 /**
- * What a family's bytes are. An outline is block geometry, so calling its
- * entry `.svg` would misdescribe it to the OPFS store and to anyone reading
- * a directory listing.
+ * What a stored entry's bytes are — JSON for every family, and that is a
+ * correction to this key's first sketch rather than an oversight.
+ *
+ * `.svg` was right while the entry was imagined as the picture alone. What a
+ * caller actually needs back is the whole worker reply: an SVG AND the bounds
+ * a consumer scales it to, or an outline's rectangles. Storing only the SVG
+ * would mean re-deriving the extent by parsing its viewBox back out, to avoid
+ * writing four numbers — and `layout`'s reply carries a `scene` and `anchors`
+ * that are not optional on it, so an entry without them could not be served
+ * back as one at all.
+ *
+ * The FAMILY is still named in the path, one segment up, which is what the
+ * extension was carrying: a directory listing says `svg/` or `outline/`, and
+ * a sweep can still drop one family the way it drops one build.
  */
 const EXTENSION: Readonly<Record<BrokeredPipeline, string>> = {
-  svg: 'svg',
+  svg: 'json',
   outline: 'json',
 }
 

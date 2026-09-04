@@ -1,6 +1,6 @@
 # ADR-0027: Every picture of a document goes through one broker, and the cache is a memo
 
-**Status:** Accepted — broker port and its in-tab implementation land with this ADR. Every surface named below now asks through it; OPFS persistence and the SharedWorker implementation are named follow-ups
+**Status:** Accepted — broker port, its in-tab implementation and the OPFS tier below all land. Every surface named below asks through it; the SharedWorker implementation remains a named follow-up
 
 ## Context
 
@@ -105,7 +105,7 @@ written. **Cross-tab leader election is an optimisation, never a correctness
 requirement.** That is what lets the SharedWorker implementation wait for
 evidence instead of blocking the first increment.
 
-### 5. Persistence is OPFS, and the path is the invalidation strategy
+### 5. Persistence is OPFS, the path is the invalidation strategy, and the tier lives in the worker
 
 The key derives the path deterministically, with the build id leading, and
 every component the keeper supplied is **encoded** — the document contract
@@ -114,27 +114,79 @@ a timestamp would otherwise move the boundary between segments and let two
 different documents join to one path. Verified rather than argued: unencoded,
 `{id: 'a', version: 'b/c'}` and `{id: 'a/b', version: 'c'}` produce the same
 string. The `~` prefix on each segment is what additionally makes `.` and
-`..` impossible as whole segments, which matters before the store exists
-rather than after.
+`..` impossible as whole segments.
 
 ```
-render/~<buildId>/<pipeline>/<kind>/~<documentId>/~<versionKey>[-<theme>].<ext>
+render/~<buildId>/<pipeline>/<kind>/~<documentId>/~<versionKey>[-<theme>].json
 ```
 
 The pipeline is part of the identity, not decoration. The broker holds one
 map, so without it a tree row's outline and a list row's SVG name the same
 entry — and whichever arrives first answers the other, in a type the caller
 has no reason to check. It sits under the build id so a sweep can drop one
-family the way it drops one build, and the extension is what the bytes
-actually are (`.svg`, or `.json` for an outline).
+family the way it drops one build.
+
+**JSON for both families**, which corrects this decision's first sketch. `.svg`
+was right while an entry was imagined as the picture alone; what a caller
+needs back is the whole worker reply — an SVG *and* the bounds a consumer
+scales it to, or an outline's rectangles — and `layout`'s reply additionally
+carries a `scene` and `anchors` that are not optional on it, so an entry
+without them could not be served back as one. The family is still named by
+its own path segment, which is what the extension was carrying.
 
 Retiring a build's entire cache is removing one directory — no scan, no
 scheduler, no index. Write-time is enough: when storing an entry, drop any
 sibling directory that is not the current build.
 
-The realm assignment follows a probe rather than a preference: only a
-**dedicated worker** has `createSyncAccessHandle`, and that is also where the
-bytes are produced, so the renderer persists its own output with no extra hop.
+**The tier lives in the WORKER, on both sides.** The realm assignment was
+first argued from `createSyncAccessHandle`, which only a dedicated worker
+has; the stronger reason is the read. Measured in a real browser, an OPFS
+read costs 1.5-2.7ms — and a render already runs off the main thread, so
+checking the cache on the *asking* thread would put ~2ms per row back onto
+the very thread [#1275] and [#1293] spent their effort clearing. So the
+request carries a `cacheKey` (the key's own path, absent when
+`isMemoisableKey` refuses it), the worker answers from the store before it
+works, and writes after. The stored value carries no `id` — an id belongs to
+a request, not to a picture — so a hit is stamped with the asking request's
+own, or the pool would be handed a reply addressed to a request it had
+already settled.
+
+### 5a. What is stored is decided by what the render cost, not by its pipeline
+
+Persisting everything is a loss on the cheap end. Measured in a real browser,
+medians of 15 interleaved rounds:
+
+| case | payload | render | OPFS read | OPFS write |
+|---|---|---|---|---|
+| markdown, 4 sections | 3.1 KB | 7.4 ms | 1.9 ms | ~2.3 ms |
+| markdown, 20 sections | 14.9 KB | **21.8 ms** | 2.2 ms | ~2.3 ms |
+| markdown, 60 sections | 44.4 KB | **67.2 ms** | 2.3 ms | ~2.3 ms |
+| spatial, 12 nodes | 2.6 KB | 2.0 ms | 1.7 ms | 2.6 ms |
+| spatial, 40 nodes | 9.4 KB | 3.0 ms | 1.7 ms | 2.6 ms |
+| spatial, 120 nodes | 28.8 KB | 7.2 ms | 2.1 ms | 2.7 ms |
+| spatial, 400 nodes | 97.0 KB | 19.9 ms | 2.7 ms | 3.1 ms |
+
+Two things follow, and neither was visible from the design.
+
+**Text shaping is what persistence is for.** It grows superlinearly where an
+OPFS read stays flat at ~2ms, so a list of twenty 20-section markdown rows is
+436ms of worker time against 44ms of reads. **A small spatial canvas is a
+loss**: 12 nodes saves 0.3ms and costs 2.6ms to store, so a naive
+"persist everything" makes the first visit slower to buy nothing on the
+second.
+
+So the gate is a **floor on the measured render**, `STORE_FLOOR_MS = 5`, and
+a floor rather than a per-pipeline rule because the cost is not a property of
+the pipeline: a 400-node spatial canvas clears it and a four-section markdown
+body barely does. Timing the work that actually ran stays true as either
+pipeline changes.
+
+The floor sits in a real gap rather than near either side. Measured warm
+round-trips through the pool: a 12-node canvas is 3.4ms and a 20-section
+markdown body 20.4ms. The first render of a session is not in that gap — a
+cold layout measured 2477ms, almost all of it worker startup and WASM — and
+storing it is correct: that render really cost that, and a list of twenty
+rows pays it once rather than per row.
 
 ### 6a. Work nobody is waiting on says so, and the fleet believes it
 
@@ -180,14 +232,25 @@ is stated per kind rather than applied uniformly.
 
 Still open, and named rather than assumed:
 
-- **Persistence still needs a version key on the LIST surfaces.**
-  `documentSummarySchema` carries no frontier, and `updatedAt` is stamped per
-  push in practice but optional in the schema. A key with no version cannot
-  notice its document changing, so `isMemoisableKey` refuses to remember a
-  completed render under one and only the in-flight join applies there —
-  honest behaviour rather than a limitation to work around, since a memo
-  under such a key would serve the old picture for as long as the tab is
-  open.
+- **The list surfaces' version key was measured, and it is weaker than this
+  ADR first claimed rather than absent.** `writeWorkspaceDocumentContent`
+  re-stamps a tree entry's `updatedAt` only when the projected content
+  actually differs, and that is what a list row reads. Measured directly in
+  `loro-adapter`: a content change moved the stamp (`...158` to `...168`) and
+  a no-op write did not move it — which is exactly the property a cache key
+  needs, and the opposite of what `documentEntrySchema`'s own comment ("when
+  the placement last changed") suggests.
+
+  Two real weaknesses remain, and only the second argues for a frontier:
+  the field is OPTIONAL, so a row without one keys `version: null` and
+  `isMemoisableKey` correctly refuses to remember it at all; and its
+  resolution is one millisecond of the writing client's wall clock. An
+  in-tab memo under a collided stamp dies with the tab. **A stored one does
+  not**, which is the one thing persistence genuinely raises the bar on.
+  Carrying a real frontier to `documentEntrySchema` / `documentSummarySchema`
+  would close it and change nothing else — a four-layer contract change for a
+  one-millisecond window, so it stays a named follow-up rather than a
+  prerequisite.
 
   The OPEN document is no longer in that position: `DocumentSyncSession`
   answers `getFrontier()`, loro's own id for its committed state, and the
@@ -210,9 +273,15 @@ Still open, and named rather than assumed:
 - **Safari and iOS are unmeasured.** SharedWorker is expected absent, OPFS
   expected present. iOS is best-effort by standing policy, and the fallback is
   the in-tab implementation this ADR ships first.
-- **The version-thumbnail PNG path is left alone here.** Its read side is dead,
-  so the question is whether the feature exists at all, and that is a product
-  decision rather than a caching one.
+- **The version-thumbnail PNG path is left alone here**, and the reason this
+  ADR first gave for that was WRONG. Its read side is not dead: `VersionThumbnail`
+  is rendered by `VersionTimeline`'s rows and by both panes of `MergeDialog`,
+  and `attachVersionThumbnail` writes it from both document pages. (The claim
+  confused it with `DocumentThumb`, a different component that really did have
+  no call site and has since been deleted.) It is left alone for a caching
+  reason instead: the picture is written once per save and read back as stored
+  bytes, so there is no repeated render for a memo to join, and `png-raster`
+  is deliberately outside `brokeredPipelineSchema`.
 
 ## Alternatives considered
 

@@ -35,7 +35,7 @@ import { unhandledKind } from '../../lib/exhaustive.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
-import { renderKeyOf } from '../../lib/render-key.js'
+import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { WorkspaceFilesSource } from './files-source.js'
 
@@ -65,20 +65,35 @@ export interface RowRenderDeps {
    * Both renders are injected like the reads above, so the branch that
    * actually produces a picture is assertable without standing up a worker.
    */
-  readonly renderMarkdown?: (body: string, maxWidth: number) => Promise<DocumentRender | null>
+  readonly renderMarkdown?: (
+    body: string,
+    maxWidth: number,
+    cacheKey?: string,
+  ) => Promise<DocumentRender | null>
   /** Takes the stored SNAPSHOT — the worker decodes it, not this thread. */
   readonly renderSpatial?: (
     snapshot: Uint8Array,
     theme: ResolvedTheme,
+    cacheKey?: string,
   ) => Promise<DocumentRender | null>
 }
 
+// `cacheKey` rides ON the request rather than being applied around the call:
+// the persistent tier lives in the worker, beside the bytes, so reading it
+// costs nothing on the thread that asked (ADR-0027 decision 5).
 async function renderMarkdownInPool(
   body: string,
   maxWidth: number,
+  cacheKey?: string,
 ): Promise<DocumentRender | null> {
   const reply = await sharedLayoutWorkerPool().run<MarkdownRenderResponse>(
-    { type: 'markdown-render', id: nextLayoutRequestId(), body, maxWidth },
+    {
+      type: 'markdown-render',
+      id: nextLayoutRequestId(),
+      body,
+      maxWidth,
+      ...(cacheKey === undefined ? {} : { cacheKey }),
+    },
     'background',
   )
   return reply.type === 'markdown-render-done' ? { svg: reply.svg, bounds: reply.bounds } : null
@@ -87,9 +102,16 @@ async function renderMarkdownInPool(
 async function renderSpatialInPool(
   snapshot: Uint8Array,
   theme: ResolvedTheme,
+  cacheKey?: string,
 ): Promise<DocumentRender | null> {
   const reply = await sharedLayoutWorkerPool().run<LayoutResponse>(
-    { type: 'layout', id: nextLayoutRequestId(), snapshot, theme },
+    {
+      type: 'layout',
+      id: nextLayoutRequestId(),
+      snapshot,
+      theme,
+      ...(cacheKey === undefined ? {} : { cacheKey }),
+    },
     'background',
   )
   return reply.type === 'laid-out' ? { svg: reply.svg, bounds: reply.bounds } : null
@@ -120,15 +142,22 @@ function renderedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' 
 }
 
 export function createRowRenderLoader(deps: RowRenderDeps) {
-  const produce = async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
+  const produce = async (
+    document: WorkspaceDocumentEntry,
+    cacheKey: string | undefined,
+  ): Promise<DocumentRender | null> => {
     if (renderedKind(document) === 'markdown') {
       const markdown = await deps.source.loadMarkdown(document)
       if (markdown.trim() === '') return null
-      return await (deps.renderMarkdown ?? renderMarkdownInPool)(markdown, ROW_LAYOUT_WIDTH)
+      return await (deps.renderMarkdown ?? renderMarkdownInPool)(
+        markdown,
+        ROW_LAYOUT_WIDTH,
+        cacheKey,
+      )
     }
 
     const snapshot = await deps.source.loadSpatialSnapshot(document)
-    return await (deps.renderSpatial ?? renderSpatialInPool)(snapshot, deps.theme)
+    return await (deps.renderSpatial ?? renderSpatialInPool)(snapshot, deps.theme, cacheKey)
   }
 
   return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
@@ -144,7 +173,7 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
         },
         deps.theme,
       )
-      return await deps.broker.render(key, () => produce(document))
+      return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
     } catch {
       return null
     }
