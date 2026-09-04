@@ -152,3 +152,17 @@ test('an empty window reports nothing, not an empty-shaped something', () => {
   assert.deepEqual(singles, [])
   assert.deepEqual(unattributedRuns, [])
 })
+
+test('the report ends by telling the session what to DO, not only what happened', () => {
+  const report = formatReport(
+    clusterFailures([
+      { runId: '1', createdAt: '2026-09-01T00:00:00Z', titles: ['[p] a.test.ts > x'] },
+      { runId: '2', createdAt: '2026-09-02T00:00:00Z', titles: ['[p] a.test.ts > x'] },
+    ]),
+    14,
+  )
+  assert.match(report, /Act on the >=2x entries NOW/)
+  assert.match(report, /root-cause fix lane/)
+})
+
+import { formatReport } from './flake-watch-lib.mjs'
