@@ -1,6 +1,6 @@
 # ADR-0023: A workspace has one keeper; every other copy is a replica
 
-**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: offline SPATIAL edits (decision 3's markdown half shipped; the canvas editor mount is the only missing piece — the convergence argument is identical)
+**Status:** Accepted — decisions 1–5 are implemented in full; the dated notes under each decision say what landed when
 
 ## Context
 
@@ -134,10 +134,21 @@ boundary, not a different design.
 > recorded frontier ships one full snapshot, ending the snapshot era).
 > `scheduleReplicaPush` runs on every daemon resolve, BEFORE the pull; a
 > clean replica costs one loro-free IndexedDB frontier read and no
-> network, so cleanliness is the dedupe. Spatial documents stay read-only;
-> control-plane actions stay absent. No "unsent edits" badge on purpose:
-> the push is automatic on the first resolve after the daemon returns, so
-> the state it would name resolves itself in seconds.
+> network, so cleanliness is the dedupe. Control-plane actions stay
+> absent. No "unsent edits" badge on purpose: the push is automatic on the
+> first resolve after the daemon returns, so the state it would name
+> resolves itself in seconds.
+>
+> **Spatial edits, 2026-09-05 — decision 3 complete.** The offline page
+> mounts the real spatial editor over the replica record; persistence goes
+> through `reconcileSpatialCanvas` (loro-adapter), a VISIBLE-diff applier —
+> writes what changed, deletes only ids the caller could see, and never
+> touches a record the current schema cannot read. That property is the
+> sharp edge on a replica: a whole-canvas resync's silent deletion of an
+> unknown-version record would become an op that SHIPS, erasing a newer
+> client's node on the keeper. Pinned by planting such a record and editing
+> around it; mutation-checked — degrading the page's persist to
+> `writeSpatialCanvas` turns exactly that test red.
 
 ### 4. Transparent mode is rejected as specified, and its goal is met here
 

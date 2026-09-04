@@ -15,17 +15,20 @@
  * viewer, which must stay out of the entry closure
  * (entry-graph-loro-free.test.ts).
  */
-import { CanvasViewer } from '@kamiazya/whiteboard-canvas-viewer'
+
 import {
   documentContainers,
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
+  reconcileSpatialCanvas,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
+import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
 import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -147,7 +150,30 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
   // Selection decides the draft; the record is the source on every switch.
   useEffect(() => {
     setDraft(content?.kind === 'markdown' ? content.body : null)
+    spatialPrev.current = content?.kind === 'spatial' ? content.canvas : null
+    setSpatialDraft(content?.kind === 'spatial' ? content.canvas : null)
   }, [content])
+
+  // The spatial draft mirrors the markdown one; `spatialPrev` is what the
+  // visible-diff reconcile compares against, advanced on every commit.
+  const [spatialDraft, setSpatialDraft] = useState<SpatialCanvas | null>(null)
+  const spatialPrev = useRef<SpatialCanvas | null>(null)
+  const onSpatialChange = useCallback(
+    (next: SpatialCanvas) => {
+      if (state.kind !== 'ready' || selected === undefined || selected.kind !== 'spatial') return
+      setSpatialDraft(next)
+      const prev = spatialPrev.current
+      if (prev !== null) {
+        // A visible diff, never a whole-canvas resync: a resync's silent
+        // deletion of an unknown-version record would become an op that
+        // SHIPS, erasing a newer client's node on the keeper.
+        reconcileSpatialCanvas(documentContainers(state.record, selected.documentId), prev, next)
+      }
+      spatialPrev.current = next
+      scheduleSave(state.record)
+    },
+    [state, selected, scheduleSave],
+  )
 
   const onDraftChange = useCallback(
     (next: string) => {
@@ -168,8 +194,7 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
         <span className="font-medium">{displayName ?? workspaceId}</span>
         {' — the daemon that keeps this workspace is unreachable. '}
         This is the copy cached in this browser (synced {new Date(syncedAt).toLocaleString()}).
-        Markdown edits save here and ship to the daemon when it returns; spatial documents open
-        read-only.
+        Edits save here and ship to the daemon when it returns.
       </div>
       {state.kind === 'loading' && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
       {state.kind === 'missing' && (
@@ -186,7 +211,18 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
               {...(selectedPath === null ? {} : { selectedPath })}
             />
           </div>
-          <div className="min-w-0 flex-1 overflow-auto p-4">
+          <div
+            className={
+              // The spatial editor measures itself: inside a padded
+              // overflow-auto box its h-full slightly overflows, a scrollbar
+              // appears, the box shrinks, the scrollbar leaves — a
+              // ResizeObserver oscillation React reports as "maximum update
+              // depth exceeded". Text content keeps the scrolling pane.
+              content?.kind === 'spatial'
+                ? 'min-w-0 flex-1 overflow-hidden'
+                : 'min-w-0 flex-1 overflow-auto p-4'
+            }
+          >
             {content === null && (
               <p className="text-sm text-muted-foreground">Select a document to read.</p>
             )}
@@ -198,10 +234,16 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
                 onChange={onDraftChange}
               />
             )}
-            {content?.kind === 'spatial' && (
-              <CanvasViewer
-                canvas={content.canvas}
-                label={selected === undefined ? undefined : (selected.name ?? selected.path)}
+            {content?.kind === 'spatial' && spatialDraft !== null && (
+              <SpatialEditor
+                key={selected?.documentId}
+                canvas={spatialDraft}
+                onChange={onSpatialChange}
+                // Editing-forward: the palette still offers the hand tool,
+                // but an offline visit that came here to fix something
+                // should not need a tool switch first.
+                defaultTool="select"
+                className="h-full"
               />
             )}
           </div>

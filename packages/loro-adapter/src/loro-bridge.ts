@@ -321,6 +321,77 @@ export function deleteSpatialEdge(doc: DocumentContainers, edgeId: string): void
   if (deleteEdgeInto(doc, edgeId)) doc.commit()
 }
 
+/**
+ * Applies `next` to the stored canvas as a VISIBLE-diff against `prev`:
+ * writes only entries that changed, deletes only ids the caller could SEE
+ * in `prev` — and therefore never touches a record the current schema
+ * cannot read. That is the property `writeSpatialCanvas`'s whole-truth
+ * resync deliberately does not have, and it is load-bearing for a REPLICA:
+ * a resync's silent deletion of an unknown-version record would become an
+ * op that SHIPS, erasing a newer client's node on the keeper.
+ *
+ * `prev` must be the canvas the edit started from (what `readSpatialCanvas`
+ * answered), not an older snapshot — a stale `prev` under-reports deletions
+ * and over-reports changes, both of which stay safe but write more ops than
+ * needed. Node/edge/comment writes share one commit; the envelope (the
+ * non-comment `x-whiteboard` fields) is a single LWW value and is only
+ * touched when it visibly changed.
+ */
+export function reconcileSpatialCanvas(
+  doc: DocumentContainers,
+  prev: SpatialCanvas,
+  next: SpatialCanvas,
+): void {
+  const same = (a: unknown, b: unknown): boolean =>
+    a === b || JSON.stringify(a) === JSON.stringify(b)
+
+  withSpatialBatch(doc, (writer) => {
+    const prevNodes = new Map(prev.nodes.map((node) => [node.id, node]))
+    const nextNodeIds = new Set(next.nodes.map((node) => node.id))
+    for (const node of next.nodes) {
+      const before = prevNodes.get(node.id)
+      if (before === undefined || !same(before, node)) writer.writeNode(node)
+    }
+    for (const id of prevNodes.keys()) if (!nextNodeIds.has(id)) writer.deleteNode(id)
+
+    const prevEdges = new Map(prev.edges.map((edge) => [edge.id, edge]))
+    const nextEdgeIds = new Set(next.edges.map((edge) => edge.id))
+    for (const edge of next.edges) {
+      const before = prevEdges.get(edge.id)
+      if (before === undefined || !same(before, edge)) writer.writeEdge(edge)
+    }
+    for (const id of prevEdges.keys()) if (!nextEdgeIds.has(id)) writer.deleteEdge(id)
+
+    const prevComments = new Map(
+      (prev[EXTENSION_FIELD]?.comments ?? []).map((comment) => [comment.id, comment]),
+    )
+    const nextComments = next[EXTENSION_FIELD]?.comments ?? []
+    const nextCommentIds = new Set(nextComments.map((comment) => comment.id))
+    for (const comment of nextComments) {
+      const before = prevComments.get(comment.id)
+      if (before === undefined || !same(before, comment)) writer.writeComment(comment)
+    }
+    for (const id of prevComments.keys()) {
+      if (!nextCommentIds.has(id)) writer.deleteComment(id)
+    }
+  })
+
+  const envelopeOf = (canvas: SpatialCanvas): Record<string, unknown> => {
+    const { comments: _comments, ...envelope } = canvas[EXTENSION_FIELD] ?? {}
+    return envelope
+  }
+  const nextEnvelope = envelopeOf(next)
+  if (!same(envelopeOf(prev), nextEnvelope)) {
+    const canvasMap = doc.getMap(CANVAS_KEY)
+    if (Object.values(nextEnvelope).every((value) => value === undefined)) {
+      canvasMap.delete(EXTENSION_FIELD)
+    } else {
+      canvasMap.set(EXTENSION_FIELD, nextEnvelope)
+    }
+    doc.commit()
+  }
+}
+
 /** Uncommitted spatial writes scoped to one `withSpatialBatch` call. */
 export interface SpatialBatchWriter {
   writeNode(node: SpatialNode): void
