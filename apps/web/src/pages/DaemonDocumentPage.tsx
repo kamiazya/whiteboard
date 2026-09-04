@@ -34,10 +34,7 @@ import {
   type VersionPreviewSession,
 } from '../components/VersionTimeline'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
-import {
-  BookmarkAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/BookmarkAction.js'
+import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
@@ -86,6 +83,7 @@ import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
+import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 const log = getAppLogger('daemon-document-page')
 
@@ -306,9 +304,6 @@ export function DaemonDocumentPage({
     setHistoryOpen(true)
     setBookmarkArmed((n) => n + 1)
   })
-
-  const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -768,37 +763,40 @@ export function DaemonDocumentPage({
     }
   }
 
-  const saveVersion = async (label: string): Promise<void> => {
-    if (canvas === null || savingVersion) return
-    // The document this run is about, fixed before the first await — a save
-    // that started on A must not report itself under B. The scope-reset has
-    // already cleared the outcome by then, so the message would read as B's.
-    const startedOn = canvas.path
-    setSavingVersion(true)
-    setSaveVersionOutcome(null)
+  const {
+    saving: savingVersion,
+    outcome: saveVersionOutcome,
+    run: runVersionSave,
+  } = useVersionSaveFlow(currentDocumentPathRef, async (label) => {
+    // Narrowed by the precondition in `saveVersion` below, which never
+    // calls `run` (so never reaches this body) while canvas is null.
+    if (canvas === null) {
+      throw new Error('saveVersion: no canvas')
+    }
     // Captured BEFORE the POST, not after. `exportScene` reads the live scene
     // synchronously at call time, so starting it here binds the picture to the
     // state this save is about to mark. Awaiting the response first meant an
     // edit made during it was drawn onto the older point — a picture of
     // content that version does not contain.
     const picture = getThumbnailBlob()
-    try {
-      const res = await daemonFetch(
-        `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label }),
-        },
-      )
-      if (!res.ok) throw new Error(`save failed: ${res.status}`)
-      const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-      if (!parsed.success) {
-        log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
-        throw new Error('save response did not match schema')
-      }
-      if (currentDocumentPathRef.current !== startedOn) return
-      setSaveVersionOutcome('saved')
+    const res = await daemonFetch(
+      `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ label }),
+      },
+    )
+    if (!res.ok) throw new Error(`save failed: ${res.status}`)
+    const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+    if (!parsed.success) {
+      log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
+      throw new Error('save response did not match schema')
+    }
+    // The rest is the post-save announce work — refresh signals, thumbnail
+    // attach, the identity event — run only once the guard has confirmed
+    // this save's document is still the one on screen.
+    return () => {
       setVersionRefreshSignal((n) => n + 1)
       // The thumbnail rides with the bookmark, as it did when the top bar
       // owned the save. It moved here with the save itself: the bar no
@@ -827,12 +825,11 @@ export function DaemonDocumentPage({
       // identity-scoped event useDocumentSync fires on a broadcast — otherwise
       // HeaderSaveDot never learns this save happened and stays dirty.
       dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
-    } catch {
-      if (currentDocumentPathRef.current !== startedOn) return
-      setSaveVersionOutcome('failed')
-    } finally {
-      if (currentDocumentPathRef.current === startedOn) setSavingVersion(false)
     }
+  })
+  const saveVersion = async (label: string): Promise<void> => {
+    if (canvas === null) return
+    await runVersionSave(label)
   }
 
   // The page-level render state, derived once (see daemon-page-state.ts for
