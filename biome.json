@@ -75,7 +75,9 @@
         "gemini-extension.json",
         "server.json"
       ],
-      "formatter": { "enabled": false }
+      "formatter": {
+        "enabled": false
+      }
     },
     {
       "includes": [
@@ -107,6 +109,12 @@
           }
         }
       }
+    }
+  ],
+  "plugins": [
+    {
+      "path": "./tools/biome-plugins/test-flake-shapes.grit",
+      "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.browser.test.ts", "**/*.browser.test.tsx"]
     }
   ]
 }

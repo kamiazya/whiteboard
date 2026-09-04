@@ -46,6 +46,7 @@ describe('dismissBootSplash', () => {
     vi.useFakeTimers()
     document.body.innerHTML = '<div id="root"><div class="wb-boot"></div></div>'
   })
+  // biome-ignore lint/plugin: boot splash DOM predates React; nothing mounts a root here
   afterEach(() => {
     vi.useRealTimers()
     document.body.innerHTML = ''
