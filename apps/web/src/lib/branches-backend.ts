@@ -19,8 +19,12 @@ import { type BranchesState, branchesApi } from '../hooks/useBranches.js'
  * declares as a capability. So this seam is not how that difference gets
  * decided — it is how the difference stops being enforced by REMEMBERING.
  *
- * Before it, `useBranches` built `/api/workspaces/...` as a template string
- * and called `apiFetch`, gated by an `enabled` flag that defaults to ON.
+ * Before it, `useBranches` built the daemon's document route as a template
+ * string and called `apiFetch`, gated by an `enabled` flag that defaults to
+ * ON. (Named in words rather than written out: `web-api-paths-mounted` scans
+ * apps/web for API path literals WITHOUT skipping comments, so a pseudo-path
+ * in prose reaches it as a route the daemon fails to mount — including, when
+ * this comment first tried to explain that, the fragment it quoted.)
  * Three consumers; one passed the flag. The other two were saved by where
  * they are mounted — a `branchesEnabled &&` in the top bar, and living only
  * on the daemon page — which is a property of today's tree rather than
