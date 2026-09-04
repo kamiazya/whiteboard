@@ -19,6 +19,7 @@ const complete = {
   properties: ['none: pure UI wiring'],
   blastRadius: ['none: new leaf module'],
   userReach: ['rendered by CanvasPage, reachable from /w/:ws'],
+  benefit: 'obvious: a missing button, visible in the diff',
 }
 
 test('a complete design explains nothing', () => {
@@ -46,6 +47,23 @@ test('a blank entry is reported as its own problem, distinct from a missing fiel
   assert.notEqual(blank[0], missing[0])
 })
 
+// The checkpoint that asks what the change is WORTH, and in which currency. A design that names
+// no column has not chosen an instrument, which is how a relocation gets measured with a
+// stopwatch and reported as a null result.
+test('an unclaimed benefit is its own checkpoint, and the problem names the columns', () => {
+  const { benefit, ...partial } = complete
+  const problems = explainDesignShape(partial)
+  assert.equal(problems.length, 1)
+  assert.ok(problems[0].includes('benefit'))
+  assert.match(problems[0], /relocation/)
+})
+
+test('a benefit stated as prose with no column is reported, not accepted', () => {
+  const problems = explainDesignShape({ ...complete, benefit: 'makes the list feel faster' })
+  assert.equal(problems.length, 1)
+  assert.ok(problems[0].includes('benefit'))
+})
+
 test('a non-object is one problem, not a crash', () => {
   for (const bad of [null, undefined, 'nope', []]) {
     assert.equal(explainDesignShape(bad).length, 1)
@@ -55,7 +73,15 @@ test('a non-object is one problem, not a crash', () => {
 // One source of truth: the gate's boolean is derived from the explanation, so a checkpoint can
 // never be enforced by one and ignored by the other.
 test('isValidDesignShape agrees with explainDesignShape on every fixture', () => {
-  for (const d of [complete, {}, null, { ...complete, userReach: [] }, { ...complete, scope: 42 }]) {
+  for (const d of [
+    complete,
+    {},
+    null,
+    { ...complete, userReach: [] },
+    { ...complete, scope: 42 },
+    { ...complete, benefit: 'no column named' },
+    { ...complete, benefit: undefined },
+  ]) {
     assert.equal(isValidDesignShape(d), explainDesignShape(d).length === 0, JSON.stringify(d))
   }
 })
