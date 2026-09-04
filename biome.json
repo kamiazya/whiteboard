@@ -115,6 +115,10 @@
     {
       "path": "./tools/biome-plugins/test-flake-shapes.grit",
       "includes": ["**/*.test.ts", "**/*.test.tsx", "**/*.browser.test.ts", "**/*.browser.test.tsx"]
+    },
+    {
+      "path": "./tools/biome-plugins/logger-argument-order.grit",
+      "includes": ["packages/mcp-server/src/server/**/*.ts", "!**/*.test.ts"]
     }
   ]
 }

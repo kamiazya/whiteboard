@@ -1,0 +1,50 @@
+language js
+
+// Executable half of AGENTS.md's "Fields first, message second."
+// Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair).
+//
+// `log.warning('msg', x)` matches pino's PRINTF overload: with no
+// placeholder in the message there is nothing to interpolate, so `x` is
+// dropped and the record ships without it. Nothing fails — not the types
+// (`...args` is `any[]`), not a test that asserts on the message.
+//
+// Observed on this repo's own logger rather than taken from the prose. The
+// second argument is lost whatever it is, which is why this rule does not
+// bother to check its shape:
+//
+//   log.warning('A obj second', { a: 1 })      -> {"msg":"A obj second"}
+//   log.warning('B err second', new Error())   -> {"msg":"B err second"}
+//   log.warning('C string second', 'extra')    -> {"msg":"C string second"}
+//   log.warning('D with %s placeholder', 'interp')
+//                                              -> {"msg":"D with interp placeholder"}
+//   log.warning({ a: 1 }, 'E fields first')    -> {"a":1,"msg":"E fields first"}
+//
+// A message carrying `%` is a real printf call (row D) and is left alone.
+//
+// SCOPED in biome.json to packages/mcp-server/src/server/**, and it has to
+// be: this is the only pino logger in the repo. server-core's seam and
+// apps/web's app-logger both take (message, data) — the OPPOSITE order — so
+// a rule reaching them would flag correct code, and the wrong habit is
+// genuinely one package away.
+//
+// Two limits, stated rather than discovered later:
+//   - The receiver is not constrained. Keying on `log` would miss the one
+//     site called `httpLog` (46 use `log`, 1 does not), and a miss here is
+//     silent while a false positive is visible — measured 0 non-logger
+//     matches in the scoped directory.
+//   - A template-literal message is not matched; no node name for one
+//     compiles in this dialect. Measured 0 such log calls in scope, and
+//     AGENTS.md already discourages interpolating into the message.
+`$logger.$level($msg, $second)` where {
+  $level <: or {
+    `debug`, `info`, `notice`, `warning`,
+    `error`, `critical`, `alert`, `emergency`
+  },
+  $msg <: string() as $s,
+  not $s <: r".*%.*",
+  register_diagnostic(
+    span = $msg,
+    message = "Message first, argument second: pino reads this as printf, and with no placeholder in the message the second argument is DROPPED — the record ships without it, and nothing fails. Swap them: log.<level>({ … }, 'message').",
+    severity = "error"
+  )
+}

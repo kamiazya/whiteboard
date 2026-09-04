@@ -154,13 +154,15 @@ const log = getLogger('canvas-store')
 log.warning({ workspaceId, documentId, err }, 'skipped corrupt row')
 ```
 
-**Fields first, message second.** This is pino's signature, and getting it
-round the wrong way is silent: `log.warning('msg', { … })` matches the
-printf overload, where the object is an interpolation argument for a message
-with no placeholder, so it is dropped and the record ships with no fields at
-all. Nothing fails — not the types (`...args` is `any[]`), not a test that
-only checks the message. Measured on a real call site: `{"level":"warning",
-"scope":"…","msg":"…"}` with the `dataDir` and `err` simply gone.
+**Fields first, message second — pino, so `mcp-server/src/server/**` only.**
+`log.warning('msg', x)` hits the printf overload: no placeholder, nothing to
+interpolate, so `x` is DROPPED whatever it is — object, `Error`, string —
+and nothing fails, not the types (`...args` is `any[]`) nor a test checking
+only the message. `logger-argument-order.grit` makes it a lint error.
+
+**`server-core`'s seam and `apps/web`'s `app-logger` take the OPPOSITE
+order**, `(message, data)` — so the rule is scoped, and `log.error('x', err)`
+is right there, lossy here.
 
 Why this exists:
 
@@ -178,8 +180,8 @@ Why this exists:
 - Clients can call MCP `logging/setLevel` to adjust their per-session view; the
   SDK handles the request once the `logging: {}` capability is registered.
 
-Tests use `resetLoggerForTests({ level, sink })` to install a fake sink and
-assert against structured records instead of spying on `console`.
+Tests use `captureLogsForTests(level)` to buffer parsed records and assert
+against them rather than spying on `console`; `restore()` in `afterEach`.
 
 ### Redaction
 
