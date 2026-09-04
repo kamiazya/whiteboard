@@ -82,7 +82,11 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 87
+// 88 since dev-flow.md's skills index gained `react-best-practices` — the
+// index entry is mandatory (dev-rules-contract.test.ts requires every skill
+// directory indexed) and already trimmed to its bare name; the corpus sat
+// ~120 characters under the boundary, so the entry is what crossed it.
+const ALWAYS_ON_TOTAL_BUDGET = 88
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
