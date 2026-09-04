@@ -98,6 +98,48 @@ describe('BrowserIndexPage', () => {
     expect(screen.queryByText('What will you make first?')).toBeNull()
   })
 
+  it('an older in-flight load resolving after a newer one must not win', async () => {
+    // `revision` re-reads on every Back, so two loads can be in flight at
+    // once: a Back that fires a second Back before the first's response
+    // lands would let the OLDER (route-a) response arrive after the NEWER
+    // (route-b) one already rendered. The load effect's per-instance
+    // `cancelled` flag is what stops that — this pins it directly rather
+    // than trusting the invariant is never exercised by a test above.
+    const store = await seededStore([])
+    await store.save({
+      documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'untitled',
+      name: 'Untitled',
+      updatedAt: '2026-09-05T00:00:00Z',
+      kind: 'spatial',
+    })
+    const real = store.index.listDocuments.bind(store.index)
+    const gates: Array<(rows: Awaited<ReturnType<typeof real>>) => void> = []
+    vi.spyOn(store.index, 'listDocuments').mockImplementation(
+      () => new Promise((resolve) => gates.push(resolve)),
+    )
+
+    const { page, rerender } = renderPage(store, 'route-a')
+    await waitFor(() => expect(gates.length).toBe(1))
+
+    rerender(page('route-b'))
+    await waitFor(() => expect(gates.length).toBe(2))
+
+    const rows = await real({ workspaceId: getBrowserWorkspaceId() })
+    // Newer (route-b) resolves first, with the document. Assert on the
+    // onboarding decision directly (`snapshots`), not on the files panel's
+    // card — the panel runs its own independent `listDocuments` call
+    // through the same mock, which this test never resolves.
+    gates[1](rows)
+    await waitFor(() => expect(screen.queryByText('What will you make first?')).toBeNull())
+
+    // Older (route-a) resolves after, empty — must not overwrite the newer list.
+    gates[0]([])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
   it('re-lists when the active workspace changes under it', async () => {
     // ADR-0019's switch is an in-SPA route change, so this page stays mounted
     // across one. Its load effect keyed on the index and the clock, neither of
