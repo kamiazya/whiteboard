@@ -1794,7 +1794,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
         e.timeStamp,
       )
-      // A cancelled pin drag writes nothing: the comment stays where it was.
+      // A cancelled pin drag writes nothing: the comment stays where it was,
+      // and the press that armed it is spent — left set, the next unrelated
+      // release would read the stale id and open that comment's card.
+      pressedCommentRef.current = null
       setCommentDrag(null)
     }
 
@@ -2228,6 +2231,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             if (thread === undefined || bubble === undefined) return null
             return (
               <CommentThreadCard
+                // Keyed by THREAD, so moving to another conversation mounts a
+                // fresh card. Without it React reuses this one instance and
+                // its unsent draft survives the switch — the next submit would
+                // append the first thread's text to the second, since the
+                // handler closes over the new id.
+                key={thread.id}
                 thread={thread}
                 box={(() => {
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)

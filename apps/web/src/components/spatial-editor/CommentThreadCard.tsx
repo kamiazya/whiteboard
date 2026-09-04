@@ -20,7 +20,7 @@
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
-import { type CSSProperties, useState } from 'react'
+import { type CSSProperties, useEffect, useRef, useState } from 'react'
 import { MessageBy } from '../annotations/message-meta.js'
 import type { Box } from './geometry.js'
 
@@ -46,7 +46,17 @@ export function CommentThreadCard({
   onClose,
 }: CommentThreadCardProps) {
   const [draft, setDraft] = useState('')
+  const cardRef = useRef<HTMLDivElement | null>(null)
   const resolved = thread.status === 'resolved'
+
+  // Focus the CARD, not its reply box: a press that opens a conversation is
+  // a request to read it, and pulling the caret into the box would send the
+  // next keystroke somewhere the reader never aimed. Focusing the card is
+  // still what makes Escape below reachable — without it the handler sits on
+  // an element nothing has focused, and the key goes to the canvas.
+  useEffect(() => {
+    cardRef.current?.focus()
+  }, [])
 
   function commit(): void {
     const body = draft.trim()
@@ -61,6 +71,11 @@ export function CommentThreadCard({
   return (
     <div
       data-testid="comment-card"
+      ref={cardRef}
+      // Focusable but not in the tab order: the card is opened by a press,
+      // and a tab stop on the container would sit in front of its own
+      // controls.
+      tabIndex={-1}
       // A non-modal dialog: it is a small surface with its own controls,
       // opened over the canvas, that a reader dismisses. The role is what
       // lets it carry the Escape and pointer handlers below — a bare div

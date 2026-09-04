@@ -34,10 +34,24 @@ const THREAD: CommentThread = {
     },
   ],
 }
+/** A second conversation, far enough away to press without hitting the first. */
+const OTHER: CanvasComment = {
+  id: 'thread-other',
+  x: 200,
+  y: 200,
+  text: 'another note',
+  createdAt: '2026-09-02T00:00:00.000Z',
+}
+const OTHER_THREAD: CommentThread = {
+  id: 'thread-other',
+  anchor: { kind: 'spatial', x: 200, y: 200 },
+  status: 'open',
+  messages: [{ id: 'm3', body: 'another note', createdAt: '2026-09-02T00:00:00.000Z' }],
+}
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
-  'x-whiteboard': { comments: [FREE] },
+  'x-whiteboard': { comments: [FREE, OTHER] },
 }
 
 function makeHost(threads: readonly CommentThread[] = [THREAD]) {
@@ -87,12 +101,18 @@ async function waitForComment(container: HTMLElement) {
   )
 }
 
-/** The bubble sits down-right of the anchor; (625, 470) is inside it. */
-function pressBubble(root: HTMLElement, pointerId: number) {
+/** The bubble sits down-right of the anchor; +25/+20 lands inside it. */
+function pressAt(root: HTMLElement, pointerId: number, x: number, y: number) {
   const r = root.getBoundingClientRect()
-  const at = { pointerId, clientX: r.left + 625, clientY: r.top + 470 }
+  const at = { pointerId, clientX: r.left + x, clientY: r.top + y }
   fireEvent.pointerDown(root, { button: 0, ...at })
   fireEvent.pointerUp(root, at)
+}
+function pressBubble(root: HTMLElement, pointerId: number) {
+  pressAt(root, pointerId, 625, 470)
+}
+function pressOtherBubble(root: HTMLElement, pointerId: number) {
+  pressAt(root, pointerId, 225, 220)
 }
 
 it('a press opens the card with the conversation and a reply box already open', async () => {
@@ -167,4 +187,68 @@ it('the context menu drops Reply, since the card is where a reply is written', a
   expect(labels).toContain('Edit comment')
   expect(labels).toContain('Resolve')
   expect(labels).not.toContain('Reply')
+})
+
+it('an unsent draft does not follow the reader to the next conversation', async () => {
+  const { Host, latest } = makeHost([THREAD, OTHER_THREAD])
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  pressBubble(root, 10)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  await userEvent.click(page.getByLabelText('Reply'))
+  await userEvent.keyboard('meant for the first one')
+
+  // Straight to another comment without sending. The card is one component
+  // in one place, so its draft would otherwise survive the switch and be
+  // committed against whichever thread is open when submit is pressed.
+  pressOtherBubble(root, 11)
+  await vi.waitFor(() =>
+    expect((page.getByLabelText('Reply').element() as HTMLTextAreaElement).value).toBe(''),
+  )
+
+  await userEvent.click(page.getByLabelText('Reply'))
+  await userEvent.keyboard('meant for the second')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  await vi.waitFor(() => expect(of(latest.commands, 'reply-to-thread')).toHaveLength(1))
+  const reply = of(latest.commands, 'reply-to-thread')[0]
+  expect(reply).toMatchObject({ kind: 'reply-to-thread', threadId: 'thread-other' })
+  expect(reply?.kind === 'reply-to-thread' ? reply.message.body : undefined).toBe(
+    'meant for the second',
+  )
+})
+
+it('Escape shuts the card straight after it opens, with no click in between', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  pressBubble(root, 12)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  // No click first: opening has to leave focus somewhere the key reaches,
+  // or the card carries a handler nothing can trigger.
+  await userEvent.keyboard('{Escape}')
+
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
+})
+
+it('a cancelled press on a comment opens nothing later', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  const r = root.getBoundingClientRect()
+  const at = { pointerId: 13, clientX: r.left + 625, clientY: r.top + 470 }
+  fireEvent.pointerDown(root, { button: 0, ...at })
+  fireEvent.pointerCancel(root, at)
+  // A later release somewhere else must not spend the cancelled press.
+  fireEvent.pointerUp(root, { pointerId: 13, clientX: r.left + 50, clientY: r.top + 50 })
+
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')).not.toBeNull(),
+  )
+  expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
 })

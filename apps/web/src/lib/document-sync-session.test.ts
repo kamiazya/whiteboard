@@ -361,7 +361,18 @@ describe('createDocumentSyncSession', () => {
       'the opening question',
       'and the answer',
     ])
-    expect(listener).toHaveBeenCalled()
+    // The PAYLOAD, not merely that a notification happened: a subscriber
+    // handed the pre-reply annotations would satisfy `toHaveBeenCalled` and
+    // leave every reader looking at the old conversation.
+    expect(listener).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        id: 't1',
+        messages: [
+          expect.objectContaining({ body: 'the opening question' }),
+          expect.objectContaining({ body: 'and the answer' }),
+        ],
+      }),
+    ])
     unsubscribe()
   })
 
