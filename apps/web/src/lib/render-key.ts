@@ -8,7 +8,7 @@
  * the wrong picture rather than failing.
  */
 
-import { documentKindSchema } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
@@ -70,10 +70,17 @@ export const renderKeySchema = z.object({
 
 export type RenderKey = z.infer<typeof renderKeySchema>
 
-/** The document fields a key is built from. */
+/**
+ * The document fields a key is built from.
+ *
+ * `kind` is `DocumentKind` rather than a hand-written copy of its members:
+ * a parallel union beside the schema is the drift this repo's Zod discipline
+ * exists to prevent, and here it would let a new kind be keyed as one of the
+ * old ones.
+ */
 export interface RenderKeySubject {
   readonly documentId: string
-  readonly kind: 'spatial' | 'markdown'
+  readonly kind: DocumentKind
   readonly updatedAt?: string
 }
 

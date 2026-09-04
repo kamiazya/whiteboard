@@ -31,6 +31,7 @@
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { unhandledKind } from '../../lib/exhaustive.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
@@ -103,7 +104,19 @@ async function renderSpatialInPool(
  * and a dark render of the same board.
  */
 function renderedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' {
-  return document.kind === 'markdown' ? 'markdown' : 'spatial'
+  // A row that does not say its kind is read as spatial, which is what the
+  // pipeline below does with it. The switch is what makes a NEW kind a
+  // compile error here rather than another silent spatial: being drawn by
+  // the wrong pipeline is a picture of the wrong thing, not a missing one.
+  const kind = document.kind ?? 'spatial'
+  switch (kind) {
+    case 'markdown':
+      return 'markdown'
+    case 'spatial':
+      return 'spatial'
+    default:
+      return unhandledKind(kind, 'renderedKind')
+  }
 }
 
 export function createRowRenderLoader(deps: RowRenderDeps) {

@@ -23,6 +23,7 @@
  * the SVG family's answer for the same document.
  */
 
+import { unhandledKind } from '../../lib/exhaustive.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { OutlineResponse } from '../../lib/layout-worker-protocol.js'
@@ -79,7 +80,19 @@ const outlineSpatialInPool = (snapshot: Uint8Array) => outlineInPool({ snapshot 
  * ends up answering for a document it is not a picture of.
  */
 function outlinedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' {
-  return document.kind === 'markdown' ? 'markdown' : 'spatial'
+  // A row that does not say its kind is read as spatial, which is what the
+  // pipeline below does with it. The switch is what makes a NEW kind a
+  // compile error here rather than another silent spatial: being drawn by
+  // the wrong pipeline is a picture of the wrong thing, not a missing one.
+  const kind = document.kind ?? 'spatial'
+  switch (kind) {
+    case 'markdown':
+      return 'markdown'
+    case 'spatial':
+      return 'spatial'
+    default:
+      return unhandledKind(kind, 'outlinedKind')
+  }
 }
 
 export function createRowOutlineLoader(deps: RowOutlineDeps) {
