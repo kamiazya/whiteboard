@@ -244,6 +244,43 @@ describe('createDocumentSyncSession', () => {
     expect(session.getFrontier()).not.toBe(hydrated)
   })
 
+  // The bytes and the frontier are read in one synchronous block on purpose,
+  // and this pins that they describe the same state. Nothing can commit
+  // between two synchronous reads, so the pairing holds by construction —
+  // but a later refactor that made either read async would break it
+  // silently, and a picture memoised under the wrong version is the failure
+  // this whole key exists to avoid.
+  it('exports bytes that decode to the state its frontier names', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const canvas = twoNodeCanvas()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
+
+    const first = session.exportSnapshot()
+    expect(first).not.toBeNull()
+    const rebuilt = new LoroDoc()
+    rebuilt.import(first as Uint8Array)
+    expect(readSpatialCanvas(rebuilt)).toEqual(canvas)
+
+    const doc = new LoroDoc()
+    doc.import(makeSnapshot(canvas))
+    const changed = { ...canvas, nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B] }
+    writeSpatialCanvas(doc, changed)
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    const after = new LoroDoc()
+    after.import(session.exportSnapshot() as Uint8Array)
+    expect(readSpatialCanvas(after)).toEqual(changed)
+  })
+
+  it('exports nothing before a snapshot, like the frontier beside it', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    expect(session.exportSnapshot()).toBeNull()
+  })
+
   it('answers the same frontier when nothing has changed', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())

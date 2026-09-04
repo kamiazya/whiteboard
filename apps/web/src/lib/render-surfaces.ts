@@ -68,13 +68,12 @@ export const RENDER_SURFACES = {
   'tree-row-icon': {
     pipeline: 'outline',
     kinds: { spatial: 'covered', markdown: 'covered' },
-    broker:
-      'not yet: the outline pipeline has no measured duplication; moving it is a named follow-up',
+    broker: 'through',
   },
   favicon: {
     pipeline: 'outline',
     kinds: { spatial: 'covered', markdown: 'covered' },
-    broker: 'not yet: one render per page, so nothing to dedup; moves with the tree row',
+    broker: 'through',
   },
   'version-thumbnail': {
     pipeline: 'png-raster',

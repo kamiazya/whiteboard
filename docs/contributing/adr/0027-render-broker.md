@@ -1,6 +1,6 @@
 # ADR-0027: Every picture of a document goes through one broker, and the cache is a memo
 
-**Status:** Accepted — broker port and its in-tab implementation land with this ADR; OPFS persistence and the SharedWorker implementation are named follow-ups
+**Status:** Accepted — broker port and its in-tab implementation land with this ADR. Every surface named below now asks through it; OPFS persistence and the SharedWorker implementation are named follow-ups
 
 ## Context
 
@@ -118,8 +118,15 @@ string. The `~` prefix on each segment is what additionally makes `.` and
 rather than after.
 
 ```
-render/~<buildId>/<kind>/~<documentId>/~<versionKey>[-<theme>].svg
+render/~<buildId>/<pipeline>/<kind>/~<documentId>/~<versionKey>[-<theme>].<ext>
 ```
+
+The pipeline is part of the identity, not decoration. The broker holds one
+map, so without it a tree row's outline and a list row's SVG name the same
+entry — and whichever arrives first answers the other, in a type the caller
+has no reason to check. It sits under the build id so a sweep can drop one
+family the way it drops one build, and the extension is what the bytes
+actually are (`.svg`, or `.json` for an outline).
 
 Retiring a build's entire cache is removing one directory — no scan, no
 scheduler, no index. Write-time is enough: when storing an entry, drop any
@@ -128,6 +135,21 @@ sibling directory that is not the current build.
 The realm assignment follows a probe rather than a preference: only a
 **dedicated worker** has `createSyncAccessHandle`, and that is also where the
 bytes are produced, so the renderer persists its own output with no extra hop.
+
+### 6a. Work nobody is waiting on says so, and the fleet believes it
+
+`background` covered everything that was not the commit a person just made,
+which put a list of thumbnails and a tab favicon on equal terms — so they won
+worker slots by arrival order. A list is still something the user is looking
+at; an icon that arrives a second late is not noticed at all. `idle` is the
+band below, and the outline surfaces run in it.
+
+The slot budget is over all the deferrable bands TOGETHER rather than one cap
+per band, and that is correctness rather than tidiness: counted per band,
+`idle` is free to take the very slot `background`'s cap reserves for an
+interactive request. Measured on a two-worker fleet before the fix — an idle
+request arriving between two background ones ran immediately, and both
+background requests then waited.
 
 ### 6. A surface that draws a document is declared, or it does not compile
 
@@ -158,19 +180,33 @@ is stated per kind rather than applied uniformly.
 
 Still open, and named rather than assumed:
 
-- **Persistence needs a version key that does not exist yet.**
-  `documentSummarySchema` carries no frontier. `updatedAt` is stamped per push
-  in practice but is optional in the schema, and a key with no version cannot
-  notice its document changing — so `isMemoisableKey` refuses to remember a
-  completed render under one, and only the in-flight join applies there. That
-  is the honest behaviour rather than a limitation to work around: a memo
-  under such a key would serve the old picture for as long as the tab is open.
-  Adding the frontier is its own increment, and until it lands the broker
-  caches in memory only.
-- **The fetch of a document's bytes is unmeasured**, and `load-row-render.ts`
-  claims it dominates the wait. If that is true, the cache's largest win is
-  skipping the fetch rather than the CPU — which does not change this design,
-  but does change how its benefit should be reported.
+- **Persistence still needs a version key on the LIST surfaces.**
+  `documentSummarySchema` carries no frontier, and `updatedAt` is stamped per
+  push in practice but optional in the schema. A key with no version cannot
+  notice its document changing, so `isMemoisableKey` refuses to remember a
+  completed render under one and only the in-flight join applies there —
+  honest behaviour rather than a limitation to work around, since a memo
+  under such a key would serve the old picture for as long as the tab is
+  open.
+
+  The OPEN document is no longer in that position: `DocumentSyncSession`
+  answers `getFrontier()`, loro's own id for its committed state, and the
+  favicon is keyed by it. Two things that took measuring rather than
+  arguing, both recorded where the next reader will be:
+
+  - the STATE frontier, not the oplog's — a document checked out to an older
+    version shows that version, and the state frontier also does not move on
+    a commit that changed nothing;
+  - it names the COMMITTED state, which is deliberately not the instant the
+    canvas is published. `onChange` publishes immediately and commits on a
+    debounce, so a key read at render time files the new picture under the
+    old version. `whiteboard:doc_changed` fires after the commit, and is
+    therefore the trigger every surface keyed this way must use.
+- **The fetch of a document's bytes is unmeasured** for the daemon keeper.
+  For the browser keeper it is measured and `load-row-render.ts`'s claim that
+  it dominates the wait is false — a near-constant 4-6ms against a render of
+  9-29ms that grows with the document. The worker pool's cap of 4 rests on
+  that claim and is worth revisiting.
 - **Safari and iOS are unmeasured.** SharedWorker is expected absent, OPFS
   expected present. iOS is best-effort by standing policy, and the fallback is
   the in-tab implementation this ADR ships first.

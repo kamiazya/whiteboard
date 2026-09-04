@@ -72,6 +72,7 @@ import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -561,6 +562,7 @@ export function BrowserDocumentPage({
     setEdgeLock,
     backendError,
     clearLocalUndo,
+    readOutlineSource,
   } = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
@@ -781,10 +783,17 @@ export function BrowserDocumentPage({
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   // One shape for whichever kind this document is — the favicon draws
   // it today, and a tree row's icon draws the same one.
+  // One broker per page mount, for the tab icon's outline. It is the same
+  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
+  // a re-render, a sync-status change or a remount does not recompute a
+  // shape the document already has — the version key is what makes that safe.
+  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
+
   const documentOutline = useDocumentOutline({
+    documentId,
     kind: documentKind,
-    canvas: canvas,
-    markdownBody: documentKind === 'markdown' ? (markdownDoc.body ?? '') : null,
+    readSource: readOutlineSource,
+    broker: outlineBroker,
   })
 
   useFavicon({
