@@ -145,9 +145,19 @@ export function DocumentPreview({
           <dt>Kind</dt>
           <dd className="text-foreground flex items-center gap-1">
             {(document.kind ?? 'markdown') === 'spatial' ? (
-              <LayoutGrid aria-hidden="true" className="size-3.5" />
+              <LayoutGrid
+                data-testid="preview-kind-icon"
+                data-kind="spatial"
+                aria-hidden="true"
+                className="size-3.5"
+              />
             ) : (
-              <FileText aria-hidden="true" className="size-3.5" />
+              <FileText
+                data-testid="preview-kind-icon"
+                data-kind="markdown"
+                aria-hidden="true"
+                className="size-3.5"
+              />
             )}
             {document.kind ?? 'markdown'}
           </dd>
