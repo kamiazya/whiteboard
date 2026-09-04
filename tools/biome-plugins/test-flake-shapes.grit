@@ -1,6 +1,6 @@
 language js
 
-// Executable half of two flake shapes from .claude/rules/integrator-flow.md.
+// Executable half of four flake shapes from .claude/rules/integrator-flow.md.
 // Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair per rule).
 any {
   // A retried waitFor callback re-fires any action inside it, so the action
@@ -23,6 +23,33 @@ any {
     register_diagnostic(
       span = $cb,
       message = "afterEach wipes document.body with innerHTML: React roots stay mounted on detached nodes and the NEXT test fails with removeChild errors. Unmount through testing-library cleanup() (or the mount API's own unmount).",
+      severity = "error"
+    )
+  },
+  // The eighth flake shape's companion: a character with no keycode (an
+  // em/en dash, a curly quote, CJK) is synthesized separately from the
+  // plain keystrokes around it and is the one that goes missing under load
+  // — the surrounding ASCII arrives intact, so it reads as an edit that
+  // never reached the app rather than a slow key-event synth.
+  `userEvent.$m($s)` where {
+    $m <: or { `keyboard`, `type` },
+    $s <: r".*[^\x00-\x7F].*",
+    register_diagnostic(
+      span = $s,
+      message = "Non-ASCII character in a userEvent.keyboard()/type() string: synthesized separately from the surrounding keystrokes and the one that goes missing under load. Prefer an ASCII stand-in, or paste() when the exact character matters.",
+      severity = "error"
+    )
+  },
+  // Fake timers left active leak into whatever the suite runs next unless
+  // something restores them, and a retry or a neighbouring test then blames
+  // the wrong code. A shared/global teardown that restores them project-wide
+  // is a legitimate reason for a single file to carry none locally — say so
+  // at the site rather than adding a per-file call that duplicates it.
+  `vi.useFakeTimers()` where {
+    not $program <: contains `vi.useRealTimers()`,
+    register_diagnostic(
+      span = $program,
+      message = "vi.useFakeTimers() with no vi.useRealTimers() anywhere in this file: a leaked fake-timer state runs into whatever the suite executes next. Restore it (typically in afterEach), or say why a shared teardown already does.",
       severity = "error"
     )
   }

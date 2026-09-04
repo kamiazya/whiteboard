@@ -34,13 +34,18 @@ function lint(file) {
   }
 }
 
-test('the bad fixture trips BOTH rules', () => {
+test('the bad fixture trips ALL FOUR rules', () => {
   const out = lint(join(FIXTURES, 'bad.test.tsx'))
   assert.match(out, /Side effect inside waitFor/)
   assert.match(out, /afterEach wipes document\.body/)
+  assert.match(out, /Non-ASCII character in a userEvent/)
+  assert.match(out, /vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/)
 })
 
-test('the good fixture trips neither rule', () => {
+test('the good fixture trips none of the four rules', () => {
   const out = lint(join(FIXTURES, 'good.test.tsx'))
-  assert.doesNotMatch(out, /Side effect inside waitFor|afterEach wipes/)
+  assert.doesNotMatch(
+    out,
+    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/,
+  )
 })
