@@ -29,8 +29,13 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Audit (high+ vulnerabilities, prod deps only)
-        # Gate on CVEs that affect published artifacts so they are caught at PR time.
-        run: pnpm audit --prod --audit-level=high
+        # Gate on CVEs that affect published artifacts so they are caught at PR
+        # time. Behind audit-with-retry.mjs because the advisories endpoint's
+        # outages otherwise fail this job with a stack trace and no finding —
+        # the wrapper retries ONLY registry-shaped failures and fails a real
+        # finding immediately. A `pnpm ` run line on purpose:
+        # local-gate-command.test.ts derives `check:local` from those.
+        run: pnpm audit:prod
 
       - name: Validate skills
         run: pnpm intent:validate
@@ -43,7 +48,14 @@ jobs:
       # quietly does not run in CI is the exact failure the script it covers
       # exists to prevent.
       - name: Install ImageMagick (compose-figure tests)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
+        # The runner image ships Microsoft's apt sources, and
+        # packages.microsoft.com intermittently answers 403 — which fails the
+        # whole `apt-get update` and this job with it, for repositories
+        # nothing here installs from. Dropping them first keeps the update
+        # scoped to the archives imagemagick actually comes from.
+        run: |
+          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.sources
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
 
       # cleanup-worktrees.mjs can force-remove worktrees and delete local
       # branches; keep its regression test enforced in the same gate as the
