@@ -87,6 +87,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
+  peek: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
