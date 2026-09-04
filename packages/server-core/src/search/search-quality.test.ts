@@ -20,7 +20,7 @@
 //     evidence, not a hunch. If the debt is small, the 120MB is not worth
 //     paying and stage 0 is the whole feature.
 
-import { tokenize } from '@kamiazya/whiteboard-search'
+import { tokenize, tokenizeForIndex } from '@kamiazya/whiteboard-search'
 import { beforeAll, describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
@@ -139,7 +139,7 @@ describe('search corpus', () => {
             ...(doc?.groups ?? []).map((g) => g.label),
             ...(doc?.edges ?? []).map((e) => e.label),
           ].join(' ')
-          const shared = [...new Set(tokenize(indexed))].filter((t) => queryTokens.has(t))
+          const shared = [...new Set(tokenizeForIndex(indexed))].filter((t) => queryTokens.has(t))
           expect(shared, `"${judged.query}" shares tokens with ${path}`).toEqual([])
         }
       }

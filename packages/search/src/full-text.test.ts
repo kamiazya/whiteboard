@@ -42,6 +42,24 @@ describe('fullTextSearch', () => {
     expect(results[0]?.contexts[0]).toContain('検索基盤')
   })
 
+  it('finds a document by a single CJK character — the first keystroke of a Japanese query', () => {
+    // What a Japanese reader types FIRST is one character, and a name is
+    // one CJK run: bigram-only indexing makes every such query answer
+    // nothing, however obviously the name contains it.
+    const results = fullTextSearch(
+      [DOC('a', [], { name: 'たささたはな' }), DOC('b', [], { name: 'unrelated' })],
+      'た',
+    )
+    expect(results.map((r) => r.documentId)).toEqual(['a'])
+  })
+
+  it('does not let a multi-character CJK query match a document sharing one character', () => {
+    // The other side of that: making the QUERY emit unigrams too would buy
+    // the case above at the cost of every longer query matching anything
+    // that shares a character.
+    expect(fullTextSearch([DOC('a', ['索引を作る'])], '検索')).toEqual([])
+  })
+
   it('matches latin queries case-insensitively', () => {
     const results = fullTextSearch([DOC('a', ['Tune the BM25 scoring constants.'])], 'bm25')
     expect(results.map((r) => r.documentId)).toEqual(['a'])

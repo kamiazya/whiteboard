@@ -7,11 +7,32 @@ import { snippetAround } from './snippet.js'
  * zero download, which is why stage 0 of the search plan starts here. A
  * lone CJK character (a run of length one) is its own token rather than
  * disappearing.
+ *
+ * This is the QUERY tokenizer, and it is deliberately narrower than
+ * `tokenizeForIndex`: a two-character query means the pair, so it must not
+ * also match every document that happens to share one of the two.
  */
 const CJK = /[぀-ヿ㐀-䶿一-鿿豈-﫿]/
 const WORD = /[\p{L}\p{N}]+/gu
 
 export function tokenize(text: string): string[] {
+  return tokenizeRuns(text, false)
+}
+
+/**
+ * The INDEX side, which additionally emits every CJK character on its own.
+ *
+ * Symmetric bigram tokenization cannot answer a one-character query at all:
+ * a name is a single CJK run, so it yields bigrams only, and 「た」 — the
+ * first keystroke of nearly every Japanese query — matches none of them.
+ * The asymmetry is the standard fix (Lucene spells it `outputUnigrams`):
+ * widen what a document is FOUND BY, not what a query demands.
+ */
+export function tokenizeForIndex(text: string): string[] {
+  return tokenizeRuns(text, true)
+}
+
+function tokenizeRuns(text: string, unigrams: boolean): string[] {
   const tokens: string[] = []
   for (const match of text.toLowerCase().matchAll(WORD)) {
     const run = match[0]
@@ -25,7 +46,7 @@ export function tokenize(text: string): string[] {
       latin = ''
     }
     const flushCjk = () => {
-      if (cjk.length === 1) tokens.push(cjk)
+      if (unigrams || cjk.length === 1) for (const char of cjk) tokens.push(char)
       for (let i = 0; i + 1 < cjk.length; i++) tokens.push(cjk.slice(i, i + 2))
       cjk = ''
     }
@@ -81,7 +102,7 @@ export function fullTextSearch(
     const counts = new Map<string, number>()
     let length = 0
     for (const text of [doc.path, doc.name ?? '', ...doc.texts]) {
-      for (const token of tokenize(text)) {
+      for (const token of tokenizeForIndex(text)) {
         counts.set(token, (counts.get(token) ?? 0) + 1)
         length++
       }

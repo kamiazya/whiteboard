@@ -54,3 +54,34 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
     .filter((entry) => documentMatchesSearch(query, entry))
     .sort(compareDocumentEntries)
 }
+
+/**
+ * The content answer, plus the documents that only their NAME or PATH
+ * matched.
+ *
+ * Both halves are real answers to different questions, and the panel used to
+ * show the second and then replace it with the first. A row that appears and
+ * then vanishes reads as the document being found and unfound — and it
+ * happens on the most ordinary input there is, a prefix: word-token search
+ * cannot match "roa" against "Roadmap", and bigram search cannot match a
+ * single CJK character against a longer name. Whatever the lexical layer
+ * produces, a document whose name contains what was typed stays listed.
+ *
+ * Appended rather than merged by rank: these are the matches the ranked
+ * search did NOT produce, so there is no score to interleave them with, and
+ * putting an unranked row above ranked ones would claim a relevance nothing
+ * measured.
+ */
+export function withNameMatches<R extends { readonly document: WorkspaceDocumentEntry }>(
+  rows: readonly R[],
+  documents: readonly WorkspaceDocumentEntry[],
+  query: string,
+): readonly (R | { document: WorkspaceDocumentEntry })[] {
+  const produced = new Set(rows.map((row) => row.document.documentId))
+  return [
+    ...rows,
+    ...searchDocuments(documents, query)
+      .filter((entry) => !produced.has(entry.documentId))
+      .map((document) => ({ document })),
+  ]
+}
