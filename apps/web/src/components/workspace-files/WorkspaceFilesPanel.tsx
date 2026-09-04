@@ -1,8 +1,19 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Columns2, List, Search } from 'lucide-react'
+import {
+  Columns2,
+  CopyPlus,
+  ExternalLink,
+  List,
+  Pencil,
+  Pin,
+  PinOff,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
@@ -226,6 +237,23 @@ export function WorkspaceFilesPanel({
   const onOpenDocumentRef = useRef(onOpenDocument)
   onOpenDocumentRef.current = onOpenDocument
   const lastReadListRef = useRef(readList)
+
+  /**
+   * Tap-to-open (2026-09-05 redesign). On a coarse pointer a tap on a
+   * document card OPENS it, matching the gallery convention every canvas
+   * product shares (Figma, Miro, Freeform: tap = open, long-press = the
+   * object menu) — the select-then-Open round trip was two taps everywhere
+   * and left the Open button below the fold on a phone. On a fine pointer a
+   * click still selects into the preview; double-click and Enter open.
+   *
+   * Gated on the host actually offering an open: a read-only host keeps the
+   * selection behavior AND the preview column, because looking is all there
+   * is to do.
+   */
+  const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
+  const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
+    onOpenDocumentRef.current?.(entry.path)
+  }, [])
 
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
@@ -590,20 +618,34 @@ export function WorkspaceFilesPanel({
       : [
           ...(onOpenDocument === undefined
             ? []
-            : [{ label: 'Open', onSelect: () => onOpenDocument(cardMenu.entry.path) }]),
+            : [
+                {
+                  label: 'Open',
+                  icon: <ExternalLink />,
+                  onSelect: () => onOpenDocument(cardMenu.entry.path),
+                },
+              ]),
           ...(onDuplicateDocument === undefined
             ? []
-            : [{ label: 'Duplicate', onSelect: () => onDuplicateDocument(cardMenu.entry.path) }]),
+            : [
+                {
+                  label: 'Duplicate',
+                  icon: <CopyPlus />,
+                  onSelect: () => onDuplicateDocument(cardMenu.entry.path),
+                },
+              ]),
           ...(source.setPinned === undefined
             ? []
             : [
                 {
                   label: cardMenu.entry.pinOrder === undefined ? 'Pin' : 'Unpin',
+                  icon: cardMenu.entry.pinOrder === undefined ? <Pin /> : <PinOff />,
                   onSelect: () => void togglePinned(cardMenu.entry),
                 },
               ]),
           {
             label: 'Rename…',
+            icon: <Pencil />,
             onSelect: () => {
               setSelected(cardMenu.entry)
               setRenameError(null)
@@ -615,6 +657,7 @@ export function WorkspaceFilesPanel({
             : [
                 {
                   label: 'Delete',
+                  icon: <Trash2 />,
                   danger: true,
                   onSelect: () =>
                     onRequestDelete(
@@ -760,6 +803,7 @@ export function WorkspaceFilesPanel({
                   : ''}
               </p>
               <SearchResults
+                {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
                 // A `#tag` query is a FILTER over what is loaded (#975's
                 // contract), not a content search — it never leaves the
                 // client. Everything else asks the source.
@@ -786,7 +830,7 @@ export function WorkspaceFilesPanel({
                 query={query}
                 searchedContents={activeTag === null && hits !== null}
                 selectedPath={selected?.path}
-                onSelect={setSelected}
+                onSelect={tapOpens ? openEntry : setSelected}
                 onDocumentContextMenu={openCardMenu}
                 renderThumbnail={(entry) => (
                   <DocumentThumbnail
@@ -803,7 +847,9 @@ export function WorkspaceFilesPanel({
           <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
             <WorkspaceFileTree
               documents={documents}
-              onOpen={setSelected}
+              onOpen={tapOpens ? openEntry : setSelected}
+              {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
+              onDocumentContextMenu={openCardMenu}
               selectedPath={selected?.path}
               renderIcon={(entry) => (
                 <DocumentMinimap
@@ -835,8 +881,11 @@ export function WorkspaceFilesPanel({
                   onOpen={(target) =>
                     target.kind === 'folder'
                       ? selectFolder(target.path)
-                      : setSelected(target.document)
+                      : tapOpens
+                        ? openEntry(target.document)
+                        : setSelected(target.document)
                   }
+                  {...(onOpenDocument === undefined ? {} : { onActivateDocument: openEntry })}
                   onDocumentContextMenu={openCardMenu}
                   renderThumbnail={(entry) => (
                     <DocumentThumbnail
@@ -851,31 +900,37 @@ export function WorkspaceFilesPanel({
             </div>
           </>
         )}
-        <div className="w-full shrink-0 overflow-y-auto md:w-72">
-          <DocumentPreview
-            document={selected}
-            loadRender={loadRender}
-            {...(onOpenDocument === undefined
-              ? {}
-              : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
-            onRename={(entry: WorkspaceDocumentEntry) => {
-              setRenameError(null)
-              setRenaming(entry)
-            }}
-            {...(onDuplicateDocument === undefined
-              ? {}
-              : {
-                  onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path),
-                })}
-            {...(onRequestDelete === undefined
-              ? {}
-              : {
-                  onDelete: (entry: WorkspaceDocumentEntry) =>
-                    onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
-                })}
-            className="h-full"
-          />
-        </div>
+        {/* When a tap opens, selection can no longer fill this pane, so it
+            would sit permanently on its empty state — below the grid on a
+            phone, where it held the only Open button (the 2-tap bug). The
+            long-press menu is the object surface on touch. */}
+        {!tapOpens && (
+          <div className="w-full shrink-0 overflow-y-auto md:w-72">
+            <DocumentPreview
+              document={selected}
+              loadRender={loadRender}
+              {...(onOpenDocument === undefined
+                ? {}
+                : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
+              onRename={(entry: WorkspaceDocumentEntry) => {
+                setRenameError(null)
+                setRenaming(entry)
+              }}
+              {...(onDuplicateDocument === undefined
+                ? {}
+                : {
+                    onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path),
+                  })}
+              {...(onRequestDelete === undefined
+                ? {}
+                : {
+                    onDelete: (entry: WorkspaceDocumentEntry) =>
+                      onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
+                  })}
+              className="h-full"
+            />
+          </div>
+        )}
       </div>
       {source.listTrash !== undefined && source.restoreFromTrash !== undefined && (
         <TrashSection
@@ -911,6 +966,7 @@ export function WorkspaceFilesPanel({
           label="Document actions"
           items={cardMenuItems}
           onClose={() => setCardMenu(null)}
+          variant={hasCoarsePointer() ? 'sheet' : 'list'}
         />
       )}
     </section>

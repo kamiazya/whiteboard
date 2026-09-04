@@ -128,6 +128,16 @@ const storageSettingsSchema = z
              */
             segment: z.string().optional(),
             displayName: z.string().optional(),
+            /**
+             * What the DAEMON is known to hold (a base64 Loro VersionVector,
+             * from the pulled bytes alone). Offline edits are exactly the
+             * ops beyond this point: the push exports from here, and the
+             * "unsent local edits" claim compares against it. Absent on
+             * entries from before offline edits existed — treated as
+             * "everything might be unsent", which the push resolves by
+             * sending a full snapshot once.
+             */
+            syncedFrontier: z.string().optional(),
           })
           .strict(),
       )

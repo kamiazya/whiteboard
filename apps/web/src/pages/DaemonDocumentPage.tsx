@@ -68,7 +68,7 @@ import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createInTabRenderBroker } from '../lib/render-broker.js'
-import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
+import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -130,12 +130,19 @@ export function DaemonDocumentPage({
 
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
-  // ADR-0023 decision 5's arrival path: the moment this browser is working
-  // on a daemon workspace is when it can afford to refresh its replica of
-  // it. Once per session per workspace, scheduled off the critical path —
-  // the module dedupes, so the effect can fire on every resolve.
+  // ADR-0023's replica reconciliation, both directions, at the moment this
+  // browser is working on a daemon workspace. PUSH first (decision 3's
+  // return half — offline edits ship as ordinary ops; a clean replica costs
+  // one IndexedDB read and no network), THEN the pull refresh, so a
+  // merge-back cannot read as an offline edit vanishing between the two.
+  // Both modules dedupe internally, so the effect can fire on every resolve.
   useEffect(() => {
     if (controller.workspaceId === null) return
+    scheduleReplicaPush({
+      fetch: daemonFetch,
+      daemonBaseUrl,
+      workspaceId: controller.workspaceId,
+    })
     scheduleReplicaRefresh({
       fetch: daemonFetch,
       daemonBaseUrl,

@@ -30,7 +30,10 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
 }
 
-vi.mock('../lib/replica-refresh.js', () => ({ scheduleReplicaRefresh: vi.fn() }))
+vi.mock('../lib/replica-refresh.js', () => ({
+  scheduleReplicaRefresh: vi.fn(),
+  scheduleReplicaPush: vi.fn(),
+}))
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
@@ -179,6 +182,17 @@ describe('DaemonDocumentPage', () => {
     const call = vi.mocked(scheduleReplicaRefresh).mock.calls[0]?.[0]
     expect(call?.workspaceId).toBe('w1')
     expect(call?.daemonBaseUrl).toBe(DAEMON_BASE_URL)
+    // And the return half: offline edits ship back on the same moment
+    // (decision 3) — the push runs BEFORE the pull so a merge-back cannot
+    // read as "my offline edit vanished" between the two.
+    const { scheduleReplicaPush } = await import('../lib/replica-refresh.js')
+    expect(vi.mocked(scheduleReplicaPush)).toHaveBeenCalled()
+    const pushCall = vi.mocked(scheduleReplicaPush).mock.calls[0]?.[0]
+    expect(pushCall?.workspaceId).toBe('w1')
+    expect(pushCall?.daemonBaseUrl).toBe(DAEMON_BASE_URL)
+    expect(vi.mocked(scheduleReplicaPush).mock.invocationCallOrder[0]).toBeLessThan(
+      vi.mocked(scheduleReplicaRefresh).mock.invocationCallOrder[0] as number,
+    )
   })
 
   it('renders a workspace-not-found list failure as an error, never as an empty workspace', async () => {

@@ -1046,6 +1046,7 @@ async function main() {
     versionId: saved.version.id,
   })
   if (
+    restored.mode !== 'in-place' ||
     restored.documentId !== documentId ||
     restored.restoredVersionId !== saved.version.id ||
     restored.label !== 'e2e'

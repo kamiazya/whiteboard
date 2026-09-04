@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { hapticTick } from './haptics.js'
 
+// biome-ignore lint/plugin: no React root in this file; the wipe clears plain fixture DOM
 afterEach(() => {
   vi.unstubAllGlobals()
   document.body.innerHTML = ''

@@ -21,9 +21,12 @@ you can put it on a canvas later) and it opens ready to work in.
 
 ![Onboarding chooser](../assets/onboarding-chooser.png)
 
-Once you have documents, the page lands on your document browser: a folder
-tree with a preview pane. Click a card to preview it, **Open** to edit it,
-and use the toolbar to search everything or move a document to a new path.
+Once you have documents, the page lands on your document browser. On a
+touch screen, tap a card to open the document, and press and hold for its
+actions (open, pin, rename, delete). With a mouse, a click previews a card
+in the pane beside the list, and a double-click — or Enter on a focused
+card — opens it. Use the toolbar to search everything or move a document to
+a new path.
 
 **New** in that toolbar opens the same two choices — **Canvas** or **Markdown
 note** — and creates one in whichever folder you are standing in. A kind

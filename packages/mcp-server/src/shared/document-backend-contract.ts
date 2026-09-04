@@ -105,22 +105,26 @@ export interface DocumentBackendHandlers {
    * 'corrupt-snapshot': the persisted snapshot bytes are not valid Loro bytes.
    * 'corrupt-delta': one of the persisted delta bytes is not valid Loro bytes.
    * 'unsupported-version': the envelope version number is not supported.
-   * 'storage-failure': IDB open, transaction, or write failed; or corrupt record
-   *   detected during a pushLocalUpdate (delta would be lost).
-   * 'read-unavailable': the READ did not complete, and carries no verdict on
-   *   the stored bytes — the transient IndexedDB failures (a connection closing
-   *   under a version change, an aborted transaction, a quota error) that are
-   *   not attributable to the record. Distinct from the three above precisely
-   *   so a consumer does not offer to discard a document over one; distinct
-   *   from 'storage-failure', which is a WRITE that did not land.
+   * 'read-unavailable': the LOAD did not complete, so nothing is known about
+   *   the stored bytes — a blocked IDB open (another tab at an older
+   *   version), an aborted transaction, storage that went away. Distinct from
+   *   the three above because those are claims about the record and this one
+   *   is not: a caller that conflates them tells someone their work is
+   *   damaged over data that is intact, and may offer a delete as the
+   *   recovery. Distinct from 'storage-failure' because the content never
+   *   arrived, so there is nothing to edit — a caller must not present an
+   *   editor over an empty document.
+   * 'storage-failure': a WRITE did not land — IDB open, transaction, or write
+   *   failed; or a corrupt record detected during a pushLocalUpdate (delta
+   *   would be lost). The document on screen is still the document.
    */
   onError?: (
     reason:
       | 'corrupt-snapshot'
       | 'corrupt-delta'
       | 'unsupported-version'
-      | 'storage-failure'
-      | 'read-unavailable',
+      | 'read-unavailable'
+      | 'storage-failure',
   ) => void
 }
 

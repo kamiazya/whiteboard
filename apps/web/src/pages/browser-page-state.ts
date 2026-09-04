@@ -24,7 +24,6 @@
 import {
   type DocumentReadFailure,
   documentReadFailureMessage,
-  documentReadUnavailableMessage,
 } from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type {
@@ -57,13 +56,7 @@ export interface BrowserPageStateInput {
 // - editing: steady state. `persistence` may be `saved`, `pending`,
 //   `saving`, or `degraded` — that distinction is the header save-status
 //   surface, not a page-level branch.
-export interface LoadUnavailableState {
-  readonly kind: 'load-unavailable'
-  readonly message: string
-}
-
 export type BrowserPageState =
-  | LoadUnavailableState
   | LoadDegradedState
   | CleanupCompletedState
   | LoadingState
@@ -104,24 +97,4 @@ export function refineForContentReadFailure(
 ): BrowserPageState {
   if (failure === null || state.kind !== 'editing') return state
   return { kind: 'load-degraded', message: documentReadFailureMessage(failure) }
-}
-
-/**
- * The same refusal to render the editor, for a failure that says nothing
- * about the stored bytes.
- *
- * Kept a separate state rather than a flag on `load-degraded` because the two
- * differ in the only way that matters to the reader: what they are offered.
- * `load-degraded` offers to discard the document, which is a coherent answer
- * to "these bytes cannot be read" and the wrong answer to "the read did not
- * happen". The editor still must not render — an empty canvas over intact
- * bytes is how the next save destroys them, which is this file's standing
- * reason for a page-level state.
- */
-export function refineForUnavailableRead(
-  state: BrowserPageState,
-  unavailable: boolean,
-): BrowserPageState {
-  if (!unavailable || state.kind !== 'editing') return state
-  return { kind: 'load-unavailable', message: documentReadUnavailableMessage() }
 }

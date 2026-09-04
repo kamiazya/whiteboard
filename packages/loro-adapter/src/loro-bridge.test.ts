@@ -17,6 +17,7 @@ import {
   readFacets,
   readNodeLocks,
   readSpatialCanvas,
+  reconcileSpatialCanvas,
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
@@ -1176,5 +1177,62 @@ describe('canvas comments bridge', () => {
       expect(readSpatialCanvas(doc).nodes).toEqual([])
       expect(undoManager.canUndo()).toBe(false)
     })
+  })
+})
+
+describe('reconcileSpatialCanvas', () => {
+  const A: SpatialNode = { id: 'a', type: 'text', text: 'alpha', x: 0, y: 0, width: 10, height: 10 }
+  const B: SpatialNode = { id: 'b', type: 'text', text: 'beta', x: 5, y: 5, width: 10, height: 10 }
+
+  test('writes only what changed, deletes only what the caller could SEE, never the rest', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [A, B], edges: [] })
+    // A record from "another version": a shape today's schema rejects. A
+    // whole-canvas resync would delete it — and on a replica that deletion
+    // would SHIP, erasing a newer client's node on the daemon.
+    doc.getMap('nodes').set('from-the-future', { type: 'hologram', shimmer: true })
+
+    const prev = readSpatialCanvas(doc)
+    reconcileSpatialCanvas(doc, prev, { nodes: [{ ...A, text: 'alpha edited' }], edges: [] })
+
+    const after = readSpatialCanvas(doc)
+    expect(after.nodes.find((n) => n.id === 'a')).toMatchObject({ text: 'alpha edited' })
+    expect(after.nodes.find((n) => n.id === 'b')).toBeUndefined()
+    expect(doc.getMap('nodes').get('from-the-future')).toEqual({ type: 'hologram', shimmer: true })
+  })
+
+  test('reconciles edges and comments by the same visible-diff rule', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [A, B],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      'x-whiteboard': { comments: [{ id: 'c1', x: 1, y: 1, text: 'keep' }] },
+    })
+    const prev = readSpatialCanvas(doc)
+    reconcileSpatialCanvas(doc, prev, {
+      nodes: [A, B],
+      edges: [{ id: 'e2', fromNode: 'b', toNode: 'a' }],
+      'x-whiteboard': {
+        comments: [
+          { id: 'c1', x: 1, y: 1, text: 'keep' },
+          { id: 'c2', x: 2, y: 2, text: 'new' },
+        ],
+      },
+    })
+
+    const after = readSpatialCanvas(doc)
+    expect(after.edges.map((e) => e.id)).toEqual(['e2'])
+    expect((after['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+  })
+
+  test('an unchanged canvas writes nothing at all', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [A], edges: [] })
+    doc.commit()
+    const before = doc.oplogVersion().encode()
+    const prev = readSpatialCanvas(doc)
+    reconcileSpatialCanvas(doc, prev, prev)
+    doc.commit()
+    expect(Array.from(doc.oplogVersion().encode())).toEqual(Array.from(before))
   })
 })

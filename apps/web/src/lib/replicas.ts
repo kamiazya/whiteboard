@@ -12,6 +12,8 @@ export interface ReplicaEntryInput {
   syncedAt: string
   segment?: string
   displayName?: string
+  /** Base64 VersionVector of what the daemon is known to hold. */
+  syncedFrontier?: string
 }
 
 /**
@@ -30,10 +32,15 @@ export function withReplicaEntry(
       replicas: {
         ...current.storage.replicas,
         [workspaceId]: {
+          // Merge over the existing entry: a writer that only knows the
+          // sync fields must not drop the offline-lookup fields (segment,
+          // displayName) some earlier writer captured.
+          ...current.storage.replicas?.[workspaceId],
           daemonBaseUrl: entry.daemonBaseUrl,
           syncedAt: entry.syncedAt,
           ...(entry.segment === undefined ? {} : { segment: entry.segment }),
           ...(entry.displayName === undefined ? {} : { displayName: entry.displayName }),
+          ...(entry.syncedFrontier === undefined ? {} : { syncedFrontier: entry.syncedFrontier }),
         },
       },
     },
@@ -47,6 +54,7 @@ export interface ReplicaMatch {
   syncedAt: string
   segment?: string
   displayName?: string
+  syncedFrontier?: string
 }
 
 export function findReplicaForHandle(settings: UserSettings, handle: string): ReplicaMatch | null {

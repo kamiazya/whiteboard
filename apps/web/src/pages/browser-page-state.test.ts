@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { derivePageState, refineForUnavailableRead } from './browser-page-state.js'
+import { derivePageState } from './browser-page-state.js'
 import type { BrowserPersistenceState } from './use-browser-document-controller.js'
 
 const snapshot: DocumentSnapshot = {
@@ -91,36 +91,5 @@ describe('derivePageState', () => {
     expect([...kinds].sort()).toEqual(
       ['cleanup-completed', 'editing', 'load-degraded', 'loading'].sort(),
     )
-  })
-})
-
-describe('an unavailable read is not a corruption verdict', () => {
-  it('refuses the editor without offering to discard the document', () => {
-    const editing = derivePageState({
-      snapshot,
-      persistence: saved,
-      cleanupCompleted: false,
-    })
-    const state = refineForUnavailableRead(editing, true)
-
-    // NOT load-degraded: that state's recovery action deletes the document,
-    // which is a coherent answer to "these bytes cannot be read" and the
-    // wrong one to "the read did not happen".
-    expect(state.kind).toBe('load-unavailable')
-    // Still not the editor — an empty canvas over intact bytes is how the
-    // next save destroys them.
-    expect(state.kind).not.toBe('editing')
-    if (state.kind === 'load-unavailable') {
-      expect(state.message).not.toMatch(/could not be read/i)
-    }
-  })
-
-  it('leaves a state that never reached the editor alone', () => {
-    const loading = derivePageState({
-      snapshot: null,
-      persistence: saved,
-      cleanupCompleted: false,
-    })
-    expect(refineForUnavailableRead(loading, true).kind).toBe('loading')
   })
 })

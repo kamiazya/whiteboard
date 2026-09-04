@@ -9,7 +9,11 @@
         // (PreToolUse/PostToolUse commands), which knip does not parse.
         ".claude/scripts/hooks/*.mjs"
       ],
-      "project": [".claude/workflows/**/*.mjs", ".claude/scripts/**/*.mjs", "tools/**/*.mjs"]
+      "project": [".claude/workflows/**/*.mjs", ".claude/scripts/**/*.mjs", "tools/**/*.mjs"],
+      // Biome-plugin lint fixtures: raw files the guard test feeds to
+      // `biome lint`, never executed or imported — their imports mimic a
+      // real test file for the reader, not for module resolution.
+      "ignore": [".claude/scripts/fixtures/**"]
     },
     "tools/checks": {
       "entry": [

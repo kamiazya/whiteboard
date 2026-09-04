@@ -32,6 +32,7 @@ export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers[
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
+import { sameAnnotations } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import { frontierOf } from './document-frontier.js'
 import {
@@ -485,34 +486,6 @@ function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: Edit
  * queued export requests, published canvas value + subscribers). Constructing
  * a new session for a backend swap therefore resets all of that for free.
  */
-/**
- * Whether two reads of the annotation layer say the same thing.
- *
- * Compares every message BODY, not just the counts: editing a comment's text
- * changes neither the thread count nor the message count, and is exactly the
- * change a cheaper comparison would swallow — the panel would go on showing
- * the old wording until something else moved.
- *
- * Order is significant and is not normalised away. `readAnnotations` fixes it
- * (threads first, legacy rows in map order) because `composeComments` fans a
- * later bubble around an earlier one, so two reads differing only in order
- * really do draw differently.
- */
-function sameAnnotations(a: readonly CommentThread[], b: readonly CommentThread[]): boolean {
-  if (a.length !== b.length) return false
-  return a.every((thread, index) => {
-    const other = b[index]
-    if (other === undefined) return false
-    if (thread.id !== other.id || thread.status !== other.status) return false
-    if (thread.messages.length !== other.messages.length) return false
-    if (JSON.stringify(thread.anchor) !== JSON.stringify(other.anchor)) return false
-    return thread.messages.every((message, messageIndex) => {
-      const otherMessage = other.messages[messageIndex]
-      return message.id === otherMessage?.id && message.body === otherMessage.body
-    })
-  })
-}
-
 export function createDocumentSyncSession(
   backend: DocumentBackend,
   deps: SessionDeps,
