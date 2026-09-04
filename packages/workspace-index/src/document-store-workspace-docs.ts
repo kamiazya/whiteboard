@@ -12,7 +12,12 @@
  * constructor argument and nothing else.
  */
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot, reassembleSnapshot, shouldCompact } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  reassembleSnapshot,
+  StoredDocumentUnreadableError,
+  shouldCompact,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
 import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
@@ -20,6 +25,33 @@ const MAX_CHUNK_BYTES = 1_000_000
 
 function refOf(workspaceId: string): DocRef {
   return { kind: 'workspace-tree', workspaceId }
+}
+
+/**
+ * Import bytes that came OUT of the record, and say so when the CRDT refuses
+ * them.
+ *
+ * `open` can fail two ways and a caller has to tell them apart before it can
+ * say anything true to a person: the store did not answer (a transaction
+ * aborted, a connection blocked behind another tab), or the bytes it DID
+ * answer are not a document. Only this layer knows both halves at once —
+ * that these bytes are the record, and that loro-crdt rejected them — so the
+ * typing belongs here rather than at any call site.
+ *
+ * Untyped, the second arrived as whatever loro threw ("Decode error: (Invalid
+ * import data)") and was indistinguishable from the first, which is how
+ * `apps/web` came to classify every failed read as damage and show a healthy
+ * document behind "This canvas’s data could not be read."
+ */
+function importStored(doc: LoroDoc, bytes: Uint8Array, workspaceId: string): void {
+  try {
+    doc.import(bytes)
+  } catch (cause) {
+    throw new StoredDocumentUnreadableError(
+      'malformed',
+      `stored workspace document ${workspaceId} could not be imported: ${String(cause)}`,
+    )
+  }
 }
 
 export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
@@ -30,9 +62,9 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     const stored = await this.store.loadSnapshot({ docRef })
     if (stored === null) return null
     const doc = new LoroDoc()
-    doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
+    importStored(doc, reassembleSnapshot(stored.manifest, stored.chunks), workspaceId)
     const { updates } = await this.store.loadDeltas({ docRef, afterSeq: null })
-    for (const update of updates) doc.import(update)
+    for (const update of updates) importStored(doc, update, workspaceId)
     return doc
   }
 

@@ -839,13 +839,30 @@ export function BrowserDocumentPage({
   if (renderState.kind === 'load-degraded') {
     return (
       <LoadDegradedView message={renderState.message}>
-        <button
-          type="button"
-          onClick={() => void startFresh()}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-        >
-          Start fresh
-        </button>
+        {/* WHICH recovery is offered follows what the failure knows, and
+            getting it wrong is destructive rather than merely unhelpful:
+            `Start fresh` deletes the record, which is the right last resort
+            for a document this build cannot read, and the worst possible
+            button for one whose read was simply blocked — the data is
+            intact and one click removes it. So the retry is what an
+            unavailable read gets, and it is the only affordance there. */}
+        {backendError === 'read-unavailable' ? (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Try again
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void startFresh()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Start fresh
+          </button>
+        )}
       </LoadDegradedView>
     )
   }

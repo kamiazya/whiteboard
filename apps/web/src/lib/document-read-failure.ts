@@ -12,12 +12,25 @@
  * being empty or missing: the bytes are there, and telling their owner
  * otherwise is the one thing this must not do.
  */
-export type DocumentReadFailure = 'unsupported-version' | 'corrupt-snapshot' | 'corrupt-delta'
+export type DocumentReadFailure =
+  | 'unsupported-version'
+  | 'corrupt-snapshot'
+  | 'corrupt-delta'
+  | 'read-unavailable'
 
 const MESSAGES: Record<DocumentReadFailure, string> = {
   'unsupported-version': 'This canvas was saved by a newer version of the app. Update to open it.',
   'corrupt-snapshot': 'This canvas’s data could not be read.',
   'corrupt-delta': 'This canvas’s edit history could not be read.',
+  // The fourth is the one that is NOT about the bytes: storage did not answer,
+  // so nothing at all is known about them. It belongs here rather than under
+  // `storage-failure` because the consequence is the same as the others' —
+  // the content never arrived, so there is no document to edit and the editor
+  // must not be presented over an empty canvas. What it must NOT share is the
+  // recovery: `Start fresh` deletes the record, and offering that over data
+  // whose only problem was a blocked read is how someone loses work by
+  // opening a document twice.
+  'read-unavailable': 'This canvas could not be opened just now. Its data has not been changed.',
 }
 
 export function documentReadFailureMessage(kind: DocumentReadFailure): string {
