@@ -34,3 +34,25 @@ export function documentReadFailureMessage(kind: DocumentReadFailure): string {
 export function isDocumentReadFailure(reason: string | null): reason is DocumentReadFailure {
   return reason !== null && reason in MESSAGES
 }
+
+/**
+ * The read did not complete — which is NOT one of the three above, and the
+ * distinction is the whole point of this pair.
+ *
+ * Those three are verdicts on the stored bytes and earn the recovery action
+ * that discards them. This one carries no verdict: IndexedDB fails
+ * transiently for reasons that say nothing about the document, and answering
+ * it with "your data could not be read" plus a button whose only effect is to
+ * delete that data inverts what actually happened. So the sentence says what
+ * is true — nothing was read this time — and the only action offered is to
+ * try again.
+ */
+export const DOCUMENT_READ_UNAVAILABLE = 'read-unavailable'
+
+export function isDocumentReadUnavailable(reason: string | null): boolean {
+  return reason === DOCUMENT_READ_UNAVAILABLE
+}
+
+export function documentReadUnavailableMessage(): string {
+  return 'This canvas could not be opened just now. Nothing has been changed.'
+}

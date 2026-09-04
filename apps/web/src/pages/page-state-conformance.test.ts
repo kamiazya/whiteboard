@@ -54,7 +54,13 @@ describe('page-state conformance', () => {
       // Word-boundary: `<LoadDegradedView` must be followed by whitespace,
       // `/` or `>` so a longer component name cannot satisfy the count.
       const mounts = source.match(/<LoadDegradedView[\s/>]/g) ?? []
-      expect(mounts, `${name} mounts LoadDegradedView once`).toHaveLength(1)
+      // At least one, not exactly one: the count used to encode "a page has
+      // one failure state", which stopped being true when a read that did not
+      // COMPLETE got its own state — same refusal to render the editor,
+      // different action, and the shared view takes the action as children
+      // precisely so both can use it. What this test is named for is the next
+      // two assertions; the count was never the part carrying it.
+      expect(mounts.length, `${name} mounts LoadDegradedView`).toBeGreaterThanOrEqual(1)
       // The load-failure paragraph's class lives only in the shared view; a
       // page containing it has re-inlined the state's markup.
       expect(countOf(source, 'max-w-md'), `${name} does not re-inline the view`).toBe(0)

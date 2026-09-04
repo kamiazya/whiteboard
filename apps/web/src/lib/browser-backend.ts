@@ -311,7 +311,14 @@ export class BrowserBackend implements DocumentBackend {
     if (
       legacy.kind === 'corrupt-snapshot' ||
       legacy.kind === 'corrupt-delta' ||
-      legacy.kind === 'unsupported-version'
+      legacy.kind === 'unsupported-version' ||
+      // Refuses for the SAME reason the three above do, from the opposite
+      // knowledge: they know the record is unreadable, this one knows
+      // nothing. Falling through would take the "there is no old record"
+      // branch below and place an empty node over a document that may be
+      // sitting on disk intact — the shadowing this method exists to avoid,
+      // reached by a transient IndexedDB failure.
+      legacy.kind === 'read-unavailable'
     ) {
       if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
       return false

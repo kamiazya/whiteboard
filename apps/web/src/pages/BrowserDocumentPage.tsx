@@ -66,7 +66,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
-import { isDocumentReadFailure } from '../lib/document-read-failure.js'
+import { isDocumentReadFailure, isDocumentReadUnavailable } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
@@ -81,7 +81,11 @@ import { cn } from '../lib/utils.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
+import {
+  derivePageState,
+  refineForContentReadFailure,
+  refineForUnavailableRead,
+} from './browser-page-state.js'
 import { mergePersistence } from './merge-persistence.js'
 import {
   type LoroStoreLike,
@@ -689,9 +693,12 @@ export function BrowserDocumentPage({
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only
   // arrive after the id it needed came out of that first phase.
-  const renderState = refineForContentReadFailure(
-    pageState,
-    isDocumentReadFailure(backendError) ? backendError : null,
+  const renderState = refineForUnavailableRead(
+    refineForContentReadFailure(
+      pageState,
+      isDocumentReadFailure(backendError) ? backendError : null,
+    ),
+    isDocumentReadUnavailable(backendError),
   )
 
   /**
@@ -855,6 +862,25 @@ export function BrowserDocumentPage({
   // a read that resolves first pins the pre-rename name with nothing left to
   // schedule another refresh. The snapshot is this canvas's live truth; the
   // list is only the copy the switcher reads for the OTHER documents.
+
+  if (renderState.kind === 'load-unavailable') {
+    return (
+      <LoadDegradedView message={renderState.message}>
+        <button
+          type="button"
+          // ponytail: a reload is the retry, because the read that failed
+          // happens during mount and the controller has no re-entry short of
+          // one. A controller-level `retry()` is the upgrade if this ever
+          // needs to keep unsaved state across the attempt — today there is
+          // none to keep, since the document never opened.
+          onClick={() => window.location.reload()}
+          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+        >
+          Try again
+        </button>
+      </LoadDegradedView>
+    )
+  }
 
   if (renderState.kind === 'load-degraded') {
     return (

@@ -107,9 +107,20 @@ export interface DocumentBackendHandlers {
    * 'unsupported-version': the envelope version number is not supported.
    * 'storage-failure': IDB open, transaction, or write failed; or corrupt record
    *   detected during a pushLocalUpdate (delta would be lost).
+   * 'read-unavailable': the READ did not complete, and carries no verdict on
+   *   the stored bytes — the transient IndexedDB failures (a connection closing
+   *   under a version change, an aborted transaction, a quota error) that are
+   *   not attributable to the record. Distinct from the three above precisely
+   *   so a consumer does not offer to discard a document over one; distinct
+   *   from 'storage-failure', which is a WRITE that did not land.
    */
   onError?: (
-    reason: 'corrupt-snapshot' | 'corrupt-delta' | 'unsupported-version' | 'storage-failure',
+    reason:
+      | 'corrupt-snapshot'
+      | 'corrupt-delta'
+      | 'unsupported-version'
+      | 'storage-failure'
+      | 'read-unavailable',
   ) => void
 }
 
