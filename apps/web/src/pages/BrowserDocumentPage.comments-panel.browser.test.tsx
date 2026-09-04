@@ -9,9 +9,11 @@
  * has to serve a markdown document, and a markdown document has no canvas to
  * hang anything on.
  */
+import { writeCommentThread } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -175,9 +177,91 @@ it('keeps the opener out of the editor surface, so it cannot swallow the editor 
   expect({ overlaps, opener: a.toJSON(), surface: b.toJSON() }).toMatchObject({ overlaps: false })
 })
 
+/**
+ * A markdown document's own record, holding one conversation.
+ *
+ * Seeded into the LEGACY per-document shape because that is the host a
+ * markdown document reaches when this browser has no workspace record for
+ * it, which is what an injected store double leaves behind — and it is the
+ * `threads` plane either way, since the plane is a peer of `body` rather
+ * than something inside a canvas envelope.
+ */
+function noteHoldingOneThread(): Uint8Array {
+  const doc = new LoroDoc()
+  writeCommentThread(doc, {
+    id: 't-note',
+    anchor: { kind: 'text', quote: { exact: 'the second paragraph' }, start: 12, end: 32 },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'is this still true?' }],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+const note = { ...snap, kind: 'markdown' as const, documentId: '0W16BGNTZ49EKRX27CHPV05AFN' }
+
+it('lists a markdown document conversations, which no session is there to deliver', async () => {
+  // The gap this closes. A markdown document is given NO BrowserBackend on
+  // purpose — the spatial sync layer persists a body-less doc to the same id
+  // and would clobber the body — so `useDocumentSync` stays idle and its
+  // annotation channel answers `[]` forever. The rail was therefore
+  // permanently empty on a note, and its opener permanently read `0`, over
+  // threads an MCP peer could write and nothing in the app could read.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingOneThread())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  // The count too: it is read off the same list, so a rail that fills while
+  // the opener still says nothing would be half a fix.
+  await waitFor(() => expect(screen.getByRole('button', { name: /comments, 1 open/i })), {
+    timeout: 15_000,
+  })
+  await userEvent.click(screen.getByRole('button', { name: /comments/i }))
+  await waitFor(() => expect(screen.getByText('is this still true?')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+})
+
+it('replies on a markdown document, where a reply has no session to travel through', async () => {
+  // The page's reply handler dispatches an editor command through the sync
+  // session, which for a note is wired to nothing — so without its own route
+  // the rail would show a reply box that silently discards what is typed
+  // into it, the one thing the panel's contract says a host must not offer.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingOneThread())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+  await userEvent.click(await screen.findByText('is this still true?'))
+
+  await userEvent.fill(await screen.findByRole('textbox', { name: /reply/i }), 'no, we changed it')
+  await userEvent.click(screen.getByRole('button', { name: /^reply$/i }))
+
+  await waitFor(() => expect(screen.getByText('no, we changed it')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+})
+
 it('offers the same opener on a markdown document, which has no canvas chrome to carry one', async () => {
   const store = new LocalStoreDouble()
-  const note = { ...snap, kind: 'markdown' as const, documentId: '0W16BGNTZ49EKRX27CHPV05AFN' }
   await store.setDefaultDocumentId(note.documentId)
   await store.save(note)
 

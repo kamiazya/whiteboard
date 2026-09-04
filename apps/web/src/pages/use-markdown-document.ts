@@ -28,17 +28,20 @@ import {
   type DocumentContainers,
   documentContainers,
   MARKDOWN_BODY_KEY,
+  readAnnotations,
   readCoreFacets,
   readMarkdownBody,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
   writeCoreFacets,
   writeMarkdownBody,
+  writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { CommentMessage, CommentThread, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
+import { sameAnnotations } from '../lib/annotations-equal.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
@@ -150,7 +153,47 @@ export interface MarkdownDocumentState {
    * across a move.
    */
   readonly bodyTextOf: (doc: Loro) => LoroText
+  /**
+   * Every conversation on this document (ADR-0026 step 3).
+   *
+   * Read here rather than through the sync session because a markdown
+   * document deliberately has NO backend — the spatial sync layer would
+   * clobber the body this hook writes — so the session sits idle and its
+   * annotation channel never speaks. That left the rail permanently empty
+   * on a note, with a door to conversations an MCP peer could write and
+   * nothing in the app could read.
+   *
+   * The threads plane is a peer of `body`, not something inside a canvas
+   * envelope, so the host this hook already holds is exactly the right
+   * place to read it from.
+   *
+   * Empty until the load resolves, and empty for a document with none —
+   * one value, because "no conversations" and "not yet known" produce the
+   * same rail and a null would only make every consumer say so twice.
+   */
+  readonly annotations: readonly CommentThread[]
+  /**
+   * Appends one message to a conversation on this document.
+   *
+   * A no-op for a thread this document does not hold, and for a document
+   * still loading — `writeThreadMessage` refuses to open a container it did
+   * not find, because a reply must never be the write that creates a thread
+   * (two replicas creating one under the same key merge to one of them, and
+   * the other side's messages are gone).
+   *
+   * The commit it makes is a local one, so the subscription above both
+   * republishes the layer and schedules the save; nothing here has to do
+   * either by hand.
+   */
+  readonly replyToThread: (threadId: string, message: CommentMessage) => void
 }
+
+/**
+ * Shared so the initial value and the value a document switch goes back to
+ * are one identity — a fresh `[]` each time would re-render every consumer
+ * of the rail on every switch for no change.
+ */
+const NO_ANNOTATIONS: readonly CommentThread[] = []
 
 /**
  * Names a document after the title its body announces, while nobody has
@@ -265,6 +308,7 @@ export function useMarkdownDocument(
   currentDocumentIdRef.current = documentId
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
+  const [annotations, setAnnotations] = useState<readonly CommentThread[]>(NO_ANNOTATIONS)
   const hostRef = useRef<ContentHost | null>(null)
   const loroRef = useRef(loro)
   loroRef.current = loro
@@ -294,6 +338,11 @@ export function useMarkdownDocument(
     setDoc(null)
     setBodyState(null)
     setCoreMetaState(null)
+    // The rail too: it is document-scoped like everything else here, and
+    // left standing it lists the previous document's conversations beside
+    // this one's body — with a reply box that would write into whichever
+    // document holds the thread it names.
+    setAnnotations(NO_ANNOTATIONS)
     // The indicator too. It reads `saved at 10:00` about the document that
     // left, and left standing that becomes a claim about this one, which was
     // never saved at all. Back to the initial value — no unsaved edits, no
@@ -312,6 +361,22 @@ export function useMarkdownDocument(
         if (cancelled) return
         hostRef.current = host
         const { containers } = host
+        // Guarded rather than left to throw: this runs inside the doc
+        // subscription below, where an exception would take the body's own
+        // refresh and the save schedule down with it — a document whose
+        // annotation layer cannot be read must still open and still save.
+        const publishAnnotations = (): void => {
+          let next: readonly CommentThread[]
+          try {
+            next = readAnnotations(containers)
+          } catch (err) {
+            log.warn('reading annotations failed', err)
+            return
+          }
+          // The subscription fires on every keystroke in the body, so
+          // without this the rail is handed a fresh array per character.
+          setAnnotations((current) => (sameAnnotations(current, next) ? current : next))
+        }
         // Subscribed AFTER the initial import, so loading never schedules a
         // save of what was just loaded. This is how commits made OUTSIDE
         // setBody — a CRDT binding mutating the 'body' container directly —
@@ -320,6 +385,8 @@ export function useMarkdownDocument(
           if (cancelled) return
           setBodyState(readMarkdownBody(containers))
           setCoreMetaState(readCoreFacets(containers) ?? DEFAULT_MARKDOWN_CORE_FACETS)
+          // Last, so a failure here cannot cost the refresh above.
+          publishAnnotations()
           if (event.by === 'local') scheduleSaveRef.current?.()
         })
         setDoc(host.doc)
@@ -340,6 +407,7 @@ export function useMarkdownDocument(
         }
         setBodyState(readMarkdownBody(containers))
         setCoreMetaState(readCoreFacets(containers) ?? DEFAULT_MARKDOWN_CORE_FACETS)
+        publishAnnotations()
       })
     return () => {
       cancelled = true
@@ -437,6 +505,12 @@ export function useMarkdownDocument(
     [scheduleSave],
   )
 
+  const replyToThread = useCallback((threadId: string, message: CommentMessage) => {
+    const host = hostRef.current
+    if (host === null) return
+    writeThreadMessage(host.containers, threadId, message)
+  }, [])
+
   const bodyTextOf = useCallback(
     (target: Loro): LoroText => {
       const host = hostRef.current
@@ -448,5 +522,15 @@ export function useMarkdownDocument(
     [documentId],
   )
 
-  return { body, setBody, saveState, coreFacets, setCoreFacets, doc, bodyTextOf }
+  return {
+    body,
+    setBody,
+    saveState,
+    coreFacets,
+    setCoreFacets,
+    doc,
+    bodyTextOf,
+    annotations,
+    replyToThread,
+  }
 }

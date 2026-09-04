@@ -1,7 +1,6 @@
 import type { IncomingMessage } from 'node:http'
 import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { SpanKind } from '@opentelemetry/api'
-import type { LoroDoc } from 'loro-crdt'
 import type { RawData, WebSocket } from 'ws'
 import type { VersionEntry } from '../../shared/api-contracts/document.js'
 import type { AgentActivityMessage, ServerTextMessage } from '../../shared/ws-messages.js'
@@ -121,14 +120,14 @@ setSyncSseHooks({
   resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
 })
 
-// Injected from document.ts. Called after every WS binary message to SIGNAL
-// that the document changed; the checkpoint itself lands once the document
-// goes quiet, and the trigger broadcasts it from there.
-type AutoVersionTrigger = (workspaceId: string, path: string, doc: LoroDoc) => void
-var autoVersionTrigger: AutoVersionTrigger = () => {}
-export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
-  autoVersionTrigger = fn
-}
+// Registered from document.ts and called after every WS binary message to
+// SIGNAL that the document changed; the checkpoint itself lands once the
+// document goes quiet, and the trigger broadcasts it from there. The holder
+// lives in auto-version.ts so neither side needs an import of the other — see
+// its comment for the dangling promise that arrangement replaced.
+export { setAutoVersionTrigger } from './document/auto-version.js'
+
+import { currentAutoVersionSignal } from './document/auto-version.js'
 
 // Test-only completion signal for the WS persistence path. Firing strictly
 // after `saveDocument` resolves lets a real-socket test await a deterministic
@@ -483,7 +482,7 @@ export async function handleWsUpgrade(
       resolvedDeps.liveDocuments
         .get(workspaceId, path)
         .then((doc) => {
-          autoVersionTrigger(workspaceId, path, doc)
+          currentAutoVersionSignal()(workspaceId, path, doc)
         })
         .catch((err: unknown) => {
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')

@@ -63,6 +63,9 @@ interface Props {
   // (merge). Undefined means "all capabilities on", matching every existing
   // caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
+  // Passed through to HeaderBranchChip: preview a variation without
+  // switching. The page owns the address, so it owns the handler.
+  onPreviewVariation?: (name: string) => void
   /**
    * Opens and closes the document's history. The PAGE owns both the state and
    * the panel: history is a column of the editor row, not a popover hanging
@@ -130,6 +133,7 @@ export default function WorkspaceTopBar({
   onNavigateBack,
   dataMode = 'daemon',
   capabilities,
+  onPreviewVariation,
   onToggleHistory,
   historyOpen = false,
   preview,
@@ -234,6 +238,7 @@ export default function WorkspaceTopBar({
               path={path}
               refreshSignal={branchRefreshSignal}
               mergeEnabled={mergeEnabled}
+              onPreviewVariation={onPreviewVariation}
             />
           </>
         )}

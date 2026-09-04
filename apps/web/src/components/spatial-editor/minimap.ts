@@ -7,6 +7,10 @@
  * into minimap space.
  */
 
+import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { NodeBox } from './geometry.js'
+
 export interface MinimapBox {
   readonly x: number
   readonly y: number
@@ -119,4 +123,31 @@ export function unprojectPoint(
   fit: MinimapFit,
 ): { x: number; y: number } {
   return { x: point.x / fit.scale + fit.originX, y: point.y / fit.scale + fit.originY }
+}
+
+/**
+ * Node boxes for the minimap overview, with each authored colour resolved to
+ * the accent the scene already uses for it. A preset key resolves through
+ * the given palette; a hex passes through; an unstyled node carries no
+ * colour and the overview falls back to its muted default.
+ *
+ * Looks up each box's node by id via a `Map` built once, rather than
+ * `nodes.find` per box (O(n) per lookup, O(n^2) over the whole canvas) —
+ * `find`-first and `Map`-last-wins cannot diverge for valid input, since
+ * node id uniqueness is a schema invariant (spatial.ts's `superRefine`
+ * rejects a duplicate node id before a canvas is ever constructed).
+ */
+export function buildMinimapNodes(
+  nodes: SpatialCanvas['nodes'],
+  boxes: readonly NodeBox[],
+  palette: SpatialPalette,
+): readonly (MinimapBox & { readonly color?: string })[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const colorOf = (id: string): string | undefined => {
+    const color = byId.get(id)?.color
+    if (color === undefined) return undefined
+    if (color.startsWith('#')) return color
+    return palette.presets[color as SpatialPresetKey]?.stroke
+  }
+  return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
 }

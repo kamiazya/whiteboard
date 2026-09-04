@@ -34,10 +34,7 @@ import {
   BROWSER_HISTORY_CAPABILITIES,
   type VersionPreviewSession,
 } from '../components/VersionTimeline'
-import {
-  BookmarkAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/BookmarkAction.js'
+import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
@@ -77,6 +74,7 @@ import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
+import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
@@ -89,6 +87,7 @@ import {
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
+import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -311,7 +310,7 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    setSaveVersionOutcome(null)
+    clearSaveVersionOutcome()
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
@@ -555,7 +554,7 @@ export function BrowserDocumentPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
-    annotations,
+    annotations: spatialAnnotations,
     loaded: canvasLoaded,
     onChange,
     externalVersion,
@@ -624,31 +623,37 @@ export function BrowserDocumentPage({
   // dot is small, so the panel a finger opens has to carry one too — the
   // daemon page's panel does. Announced on the window like every other
   // save, which is what clears the dot and refreshes the list.
-  const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
-  const saveVersionFromPanel = async (label: string): Promise<void> => {
-    if (versionsBackend === null || documentPath === null || savingVersion) return
-    // The document this run is about, fixed before the first await. The page
-    // switches documents without remounting, so a save that started on A can
-    // settle after B is on screen — and the scope-reset effect has already
-    // cleared the outcome by then, so the message would appear under B as if
-    // B had been saved. Same residual `handleDuplicate` guards against.
-    const startedOn = currentDocumentIdRef.current
-    setSavingVersion(true)
-    setSaveVersionOutcome(null)
+  const {
+    saving: savingVersion,
+    outcome: saveVersionOutcome,
+    run: runVersionSave,
+    clearOutcome: clearSaveVersionOutcome,
+  } = useVersionSaveFlow(currentDocumentIdRef, async (label) => {
+    // Narrowed by the precondition in `saveVersionFromPanel` below, which
+    // never calls `run` (so never reaches this body) while either is null.
+    if (versionsBackend === null || documentPath === null) {
+      throw new Error('saveVersionFromPanel: no versions backend or document path')
+    }
+    // Captured BEFORE the save, not after. Both arms read the live document
+    // at call time, so starting the capture here binds the picture to the
+    // state the save is about to mark. Awaiting the save first meant an edit
+    // made during it was drawn onto the older point — a picture of content
+    // that version does not contain.
+    const picture = captureBookmarkPicture(documentKind, {
+      exportScene,
+      body: markdownDoc.body,
+    })
+    let saved: Awaited<ReturnType<typeof versionsBackend.save>>
     try {
-      // Captured BEFORE the save, not after. `exportScene` reads the live
-      // scene synchronously at call time, so starting it here binds the
-      // picture to the state the save is about to mark. Awaiting the save
-      // first meant an edit made during it was drawn onto the older point —
-      // a picture of content that version does not contain.
-      const picture = captureBookmarkPicture(documentKind, {
-        exportScene,
-        body: markdownDoc.body,
-      })
-      const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('saved')
+      saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+    } catch (err) {
+      log.warn('save version from the History panel failed', err)
+      throw err
+    }
+    // The rest is the post-save announce work — thumbnail attach, the
+    // event that clears the dot and refreshes the History panel — run only
+    // once the guard has confirmed this save's document is still on screen.
+    return () => {
       // The picture rides with the bookmark, as it does on the daemon page —
       // one path through the seam, so a browser-kept row is not the one that
       // silently has no picture. Not awaited: the bookmark has landed, and
@@ -681,13 +686,11 @@ export function BrowserDocumentPage({
           detail: { workspaceId: 'local', path: documentPath },
         }),
       )
-    } catch (err) {
-      log.warn('save version from the History panel failed', err)
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('failed')
-    } finally {
-      if (currentDocumentIdRef.current === startedOn) setSavingVersion(false)
     }
+  })
+  const saveVersionFromPanel = async (label: string): Promise<void> => {
+    if (versionsBackend === null || documentPath === null) return
+    await runVersionSave(label)
   }
 
   // The second phase of the page state. `pageState` above is derived from what
@@ -704,6 +707,16 @@ export function BrowserDocumentPage({
    * not a rail that takes a third of the surface from everyone.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  /**
+   * This document's conversations, whichever half of the page holds them.
+   *
+   * A markdown document is given no BrowserBackend on purpose (see the
+   * `backend` memo), so the sync session it would speak through stays idle
+   * and its annotation channel answers `[]` forever. The markdown hook reads
+   * the same document-level `threads` plane off the host it already has, and
+   * from here down nothing cares which of the two did the reading.
+   */
+  const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
   /**
    * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
@@ -717,6 +730,13 @@ export function BrowserDocumentPage({
    * matched against the body, which is the markdown projection's job.
    */
   const resolveAnchor = useMemo(() => {
+    // A markdown document CAN tell now: a text anchor's passage is either
+    // still findable in the body or it is gone (see text-anchor.ts). Until
+    // that reader existed this branch answered `undefined` for every note,
+    // which the panel correctly read as "this host cannot tell" — true then,
+    // and a thread whose sentence had been deleted looked exactly like one
+    // whose sentence was still there.
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body)
     if (documentKind !== 'spatial') return undefined
     const nodeIds = new Set(canvas.nodes.map((node) => node.id))
     return (thread: CommentThread): 'placed' | 'orphaned' => {
@@ -724,33 +744,44 @@ export function BrowserDocumentPage({
       if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
-  }, [documentKind, canvas])
+  }, [documentKind, canvas, markdownDoc.body])
 
   /**
    * Appends the reader's reply to a conversation.
    *
-   * Goes through `onChange` like every other edit, so it is one undo step and
-   * rides the annotation channel — the alternative, a direct write, would put
-   * a second door onto the same plane with different history behaviour. The
-   * canvas argument is the CURRENT one unchanged: a reply touches no node and
-   * no edge, which is exactly why the command needed its own write path.
+   * On a spatial document it goes through `onChange` like every other edit,
+   * so it is one undo step and rides the annotation channel — a direct write
+   * there would put a second door onto the same plane with different history
+   * behaviour. The canvas argument is the CURRENT one unchanged: a reply
+   * touches no node and no edge, which is exactly why the command needed its
+   * own write path.
+   *
+   * A markdown document has no session for that command to travel through,
+   * so its reply goes to the host holding it instead. The two doors are not a
+   * duplicate: they lead to different documents, and the second exists
+   * precisely because the first is closed on a note.
    */
   const handleReply = useCallback(
     (threadId: string, body: string) => {
-      onChange(canvas, {
-        kind: 'reply-to-thread',
-        threadId,
-        message: {
-          id: crypto.randomUUID(),
-          body,
-          // No author: this app has no accounts, so there is no name to write
-          // that would not be invented. A message an MCP peer wrote carries
-          // the one its caller supplied, and the panel shows whichever it has.
-          createdAt: new Date().toISOString(),
-        },
-      })
+      const message = {
+        id: crypto.randomUUID(),
+        body,
+        // No author: this app has no accounts, so there is no name to write
+        // that would not be invented. A message an MCP peer wrote carries
+        // the one its caller supplied, and the panel shows whichever it has.
+        createdAt: new Date().toISOString(),
+      }
+      // A markdown document has no session to send a command through, so its
+      // reply goes to the host that holds it. Routing both through `onChange`
+      // would leave the rail's reply box present and inert on a note — the
+      // one thing the panel's contract says a host must not offer.
+      if (documentKind === 'markdown') {
+        markdownDoc.replyToThread(threadId, message)
+        return
+      }
+      onChange(canvas, { kind: 'reply-to-thread', threadId, message })
     },
-    [canvas, onChange],
+    [canvas, documentKind, markdownDoc.replyToThread, onChange],
   )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
@@ -863,13 +894,30 @@ export function BrowserDocumentPage({
   if (renderState.kind === 'load-degraded') {
     return (
       <LoadDegradedView message={renderState.message}>
-        <button
-          type="button"
-          onClick={() => void startFresh()}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-        >
-          Start fresh
-        </button>
+        {/* WHICH recovery is offered follows what the failure knows, and
+            getting it wrong is destructive rather than merely unhelpful:
+            `Start fresh` deletes the record, which is the right last resort
+            for a document this build cannot read, and the worst possible
+            button for one whose read was simply blocked — the data is
+            intact and one click removes it. So the retry is what an
+            unavailable read gets, and it is the only affordance there. */}
+        {backendError === 'read-unavailable' ? (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Try again
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void startFresh()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Start fresh
+          </button>
+        )}
       </LoadDegradedView>
     )
   }

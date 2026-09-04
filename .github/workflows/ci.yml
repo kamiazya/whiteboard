@@ -2,6 +2,11 @@ name: ci
 
 on:
   pull_request:
+  # For the merge queue: its speculative merge commits fire `merge_group`,
+  # and a required check that never reports on that event stalls the whole
+  # queue until timeout. Harmless while no queue is configured — the event
+  # simply never fires.
+  merge_group:
   push:
     branches: [main]
 
@@ -158,6 +163,54 @@ jobs:
       - name: Test browser projects (shard ${{ matrix.shard }}/2)
         timeout-minutes: 12
         run: pnpm test:browser --shard=${{ matrix.shard }}/2
+
+  # Detection-at-introduction (industry pattern: run new/changed tests many
+  # times BEFORE they can flake on main): every test file this PR touches is
+  # re-run 5x in fresh processes. A test that cannot survive five quiet runs
+  # has no business gating anyone; catching it here costs one job, catching
+  # it on main costs a root-cause lane (integrator-flow.md, CI flakes).
+  stress-changed-tests:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Collect changed test files
+        id: changed
+        # base_ref reaches the shell through env, never ${{ }} interpolation —
+        # a ref name may legally contain shell metacharacters.
+        # `.claude/**` is excluded: its test-NAMED files (biome-plugin lint
+        # fixtures) belong to no vitest project, and vitest exits 1 on a file
+        # list that matches no project.
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF" --depth=1
+          files=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
+          echo "files=$files" >> "$GITHUB_OUTPUT"
+          echo "changed test files: $files"
+
+      - name: Stress changed test files (5 runs, fresh process each)
+        if: steps.changed.outputs.files != ''
+        # Fresh vitest process per iteration on purpose: module state, test
+        # order and process env all reset, which is closer to the conditions
+        # a flake needs than one long in-process repeat (and config-level
+        # test.repeats is ignored by vitest 4.1 anyway — measured).
+        run: |
+          for i in 1 2 3 4 5; do
+            echo "=== stress run $i/5 ==="
+            pnpm exec vitest run --passWithNoTests ${{ steps.changed.outputs.files }}
+          done
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before

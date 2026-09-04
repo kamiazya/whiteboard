@@ -2,7 +2,7 @@ import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
-import { buildMinimapNodes } from './SpatialEditor.js'
+import { buildMinimapNodes } from './minimap.js'
 
 function nodes(entries: SpatialCanvas['nodes']): SpatialCanvas['nodes'] {
   return entries

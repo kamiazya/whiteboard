@@ -10,6 +10,7 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
@@ -269,10 +270,32 @@ export class BrowserBackend implements DocumentBackend {
     let workspaceDoc: LoroDoc
     try {
       workspaceDoc = await this.docs.create(getBrowserWorkspaceId())
-    } catch {
-      // The workspace record would not read back. Every document is in it,
-      // so this is the browser twin of a corrupt per-document snapshot.
-      if (!this.isStale(handlers)) handlers.onError?.('corrupt-snapshot')
+    } catch (err) {
+      // WHICH failure this was decides what the reader is told, and the two
+      // sentences are about different things.
+      //
+      // A typed unreadable error is a claim about the RECORD: every document
+      // is in the workspace document, so this is the browser twin of a
+      // corrupt per-document snapshot, and `corrupt-snapshot` is what the
+      // page turns into a full-page "This canvas’s data could not be read."
+      //
+      // Anything else is a read that never completed — a blocked open
+      // (another tab holding this app at an older version, which
+      // `openWhiteboardDb` rejects by name), an aborted transaction, storage
+      // that went away. Nothing about the stored bytes is known, and calling
+      // that damage accuses data that is sitting intact on disk — the one
+      // thing `document-read-failure.ts` says these sentences must never do,
+      // and worse, the page answers `corrupt-snapshot` with a Start fresh
+      // button that DELETES the record. `read-unavailable` keeps the page
+      // level treatment, since the content did not arrive either way and an
+      // editor over an empty canvas would be its own lie, and changes what
+      // is said and what is offered.
+      if (!this.isStale(handlers)) {
+        handlers.onError?.(
+          isStoredDocumentUnreadableError(err) ? 'corrupt-snapshot' : 'read-unavailable',
+        )
+      }
+      getAppLogger('browser-backend').warn('opening the workspace record failed', err)
       return
     }
     if (this.isStale(handlers)) return
@@ -311,7 +334,14 @@ export class BrowserBackend implements DocumentBackend {
     if (
       legacy.kind === 'corrupt-snapshot' ||
       legacy.kind === 'corrupt-delta' ||
-      legacy.kind === 'unsupported-version'
+      legacy.kind === 'unsupported-version' ||
+      // Refuses for the SAME reason the three above do, from the opposite
+      // knowledge: they know the record is unreadable, this one knows
+      // nothing. Falling through would take the "there is no old record"
+      // branch below and place an empty node over a document that may be
+      // sitting on disk intact — the shadowing this method exists to avoid,
+      // reached by a transient IndexedDB failure.
+      legacy.kind === 'read-unavailable'
     ) {
       if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
       return false

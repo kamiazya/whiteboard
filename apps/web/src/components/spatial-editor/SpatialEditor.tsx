@@ -62,17 +62,13 @@ import type {
   BoundingBox,
   MeasureText,
   ResolvedReference,
-  SpatialPalette,
-  SpatialPresetKey,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
-  commentAnchor,
   edgeLabelAnchor,
-  flattenDrawnEdgePath,
   outlineContentBox,
   placeCommentBubble,
   SPATIAL_DARK_PALETTE,
@@ -81,35 +77,16 @@ import {
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type {
-  CanvasComment,
-  CommentThread,
-  SpatialCanvas,
-  SpatialNode,
-} from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import {
-  forwardRef,
-  type ReactNode,
-  useEffect,
-  useImperativeHandle,
-  useMemo,
-  useRef,
-  useState,
-} from 'react'
+import { forwardRef, type ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { BoxMove } from './align.js'
-import {
-  CanvasContextMenu,
-  type CommentComposeState,
-  type ContextMenuTarget,
-  type DocumentPickerState,
-  type LinkDialogState,
-} from './CanvasContextMenu.js'
+import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
@@ -124,37 +101,22 @@ import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import {
-  distanceToPolyline,
-  findFreeSpot,
-  hitTest,
-  indexNodeBoxes,
-  type NodeBox,
-  unionBox,
-} from './geometry.js'
+import { distanceToPolyline, findFreeSpot, hitTest, indexNodeBoxes } from './geometry.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
-import type { GestureState } from './gestures.js'
-import {
-  createIdleState,
-  defaultCreateId,
-  NEW_NODE_HEIGHT,
-  NEW_NODE_WIDTH,
-  reduceGesture,
-} from './gestures.js'
+import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
-import { type MinimapNode, MinimapOverlay } from './MinimapOverlay.js'
+import { MinimapOverlay } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
   type NavigationEvent,
   type NavigationResult,
-  type NavigationState,
   type PointerKind,
   reduceNavigation,
 } from './navigation.js'
@@ -162,13 +124,8 @@ import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { requiredTextNodeHeight } from './scene-render.js'
-import { keyedWithoutPrefix, renderedCanvasKeyed } from './scene-render-core.js'
-import {
-  EMPTY_SELECTION,
-  reduceSelection,
-  type SelectionEvent,
-  type SelectionState,
-} from './selection.js'
+import { keyedWithoutPrefix } from './scene-render-core.js'
+import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
@@ -179,14 +136,20 @@ import {
 } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
+import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
+import { useEditSessionState } from './use-edit-session-state.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
+import { useInteractionState } from './use-interaction-state.js'
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
+import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
+import { useSceneProjection } from './use-scene-projection.js'
+import { useToolState } from './use-tool-state.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
@@ -492,33 +455,6 @@ function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
   }
 }
 
-/**
- * Node boxes for the minimap overview, with each authored colour resolved to
- * the accent the scene already uses for it. A preset key resolves through
- * the given palette; a hex passes through; an unstyled node carries no
- * colour and the overview falls back to its muted default.
- *
- * Looks up each box's node by id via a `Map` built once, rather than
- * `nodes.find` per box (O(n) per lookup, O(n^2) over the whole canvas) —
- * `find`-first and `Map`-last-wins cannot diverge for valid input, since
- * node id uniqueness is a schema invariant (spatial.ts's `superRefine`
- * rejects a duplicate node id before a canvas is ever constructed).
- */
-export function buildMinimapNodes(
-  nodes: SpatialCanvas['nodes'],
-  boxes: readonly NodeBox[],
-  palette: SpatialPalette,
-): readonly MinimapNode[] {
-  const byId = new Map(nodes.map((node) => [node.id, node]))
-  const colorOf = (id: string): string | undefined => {
-    const color = byId.get(id)?.color
-    if (color === undefined) return undefined
-    if (color.startsWith('#')) return color
-    return palette.presets[color as SpatialPresetKey]?.stroke
-  }
-  return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
-}
-
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
   function SpatialEditor(
     {
@@ -555,53 +491,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
       useEditorMeasurements(rootRef)
 
-    /**
-     * The multi-selection lives in ONE state object and every transition
-     * routes through the pure `reduceSelection` (selection.ts), so its
-     * invariants (primary never inside extras; extras only with a primary)
-     * hold by construction — never hand-write a primary/extras update pair.
-     * Functional updates make sequential events inside one handler compose
-     * instead of clobbering each other through stale closures.
-     */
-    const [selectionState, setSelectionState] = useState<SelectionState>(EMPTY_SELECTION)
+    const {
+      selectionState,
+      setSelectionState,
+      applySelection,
+      gestureState,
+      setGestureState,
+      gestureStateRef,
+      livePoint,
+      setLivePoint,
+      snapGuides,
+      setSnapGuides,
+      doublePressRef,
+      marquee,
+      setMarquee,
+      spaceDownRef,
+      lastPressRef,
+      activePointerIdRef,
+      navigationRef,
+      canvasRef,
+      longPressRef,
+      clearLongPress,
+    } = useInteractionState({ canvas })
     const selectedId = selectionState.primaryId
-    const applySelection = (event: SelectionEvent) =>
-      setSelectionState((prev) => reduceSelection(prev, event))
-    const [gestureState, setGestureState] = useState<GestureState>(createIdleState())
-    /**
-     * Live pointer position during an in-flight move/resize/connect, in canvas
-     * space. Component-local on purpose: the reducer still recomputes the real
-     * commit from startPoint at pointerup, so this drives ONLY the preview
-     * overlay below and never becomes a source of truth. Keeping it out of
-     * `canvas` is what stops a per-frame `renderCanvasToSvg` (measured at
-     * ~30ms on an 80-node canvas — far past a frame budget).
-     */
-    const [livePoint, setLivePoint] = useState<Point | null>(null)
-    /**
-     * Canvas-space lines justifying the current snap, cleared with the
-     * gesture. Same rationale as `livePoint`: a per-frame value that drives
-     * only an overlay, never the document.
-     */
-    const [snapGuides, setSnapGuides] = useState<{
-      readonly x: readonly number[]
-      readonly y: readonly number[]
-    } | null>(null)
-    // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
-    // Select restores the pre-tool editing behavior byte-for-byte; Connect
-    // arms object-first click-A, click-B edge creation. Creation is
-    // deliberately NOT a mode — the palette's Note entry works in every mode.
-    const [tool, setTool] = useState<EditorTool>(defaultTool)
-    const toolChosenByUserRef = useRef(false)
-    const initialToolAppliedRef = useRef(false)
-    useEffect(() => {
-      if (initialTool === undefined) return
-      if (initialToolAppliedRef.current || toolChosenByUserRef.current) return
-      initialToolAppliedRef.current = true
-      setTool(initialTool)
-    }, [initialTool])
-    const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
-    // Screen point of the last committed long-press, while its pulse plays.
-    const [longPressPulse, setLongPressPulse] = useState<Point | null>(null)
+    const {
+      tool,
+      setTool,
+      toolChosenByUserRef,
+      contextMenu,
+      setContextMenu,
+      longPressPulse,
+      setLongPressPulse,
+      openContextMenuAtRef,
+    } = useToolState({ defaultTool, initialTool })
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -610,15 +532,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * delete paths). Cleared whenever the primary selection clears.
      */
     const extraIds = selectionState.extraIds
-    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
-    const selectedBox = useMemo(
-      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
-      [boxes, selectedId],
-    )
-    const selectedNode = useMemo(
-      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
-      [canvas, selectedId],
-    )
+    const { boxes, selectedBox, selectedNode } = useNodeBoxes({ canvas, selectedId })
     /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
     const selection =
       selectedId !== null && selectedBox !== undefined
@@ -635,75 +549,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       viewportCenterScreen,
       containerSizeOf,
     })
-    /**
-     * Armed by a second same-target press inside the double-press window;
-     * RESOLVED at pointerup: zero movement opens the editor (node) or
-     * creates (empty), any movement means it was a drag all along. Firing
-     * at the release also sidesteps mousedown's default focus action, which
-     * used to blur the just-mounted textarea when we opened at the press.
-     */
-    const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
-    /** In-flight marquee selection rect, in canvas space (Excalidraw
-     * semantics: plain drag on empty space selects; pan is Space+drag,
-     * middle-button drag, or wheel). */
-    const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null)
-    const spaceDownRef = useRef(false)
-    /**
-     * Last press for the SELECT tool's double press, keyed by what was under
-     * it — a node id, an edge id, or `'empty'`. Hand mode's own double press
-     * is not here: it has no target to key on, so the navigation machine
-     * holds it with the distance bound that keying cannot supply.
-     */
-    const lastPressRef = useRef<{ key: string; at: number; point: Point } | null>(null)
-    /**
-     * The pointerId this component currently holds capture for, or `null`.
-     * Tracked so unmount can best-effort release capture (see the teardown
-     * effect below) even though no window-level fallback listener exists to
-     * do it otherwise — mirrors `trySetPointerCapture`'s own
-     * best-effort/never-throw reasoning.
-     */
-    const activePointerIdRef = useRef<number | null>(null)
-    /**
-     * Everything navigation owns, as one value: which fingers are down, what
-     * is driving the viewport, what the last hand press was. See
-     * `navigation.ts` — the refs this replaced could not say when a gesture
-     * was over, and twice shipped a field that outlived one.
-     */
-    const navigationRef = useRef<NavigationState>(createIdleNavigation())
-
-    const canvasRef = useRef(canvas)
-    canvasRef.current = canvas
-
-    // Mirror for callbacks that outlive their render — the long-press timer
-    // fires ~500ms after the closure that armed it, by which time the press
-    // itself has usually advanced the gesture ('pressing'/'moving'); reducing
-    // a cancel against the ARM-time state would mis-apply it.
-    const gestureStateRef = useRef(gestureState)
-    gestureStateRef.current = gestureState
-
-    /**
-     * Touch long-press -> context menu. iOS Safari never synthesises a
-     * `contextmenu` event from a touch long-press (Android Chrome does), so
-     * without this the app's object menu is simply unreachable on an iPhone
-     * — the press reads as a drag start and the menu never opens. Armed on
-     * a single stationary touch, cancelled by movement past the slop, a
-     * second finger, or lift.
-     */
-    const longPressRef = useRef<{
-      timer: ReturnType<typeof setTimeout>
-      pointerId: number
-      screen: Point
-    } | null>(null)
-    const clearLongPress = () => {
-      if (longPressRef.current !== null) {
-        clearTimeout(longPressRef.current.timer)
-        longPressRef.current = null
-      }
-    }
-    // The timer must call the LATEST render's opener (fresh viewport/boxes/
-    // selection), not the one captured when the finger landed.
-    const openContextMenuAtRef = useRef<(screen: Point) => void>(() => {})
-
     // The file-reference seam — the LOD gate, label/missing resolution and
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
@@ -739,12 +584,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       containerSizeOf,
       setViewport,
     })
-    /**
-     * Whether resolved comments are drawn (muted) — ADR-0025 decision 2:
-     * per-user VIEW state, never written to the shared document, so one
-     * person's toggle cannot change what another person sees.
-     */
-    const [showResolvedComments, setShowResolvedComments] = useState(false)
+    const {
+      showResolvedComments,
+      setShowResolvedComments,
+      selectedEdgeId,
+      setSelectedEdgeId,
+      pendingCut,
+      setPendingCut,
+      edgeLabelEditId,
+      setEdgeLabelEditId,
+      groupLabelEditId,
+      setGroupLabelEditId,
+      linkDialog,
+      setLinkDialog,
+      canvasPicker,
+      setDocumentPicker,
+      facetPanelOpen,
+      setFacetPanelOpen,
+    } = useEditSessionState({ canvas, selectedId })
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {
@@ -757,180 +614,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       fileRefOptions,
       missingFileRefs,
     )
-    // The committed surface's keyed projection, derived from the scene the
-    // worker (or sync path) delivered — ~3ms of stringify against the
-    // 66-125ms layout, so the worker protocol stays plain-data. The patch
-    // container below consumes it; the plain `svg` string is no longer
-    // read here.
-    const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
-    // Routed edge paths in canvas coordinates, for edge hit-testing and the
-    // selection highlight. Edges have no area, so selection is a
-    // distance-to-polyline test against a zoom-adjusted tolerance. The
-    // hit/highlight path is the DRAWN line — rounded corners flattened and
-    // line-jump hops arced over — via the same decomposition the SVG
-    // backend serializes, so a tap and the highlight land on the ink.
-    const edgePaths = useMemo(
-      () =>
-        scene.nodes.flatMap((node) =>
-          node.kind === 'edge'
-            ? [
-                {
-                  id: node.id,
-                  path: flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true),
-                },
-              ]
-            : [],
-        ),
-      [scene],
-    )
-    // Comment chrome (pins and bubbles) from the committed scene, for
-    // hit-testing: the shapes carry `${commentId}/pin` / `/bubble` ids and
-    // the commentChrome marker (ADR-0025 decision 5), so the boxes a press
-    // is tested against are exactly the boxes the renderer painted — one
-    // producer for the geometry. Later entries draw on top, so hit-testing
-    // walks them in reverse.
-    const commentChromeBoxes = useMemo(
-      () =>
-        scene.nodes.flatMap((node) => {
-          if (node.kind !== 'shape' || node.commentChrome !== true || node.id === undefined)
-            return []
-          const cut = node.id.lastIndexOf('/')
-          if (cut <= 0) return []
-          const part = node.id.slice(cut + 1)
-          if (part !== 'pin' && part !== 'bubble') return []
-          return [{ commentId: node.id.slice(0, cut), part, bbox: node.bbox }]
-        }),
-      [scene],
-    )
-    /**
-     * What a comment's bubble is placed around — the same obstacle set
-     * canvas-render's placer sees for it: every node that is not a group
-     * frame, plus the bubbles of the comments BEFORE it in document order
-     * (all of them for a comment about to be created, which goes last). The
-     * editor's draft and its drag preview both place through this, so a
-     * bubble opens, drags and settles in one spot.
-     */
-    const commentPlacementObstacles = (beforeCommentId?: string): BoundingBox[] => {
-      const out: BoundingBox[] = canvasRef.current.nodes
-        .filter((node) => node.type !== 'group')
-        .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
-      for (const entry of commentChromeBoxes) {
-        if (entry.part !== 'bubble') continue
-        if (entry.commentId === beforeCommentId) break
-        out.push(entry.bbox)
-      }
-      return out
-    }
-    const hitTestComment = (point: Point): string | undefined => {
-      for (let i = commentChromeBoxes.length - 1; i >= 0; i -= 1) {
-        const entry = commentChromeBoxes[i]
-        if (entry === undefined) continue
-        const { bbox } = entry
-        if (
-          point.x >= bbox.x &&
-          point.x <= bbox.x + bbox.w &&
-          point.y >= bbox.y &&
-          point.y <= bbox.y + bbox.h
-        ) {
-          return entry.commentId
-        }
-      }
-      return undefined
-    }
-    const commentById = (id: string): CanvasComment | undefined =>
-      canvasRef.current['x-whiteboard']?.comments?.find((entry) => entry.id === id)
-    /**
-     * Opens a conversation in place, or shuts the one already open. Pressing
-     * the comment whose card is up is how it closes without hunting for the
-     * ×, which is the gesture people try first.
-     */
-    const toggleCommentCard = (commentId: string): void => {
-      setOpenCommentId((current) => (current === commentId ? null : commentId))
-    }
-    /** Opens the compose bubble over an existing comment, pre-filled, to rewrite its text. */
-    const openCommentEditor = (comment: CanvasComment) => {
-      setCommentCompose({
-        point: commentAnchor(comment, canvasRef.current),
-        editing: { id: comment.id, initialText: comment.text },
-      })
-    }
-    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-    /**
-     * A cut waiting for its paste — the front half of a move. Pure view
-     * state (never persisted or synced): the nodes stay in the document,
-     * dimmed by GhostOverlay, until a same-canvas paste MOVES them, or the
-     * hold is lifted (Escape, a newer copy/cut, or any edit that touches a
-     * held node). `snapshot` records each held node's full serialized value
-     * at cut time so ANY change — a drag, a text or color edit, a remote
-     * write, a delete — reads as "someone touched it" and cancels the hold;
-     * nothing is ever lost by a cancel, because nothing was deleted.
-     */
-    const [pendingCut, setPendingCut] = useState<{
-      readonly cutId: string
-      readonly snapshot: ReadonlyMap<string, string>
-    } | null>(null)
-    useEffect(() => {
-      // Anyone touching a held node — local drag, remote edit, delete —
-      // lifts the hold; the veil must never dim a node that changed under
-      // it. The move resolution clears the hold before it applies, so its
-      // own geometry change never races this.
-      if (pendingCut === null) return
-      const touched = [...pendingCut.snapshot].some(([id, frozen]) => {
-        const node = canvas.nodes.find((n) => n.id === id)
-        return node === undefined || JSON.stringify(node) !== frozen
-      })
-      if (touched) setPendingCut(null)
-    }, [canvas, pendingCut])
-    const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
-    const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
-    /**
-     * The conversation opened in place on the canvas — at most one, because
-     * a card is a place to read and answer ONE thread, and a canvas of
-     * simultaneously open cards is the comments rail with worse layout.
-     */
-    const [openCommentId, setOpenCommentId] = useState<string | null>(null)
-    /**
-     * The comment a press landed on, read back at the release. A press that
-     * never travelled opens the card; one that travelled was a pin drag and
-     * the drag branch owns it.
-     */
-    const pressedCommentRef = useRef<string | null>(null)
-    /**
-     * A point-anchored comment's pin being dragged: the comment as it was
-     * at the press (its stored anchor), the press point, and the live
-     * pointer. Kept beside the gesture machine rather than in it — see
-     * CommentDragLayer for why — so the node machinery (snapping, carried
-     * sets, live edges) never has to learn what a comment is.
-     */
-    const [commentDrag, setCommentDrag] = useState<{
-      readonly comment: CanvasComment
-      readonly startPoint: Point
-      readonly live: Point | null
-      /** The obstacle set at the press, so the preview places like the committed chrome. */
-      readonly obstacles: readonly BoundingBox[]
-      /**
-       * Set on release: the anchor the move was committed at. The drag then
-       * SETTLES rather than ending — the preview stays up, and the committed
-       * copy stays out of the surface, until the committed scene carries the
-       * comment at this anchor (a worker round trip later on a large canvas).
-       * Ending at the release instead showed the old copy for a frame and
-       * animated it to the new anchor.
-       */
-      readonly dropped: Point | null
-    } | null>(null)
-    useEffect(() => {
-      if (commentDrag?.dropped == null) return
-      const { dropped } = commentDrag
-      const pin = commentChromeBoxes.find(
-        (entry) => entry.commentId === commentDrag.comment.id && entry.part === 'pin',
-      )
-      const arrived =
-        pin !== undefined &&
-        pin.bbox.x + pin.bbox.w / 2 === dropped.x &&
-        pin.bbox.y + pin.bbox.h / 2 === dropped.y
-      // Gone (removed underneath the drag) settles too: nothing to wait for.
-      if (arrived || commentById(commentDrag.comment.id) === undefined) setCommentDrag(null)
-    }, [commentDrag, commentChromeBoxes])
+    const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
+      useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    const {
+      commentPlacementObstacles,
+      hitTestComment,
+      commentById,
+      toggleCommentCard,
+      openCommentEditor,
+      commentCompose,
+      setCommentCompose,
+      openCommentId,
+      setOpenCommentId,
+      pressedCommentRef,
+      commentDrag,
+      setCommentDrag,
+    } = useCommentState({ canvasRef, commentChromeBoxes })
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -939,27 +638,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         draggedCommentId === undefined ? keyed : keyedWithoutPrefix(keyed, `${draggedCommentId}/`),
       [keyed, draggedCommentId],
     )
-    // The URL dialog serves both palette-create and context-menu-edit; which
-    // one decides what its submit does.
-    const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
-    const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
-    const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
-    // The inspector is open or shut; WHICH node it edits follows the
-    // selection. Pinning it to the node the menu was opened on made it a
-    // dialog you had to close before you could look at anything else.
-    const [facetPanelOpen, setFacetPanelOpen] = useState(false)
-    // Deselecting CLOSES it, rather than leaving it standing with nothing to
-    // edit. It is the same act that dismisses the context menu, and on touch
-    // a press on blank canvas is how you put a surface away — one semantic
-    // instead of two, and no dismiss control for this panel to carry.
-    //
-    // Cleared during render rather than in an effect, the shape
-    // `DerivedFacetForm` uses for its draft: an effect would let the panel
-    // paint one frame with nothing in it. Clearing the FLAG (rather than
-    // rendering null and leaving it true) is what keeps a later re-open an
-    // ordinary open — the earlier version of this returned null and stranded
-    // the flag, which only a new selection could get out of.
-    if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
     // Lock seams + coherence (predicates, selectable subset, and the two
     // effects that retire state a lock arrival invalidates) — see
     // use-lock-policy.ts.
@@ -1030,25 +708,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [boxes],
     )
 
-    /**
-     * Every selected node with the box it currently occupies, primary first.
-     *
-     * The resize handles surround the UNION of these rather than the primary
-     * alone: handles drawn around a group have to act on the group, or a
-     * three-node selection offers one node's handles and resizes that node
-     * while the other two watch.
-     */
-    const selectionMembers = useMemo(() => {
-      if (selectedId === null) return []
-      return [selectedId, ...extraIds].flatMap((id) => {
-        const entry = boxes.find((candidate) => candidate.id === id)
-        return entry === undefined ? [] : [{ id, box: entry.box }]
-      })
-    }, [selectedId, extraIds, boxes])
-    const selectionBox = useMemo(
-      () => unionBox(selectionMembers.map((member) => member.box)),
-      [selectionMembers],
-    )
     const isMultiSelection = selectionMembers.length > 1
 
     /**
@@ -1987,17 +1646,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
-    /**
-     * Node boxes for the overview, with each authored colour resolved to the
-     * accent the scene already uses for it. A preset key resolves through the
-     * current mode's palette; a hex passes through; an unstyled node carries
-     * no colour and the overview falls back to its muted default.
-     */
-    const minimapNodes = useMemo(() => {
-      const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
-      return buildMinimapNodes(canvas.nodes, boxes, palette)
-    }, [boxes, canvas, theme])
-
     /**
      * Pans so the union of all node boxes sits centered in the viewport,
      * keeping the current zoom (the hand-mode "where did my content go"
