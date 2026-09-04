@@ -26,7 +26,7 @@ describe('assertNoSetStateInRenderWarning', () => {
   it('fails on the "Cannot update a component while rendering a different component" phrasing', () => {
     const spy = spyWithCalls([
       [
-        'Warning: Cannot update a component (`DocumentList`) while rendering a different component (`DocumentThumb`).',
+        'Warning: Cannot update a component (`DocumentList`) while rendering a different component (`DocumentRow`).',
       ],
     ])
 

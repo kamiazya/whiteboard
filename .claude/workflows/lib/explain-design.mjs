@@ -9,6 +9,9 @@
 const nonBlankList = (v) =>
   Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && /\S/.test(x))
 const stringList = (v) => Array.isArray(v) && v.every((x) => typeof x === 'string')
+// Kept identical to DESIGN_SCHEMA's `benefit` pattern by design-schema.test.mjs; spelled out here
+// because this module deliberately does not import the schema (it is the inline-mode half).
+const benefitClaim = /^(delta|relocation|elimination|obvious):\s*\S/
 
 const CHECKPOINTS = [
   {
@@ -42,6 +45,12 @@ const CHECKPOINTS = [
     ok: (d) => nonBlankList(d.userReach),
     supply:
       'the entry point that makes this reachable by a user, or one "foundation: <reason> — wired by <named follow-up>" entry',
+  },
+  {
+    field: 'benefit',
+    ok: (d) => typeof d.benefit === 'string' && benefitClaim.test(d.benefit),
+    supply:
+      'which kind of benefit this claims, prefixed with the column that decides the instrument — "delta: <the metric and the bench>", "relocation: <what the waited-on path stops doing, and what the handover costs>", "elimination: <the class of mistake, and what fails when it recurs>", or "obvious: <reason>" (see the measured-change skill)',
   },
 ]
 

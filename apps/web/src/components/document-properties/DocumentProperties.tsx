@@ -2,6 +2,8 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
+import { cn } from '@/lib/utils'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -182,7 +184,10 @@ export function DocumentProperties({
                 aria-label="Properties"
                 aria-expanded={open}
                 aria-controls={`${suggestionsId}-disclosure`}
-                className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
+                className={cn(
+                  'text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5',
+                  TOGGLE_STATE_CLASS,
+                )}
               >
                 <Info aria-hidden="true" className="size-4" />
               </button>

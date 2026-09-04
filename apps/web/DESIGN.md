@@ -447,6 +447,46 @@ destructive entry alone at the bottom. What is learned in one vessel
 must transfer to the other, so a new action is added to the catalog,
 never to a single vessel.
 
+## A toggle looks toggled, and says so once
+
+A control that switches something on — a rail, a popover, a tool, a filter —
+expresses that state **from its ARIA attribute**, through
+`TOGGLE_STATE_CLASS` (`components/ui/dock-button`) or an
+`aria-pressed:` / `aria-expanded:` variant of its own. `aria-pressed={open}`
+is then the ONE place the state is written.
+
+Two spellings this replaced, both of which had spread across the app:
+
+- **doubled** — `aria-pressed={open}` beside `open && 'bg-accent …'`. The
+  same fact in two places, so an editor who changes one leaves the picture
+  disagreeing with what a screen reader is told.
+- **absent** — the attribute alone. Announced, invisible. Found in the
+  running app on the comments rail: its opener looked identical open and
+  closed, and on two other controls nobody had noticed.
+
+`toggle-state-surface.test.ts` holds it: it reads the opening tag of every
+element with a dynamic `aria-pressed`/`aria-expanded` and requires the state
+to be derived there. Class constants that compose `TOGGLE_STATE_CLASS` are
+found by scanning rather than listed, so `TOOL_BUTTON_CLASS` counts without
+anyone maintaining a name list.
+
+**A control may keep its own look.** The segmented control in the markdown
+toolbar raises its selected segment instead of filling it
+(`aria-pressed:bg-background aria-pressed:shadow-sm`), and the edge-routing
+options add `aria-pressed:font-medium`. What the rule fixes is where the
+state is written, not what it looks like.
+
+Exemptions are listed in the guard with a reason each: a tree row's
+disclosure triangle expresses itself by ROTATING, and the canvas context
+menu's `aria-expanded` is about its colour submenu while its `bg-accent` is
+about the selected colour — two different subjects, so deriving one from the
+other would be wrong.
+
+And use the **theme tokens**, not raw palette steps. The comments filter
+shipped with `bg-neutral-200 dark:bg-neutral-700` — a second colour system
+beside the one every other control uses, which does not follow a theme
+change.
+
 ## Bottom chrome: one dock, fixed width
 
 All bottom-anchored canvas chrome lives in ONE flex container (the tool

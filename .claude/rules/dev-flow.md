@@ -69,10 +69,18 @@ developer (TDD), plan-reviewer, reviewer-dimension, security-scanner, qa-scenari
 
 TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-written interface); `getLogger` (no `console.*` in server code); behavior-preserving refactors keep existing tests un-weakened; mutation-check schema/regression fixes; immutable updates; single-integrator / single-push. **Temp artifacts go in `tmp/` buckets — screenshots → `tmp/screenshots/` (explicit path), never the repo root or a source dir.**
 
-**Reach is designed, not discovered in review.** Beside `scope` (what you intend to edit), dev-loop's `DESIGN_SCHEMA` requires two answers `scope` cannot give, both judged by PlanReview and re-asked of the diff by the `reachability` review dimension:
+**Reach and worth are designed, not discovered in review.** Beside `scope` (what you intend to edit), dev-loop's `DESIGN_SCHEMA` requires three answers `scope` cannot give, all judged by PlanReview — the first two re-asked of the diff by the `reachability` review dimension:
 
 - **`blastRadius`** — who else inside the codebase this edit reaches, each caller flagged for whether a test would fail if it broke. `typecheck` already catches *signature* breaks; this is for the caller that still compiles, changed behavior, and has nothing watching it. Use an impact-graph MCP tool (`get_impact_radius_tool`) when connected, else grep. Sentinels: `none:` (leaf change), `unavailable:` (no such tool on this machine — accepted without argument; nobody is gated on optional local tooling).
 - **`userReach`** — whether it reaches a USER at all: the registration, route, rendering parent, or flag-read that this increment adds. Built-but-unwired passes every other gate, because the tests pass *precisely by calling the new code directly*. A foundation-only slice is fine; a silently foundation-only one is the defect. Sentinel: `foundation: <reason> — wired by <named follow-up>`, rejected if the follow-up is too vague to file.
+- **`benefit`** — what the change is WORTH, in the currency that picks its instrument. `delta:`
+  (a metric moves) is a bench or a scoreboard; `relocation:` (work leaves the path a person
+  waits on) is what that path stops doing PLUS what the handover costs; `elimination:` (a class
+  of mistake stops being possible) is a count or a mutation check; `obvious:` is worth visible in
+  the diff. PATTERN-enforced, because a field asking someone to choose a column is one they
+  answer in prose otherwise. What it prevents: a relocation pointed at a stopwatch, which cannot
+  see one — and reports a null that reads as a verdict on the change rather than on the probe.
+  Worked cases: `measured-change`.
 
 `codebase-auditor`'s `wiring-gaps` dimension stays the periodic sweep for whatever still slipped through.
 
@@ -85,7 +93,7 @@ worked measurements live.** Load it before the work, not after:
   correct-looking code whose worth is entirely in numbers nobody has taken, so the INSTRUMENT
   lands first, in its own commit, and the change is judged by it. It rejected three changes that
   were obviously right on argument, and priced a fourth through three shapes until one was worth
-  paying for.
+  paying for. Which numbers it wants follows from `benefit`'s column, above.
 - **`diagnosis-evidence`** — before publishing ANY cause, "not a regression", mutation result, or
   fix you are calling verified by hand. A number arrives looking like evidence while saying
   nothing about what was actually exercised; the fix is to choose an observation that could

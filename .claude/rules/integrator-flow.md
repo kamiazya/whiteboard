@@ -157,6 +157,13 @@ imports. Start the run, then leave the working tree alone.
   a raw DOM wipe also races the shared setup's own cleanup, so in
   isolation it reproduces only intermittently (1 in 17 reruns) while CI
   load makes it reliable.
+- **A tenth: `EnvironmentTeardownError: Cannot load '<module>' ... after the
+  environment was torn down`.** The ninth's signature — `2130 passed`,
+  `Errors 2`, job red, so the exit code is the only tell — with another
+  cause. NOT the in-body `await import()` shape: every import in the chain
+  was static, so hoisting fixes nothing. Vitest instantiates a static graph
+  on demand and its tail was still loading at teardown; the file it names is
+  a victim. Did not reproduce in three runs of CI's own shard command.
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.

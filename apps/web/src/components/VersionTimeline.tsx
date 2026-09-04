@@ -36,13 +36,29 @@ export interface VersionPreviewSession {
 }
 
 /**
- * What the keeper behind this history can do. Both default to true — the
- * daemon's shape — so every existing mount is unchanged; the browser keeper
- * passes both false: it has one lane and saves only when asked.
+ * What the keeper behind this history can do.
+ *
+ * A prop rather than a read of the provider's capability map, because these
+ * are not the same question: that map says what the CONNECTION offers, and
+ * this says what the history in front of you does. The two shapes below are
+ * the only answers a keeper has, named so a mount states which keeper it is
+ * instead of writing a literal that reads like a preference.
  */
 export interface VersionTimelineCapabilities {
   readonly branches: boolean
   readonly autoVersions: boolean
+}
+
+/** The daemon's history: lanes, and a checkpoint after work settles. */
+export const DAEMON_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
+  branches: true,
+  autoVersions: true,
+}
+
+/** The browser's history: one lane, and a point only when asked for. */
+export const BROWSER_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
+  branches: false,
+  autoVersions: false,
 }
 
 interface Props {
@@ -158,7 +174,7 @@ function RowShell({
 export default function VersionTimeline({
   workspaceId,
   path,
-  capabilities = { branches: true, autoVersions: true },
+  capabilities = DAEMON_HISTORY_CAPABILITIES,
   onRestored,
   onPreview,
   refreshSignal,

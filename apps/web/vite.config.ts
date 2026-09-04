@@ -8,7 +8,9 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { rendererBuildDefine } from './renderer-build-id.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
+import { manualChunks } from './vite-manual-chunks.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
@@ -16,6 +18,7 @@ import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  define: { ...rendererBuildDefine },
   // Both workers are constructed with `type: 'module'`, but Vite's default
   // worker output is `iife` — which happened to run anyway, since a module
   // worker executes IIFE code fine. It stops being harmless the moment a
@@ -81,13 +84,7 @@ export default defineConfig({
         // the entry ended up eagerly loading the whole vendor-loro-crdt
         // chunk through a dependency that had nothing to do with loro.
         //
-        manualChunks(id) {
-          if (!id.includes('node_modules')) return undefined
-          if (id.includes('/react-dom/') || id.includes('/react/') || id.includes('scheduler')) {
-            return 'vendor-react'
-          }
-          return undefined
-        },
+        manualChunks,
       },
     },
   },

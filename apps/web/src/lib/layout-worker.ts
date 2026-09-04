@@ -30,6 +30,7 @@
 import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   layoutMarkdownOutline,
   renderMarkdownPreview,
@@ -61,6 +62,36 @@ function contentCacheFor(theme: ResolvedTheme): SpatialContentCache {
   const cache = createSpatialContentCache()
   contentCaches.set(theme, cache)
   return cache
+}
+
+/**
+ * Decodes a stored snapshot into a canvas, INSIDE the worker.
+ *
+ * The import is lazy and memoized for the same reason `sse-shared-worker.ts`
+ * defers its own: loro-crdt initialises WASM, and paying that at worker
+ * startup would charge every markdown render and every editor layout for
+ * something only this path needs. The first spatial thumbnail pays it once
+ * per worker, off the main thread, at background priority.
+ */
+let loroBundle:
+  | Promise<{
+      readonly LoroDoc: typeof import('loro-crdt').LoroDoc
+      readonly readSpatialCanvas: typeof import('@kamiazya/whiteboard-loro-adapter').readSpatialCanvas
+    }>
+  | undefined
+
+async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
+  loroBundle ??= Promise.all([
+    import('loro-crdt'),
+    import('@kamiazya/whiteboard-loro-adapter'),
+  ]).then(([loro, adapter]) => ({
+    LoroDoc: loro.LoroDoc,
+    readSpatialCanvas: adapter.readSpatialCanvas,
+  }))
+  const { LoroDoc, readSpatialCanvas } = await loroBundle
+  const doc = new LoroDoc()
+  doc.import(bytes)
+  return readSpatialCanvas(doc)
 }
 
 // Registration is idempotent and memoized inside the loader, but the FIRST
@@ -162,7 +193,12 @@ self.onmessage = async (
     }
     const labels = new Map((request.fileRefLabels ?? []).map((o) => [o.file, o.label]))
     const missingRefs = new Set(request.missingFileRefs ?? [])
-    const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(request.canvas, {
+    // A corrupt snapshot throws here and lands in the catch below as a
+    // `failed` reply, which is what the row's kind icon is for. It must not
+    // take the worker down: every request queued behind it belongs to a
+    // different document.
+    const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+    const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
       resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),

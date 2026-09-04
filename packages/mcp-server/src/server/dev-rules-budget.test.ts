@@ -61,7 +61,13 @@ function alwaysOnFiles(): string[] {
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
   '.claude/rules/architecture-map.md': 14,
-  '.claude/rules/dev-flow.md': 25,
+  // 26 since the design checkpoints gained `benefit` — the column a change's
+  // worth is claimed in, which decides how it gets verified. The entry sits
+  // beside `blastRadius` and `userReach` because it is a peer required field,
+  // and the file had 277 characters of headroom, so the bucket is bought by
+  // one bullet rather than by drift. The three worked cases live in the
+  // `measured-change` skill, which is not always-on and costs nothing here.
+  '.claude/rules/dev-flow.md': 26,
   '.claude/rules/integrator-flow.md': 13,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
@@ -71,7 +77,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 86
+const ALWAYS_ON_TOTAL_BUDGET = 87
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by

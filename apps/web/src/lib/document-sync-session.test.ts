@@ -13,7 +13,9 @@ import {
   readSpatialCanvas,
   setNodeLock,
   writeCanvasComment,
+  writeCommentThread,
   writeSpatialCanvas,
+  writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
@@ -222,6 +224,122 @@ describe('createDocumentSyncSession', () => {
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
     expect(listener).toHaveBeenCalledWith(patched, 'external')
+    unsubscribe()
+  })
+
+  it('publishes the annotation layer beside the canvas, read from the doc', () => {
+    // ADR-0026 step 2: the layer is document-level, so the session reads it
+    // with `readAnnotations` rather than picking it out of the canvas it just
+    // built. This is the accessor the comments panel and the markdown editor
+    // consume — neither of which has a canvas envelope to read.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 12, y: 34 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'needs a second look' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getAnnotations()).toEqual([
+      {
+        id: 't1',
+        anchor: { kind: 'spatial', x: 12, y: 34 },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'needs a second look' }],
+      },
+    ])
+  })
+
+  it('republishes annotations when a remote peer replies, without a canvas edit', () => {
+    // A reply changes no node and no edge. A subscriber that only hears about
+    // canvas values would never learn of it, which is the whole reason this
+    // is its own channel.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 0, y: 0 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'first' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+    writeThreadMessage(doc, 't1', { id: 'm2', body: 'a reply from elsewhere' })
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0]?.[0]?.[0]?.messages.map((m: { body: string }) => m.body)).toEqual(
+      ['first', 'a reply from elsewhere'],
+    )
+    unsubscribe()
+  })
+
+  it('republishes annotations after a LOCAL comment commit, which is how a person creates one', async () => {
+    // The path a person actually takes, and the one the remote-peer case
+    // above does not cover: the editor commits a comment through
+    // `commitToDoc`, which writes it into the doc and — before this — never
+    // told the annotation channel. Found by dogfooding: the bubble appeared
+    // on the canvas (the optimistic canvas value is published undebounced)
+    // while the panel went on saying "No comments yet" for the rest of the
+    // session, because annotations were only recomputed when a REMOTE update
+    // happened to arrive.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(emptyCanvas()))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    const comment: CanvasComment = {
+      id: 'c1',
+      x: 40,
+      y: 60,
+      text: 'made right here',
+      createdAt: '2026-09-03T00:00:00.000Z',
+    }
+    const command: EditorCommand = { kind: 'create-comment', comment }
+    const next = applyCommand(emptyCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations().map((thread) => thread.messages[0]?.body)).toEqual([
+      'made right here',
+    ])
+    expect(listener).toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('does not republish annotations for a commit that touched no conversation', async () => {
+    // The guard is value equality rather than a list of comment-shaped
+    // command kinds: a classification over EditorCommand['kind'] is silent
+    // when kind N+1 arrives, and this one would go stale into "the panel
+    // stops updating" — the exact defect above, re-introduced.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(listener).not.toHaveBeenCalled()
     unsubscribe()
   })
 

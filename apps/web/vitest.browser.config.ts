@@ -8,11 +8,13 @@ import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { rendererBuildDefine } from './renderer-build-id.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  define: { ...rendererBuildDefine },
   resolve: {
     alias: {
       ...mcpSourceAlias,

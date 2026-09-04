@@ -36,11 +36,41 @@ import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
 export type FileRefLabel = { readonly file: string; readonly label: string }
 
-export type LayoutRequest = {
+/**
+ * A canvas the worker should lay out, in one of two shapes.
+ *
+ * `canvas` is for a caller that already HOLDS one in memory — the editor,
+ * whose LoroDoc is live — where exporting a snapshot just to post it would be
+ * strictly worse. `snapshot` is for a caller that has only the stored bytes,
+ * and hands them over without decoding: the point is not a faster render but
+ * a main thread that stays free while one happens, so whatever the person is
+ * doing meanwhile keeps the budget the decode was taking.
+ *
+ * Two measurements decide the shape, and the second is the load-bearing one:
+ *
+ * - Decoding on the main thread costs 1.20ms at 12 nodes, 2.60ms at 40 and
+ *   4.60ms at 120 — so a list of twenty visible rows was spending 24-92ms of
+ *   the thread that answers the user, to hand work to a worker that could
+ *   decode it itself.
+ * - Handing over the BYTES costs nothing measurable (the structured clone of
+ *   the decoded object was 0.10-0.40ms; of the bytes, below measurement).
+ *   That is what makes the move a release rather than a relocation — an
+ *   expensive handover would simply have moved the block into the handover,
+ *   and the main thread's share of a thumbnail would still not be zero.
+ *
+ * Exactly one of the two, which is what the union says. Decoding pulls
+ * loro-crdt's WASM into the worker, so the worker imports it lazily and only
+ * this shape pays for it — the editor's path and every markdown render are
+ * untouched.
+ */
+type LayoutSubject =
+  | { readonly canvas: SpatialCanvas; readonly snapshot?: undefined }
+  | { readonly snapshot: Uint8Array; readonly canvas?: undefined }
+
+export type LayoutRequest = LayoutSubject & {
   readonly type: 'layout'
   /** Echoed back so a late reply for a superseded canvas can be dropped. */
   readonly id: number
-  readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
   readonly fileRefLabels?: readonly FileRefLabel[]
   /** File refs the host resolved as dangling — the plain-data form of the

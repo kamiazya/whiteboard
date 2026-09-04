@@ -1116,7 +1116,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
     ).toBe(false)
   })
 
-  it('renders the thumbnail <img> for the same-origin fallback (no provider)', async () => {
+  it('draws the picture the keeper answers with', async () => {
     const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -1130,7 +1130,10 @@ describe('VersionTimeline via DaemonApiContext', () => {
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await screen.findByText(/Assistant/)
-    expect(document.querySelector('img')).not.toBeNull()
+    // Awaited rather than read once: the picture arrives from the keeper on a
+    // later tick now, where it used to be an <img src> the first render
+    // already carried.
+    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
   })
 
   it('titles a version a person marked by the name they gave it', async () => {

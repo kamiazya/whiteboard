@@ -23,7 +23,10 @@ import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
-import type { VersionPreviewSession } from '../components/VersionTimeline'
+import {
+  DAEMON_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import {
   BookmarkAction,
@@ -31,10 +34,11 @@ import {
 } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import { useBookmarkShortcut } from '../components/workspace-top-bar/useSaveVersion.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
@@ -63,7 +67,7 @@ import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { uploadVersionThumbnail } from '../lib/version-thumbnail.js'
+import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
@@ -551,6 +555,11 @@ export function DaemonDocumentPage({
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
+  // The keeper this page's history belongs to. No provider is mounted here,
+  // so this is the daemon backend over `DaemonApiContext`'s fetch — the
+  // picture rides to the same route it always did, by the seam both pages
+  // now share rather than by a URL only this one could build.
+  const versionsBackend = useVersionsBackend()
 
   // The document's own verbs live on the document's ⋯, the same as on the
   // browser page — one object, one action menu (ADR-0006).
@@ -582,6 +591,12 @@ export function DaemonDocumentPage({
     const startedOn = canvas.path
     setSavingVersion(true)
     setSaveVersionOutcome(null)
+    // Captured BEFORE the POST, not after. `exportScene` reads the live scene
+    // synchronously at call time, so starting it here binds the picture to the
+    // state this save is about to mark. Awaiting the response first meant an
+    // edit made during it was drawn onto the older point — a picture of
+    // content that version does not contain.
+    const picture = getThumbnailBlob()
     try {
       const res = await daemonFetch(
         `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
@@ -605,15 +620,21 @@ export function DaemonDocumentPage({
       // longer takes versions, so it no longer needs the scene exporter.
       // Not awaited — the bookmark has landed, and its picture arriving late
       // or not at all must not hold up the row.
-      void uploadVersionThumbnail({
-        daemonBaseUrl,
+      void attachVersionThumbnail({
+        backend: versionsBackend,
         workspaceId: canvas.workspaceId,
         path: canvas.path,
         versionId: parsed.data.version.id,
-        getBlob: getThumbnailBlob,
-        fetchImpl: daemonFetch,
+        getBlob: () => picture,
       }).then((outcome) => {
-        if (outcome === 'failed') log.error('bookmark thumbnail upload failed')
+        if (outcome === 'failed') {
+          log.error('bookmark thumbnail upload failed')
+          return
+        }
+        // Refresh a SECOND time, for the reason the browser page does: the
+        // row landed before its picture did, so the list refreshed above
+        // holds a row that says it has none.
+        setVersionRefreshSignal((n) => n + 1)
       })
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
@@ -668,6 +689,7 @@ export function DaemonDocumentPage({
             <VersionPanel
               workspaceId={canvas.workspaceId}
               path={canvas.path}
+              capabilities={DAEMON_HISTORY_CAPABILITIES}
               onRestored={clearLocalUndo}
               onPreview={setPreview}
               refreshSignal={versionRefreshSignal}

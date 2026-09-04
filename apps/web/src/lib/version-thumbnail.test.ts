@@ -1,16 +1,16 @@
 import { describe, expect, it, vi } from 'vitest'
-import { uploadVersionThumbnail } from './version-thumbnail.js'
+import { attachVersionThumbnail } from './version-thumbnail.js'
 
 const WHERE = {
-  daemonBaseUrl: 'http://127.0.0.1:3099',
   workspaceId: 'ws-1',
   path: 'canvas-a',
   versionId: 'v-7',
 } as const
 
-function okFetch() {
-  return vi.fn(async (_url: string, _init: RequestInit) => new Response(null, { status: 204 }))
-}
+const keeper = (putThumbnail = vi.fn(async () => {})) => ({
+  backend: { putThumbnail },
+  putThumbnail,
+})
 
 /**
  * The picture a bookmark carries.
@@ -18,66 +18,52 @@ function okFetch() {
  * It used to be covered through the daemon page, and that net was lost when
  * the save moved onto the page itself: the exporter it now calls answers null
  * under jsdom, so a page-level test had no injection point and would have had
- * to fake the very thing it was checking. Extracting the upload is what puts a
+ * to fake the very thing it was checking. Extracting the attach is what puts a
  * real one back — the three outcomes below are exactly what a reader cannot
  * see from the call site, because all three look like the same `void`.
  */
-describe('uploading a bookmark thumbnail', () => {
-  it('PUTs the PNG to that version, and says it uploaded', async () => {
-    const fetchImpl = okFetch()
+describe('attaching a bookmark thumbnail', () => {
+  it('hands the picture to the keeper, for that point of that document', async () => {
+    const { backend, putThumbnail } = keeper()
     const blob = new Blob([new Uint8Array([1, 2, 3])], { type: 'image/png' })
 
-    const outcome = await uploadVersionThumbnail({
-      ...WHERE,
-      getBlob: async () => blob,
-      fetchImpl,
-    })
+    const outcome = await attachVersionThumbnail({ ...WHERE, backend, getBlob: async () => blob })
 
     expect(outcome).toBe('uploaded')
-    expect(fetchImpl).toHaveBeenCalledTimes(1)
-    const [url, init] = fetchImpl.mock.calls[0]
-    // The version's own thumbnail, not the document's latest.
-    expect(url).toBe(
-      'http://127.0.0.1:3099/api/workspaces/ws-1/documents/canvas-a/versions/v-7/thumbnail',
-    )
-    expect(init.method).toBe('PUT')
-    // The daemon validates a PNG signature and rejects anything else, so the
-    // content type is not decoration.
-    expect((init.headers as Record<string, string>)['Content-Type']).toBe('image/png')
-    expect(init.body).toBe(blob)
+    // The version's own picture, not the document's latest — and addressed by
+    // path, because a picture belongs to one point of one document.
+    expect(putThumbnail).toHaveBeenCalledWith('ws-1', 'canvas-a', 'v-7', blob)
   })
 
-  it('sends nothing when there is no image to send', async () => {
-    const fetchImpl = okFetch()
+  it('asks the keeper for nothing when there is no image to give it', async () => {
+    const { backend, putThumbnail } = keeper()
 
-    const outcome = await uploadVersionThumbnail({
-      ...WHERE,
-      getBlob: async () => null,
-      fetchImpl,
-    })
+    const outcome = await attachVersionThumbnail({ ...WHERE, backend, getBlob: async () => null })
 
     expect(outcome).toBe('no-image')
-    expect(fetchImpl).not.toHaveBeenCalled()
+    expect(putThumbnail).not.toHaveBeenCalled()
   })
 
   it('answers failed rather than throwing, whichever half went wrong', async () => {
     // The bookmark is already saved by the time this runs. A thrown exporter
-    // or a refused upload must not read as a failed bookmark.
-    const threw = await uploadVersionThumbnail({
+    // or a keeper that refuses must not read as a failed bookmark.
+    const threw = await attachVersionThumbnail({
       ...WHERE,
+      backend: keeper().backend,
       getBlob: async () => {
         throw new Error('no renderer')
       },
-      fetchImpl: okFetch(),
     })
     expect(threw).toBe('failed')
 
-    const refused = await uploadVersionThumbnail({
+    const refused = await attachVersionThumbnail({
       ...WHERE,
-      getBlob: async () => new Blob([new Uint8Array([1])], { type: 'image/png' }),
-      fetchImpl: vi.fn(
-        async (_url: string, _init: RequestInit) => new Response('nope', { status: 415 }),
-      ),
+      backend: {
+        putThumbnail: async () => {
+          throw new Error('keeper refused')
+        },
+      },
+      getBlob: async () => new Blob(['png']),
     })
     expect(refused).toBe('failed')
   })

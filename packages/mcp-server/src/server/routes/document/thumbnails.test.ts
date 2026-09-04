@@ -44,6 +44,47 @@ describe('thumbnail PUT/GET endpoints', () => {
     clearCache()
   })
 
+  it('refuses a version another document owns, in both directions', async () => {
+    // The refusal `GET /versions/:id/document` and restore already make: an
+    // id alone must not reach a history that is not this document's. A
+    // picture is the same history — and the browser keeper refuses it, so a
+    // daemon that did not would be the keeper difference nobody declared.
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
+    const saved = await app.request('/api/workspaces/session1/documents/canvas-b/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'theirs' }),
+    })
+    const { version } = (await saved.json()) as { version: { id: string } }
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
+
+    // Writing it through canvas-a's route must not reach canvas-b's point.
+    const put = await app.request(
+      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/thumbnail`,
+      { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: png },
+    )
+    expect(put.status).toBe(400)
+
+    // And having stored one legitimately, reading it through canvas-a's
+    // route must not answer with the bytes.
+    const ownPut = await app.request(
+      `/api/workspaces/session1/documents/canvas-b/versions/${version.id}/thumbnail`,
+      { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: png },
+    )
+    expect(ownPut.status).toBe(200)
+    const get = await app.request(
+      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/thumbnail`,
+    )
+    expect(get.status).toBe(404)
+    // The document that owns it still gets it, so the refusal is not just
+    // a route that answers 404 to everyone.
+    const ownGet = await app.request(
+      `/api/workspaces/session1/documents/canvas-b/versions/${version.id}/thumbnail`,
+    )
+    expect(ownGet.status).toBe(200)
+  })
+
   it('saves a PNG through PUT /versions/:id/thumbnail and fetches it through GET', async () => {
     const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
@@ -124,12 +165,13 @@ describe('thumbnail PUT/GET endpoints', () => {
     expect(res.status).toBe(404)
   })
 
-  // GET /latest-thumbnail is consumed by DocumentThumb's <img src>. A 404 makes
-  // the browser log "Failed to load resource: 404" for every thumbnail-less
-  // canvas, which is console noise (the component already has an onError
-  // fallback). Returning 204 No Content is a success status, so no console
-  // error is logged, while the empty body still triggers <img> onError → the
-  // FileText placeholder.
+  // A 404 would make a browser log "Failed to load resource: 404" for every
+  // thumbnail-less document, which is console noise rather than news: a
+  // client asking for a picture that does not exist yet has asked a valid
+  // question. 204 No Content is a success status, so nothing is logged, and
+  // an empty body still fails an <img> into whatever placeholder the client
+  // draws. (The web app's own consumer of this route has since been deleted
+  // — nothing there rendered it — so the route's clients are external.)
   it('returns 204 (not 404) from GET /latest-thumbnail when the canvas has no thumbnail', async () => {
     const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/latest-thumbnail')
@@ -160,19 +202,30 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('returns structured 500 for a broken thumbnail file on GET /thumbnail', async () => {
-    await mkdir(join(tmp.dir, 'blobs', 'session1', 'versions', 'broken-thumb.png'), {
+    // A REAL version of this document, because the route establishes
+    // ownership before it reads bytes: with a made-up id the answer is
+    // "no such picture here", which would hide the corrupt-file path
+    // this case exists to exercise.
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'broken' }),
+    })
+    const { version } = (await saveRes.json()) as { version: { id: string } }
+    // A directory where the PNG should be: unreadable as a file.
+    await mkdir(join(tmp.dir, 'blobs', 'session1', 'versions', `${version.id}.png`), {
       recursive: true,
     })
 
-    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/versions/broken-thumb/thumbnail',
+      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/thumbnail`,
     )
 
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining('broken-thumb.png'),
+      message: expect.stringContaining('.png'),
     })
   })
 

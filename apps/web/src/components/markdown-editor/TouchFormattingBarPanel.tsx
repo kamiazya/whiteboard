@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 import { trackKeyboardDock } from '../../lib/software-keyboard.js'
 import { DOCK_BUTTON_CLASS } from '../ui/dock-button.js'
@@ -138,7 +139,7 @@ export default function TouchFormattingBarPanel() {
             aria-haspopup="menu"
             aria-expanded={sheetOpen}
             onClick={() => setSheetOpen((open) => !open)}
-            className={cn(DOCK_BUTTON_CLASS, sheetOpen && 'bg-accent text-foreground')}
+            className={cn(DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS)}
           >
             <Ellipsis aria-hidden className="size-4" />
           </button>

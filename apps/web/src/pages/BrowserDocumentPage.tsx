@@ -1,10 +1,12 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, MessageSquare, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
@@ -26,15 +28,19 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
+import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import type { VersionPreviewSession } from '../components/VersionTimeline'
+import {
+  BROWSER_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import {
   BookmarkAction,
   type SaveVersionOutcome,
 } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import { useBookmarkShortcut } from '../components/workspace-top-bar/useSaveVersion.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
@@ -69,6 +75,7 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -539,6 +546,7 @@ export function BrowserDocumentPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
+    annotations,
     loaded: canvasLoaded,
     onChange,
     externalVersion,
@@ -576,7 +584,7 @@ export function BrowserDocumentPage({
   )
   const versionsEnabled = versionsBackend !== null
   // The panel refetches on a CHANGE of this signal. A manual save announces
-  // itself on the window (`useSaveVersion` dispatches it after the keeper
+  // itself on the window (the page dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
   // The document's history column. This page keeps its own document
   // switching rather than remounting, so an open panel is cleared by hand
@@ -619,9 +627,40 @@ export function BrowserDocumentPage({
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
-      await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+      // Captured BEFORE the save, not after. `exportScene` reads the live
+      // scene synchronously at call time, so starting it here binds the
+      // picture to the state the save is about to mark. Awaiting the save
+      // first meant an edit made during it was drawn onto the older point —
+      // a picture of content that version does not contain.
+      const picture = exportScene('png')
+      const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
       if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('saved')
+      // The picture rides with the bookmark, as it does on the daemon page —
+      // one path through the seam, so a browser-kept row is not the one that
+      // silently has no picture. Not awaited: the bookmark has landed, and
+      // its picture arriving late or not at all must not hold up the row.
+      void attachVersionThumbnail({
+        backend: versionsBackend,
+        workspaceId: getBrowserWorkspaceId(),
+        path: documentPath,
+        versionId: saved.id,
+        getBlob: () => picture,
+      }).then((outcome) => {
+        if (outcome === 'failed') {
+          log.warn('bookmark thumbnail failed')
+          return
+        }
+        // Announce a SECOND time. The row landed before its picture did, so
+        // the list this save already refreshed holds a row that says it has
+        // none — and without this the picture appears only when something
+        // else happens to refetch, which for a person means reloading.
+        window.dispatchEvent(
+          new CustomEvent('whiteboard:wb_version_saved', {
+            detail: { workspaceId: 'local', path: documentPath },
+          }),
+        )
+      })
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
       window.dispatchEvent(
@@ -645,6 +684,34 @@ export function BrowserDocumentPage({
     pageState,
     isDocumentReadFailure(backendError) ? backendError : null,
   )
+
+  /**
+   * Whether the comments rail is open. Per-user view state, held here and
+   * written nowhere: the panel is an answer to a question the reader asks,
+   * not a rail that takes a third of the surface from everyone.
+   */
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
+  /**
+   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
+   * deleting the subject of a conversation must not delete the conversation).
+   *
+   * Spatial documents only, because only they have a canvas to judge against
+   * — a markdown document would report EMPTY_CANVAS and call every
+   * node-anchored thread orphaned, which is the opposite of not knowing.
+   * Within one, only an anchor that NAMES a node is judged: an anchor at bare
+   * coordinates has nothing to outlive, and a text anchor needs its quote
+   * matched against the body, which is the markdown projection's job.
+   */
+  const resolveAnchor = useMemo(() => {
+    if (documentKind !== 'spatial') return undefined
+    const nodeIds = new Set(canvas.nodes.map((node) => node.id))
+    return (thread: CommentThread): 'placed' | 'orphaned' => {
+      const { anchor } = thread
+      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
+      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
+    }
+  }, [documentKind, canvas])
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
@@ -777,8 +844,33 @@ export function BrowserDocumentPage({
   // are rare actions, and rare + destructive earns a menu (with words)
   // over two always-visible icon buttons. One JSX value shared by both
   // canvas-kind branches so the two rows cannot drift apart.
+  // The opener belongs in the document's own actions row, not floated over the
+  // editor: measured, a control absolutely positioned in the surface's
+  // top-right corner sat on top of the markdown editor's catalog trigger and
+  // intercepted every click meant for it. Both editor kinds put chrome in
+  // their corners, and the annotation layer is a document-level concern, so
+  // the row that already carries document-level verbs is where it goes.
+  const commentsToggle = (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
+      aria-pressed={commentsOpen}
+      onClick={() => setCommentsOpen((open) => !open)}
+      // A toggle has to LOOK toggled. Without this the rail's open state was
+      // announced to a screen reader and invisible to everyone else, which is
+      // how it read in the running app: the panel was open and its opener was
+      // indistinguishable from the closed one.
+      className={TOGGLE_STATE_CLASS}
+    >
+      <MessageSquare aria-hidden="true" className="size-4" />
+      {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}
+    </Button>
+  )
+
   const canvasRowActions = (
     <>
+      {commentsToggle}
       {cleanupError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">
           {cleanupError}
@@ -926,8 +1018,7 @@ export function BrowserDocumentPage({
             <VersionPanel
               workspaceId={getBrowserWorkspaceId()}
               path={renderState.snapshot.path}
-              // One lane, and a version only when asked for.
-              capabilities={{ branches: false, autoVersions: false }}
+              capabilities={BROWSER_HISTORY_CAPABILITIES}
               onRestored={clearLocalUndo}
               onPreview={setPreview}
               refreshSignal={versionRefreshSignal}
@@ -1015,76 +1106,88 @@ export function BrowserDocumentPage({
             <Minimize2 aria-hidden="true" className="size-4" />
           </Button>
         )}
-        <div className="relative h-full min-h-0">
-          {preview ? (
-            <DocumentPreview past={preview.past} theme={resolvedTheme} />
-          ) : (
-            <DocumentEditorSurface
-              kind={documentKind}
-              documentKey={documentId ?? 'no-canvas'}
-              markdown={
-                markdownDoc.coreFacets === null
-                  ? { body: null, setBody: markdownDoc.setBody }
-                  : {
-                      body: markdownDoc.body,
-                      setBody: markdownDoc.setBody,
-                      sourceExtensions: markdownBinding,
-                      autoFocus: true,
-                      theme: resolvedTheme,
-                      meta: markdownDoc.coreFacets,
-                      title: titleOf(documentName, documentPath),
-                      resolveAlias,
-                      linkTargets,
-                      onOpenDocument: (id) => navigateToDocument(id),
-                      resolveEmbed,
-                    }
-              }
-              spatial={() => (
-                <div className="flex h-full min-h-0 flex-col">
-                  <SpatialEditorPane
-                    className="relative min-h-0 flex-1"
-                    editorKey={documentId ?? 'no-canvas'}
-                    canvasLoaded={canvasLoaded}
-                    canvas={canvas}
-                    onChange={onChange}
-                    externalVersion={externalVersion}
-                    theme={resolvedTheme}
-                    // File-node reference = canvas id minted in the browser; the
-                    // current canvas is excluded (a self-reference card is pure
-                    // noise).
-                    fileRefOptions={documents
-                      .filter((entry) => entry.documentId !== documentId)
-                      .map((entry) => ({
-                        file: entry.documentId,
-                        label: entry.name,
-                        kind: entry.kind,
-                      }))}
-                    onOpenDocument={navigateToDocument}
-                    missingFileRef={missingFileRef}
-                    fileSeams={fileSeams}
-                    lockedNodeIds={lockedNodeIds}
-                    lockedEdgeIds={lockedEdgeIds}
-                    onToggleNodeLock={setNodeLock}
-                    onToggleEdgeLock={setEdgeLock}
-                    nodeInEditor={nodeInEditor}
-                    history={{
-                      onUndo: () => void undo(),
-                      onRedo: () => void redo(),
-                      canUndo: canUndo(),
-                      canRedo: canRedo(),
-                    }}
-                    overlayTitle={documentName ?? 'Untitled'}
-                    resolveAlias={resolveAlias}
-                    resolveEmbed={resolveEmbed}
-                    linkTargets={linkTargets}
-                  />
-                </div>
-              )}
-            />
-          )}
-          {/* Markdown documents keep CodeMirror's own history (its keymap
+        {/* The annotation layer's document-level surface (ADR-0026
+            decision 5) sits BESIDE the editor rather than inside it,
+            because one panel serves both document kinds and a markdown
+            document has no canvas chrome to host one. Its opener lives in
+            the document actions row above, in flow — see commentsToggle. */}
+        <div className="flex h-full min-h-0">
+          <div className="relative min-w-0 flex-1">
+            {preview ? (
+              <DocumentPreview past={preview.past} theme={resolvedTheme} />
+            ) : (
+              <DocumentEditorSurface
+                kind={documentKind}
+                documentKey={documentId ?? 'no-canvas'}
+                markdown={
+                  markdownDoc.coreFacets === null
+                    ? { body: null, setBody: markdownDoc.setBody }
+                    : {
+                        body: markdownDoc.body,
+                        setBody: markdownDoc.setBody,
+                        sourceExtensions: markdownBinding,
+                        autoFocus: true,
+                        theme: resolvedTheme,
+                        meta: markdownDoc.coreFacets,
+                        title: titleOf(documentName, documentPath),
+                        resolveAlias,
+                        linkTargets,
+                        onOpenDocument: (id) => navigateToDocument(id),
+                        resolveEmbed,
+                      }
+                }
+                spatial={() => (
+                  <div className="flex h-full min-h-0 flex-col">
+                    <SpatialEditorPane
+                      className="relative min-h-0 flex-1"
+                      editorKey={documentId ?? 'no-canvas'}
+                      canvasLoaded={canvasLoaded}
+                      canvas={canvas}
+                      onChange={onChange}
+                      externalVersion={externalVersion}
+                      theme={resolvedTheme}
+                      // File-node reference = canvas id minted in the browser; the
+                      // current canvas is excluded (a self-reference card is pure
+                      // noise).
+                      fileRefOptions={documents
+                        .filter((entry) => entry.documentId !== documentId)
+                        .map((entry) => ({
+                          file: entry.documentId,
+                          label: entry.name,
+                          kind: entry.kind,
+                        }))}
+                      onOpenDocument={navigateToDocument}
+                      missingFileRef={missingFileRef}
+                      fileSeams={fileSeams}
+                      lockedNodeIds={lockedNodeIds}
+                      lockedEdgeIds={lockedEdgeIds}
+                      onToggleNodeLock={setNodeLock}
+                      onToggleEdgeLock={setEdgeLock}
+                      nodeInEditor={nodeInEditor}
+                      history={{
+                        onUndo: () => void undo(),
+                        onRedo: () => void redo(),
+                        canUndo: canUndo(),
+                        canRedo: canRedo(),
+                      }}
+                      overlayTitle={documentName ?? 'Untitled'}
+                      resolveAlias={resolveAlias}
+                      resolveEmbed={resolveEmbed}
+                      linkTargets={linkTargets}
+                    />
+                  </div>
+                )}
+              />
+            )}
+            {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
+          </div>
+          {commentsOpen ? (
+            <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
+              <CommentsPanel threads={annotations} resolveAnchor={resolveAnchor} />
+            </aside>
+          ) : null}
         </div>
       </DocumentPageShell>
     </VersionsBackendContext.Provider>

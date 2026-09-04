@@ -20,6 +20,7 @@ import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { rendererBuildDefine } from './renderer-build-id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // Absolute path so test files can ship a single string literal to
@@ -30,6 +31,7 @@ const DOCS_ASSETS_DIR = resolve(__dirname, '..', '..', 'docs', 'assets')
 
 export default defineConfig({
   define: {
+    ...rendererBuildDefine,
     __DOCS_ASSETS_DIR__: JSON.stringify(DOCS_ASSETS_DIR),
   },
   // The doc-snapshot tests need to read existing scene fixtures (e.g.

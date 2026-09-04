@@ -105,4 +105,48 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
     expect(await store.loadPast(workspaceId, 'canvas-a', 'no-such-version')).toBeNull()
     expect(await store.list(workspaceId, 'canvas-a')).toEqual([])
   })
+  it("keeps a saved point's picture, and says on the row that there is one", async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'drawn')
+    const store = new BrowserVersionStore({ docs, index })
+    const saved = await store.save(workspaceId, 'canvas-a', { label: 'with a picture' })
+
+    // A row says it has none until one lands, which is what the panel reads
+    // to decide whether to leave room for a picture at all.
+    expect((await store.list(workspaceId, 'canvas-a'))[0]?.hasThumbnail).toBe(false)
+
+    await store.putThumbnail(
+      workspaceId,
+      'canvas-a',
+      saved.id,
+      new Blob(['png-ish'], {
+        type: 'image/png',
+      }),
+    )
+
+    // A reload, because a picture that lives only in memory is not kept.
+    const reloaded = new BrowserVersionStore({
+      docs: new BrowserWorkspaceDocs(),
+      index: new FoldingBrowserIndex(),
+    })
+    expect((await reloaded.list(workspaceId, 'canvas-a'))[0]?.hasThumbnail).toBe(true)
+    const blob = await reloaded.loadThumbnail(workspaceId, 'canvas-a', saved.id)
+    expect(await blob?.text()).toBe('png-ish')
+  })
+
+  it("refuses a picture belonging to another document's history", async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const other = await index.createDocument({ workspaceId, path: 'canvas-b', kind: 'spatial' })
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'mine')
+    await writeContent(docs, other.documentId, 'theirs')
+    const store = new BrowserVersionStore({ docs, index })
+    const theirs = await store.save(workspaceId, 'canvas-b', {})
+    await store.putThumbnail(workspaceId, 'canvas-b', theirs.id, new Blob(['theirs']))
+
+    // The refusal loadPast makes, for the same reason: an id alone must not
+    // read a history that is not this document's.
+    expect(await store.loadThumbnail(workspaceId, 'canvas-a', theirs.id)).toBeNull()
+  })
 })

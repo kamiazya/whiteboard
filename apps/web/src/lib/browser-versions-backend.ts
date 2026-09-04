@@ -17,8 +17,7 @@ import type { VersionsBackend } from './versions-backend.js'
  * The `workspaceId` the UI passes is ignored in favour of the browser's
  * own: the top bar spells `"local"` there as a display placeholder (see its
  * `dataMode="local"`), and the store must not file rows under a name that
- * is not a workspace. No thumbnails: the browser renders none, and the
- * seam says so by leaving `putThumbnail` out.
+ * is not a workspace.
  */
 export function createBrowserVersionsBackend(deps: {
   readonly store: BrowserVersionStore
@@ -43,6 +42,10 @@ export function createBrowserVersionsBackend(deps: {
         ? { kind: 'markdown', body: readMarkdownBody(past) }
         : { kind: 'spatial', canvas: readSpatialCanvas(past) }
     },
+    putThumbnail: (_workspaceId, path, versionId, blob) =>
+      deps.store.putThumbnail(getBrowserWorkspaceId(), path, versionId, blob),
+    loadThumbnail: (_workspaceId, path, versionId) =>
+      deps.store.loadThumbnail(getBrowserWorkspaceId(), path, versionId),
     async restore(_workspaceId, path, versionId) {
       const workspaceId = getBrowserWorkspaceId()
       const past = await deps.store.loadPast(workspaceId, path, versionId)

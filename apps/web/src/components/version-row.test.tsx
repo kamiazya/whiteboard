@@ -66,6 +66,8 @@ function backendOf(list: () => Promise<typeof ROWS>): VersionsBackend {
     loadPast: vi.fn() as never,
     save: vi.fn() as never,
     restore: vi.fn() as never,
+    putThumbnail: vi.fn() as never,
+    loadThumbnail: vi.fn(async () => null) as never,
   }
 }
 

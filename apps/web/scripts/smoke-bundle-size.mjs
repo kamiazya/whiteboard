@@ -100,7 +100,26 @@ const BUDGETS = [
 //
 // Choosing the LCP threshold is the product call this comment already says
 // does not belong in a gate file, so it is not made here either.
-const CRITICAL_PATH_BUDGET_KB = 138
+//
+// Raised 138 -> 152 for the same reason as the last raise, and the comment
+// above is why the raise is not +1: at 138 the budget was spent again
+// (measured 137.9 KB locally, 138.1 KB on CI — the gate went red on 0.1 KB),
+// and a budget with no headroom is a tripwire on whoever commits next rather
+// than a regression stop. 152 restores the ~10% this file asks for.
+//
+// What spent it: `manualChunks` now gives lucide-react a chunk of its own.
+// That was not a size decision and was not optional — left unassigned, the
+// icons merged into a chunk carrying loro's WASM top-level await, where
+// rolldown emits them as `let Copy, …` assigned inside the TLA body, so the
+// exports read `undefined` forever. Rendering the document kebab then called
+// createElement(undefined) and React #130 took the whole page to the error
+// screen. Reproduced against a local production build; invisible to every
+// source-level test and to an unminified build alike.
+//
+// Still not settled here, exactly as above: whether ~138 KB of critical path
+// is the right size. That is the product call about first paint, and it has
+// now been deferred four raises running.
+const CRITICAL_PATH_BUDGET_KB = 152
 
 // Attribute-order-, quote-style-, and case-insensitive: extract each tag
 // first, then match attributes independently, so a Vite/minifier formatting

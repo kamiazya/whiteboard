@@ -9,7 +9,11 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import { VERSIONS_BY_DOCUMENT_INDEX, VERSIONS_STORE } from './browser-idb.js'
+import {
+  VERSION_THUMBNAILS_STORE,
+  VERSIONS_BY_DOCUMENT_INDEX,
+  VERSIONS_STORE,
+} from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 
 /**
@@ -30,6 +34,14 @@ const versionRowSchema = z
     operator: operatorInfoSchema.optional(),
     /** Set only on the point a restore produced; see `versionEntrySchema`. */
     restoredFrom: z.string().optional(),
+    /**
+     * Whether `versionThumbnails` holds a picture for this point. Optional
+     * because rows written before v17 have none — and because this schema is
+     * `.strict()` over rows the reader SKIPS when they fail to parse, so a
+     * newly-required field would delete a reader's whole history rather than
+     * fail loudly.
+     */
+    hasThumbnail: z.boolean().optional(),
     frontiers: z.instanceof(Uint8Array),
   })
   .strict()
@@ -115,6 +127,69 @@ export class BrowserVersionStore {
    * document's history be restored onto this one.
    */
   async loadPast(workspaceId: string, path: string, versionId: string): Promise<LoroDoc | null> {
+    const row = await this.ownedRow(workspaceId, path, versionId)
+    if (row === null) return null
+    const record = await this.deps.docs.open(workspaceId)
+    if (record === null) return null
+    const clone = LoroDoc.fromSnapshot(record.export({ mode: 'snapshot' }))
+    clone.checkout(decodeFrontiers(row.frontiers))
+    return projectWorkspaceDocument(clone, row.documentId)
+  }
+
+  /**
+   * Keep the picture drawn for a saved point, and record on the row that
+   * there is one.
+   *
+   * Two stores in one transaction, so a row can never claim a picture the
+   * other store does not hold. The daemon's twin is a PUT to
+   * `versions/:id/thumbnail`; what differs is only where the bytes land.
+   */
+  async putThumbnail(
+    workspaceId: string,
+    path: string,
+    versionId: string,
+    blob: Blob,
+  ): Promise<void> {
+    const row = await this.ownedRow(workspaceId, path, versionId)
+    if (row === null) throw new Error(`no such version: ${versionId}`)
+    await inTransaction(
+      this.deps.dbName,
+      [VERSIONS_STORE, VERSION_THUMBNAILS_STORE],
+      'readwrite',
+      async (tx) => {
+        await request(tx.objectStore(VERSION_THUMBNAILS_STORE).put(blob, versionId))
+        await request(
+          tx
+            .objectStore(VERSIONS_STORE)
+            .put(versionRowSchema.parse({ ...row, hasThumbnail: true })),
+        )
+      },
+    )
+  }
+
+  /** The picture, or null when there is none — or when the version is not this document's. */
+  async loadThumbnail(workspaceId: string, path: string, versionId: string): Promise<Blob | null> {
+    if ((await this.ownedRow(workspaceId, path, versionId)) === null) return null
+    const blob = await inTransaction(
+      this.deps.dbName,
+      [VERSION_THUMBNAILS_STORE],
+      'readonly',
+      async (tx) => request(tx.objectStore(VERSION_THUMBNAILS_STORE).get(versionId)),
+    )
+    return blob instanceof Blob ? blob : null
+  }
+
+  /**
+   * The row, but only if `path` is the document whose history it belongs to
+   * — the refusal `loadPast` makes, in the one place both it and the picture
+   * reads can share, so an id alone can never reach another document's
+   * history through whichever of them was written second.
+   */
+  private async ownedRow(
+    workspaceId: string,
+    path: string,
+    versionId: string,
+  ): Promise<VersionRow | null> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
     if (placement === null) return null
     const row = await this.rowById(versionId)
@@ -125,11 +200,7 @@ export class BrowserVersionStore {
     ) {
       return null
     }
-    const record = await this.deps.docs.open(workspaceId)
-    if (record === null) return null
-    const clone = LoroDoc.fromSnapshot(record.export({ mode: 'snapshot' }))
-    clone.checkout(decodeFrontiers(row.frontiers))
-    return projectWorkspaceDocument(clone, row.documentId)
+    return row
   }
 
   private async rowsOf(workspaceId: string, documentId: string): Promise<VersionRow[]> {
@@ -174,7 +245,7 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: false,
-    hasThumbnail: false,
+    hasThumbnail: row.hasThumbnail === true,
     branchName: 'main',
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),
