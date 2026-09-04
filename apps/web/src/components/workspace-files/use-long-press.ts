@@ -1,4 +1,4 @@
-import { type MouseEvent as ReactMouseEvent, type PointerEvent, useMemo, useRef } from 'react'
+import { type PointerEvent, type MouseEvent as ReactMouseEvent, useMemo, useRef } from 'react'
 
 /** Matches the platform's own long-press feel (iOS/Android context menus). */
 export const LONG_PRESS_MS = 500

@@ -1,5 +1,15 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Columns2, CopyPlus, ExternalLink, List, Pencil, Pin, PinOff, Search, Trash2 } from 'lucide-react'
+import {
+  Columns2,
+  CopyPlus,
+  ExternalLink,
+  List,
+  Pencil,
+  Pin,
+  PinOff,
+  Search,
+  Trash2,
+} from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
@@ -894,31 +904,31 @@ export function WorkspaceFilesPanel({
             phone, where it held the only Open button (the 2-tap bug). The
             long-press menu is the object surface on touch. */}
         {!tapOpens && (
-        <div className="w-full shrink-0 overflow-y-auto md:w-72">
-          <DocumentPreview
-            document={selected}
-            loadRender={loadRender}
-            {...(onOpenDocument === undefined
-              ? {}
-              : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
-            onRename={(entry: WorkspaceDocumentEntry) => {
-              setRenameError(null)
-              setRenaming(entry)
-            }}
-            {...(onDuplicateDocument === undefined
-              ? {}
-              : {
-                  onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path),
-                })}
-            {...(onRequestDelete === undefined
-              ? {}
-              : {
-                  onDelete: (entry: WorkspaceDocumentEntry) =>
-                    onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
-                })}
-            className="h-full"
-          />
-        </div>
+          <div className="w-full shrink-0 overflow-y-auto md:w-72">
+            <DocumentPreview
+              document={selected}
+              loadRender={loadRender}
+              {...(onOpenDocument === undefined
+                ? {}
+                : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
+              onRename={(entry: WorkspaceDocumentEntry) => {
+                setRenameError(null)
+                setRenaming(entry)
+              }}
+              {...(onDuplicateDocument === undefined
+                ? {}
+                : {
+                    onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path),
+                  })}
+              {...(onRequestDelete === undefined
+                ? {}
+                : {
+                    onDelete: (entry: WorkspaceDocumentEntry) =>
+                      onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
+                  })}
+              className="h-full"
+            />
+          </div>
         )}
       </div>
       {source.listTrash !== undefined && source.restoreFromTrash !== undefined && (
