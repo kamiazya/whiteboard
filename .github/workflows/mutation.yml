@@ -65,7 +65,14 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           set -euo pipefail
-          git diff --name-only "$BASE" "$HEAD" > /tmp/changed.txt
+          # THREE dots: the merge base, not the base branch's tip. `base.sha` is
+          # where the base branch stood when the PR opened, so a two-dot range
+          # grows every time the base moves ahead — and everything that landed
+          # on it in between reads as a file this PR changed. Measured on
+          # #1293, which touched apps/web and docs only: two-dot reported six
+          # curated files and three-dot reported none, and the lane attributed
+          # ten survivors to a PR that never opened that file.
+          git diff --name-only "$BASE"..."$HEAD" > /tmp/changed.txt
           scoped=$(node .claude/scripts/mutation-scope.mjs \
             --targets ./packages/canvas-render/stryker-targets.mjs \
             --prefix packages/canvas-render/ \
