@@ -1016,8 +1016,13 @@ export function DaemonDocumentPage({
               />
             )}
             {variationNotice !== null && (
+              // role="alert", not "status": every notice here reports a
+              // failure (unknown name, unreadable tip, failed switch), and
+              // an alert injected with its content is the supported pattern
+              // — a conditionally-mounted status region is not
+              // (polite-live-region.test.ts).
               <div
-                role="status"
+                role="alert"
                 data-testid="variation-preview-notice"
                 className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
               >
