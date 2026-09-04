@@ -1,26 +1,31 @@
 /**
- * ADR-0023's offline read: the daemon that keeps this workspace is
- * unreachable, and this browser holds a replica of it — so reads are served
- * from the replica, read-only by construction. Every renderer here takes a
- * VALUE (a document list, a markdown string, a SpatialCanvas), none can
- * write; the record is opened with `open`, never `create`, so a missing
- * replica stays missing instead of being minted. Control-plane actions need
- * the keeper (decision 3), so none are offered — not greyed out, absent.
+ * ADR-0023's offline page: the daemon that keeps this workspace is
+ * unreachable, and this browser holds a replica of it. Markdown bodies are
+ * EDITABLE — decision 3's data plane: the edits are CRDT ops appended to
+ * the replica record and shipped to the daemon as ordinary updates when it
+ * returns (replica-push, run by the daemon page's resolve effect). Spatial
+ * documents stay read-only for now; the convergence argument is identical,
+ * only the editor mount is heavier. Control-plane actions need the keeper
+ * (decision 3), so none are offered — not greyed out, absent — and NOTHING
+ * here may touch a document index: a data-plane edit writes the record and
+ * only the record. The record is opened with `open`, never `create`, so a
+ * missing replica stays missing instead of being minted.
  *
  * A lazy page like the others: it imports loro-adapter and the canvas
  * viewer, which must stay out of the entry closure
  * (entry-graph-loro-free.test.ts).
  */
-import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { CanvasViewer } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   documentContainers,
   readMarkdownBody,
   readSpatialCanvas,
   readWorkspaceDocuments,
+  writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc } from 'loro-crdt'
-import { useEffect, useMemo, useState } from 'react'
-import { PreviewPane } from '../components/markdown-editor/PreviewPane.js'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -40,8 +45,52 @@ type LoadState =
 
 export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaReadPageProps) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' })
-  const measure = useMemo(() => createBrowserMeasureText(), [])
   const [selectedPath, setSelectedPath] = useState<string | null>(null)
+  // The markdown editor's controlled value, re-derived when the selection
+  // changes; edits go straight into the record's containers and a debounced
+  // save appends them to the stored replica.
+  const [draft, setDraft] = useState<string | null>(null)
+  // ponytail: one trailing 500ms debounce + a sequential save chain — the
+  // full save-scheduler carries persistence-state reporting this page does
+  // not show. Upgrade path: thread createSaveScheduler when a save
+  // indicator arrives here.
+  const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const saveChain = useRef<Promise<void>>(Promise.resolve())
+  const saveNow = useCallback(
+    (record: LoroDoc) => {
+      saveChain.current = saveChain.current
+        .then(() => new BrowserWorkspaceDocs().save(workspaceId, record))
+        .then(() => undefined)
+        .catch(() => {
+          // A failed append leaves the previous stored state; the ops are
+          // still in the in-memory record and the next save retries them.
+        })
+    },
+    [workspaceId],
+  )
+  const scheduleSave = useCallback(
+    (record: LoroDoc) => {
+      if (saveTimer.current !== null) clearTimeout(saveTimer.current)
+      saveTimer.current = setTimeout(() => {
+        saveTimer.current = null
+        saveNow(record)
+      }, 500)
+    },
+    [saveNow],
+  )
+  // FLUSH on unmount, not cancel: the daemon returning is exactly what
+  // unmounts this page, and that moment must not eat the last debounce
+  // window of typing.
+  const latestRecord = useRef<LoroDoc | null>(null)
+  useEffect(() => {
+    return () => {
+      if (saveTimer.current !== null) {
+        clearTimeout(saveTimer.current)
+        saveTimer.current = null
+        if (latestRecord.current !== null) saveNow(latestRecord.current)
+      }
+    }
+  }, [saveNow])
 
   useEffect(() => {
     let cancelled = false
@@ -83,6 +132,10 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
       ? state.entries.find((entry) => entry.path === selectedPath)
       : undefined
 
+  useEffect(() => {
+    latestRecord.current = state.kind === 'ready' ? state.record : null
+  }, [state])
+
   const content = useMemo(() => {
     if (state.kind !== 'ready' || selected === undefined) return null
     const containers = documentContainers(state.record, selected.documentId)
@@ -90,6 +143,21 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
       ? { kind: 'spatial' as const, canvas: readSpatialCanvas(containers) }
       : { kind: 'markdown' as const, body: readMarkdownBody(containers) }
   }, [state, selected])
+
+  // Selection decides the draft; the record is the source on every switch.
+  useEffect(() => {
+    setDraft(content?.kind === 'markdown' ? content.body : null)
+  }, [content])
+
+  const onDraftChange = useCallback(
+    (next: string) => {
+      if (state.kind !== 'ready' || selected === undefined || selected.kind === 'spatial') return
+      setDraft(next)
+      writeMarkdownBody(documentContainers(state.record, selected.documentId), next)
+      scheduleSave(state.record)
+    },
+    [state, selected, scheduleSave],
+  )
 
   return (
     <div className="flex h-full flex-col" data-testid="replica-read-page">
@@ -99,7 +167,8 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
       >
         <span className="font-medium">{displayName ?? workspaceId}</span>
         {' — the daemon that keeps this workspace is unreachable. '}
-        Reading the copy cached in this browser (synced {new Date(syncedAt).toLocaleString()}),
+        This is the copy cached in this browser (synced {new Date(syncedAt).toLocaleString()}).
+        Markdown edits save here and ship to the daemon when it returns; spatial documents open
         read-only.
       </div>
       {state.kind === 'loading' && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
@@ -121,8 +190,13 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
             {content === null && (
               <p className="text-sm text-muted-foreground">Select a document to read.</p>
             )}
-            {content?.kind === 'markdown' && (
-              <PreviewPane value={content.body} measure={measure} maxWidth={720} />
+            {content?.kind === 'markdown' && draft !== null && (
+              <MarkdownEditor
+                key={selected?.documentId}
+                initialViewMode="split"
+                value={draft}
+                onChange={onDraftChange}
+              />
             )}
             {content?.kind === 'spatial' && (
               <CanvasViewer

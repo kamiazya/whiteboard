@@ -1,6 +1,6 @@
 # ADR-0023: A workspace has one keeper; every other copy is a replica
 
-**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: offline replica EDITS (decision 3 shipped read-only v1)
+**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: offline SPATIAL edits (decision 3's markdown half shipped; the canvas editor mount is the only missing piece — the convergence argument is identical)
 
 ## Context
 
@@ -121,6 +121,23 @@ boundary, not a different design.
 > **Read-only v1 implemented 2026-09-02 (#1182):** `ReplicaReadPage`, served
 > when the kept daemon is unreachable and a replica exists — `open()` never
 > `create`, value-only renderers, control-plane actions absent.
+>
+> **Markdown edits, 2026-09-04.** The offline page takes markdown edits as
+> ordinary ops on the replica record (`writeMarkdownBody` + the record
+> save; no index is ever touched, and an edit-free visit still leaves the
+> record byte-identical — both pinned). The registry entry carries
+> `syncedFrontier`, the DAEMON's known version recorded from the pulled
+> bytes ALONE — deriving it from the merged record would mark local edits
+> as already-sent, which the pull test pins. The return half is
+> `replica-push.ts`: exports the ops past `syncedFrontier` and POSTs them
+> to the same idempotent merge endpoint the promote uses (an entry with no
+> recorded frontier ships one full snapshot, ending the snapshot era).
+> `scheduleReplicaPush` runs on every daemon resolve, BEFORE the pull; a
+> clean replica costs one loro-free IndexedDB frontier read and no
+> network, so cleanliness is the dedupe. Spatial documents stay read-only;
+> control-plane actions stay absent. No "unsent edits" badge on purpose:
+> the push is automatic on the first resolve after the daemon returns, so
+> the state it would name resolves itself in seconds.
 
 ### 4. Transparent mode is rejected as specified, and its goal is met here
 
