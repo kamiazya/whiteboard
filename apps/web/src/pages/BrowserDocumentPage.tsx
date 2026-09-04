@@ -311,10 +311,6 @@ export function BrowserDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
-    // A thread id belongs to the document it was written on: left standing,
-    // the next document's rail would be asked to open a conversation it does
-    // not hold.
-    setRevealThread(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -695,19 +691,6 @@ export function BrowserDocumentPage({
    * not a rail that takes a third of the surface from everyone.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
-  /**
-   * The conversation the rail should open on, when something outside it
-   * asked. Today that is a reply typed on the canvas: the canvas draws a
-   * thread's opening message alone, so without this the reply lands
-   * correctly and looks like nothing happened.
-   */
-  const [revealThread, setRevealThread] = useState<{ readonly threadId: string } | null>(null)
-  const handleThreadReplied = useCallback((threadId: string) => {
-    setCommentsOpen(true)
-    // A fresh object every time — see `CommentsPanel`'s `reveal` for why
-    // the request, not the id, is what the panel keys on.
-    setRevealThread({ threadId })
-  }, [])
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
   /**
    * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
@@ -1218,7 +1201,7 @@ export function BrowserDocumentPage({
                       resolveAlias={resolveAlias}
                       resolveEmbed={resolveEmbed}
                       linkTargets={linkTargets}
-                      onThreadReplied={handleThreadReplied}
+                      threads={annotations}
                     />
                   </div>
                 )}
@@ -1234,7 +1217,6 @@ export function BrowserDocumentPage({
                 threads={annotations}
                 resolveAnchor={resolveAnchor}
                 onReply={handleReply}
-                reveal={revealThread ?? undefined}
               />
             </aside>
           ) : null}

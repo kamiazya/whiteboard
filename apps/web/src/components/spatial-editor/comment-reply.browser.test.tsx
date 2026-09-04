@@ -1,8 +1,9 @@
-// ADR-0026 decision 2: a conversation is the anchored unit, so the bubble on
-// the canvas is a THREAD and answering it belongs where it is drawn — not
-// only in the document-level rail. "Reply" opens the same inline compose
-// bubble create and edit use, and commits one `reply-to-thread`.
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+// ADR-0026 decision 2: a conversation is the anchored unit, so the surface it
+// is anchored to is where it is read AND answered. Pressing a comment opens
+// its card: the whole conversation, its lifecycle actions in the top-right,
+// and a reply box already open — no menu, and no second gesture to reach the
+// thing a reader came to do.
+import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -19,18 +20,31 @@ const FREE: CanvasComment = {
   text: 'free note',
   createdAt: '2026-09-02T00:00:00.000Z',
 }
+const THREAD: CommentThread = {
+  id: 'thread-free',
+  anchor: { kind: 'spatial', x: 600, y: 450 },
+  status: 'open',
+  messages: [
+    { id: 'm1', body: 'free note', createdAt: '2026-09-02T00:00:00.000Z' },
+    {
+      id: 'm2',
+      body: 'already answered once',
+      author: 'assistant',
+      createdAt: '2026-09-02T01:00:00.000Z',
+    },
+  ],
+}
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
   edges: [],
   'x-whiteboard': { comments: [FREE] },
 }
 
-function makeHost() {
-  const latest: {
-    canvas: SpatialCanvas
-    commands: EditorCommand[]
-    replied: string[]
-  } = { canvas: start, commands: [], replied: [] }
+function makeHost(threads: readonly CommentThread[] = [THREAD]) {
+  const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
+    canvas: start,
+    commands: [],
+  }
   let seq = 0
   function Host() {
     const [canvas, setCanvas] = useState<SpatialCanvas>(start)
@@ -40,6 +54,7 @@ function makeHost() {
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
+          threads={threads}
           createId={() => {
             seq += 1
             return `id-${seq}`
@@ -48,7 +63,6 @@ function makeHost() {
             latest.commands.push(command)
             setCanvas(next)
           }}
-          onThreadReplied={(threadId) => latest.replied.push(threadId)}
           theme="light"
         />
       </div>
@@ -61,8 +75,8 @@ function rootOf(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
-function replies(commands: readonly EditorCommand[]) {
-  return commands.filter((c) => c.kind === 'reply-to-thread')
+function of(commands: readonly EditorCommand[], kind: EditorCommand['kind']) {
+  return commands.filter((c) => c.kind === kind)
 }
 
 async function waitForComment(container: HTMLElement) {
@@ -74,71 +88,83 @@ async function waitForComment(container: HTMLElement) {
 }
 
 /** The bubble sits down-right of the anchor; (625, 470) is inside it. */
-async function openCommentMenu(root: HTMLElement) {
+function pressBubble(root: HTMLElement, pointerId: number) {
   const r = root.getBoundingClientRect()
-  fireEvent.contextMenu(root, { clientX: r.left + 625, clientY: r.top + 470, button: 2 })
-  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const at = { pointerId, clientX: r.left + 625, clientY: r.top + 470 }
+  fireEvent.pointerDown(root, { button: 0, ...at })
+  fireEvent.pointerUp(root, at)
 }
 
-it('Reply on a comment commits one reply-to-thread carrying the typed body', async () => {
+it('a press opens the card with the conversation and a reply box already open', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+  expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
+
+  pressBubble(root, 1)
+
+  const card = page.getByTestId('comment-card')
+  await expect.element(card).toBeInTheDocument()
+  // The whole conversation, not just the opening message the canvas draws.
+  await expect.element(page.getByText('already answered once')).toBeInTheDocument()
+  // The box is THERE, not behind a verb.
+  await expect.element(page.getByLabelText('Reply')).toBeInTheDocument()
+})
+
+it('the card commits a reply from its own box', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
 
-  await openCommentMenu(root)
-  await userEvent.click(page.getByRole('menuitem', { name: 'Reply' }))
-  const compose = page.getByTestId('comment-compose')
-  await expect.element(compose).toBeInTheDocument()
-  // Empty: a reply is a NEW message, not a rewrite of the one it answers.
-  expect((compose.element() as HTMLTextAreaElement).value).toBe('')
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
+  pressBubble(root, 2)
+  const box = page.getByLabelText('Reply')
+  await expect.element(box).toBeInTheDocument()
+  await userEvent.click(box)
   await userEvent.keyboard('on it')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
-  await vi.waitFor(() => expect(replies(latest.commands)).toHaveLength(1))
-  const reply = replies(latest.commands)[0]
+  await vi.waitFor(() => expect(of(latest.commands, 'reply-to-thread')).toHaveLength(1))
+  const reply = of(latest.commands, 'reply-to-thread')[0]
   expect(reply).toMatchObject({ kind: 'reply-to-thread', threadId: 'thread-free' })
   expect(reply?.kind === 'reply-to-thread' ? reply.message.body : undefined).toBe('on it')
   // The opening message is untouched — a reply appends beside it.
   expect(latest.canvas['x-whiteboard']?.comments?.[0]?.text).toBe('free note')
-  // The host is told, so the conversation can be shown where it is READ.
-  expect(latest.replied).toEqual(['thread-free'])
 })
 
-it('Escape abandons the reply and writes nothing', async () => {
+it('Resolve sits on the card itself, not only in a menu', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
 
-  await openCommentMenu(root)
-  await userEvent.click(page.getByRole('menuitem', { name: 'Reply' }))
-  await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
-  await userEvent.keyboard('never mind')
-  await userEvent.keyboard('{Escape}')
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="comment-compose"]')).toBeNull(),
-  )
-  expect(replies(latest.commands)).toHaveLength(0)
-  expect(latest.replied).toEqual([])
+  pressBubble(root, 3)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  await userEvent.click(page.getByRole('button', { name: 'Resolve' }))
+
+  await vi.waitFor(() => expect(of(latest.commands, 'set-comment-resolved')).toHaveLength(1))
+  expect(of(latest.commands, 'set-comment-resolved')[0]).toEqual({
+    kind: 'set-comment-resolved',
+    id: 'thread-free',
+    resolved: true,
+  })
 })
 
-it('an empty reply is a cancel, not a blank message', async () => {
-  const { Host, latest } = makeHost()
+it('the context menu drops Reply, since the card is where a reply is written', async () => {
+  const { Host } = makeHost()
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
 
-  await openCommentMenu(root)
-  await userEvent.click(page.getByRole('menuitem', { name: 'Reply' }))
-  await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
-  await userEvent.keyboard('   ')
-  await userEvent.keyboard('{Control>}{Enter}{/Control}')
-
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="comment-compose"]')).toBeNull(),
+  const r = root.getBoundingClientRect()
+  fireEvent.contextMenu(root, { clientX: r.left + 625, clientY: r.top + 470, button: 2 })
+  await expect.element(page.getByTestId('context-menu')).toBeInTheDocument()
+  const labels = [...container.querySelectorAll('[data-testid="context-menu"] button')].map(
+    (el) => el.textContent,
   )
-  expect(replies(latest.commands)).toHaveLength(0)
-  expect(latest.replied).toEqual([])
+  // Kept: reachable without opening the card, and by keyboard.
+  expect(labels).toContain('Edit comment')
+  expect(labels).toContain('Resolve')
+  expect(labels).not.toContain('Reply')
 })

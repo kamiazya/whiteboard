@@ -12,10 +12,11 @@
  * "show resolved" answers whether resolved comments are drawn when what a
  * reader wants at document level is which ones are still open.
  */
-import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
-import { useEffect, useMemo, useState } from 'react'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
+import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
+import { MessageBy } from './message-meta.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -48,16 +49,6 @@ export interface CommentsPanelProps {
    * offer, and saying so by omission is the honest form.
    */
   readonly onReply?: (threadId: string, body: string) => void
-  /**
-   * Opens one conversation from outside — how a reply typed on the canvas
-   * ends up visible, since the canvas draws only a thread's opening message.
-   *
-   * An OBJECT rather than a bare id, because the request is the event: two
-   * replies to the same thread carry the same id, and a reader who collapsed
-   * the thread in between would not have it reopened by a value that never
-   * changed. Each request is a fresh object, and the effect keys on it.
-   */
-  readonly reveal?: { readonly threadId: string }
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -72,48 +63,7 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
-/**
- * Locale- and clock-independent, deliberately: `toLocaleString` reads the
- * runner's timezone (so the same thread renders differently in CI than on a
- * laptop) and a relative "2 days ago" would make every rendering depend on
- * the wall clock. What a reader needs here is which message came first, and
- * an absolute stamp answers that without either dependency. The machine-
- * readable original rides along in `dateTime`.
- */
-function stampOf(iso: string | undefined): { readonly text: string; readonly dateTime: string } {
-  if (iso === undefined) return { text: '', dateTime: '' }
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return { text: '', dateTime: iso }
-  return { text: parsed.toISOString().slice(0, 16).replace('T', ' '), dateTime: iso }
-}
-
-/**
- * Who wrote a message and when, or nothing when the message says neither.
- *
- * `okfActor` is a bare single-line string with no kind, and this app has no
- * accounts, so there is nothing here to infer a human-vs-AI badge FROM. The
- * name when one was written, and silence otherwise — inventing the
- * distinction from a free string would be a guess wearing a badge.
- */
-function MessageBy({ message }: { readonly message: CommentMessage | undefined }) {
-  if (message === undefined) return null
-  const stamp = stampOf(message.createdAt)
-  if (message.author === undefined && stamp.text === '') return null
-  return (
-    <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
-      {message.author !== undefined ? <span>{message.author}</span> : null}
-      {stamp.text !== '' ? <time dateTime={stamp.dateTime}>{stamp.text}</time> : null}
-    </span>
-  )
-}
-
-export function CommentsPanel({
-  threads,
-  resolveAnchor,
-  onSelect,
-  onReply,
-  reveal,
-}: CommentsPanelProps) {
+export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
@@ -121,21 +71,6 @@ export function CommentsPanel({
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
-
-  useEffect(() => {
-    if (reveal === undefined) return
-    const target = threads.find((thread) => thread.id === reveal.threadId)
-    setOpenThreadId(reveal.threadId)
-    // Widen the filter only when the revealed thread would otherwise be
-    // filtered OUT — expanded behind a list that does not include it is
-    // the same as not revealed. A thread the current filter already shows
-    // leaves the reader's view alone.
-    setFilter((current) => (target !== undefined && !matches(target, current) ? 'all' : current))
-    setDraft('')
-    // `threads` is read for that one lookup and deliberately not a
-    // dependency: re-running on every document change would re-open a
-    // thread the reader has since closed.
-  }, [reveal])
 
   function toggle(thread: CommentThread): void {
     setOpenThreadId((current) => (current === thread.id ? null : thread.id))

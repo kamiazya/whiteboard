@@ -38,7 +38,7 @@ type PassedThrough = Pick<
   | 'onToggleNodeLock'
   | 'onToggleEdgeLock'
   | 'agentTouchedNodeIds'
-  | 'onThreadReplied'
+  | 'threads'
 >
 
 export interface SpatialEditorPaneProps extends PassedThrough {
@@ -102,7 +102,7 @@ export function SpatialEditorPane({
   onToggleNodeLock,
   onToggleEdgeLock,
   agentTouchedNodeIds,
-  onThreadReplied,
+  threads,
 }: SpatialEditorPaneProps) {
   return (
     <div data-testid="spatial-editor-container" className={className}>
@@ -138,7 +138,7 @@ export function SpatialEditorPane({
         onToggleNodeLock={onToggleNodeLock}
         onOpenInEditor={nodeInEditor.open}
         onToggleEdgeLock={onToggleEdgeLock}
-        onThreadReplied={onThreadReplied}
+        threads={threads}
         paletteLeading={<HistoryCluster {...history} />}
       />
       {nodeInEditor.editing !== null && (
