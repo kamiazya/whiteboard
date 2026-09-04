@@ -9,8 +9,8 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 
-export const QUARANTINE_CAP = 8
-export const QUARANTINE_MAX_AGE_DAYS = 14
+const QUARANTINE_CAP = 8
+const QUARANTINE_MAX_AGE_DAYS = 14
 
 const MARKER = /^\s*\/\/\s*QUARANTINE\(([^)]*)\):\s*(.*)$/
 
