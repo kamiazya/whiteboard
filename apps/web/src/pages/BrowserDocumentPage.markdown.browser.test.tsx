@@ -29,6 +29,23 @@ import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.
 
 claimIsolatedWhiteboardDb('browserdocumentpage-markdown')
 
+/**
+ * A real index whose name write takes a measurable moment, the way it does on
+ * a machine under load. Nothing else is faked: the rows, the transactions and
+ * their ordering are IndexedDB's own.
+ */
+class SlowNameWriteIndex extends IdbDocumentIndex {
+  constructor(private readonly delayMs: number) {
+    super()
+  }
+  override async setDocumentName(
+    input: Parameters<IdbDocumentIndex['setDocumentName']>[0],
+  ): Promise<void> {
+    await new Promise((resolve) => setTimeout(resolve, this.delayMs))
+    return super.setDocumentName(input)
+  }
+}
+
 function render(ui: ReactElement) {
   return rtlRender(
     // Pages fill their allotted height (h-full) — the app shell owns the
@@ -340,7 +357,16 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('flushes a title edit that is still debounced when the page goes away', async () => {
-    const store = new IdbDocumentIndex()
+    // Slowed deliberately, because the defect is an ORDERING one and an
+    // unslowed run only reaches it by luck. Each keystroke queues a name
+    // write; while one is in flight the next only WAITS, so it has not
+    // opened its IndexedDB transaction yet. IndexedDB orders transactions by
+    // creation, so the remount's read — whose transaction opens immediately —
+    // is served before the last keystroke's write ever starts, and comes back
+    // with the previous name. Measured unslowed under a full browser-project
+    // run: the final write completed, and the reload still showed the name
+    // from the write before it.
+    const store = new SlowNameWriteIndex(60)
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
     const first = render(<BrowserDocumentPage store={store} />)
 
@@ -369,6 +395,29 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       },
       { timeout: 10_000 },
     )
+  })
+
+  it('the workspace listing sees the last keystroke too, not only the reopened page', async () => {
+    // The second reader, and the one the fix first missed: leaving a document
+    // for the workspace shows the list, which reads the index on its own.
+    // Measured in the running app before this was closed — a title typed and
+    // left immediately read back a character short in the LIST while the
+    // reopened document was already correct.
+    const store = new SlowNameWriteIndex(60)
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+    const first = render(<BrowserDocumentPage store={store} />)
+
+    const title = await findMarkdownTitleInput()
+    await userEvent.click(title)
+    await userEvent.keyboard('Release plan')
+    await expectTitleValue('Release plan')
+    first.unmount()
+
+    // ONE read, taken the moment the page goes away — deliberately not a
+    // waitFor. Retrying would pass either way once the queued write lands,
+    // which is exactly the difference this is here to see.
+    const listed = await listLocalDocuments(store)
+    expect(listed.map((row) => row.name)).toContain('Release plan')
   })
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
