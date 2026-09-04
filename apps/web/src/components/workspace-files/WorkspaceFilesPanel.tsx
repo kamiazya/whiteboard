@@ -849,6 +849,7 @@ export function WorkspaceFilesPanel({
               documents={documents}
               onOpen={tapOpens ? openEntry : setSelected}
               {...(onOpenDocument === undefined ? {} : { onActivate: openEntry })}
+              onDocumentContextMenu={openCardMenu}
               selectedPath={selected?.path}
               renderIcon={(entry) => (
                 <DocumentMinimap

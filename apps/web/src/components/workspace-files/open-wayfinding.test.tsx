@@ -192,3 +192,127 @@ describe('fine pointer: click previews, double-click and Enter open', () => {
     }
   })
 })
+
+describe('one-column tree: object actions stay reachable', () => {
+  // The HIGH regression this locks: with a tap opening the document, the
+  // preview pane (the old route to rename/delete) does not render — so the
+  // tree itself must reach the object menu, on touch AND by right-click.
+  it('coarse: long-press on a tree row opens the action menu', async () => {
+    localStorage.setItem('whiteboard.document-browser.columns.v1', 'one')
+    try {
+      coarse = true
+      const onOpenDocument = vi.fn()
+      renderPanel({ onOpenDocument })
+
+      const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
+      const button = within(row).getByRole('button', { name: /Meeting notes/ })
+      fireEvent.pointerDown(button, {
+        pointerType: 'touch',
+        clientX: 30,
+        clientY: 30,
+        pointerId: 3,
+      })
+      const menu = await screen.findByRole('menu', { name: 'Document actions' })
+      expect(within(menu).getByRole('menuitem', { name: 'Rename…' })).toBeTruthy()
+
+      fireEvent.pointerUp(button, { pointerType: 'touch', pointerId: 3 })
+      fireEvent.click(button, { detail: 1 })
+      expect(onOpenDocument).not.toHaveBeenCalled()
+    } finally {
+      localStorage.removeItem('whiteboard.document-browser.columns.v1')
+    }
+  })
+
+  it('right-click on a tree row opens the action menu', async () => {
+    localStorage.setItem('whiteboard.document-browser.columns.v1', 'one')
+    try {
+      renderPanel({ onOpenDocument: vi.fn() })
+      const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
+      const button = within(row).getByRole('button', { name: /Meeting notes/ })
+      fireEvent.contextMenu(button, { clientX: 30, clientY: 30 })
+      expect(await screen.findByRole('menu', { name: 'Document actions' })).toBeTruthy()
+    } finally {
+      localStorage.removeItem('whiteboard.document-browser.columns.v1')
+    }
+  })
+
+  it('double-click on a tree row opens', async () => {
+    localStorage.setItem('whiteboard.document-browser.columns.v1', 'one')
+    try {
+      const onOpenDocument = vi.fn()
+      renderPanel({ onOpenDocument })
+      const row = await screen.findByRole('treeitem', { name: /Meeting notes/ })
+      fireEvent.doubleClick(within(row).getByRole('button', { name: /Meeting notes/ }))
+      expect(onOpenDocument).toHaveBeenCalledWith('meeting-notes')
+    } finally {
+      localStorage.removeItem('whiteboard.document-browser.columns.v1')
+    }
+  })
+})
+
+describe('search results: activation and long-press', () => {
+  async function searchHit(query: string) {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+      target: { value: query },
+    })
+    const results = await screen.findByTestId('search-results')
+    await waitFor(() => {
+      expect(within(results).getAllByTestId('result-title').length).toBeGreaterThan(0)
+    })
+    const hit = within(results)
+      .getAllByTestId('result-title')
+      .find((el) => el.textContent?.includes(query))
+    return hit?.closest('button') as HTMLElement
+  }
+
+  it('double-click on a result opens', async () => {
+    const onOpenDocument = vi.fn()
+    renderPanel({ onOpenDocument })
+    await cardButton('Meeting notes')
+    fireEvent.doubleClick(await searchHit('Roadmap'))
+    expect(onOpenDocument).toHaveBeenCalledWith('plans/roadmap')
+  })
+
+  it('Enter on a result opens without a stray select', async () => {
+    const onOpenDocument = vi.fn()
+    renderPanel({ onOpenDocument })
+    await cardButton('Meeting notes')
+    const row = await searchHit('Roadmap')
+    row.focus()
+    fireEvent.keyDown(row, { key: 'Enter' })
+    expect(onOpenDocument).toHaveBeenCalledWith('plans/roadmap')
+  })
+
+  it('coarse: long-press on a result opens the menu, not the document', async () => {
+    coarse = true
+    const onOpenDocument = vi.fn()
+    renderPanel({ onOpenDocument })
+    await cardButton('Meeting notes')
+    const row = await searchHit('Roadmap')
+    fireEvent.pointerDown(row, { pointerType: 'touch', clientX: 30, clientY: 30, pointerId: 5 })
+    expect(await screen.findByRole('menu', { name: 'Document actions' })).toBeTruthy()
+    fireEvent.pointerUp(row, { pointerType: 'touch', pointerId: 5 })
+    fireEvent.click(row, { detail: 1 })
+    expect(onOpenDocument).not.toHaveBeenCalled()
+  })
+})
+
+describe('long-press guards', () => {
+  it('a drifting hold is a scroll, not a menu', async () => {
+    coarse = true
+    renderPanel({ onOpenDocument: vi.fn() })
+    const card = await cardButton('Meeting notes')
+    fireEvent.pointerDown(card, { pointerType: 'touch', clientX: 40, clientY: 40, pointerId: 7 })
+    fireEvent.pointerMove(card, { pointerType: 'touch', clientX: 40, clientY: 80, pointerId: 7 })
+    await new Promise((resolve) => setTimeout(resolve, 650))
+    expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull()
+  })
+
+  it('a held mouse button is not a long-press', async () => {
+    renderPanel({ onOpenDocument: vi.fn() })
+    const card = await cardButton('Meeting notes')
+    fireEvent.pointerDown(card, { pointerType: 'mouse', clientX: 40, clientY: 40, pointerId: 1 })
+    await new Promise((resolve) => setTimeout(resolve, 650))
+    expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull()
+  })
+})

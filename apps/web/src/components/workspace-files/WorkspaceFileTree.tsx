@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-
 import { type ReactNode, useMemo, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFileTreeProps {
   documents: readonly WorkspaceDocumentEntry[]
@@ -11,6 +12,13 @@ export interface WorkspaceFileTreeProps {
    * keeps the native button click (select-and-preview).
    */
   onActivate?: (document: WorkspaceDocumentEntry) => void
+  /**
+   * Right-click or touch long-press on a document row — the object-action
+   * menu hook. Without it the one-column view has NO route to
+   * rename/delete/pin on touch: the preview pane that used to carry those
+   * verbs does not render when a tap opens.
+   */
+  onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   /** The document the preview is showing, so the two agree. */
   selectedPath?: string
   /**
@@ -71,12 +79,14 @@ function TreeItem({
   node,
   onOpen,
   onActivate,
+  onDocumentContextMenu,
   renderIcon,
   selectedPath,
 }: {
   node: TreeNode
   onOpen: (document: WorkspaceDocumentEntry) => void
   onActivate?: (document: WorkspaceDocumentEntry) => void
+  onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   selectedPath?: string
 }) {
@@ -115,8 +125,18 @@ function TreeItem({
         {node.canvas ? (
           <button
             type="button"
+            data-doc-path={node.canvas.path}
             aria-current={node.canvas.path === selectedPath ? 'true' : undefined}
             onClick={() => node.canvas && onOpen(node.canvas)}
+            onContextMenu={
+              onDocumentContextMenu === undefined
+                ? undefined
+                : (event) => {
+                    event.preventDefault()
+                    if (node.canvas)
+                      onDocumentContextMenu(node.canvas, event.clientX, event.clientY)
+                  }
+            }
             onDoubleClick={
               onActivate === undefined ? undefined : () => node.canvas && onActivate(node.canvas)
             }
@@ -169,6 +189,7 @@ function TreeItem({
               node={child}
               onOpen={onOpen}
               onActivate={onActivate}
+              onDocumentContextMenu={onDocumentContextMenu}
               renderIcon={renderIcon}
               selectedPath={selectedPath}
             />
@@ -195,11 +216,20 @@ export function WorkspaceFileTree({
   documents,
   onOpen,
   onActivate,
+  onDocumentContextMenu,
   renderIcon,
   selectedPath,
   className,
 }: WorkspaceFileTreeProps) {
   const tree = useMemo(() => buildTree(documents), [documents])
+  const longPress = useLongPressMenu(
+    onDocumentContextMenu === undefined
+      ? undefined
+      : (path, x, y) => {
+          const entry = documents.find((row) => row.path === path)
+          if (entry !== undefined) onDocumentContextMenu(entry, x, y)
+        },
+  )
 
   if (tree.length === 0) {
     return (
@@ -210,13 +240,19 @@ export function WorkspaceFileTree({
   }
 
   return (
-    <div role="tree" aria-label="Workspace documents" className={cn('space-y-0.5', className)}>
+    <div
+      role="tree"
+      aria-label="Workspace documents"
+      {...longPress}
+      className={cn('space-y-0.5', className)}
+    >
       {tree.map((node) => (
         <TreeItem
           key={node.path}
           node={node}
           onOpen={onOpen}
           onActivate={onActivate}
+          onDocumentContextMenu={onDocumentContextMenu}
           renderIcon={renderIcon}
           selectedPath={selectedPath}
         />
