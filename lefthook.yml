@@ -33,8 +33,12 @@ pre-push:
       run: pnpm verify:git-hooks
     typecheck:
       run: pnpm -r typecheck
-    test-node:
-      run: pnpm test --project mcp-node
+    # No test run here, deliberately (user decision, 2026-09-05): full suites
+    # are CI's job, and running one at push time was the same work twice —
+    # the dev loop already ran the nearest-layer tests for what changed, and
+    # CI (6min wall since the needs unchaining) runs everything. It was also
+    # the gate the port-squatting flake bit, precisely because a full suite
+    # under push-time load is a full suite on a saturated machine.
     noconsole:
       run: pnpm lint:noconsole
     lint:
