@@ -20,7 +20,7 @@ import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whitebo
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { SlidersHorizontal } from 'lucide-react'
-import { Fragment, useEffect, useRef, useState } from 'react'
+import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
@@ -57,15 +57,19 @@ export function CanvasDisplaySettings({
     onChange(running, command)
   }
 
-  const groups = resolveFacetContributions(facetRegistry, 'canvasSettings')
-    .map((group) => ({
-      group,
-      widgets: group.facets.flatMap((facet) => {
-        const widget = widgets[facet.key]
-        return widget === undefined ? [] : [{ key: facet.key, widget }]
-      }),
-    }))
-    .filter((entry) => entry.widgets.length > 0)
+  const groups = useMemo(
+    () =>
+      resolveFacetContributions(facetRegistry, 'canvasSettings')
+        .map((group) => ({
+          group,
+          widgets: group.facets.flatMap((facet) => {
+            const widget = widgets[facet.key]
+            return widget === undefined ? [] : [{ key: facet.key, widget }]
+          }),
+        }))
+        .filter((entry) => entry.widgets.length > 0),
+    [facetRegistry, widgets],
+  )
 
   const [activeNamespace, setActiveNamespace] = useState<string | null>(null)
   const active = groups.find((entry) => entry.group.namespace === activeNamespace) ?? groups[0]
