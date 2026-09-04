@@ -3,7 +3,11 @@ import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
+import {
+  type AutoVersionTrigger,
+  createAutoVersionTrigger,
+  setAutoVersionTrigger,
+} from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -71,11 +75,10 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
     },
   })
   options.onAutoVersionTrigger?.(triggerAutoVersion)
-  // Register the same trigger with ws.ts so the WS path shares the auto-version logic.
-  // Use dynamic import to avoid the ws.ts <- canvas.ts cycle evaluating in the wrong order.
-  void import('./ws.js').then(({ setAutoVersionTrigger }) => {
-    setAutoVersionTrigger?.(triggerAutoVersion)
-  })
+  // Register the same trigger for the WS path, synchronously. The holder is
+  // auto-version.ts rather than ws.ts precisely so this needs no import of a
+  // module that imports back — see its comment for the promise this replaced.
+  setAutoVersionTrigger(triggerAutoVersion)
 
   // Auto-compact debounce: every successful saveDocument reschedules a per-
   // canvas compaction. The 30s default lets active editing sessions burst
