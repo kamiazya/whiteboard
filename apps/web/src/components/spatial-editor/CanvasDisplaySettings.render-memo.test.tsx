@@ -56,3 +56,34 @@ it('does not recompute contribution groups on a re-render with unchanged facetRe
   fireEvent.click(getByTestId('force-rerender'))
   expect(resolveSpy).toHaveBeenCalledTimes(1)
 })
+
+// The other direction, so a dependency-array regression (e.g. `[]`) cannot
+// pass: a CHANGED registry must recompute the groups.
+function SwappingHost() {
+  const [reg, setReg] = useState(() => createFacetRegistry(bundledPlugins))
+  return (
+    <div>
+      <button
+        type="button"
+        data-testid="swap-registry"
+        onClick={() => setReg(createFacetRegistry(bundledPlugins))}
+      >
+        swap
+      </button>
+      <CanvasDisplaySettings
+        canvas={canvas}
+        onChange={() => {}}
+        facetRegistry={reg}
+        widgets={CANVAS_SETTINGS_WIDGETS}
+      />
+    </div>
+  )
+}
+
+it('recomputes contribution groups when the facetRegistry changes', () => {
+  const { getByTestId } = render(<SwappingHost />)
+  expect(resolveSpy).toHaveBeenCalledTimes(1)
+
+  fireEvent.click(getByTestId('swap-registry'))
+  expect(resolveSpy).toHaveBeenCalledTimes(2)
+})
