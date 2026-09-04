@@ -83,10 +83,45 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
   return { nodes, edges }
 }
 
+/**
+ * Labels that DO NOT FIT, which the cases above never produce: their labels
+ * are `n0`..`n479`, and at the fake measurer's 0.6 factor and a 16px label
+ * font that is ~29px against a 200px box, so `fitToWidth`'s cut loop never
+ * runs and this bench is blind to how a label is cut.
+ *
+ * Mixed script on purpose. The cut walks the label unit by unit, measuring
+ * each prefix, so its cost tracks the number of UNITS — and what counts as a
+ * unit is exactly what a change to the cut rule moves. ASCII, Japanese and
+ * grapheme clusters (a ZWJ family, a flag, a skin-tone modifier) each answer
+ * that differently.
+ */
+const OVERFLOWING_LABEL = 'Design review of the Q3 migration 設計レビュー 👨‍👩‍👧‍👦 🇯🇵 👍🏽 done'
+
+function labelledCanvasOf(nodeCount: number, label = OVERFLOWING_LABEL): SpatialCanvas {
+  const nodes: SpatialNode[] = Array.from({ length: nodeCount }, (_, i) => ({
+    id: `g${i}`,
+    type: 'group',
+    x: (i % 12) * 260,
+    y: Math.floor(i / 12) * 180,
+    width: 200,
+    height: 120,
+    label: `${label} ${i}`,
+  }))
+  const edges: CanvasEdge[] = [
+    { id: 'e0', fromNode: 'g0', toNode: `g${Math.min(1, nodeCount - 1)}` },
+  ]
+  return { nodes, edges }
+}
+
 const plain120 = canvasOf(120, false)
 const styled120 = canvasOf(120, true)
 const plain480 = canvasOf(480, false)
 const styled480 = canvasOf(480, true)
+const labelled480 = labelledCanvasOf(480)
+const asciiLabelled480 = labelledCanvasOf(
+  480,
+  'Design review of the Q3 migration schedule and rollout plan done',
+)
 
 describe('layoutSpatialCanvas, per-node path', () => {
   bench('120 nodes, plain', () => {
@@ -103,5 +138,19 @@ describe('layoutSpatialCanvas, per-node path', () => {
 
   bench('480 nodes, three facets each', () => {
     layoutSpatialCanvas(styled480, OPTIONS)
+  })
+
+  // The one case that enters `fitToWidth`'s cut loop. Its own number is the
+  // point: the four above cannot move when the cut rule changes, so a
+  // before/after on them alone reads as "free".
+  bench('480 nodes, labels that overflow', () => {
+    layoutSpatialCanvas(labelled480, OPTIONS)
+  })
+
+  // The same case with an ASCII-only label. Paired with the row above because
+  // the cost of a cut rule can depend on the SCRIPT, and one row cannot show
+  // that.
+  bench('480 nodes, ascii labels that overflow', () => {
+    layoutSpatialCanvas(asciiLabelled480, OPTIONS)
   })
 })

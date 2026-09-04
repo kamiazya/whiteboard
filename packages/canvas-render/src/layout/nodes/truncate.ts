@@ -1,6 +1,59 @@
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+
+/**
+ * Could this text hold a cluster at all?
+ *
+ * Nothing below U+0300 joins the character before it — no combining mark, no
+ * regional indicator, no ZWJ, no conjoining jamo — with exactly one
+ * exception, LF after CR, which is why CR is named here beside the
+ * threshold. The claim is checked against the segmenter over BOTH axes in
+ * this file's test rather than reasoned about, because a joiner that slips
+ * through is a label that fragments with nothing red — and CRLF is the one
+ * that did slip through, under a sweep that read as exhaustive while varying
+ * only the candidate joiner.
+ *
+ * CR rather than LF, because a lone LF is ordinary in a body while a lone CR
+ * is not, so keying on the LEADER leaves LF-only text on the cheap path.
+ *
+ * Only one direction of error exists: answering `true` for text that holds
+ * no cluster costs a slower walk over the same units, while answering
+ * `false` for text that holds one cuts it in half. So the threshold may only
+ * ever be made MORE eager — which is also why most edits to this function
+ * cannot be caught by a test, and why the mutation lane reports them as
+ * survivors.
+ *
+ * Deliberately coarse: it sends Japanese, Chinese and Korean down the
+ * segmenter path even though most of their text carries no clusters. A
+ * tighter gate was tried and abandoned — 'can this character join something'
+ * flags every precomposed Hangul syllable, since one may follow a jamo L, so
+ * it answers yes for ordinary Korean and buys nothing. Only the segmenter can
+ * say whether a string HAS a cluster, which is the work being avoided.
+ */
+function mayCluster(text: string): boolean {
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i)
+    if (code >= 0x0300 || code === 0x000d) return true
+  }
+  return false
+}
+
+/**
+ * The units a cut may fall between, iterated LAZILY: the walk stops at the
+ * first unit that does not fit, and segmenting the tail past it is work
+ * nobody reads. Measured on the 480-label bench, materialising instead cost
+ * 12.1ms against 5.5ms for this.
+ */
+function* cutUnits(text: string): Generator<string> {
+  if (!mayCluster(text)) {
+    yield* text
+    return
+  }
+  for (const { segment } of GRAPHEMES.segment(text)) yield segment
+}
+
 export interface FittedText {
   readonly text: string
   /**
@@ -33,7 +86,9 @@ export interface FittedText {
  * its box.
  *
  * Never returns the empty string for non-empty input: one glyph over the edge
- * still says a label is there, and nothing at all does not. A non-finite or
+ * still says a label is there, and nothing at all does not. That glyph is a
+ * whole GRAPHEME — a lone 👨 is not a narrower family emoji, it is a
+ * different picture. A non-finite or
  * non-positive `maxWidth` means "no width to fit against" and returns the
  * text unchanged, matching how layout treats an unusable wrap width
  * everywhere else.
@@ -50,14 +105,15 @@ export function fitToWidth(
 ): FittedText {
   if (!Number.isFinite(maxWidth) || maxWidth <= 0) return { text }
   if (clampAdvance(measure(text, font).advanceWidth) <= maxWidth) return { text }
-  const points = [...text]
   let fitted = ''
-  for (const point of points) {
-    const candidate = fitted + point
+  let firstUnit = ''
+  for (const unit of cutUnits(text)) {
+    if (firstUnit === '') firstUnit = unit
+    const candidate = fitted + unit
     if (clampAdvance(measure(candidate, font).advanceWidth) > maxWidth) break
     fitted = candidate
   }
-  const kept = fitted === '' ? (points[0] ?? '') : fitted
+  const kept = fitted === '' ? firstUnit : fitted
   return {
     text: kept,
     ...(kept === text ? {} : { truncated: true as const }),

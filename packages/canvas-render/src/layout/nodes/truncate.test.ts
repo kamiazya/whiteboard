@@ -246,3 +246,132 @@ describe('fitToWidth properties', () => {
     },
   )
 })
+
+/**
+ * A label is cut on GRAPHEME boundaries, not code points.
+ *
+ * `[...text]` walked code points, so a cut landed inside a cluster and drew a
+ * fragment: measured over the swept widths of a label carrying six of each
+ * class, a ZWJ family fragmented at 36 widths (a lone 👨), a Devanagari
+ * cluster at 18, a keycap at 12, and a flag and a skin-tone modifier at 6
+ * each.
+ */
+describe('fitToWidth: cuts between characters a reader sees as one', () => {
+  const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  const split = (value: string): string[] => [...GRAPHEMES.segment(value)].map((g) => g.segment)
+
+  const CLASSES = {
+    'ZWJ family': '👨‍👩‍👧‍👦',
+    flag: '🇯🇵',
+    'skin-tone modifier': '👍🏽',
+    keycap: '1️⃣',
+    // DECOMPOSED on purpose: the precomposed form is one code point, so the
+    // code-point walk already kept it whole and the case proved nothing.
+    'combining accent': 'e\u0301',
+    devanagari: 'क्षि',
+    'halfwidth dakuten': 'ｶﾞ',
+  } as const
+
+  /**
+   * Widths whose cut fell immediately after a cluster of more than one code
+   * point — the arrangement in which the old rule COULD have stopped halfway
+   * through one and drawn a fragment.
+   *
+   * Counting the fragments themselves was the obvious thing and is useless:
+   * that number is zero once the fix is in, by construction, so it can never
+   * tell a sweep that reached the interesting widths from one that reached
+   * none. This counts the OPPORTUNITY, which survives the fix.
+   */
+  let cutAfterACluster = 0
+
+  afterAll(() => {
+    expect(
+      cutAfterACluster,
+      'no swept width cut next to a multi-code-point cluster — the sweep never reached the case',
+    ).toBeGreaterThan(20)
+  })
+
+  for (const [name, cluster] of Object.entries(CLASSES)) {
+    it(`keeps ${name} whole at every width`, () => {
+      const label = `Task ${cluster.repeat(6)} done`
+      const whole = new Set(split(label))
+      for (let width = 10; width <= label.length * 10; width += 10) {
+        const kept = fit(label, width).text
+        const units = split(kept)
+        const last = units[units.length - 1]
+        if (last !== undefined && [...last].length > 1) cutAfterACluster += 1
+        expect(units.filter((unit) => !whole.has(unit) && unit.trim() !== '')).toEqual([])
+      }
+    })
+  }
+
+  /**
+   * The gate that keeps the common label on the cheap path, checked against
+   * the segmenter over BOTH axes, because a code point that joins and is not
+   * caught here is a label that fragments with nothing red.
+   *
+   * The single axis this replaced swept every candidate joiner against nine
+   * hand-picked predecessors, and read as exhaustive while being exhaustive
+   * only in one direction: `\r` was not among the nine, so LF-after-CR — the
+   * one sub-U+0300 join there is — went unseen and the gate shipped claiming
+   * an absolute that was false.
+   *
+   * Every predecessor below U+0300 is swept in one segmentation per
+   * candidate: `a0 j a1 j ...` holds one segment per character unless
+   * something joined, since a join only ever LOWERS the count. That admits a
+   * false positive when the candidate joins the character AFTER it rather
+   * than before (which is how `\r` shows up here), so each suspect is then
+   * re-tested pairwise for the direction that actually matters. Complete in
+   * ~600ms, against 2.2s for 768x768 pairwise.
+   */
+  it('nothing below U+0300 joins the character before it, except LF after CR', () => {
+    const predecessors = [
+      ...Array.from({ length: 0x300 }, (_, cp) => String.fromCodePoint(cp)),
+      'ᄀ',
+      '🇯',
+      '😀',
+      'ｶ',
+      'क',
+      '가',
+      'ก',
+    ]
+    const suspects: number[] = []
+    for (let cp = 0; cp < 0x300; cp += 1) {
+      const char = String.fromCodePoint(cp)
+      const probe = predecessors.map((before) => before + char).join('')
+      if (split(probe).length !== predecessors.length * 2) suspects.push(cp)
+    }
+    const joins: string[] = []
+    for (const cp of suspects) {
+      const char = String.fromCodePoint(cp)
+      for (const before of predecessors) {
+        if (split(before + char).length === 1) {
+          joins.push(
+            `U+${before.codePointAt(0)?.toString(16).toUpperCase()} + U+${cp.toString(16).toUpperCase()}`,
+          )
+        }
+      }
+    }
+    expect(joins).toEqual(['U+D + U+A'])
+  })
+
+  it('does not cut CRLF in half', () => {
+    // The one join below U+0300. Both halves are non-printing, so a cut
+    // between them draws the same picture either way — what it breaks is the
+    // gate's claim to be absolute, and a claim with a silent exception is one
+    // nobody can rely on for the next character somebody adds.
+    expect(fit('a\r\nb', 25).text).toBe('a')
+  })
+
+  it('treats U+0300 itself as a joiner', () => {
+    // The gate's boundary. At `>` rather than `>=` a combining grave takes
+    // the cheap path and the accent is cut off its letter.
+    expect(fit('e\u0300', 15).text).toBe('e\u0300')
+  })
+
+  it('keeps a whole cluster when even one does not fit', () => {
+    // The never-empty rule at grapheme granularity: `👨` alone is not a
+    // smaller version of the family, it is a different picture.
+    expect(fit('👨‍👩‍👧‍👦x', 5).text).toBe('👨‍👩‍👧‍👦')
+  })
+})

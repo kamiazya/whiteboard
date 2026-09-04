@@ -85,7 +85,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 87
  * because at more than thirteen times the median package rule it is a budget
  * of its own; the rest are small enough that a total would hide them.
  */
-const CANVAS_RENDER_BUDGET = 77
+// 78 since the label cut moved to grapheme boundaries. What bought the bucket
+// is ~800 characters, and most of it is one dead end stated so nobody walks it
+// again: a gate tighter than "any code point at or above U+0300" cannot be
+// built, because "can this character join something" answers yes for every
+// precomposed Hangul syllable. Raised rather than trimmed — this test exists
+// to make crossing a bucket a decision, not to forbid it.
+const CANVAS_RENDER_BUDGET = 78
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
