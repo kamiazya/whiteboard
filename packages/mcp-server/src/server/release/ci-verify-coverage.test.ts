@@ -111,16 +111,30 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
     expect(flaggedProjects).toEqual(expect.arrayContaining(browserProjectNames))
   })
 
-  it('the verify job gates on all four test jobs, so a release tag always points at a commit where they ran', () => {
-    const verifyIdx = text.indexOf('\n  verify:')
-    expect(verifyIdx, 'verify job must exist').toBeGreaterThanOrEqual(0)
-    const verifySection = text.slice(verifyIdx, verifyIdx + 400)
-    const needsMatch = verifySection.match(/needs:\s*\[([^\]]+)\]/)
-    expect(needsMatch, 'verify job must declare needs: [...]').not.toBeNull()
-    const needs = needsMatch![1].split(',').map((s) => s.trim())
-    expect(needs).toEqual(
-      expect.arrayContaining(['check', 'test-unit', 'test-jsdom', 'test-browser']),
-    )
+  it('dry-run-npm still rides the verify dist, the one needs edge that carries an artifact', () => {
+    // verify's `needs` on the test jobs was removed deliberately (measured
+    // 2026-09-04: that chain was the whole wall clock — see the comment in
+    // ci.yml). The "a release tag points at a commit where the tests ran"
+    // property this test used to pin moved to branch protection, which
+    // requires every test job individually and which no in-repo test can
+    // read — the Actions token cannot see it, so the settings page is the
+    // source of truth and this comment is the pointer. What remains
+    // assertable in-repo is the one dependency that is REAL: dry-run-npm
+    // downloads the dist verify built, so losing that edge would hand it a
+    // stale or absent artifact.
+    const npmIdx = text.indexOf('\n  dry-run-npm:')
+    expect(npmIdx, 'dry-run-npm job must exist').toBeGreaterThanOrEqual(0)
+    const npmSection = text.slice(npmIdx, npmIdx + 400)
+    // Anchored to a line START so a comment SAYING "needs: verify" (which
+    // dry-run-docker's why-not comment does) can never satisfy or trip it.
+    expect(npmSection).toMatch(/^\s*needs:\s*verify/m)
+    // And the inverse guard: dry-run-docker must NOT grow the edge back by
+    // reflex — it consumes no artifact, and the edge serialized the two
+    // longest jobs in the workflow.
+    const dockerIdx = text.indexOf('\n  dry-run-docker:')
+    expect(dockerIdx, 'dry-run-docker job must exist').toBeGreaterThanOrEqual(0)
+    const dockerSection = text.slice(dockerIdx, text.indexOf('steps:', dockerIdx))
+    expect(dockerSection).not.toMatch(/^\s*needs:\s*verify/m)
   })
 
   // Which browser CI runs is not a detail: local runs use Playwright's Chromium
