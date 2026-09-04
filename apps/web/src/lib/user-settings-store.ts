@@ -187,6 +187,12 @@ const promotionResultSchema = z.discriminatedUnion('ok', [
       shadowedPaths: z.array(z.string()),
       blobsMissing: z.array(z.string()),
       blobsFailed: z.array(z.string()),
+      /**
+       * Whether the verified demote removed the source browser record
+       * (ADR-0023 decision 2). Absent on records from before the feature —
+       * those runs kept the copy, so absent reads as false.
+       */
+      localCopyRemoved: z.boolean().optional(),
     })
     .strict(),
   z

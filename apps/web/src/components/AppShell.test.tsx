@@ -398,6 +398,9 @@ describe('AppShell — the mark as the connection carrier', () => {
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     const notice = await screen.findByTestId('replica-cache-notice')
     expect(notice.textContent).toMatch(/cached in this browser/i)
+    // The claim carries its AGE: a reader deciding whether to trust the
+    // offline copy needs to know how old it is, in the same breath.
+    expect(notice.textContent).toMatch(/synced .+ ago/i)
   })
 
   it('no replica claim for a daemon workspace this browser holds no replica of', async () => {

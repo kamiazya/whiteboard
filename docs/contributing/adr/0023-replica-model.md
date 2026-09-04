@@ -1,6 +1,6 @@
 # ADR-0023: A workspace has one keeper; every other copy is a replica
 
-**Status:** Proposed — design of record for the demote/cache work; nothing here is implemented yet except where a paragraph says so
+**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: offline replica EDITS (decision 3 shipped read-only v1)
 
 ## Context
 
@@ -88,6 +88,25 @@ moved-marked independent store. Concretely:
 The reload after promote stays narrated (the user takes it); what changes
 is what they come back to.
 
+> **Implemented 2026-09-04.** The pull half landed first (#1181:
+> `replica-cache.ts`, the `storage.replicas` registry, `replica-refresh.ts`)
+> with one hole: the promote path cached bytes without writing the registry
+> entry, so a fresh replica was invisible to offline lookup until some later
+> visit refreshed it. The completion closed that (the registry write moved
+> into the promote flow, shared with the refresh via `withReplicaEntry`) and
+> went one honest step further than the paragraph above: after a VERIFIED
+> move — every image transferred, and the replica read back from this
+> browser's own store holding every promoted document
+> (`replicaCarriesAll`) — the source browser record is **deleted**
+> (`demote-browser-workspace.ts`), not left as a moved-marked fork. The
+> registry row is deleted with it; if it was the last browser workspace, a
+> fresh empty one is minted in the same transaction (the boot resolve
+> throws on an empty registry) and the in-memory identity is re-pointed. A
+> move that cannot be verified keeps the browser copy and reports why.
+> Planes keyed by DOCUMENT id (images, versions) are deliberately not
+> deleted: the move preserves document ids, so the replica's documents
+> share them.
+
 ### 3. Replica edits are data-plane only
 
 While the keeper is unreachable, a replica MAY keep taking document edits:
@@ -98,6 +117,10 @@ or workspaces, version saves, branch operations, compaction — because those
 are the operations convergence does not cover. v1 may ship read-only
 replicas first; the edit capability is an extension inside the same
 boundary, not a different design.
+
+> **Read-only v1 implemented 2026-09-02 (#1182):** `ReplicaReadPage`, served
+> when the kept daemon is unreachable and a replica exists — `open()` never
+> `create`, value-only renderers, control-plane actions absent.
 
 ### 4. Transparent mode is rejected as specified, and its goal is met here
 
@@ -119,6 +142,21 @@ cached in the browser for warm start and offline reads. This is the
 "assume the daemon" cache strategy of request 1, obtained as a consequence
 rather than as a separate feature. It is explicitly later work; nothing in
 decisions 1–4 depends on it.
+
+> **Implemented 2026-09-02 (#1181), ahead of decision 2's completion:**
+> `DaemonDocumentPage` schedules `scheduleReplicaRefresh` on every daemon
+> workspace resolve — once per (daemon, workspace) per session, off the
+> critical path.
+>
+> **Freshness, 2026-09-04:** the dedupe holds only while the registry entry
+> is within `REPLICA_STALE_AFTER_MS` (15 min), so a long working session
+> re-pulls on a later resolve instead of letting its replica age all day;
+> a failed pull writes no entry and is retried on the next resolve; an
+> in-flight pull is never doubled. Still no timer loop — the ceiling is
+> resolves, and each re-fire costs the one snapshot pull a visit already
+> pays. The popover's replica notice now states the age ("Last synced …"),
+> because a reader deciding whether to trust the offline copy needs it in
+> the same breath as the claim.
 
 ## Consequences
 

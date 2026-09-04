@@ -1,8 +1,9 @@
 /**
  * ADR-0023 decision 5's arrival path: working on a daemon workspace quietly
  * refreshes this browser's replica of it. What this file pins is the
- * scheduling contract — once per (daemon, workspace) per session, off the
- * critical path, registry written only on a successful pull.
+ * scheduling contract — deduped while the registry entry is FRESH, re-armed
+ * once it goes stale (a long session must not let the replica age all day),
+ * off the critical path, registry written only on a successful pull.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetReplicaRefreshForTests, scheduleReplicaRefresh } from './replica-refresh.js'
@@ -34,8 +35,14 @@ function deps(over?: Partial<Parameters<typeof scheduleReplicaRefresh>[0]>) {
 beforeEach(() => {
   localStorage.clear()
   resetReplicaRefreshForTests()
+  // The dedupe compares the registry stamp against now, so the clock is
+  // pinned NEAR the stamps the stubs record — otherwise every entry reads
+  // as ancient and the dedupe never holds.
+  vi.useFakeTimers({ toFake: ['Date'] })
+  vi.setSystemTime(new Date('2026-09-01T12:05:00.000Z'))
 })
 afterEach(() => {
+  vi.useRealTimers()
   resetReplicaRefreshForTests()
 })
 
@@ -103,6 +110,42 @@ describe('scheduleReplicaRefresh', () => {
     )
     await new Promise((r) => setTimeout(r, 50))
     expect(cache).not.toHaveBeenCalled()
+  })
+
+  it('a stale registry entry re-arms the dedupe; a fresh one holds it', async () => {
+    const cache = vi.fn().mockImplementation(async () => ({
+      kind: 'ok' as const,
+      syncedAt: new Date().toISOString(),
+      documentCount: 1,
+    }))
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+    // Fresh entry: the dedupe holds.
+    scheduleReplicaRefresh(deps({ cache }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(cache).toHaveBeenCalledTimes(1)
+    // The entry ages past the staleness window mid-session: the next
+    // resolve pulls again instead of letting the replica age all day.
+    vi.setSystemTime(new Date('2026-09-01T12:25:00.000Z'))
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(2))
+    // And the refreshed stamp holds the dedupe again.
+    scheduleReplicaRefresh(deps({ cache }))
+    await new Promise((r) => setTimeout(r, 20))
+    expect(cache).toHaveBeenCalledTimes(2)
+  })
+
+  it('a failed pull is retried on the next resolve, not abandoned for the session', async () => {
+    const cache = vi
+      .fn()
+      .mockResolvedValueOnce({ kind: 'failed', reason: 'offline' })
+      .mockResolvedValue({ kind: 'ok', syncedAt: new Date().toISOString(), documentCount: 1 })
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
+    // No registry entry was written, so nothing says the replica is fresh —
+    // the next resolve tries again.
+    scheduleReplicaRefresh(deps({ cache }))
+    await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(2))
   })
 
   it('a failed pull records nothing, and never throws', async () => {

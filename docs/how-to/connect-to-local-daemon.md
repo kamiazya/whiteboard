@@ -206,12 +206,14 @@ The move carries your documents, their full edit history, and the images
 they reference. Documents keep their identity, so links between them keep
 working on the daemon. If a path already exists in the chosen daemon
 workspace, both versions are kept and the pre-existing one is marked
-*shadowed* — nothing is renamed or overwritten. Your documents also stay in
-this browser; moving again later is safe and simply re-merges.
+*shadowed* — nothing is renamed or overwritten.
 
-If the app later opens in browser mode while that daemon is unavailable,
-the connection chip's popover notes that the workspace has been moved and
-that changes made in the browser stay there until you move it again — the
-two copies do not sync on their own.
+Once every document and image is confirmed on the daemon, the old browser
+copy is removed: the daemon is the workspace's one keeper, and this browser
+keeps a **cached replica** instead — it opens read-only when the daemon
+cannot be reached, so your data stays viewable offline. If anything could
+not be confirmed (for example an image upload failed), the browser copy is
+kept unchanged and the result says so; moving again later is safe and
+simply re-merges.
 
 ← Back to [How-to guides](README.md)

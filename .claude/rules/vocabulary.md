@@ -129,19 +129,22 @@ whiteboard daemon, later a self-hosted or SaaS backend. **`Browser` and
 the intended model is that connecting a daemon PROMOTES a workspace's source
 of truth to it, with everything below becoming a replica.
 
-The MOVE half of that model is implemented: Settings > Connections'
-"This workspace" section (`components/settings/PromoteWorkspaceSection.tsx`
-over `lib/promote-workspace.ts`) transfers the browser's whole workspace
-record into a daemon workspace as a CRDT merge — identity, history and
-referenced images survive, and path collisions surface as shadowed. What is
-still NOT implemented is the automatic demotion below it: after the move the
-browser record remains its own store rather than a subscribed replica, and
-continuing from the daemon is a narrated reload the user takes, never a
-silent source-of-truth swap. Copy may therefore promise the MOVE ("move this
-workspace to the daemon") but must not claim the browser has become a
-replica. The older per-document import panel, which preserved no document
-identity, is DELETED (user decision, 2026-08-28) — the whole-workspace move
-is the only browser-to-daemon transfer.
+Both halves of that model are implemented (ADR-0023). The MOVE: Settings >
+Connections' "This workspace" section (`components/settings/
+PromoteWorkspaceSection.tsx` over `lib/promote-workspace.ts`) transfers the
+browser's whole workspace record into a daemon workspace as a CRDT merge —
+identity, history and referenced images survive, and path collisions
+surface as shadowed. The DEMOTE (2026-09-04): once every document and
+image is VERIFIED on the daemon — read back from this browser's own
+replica, not from the response — the old browser record is deleted
+(`lib/demote-browser-workspace.ts`); what remains is a cached replica under
+the daemon workspace's id, read-only when the daemon is unreachable. An
+unverified move keeps the browser copy and says so. Copy may
+therefore say "kept by the daemon, cached here" after a verified move;
+continuing from the daemon is still a narrated reload the user takes, never
+a silent source-of-truth swap. The older per-document import panel, which
+preserved no document identity, is DELETED (user decision, 2026-08-28) —
+the whole-workspace move is the only browser-to-daemon transfer.
 
 `local` was the wrong word for this axis and could never have been the right
 one, because **a daemon is local too**. Two names spelled it that way and
