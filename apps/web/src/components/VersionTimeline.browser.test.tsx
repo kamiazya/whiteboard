@@ -1,8 +1,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
 import '../index.css'
-import VersionTimeline from './VersionTimeline.js'
+import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
 type FetchArgs = [RequestInfo | URL, RequestInit?]
 
@@ -89,6 +88,14 @@ beforeEach(() => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+    if (url.endsWith('/document')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))
   })
@@ -100,6 +107,17 @@ afterEach(() => {
   cleanup()
 })
 
+/**
+ * What is left here is what needs a real engine: layout, painting, and the
+ * browser's own focus model.
+ *
+ * The restore FLOW moved to `BrowserDocumentPage.versions.browser.test.tsx`,
+ * and that is where it belongs now rather than a coverage loss — the buttons
+ * that drive it are the document's chrome, which a standalone mount of this
+ * panel does not have, so a test here would have had to click a copy of them
+ * it built itself. The panel's own half (publishing the session, refusing a
+ * second restore, carrying the error) is `VersionTimeline.test.tsx`.
+ */
 describe('VersionTimeline browser mode', () => {
   it('keeps the history list scrollable inside the fixed-height popover', async () => {
     const { container } = render(
@@ -136,7 +154,8 @@ describe('VersionTimeline browser mode', () => {
     expect(viewport!.scrollTop).toBeGreaterThan(before)
   })
 
-  it('keeps each history row keyboard-focusable and opens the restore dialog', async () => {
+  it('keeps each history row keyboard-focusable, and opens the version for looking at', async () => {
+    const captured: { session: VersionPreviewSession | null } = { session: null }
     render(
       <div
         style={{
@@ -147,7 +166,13 @@ describe('VersionTimeline browser mode', () => {
           minHeight: 0,
         }}
       >
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline
+          workspaceId="sess_1"
+          path="canvas-a"
+          onPreview={(session) => {
+            captured.session = session
+          }}
+        />
       </div>,
     )
 
@@ -158,8 +183,10 @@ describe('VersionTimeline browser mode', () => {
     expect(firstVersion).toHaveFocus()
     firstVersion.click()
 
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
-    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
+    // What the panel does is PUBLISH the session; the bar that draws it is
+    // the document's chrome, which this standalone mount does not have.
+    await vi.waitFor(() => expect(captured.session).not.toBeNull())
+    expect(captured.session?.title).toMatch(/Version 1/)
   })
 
   it('rings the lane HEAD is not on, names it, and keeps it out of the tab order', async () => {
@@ -216,86 +243,5 @@ describe('VersionTimeline browser mode', () => {
     expect(shell).not.toBeNull()
     shell?.focus()
     expect(document.activeElement).not.toBe(shell)
-  })
-
-  it('closes the dialog and notifies the caller after a real click through a successful restore', async () => {
-    const onRestored = vi.fn()
-    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/restore')) {
-        return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
-      }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(
-      <div
-        style={{
-          width: '340px',
-          height: '480px',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0,
-        }}
-      >
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />
-      </div>,
-    )
-
-    const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
-    firstVersion.click()
-
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
-    await page.getByRole('button', { name: 'Restore' }).click()
-
-    await expect.element(page.getByRole('alertdialog')).not.toBeInTheDocument()
-    await waitFor(() => {
-      expect(onRestored).toHaveBeenCalledTimes(1)
-    })
-  })
-
-  it('keeps the dialog open with an error after a real click through a failed restore', async () => {
-    const onRestored = vi.fn()
-    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/restore')) {
-        return Promise.resolve(
-          new Response(JSON.stringify({ error: 'not_found' }), { status: 404 }),
-        )
-      }
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(
-      <div
-        style={{
-          width: '340px',
-          height: '480px',
-          display: 'flex',
-          flexDirection: 'column',
-          minHeight: 0,
-        }}
-      >
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />
-      </div>,
-    )
-
-    const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
-    firstVersion.click()
-
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
-    await page.getByRole('button', { name: 'Restore' }).click()
-
-    await expect.element(page.getByText(/restore failed/i)).toBeInTheDocument()
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
-    expect(onRestored).not.toHaveBeenCalled()
   })
 })

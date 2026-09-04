@@ -179,7 +179,16 @@ const contextArb = fc.record({
  * independent timestamps would rarely put two inside the window.
  */
 const stepArb = fc.record({
-  dt: fc.integer({ min: 0, max: 600 }),
+  // Biased short. A double press is two presses inside a 400ms window with
+  // whatever steps fell between them, and a uniform 0-600ms interval left
+  // `zoom-at` at 4-5 per 2000 sequences — zero in one local run out of six,
+  // and once on CI, which the ledger reported. Two draws in three under
+  // 150ms lift it to 9-13 (measured 12, 9, 13) while the long tail still
+  // generates the "too late" rejection.
+  dt: fc.oneof(
+    { weight: 2, arbitrary: fc.integer({ min: 0, max: 150 }) },
+    { weight: 1, arbitrary: fc.integer({ min: 0, max: 600 }) },
+  ),
   pointerId: pointerIdArb,
   /**
    * Weighted, not uniform. The arrangement that matters most here — a

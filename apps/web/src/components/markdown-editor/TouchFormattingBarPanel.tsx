@@ -7,6 +7,7 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 import { trackKeyboardDock } from '../../lib/software-keyboard.js'
 import { DOCK_BUTTON_CLASS } from '../ui/dock-button.js'
@@ -15,13 +16,13 @@ import {
   cycleHeadingLevel,
   type MarkdownVerbId,
   selfContainedCommand,
-  TOUCH_BAR_ORDER,
+  VERB_BAR_ORDER,
   verb,
 } from './editor-verbs.js'
-import { layoutTouchBar, TOUCH_BAR_HEIGHT_PX } from './touch-bar-layout.js'
+import { layoutVerbBar, TOUCH_BAR_HEIGHT_PX, TOUCH_BAR_METRICS } from './verb-bar-layout.js'
 import { VERB_ICONS } from './verb-icons.js'
 
-const BAR_ITEMS = TOUCH_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
+const BAR_ITEMS = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
 
 function useWindowWidth(): number {
   const [width, setWidth] = useState(() => window.innerWidth)
@@ -40,8 +41,8 @@ function useWindowWidth(): number {
  * what must stay out of the entry chunk: the critical-path bundle budget
  * measured the eager version at +20 KB gzip.
  *
- * Slots follow the dock's button language and `TOUCH_BAR_ORDER`; what the
- * width cannot hold goes behind "…", a sheet above the bar (`layoutTouchBar`
+ * Slots follow the dock's button language and `VERB_BAR_ORDER`; what the
+ * width cannot hold goes behind "…", a sheet above the bar (`layoutVerbBar`
  * decides the split). Every press cancels pointerdown so focus — and with
  * it the keyboard, and the node editor's blur-commit — stays put.
  */
@@ -94,7 +95,7 @@ export default function TouchFormattingBarPanel() {
     }
     setSheetOpen(false)
   }
-  const layout = layoutTouchBar(width, BAR_ITEMS)
+  const layout = layoutVerbBar(width, BAR_ITEMS, TOUCH_BAR_METRICS)
 
   return createPortal(
     <div
@@ -138,7 +139,7 @@ export default function TouchFormattingBarPanel() {
             aria-haspopup="menu"
             aria-expanded={sheetOpen}
             onClick={() => setSheetOpen((open) => !open)}
-            className={cn(DOCK_BUTTON_CLASS, sheetOpen && 'bg-accent text-foreground')}
+            className={cn(DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS)}
           >
             <Ellipsis aria-hidden className="size-4" />
           </button>

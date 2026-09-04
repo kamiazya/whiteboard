@@ -72,9 +72,29 @@ test('isValidDesignShape accepts a well-formed caller-provided designDoc', () =>
       properties: ['none: pure UI wiring, no state/parser/store surface'],
       blastRadius: ['none: new leaf module, no existing callers'],
       userReach: ['rendered by CanvasList, reachable from /w/:ws'],
+      benefit: 'obvious: a missing affordance, visible in the diff',
     }),
     true,
   )
+})
+
+// The field that makes the author choose the column their change will be VERIFIED in. Without
+// it a relocation gets pointed at a stopwatch, reports no difference, and reads as worthless.
+test('isValidDesignShape rejects a designDoc with no `benefit` claim, and one that names no column', () => {
+  const isValidDesignShape = extractIsValidDesignShape()
+  const base = {
+    completionCriteria: ['does the thing'],
+    scope: 'small',
+    testScenarios: { unit: ['covers the thing'] },
+    properties: ['none: pure UI wiring, no state/parser/store surface'],
+    blastRadius: ['none: new leaf module, no existing callers'],
+    userReach: ['rendered by CanvasList, reachable from /w/:ws'],
+  }
+  for (const design of [base, { ...base, benefit: 'makes the list feel faster' }, { ...base, benefit: 'relocation:' }]) {
+    assert.equal(isValidDesignShape(design), false, JSON.stringify(design))
+    assert.equal(sharedIsValidDesignShape(design), false, JSON.stringify(design))
+  }
+  assert.equal(isValidDesignShape({ ...base, benefit: 'relocation: decode leaves the main thread; clone of the bytes unmeasurable' }), true)
 })
 
 test('isValidDesignShape rejects a designDoc missing the required `userReach` field', () => {

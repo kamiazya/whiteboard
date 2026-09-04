@@ -27,7 +27,10 @@ export type WhiteboardCapabilities = {
   // single-workspace, both keepers set the flag the same way, and a flag both
   // keepers agree on is not a capability — it gates nothing and the copy
   // built on it promises a difference that is not there.
-  readonly versions: boolean
+  // `versions` left the same way: the browser keeps its own manual history
+  // now, so both keepers answer true and the flag gates nothing. What the
+  // daemon adds on top (automatic checkpoints, thumbnails) is a per-panel
+  // fact the page states where it mounts the panel, not a keeper flag.
   readonly branches: boolean
   readonly merge: boolean
 }
@@ -42,13 +45,11 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  versions: false,
   branches: false,
   merge: false,
 }
 
 export const DAEMON_CAPABILITIES: WhiteboardCapabilities = {
-  versions: true,
   branches: true,
   merge: true,
 }

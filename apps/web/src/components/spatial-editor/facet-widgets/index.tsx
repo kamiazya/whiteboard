@@ -15,6 +15,7 @@ import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
@@ -79,9 +80,8 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
               onClick={() => run({ kind: 'set-edge-routing', style })}
               className={cn(
                 OPTION_CLASS,
-                currentRouting === style
-                  ? 'bg-accent font-medium text-foreground'
-                  : 'text-muted-foreground',
+                'text-muted-foreground aria-pressed:font-medium',
+                TOGGLE_STATE_CLASS,
               )}
             >
               {label}
@@ -105,9 +105,8 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
               onClick={() => run({ kind: 'set-line-jumps', lineJumps })}
               className={cn(
                 OPTION_CLASS,
-                currentJumps === lineJumps
-                  ? 'bg-accent font-medium text-foreground'
-                  : 'text-muted-foreground',
+                'text-muted-foreground aria-pressed:font-medium',
+                TOGGLE_STATE_CLASS,
               )}
             >
               {label}

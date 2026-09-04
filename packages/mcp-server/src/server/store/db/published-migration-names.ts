@@ -32,4 +32,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0019-workspace-canonical-id',
   '0020-snapshot-generation',
   '0021-leases',
+  '0022-version-restored-from',
 ] as const satisfies readonly string[]

@@ -31,5 +31,16 @@ export const versionEntrySchema = z.object({
   operator: operatorInfoSchema.optional(),
   hasThumbnail: z.boolean(),
   branchName: z.string(),
+  /**
+   * The version this point was produced by RESTORING, when it was.
+   *
+   * A restore reconciles a past state onto the live document, so what comes
+   * out is a descendant of both the state you were on and the one you went
+   * back to — a merge. The shape of that is already derivable from the
+   * stored frontiers, and the shape is not the part a reader is missing:
+   * `cmpFrontiers` can say two points diverged and rejoined, and can never
+   * say WHY. This is the merge commit's message.
+   */
+  restoredFrom: z.string().optional(),
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>

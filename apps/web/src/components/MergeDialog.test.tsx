@@ -254,9 +254,14 @@ describe('MergeDialog', () => {
       versionEntry({ id: 'feature-v1', branchName: 'feature', createdAt: '2026-04-23T05:00:00Z' }),
     ]
     const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(new Response(JSON.stringify({ versions }), { status: 200 }))
-      .mockResolvedValueOnce(new Response('nope', { status: 500 }))
+      .fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/thumbnail')
+          ? new Response(new Blob(['png']), { status: 200 })
+          : new Response('nope', { status: 500 }),
+      )
+      .mockImplementationOnce(
+        async () => new Response(JSON.stringify({ versions }), { status: 200 }),
+      )
     vi.stubGlobal('fetch', fetchMock)
     const runMerge = vi
       .fn<(source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResponse>>()
@@ -273,10 +278,11 @@ describe('MergeDialog', () => {
       />,
     )
     const sourceCard = await screen.findByTestId('merge-branch-card-source')
+    // The picture comes from the keeper now, so what it is drawn FROM is an
+    // object URL rather than the route. What this case is about is the
+    // clearing below, so it waits for a picture rather than naming one.
     await waitFor(() => {
-      expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/workspaces/w1/documents/c1/versions/feature-v1/thumbnail',
-      )
+      expect(sourceCard.querySelector('img')).not.toBeNull()
     })
     // Switch the source branch so the effect re-runs and the follow-up fetch fails.
     const otherFeature: BranchMeta = { ...feature, name: 'other-feature' }
@@ -444,16 +450,21 @@ describe('MergeDialog', () => {
         path="c1"
       />,
     )
-    const sourceCard = await screen.findByTestId('merge-branch-card-source')
-    const targetCard = await screen.findByTestId('merge-branch-card-target')
+    await screen.findByTestId('merge-branch-card-source')
+    await screen.findByTestId('merge-branch-card-target')
+    // Which POINT each card picked, asserted on what was asked for rather
+    // than on an <img src>: the picture is the keeper's to hand over now, and
+    // an object URL says nothing about the choice this case is about.
+    const asked = () =>
+      (vi.mocked(fetch).mock.calls as [RequestInfo | URL][])
+        .map(([input]) => String(input))
+        .filter((url) => url.includes('/thumbnail'))
     await waitFor(() => {
-      expect(sourceCard.querySelector('img')?.getAttribute('src')).toBe(
-        '/api/workspaces/w1/documents/c1/versions/feature-only/thumbnail',
-      )
+      expect(asked()).toContain('/api/workspaces/w1/documents/c1/versions/feature-only/thumbnail')
     })
-    expect(targetCard.querySelector('img')?.getAttribute('src')).toBe(
-      '/api/workspaces/w1/documents/c1/versions/main-new/thumbnail',
-    )
+    await waitFor(() => {
+      expect(asked()).toContain('/api/workspaces/w1/documents/c1/versions/main-new/thumbnail')
+    })
   })
 
   it('gives the Combined preview panel a dark-mode-aware surface, not a hardcoded white background', async () => {

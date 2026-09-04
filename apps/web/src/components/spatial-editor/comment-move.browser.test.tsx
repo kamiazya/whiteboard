@@ -110,6 +110,33 @@ it('dragging a point-anchored pin moves the anchor and commits one move-comment'
   expect(latest.canvas.nodes).toHaveLength(1)
 })
 
+it('a pressed pin stays on screen before the pointer has moved', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+      'free note',
+    ),
+  )
+
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 7,
+    clientX: r.left + 600,
+    clientY: r.top + 450,
+  })
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+
+  // The press alone starts the drag, which takes the committed copy out of
+  // the surface. The preview only rendered once a pointer MOVE supplied a
+  // live point, so between the two the comment was in neither place and
+  // simply vanished — most visibly on touch, where a long-press commits the
+  // drag and a finger held still supplies no move at all.
+  expect(root.textContent).toContain('free note')
+})
+
 it('a press on a pin that does not travel is not a move', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

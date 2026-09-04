@@ -1,6 +1,5 @@
-import { documentsApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useEffect, useState } from 'react'
-import { useDaemonApi, useHasDaemonApi } from '@/contexts/DaemonApiContext'
+import { useVersionsBackend } from '@/contexts/VersionsBackendContext'
 
 interface VersionThumbnailProps {
   workspaceId: string
@@ -21,13 +20,19 @@ function Placeholder({ className }: { className?: string }) {
 }
 
 /**
- * Renders a version's thumbnail image.
+ * The picture a saved point carries.
  *
- * A plain <img src> cannot carry the daemon's own origin or bearer token, so
- * in daemon mode (a DaemonApiContext provider mounted) this fetches the
- * image through the authorized daemon fetch and exposes it via an object
- * URL instead. The same-origin mcp-server app has no such constraint and
- * keeps the cheaper plain <img src> path with no objectURL bookkeeping.
+ * Asked of the KEEPER rather than of a URL. This component used to build the
+ * daemon's route itself, which is what made a picture a thing only one
+ * keeper's history could have — the browser's rows had nowhere to fetch
+ * from and simply showed less, and no test failed over it. Where the bytes
+ * live is now the seam's business: a daemon route, or an IndexedDB store.
+ *
+ * Always through an object URL, including where the app is served from the
+ * same origin as the daemon and a plain `<img src>` would have done. That
+ * shortcut cost one branch here and made the component's source of bytes a
+ * URL, which is the whole defect above; a keeper that holds a Blob has no
+ * URL to offer.
  */
 export function VersionThumbnail({
   workspaceId,
@@ -36,71 +41,35 @@ export function VersionThumbnail({
   hasThumbnail,
   className,
 }: VersionThumbnailProps) {
-  const fetchFn = useDaemonApi()
-  const hasDaemonApi = useHasDaemonApi()
+  const backend = useVersionsBackend()
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
-  const [failed, setFailed] = useState(false)
-
-  const src = documentsApiUrl(
-    workspaceId,
-    path,
-    `versions/${encodeURIComponent(versionId)}/thumbnail`,
-  )
 
   useEffect(() => {
-    if (!hasThumbnail || !hasDaemonApi) return
-
+    if (!hasThumbnail) return
     let cancelled = false
     let createdUrl: string | null = null
-    setFailed(false)
     setObjectUrl(null)
 
-    async function load(): Promise<void> {
+    void (async () => {
       try {
-        const res = await fetchFn(src)
-        if (!res.ok) {
-          if (!cancelled) setFailed(true)
-          return
-        }
-        const blob = await res.blob()
-        if (cancelled) return
-        // 204 No Content ("no thumbnail yet") is a success status, so it slips
-        // past the `res.ok` check above. An object URL built from an empty
-        // body renders as a broken image instead of the placeholder.
-        if (blob.size === 0) {
-          setFailed(true)
-          return
-        }
+        const blob = await backend.loadThumbnail(workspaceId, path, versionId)
+        if (cancelled || blob === null) return
         createdUrl = URL.createObjectURL(blob)
         setObjectUrl(createdUrl)
       } catch {
-        if (!cancelled) setFailed(true)
+        // A row whose picture cannot be fetched keeps its place in the
+        // history. The picture is a convenience; failing to get one must not
+        // cost the row itself.
       }
-    }
+    })()
 
-    void load()
     return () => {
       cancelled = true
       if (createdUrl) URL.revokeObjectURL(createdUrl)
     }
-    // `src` is derived purely from these identity fields; fetchFn is the
-    // context-provided function and is not expected to change identity
-    // across a poll-driven re-render of the same canvas.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [workspaceId, path, versionId, hasThumbnail, hasDaemonApi])
+  }, [backend, workspaceId, path, versionId, hasThumbnail])
 
-  if (!hasThumbnail) return <Placeholder className={className} />
-  if (!hasDaemonApi) {
-    return (
-      <img
-        src={src}
-        alt="Version thumbnail"
-        className={className ?? 'w-full h-20 object-contain'}
-        loading="lazy"
-      />
-    )
-  }
-  if (failed || !objectUrl) return <Placeholder className={className} />
+  if (!hasThumbnail || objectUrl === null) return <Placeholder className={className} />
   return (
     <img
       src={objectUrl}

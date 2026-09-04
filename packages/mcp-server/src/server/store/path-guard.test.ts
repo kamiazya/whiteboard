@@ -62,7 +62,7 @@ describe('store path guards', () => {
     // filesystem, so the path guard remains the second-line defense behind
     // validateVersionId. Relaxing the validators forces the assertPathWithinDir
     // guard to fire when the id would otherwise build a path outside blobs/.
-    const error = await captureError(store.loadThumbnail('sess-1', '../escape'))
+    const error = await captureError(store.loadThumbnail('sess-1', 'canvas-a', '../escape'))
 
     expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
     expect(validationErrorBody(error)).toEqual({

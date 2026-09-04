@@ -11,6 +11,17 @@ import { resolveBrowserLaunchOptions } from './packages/mcp-server/src/server/br
 const TRACES_DIR = 'tmp/vitest-traces'
 
 /**
+ * Set by `pnpm test:browser:trace` to record DOM snapshots as well.
+ *
+ * It is an env var rather than a CLI flag because a CLI flag cannot do it.
+ * `--browser.trace=on` MERGES into the object below rather than replacing it
+ * (measured: a config carrying `snapshots: false` still produced a zero-byte
+ * `.network` under that flag), so once the default is off, nothing on the
+ * command line can turn it back on. This is the switch that can.
+ */
+const SNAPSHOTS_VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
+
+/**
  * The one definition of how this repo runs a Vitest browser project —
  * headless chromium via Playwright, launch options honouring
  * WHITEBOARD_CHROME_PATH, failure traces retained under the package's
@@ -33,6 +44,30 @@ const TRACES_DIR = 'tmp/vitest-traces'
  * still reports plenty of "Used". One run's worth is also all that is
  * useful: the traces you read are the ones from the run that just failed,
  * and a second run at the same path would overwrite them anyway.
+ *
+ * **DOM snapshots are off unless asked for**, which is a separate bound and
+ * the one that stops a SINGLE run filling the disk — the clear above only
+ * stops runs accumulating on each other. `snapshots: true` makes Playwright
+ * record every resource body it served so the viewer can replay the DOM, and
+ * under vitest browser mode vite serves the whole module graph of every page
+ * under test. Measured on `apps/web`'s 16 page files (63 tests, all passing):
+ * 302MB, of which the `.network` file is 284MB; the same subset with
+ * snapshots off writes 7.5MB and a `.network` of zero. A whole `web-browser`
+ * run measured 22GB.
+ *
+ * That is worth a paragraph because of how it fails rather than how big it
+ * is. The disk runs out MID-RUN, and `tracing.stopChunk: ENOSPC` appears
+ * once while what a reader actually sees is `Failed to fetch dynamically
+ * imported module`, `Cannot connect to the iframe`, and a summary of
+ * `774 passed` — against a true total of 929. 155 tests silently never ran,
+ * and the smaller total reads like good news. Same shape as a mis-filtered
+ * `--project`, reached by a different route.
+ *
+ * A failure's trace stays useful without them: the retained `.trace.zip` is
+ * self-contained and still carries the screenshots, the action log and the
+ * stacks (measured: 7 entries, 4 screenshots, 80KB against 96KB). What is
+ * lost is DOM time-travel and the resource bodies, and it is one command
+ * away — `pnpm test:browser:trace`, which is what that script is for.
  */
 export function sharedBrowserTestConfig(
   options: {
@@ -58,7 +93,7 @@ export function sharedBrowserTestConfig(
       mode: 'retain-on-failure' as const,
       tracesDir: `./${TRACES_DIR}`,
       screenshots: true,
-      snapshots: true,
+      snapshots: process.env[SNAPSHOTS_VAR] !== undefined,
     },
     viewport: options.viewport ?? { width: 800, height: 600 },
     provider: playwright({

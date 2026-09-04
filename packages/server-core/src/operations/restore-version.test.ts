@@ -155,8 +155,27 @@ class FakeVersions implements VersionHistory {
       { doc: LoroDoc | null; workspace: LoroDoc | null; label?: string; path: string }
     >,
   ) {}
-  async save(): Promise<VersionEntry> {
-    throw new Error('restoreVersion never saves a version')
+  readonly saved: {
+    path: string
+    options: { auto: boolean; label?: string; restoredFrom?: string }
+  }[] = []
+  async save(
+    _workspaceId: string,
+    path: string,
+    _doc: LoroDoc,
+    options: { auto: boolean; label?: string; restoredFrom?: string },
+  ): Promise<VersionEntry> {
+    this.saved.push({ path, options })
+    return {
+      id: `saved-${this.saved.length}`,
+      path,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      elementCount: 0,
+      auto: options.auto,
+      hasThumbnail: false,
+      branchName: 'main',
+      ...(options.restoredFrom === undefined ? {} : { restoredFrom: options.restoredFrom }),
+    }
   }
   async load(_workspaceId: string, id: string): Promise<LoroDoc | null> {
     return this.byId.get(id)?.doc ?? null
@@ -489,5 +508,68 @@ describe('restoreVersion subtree mode', () => {
     expect(slot.id).not.toBe(squatterId)
     expect(readSpatialCanvas(slot.doc).nodes.map((node) => node.id)).toEqual(['original'])
     expectAllCallsLocked(live)
+  })
+})
+
+/**
+ * A restore is a MERGE, and a merge that leaves no row is a merge nobody can
+ * find afterwards.
+ *
+ * `reconcileDocContent` commits new ops whose result equals the past state,
+ * so what comes out is a descendant of BOTH the state you were on and the
+ * one you restored. Before this, nothing recorded that moment: the next row
+ * appeared only when the document had been quiet for five minutes, by which
+ * time it was an ordinary checkpoint saying nothing about where it came
+ * from. The history read as a straight line through a point where two
+ * branches had actually joined.
+ *
+ * The row is what carries the REASON. The topology is already derivable
+ * from the stored frontiers (`cmpFrontiers` answers -1/1/0/undefined, and
+ * undefined is a real branch point), but no amount of frontier arithmetic
+ * can say WHY the branches met — the same reason a merge commit carries a
+ * message.
+ */
+describe('a restore records the merge point it creates', () => {
+  it('saves a row naming the version it restored', async () => {
+    const live = new FakeLive()
+    live.seed('canvas-a', spatialDoc(['now']))
+    const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
+
+    const result = await restoreVersion(
+      { versions, liveDocuments: live },
+      { workspaceId: WS, path: 'canvas-a', versionId: 'v-past' },
+    )
+
+    expect(result).toEqual({ kind: 'restored-in-place' })
+    expect(versions.saved).toHaveLength(1)
+    expect(versions.saved[0]?.path).toBe('canvas-a')
+    // Named, so the panel can say "restored from …" rather than leaving the
+    // reader to infer it from two timestamps.
+    expect(versions.saved[0]?.options.restoredFrom).toBe('v-past')
+    // Not a bookmark: nobody typed a name for it.
+    expect(versions.saved[0]?.options.auto).toBe(true)
+  })
+
+  it('records the merge against the TARGET when restoring into another document', async () => {
+    const live = new FakeLive()
+    live.seed('canvas-a', spatialDoc(['now']))
+    live.seed('canvas-b', spatialDoc(['other']))
+    const versions = versionsWith({ 'v-past': { doc: spatialDoc(['then']), path: 'canvas-a' } })
+
+    await restoreVersion(
+      { versions, liveDocuments: live },
+      {
+        workspaceId: WS,
+        path: 'canvas-a',
+        versionId: 'v-past',
+        targetPath: 'canvas-b',
+        overwrite: true,
+      },
+    )
+
+    // The document that CHANGED is the one whose history gained a point.
+    expect(versions.saved).toHaveLength(1)
+    expect(versions.saved[0]?.path).toBe('canvas-b')
+    expect(versions.saved[0]?.options.restoredFrom).toBe('v-past')
   })
 })

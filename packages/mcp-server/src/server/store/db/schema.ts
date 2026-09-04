@@ -47,6 +47,8 @@ interface VersionsTable {
   frontiers: string
   hasThumbnail: Bool
   createdAt: Timestamp
+  // Set only on the point a restore produced; see `versionEntrySchema`.
+  restoredFrom: string | null
 }
 
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,

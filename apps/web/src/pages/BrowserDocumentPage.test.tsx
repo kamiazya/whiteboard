@@ -803,7 +803,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   describe('daemon-only capability messaging', () => {
-    const CTA_TEXT = 'Connect a daemon (MCP) for version history, variations and merging.'
+    const CTA_TEXT = 'Connect a daemon (MCP) for automatic checkpoints, variations and merging.'
 
     it('keeps the capability CTA out of page chrome and reports "local" to the shell', async () => {
       const store = new LocalStoreDouble()
@@ -821,7 +821,7 @@ describe('BrowserDocumentPage', () => {
       })
       // No sentence-length CTA sits in the page chrome...
       expect(screen.queryByText(CTA_TEXT)).toBeNull()
-      for (const label of ['Version history', 'Workspaces', 'Branches', 'Merge']) {
+      for (const label of ['Workspaces', 'Branches', 'Merge']) {
         expect(screen.queryByRole('button', { name: label })).toBeNull()
       }
       // ...nor does the chip itself: the connection is app-level, so the

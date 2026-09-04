@@ -109,3 +109,52 @@ describe('CanvasViewer (real browser)', () => {
     unmount()
   })
 })
+
+/**
+ * The half the DOM cannot state: a viewer given no size FITS its container.
+ *
+ * The framing fix (a viewBox, pinned in CanvasViewer.test.tsx) is necessary
+ * and not sufficient — an SVG sized only by its own content still renders at
+ * that content's pixel size, so a canvas larger than the pane is cut off and
+ * one smaller sits in a corner. Fitting needs the container's real measured
+ * box, which is a layout fact and exists in no other layer.
+ */
+describe('CanvasViewer fits the box it is given', () => {
+  const farCanvas: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' },
+      { id: 'b', type: 'text', x: 900, y: 700, width: 200, height: 80, text: 'also far' },
+    ],
+    edges: [],
+  }
+
+  it('draws the whole canvas inside the pane, not off its edge', async () => {
+    const { container } = render(
+      <div style={{ width: '400px', height: '300px' }}>
+        <CanvasViewer canvas={farCanvas} measure={fakeMeasure} />
+      </div>,
+    )
+    const pane = container.firstElementChild as HTMLElement
+
+    // The SVG takes the pane's box rather than the content's own pixel size.
+    await expect
+      .poll(() => container.querySelector('svg')?.getBoundingClientRect().width ?? 0)
+      .toBeCloseTo(400, 0)
+    const svg = container.querySelector('svg') as SVGSVGElement
+    expect(svg.getBoundingClientRect().height).toBeCloseTo(300, 0)
+
+    // And every drawn node lands inside that box. Before the fix the same
+    // canvas put both rects entirely outside it.
+    const paneBox = pane.getBoundingClientRect()
+    const rects = [...svg.querySelectorAll('rect')]
+    expect(rects.length).toBe(2)
+    for (const rect of rects) {
+      const box = rect.getBoundingClientRect()
+      expect(box.width).toBeGreaterThan(0)
+      expect(box.left).toBeGreaterThanOrEqual(paneBox.left - 1)
+      expect(box.right).toBeLessThanOrEqual(paneBox.right + 1)
+      expect(box.top).toBeGreaterThanOrEqual(paneBox.top - 1)
+      expect(box.bottom).toBeLessThanOrEqual(paneBox.bottom + 1)
+    }
+  })
+})

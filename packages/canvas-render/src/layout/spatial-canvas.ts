@@ -286,6 +286,25 @@ export interface SpatialLayoutOptions {
    * alone) and needing it placed exactly as the committed scene placed it.
    */
   readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * This document's annotation layer, handed over beside the canvas rather
+   * than read out of its envelope.
+   *
+   * ADR-0026 decision 1b makes the layer keeper-side: it is stored one level
+   * above content, so it no longer rides inside `x-whiteboard`. A markdown
+   * document has no envelope at all, which is the argument that decides it —
+   * there is nowhere in a canvas key to put a markdown document's comments.
+   *
+   * When present it REPLACES the envelope's copy rather than adding to it,
+   * and an empty array is an answer ("no conversations") rather than a
+   * missing one. Both matter while call sites migrate one at a time: the
+   * union would draw two pins on one comment, and a fallback would hand a
+   * caller that read the layer and found it empty the stale copy back.
+   *
+   * Absent, the envelope is read as before. That is what keeps every
+   * unmigrated caller byte-identical, and it goes once none is left.
+   */
+  readonly comments?: readonly CanvasComment[]
 }
 
 /**
@@ -1385,7 +1404,7 @@ function composeComments(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const comments = canvas['x-whiteboard']?.comments
+  const comments = options.comments ?? canvas['x-whiteboard']?.comments
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()

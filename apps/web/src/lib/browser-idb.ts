@@ -156,7 +156,7 @@ export function whiteboardDbName(): string {
  * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
  * rename-and-done.
  */
-export const DB_VERSION = 15
+export const DB_VERSION = 17
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -195,6 +195,30 @@ export const SYNC_SNAPSHOT_CHUNKS_STORE = 'syncSnapshotChunks'
  * clock that reads it, and it lives where those do: outside the contracts.
  */
 export const CONTENT_TIMESTAMPS_STORE = 'contentTimestamps'
+
+/**
+ * A document's saved versions, keyed by version id, with a `byDocument`
+ * index over `[workspaceId, documentId]`.
+ *
+ * A version is a FRONTIER into the workspace record (the same shape the
+ * daemon's `versions` table keeps) plus the row the History panel lists —
+ * never a copy of the content. The record keeps every op it ever held (the
+ * fold re-snapshots, it does not shallow-export), so a frontier saved today
+ * still checks out after any number of folds. v16 adds this store.
+ */
+export const VERSIONS_STORE = 'versions'
+export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
+
+/**
+ * The picture a saved point carries, keyed by version id. v17 adds this store.
+ *
+ * Its own store rather than a field on the row, for the reason the snapshot
+ * chunks are split out above: a `get` answers with the whole record, so an
+ * image on the row would be deserialized by every `list` the History panel
+ * does, to draw a list that shows one picture at a time. The row keeps only
+ * a boolean saying whether there is one.
+ */
+export const VERSION_THUMBNAILS_STORE = 'versionThumbnails'
 
 /**
  * The chunk size the v12 migration writes its carried snapshots with.
@@ -668,6 +692,13 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
           keyPath: ['workspaceId', 'path'],
         })
         index.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
+      }
+      if (!db.objectStoreNames.contains(VERSIONS_STORE)) {
+        const versions = db.createObjectStore(VERSIONS_STORE, { keyPath: 'id' })
+        versions.createIndex(VERSIONS_BY_DOCUMENT_INDEX, ['workspaceId', 'documentId'])
+      }
+      if (!db.objectStoreNames.contains(VERSION_THUMBNAILS_STORE)) {
+        db.createObjectStore(VERSION_THUMBNAILS_STORE)
       }
 
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.

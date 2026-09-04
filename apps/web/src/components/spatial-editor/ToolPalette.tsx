@@ -38,7 +38,7 @@ import {
   StickyNote,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
+import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { CREATION_LABELS } from './creation-labels.js'
 
@@ -93,7 +93,7 @@ interface ToolPaletteProps {
  */
 export const DOCK_OCCLUSION_PX = 70
 
-export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground`
+export const TOOL_BUTTON_CLASS = `${DOCK_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
 
 interface AddMenuEntry {
   readonly label: string

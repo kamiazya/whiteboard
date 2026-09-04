@@ -70,3 +70,56 @@ describe('CanvasViewer', () => {
     expect(getByTestId('default-measure').querySelector('svg')).toBeTruthy()
   })
 })
+
+/**
+ * A standalone viewer must FRAME what it draws.
+ *
+ * `renderSceneToSvg` only emits the `width`/`height`/`viewBox` envelope when
+ * asked for one — right for a scene composed into a larger document, and
+ * wrong for every use of this component, which is a whole SVG in a browser.
+ * Without it the root carries `xmlns` alone, the children keep raw scene
+ * coordinates, and the browser lays the element out at the replaced-element
+ * default: a canvas whose nodes start at x=400 renders as blank space with
+ * one clipped corner.
+ *
+ * Measured on the emitted string before this was fixed: `<svg
+ * xmlns="http://www.w3.org/2000/svg"><rect x="400" y="300" …` — no viewBox,
+ * nothing to map those coordinates into the box on screen.
+ */
+describe('CanvasViewer frames what it draws', () => {
+  const offCanvas: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 400, y: 300, width: 200, height: 80, text: 'far from origin' },
+      { id: 'b', type: 'text', x: 700, y: 500, width: 200, height: 80, text: 'also far' },
+    ],
+    edges: [],
+  }
+
+  it('carries a viewBox around the content even when the host gives no size', () => {
+    const { container } = render(<CanvasViewer canvas={offCanvas} measure={fakeMeasure} />)
+    const svg = container.querySelector('svg')
+    expect(svg).not.toBeNull()
+
+    const viewBox = svg?.getAttribute('viewBox')
+    expect(viewBox).not.toBeNull()
+    const [x, y, w, h] = (viewBox ?? '').split(/\s+/).map(Number)
+    // Framed ON the content: the box starts near the leftmost/topmost node
+    // rather than at the origin, and is big enough to hold both.
+    expect(x).toBeLessThanOrEqual(400)
+    expect(x).toBeGreaterThan(300)
+    expect(y).toBeLessThanOrEqual(300)
+    expect(y).toBeGreaterThan(200)
+    expect(w).toBeGreaterThanOrEqual(500)
+    expect(h).toBeGreaterThanOrEqual(280)
+  })
+
+  it('still honours an explicit size from the host', () => {
+    const { container } = render(
+      <CanvasViewer canvas={offCanvas} measure={fakeMeasure} width={640} height={480} />,
+    )
+    const svg = container.querySelector('svg')
+    expect(svg?.getAttribute('width')).toBe('640')
+    expect(svg?.getAttribute('height')).toBe('480')
+    expect(svg?.getAttribute('viewBox')).not.toBeNull()
+  })
+})

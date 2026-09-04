@@ -11,6 +11,7 @@ import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeas
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
+import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -22,11 +23,22 @@ import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
+import {
+  DAEMON_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import {
+  BookmarkAction,
+  type SaveVersionOutcome,
+} from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
@@ -59,6 +71,7 @@ import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
@@ -154,15 +167,28 @@ export function DaemonDocumentPage({
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  // The document's history column. Cleared on a document switch: this page
+  // does not remount, and a panel left open across a switch would be listing
+  // the departed document's versions under the arrived document's name.
+  const [historyOpen, setHistoryOpen] = useState(false)
+  // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
+  const [bookmarkArmed, setBookmarkArmed] = useState(0)
+  // The past state the person is LOOKING at, drawn in place of the editor.
+  // Read-only by construction — see DocumentPreview — so "look, then decide"
+  // cannot turn into an edit against a state that is not the document's.
+  const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   // Bumped on any version_created broadcast (covers this button's own save,
   // MCP tool saves, and other peers) so an open VersionTimeline updates
   // without waiting for its 15s poll.
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
+  useBookmarkShortcut(canvas !== null, () => {
+    setHistoryOpen(true)
+    setBookmarkArmed((n) => n + 1)
+  })
+
   const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionMessage, setSaveVersionMessage] = useState<{
-    kind: 'success' | 'error'
-    text: string
-  } | null>(null)
+  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -315,6 +341,12 @@ export function DaemonDocumentPage({
   // through unchanged.
   const canvasesRef = useRef(controller.documents)
   canvasesRef.current = controller.documents
+
+  // The document on screen, written during render so a handler that outlives
+  // a switch can ask what arrived rather than reading the `canvas` its own
+  // closure captured. This page switches documents without remounting.
+  const currentDocumentPathRef = useRef(canvas?.path)
+  currentDocumentPathRef.current = canvas?.path
   const resolveRefPath = useCallback(
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
     [],
@@ -390,6 +422,13 @@ export function DaemonDocumentPage({
     onChange,
     `${controller.workspaceId}:${controller.path}`,
   )
+  // SCOPE RESET — see the state's own note above.
+  useEffect(() => {
+    setHistoryOpen(false)
+    setBookmarkArmed(0)
+    setPreview(null)
+  }, [controller.path])
+
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
@@ -521,6 +560,11 @@ export function DaemonDocumentPage({
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
+  // The keeper this page's history belongs to. No provider is mounted here,
+  // so this is the daemon backend over `DaemonApiContext`'s fetch — the
+  // picture rides to the same route it always did, by the seam both pages
+  // now share rather than by a URL only this one could build.
+  const versionsBackend = useVersionsBackend()
 
   // The document's own verbs live on the document's ⋯, the same as on the
   // browser page — one object, one action menu (ADR-0006).
@@ -544,17 +588,27 @@ export function DaemonDocumentPage({
     }
   }
 
-  const saveVersion = async (): Promise<void> => {
-    if (!capabilities.versions || canvas === null || savingVersion) return
+  const saveVersion = async (label: string): Promise<void> => {
+    if (canvas === null || savingVersion) return
+    // The document this run is about, fixed before the first await — a save
+    // that started on A must not report itself under B. The scope-reset has
+    // already cleared the outcome by then, so the message would read as B's.
+    const startedOn = canvas.path
     setSavingVersion(true)
-    setSaveVersionMessage(null)
+    setSaveVersionOutcome(null)
+    // Captured BEFORE the POST, not after. `exportScene` reads the live scene
+    // synchronously at call time, so starting it here binds the picture to the
+    // state this save is about to mark. Awaiting the response first meant an
+    // edit made during it was drawn onto the older point — a picture of
+    // content that version does not contain.
+    const picture = getThumbnailBlob()
     try {
       const res = await daemonFetch(
         `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ label }),
         },
       )
       if (!res.ok) throw new Error(`save failed: ${res.status}`)
@@ -563,8 +617,30 @@ export function DaemonDocumentPage({
         log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
         throw new Error('save response did not match schema')
       }
-      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      if (currentDocumentPathRef.current !== startedOn) return
+      setSaveVersionOutcome('saved')
       setVersionRefreshSignal((n) => n + 1)
+      // The thumbnail rides with the bookmark, as it did when the top bar
+      // owned the save. It moved here with the save itself: the bar no
+      // longer takes versions, so it no longer needs the scene exporter.
+      // Not awaited — the bookmark has landed, and its picture arriving late
+      // or not at all must not hold up the row.
+      void attachVersionThumbnail({
+        backend: versionsBackend,
+        workspaceId: canvas.workspaceId,
+        path: canvas.path,
+        versionId: parsed.data.version.id,
+        getBlob: () => picture,
+      }).then((outcome) => {
+        if (outcome === 'failed') {
+          log.error('bookmark thumbnail upload failed')
+          return
+        }
+        // Refresh a SECOND time, for the reason the browser page does: the
+        // row landed before its picture did, so the list refreshed above
+        // holds a row that says it has none.
+        setVersionRefreshSignal((n) => n + 1)
+      })
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
@@ -572,9 +648,10 @@ export function DaemonDocumentPage({
       // HeaderSaveDot never learns this save happened and stays dirty.
       dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
     } catch {
-      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+      if (currentDocumentPathRef.current !== startedOn) return
+      setSaveVersionOutcome('failed')
     } finally {
-      setSavingVersion(false)
+      if (currentDocumentPathRef.current === startedOn) setSavingVersion(false)
     }
   }
 
@@ -599,37 +676,32 @@ export function DaemonDocumentPage({
     return <LoadDegradedView message={pageState.message} />
   }
 
-  const versionPanelExtra =
-    capabilities.versions && canvas ? (
-      <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
-        <button
-          type="button"
-          onClick={() => void saveVersion()}
-          disabled={savingVersion}
-          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-        >
-          {savingVersion ? 'Saving…' : 'Save version'}
-        </button>
-        {saveVersionMessage && (
-          <span
-            role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
-            aria-live="polite"
-            className={
-              saveVersionMessage.kind === 'error'
-                ? 'text-xs text-destructive'
-                : 'text-xs text-muted-foreground'
-            }
-          >
-            {saveVersionMessage.text}
-          </span>
-        )}
-      </div>
-    ) : null
+  const versionHeaderActions = canvas ? (
+    <BookmarkAction
+      saving={savingVersion}
+      outcome={saveVersionOutcome}
+      armed={bookmarkArmed}
+      onSave={(label) => void saveVersion(label)}
+    />
+  ) : null
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <DocumentPageShell
         srTitle="Whiteboard (daemon)"
+        aside={
+          historyOpen && canvas ? (
+            <VersionPanel
+              workspaceId={canvas.workspaceId}
+              path={canvas.path}
+              capabilities={DAEMON_HISTORY_CAPABILITIES}
+              onRestored={clearLocalUndo}
+              onPreview={setPreview}
+              refreshSignal={versionRefreshSignal}
+              headerActions={versionHeaderActions}
+            />
+          ) : undefined
+        }
         header={
           <>
             {canvas && (
@@ -701,12 +773,17 @@ export function DaemonDocumentPage({
                 workspaceId={canvas.workspaceId}
                 path={canvas.path}
                 capabilities={capabilities}
+                // Whatever the document holds: the daemon writes a history for
+                // every kind, and gating this on the editor is what left a
+                // markdown document's checkpoints unreachable.
+                onToggleHistory={canvas ? () => setHistoryOpen((open) => !open) : undefined}
+                historyOpen={historyOpen}
+                {...(preview === null ? {} : { preview })}
                 branchRefreshSignal={branchRefreshSignal}
                 onNavigateBack={onNavigateBack}
                 // Version thumbnails come from the same PNG export path the
                 // user can trigger by hand. Without this the save flow skips
                 // the upload entirely and latest-thumbnail stays 204 forever.
-                getThumbnailBlob={getThumbnailBlob}
               />
             )}
             {capabilities.branches && canvas && (
@@ -723,12 +800,11 @@ export function DaemonDocumentPage({
             had gone stale: it deferred to a WorkspaceTopBar dropdown that no
             longer exists. The shell switcher names the workspace on every
             page, this one included, so it is the one carrier now. */}
-            {(!capabilities.versions || !capabilities.branches || !capabilities.merge) && (
+            {(!capabilities.branches || !capabilities.merge) && (
               <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
                 {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
-                {!capabilities.versions && <CapabilityTeaser label="Version history" />}
                 {!capabilities.branches && <CapabilityTeaser label="Variations" />}
                 {!capabilities.merge && <CapabilityTeaser label="Combine" />}
               </div>
@@ -803,6 +879,8 @@ export function DaemonDocumentPage({
               Create a canvas
             </Button>
           </div>
+        ) : preview ? (
+          <DocumentPreview past={preview.past} theme={resolvedTheme} />
         ) : (
           <DocumentEditorSurface
             kind={documentKind}
@@ -853,16 +931,6 @@ export function DaemonDocumentPage({
                   onRedo: () => void redo(),
                   canUndo: canUndo(),
                   canRedo: canRedo(),
-                  versions:
-                    capabilities.versions && canvas
-                      ? {
-                          workspaceId: canvas.workspaceId,
-                          path: canvas.path,
-                          onRestored: clearLocalUndo,
-                          refreshSignal: versionRefreshSignal,
-                          versionPanelExtra,
-                        }
-                      : undefined,
                 }}
                 overlayTitle={canvas?.path ?? 'Untitled'}
                 resolveAlias={resolveAlias}

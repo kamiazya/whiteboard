@@ -127,6 +127,7 @@ export async function restoreVersion(
           kind: sourceKind,
           progress,
         })
+        await recordMerge(versions, workspaceId, targetPath, targetDoc, versionId)
         return {
           kind: 'restored-to-target',
           targetPath,
@@ -153,6 +154,7 @@ export async function restoreVersion(
       // Guard against a stale cache entry from a since-deleted document at
       // this path being served instead of the just-written snapshot.
       live.evict(workspaceId, targetPath)
+      await recordMerge(versions, workspaceId, targetPath, past, versionId)
       return { kind: 'restored-to-target', targetPath, elementCount: countAliveNodes(past) }
     }
 
@@ -206,6 +208,11 @@ export async function restoreVersion(
             await live.save(workspaceId, node.path, pastDoc, { kind: node.meta.kind })
             live.evict(workspaceId, node.path)
           }
+          // Every document the rollback moved gains the point, not just the
+          // one that was addressed: leaving the rest unrecorded would make
+          // this the one mode whose history reads as a straight line through
+          // a merge.
+          await recordMerge(versions, workspaceId, node.path, pastDoc, versionId)
         }
       } finally {
         await progress({ workspaceId, path, phase: 'complete' })
@@ -214,8 +221,32 @@ export async function restoreVersion(
     }
 
     await reconcileAndSave(live, workspaceId, path, doc, past, { label, kind: null, progress })
+    await recordMerge(versions, workspaceId, path, doc, versionId)
     return { kind: 'restored-in-place' }
   })
+}
+
+/**
+ * Record the point a restore just created, on the document it changed.
+ *
+ * BEST EFFORT, deliberately: the content is already saved by the time this
+ * runs, so a failure here costs the history a point and costs the document
+ * nothing. Letting it throw would report a restore that in fact landed,
+ * which is the worse of the two lies — and rolling the restore back to keep
+ * the history tidy would be worse still.
+ */
+async function recordMerge(
+  versions: Pick<ServerDeps, 'versions'>['versions'],
+  workspaceId: string,
+  path: string,
+  doc: LoroDoc,
+  restoredFrom: string,
+): Promise<void> {
+  try {
+    await versions.save(workspaceId, path, doc, { auto: true, restoredFrom })
+  } catch {
+    // See above.
+  }
 }
 
 // Reconciles `past` onto `doc` (the LIVE doc for workspaceId/targetPath),

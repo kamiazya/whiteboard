@@ -77,6 +77,75 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.branchName).toBe('main')
   })
 
+  /**
+   * The merge point a restore creates, through the real column.
+   *
+   * The value crosses a migration, a nullable text column and `selectAll`,
+   * and every one of those can drop it without anything else noticing — the
+   * entry would simply come back without the field, which is also exactly
+   * what an ordinary checkpoint looks like. So the absence is asserted
+   * beside the presence: a store that never reads the column back would
+   * pass the first half alone.
+   */
+  it('carries restoredFrom through save and list, and leaves an ordinary point without it', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+
+    const merge = await store.save('sess-1', 'canvas-a', doc, {
+      auto: true,
+      restoredFrom: 'v-earlier',
+    })
+    expect(merge.restoredFrom).toBe('v-earlier')
+
+    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(plain.restoredFrom).toBeUndefined()
+
+    const listed = await store.list('sess-1', 'canvas-a')
+    expect(listed.find((v) => v.id === merge.id)?.restoredFrom).toBe('v-earlier')
+    expect(listed.find((v) => v.id === plain.id)?.restoredFrom).toBeUndefined()
+  })
+
+  /**
+   * Lineage outlives the automatic cap.
+   *
+   * A restore records its merge point as an AUTOMATIC version, which makes
+   * both ends of a restore ordinary sweep candidates once fifty checkpoints
+   * pile up on top: the merge itself, and the point it named. A swept
+   * checkpoint is recoverable by editing again; a swept lineage is not — the
+   * history simply stops being able to say where a state came from.
+   *
+   * Fifty-one rows, so exactly one is over the cap, and it is arranged to be
+   * the restore's source. Both survivors are asserted, because keeping the
+   * merge and losing what it points at leaves a row naming a version that no
+   * longer exists.
+   */
+  it('never sweeps a restore merge or the point it names, even past the automatic cap', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+
+    const source = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const merge = await store.save('sess-1', 'canvas-a', doc, {
+      auto: true,
+      restoredFrom: source.id,
+    })
+    // Ordinary checkpoints on top: 53 rows against a cap of 50, so THREE are
+    // over it — the lineage pair and one ordinary checkpoint.
+    for (let i = 0; i < 51; i++) {
+      await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    }
+
+    const ids = new Set((await store.list('sess-1', 'canvas-a')).map((v) => v.id))
+    expect(ids.has(merge.id)).toBe(true)
+    expect(ids.has(source.id)).toBe(true)
+    // 52 is the whole claim in one number, and it is why the count is
+    // asserted rather than a survivor list: the sweep ran (53 - 1 ordinary),
+    // and it spared exactly the two rows lineage needs. Had the protection
+    // not applied, all three over the cap would have gone and this would be
+    // 50 — so the count cannot pass by the pair merely happening to sit
+    // inside the cap.
+    expect(ids.size).toBe(52)
+  })
+
   it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
     const doc = makeSpatialDoc({
       nodes: [
@@ -227,8 +296,8 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: false, label: 'v1' })
 
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await store.saveThumbnail('sess-1', entry.id, png)
-    const loaded = await store.loadThumbnail('sess-1', entry.id)
+    await store.saveThumbnail('sess-1', 'canvas-a', entry.id, png)
+    const loaded = await store.loadThumbnail('sess-1', 'canvas-a', entry.id)
     expect(loaded).not.toBeNull()
     expect(Array.from(loaded!)).toEqual(Array.from(png))
 
@@ -237,7 +306,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('returns null from loadThumbnail for an unsaved id', async () => {
-    const res = await store.loadThumbnail('sess-1', 'whatever')
+    const res = await store.loadThumbnail('sess-1', 'canvas-a', 'whatever')
     expect(res).toBeNull()
   })
 
@@ -252,22 +321,28 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     // ownEntry.id only exists in sess-1; pretending it belongs to sess-2 is
     // exactly the cross-workspace case we want to reject.
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await expect(store.saveThumbnail('sess-2', ownEntry.id, png)).rejects.toThrow()
-    await expect(store.loadThumbnail('sess-2', ownEntry.id)).resolves.toBeNull()
+    await expect(store.saveThumbnail('sess-2', 'canvas-a', ownEntry.id, png)).rejects.toThrow()
+    await expect(store.loadThumbnail('sess-2', 'canvas-a', ownEntry.id)).resolves.toBeNull()
 
     // Sanity check: the legitimate workspace can still save / load.
-    await store.saveThumbnail('sess-1', ownEntry.id, png)
-    const loaded = await store.loadThumbnail('sess-1', ownEntry.id)
+    await store.saveThumbnail('sess-1', 'canvas-a', ownEntry.id, png)
+    const loaded = await store.loadThumbnail('sess-1', 'canvas-a', ownEntry.id)
     expect(loaded).not.toBeNull()
   })
 
   it('does not swallow non-missing read failures in loadThumbnail', async () => {
+    // A REAL version of this document: ownership is established before the
+    // bytes are read, so a made-up id answers "no picture here" and would
+    // never reach the corrupt-file path this case exists to pin.
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     const dir = join(tempDir, 'blobs', 'sess-1', 'versions')
-    await mkdir(join(dir, 'broken-thumb.png'), { recursive: true })
+    await mkdir(join(dir, `${entry.id}.png`), { recursive: true })
 
-    await expect(store.loadThumbnail('sess-1', 'broken-thumb')).rejects.toMatchObject({
+    await expect(store.loadThumbnail('sess-1', 'canvas-a', entry.id)).rejects.toMatchObject({
       name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken-thumb.png'),
+      message: expect.stringContaining(`${entry.id}.png`),
     })
   })
 
@@ -276,7 +351,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     appendElement(doc, 'e1')
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     const huge = new Uint8Array(2 * 1024 * 1024 + 1)
-    await expect(store.saveThumbnail('sess-1', entry.id, huge)).rejects.toThrow(/exceeds/i)
+    await expect(store.saveThumbnail('sess-1', 'canvas-a', entry.id, huge)).rejects.toThrow(
+      /exceeds/i,
+    )
   })
 
   it('keeps auto versions capped at 50 per canvas while preserving manual versions', async () => {
@@ -305,8 +382,8 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     // Save the first auto and attach a thumbnail before any eviction can happen.
     const evictable = await store.save('sess-1', 'canvas-a', doc, { auto: true })
     const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await store.saveThumbnail('sess-1', evictable.id, png)
-    expect(await store.loadThumbnail('sess-1', evictable.id)).not.toBeNull()
+    await store.saveThumbnail('sess-1', 'canvas-a', evictable.id, png)
+    expect(await store.loadThumbnail('sess-1', 'canvas-a', evictable.id)).not.toBeNull()
 
     // Push 50 more autos so the original one falls out of the retention window.
     for (let i = 0; i < 50; i++) {
@@ -314,7 +391,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       await store.save('sess-1', 'canvas-a', doc, { auto: true })
     }
 
-    expect(await store.loadThumbnail('sess-1', evictable.id)).toBeNull()
+    expect(await store.loadThumbnail('sess-1', 'canvas-a', evictable.id)).toBeNull()
   })
 
   describe('branchName', () => {
@@ -479,12 +556,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       await saveAt('canvas-z', 'manual', 3_000)
 
       // Stamp a thumbnail on the soon-to-be-pruned auto version.
-      await store.saveThumbnail('sess-1', a1.id, new Uint8Array([1, 2, 3]))
-      expect(await store.loadThumbnail('sess-1', a1.id)).not.toBeNull()
+      await store.saveThumbnail('sess-1', 'canvas-z', a1.id, new Uint8Array([1, 2, 3]))
+      expect(await store.loadThumbnail('sess-1', 'canvas-z', a1.id)).not.toBeNull()
 
       const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-z')
       expect(result.deletedIds).toEqual([a1.id])
-      expect(await store.loadThumbnail('sess-1', a1.id)).toBeNull()
+      expect(await store.loadThumbnail('sess-1', 'canvas-z', a1.id)).toBeNull()
     })
   })
 })

@@ -4,7 +4,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
@@ -64,6 +64,12 @@ export interface UseDocumentSyncResult {
    * string before the first snapshot; a caller that also needs to know
    * whether the document has hydrated reads `loaded`.
    */
+  /**
+   * This document's conversations (ADR-0026), published on their own channel
+   * because a reply changes no node and no edge — a consumer watching only
+   * `canvas` would never learn of one.
+   */
+  annotations: readonly CommentThread[]
   markdownBody: string
   /**
    * OKF core facets from the doc's `core` map — `undefined` for a spatial
@@ -85,6 +91,7 @@ export interface UseDocumentSyncResult {
 
 /** Stable identity so an unlocked canvas never re-renders the editor. */
 const EMPTY_LOCKED_IDS: ReadonlySet<string> = new Set()
+const EMPTY_ANNOTATIONS: readonly CommentThread[] = []
 
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
@@ -198,6 +205,12 @@ export function useDocumentSync(
   const [externalVersion, setExternalVersion] = useState(0)
   // Render signal only — the value itself is never read.
   const [, setHistoryVersion] = useState(0)
+  /**
+   * This document's conversations (ADR-0026). Frozen empty default so an
+   * unhydrated render and a document with no comments are the same value,
+   * and neither re-renders a consumer that memoises on it.
+   */
+  const [annotations, setAnnotations] = useState<readonly CommentThread[]>(EMPTY_ANNOTATIONS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
@@ -224,6 +237,11 @@ export function useDocumentSync(
     // all, when the backend goes to null.
     setLockedNodeIds(EMPTY_LOCKED_IDS)
     setLockedEdgeIds(EMPTY_LOCKED_IDS)
+    // Conversations belong to the session being torn down, exactly as the
+    // locks do — left standing they would be listed against whatever document
+    // is next, and with no successor session (backend going to null) nothing
+    // would ever publish over them.
+    setAnnotations(EMPTY_ANNOTATIONS)
     // The body belongs to the session being torn down, exactly as the locks
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
@@ -279,6 +297,12 @@ export function useDocumentSync(
       setLockedNodeIds(session.getNodeLocks())
       setLockedEdgeIds(session.getEdgeLocks())
     })
+    // A reply changes no canvas value at all — no node, no edge — so the
+    // annotation layer needs its own notification for the same reason locks
+    // and the body do.
+    const unsubscribeAnnotations = session.subscribeAnnotations((threads) => {
+      setAnnotations(threads)
+    })
     // The body changes no canvas value either, so it needs its own
     // notification for the same reason locks do.
     const unsubscribeBody = session.subscribeMarkdownBody(() => {
@@ -291,12 +315,14 @@ export function useDocumentSync(
     // persisted lock invisible until the next toggle.
     setLockedNodeIds(session.getNodeLocks())
     setLockedEdgeIds(session.getEdgeLocks())
+    setAnnotations(session.getAnnotations())
     session.connect()
     session.onEditorReady()
 
     return () => {
       unsubscribe()
       unsubscribeHistory()
+      unsubscribeAnnotations()
       unsubscribeLocks()
       unsubscribeBody()
       session.dispose()
@@ -427,6 +453,7 @@ export function useDocumentSync(
     canUndo,
     lockedNodeIds,
     setNodeLock,
+    annotations,
     markdownBody,
     coreFacets,
     setCoreFacets,

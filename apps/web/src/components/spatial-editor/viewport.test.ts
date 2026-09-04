@@ -199,6 +199,19 @@ describe('panToShowTarget', () => {
     expect(next.y).toBeCloseTo(540 + 40 + PAN_MARGIN_PX - (containerSize.height - 80), 0)
   })
 
+  it('treats a strip below the header as not-visible: a box under it is panned clear', () => {
+    // The desktop formatting bar overlays the canvas's top edge while a node
+    // is being edited. Occlusion was bottom-only because the dock was the
+    // only thing in the way; a node opened near the top would sit under the
+    // bar with nothing to move it.
+    const vp = { x: 0, y: 0, zoom: 1 }
+    const box = { x: 100, y: 10, width: 100, height: 40 }
+    expect(panToShowTarget(box, vp, containerSize)).toBe(undefined)
+    const next = panToShowTarget(box, vp, containerSize, { top: 40 })
+    if (next === undefined) throw new Error('expected a pan out from under the bar')
+    expect(next.y).toBeCloseTo(10 - (40 + PAN_MARGIN_PX), 0)
+  })
+
   it('reveals a box whose size is within a margin of the visible extent — both edges, not one', () => {
     // The band the one-edge-at-a-time shift used to miss: tall enough that
     // honouring the top margin pushes the bottom back under the dock, but

@@ -1,6 +1,6 @@
 ---
 name: measured-change
-description: Build the measuring instrument before changing anything whose effect you cannot see by reading the diff — quality scoreboards (pinned aggregate metrics) and performance benchmarks (pnpm bench, interleaved runs). Use for optimisation, layout/routing quality, heuristic tuning, or any change where "did that help?" is a real question.
+description: Build the measuring instrument before changing anything whose effect you cannot see by reading the diff — quality scoreboards (pinned aggregate metrics) and performance benchmarks (pnpm bench, interleaved runs). Use for optimisation, layout/routing quality, heuristic tuning, or any change where "did that help?" is a real question — AND for a structural change (moving work off a thread, unifying a pipeline, making a mistake uncompilable), where the numbers SIZE a benefit that end-to-end timing cannot show at all.
 ---
 
 # Measure before you change it
@@ -9,6 +9,11 @@ Some changes announce themselves in the diff. A heuristic, a cost model, a
 search, an optimisation does not: it is correct-looking code whose worth is
 entirely in numbers nobody has taken. For those, **the instrument comes
 first, in its own commit, and the change is judged by it.**
+
+Which numbers, though, follows from what kind of benefit you are claiming —
+and a structural change (work moved off a thread, a pipeline unified, a
+mistake made uncompilable) needs different ones from a speed-up. That is the
+next section, and it comes before everything else here.
 
 This is not a preference. Across one routing/performance batch the
 instrument rejected **three separate changes that were obviously right**:
@@ -35,6 +40,77 @@ that kills the first shape of an idea has not killed the idea.
 That distinction is worth the words because this list used to end with the
 re-score's FIRST verdict, as though it were the final one, while the third
 shape was already in `spatial-edges.ts`.
+
+## First decide WHAT KIND of benefit you are claiming
+
+The instrument follows from the claim, and getting this wrong is not a
+smaller measurement — it is a measurement of the wrong thing, which comes
+back "no difference" and reads as "the change was worthless".
+
+| claim | what it is worth | the instrument | the wrong instrument |
+|---|---|---|---|
+| **delta** — this is faster / lays out better | the difference in a number | bench, scoreboard | — |
+| **relocation** — the work left the path a person waits on | what that path no longer does, **plus what the boundary costs** | the cost you removed from the critical path, and the cost of the handover | end-to-end duration |
+| **elimination** — a whole class of mistake stops being possible | that the mistake now fails something | a count, or a mutation check | any duration |
+
+Everything below this line is the **delta** column, which is the only one
+this skill used to describe. The other two are not exempt from measuring;
+they need different numbers.
+
+### Relocation: the total does not move, and that is not a failure
+
+Moving work off the thread that answers the user does not make the work
+faster. Nothing gets faster. What changes is *who is blocked*, so an
+end-to-end measurement of the outcome is structurally unable to see it, and
+if that is the instrument you built you will report a null result about a
+change that did exactly what it was for.
+
+Worked case — moving a snapshot decode from the main thread into the layout
+worker. The instrument that answered it:
+
+- what the critical path stopped doing: decode measured **1.20ms at 12 nodes,
+  2.60 at 40, 4.60 at 120**, so a list of twenty visible rows stopped charging
+  24–92ms to the thread that answers the user;
+- what the boundary costs: structured-cloning the decoded canvas was
+  0.10/0.10/0.40ms, and cloning the **bytes** was not measurable at all.
+
+That second row is the one a relocation must never skip, and it is what makes
+this one a real release: a handover that costs what the work cost has moved
+the block to the boundary rather than lifting it, and bought nothing. Measure
+what you hand OVER, not only what you hand OFF.
+
+And the honest null: the obvious instrument — a main-thread frame-gap probe
+while a list fills — **could not detect this change**, 13ms against a 200ms+
+spread between two runs of the same build. Reported as a null result it says
+nothing about the change; it says the probe is far below the noise floor of
+the thing it was pointed at. Say that, rather than reporting the null.
+
+### Elimination: the number is a count, or there is no number
+
+A change whose worth is that something can no longer happen is judged by
+whether the something now fails. Two shapes in this repo:
+
+- **A count, when the defect was repeated work.** The render broker's claim
+  is not "rendering is faster" — it is that a row's thumbnail and the preview
+  beside it produce **one** render for one key instead of two. Renders per
+  key, not milliseconds.
+- **A mutation check, when the worth is that a type or a single definition
+  refuses the mistake.** `Record<DocumentKind, …>` over the surface registry
+  is worth exactly as much as the compile error it produces, so the evidence
+  is removing the guard and watching the build fail. A guard nobody has
+  broken on purpose reads exactly like a guard that checked.
+
+Neither is a weaker kind of evidence than a benchmark. Both can be faked the
+same way a scoreboard can — a count taken over a run that never asked twice,
+a mutation check on a path the fixture does not reach — and the discipline is
+the same: choose the observation that could **refute** the claim
+(`diagnosis-evidence`).
+
+### Say which column you are in, in the commit and the PR
+
+A relocation described as a speed-up is a claim the reviewer will check with
+a stopwatch and find false, and the real benefit goes unstated. State the
+column first, then the numbers, and name what the change does NOT claim.
 
 ## Quality: a scoreboard
 

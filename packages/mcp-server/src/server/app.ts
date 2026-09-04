@@ -438,6 +438,9 @@ export function createApp(options: AppOptions) {
     '/',
     createDocumentRouter({
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      ...(options.onAutoVersionTrigger === undefined
+        ? {}
+        : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
       // Attach the current HEAD branch name to saved versions when available.
       getHeadBranch: async (sid, path) => {
         try {

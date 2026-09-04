@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { useActiveMarkdownEditor } from './active-markdown-editor.js'
-import { touchFormattingBarShown } from './touch-bar-layout.js'
+import { touchFormattingBarShown } from './verb-bar-layout.js'
 
 const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'))
 

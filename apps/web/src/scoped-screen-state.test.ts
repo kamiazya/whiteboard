@@ -259,13 +259,22 @@ const BRANCH_CHIP_STATE: Record<string, ScopeCoverage> = {
 
 const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   versions: 'cleared on switch',
-  pendingRestore: 'cleared on switch',
+  previewing: 'cleared on switch',
+  // The past state ITSELF, held so the published session can be re-emitted
+  // when the restore's progress moves. It is a document's content, so a
+  // switch that left it would draw the departed document over the arrived
+  // one.
+  previewPast: 'cleared on switch',
   restoreError: 'cleared on switch',
   isRestoring: 'cleared on switch',
 
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
-  pendingRestoreRef:
-    'no subject: mirrors pendingRestore, reassigned every render — so it is dropped with the state it mirrors',
+  stale:
+    'no subject: whether the LAST READ failed, which is about the fetch rather than about a document — and a switch refetches, so a success clears it on its own',
+  onPreviewRef:
+    'no subject: mirrors the callback prop, reassigned every render — it exists so the session is published from ONE effect rather than from a call beside every state change',
+  previewingRef:
+    'no subject: mirrors previewing, reassigned every render — so it is dropped with the state it mirrors',
   fetchSeqRef:
     'no subject: a monotonic dispatch stamp; resetting it would revive the stale-response race it exists to close',
   prevRefreshSignalRef:
@@ -295,6 +304,17 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
 // switching rather than remounting — `App.tsx` says so at the mount site —
 // so everything it holds about a document has to be dropped by hand.
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  historyOpen: 'cleared on switch',
+  // The past state being looked at. Restoring one the person opened on the
+  // DEPARTED document would apply that version id to the arrived one.
+  preview: 'cleared on switch',
+  // Cleared with the panel: a field left armed across a switch would name
+  // the arrived document from the departed one's keystroke.
+  bookmarkArmed: 'cleared on switch',
+  savingVersion: 'no subject: an in-flight flag for this screen’s own submit',
+  saveVersionOutcome: 'cleared on switch',
+  versionRefreshSignal:
+    'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
   // whatever document the controller currently holds. Confirmed after a
   // switch, it deleted the document that had arrived.
@@ -304,6 +324,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
+  commentsOpen:
+    'no subject: whether the rail is open, not what is in it — the threads themselves arrive on the session\u2019s annotation channel and are republished per document, so a switch changes the LIST while leaving the reader where they chose to be',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',

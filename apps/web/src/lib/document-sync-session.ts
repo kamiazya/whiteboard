@@ -2,6 +2,7 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
+  readAnnotations,
   readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
@@ -27,7 +28,7 @@ import type {
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
@@ -218,6 +219,19 @@ export interface DocumentSyncSession {
   // controlled SpatialEditor needs this to tell apart its own re-render from
   // a replacement mid-gesture. Returns an unsubscribe function.
   subscribe(listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void): () => void
+  /**
+   * This document's annotation layer (ADR-0026): its conversations, read
+   * from the document-level threads plane rather than picked out of the
+   * canvas.
+   *
+   * Its own channel because it is its own plane. A reply changes no node and
+   * no edge, so a subscriber listening only for canvas values would never
+   * hear about one — and a markdown document, which publishes no canvas at
+   * all, would have no channel to hear about anything.
+   */
+  getAnnotations(): readonly CommentThread[]
+  /** Registers a listener for every published annotation-layer value. */
+  subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void
 }
 
 /**
@@ -411,6 +425,34 @@ function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: Edit
  * queued export requests, published canvas value + subscribers). Constructing
  * a new session for a backend swap therefore resets all of that for free.
  */
+/**
+ * Whether two reads of the annotation layer say the same thing.
+ *
+ * Compares every message BODY, not just the counts: editing a comment's text
+ * changes neither the thread count nor the message count, and is exactly the
+ * change a cheaper comparison would swallow — the panel would go on showing
+ * the old wording until something else moved.
+ *
+ * Order is significant and is not normalised away. `readAnnotations` fixes it
+ * (threads first, legacy rows in map order) because `composeComments` fans a
+ * later bubble around an earlier one, so two reads differing only in order
+ * really do draw differently.
+ */
+function sameAnnotations(a: readonly CommentThread[], b: readonly CommentThread[]): boolean {
+  if (a.length !== b.length) return false
+  return a.every((thread, index) => {
+    const other = b[index]
+    if (other === undefined) return false
+    if (thread.id !== other.id || thread.status !== other.status) return false
+    if (thread.messages.length !== other.messages.length) return false
+    if (JSON.stringify(thread.anchor) !== JSON.stringify(other.anchor)) return false
+    return thread.messages.every((message, messageIndex) => {
+      const otherMessage = other.messages[messageIndex]
+      return message.id === otherMessage?.id && message.body === otherMessage.body
+    })
+  })
+}
+
 export function createDocumentSyncSession(
   backend: DocumentBackend,
   deps: SessionDeps,
@@ -432,6 +474,8 @@ export function createDocumentSyncSession(
     })
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
+  let currentAnnotations: readonly CommentThread[] = []
+  const annotationListeners = new Set<(threads: readonly CommentThread[]) => void>()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
@@ -465,8 +509,23 @@ export function createDocumentSyncSession(
     for (const listener of listeners) listener(canvas, origin)
   }
 
+  function notifyAnnotations(threads: readonly CommentThread[]): void {
+    for (const listener of annotationListeners) listener(threads)
+  }
+
   function getCanvas(): SpatialCanvas {
     return currentCanvas
+  }
+
+  function getAnnotations(): readonly CommentThread[] {
+    return currentAnnotations
+  }
+
+  function subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void {
+    annotationListeners.add(listener)
+    return () => {
+      annotationListeners.delete(listener)
+    }
   }
 
   function subscribe(
@@ -490,9 +549,46 @@ export function createDocumentSyncSession(
   function publishCanvasFromDoc(targetDoc: LoroDoc): void {
     deps.generations.nextApplyGeneration()
     if (isStale()) return
-    const canvas = readSpatialCanvas(contentOf(targetDoc))
+    const content = contentOf(targetDoc)
+    const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
+    // Read from the same doc read that produced the canvas, so the two
+    // published values are always a pair taken at one instant rather than
+    // two reads a remote update could land between.
+    currentAnnotations = readAnnotations(content)
     notify(canvas, 'external')
+    notifyAnnotations(currentAnnotations)
+  }
+
+  /**
+   * A local commit reaches the annotation channel too.
+   *
+   * `publishCanvasFromDoc` runs on an EXTERNAL update, so before this the
+   * only way a conversation reached the panel was a remote peer touching the
+   * document: a person's own comment was written, drawn on the canvas from
+   * the optimistic value, and never listed. Found by dogfooding, not by a
+   * test — the remote-reply case was covered and this one was not.
+   *
+   * Gated on the VALUE having changed rather than on the command kind. A
+   * classification over `EditorCommand['kind']` is silent when kind N+1
+   * arrives, and what it would fail at is exactly the defect above: a
+   * comment-shaped command nobody added to the list, writing a conversation
+   * the panel never hears about. Equality here cannot go stale that way.
+   */
+  function republishAnnotationsIfChanged(targetDoc: LoroDoc): void {
+    if (isStale()) return
+    let next: readonly CommentThread[]
+    try {
+      next = readAnnotations(contentOf(targetDoc))
+    } catch (err) {
+      // Same contract as guardedCommit: the chain must never reject, or every
+      // later firing's commit is skipped for the rest of the session.
+      log.error('reading annotations after a commit failed', err)
+      return
+    }
+    if (sameAnnotations(currentAnnotations, next)) return
+    currentAnnotations = next
+    notifyAnnotations(next)
   }
 
   // Debounce window (ms): edits fired within this window of each other
@@ -547,9 +643,12 @@ export function createDocumentSyncSession(
     // or a later firing awaiting it would skip its own commit entirely.
     const previousChain = commitChain
     pendingCommitCount++
-    commitChain = previousChain.then(guardedCommit).finally(() => {
-      pendingCommitCount--
-    })
+    commitChain = previousChain
+      .then(guardedCommit)
+      .then(() => republishAnnotationsIfChanged(targetDoc))
+      .finally(() => {
+        pendingCommitCount--
+      })
   }
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
@@ -945,7 +1044,9 @@ export function createDocumentSyncSession(
     redo,
     canUndo,
     canRedo,
+    getAnnotations,
     getCanvas,
+    subscribeAnnotations,
     subscribe,
     subscribeHistory,
     getNodeLocks,
