@@ -18,6 +18,7 @@ import { type ReactNode, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { useLongPressMenu } from './use-long-press.js'
 
 /**
  * A row: the document, and the excerpts that say why it is here. Empty
@@ -49,7 +50,12 @@ export interface SearchResultsProps {
   searchedContents?: boolean
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
-  /** Right-click on a result row — the object-action menu hook. */
+  /**
+   * The committed open — double-click, or Enter on a focused row. Space
+   * keeps the native button click (select-and-preview).
+   */
+  onActivate?: (document: WorkspaceDocumentEntry) => void
+  /** Right-click or touch long-press on a result row — the object-action menu hook. */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
@@ -86,10 +92,19 @@ export function SearchResults({
   searchedContents = true,
   selectedPath,
   onSelect,
+  onActivate,
   onDocumentContextMenu,
   renderThumbnail,
   className,
 }: SearchResultsProps) {
+  const longPress = useLongPressMenu(
+    onDocumentContextMenu === undefined
+      ? undefined
+      : (path, x, y) => {
+          const row = results.find(({ document: entry }) => entry.path === path)
+          if (row !== undefined) onDocumentContextMenu(row.document, x, y)
+        },
+  )
   // List first: the row form carries the path inline beside the title, which
   // is the stronger answer to "where is this" — the grid trades that density
   // for a bigger picture, the way Finder's icon view does.
@@ -161,13 +176,27 @@ export function SearchResults({
         </div>
       </div>
       {layout === 'list' ? (
-        <ul data-testid="search-results-list" className="space-y-1 p-0.5">
+        <ul {...longPress} data-testid="search-results-list" className="space-y-1 p-0.5">
           {results.map(({ document: entry, contexts, lexicalRank }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
+                data-doc-path={entry.path}
                 aria-current={entry.path === selectedPath ? 'true' : undefined}
                 onClick={() => onSelect(entry)}
+                onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
+                onKeyDown={
+                  onActivate === undefined
+                    ? undefined
+                    : (event) => {
+                        if (event.key === 'Enter') {
+                          // Without this the keydown ALSO fires the native
+                          // button click, selecting after the open.
+                          event.preventDefault()
+                          onActivate(entry)
+                        }
+                      }
+                }
                 onContextMenu={
                   onDocumentContextMenu === undefined
                     ? undefined
@@ -220,6 +249,7 @@ export function SearchResults({
         </ul>
       ) : (
         <ul
+          {...longPress}
           data-testid="search-results-grid"
           className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
         >
@@ -227,8 +257,22 @@ export function SearchResults({
             <li key={entry.documentId}>
               <button
                 type="button"
+                data-doc-path={entry.path}
                 aria-current={entry.path === selectedPath ? 'true' : undefined}
                 onClick={() => onSelect(entry)}
+                onDoubleClick={onActivate === undefined ? undefined : () => onActivate(entry)}
+                onKeyDown={
+                  onActivate === undefined
+                    ? undefined
+                    : (event) => {
+                        if (event.key === 'Enter') {
+                          // Without this the keydown ALSO fires the native
+                          // button click, selecting after the open.
+                          event.preventDefault()
+                          onActivate(entry)
+                        }
+                      }
+                }
                 onContextMenu={
                   onDocumentContextMenu === undefined
                     ? undefined
