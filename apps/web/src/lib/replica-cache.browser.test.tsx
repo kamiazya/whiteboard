@@ -11,7 +11,7 @@ import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, VersionVector } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -86,7 +86,6 @@ describe('cacheDaemonWorkspace', () => {
     ).toEqual([DOC_A, DOC_B].sort())
     // ...and the reported frontier covers the daemon's ops but NOT the
     // local edit: an update exported from it still carries something.
-    const { VersionVector } = await import('loro-crdt')
     const synced = VersionVector.decode(
       Uint8Array.from(atob(result.syncedFrontier), (c) => c.charCodeAt(0)),
     )

@@ -17,6 +17,7 @@ import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -108,7 +109,6 @@ describe('ReplicaReadPage', () => {
     })
     // Decision 3's boundary: a data-plane edit files NOTHING in any index —
     // no phantom document rows under either workspace id.
-    const { IdbDocumentIndex } = await import('../lib/idb-document-index.js')
     await expect(new IdbDocumentIndex().listDocuments({ workspaceId: DAEMON_WS })).rejects.toThrow()
   })
 })
