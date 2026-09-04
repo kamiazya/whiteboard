@@ -42,6 +42,10 @@ interface StubOptions {
   /** An update that stays in flight until the test releases it. */
   updateGate?: Promise<void>
   failUpdateStatus?: number
+  /** Refuse blob PUTs, so the demote gate has a real failed transfer. */
+  failPutStatus?: number
+  /** Serve THESE bytes from the snapshot route instead of the merged target. */
+  snapshotBytes?: () => Uint8Array
   workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
 }
 
@@ -68,11 +72,13 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     if (url.includes('/file/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
+      if (opts.failPutStatus) return new Response(null, { status: opts.failPutStatus })
       return new Response(null, { status: 204 })
     }
     if (url.endsWith('/workspace-document/snapshot') && (init?.method ?? 'GET') === 'GET') {
       // The demote pull: the merged target's own bytes, as the real route serves.
-      return new Response(target.export({ mode: 'snapshot' }) as BodyInit, {
+      const bytes = opts.snapshotBytes?.() ?? target.export({ mode: 'snapshot' })
+      return new Response(bytes as BodyInit, {
         status: 200,
         headers: { 'Content-Type': 'application/octet-stream' },
       })
@@ -273,14 +279,18 @@ describe('PromoteWorkspaceSection', () => {
     const result = await screen.findByTestId('promote-last-result')
     expect(result.textContent).toMatch(/moved 2 documents to daemon workspace "ws-a"/i)
 
-    // Identity invariant: the same ids resolve on the daemon target, and the
-    // browser keeper still resolves them too (the copy here stays).
+    // Identity invariant: the same ids resolve on the daemon target, and in
+    // the REPLICA this browser now holds under the daemon's id — the old
+    // independent copy is gone (the verified demote deleted it).
     expect(resolveWorkspaceDocumentById(target, roadmapId)).not.toBeNull()
     expect(resolveWorkspaceDocumentById(target, sketchId)).not.toBeNull()
-    const stillHere = await new FoldingBrowserIndex().listDocuments({
-      workspaceId: getBrowserWorkspaceId(),
-    })
-    expect([...stillHere.map((d) => d.documentId)].sort()).toEqual([roadmapId, sketchId].sort())
+    const replica = await new BrowserWorkspaceDocs().open('ws-a')
+    expect(replica).not.toBeNull()
+    expect(
+      readWorkspaceDocuments(replica!)
+        .map((entry) => entry.documentId)
+        .sort(),
+    ).toEqual([roadmapId, sketchId].sort())
 
     // Not a toast: no alert/transient surface anywhere, and the report is
     // still standing after a full unmount/remount (a later Settings visit).
@@ -517,6 +527,124 @@ describe('PromoteWorkspaceSection', () => {
     const promotion = createUserSettingsStore().load().migration.promotion
     if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
     expect(promotion.replicaSyncedAt).toBeTruthy()
+  })
+
+  it('a successful move registers the replica so offline lookup finds it immediately', async () => {
+    // The registry entry is what findReplicaForHandle and the AppShell
+    // notice read; without it the cached bytes are invisible until some
+    // later visit happens to refresh them.
+    await seedTwoDocuments()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target, {
+          workspaces: [{ workspaceId: 'ws-a', segment: 'team', displayName: 'Team docs' }],
+        })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    await screen.findByTestId('promote-last-result')
+
+    const replica = createUserSettingsStore().load().storage.replicas?.['ws-a']
+    expect(replica).toBeTruthy()
+    expect(replica?.daemonBaseUrl).toBe(BASE)
+    expect(replica?.syncedAt).toBeTruthy()
+    expect(replica?.segment).toBe('team')
+    expect(replica?.displayName).toBe('Team docs')
+  })
+
+  it('a verified move removes the browser copy and leaves a fresh empty workspace', async () => {
+    // ADR-0023 decision 2's second half: once the replica verifiably holds
+    // every promoted document, the old browser record stops existing —
+    // deletion, not a frozen fork. A fresh empty workspace row keeps the
+    // browser keeper bootable.
+    await seedTwoDocuments()
+    const sourceId = getBrowserWorkspaceId()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target)}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/browser copy was removed/i)
+
+    // The old record is gone; the replica (daemon id) still opens.
+    expect(await new BrowserWorkspaceDocs().open(sourceId)).toBeNull()
+    expect(await new BrowserWorkspaceDocs().open('ws-a')).not.toBeNull()
+    // The browser keeper stays bootable: the active identity was re-pointed
+    // at a fresh empty workspace in the same operation.
+    expect(getBrowserWorkspaceId()).not.toBe(sourceId)
+    expect(
+      await new FoldingBrowserIndex().listDocuments({ workspaceId: getBrowserWorkspaceId() }),
+    ).toEqual([])
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.localCopyRemoved).toBe(true)
+  })
+
+  it('a failed blob transfer keeps the browser copy and says why', async () => {
+    // The demote gate: deletion is allowed only when everything the record
+    // references made it across. A refused image PUT means the daemon copy
+    // is incomplete, so the browser record stays authoritative.
+    const { sketchId } = await seedTwoDocuments()
+    await seedImageOnSketch(sketchId)
+    const sourceId = getBrowserWorkspaceId()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target, { failPutStatus: 507 })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/kept in this browser/i)
+
+    expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.localCopyRemoved).toBe(false)
+  })
+
+  it('an incomplete replica keeps the browser copy — deletion trusts only what was read back', async () => {
+    // The snapshot route answers with an EMPTY record: the pull "succeeds",
+    // but the replica verifiably does not hold the promoted documents, so
+    // the source record must survive.
+    await seedTwoDocuments()
+    const sourceId = getBrowserWorkspaceId()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target, {
+          snapshotBytes: () => new LoroDoc().export({ mode: 'snapshot' }),
+        })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/kept in this browser/i)
+
+    expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.localCopyRemoved).toBe(false)
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {
