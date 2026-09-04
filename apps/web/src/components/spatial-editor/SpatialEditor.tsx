@@ -100,12 +100,7 @@ import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { BoxMove } from './align.js'
-import {
-  CanvasContextMenu,
-  type CommentComposeState,
-  type DocumentPickerState,
-  type LinkDialogState,
-} from './CanvasContextMenu.js'
+import { CanvasContextMenu, type CommentComposeState } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
@@ -169,6 +164,7 @@ import {
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useDragLayers } from './use-drag-layers.js'
+import { useEditSessionState } from './use-edit-session-state.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
@@ -686,12 +682,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       containerSizeOf,
       setViewport,
     })
-    /**
-     * Whether resolved comments are drawn (muted) — ADR-0025 decision 2:
-     * per-user VIEW state, never written to the shared document, so one
-     * person's toggle cannot change what another person sees.
-     */
-    const [showResolvedComments, setShowResolvedComments] = useState(false)
+    const {
+      showResolvedComments,
+      setShowResolvedComments,
+      selectedEdgeId,
+      setSelectedEdgeId,
+      pendingCut,
+      setPendingCut,
+      edgeLabelEditId,
+      setEdgeLabelEditId,
+      groupLabelEditId,
+      setGroupLabelEditId,
+      linkDialog,
+      setLinkDialog,
+      canvasPicker,
+      setDocumentPicker,
+      facetPanelOpen,
+      setFacetPanelOpen,
+    } = useEditSessionState({ canvas, selectedId })
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {
@@ -758,34 +766,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         editing: { id: comment.id, initialText: comment.text },
       })
     }
-    const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
-    /**
-     * A cut waiting for its paste — the front half of a move. Pure view
-     * state (never persisted or synced): the nodes stay in the document,
-     * dimmed by GhostOverlay, until a same-canvas paste MOVES them, or the
-     * hold is lifted (Escape, a newer copy/cut, or any edit that touches a
-     * held node). `snapshot` records each held node's full serialized value
-     * at cut time so ANY change — a drag, a text or color edit, a remote
-     * write, a delete — reads as "someone touched it" and cancels the hold;
-     * nothing is ever lost by a cancel, because nothing was deleted.
-     */
-    const [pendingCut, setPendingCut] = useState<{
-      readonly cutId: string
-      readonly snapshot: ReadonlyMap<string, string>
-    } | null>(null)
-    useEffect(() => {
-      // Anyone touching a held node — local drag, remote edit, delete —
-      // lifts the hold; the veil must never dim a node that changed under
-      // it. The move resolution clears the hold before it applies, so its
-      // own geometry change never races this.
-      if (pendingCut === null) return
-      const touched = [...pendingCut.snapshot].some(([id, frozen]) => {
-        const node = canvas.nodes.find((n) => n.id === id)
-        return node === undefined || JSON.stringify(node) !== frozen
-      })
-      if (touched) setPendingCut(null)
-    }, [canvas, pendingCut])
-    const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
     /**
      * The conversation opened in place on the canvas — at most one, because
@@ -843,27 +823,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         draggedCommentId === undefined ? keyed : keyedWithoutPrefix(keyed, `${draggedCommentId}/`),
       [keyed, draggedCommentId],
     )
-    // The URL dialog serves both palette-create and context-menu-edit; which
-    // one decides what its submit does.
-    const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
-    const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
-    const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
-    // The inspector is open or shut; WHICH node it edits follows the
-    // selection. Pinning it to the node the menu was opened on made it a
-    // dialog you had to close before you could look at anything else.
-    const [facetPanelOpen, setFacetPanelOpen] = useState(false)
-    // Deselecting CLOSES it, rather than leaving it standing with nothing to
-    // edit. It is the same act that dismisses the context menu, and on touch
-    // a press on blank canvas is how you put a surface away — one semantic
-    // instead of two, and no dismiss control for this panel to carry.
-    //
-    // Cleared during render rather than in an effect, the shape
-    // `DerivedFacetForm` uses for its draft: an effect would let the panel
-    // paint one frame with nothing in it. Clearing the FLAG (rather than
-    // rendering null and leaving it true) is what keeps a later re-open an
-    // ordinary open — the earlier version of this returned null and stranded
-    // the flag, which only a new selection could get out of.
-    if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
     // Lock seams + coherence (predicates, selectable subset, and the two
     // effects that retire state a lock arrival invalidates) — see
     // use-lock-policy.ts.
