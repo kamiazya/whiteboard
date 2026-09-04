@@ -81,11 +81,22 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   '.claude/rules/vocabulary.md': 16,
 }
 
-/** Floored bucket of the SUM, which is not the sum of the buckets. */
-// 88 since dev-flow.md's skills index gained `react-best-practices` — the
-// index entry is mandatory (dev-rules-contract.test.ts requires every skill
-// directory indexed) and already trimmed to its bare name; the corpus sat
-// ~120 characters under the boundary, so the entry is what crossed it.
+/**
+ * Floored bucket of the SUM, which is not the sum of the buckets.
+ *
+ * 88 since two merges that were each green on their own base landed
+ * together. `integrator-flow.md` grew past its own boundary (13 -> 14) in
+ * one; `vocabulary.md` gained 204 characters in the other, which did not
+ * move ITS bucket (16 either way) and moved the total, 87940 -> 88144. So
+ * both per-file pins were correct and only this one was crossed, on a main
+ * neither PR's CI ever saw — the second PR was branched before the first
+ * landed, which is the one thing a per-PR check cannot cover.
+ *
+ * Worth knowing when this fails on a diff that touches no rule file: the
+ * total is the reading most likely to be stale, and the four `it`s below
+ * separate the cases — a per-file failure names the file that grew, this
+ * one names only the corpus.
+ */
 const ALWAYS_ON_TOTAL_BUDGET = 88
 
 /**
