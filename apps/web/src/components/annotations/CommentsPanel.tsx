@@ -13,7 +13,7 @@
  * reader wants at document level is which ones are still open.
  */
 import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 
@@ -48,6 +48,16 @@ export interface CommentsPanelProps {
    * offer, and saying so by omission is the honest form.
    */
   readonly onReply?: (threadId: string, body: string) => void
+  /**
+   * Opens one conversation from outside — how a reply typed on the canvas
+   * ends up visible, since the canvas draws only a thread's opening message.
+   *
+   * An OBJECT rather than a bare id, because the request is the event: two
+   * replies to the same thread carry the same id, and a reader who collapsed
+   * the thread in between would not have it reopened by a value that never
+   * changed. Each request is a fresh object, and the effect keys on it.
+   */
+  readonly reveal?: { readonly threadId: string }
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -97,7 +107,13 @@ function MessageBy({ message }: { readonly message: CommentMessage | undefined }
   )
 }
 
-export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
+export function CommentsPanel({
+  threads,
+  resolveAnchor,
+  onSelect,
+  onReply,
+  reveal,
+}: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
@@ -105,6 +121,21 @@ export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: Com
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
+
+  useEffect(() => {
+    if (reveal === undefined) return
+    const target = threads.find((thread) => thread.id === reveal.threadId)
+    setOpenThreadId(reveal.threadId)
+    // Widen the filter only when the revealed thread would otherwise be
+    // filtered OUT — expanded behind a list that does not include it is
+    // the same as not revealed. A thread the current filter already shows
+    // leaves the reader's view alone.
+    setFilter((current) => (target !== undefined && !matches(target, current) ? 'all' : current))
+    setDraft('')
+    // `threads` is read for that one lookup and deliberately not a
+    // dependency: re-running on every document change would re-open a
+    // thread the reader has since closed.
+  }, [reveal])
 
   function toggle(thread: CommentThread): void {
     setOpenThreadId((current) => (current === thread.id ? null : thread.id))

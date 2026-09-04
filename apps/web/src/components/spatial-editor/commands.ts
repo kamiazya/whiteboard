@@ -20,11 +20,11 @@
  */
 
 import type {
-  CommentMessage,
   CanvasColor,
   CanvasComment,
   CanvasEdge,
   ClipboardFragment,
+  CommentMessage,
   EdgeRoutingStyle,
   LineJumps,
   SpatialCanvas,

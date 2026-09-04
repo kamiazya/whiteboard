@@ -1,7 +1,12 @@
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  ClipboardFragment,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
@@ -57,6 +62,18 @@ export interface CommentComposeState {
    * over the drawn one.
    */
   readonly editing?: { readonly id: string; readonly initialText: string }
+  /**
+   * Present when the bubble ANSWERS a conversation rather than starting or
+   * rewriting one: the commit appends a message to that thread. A comment's
+   * id IS its thread's id (`canvasCommentFromThread`), so the bubble drawn
+   * on the canvas is enough to address the conversation — the editor needs
+   * no second copy of the threads plane to reply into it.
+   *
+   * Separate from `editing` rather than a mode on it: an edit opens
+   * pre-filled over the bubble it rewrites, a reply opens EMPTY and beside
+   * it, and collapsing the two would make one of those wrong.
+   */
+  readonly replyTo?: string
 }
 
 /**
@@ -97,6 +114,13 @@ export interface CanvasCommands {
   /** Opens the node's full facet editor — the point knows no domain. */
   readonly setFacetPanelOpen: (open: boolean) => void
   readonly setCommentCompose: (state: CommentComposeState | null) => void
+  /**
+   * Opens an empty compose bubble that ANSWERS this conversation. Optional
+   * for the same reason `onOpenFileRef` is: absent means the host has no
+   * surface a reply could be read on afterwards, and the catalog does not
+   * offer a verb whose result nobody could see.
+   */
+  readonly replyToComment?: (comment: CanvasComment) => void
   /** Per-user view state (ADR-0025 decision 2): resolved comments drawn, muted. */
   readonly showResolvedComments: boolean
   readonly setShowResolvedComments: (show: boolean) => void
@@ -167,6 +191,7 @@ export function CanvasContextMenu({
     setDocumentPicker,
     setFacetPanelOpen,
     setCommentCompose,
+    replyToComment,
     showResolvedComments,
     setShowResolvedComments,
   } = commands
@@ -201,7 +226,7 @@ export function CanvasContextMenu({
 
   const items: readonly ContextMenuItem[] =
     comment !== undefined
-      ? commentMenuItems({ comment, canvasRef, setCommentCompose, applyResult })
+      ? commentMenuItems({ comment, canvasRef, setCommentCompose, replyToComment, applyResult })
       : node === undefined && edge !== undefined
         ? edgeMenuItems({
             edge,

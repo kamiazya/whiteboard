@@ -128,3 +128,30 @@ it('offers no reply box when the host wired no reply handler', async () => {
 
   expect(page.getByRole('textbox', { name: /reply/i }).query()).toBeNull()
 })
+
+it('opens the conversation a host asks it to reveal, widening the filter to reach it', async () => {
+  const { rerender } = render(<CommentsPanel threads={[OPEN, RESOLVED]} onReply={() => {}} />)
+
+  // Nothing is expanded until asked; the rail opens as a list.
+  expect(page.getByLabelText('Reply').query()).toBeNull()
+
+  rerender(
+    <CommentsPanel threads={[OPEN, RESOLVED]} onReply={() => {}} reveal={{ threadId: OPEN.id }} />,
+  )
+  await expect.element(page.getByLabelText('Reply')).toBeInTheDocument()
+  await expect.element(page.getByText('agreed')).toBeInTheDocument()
+
+  // A RESOLVED thread is not in the default list at all, so revealing it has
+  // to move the filter as well as expand the row.
+  rerender(
+    <CommentsPanel
+      threads={[OPEN, RESOLVED]}
+      onReply={() => {}}
+      reveal={{ threadId: RESOLVED.id }}
+    />,
+  )
+  await expect.element(page.getByText('this one is done')).toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: /^this one is done/ }))
+    .toHaveAttribute('aria-expanded', 'true')
+})

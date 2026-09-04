@@ -298,6 +298,15 @@ export interface SpatialEditorProps {
    */
   readonly onOpenInEditor?: (nodeId: string, text: string) => void
   /**
+   * A reply was just committed from the canvas. The canvas draws a
+   * conversation's OPENING message and nothing else (`canvasCommentFromThread`
+   * is lossy by construction), so a reply typed here changes nothing a
+   * person can see on the surface they typed it on. Telling the host lets
+   * the surface that DOES show conversations reveal the one just answered,
+   * which is the difference between a reply and a dead end.
+   */
+  readonly onThreadReplied?: (threadId: string) => void
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -487,6 +496,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
+      onThreadReplied,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -794,6 +804,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         editing: { id: comment.id, initialText: comment.text },
       })
     }
+    /**
+     * Opens an EMPTY bubble at the same anchor to answer the conversation.
+     * No `editing`, so the placer counts every drawn bubble as an obstacle
+     * and the draft opens beside the comment rather than over it.
+     */
+    const openCommentReply =
+      onThreadReplied === undefined
+        ? undefined
+        : (comment: CanvasComment) => {
+            setCommentCompose({
+              point: commentAnchor(comment, canvasRef.current),
+              replyTo: comment.id,
+            })
+          }
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     /**
      * A cut waiting for its paste — the front half of a move. Pure view
@@ -2326,6 +2350,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 setDocumentPicker,
                 setFacetPanelOpen,
                 setCommentCompose,
+                replyToComment: openCommentReply,
                 showResolvedComments,
                 setShowResolvedComments,
               }}
@@ -2740,7 +2765,26 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   // and would still ask the reader to resolve it. Editing an
                   // existing comment to blank likewise keeps its stored text —
                   // removal stays MCP-only in v1 (ADR-0025).
-                  if (commentCompose.editing !== undefined) {
+                  if (commentCompose.replyTo !== undefined) {
+                    if (text.length > 0) {
+                      const threadId = commentCompose.replyTo
+                      applyResult({
+                        state: { kind: 'idle' },
+                        commands: [
+                          {
+                            kind: 'reply-to-thread',
+                            threadId,
+                            message: {
+                              id: (createId ?? defaultCreateId)(),
+                              body: text,
+                              createdAt: new Date().toISOString(),
+                            },
+                          } as const,
+                        ],
+                      })
+                      onThreadReplied?.(threadId)
+                    }
+                  } else if (commentCompose.editing !== undefined) {
                     if (text.length > 0 && text !== commentCompose.editing.initialText) {
                       applyResult({
                         state: { kind: 'idle' },
