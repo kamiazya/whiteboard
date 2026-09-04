@@ -408,6 +408,40 @@ class Rule extends Press {
   }
 }
 
+/**
+ * Not a verb: the user typing the line's first word. The machine needs it
+ * because `Rule` opens a fresh empty line and every mark's meaning starts at
+ * a word — without typing, the first `rule` in a sequence closes the inline
+ * verbs for the REST of it (`Inline.check` gates on a non-empty line, and
+ * nothing else ever put text back). Measured before this command existed:
+ * across five full executions the six marks were driven 0–13 times each
+ * while every structure verb was driven ~400–480, and the ledger failure CI
+ * saw — `code` marked covered but never produced — is that distribution's
+ * tail. The word is inserted at the caret, so it lands inside whatever
+ * structure the presses have built; `judge` holds it to the model like any
+ * press.
+ */
+class Type implements fc.Command<Model, Real> {
+  check(model: Readonly<Model>): boolean {
+    return model.line.text === ''
+  }
+  run(model: Model, real: Real): void {
+    const head = real.state.selection.main.head
+    real.state = real.state.update({
+      changes: { from: head, insert: 'milk' },
+      selection: EditorSelection.cursor(head + 'milk'.length),
+    }).state
+    // `Line.text` is readonly because no VERB writes it, and typing is not a
+    // verb — the line is replaced rather than the field assigned, so that
+    // statement stays checked by the compiler.
+    model.line = { ...model.line, text: 'milk' }
+    judge(model, real)
+  }
+  toString(): string {
+    return 'type'
+  }
+}
+
 // ------------------------------------------------------------ the generator
 
 const mark = fc.constantFrom<Mark>('bold', 'italic', 'strikethrough', 'code', 'link', 'math')
@@ -439,6 +473,7 @@ const presses = fc.commands(
     fc.constant(new Task()),
     mark.map((id) => new Inline(id)),
     fc.constant(new Rule()),
+    fc.constant(new Type()),
   ],
   { size: '+1' },
 )
@@ -481,5 +516,21 @@ describe('markdown editor verbs as a state machine over the caret line', () => {
 
   afterAll(() => {
     assertLedger('editing verb', VERB_COVERAGE, drives)
+    // A FLOOR for the marks, not only the ledger's "at least once" — the
+    // same guard-of-the-guard edge-rules.properties.test.ts carries, for the
+    // same reason. Without `Type` in the pool the marks were driven 0–13
+    // times per execution against ~400+ for every structure verb, and the
+    // ledger failed only on the tail of that distribution: a red build
+    // pointing at a file nobody had changed. With `Type`, measured over five
+    // executions, every mark lands 18–46. The floor sits well below that
+    // without pinning a distribution; a generator change that thins the
+    // marks back out fails HERE, every run, naming the thin mark.
+    const MARK_DRIVE_FLOOR = 8
+    for (const id of ['bold', 'italic', 'strikethrough', 'code', 'link', 'math'] as const) {
+      expect(
+        drives[id],
+        `mark "${id}" was driven ${drives[id]} time(s); the generator has gone sparse (see Type)`,
+      ).toBeGreaterThanOrEqual(MARK_DRIVE_FLOOR)
+    }
   })
 })
