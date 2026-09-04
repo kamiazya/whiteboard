@@ -69,7 +69,7 @@ describe('docs snapshot — user added review notes', () => {
 
     await waitForSnapshotContent(container, {
       sceneText: 'tighten',
-      topBarWorkspaceName: 'Main workspace',
+      topBarTitle: 'System architecture',
     })
     await captureDocAsset(container, 'canvas-user-annotated-frame', 'canvas-user-annotated.png')
   })

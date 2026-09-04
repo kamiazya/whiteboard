@@ -162,10 +162,13 @@ export function BrowserIndexPage({
     // `activeWorkspace` is not read in the body — the helpers below read the
     // accessor themselves — but it IS what this effect follows. Depending on
     // the value rather than calling it is the difference between a list that
-    // re-reads on a switch and one that does not. `revision` is the same
-    // contract for the ROUTE: it moves when the address returns here while
-    // this page stayed mounted (see the prop's doc).
-  }, [index, clock, filesSource, activeWorkspace, revision])
+    // re-reads on a switch and one that does not. Two more triggers for the
+    // same aborted-startTransition mount (a Back while a lazy chunk loads
+    // returns to THIS mount, never remounting): `filesRevision` follows this
+    // page's OWN writes (create below, delete dialog — #1325's fix), and
+    // `revision` follows the ROUTE returning here (see the prop's doc) so a
+    // return re-reads even when the write was not this page's own.
+  }, [index, clock, filesSource, activeWorkspace, revision, filesRevision])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -233,6 +236,10 @@ export function BrowserIndexPage({
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
         await pointer.set(created.documentId)
+        // This page's own list must see the create even if it never
+        // unmounts (Back before the editor chunk mounts) — see the load
+        // effect's dependency note.
+        setFilesRevision((n) => n + 1)
         onOpenDocument(created.path)
       } catch {
         setError(`Failed to create a ${kindNoun(kind)} in this browser.`)

@@ -302,6 +302,22 @@ describe('BrowserIndexPage', () => {
     expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
   })
 
+  it('a create this page performed reaches its own list without an unmount', async () => {
+    // react-router wraps navigation in startTransition, so while the lazy
+    // editor chunk loads this page STAYS MOUNTED — and a Back landing in
+    // that window returns to this same mount. The list it renders must
+    // therefore include what it just created, or the onboarding empty state
+    // sticks over a store that has a document (the back-from-editor bug).
+    const store = new LocalStoreDouble()
+    renderPage(store)
+
+    fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
+
+    const titles = await screen.findAllByTestId('card-title')
+    expect(titles).toHaveLength(1)
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
   it('empty store also offers a markdown note, creating and opening one', async () => {
     const store = new LocalStoreDouble()
     const { onOpenDocument } = renderPage(store)
