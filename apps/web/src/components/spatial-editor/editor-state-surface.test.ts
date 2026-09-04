@@ -42,6 +42,7 @@ const sources = import.meta.glob(
     './use-edit-session-state.ts',
     './use-editor-measurements.ts',
     './use-file-seam-scene.ts',
+    './use-interaction-state.ts',
     './use-tool-state.ts',
     './use-viewport-controls.ts',
   ],
