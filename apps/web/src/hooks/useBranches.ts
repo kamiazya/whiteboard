@@ -19,6 +19,8 @@ import {
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ZodError } from 'zod'
+import { useBranchesBackend } from '@/contexts/BranchesBackendContext'
+import type { BranchesBackend } from '@/lib/branches-backend'
 
 // Branch API helpers plus the React hook wrapper.
 // - branchesApi: pure request helpers that can be tested without React.
@@ -185,6 +187,25 @@ export function branchesApi(workspaceId: string, path: string, fetchFn: typeof f
   }
 }
 
+/**
+ * The seam's methods take (workspaceId, path) per call; the hook holds one
+ * document. Binding them once keeps the call sites below unchanged from when
+ * this was a per-document `branchesApi`.
+ */
+function boundBranches(backend: BranchesBackend, workspaceId: string, path: string) {
+  return {
+    list: () => backend.list(workspaceId, path),
+    create: (args: CreateBranchRequest) => backend.create(workspaceId, path, args),
+    remove: (name: string) => backend.remove(workspaceId, path, name),
+    rename: (oldName: string, newName: string) =>
+      backend.rename(workspaceId, path, oldName, newName),
+    setHead: (branch: string) => backend.setHead(workspaceId, path, branch),
+    getStats: (name: string) => backend.getStats(workspaceId, path, name),
+    merge: (source: string, args: { into: string; dryRun?: boolean }) =>
+      backend.merge(workspaceId, path, source, args),
+  }
+}
+
 // React hook.
 // Expose refetch so callers can refresh on an externally observed HEAD
 // change (e.g. useDocumentSync's onHeadChanged callback).
@@ -201,17 +222,15 @@ export interface UseBranchesResult {
   merge: (source: string, args: { into: string; dryRun?: boolean }) => Promise<MergeResult>
 }
 
-export function useBranches(
-  workspaceId: string,
-  path: string,
-  fetchFn: typeof fetch = apiFetch,
-  // `enabled: false` is a keeper with no branches (the browser): the hook
-  // answers the resting state — one lane, `main`, not loading — and never
-  // fetches, so a panel that reads `head` for its mini-graph gets an answer
-  // instead of a 404 it would have to log and ignore.
-  options: { enabled?: boolean } = {},
-): UseBranchesResult {
-  const enabled = options.enabled !== false
+export function useBranches(workspaceId: string, path: string): UseBranchesResult {
+  // WHICH keeper answers comes from context, not from an argument. It used to
+  // be an `enabled` flag each caller passed, defaulting to ON — three callers,
+  // one of which passed it, the other two saved by where they are mounted
+  // rather than by anything a compiler could check. A keeper with no branches
+  // now answers the resting state itself, so forgetting yields `main` instead
+  // of a request to a daemon that is not there.
+  const backend = useBranchesBackend()
+  const enabled = backend.hasBranches
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
   const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
@@ -220,15 +239,15 @@ export function useBranches(
   // rebuild would depend on effect declaration order to run before the
   // initial-fetch effect — correct today but fragile under reordering. The
   // factory is a stateless wrapper, so rebuilding during render is safe.
-  const apiRef = useRef(branchesApi(workspaceId, path, fetchFn))
-  const apiDepsRef = useRef({ workspaceId, path, fetchFn })
+  const apiRef = useRef(boundBranches(backend, workspaceId, path))
+  const apiDepsRef = useRef({ workspaceId, path, backend })
   if (
     apiDepsRef.current.workspaceId !== workspaceId ||
     apiDepsRef.current.path !== path ||
-    apiDepsRef.current.fetchFn !== fetchFn
+    apiDepsRef.current.backend !== backend
   ) {
-    apiDepsRef.current = { workspaceId, path, fetchFn }
-    apiRef.current = branchesApi(workspaceId, path, fetchFn)
+    apiDepsRef.current = { workspaceId, path, backend }
+    apiRef.current = boundBranches(backend, workspaceId, path)
   }
   // Monotonically increasing counter. Each refetch call stamps its result with
   // the counter value at dispatch time; the setter is a no-op when a newer
@@ -273,7 +292,7 @@ export function useBranches(
 
   useEffect(() => {
     void refetch()
-  }, [refetch, workspaceId, path, fetchFn])
+  }, [refetch, workspaceId, path, backend])
 
   // Bump the sequence counter on unmount so any in-flight fetch resolution is
   // routed into the stale-fetch guard above instead of committing state after

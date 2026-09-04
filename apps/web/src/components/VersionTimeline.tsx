@@ -3,7 +3,6 @@ import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useVersionsBackend } from '@/contexts/VersionsBackendContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
@@ -180,7 +179,6 @@ export default function VersionTimeline({
   refreshSignal,
   headerActions,
 }: Props) {
-  const fetchFn = useDaemonApi()
   const versionsBackend = useVersionsBackend()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
@@ -261,7 +259,7 @@ export default function VersionTimeline({
     state: branchesState,
     loading: branchesLoading,
     refetch: refetchBranches,
-  } = useBranches(workspaceId, path, fetchFn, { enabled: capabilities.branches })
+  } = useBranches(workspaceId, path)
 
   // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
   // same tick. useBranches has no event subscription of its own, so this is

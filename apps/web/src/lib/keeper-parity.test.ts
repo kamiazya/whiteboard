@@ -94,6 +94,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_VERSIONS,
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
+  // The seam that makes the declared difference the DEFAULT rather than a flag
+  // each caller passes: its fallback is the daemon, and the browser page
+  // provides a keeper that has none. (`capability` entries take no `note` —
+  // the vocabulary's own type says so — so this is a comment.)
+  'src/contexts/BranchesBackendContext.tsx': { reach: 'capability', capability: 'branches' },
   'src/hooks/useBranches.ts': { reach: 'capability', capability: 'branches' },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
