@@ -27,6 +27,7 @@ function submitForm(control: { element: HTMLFormElement }): void {
 }
 
 describe('createCommentControl', () => {
+  // biome-ignore lint/plugin: createCommentControl is plain DOM, no React root
   afterEach(() => {
     document.body.innerHTML = ''
   })

@@ -7,6 +7,7 @@ describe('mountUpdateToast', () => {
     vi.resetModules()
   })
 
+  // biome-ignore lint/plugin: mount-update-toast reuses one module-level root across mounts by design (see impl comment); resetModules in beforeEach retires it with the DOM
   afterEach(() => {
     document.body.innerHTML = ''
   })

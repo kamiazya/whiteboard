@@ -1,0 +1,29 @@
+language js
+
+// Executable half of two flake shapes from .claude/rules/integrator-flow.md.
+// Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair per rule).
+any {
+  // A retried waitFor callback re-fires any action inside it, so the action
+  // double-fires under load and the failure blames the assertion.
+  `waitFor($cb)` where {
+    $cb <: contains or { `fireEvent.$m($a)`, `userEvent.$m($a)`, `render($a)` },
+    register_diagnostic(
+      span = $cb,
+      message = "Side effect inside waitFor: fire the event / render OUTSIDE the callback, assert inside. A retried callback re-fires the action (double-fired-action flake).",
+      severity = "error"
+    )
+  },
+  // The ninth flake shape: an afterEach wiping document.body leaves React
+  // roots mounted on detached nodes; the NEXT test's reconciler throws
+  // removeChild errors while every test in the file reports PASSED.
+  // A wipe behind a named helper (afterEach(resetDom)) is past this rule's
+  // floor — reader judgement in review covers that arrangement.
+  `afterEach($cb)` where {
+    $cb <: contains `document.body.innerHTML = $_`,
+    register_diagnostic(
+      span = $cb,
+      message = "afterEach wipes document.body with innerHTML: React roots stay mounted on detached nodes and the NEXT test fails with removeChild errors. Unmount through testing-library cleanup() (or the mount API's own unmount).",
+      severity = "error"
+    )
+  }
+}

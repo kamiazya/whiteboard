@@ -44,6 +44,7 @@ function mountScene(scene: Scene, testId: string): void {
   document.body.append(svg)
 }
 
+// biome-ignore lint/plugin: SVG markup appended raw, no React root to unmount
 afterEach(() => {
   document.body.innerHTML = ''
 })
