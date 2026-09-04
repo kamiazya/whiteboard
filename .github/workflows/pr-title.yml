@@ -12,6 +12,12 @@ name: pr-title
 on:
   pull_request:
     types: [opened, edited, synchronize, reopened]
+  # Required checks must also report on the merge queue's speculative
+  # commits or the queue stalls. A merge_group event carries no PR title to
+  # validate — and needs none: a PR only enters the queue after this check
+  # passed on the PR itself, `edited` included. The job below passes
+  # through on this event.
+  merge_group:
 
 permissions:
   contents: read
@@ -28,6 +34,11 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Validate PR title
+        if: github.event_name == 'pull_request'
         env:
           PR_TITLE: ${{ github.event.pull_request.title }}
         run: node tools/check-pr-title.mjs "$PR_TITLE"
+
+      - name: Pass through for a merge group
+        if: github.event_name == 'merge_group'
+        run: echo "title already validated on the pull request that entered the queue"
