@@ -554,7 +554,7 @@ export function BrowserDocumentPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
-    annotations,
+    annotations: spatialAnnotations,
     loaded: canvasLoaded,
     onChange,
     externalVersion,
@@ -700,6 +700,16 @@ export function BrowserDocumentPage({
    * not a rail that takes a third of the surface from everyone.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  /**
+   * This document's conversations, whichever half of the page holds them.
+   *
+   * A markdown document is given no BrowserBackend on purpose (see the
+   * `backend` memo), so the sync session it would speak through stays idle
+   * and its annotation channel answers `[]` forever. The markdown hook reads
+   * the same document-level `threads` plane off the host it already has, and
+   * from here down nothing cares which of the two did the reading.
+   */
+  const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
   /**
    * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
@@ -725,28 +735,39 @@ export function BrowserDocumentPage({
   /**
    * Appends the reader's reply to a conversation.
    *
-   * Goes through `onChange` like every other edit, so it is one undo step and
-   * rides the annotation channel — the alternative, a direct write, would put
-   * a second door onto the same plane with different history behaviour. The
-   * canvas argument is the CURRENT one unchanged: a reply touches no node and
-   * no edge, which is exactly why the command needed its own write path.
+   * On a spatial document it goes through `onChange` like every other edit,
+   * so it is one undo step and rides the annotation channel — a direct write
+   * there would put a second door onto the same plane with different history
+   * behaviour. The canvas argument is the CURRENT one unchanged: a reply
+   * touches no node and no edge, which is exactly why the command needed its
+   * own write path.
+   *
+   * A markdown document has no session for that command to travel through,
+   * so its reply goes to the host holding it instead. The two doors are not a
+   * duplicate: they lead to different documents, and the second exists
+   * precisely because the first is closed on a note.
    */
   const handleReply = useCallback(
     (threadId: string, body: string) => {
-      onChange(canvas, {
-        kind: 'reply-to-thread',
-        threadId,
-        message: {
-          id: crypto.randomUUID(),
-          body,
-          // No author: this app has no accounts, so there is no name to write
-          // that would not be invented. A message an MCP peer wrote carries
-          // the one its caller supplied, and the panel shows whichever it has.
-          createdAt: new Date().toISOString(),
-        },
-      })
+      const message = {
+        id: crypto.randomUUID(),
+        body,
+        // No author: this app has no accounts, so there is no name to write
+        // that would not be invented. A message an MCP peer wrote carries
+        // the one its caller supplied, and the panel shows whichever it has.
+        createdAt: new Date().toISOString(),
+      }
+      // A markdown document has no session to send a command through, so its
+      // reply goes to the host that holds it. Routing both through `onChange`
+      // would leave the rail's reply box present and inert on a note — the
+      // one thing the panel's contract says a host must not offer.
+      if (documentKind === 'markdown') {
+        markdownDoc.replyToThread(threadId, message)
+        return
+      }
+      onChange(canvas, { kind: 'reply-to-thread', threadId, message })
     },
-    [canvas, onChange],
+    [canvas, documentKind, markdownDoc.replyToThread, onChange],
   )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
