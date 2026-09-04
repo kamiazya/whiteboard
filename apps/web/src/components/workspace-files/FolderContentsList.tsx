@@ -1,4 +1,4 @@
-import { ChevronRight, Folder } from 'lucide-react'
+import { ChevronRight, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
@@ -40,10 +40,23 @@ export interface FolderContentsListProps {
   className?: string
 }
 
-/** `markdown · 2d ago`, dropping whichever half the daemon did not record. */
-function cardSubtitle(entry: WorkspaceDocumentEntry): string {
-  const age = entry.updatedAt === undefined ? '' : formatRelative(entry.updatedAt)
-  return [entry.kind ?? '', age].filter((part) => part !== '').join(' · ')
+/**
+ * The kind, spoken in the tree rows' existing icon vocabulary rather than a
+ * word — with the kind as the icon's accessible name, so what left the
+ * subtitle text still answers to a reader.
+ */
+function KindBadge({ kind }: { kind: WorkspaceDocumentEntry['kind'] }) {
+  const resolved = kind ?? 'markdown'
+  const Icon = resolved === 'spatial' ? LayoutGrid : FileText
+  return (
+    <Icon
+      data-testid="card-kind-badge"
+      data-kind={resolved}
+      role="img"
+      aria-label={resolved}
+      className="text-muted-foreground size-3.5 shrink-0"
+    />
+  )
 }
 
 export function FolderContentsList({
@@ -76,7 +89,7 @@ export function FolderContentsList({
   return (
     <ul
       {...longPress}
-      className={cn('grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 p-0.5', className)}
+      className={cn('grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 p-0.5', className)}
     >
       {folders.map((child) => (
         <li key={child.path}>
@@ -86,7 +99,7 @@ export function FolderContentsList({
             onClick={() => onOpen({ kind: 'folder', path: child.path })}
             className="hover:bg-accent flex w-full flex-col overflow-hidden rounded-md border text-left"
           >
-            <span className="bg-muted/40 text-muted-foreground flex h-16 w-full items-center justify-center">
+            <span className="bg-muted/40 text-muted-foreground flex aspect-video w-full items-center justify-center">
               <Folder className="size-7" />
             </span>
             <span className="flex min-w-0 items-center gap-1 px-2 py-1.5">
@@ -135,7 +148,7 @@ export function FolderContentsList({
             }
             className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
           >
-            <span className="bg-muted/40 flex h-16 w-full items-center justify-center overflow-hidden">
+            <span className="bg-muted/40 flex aspect-video w-full items-center justify-center overflow-hidden">
               {renderThumbnail?.(entry) ?? (
                 <span
                   data-kind={entry.kind ?? 'markdown'}
@@ -150,6 +163,7 @@ export function FolderContentsList({
                   is the fallback for a document nobody named, never a name
                   invented from the path. */}
               <span className="flex min-w-0 items-center gap-1">
+                <KindBadge kind={entry.kind} />
                 <span data-testid="card-title" className="truncate text-sm">
                   {entry.name ?? entry.path.split('/').at(-1)}
                 </span>
@@ -162,10 +176,24 @@ export function FolderContentsList({
                     Path conflict
                   </span>
                 )}
+                {entry.pinOrder !== undefined && (
+                  /* The pin used to exist only as a sort position — state a
+                     reader could not see on the object it belongs to. */
+                  <Pin
+                    role="img"
+                    aria-label="Pinned"
+                    className="text-muted-foreground ml-auto size-3 shrink-0"
+                  />
+                )}
               </span>
-              <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
-                {cardSubtitle(entry)}
-              </span>
+              {entry.updatedAt !== undefined && (
+                <span
+                  data-testid="card-subtitle"
+                  className="text-muted-foreground truncate text-xs"
+                >
+                  {formatRelative(entry.updatedAt)}
+                </span>
+              )}
               {(entry.tags?.length ?? 0) > 0 && (
                 <span className="text-muted-foreground truncate text-[11px]">
                   {entry.tags?.map((tag) => `#${tag}`).join(' ')}

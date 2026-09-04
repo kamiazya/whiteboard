@@ -12,6 +12,7 @@ import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { IdbDocumentStore } from './idb-document-store.js'
 import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import { LoroStore } from './loro-store.js'
 
@@ -193,3 +194,36 @@ describe('LoroStore (real IndexedDB)', () => {
 })
 
 // --- helpers for raw IndexedDB access in tests ---
+
+/**
+ * A read that did not COMPLETE is not a claim about the stored bytes.
+ *
+ * IndexedDB fails transiently for reasons that say nothing about the
+ * document — a connection closing under a version change, an aborted
+ * transaction, a quota error. Every one of those used to arrive here as
+ * `corrupt-snapshot`, which is the sentence this module's own contract
+ * forbids: the bytes are there, and telling their owner otherwise is the one
+ * thing it must not do. The page then offered "Start fresh", whose only
+ * action is to delete the document being reported as damaged.
+ */
+it('answers read-unavailable when the read itself fails, not corrupt-snapshot', async () => {
+  const dbName = `unavailable-${Math.trunc(performance.now() * 1000)}`
+  const inner = new IdbDocumentStore(dbName)
+  const store = new LoroStore(dbName, {
+    ...inner,
+    saveSnapshot: (i) => inner.saveSnapshot(i),
+    loadDeltas: (i) => inner.loadDeltas(i),
+    appendDeltas: (i) => inner.appendDeltas(i),
+    readSnapshotManifest: (i) => inner.readSnapshotManifest(i),
+    readFrontier: (i) => inner.readFrontier(i),
+    deleteDoc: (i) => inner.deleteDoc(i),
+    saveCompactedSnapshot: (i) => inner.saveCompactedSnapshot(i),
+    loadSnapshot: () => {
+      // What the browser throws when a transaction is aborted mid-read. It
+      // carries no verdict on the record.
+      throw new DOMException('The transaction was aborted', 'AbortError')
+    },
+  })
+
+  expect((await store.load('doc')).kind).toBe('read-unavailable')
+})

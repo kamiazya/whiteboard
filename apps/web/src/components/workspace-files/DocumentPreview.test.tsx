@@ -199,3 +199,39 @@ describe('DocumentPreview', () => {
     })
   })
 })
+
+describe('kind row and action icons', () => {
+  const entry = (kind: 'markdown' | 'spatial') => ({
+    documentId: 'd1',
+    path: 'note',
+    name: 'Note',
+    kind,
+  })
+  const noopLoad = async () => null
+
+  // Kills the inverted-ternary mutant: the icon must FOLLOW the kind.
+  it('the Kind row draws the icon of the kind on screen', () => {
+    render(<DocumentPreview document={entry('spatial')} loadRender={noopLoad} />)
+    expect(screen.getByTestId('preview-kind-icon').getAttribute('data-kind')).toBe('spatial')
+    cleanup()
+    render(<DocumentPreview document={entry('markdown')} loadRender={noopLoad} />)
+    expect(screen.getByTestId('preview-kind-icon').getAttribute('data-kind')).toBe('markdown')
+  })
+
+  it('each action button carries its own icon, not a shared or shuffled one', () => {
+    render(
+      <DocumentPreview
+        document={entry('markdown')}
+        loadRender={noopLoad}
+        onOpen={() => {}}
+        onDuplicate={() => {}}
+        onDelete={() => {}}
+      />,
+    )
+    const iconIn = (name: string) =>
+      screen.getByRole('button', { name }).querySelector('svg')?.getAttribute('class') ?? ''
+    expect(iconIn('Open')).toContain('lucide-external-link')
+    expect(iconIn('Duplicate')).toContain('lucide-copy-plus')
+    expect(iconIn('Delete')).toContain('lucide-trash-2')
+  })
+})

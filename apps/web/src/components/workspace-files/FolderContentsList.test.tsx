@@ -84,7 +84,9 @@ describe('FolderContentsList', () => {
       />,
     )
     expect(screen.getByTestId('custom-icon').textContent).toBe('d1')
-    expect(document.querySelector('[data-kind]')).toBeNull()
+    // The PLACEHOLDER specifically (a span): the title row's kind badge is
+    // an svg and legitimately stays.
+    expect(document.querySelector('span[data-kind]')).toBeNull()
   })
 
   it('falls back to the kind, which the list already carries', () => {
@@ -117,17 +119,17 @@ describe('FolderContentsList', () => {
       },
     ]
     render(<FolderContentsList documents={dated} folder="design" onOpen={vi.fn()} />)
-    // The subtitle specifically: the placeholder standing in for a missing
-    // thumbnail also prints the kind, so asserting on the whole card would
-    // pass with the subtitle saying nothing at all.
-    expect(screen.getByTestId('card-subtitle').textContent).toBe('markdown · 2d ago')
+    // The subtitle is the age alone — the kind moved to the icon badge.
+    expect(screen.getByTestId('card-subtitle').textContent).toBe('2d ago')
   })
 
   // A daemon that does not record the time must not make the card say
-  // something false about it.
-  it('carries no age when the daemon did not record one', () => {
+  // something false about it — and with the kind an icon, that leaves no
+  // subtitle at all.
+  it('carries no subtitle when the daemon recorded no age', () => {
     render(<FolderContentsList documents={docs} folder="design" onOpen={vi.fn()} />)
-    expect(screen.getAllByTestId('card-subtitle')[0]?.textContent).toBe('markdown')
+    expect(screen.queryByTestId('card-subtitle')).toBeNull()
+    expect(screen.getAllByTestId('card-kind-badge').length).toBeGreaterThan(0)
   })
 
   it('labels a document by its path segment when nobody named it', () => {

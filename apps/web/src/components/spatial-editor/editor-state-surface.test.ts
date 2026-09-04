@@ -38,8 +38,12 @@ import { assertScannedLedger } from '../../test-utils/coverage-ledger.js'
 const sources = import.meta.glob(
   [
     './SpatialEditor.tsx',
+    './use-comment-state.ts',
+    './use-edit-session-state.ts',
     './use-editor-measurements.ts',
     './use-file-seam-scene.ts',
+    './use-interaction-state.ts',
+    './use-tool-state.ts',
     './use-viewport-controls.ts',
   ],
   { query: '?raw', import: 'default', eager: true },

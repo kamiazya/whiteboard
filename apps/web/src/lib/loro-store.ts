@@ -48,6 +48,15 @@ export type LoroLoadResult =
   | { kind: 'corrupt-snapshot' }
   | { kind: 'corrupt-delta' }
   | { kind: 'unsupported-version' }
+  /**
+   * The read did not COMPLETE. Deliberately not one of the three above: those
+   * are verdicts on the stored bytes, and this one has none — IndexedDB fails
+   * transiently for reasons that say nothing about the document (a connection
+   * closing under a version change, an aborted transaction, a quota error).
+   * Folding those into `corrupt-snapshot` told a user their data was
+   * unreadable and offered to delete it.
+   */
+  | { kind: 'read-unavailable' }
 
 /**
  * Where a browser-kept snapshot is split for storage.
@@ -210,7 +219,9 @@ export class LoroStore {
           kind: err.code === 'unsupported-version' ? 'unsupported-version' : 'corrupt-snapshot',
         }
       }
-      return { kind: 'corrupt-snapshot' }
+      // Unclassified: the port names every failure it can attribute to the
+      // record, so anything left is the read itself failing.
+      return { kind: 'read-unavailable' }
     }
     if (stored === null) return { kind: 'not-found' }
 
