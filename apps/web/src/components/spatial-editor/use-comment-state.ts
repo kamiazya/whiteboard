@@ -6,8 +6,8 @@
 // since `commentChromeBoxes` — the boxes the renderer actually painted — is
 // its whole hit-testing input.
 
-import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
+import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import type { CommentComposeState } from './CanvasContextMenu.js'

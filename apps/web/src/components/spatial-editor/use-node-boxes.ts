@@ -3,9 +3,9 @@
 // `canvas` prop — before layout runs — so useViewportControls (which frames
 // on `boxes`) never waits on the worker-laid-out scene.
 
-import { useMemo } from 'react'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { indexNodeBoxes, type Box, type NodeBox } from './geometry.js'
+import { useMemo } from 'react'
+import { type Box, indexNodeBoxes, type NodeBox } from './geometry.js'
 
 export interface NodeBoxesInputs {
   readonly canvas: SpatialCanvas
