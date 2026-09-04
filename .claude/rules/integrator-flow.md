@@ -65,7 +65,7 @@ imports. Start the run, then leave the working tree alone.
 
 ## CI flakes
 
-- A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running.
+- A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running. The second occurrence is WATCHED: `flake-watch.mjs` (a quiet SessionStart hook) reports any test failing >=2 distinct main runs in 14 days, from the annotations vitest already emits.
 - **Read the property test's MESSAGE before hunting a counterexample.**
   `@fast-check/vitest` prints the seed in the test NAME, so a plain per-test
   timeout arrives looking exactly like a property failure — `... (with
