@@ -249,13 +249,17 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('note')
 
-    // The kind marker is the card SUBTITLE (`markdown · …`); the thumbnail
-    // placeholder is excluded because it labels unknown kinds "markdown" too.
+    // The kind marker is the card's icon badge; the thumbnail placeholder is
+    // excluded because it labels unknown kinds "markdown" too.
     const cards = screen.getAllByRole('button', { name: /note|board/ })
     const noteCard = cards.find((c) => within(c).queryByText('note'))!
     const boardCard = cards.find((c) => within(c).queryByText('board'))!
-    expect(within(noteCard).getByTestId('card-subtitle').textContent).toMatch(/markdown/)
-    expect(within(boardCard).getByTestId('card-subtitle').textContent).not.toMatch(/markdown/)
+    expect(within(noteCard).getByTestId('card-kind-badge').getAttribute('data-kind')).toBe(
+      'markdown',
+    )
+    expect(within(boardCard).getByTestId('card-kind-badge').getAttribute('data-kind')).not.toBe(
+      'markdown',
+    )
   })
 
   it('keeps a create entry point when the canvas list fails to load', async () => {

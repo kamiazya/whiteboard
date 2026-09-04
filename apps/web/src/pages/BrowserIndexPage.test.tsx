@@ -141,9 +141,9 @@ describe('BrowserIndexPage', () => {
     // ordering retired with the grid.
     const titles = await screen.findAllByTestId('card-title')
     expect(titles.map((el) => el.textContent)).toEqual(['Meeting Notes', 'Trip Plan'])
-    const subtitles = screen.getAllByTestId('card-subtitle')
-    expect(subtitles[0]?.textContent).toContain('markdown')
-    expect(subtitles[1]?.textContent).not.toContain('markdown')
+    const badges = screen.getAllByTestId('card-kind-badge')
+    expect(badges[0]?.getAttribute('data-kind')).toBe('markdown')
+    expect(badges[1]?.getAttribute('data-kind')).not.toBe('markdown')
   })
 
   it('opens a document via the preview pane after selecting its card', async () => {

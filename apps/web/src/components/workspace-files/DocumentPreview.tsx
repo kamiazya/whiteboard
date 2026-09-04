@@ -12,6 +12,7 @@
  * keep throwing you into an editor.
  */
 
+import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
@@ -142,7 +143,24 @@ export function DocumentPreview({
         </div>
         <dl className="text-muted-foreground grid grid-cols-[auto_1fr] gap-x-3 text-xs">
           <dt>Kind</dt>
-          <dd className="text-foreground">{document.kind ?? 'markdown'}</dd>
+          <dd className="text-foreground flex items-center gap-1">
+            {(document.kind ?? 'markdown') === 'spatial' ? (
+              <LayoutGrid
+                data-testid="preview-kind-icon"
+                data-kind="spatial"
+                aria-hidden="true"
+                className="size-3.5"
+              />
+            ) : (
+              <FileText
+                data-testid="preview-kind-icon"
+                data-kind="markdown"
+                aria-hidden="true"
+                className="size-3.5"
+              />
+            )}
+            {document.kind ?? 'markdown'}
+          </dd>
           {document.updatedAt !== undefined && (
             <>
               <dt>Updated</dt>
@@ -155,8 +173,9 @@ export function DocumentPreview({
             <button
               type="button"
               onClick={() => onOpen(document)}
-              className="bg-primary text-primary-foreground rounded px-2.5 py-1 text-xs"
+              className="bg-primary text-primary-foreground flex items-center gap-1 rounded px-2.5 py-1 text-xs"
             >
+              <ExternalLink aria-hidden="true" className="size-3" />
               Open
             </button>
           )}
@@ -164,8 +183,9 @@ export function DocumentPreview({
             <button
               type="button"
               onClick={() => onDuplicate(document)}
-              className="rounded border px-2.5 py-1 text-xs"
+              className="flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
             >
+              <CopyPlus aria-hidden="true" className="size-3" />
               Duplicate
             </button>
           )}
@@ -173,8 +193,9 @@ export function DocumentPreview({
             <button
               type="button"
               onClick={() => onDelete(document)}
-              className="text-destructive rounded border px-2.5 py-1 text-xs"
+              className="text-destructive flex items-center gap-1 rounded border px-2.5 py-1 text-xs"
             >
+              <Trash2 aria-hidden="true" className="size-3" />
               Delete
             </button>
           )}
