@@ -103,7 +103,6 @@ import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
   type CommentComposeState,
-  type ContextMenuTarget,
   type DocumentPickerState,
   type LinkDialogState,
 } from './CanvasContextMenu.js'
@@ -179,6 +178,7 @@ import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
 import { useSceneProjection } from './use-scene-projection.js'
+import { useToolState } from './use-tool-state.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
@@ -551,22 +551,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       readonly x: readonly number[]
       readonly y: readonly number[]
     } | null>(null)
-    // OOUI interaction mode (S6/S7): Hand (navigation) is the default —
-    // Select restores the pre-tool editing behavior byte-for-byte; Connect
-    // arms object-first click-A, click-B edge creation. Creation is
-    // deliberately NOT a mode — the palette's Note entry works in every mode.
-    const [tool, setTool] = useState<EditorTool>(defaultTool)
-    const toolChosenByUserRef = useRef(false)
-    const initialToolAppliedRef = useRef(false)
-    useEffect(() => {
-      if (initialTool === undefined) return
-      if (initialToolAppliedRef.current || toolChosenByUserRef.current) return
-      initialToolAppliedRef.current = true
-      setTool(initialTool)
-    }, [initialTool])
-    const [contextMenu, setContextMenu] = useState<ContextMenuTarget | null>(null)
-    // Screen point of the last committed long-press, while its pulse plays.
-    const [longPressPulse, setLongPressPulse] = useState<Point | null>(null)
+    const {
+      tool,
+      setTool,
+      toolChosenByUserRef,
+      contextMenu,
+      setContextMenu,
+      longPressPulse,
+      setLongPressPulse,
+      openContextMenuAtRef,
+    } = useToolState({ defaultTool, initialTool })
     /**
      * Additional selected node ids beyond the reducer's single primary
      * selection. Multi-select lives at the component layer on purpose: the
@@ -657,10 +651,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         longPressRef.current = null
       }
     }
-    // The timer must call the LATEST render's opener (fresh viewport/boxes/
-    // selection), not the one captured when the finger landed.
-    const openContextMenuAtRef = useRef<(screen: Point) => void>(() => {})
-
     // The file-reference seam — the LOD gate, label/missing resolution and
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
