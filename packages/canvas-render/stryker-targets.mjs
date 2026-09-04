@@ -79,6 +79,29 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // Every one of these makes `mayCluster` answer TRUE more often, which buys
+  // the segmenter path — the correct one everywhere — at the price of walking
+  // text that did not need it. The invariant is on `mayCluster`, backed by a
+  // sweep of the domain the cheap path serves; only a bench can see them.
+  // `firstUnit` is a separate algebraic case, stated at its declaration, and
+  // naming `granularity` is equivalent to leaving it to the default.
+  //
+  // NOT recorded here, deliberately: `StringLiteral: 'grapheme' -> ""`, which
+  // the lane also reports on this file. That one is KILLED — it throws
+  // `RangeError` at module load and 34 test files fail to import — and it
+  // survives the report only because it was judged by zero tests. An entry
+  // would make this ledger claim no test can kill it, which is false; the
+  // measurement is on `GRAPHEMES` instead.
+  'src/layout/nodes/truncate.ts': {
+    'BlockStatement: { yield* text return } -> {}': 1,
+    'BooleanLiteral: false -> true': 1,
+    'ConditionalExpression: !mayCluster(text) -> false': 1,
+    'ConditionalExpression: code >= 0x0300 || code === 0x000d -> true': 1,
+    "ConditionalExpression: firstUnit === '' -> true": 1,
+    'EqualityOperator: code === 0x000d -> code !== 0x000d': 1,
+    'EqualityOperator: i < text.length -> i <= text.length': 1,
+    "ObjectLiteral: { granularity: 'grapheme' } -> {}": 1,
+  },
   // A placed bubble sits a whole offset to one side of its anchor on each
   // axis, so the anchor is never on a centre line and `<=` cannot differ from
   // `<`; a zero-extent overlap contributes nothing to the sum whether the
