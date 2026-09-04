@@ -94,12 +94,17 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_VERSIONS,
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
-  // The seam that makes the declared difference the DEFAULT rather than a flag
-  // each caller passes: its fallback is the daemon, and the browser page
-  // provides a keeper that has none. (`capability` entries take no `note` —
-  // the vocabulary's own type says so — so this is a comment.)
+  // The branch seam, in two halves. The context is which keeper answers; the
+  // backend holds the daemon's requests AND the browser's refusal. Together
+  // they make the declared difference the DEFAULT rather than a flag each
+  // caller passes. (`capability` entries take no `note` — the vocabulary's
+  // own type says so — so this is a comment.)
+  //
+  // `src/hooks/useBranches.ts` is deliberately absent: it stopped reaching
+  // the daemon when the transport moved out of it, and this ledger's other
+  // direction fails on an entry naming a module that no longer reaches.
   'src/contexts/BranchesBackendContext.tsx': { reach: 'capability', capability: 'branches' },
-  'src/hooks/useBranches.ts': { reach: 'capability', capability: 'branches' },
+  'src/lib/branches-backend.ts': { reach: 'capability', capability: 'branches' },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -149,12 +154,16 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
  * that reach it, or it writes an `/api/` path by hand.
  *
  * All four, because the narrow version of this scan MISSED the largest
- * difference in the app. `useBranches` — the whole branch surface, which the
- * browser keeper cannot answer at all — builds
- * `/api/workspaces/${'${id}'}/documents/…` as a template string and calls
- * `apiFetch`, so a pattern over the URL helpers and `daemonFetch` alone did
- * not see it. A module that reaches the daemon the least conventional way is
- * exactly the one nobody thought about the browser for.
+ * difference in the app. The whole branch surface, which the browser keeper
+ * cannot answer at all, built `/api/workspaces/${'${id}'}/documents/…` as a
+ * template string and called `apiFetch`, so a pattern over the URL helpers
+ * and `daemonFetch` alone did not see it. A module that reaches the daemon
+ * the least conventional way is exactly the one nobody thought about the
+ * browser for.
+ *
+ * That surface now goes through `branches-backend.ts`, which is the ordinary
+ * shape — but the pattern stays wide, because what it caught was a habit
+ * rather than one module.
  */
 const DAEMON_REACH_PATTERN = /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|['"`]\/api\//
 

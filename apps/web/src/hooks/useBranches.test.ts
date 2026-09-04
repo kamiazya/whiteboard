@@ -3,14 +3,13 @@ import { createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
-  type BranchesState,
   branchesApi,
   buildBranchUrls,
+  createDaemonBranchesBackend,
   parseBranchesResponse,
-  useBranches,
-} from './useBranches.js'
+} from '../lib/branches-backend.js'
+import { type BranchesState, useBranches } from './useBranches.js'
 
 describe('buildBranchUrls', () => {
   it('encodes hierarchical path with "/" safely', () => {

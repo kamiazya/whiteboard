@@ -1,13 +1,182 @@
-import type {
-  BranchMeta,
-  BranchStatsResponse,
-  CreateBranchRequest,
-  DeleteBranchResponse,
-  MergeResponse,
-  RenameBranchResponse,
-  SetHeadResponse,
+import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import {
+  type BranchMeta,
+  type BranchStatsResponse,
+  branchMetaSchema,
+  branchStatsResponseSchema,
+  type CreateBranchRequest,
+  createBranchResponseSchema,
+  type DeleteBranchResponse,
+  type DocumentBranchesState,
+  deleteBranchResponseSchema,
+  documentBranchesStateSchema,
+  type MergeResponse,
+  mergeResponseSchema,
+  type RenameBranchResponse,
+  renameBranchResponseSchema,
+  type SetHeadResponse,
+  setHeadResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { type BranchesState, branchesApi } from '../hooks/useBranches.js'
+import { ZodError } from 'zod'
+
+export type { BranchMeta }
+export type BranchesState = DocumentBranchesState
+export type MergeResult = MergeResponse
+
+/** A refusal the daemon answered with a status, kept so a caller can branch on it. */
+export interface BranchApiError {
+  status: number
+  body: Record<string, unknown>
+}
+
+// ── URL builder ──
+// Paths can contain "/", so always encode them.
+export function buildBranchUrls(
+  workspaceId: string,
+  path: string,
+): {
+  list: string
+  head: string
+  deleteBranch: (name: string) => string
+  stats: (name: string) => string
+  merge: (source: string) => string
+} {
+  const safePath = encodeURIComponent(path)
+  const base = `/api/workspaces/${workspaceId}/documents/${safePath}`
+  return {
+    list: `${base}/branches`,
+    head: `${base}/head`,
+    deleteBranch: (name) => `${base}/branches/${encodeURIComponent(name)}`,
+    stats: (name) => `${base}/branches/${encodeURIComponent(name)}/stats`,
+    merge: (source) => `${base}/branches/${encodeURIComponent(source)}/merge`,
+  }
+}
+
+// documentBranchesStateSchema is the single source of truth for the envelope
+// shape. Fall back to filtering the branches array per-item only when the
+// envelope itself fails validation (e.g. a single rogue row breaks the whole
+// array parse), so the BranchPicker keeps rendering the valid branches
+// instead of dropping the entire response.
+export function parseBranchesResponse(raw: unknown): BranchesState {
+  if (!raw || typeof raw !== 'object') return { branches: [], head: 'main' }
+  const envelope = documentBranchesStateSchema.safeParse(raw)
+  if (envelope.success) {
+    return {
+      branches: envelope.data.branches,
+      head: envelope.data.head.length > 0 ? envelope.data.head : 'main',
+    }
+  }
+  const data = raw as { head?: unknown; branches?: unknown }
+  const branches: BranchMeta[] = []
+  if (Array.isArray(data.branches)) {
+    for (const entry of data.branches) {
+      const parsed = branchMetaSchema.safeParse(entry)
+      if (parsed.success) branches.push(parsed.data)
+    }
+  }
+  return {
+    branches,
+    head: typeof data.head === 'string' && data.head.length > 0 ? data.head : 'main',
+  }
+}
+
+async function requireOk(res: Response): Promise<Response> {
+  if (res.ok) return res
+  let body: Record<string, unknown> = {}
+  try {
+    body = (await res.json()) as Record<string, unknown>
+  } catch {
+    /* Leave body empty if it cannot be parsed. */
+  }
+  const err: BranchApiError = { status: res.status, body }
+  throw err
+}
+
+// A schema mismatch on a 200 response means the server shipped a shape that
+// does not match the client's contract. Normalise into a structured error so
+// callers never receive a raw ZodError whose instanceof-Error check would
+// incorrectly signal a network / auth problem.
+function safeParse<T>(schema: { parse: (v: unknown) => T }, value: unknown): T {
+  try {
+    return schema.parse(value)
+  } catch (e) {
+    if (e instanceof ZodError) {
+      const err: BranchApiError = {
+        status: 200,
+        body: { error: 'contract_mismatch', issues: e.issues },
+      }
+      throw err
+    }
+    throw e
+  }
+}
+
+// Imperative API helpers independent from React. `fetchFn` defaults to the
+// same-origin apiFetch so every pre-existing caller (MergeDialog,
+// WorkspaceTopBar) is unaffected; a daemon-paired caller passes the
+// daemon-origin-aware fetch obtained from useDaemonApi() instead. Kept a
+// plain function (not a hook) because it is also constructed outside React
+// (branchesApi.test.ts) and inside a ref (see useBranches below).
+export function branchesApi(workspaceId: string, path: string, fetchFn: typeof fetch = apiFetch) {
+  const urls = buildBranchUrls(workspaceId, path)
+  return {
+    async list(): Promise<BranchesState> {
+      const res = await requireOk(await fetchFn(urls.list))
+      return parseBranchesResponse(await res.json())
+    },
+    async create(args: CreateBranchRequest): Promise<BranchMeta> {
+      const res = await requireOk(
+        await fetchFn(urls.list, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(args),
+        }),
+      )
+      return safeParse(createBranchResponseSchema, await res.json()).branch
+    },
+    async getStats(name: string): Promise<BranchStatsResponse> {
+      const res = await requireOk(await fetchFn(urls.stats(name)))
+      return safeParse(branchStatsResponseSchema, await res.json())
+    },
+    async remove(name: string): Promise<DeleteBranchResponse> {
+      const res = await requireOk(await fetchFn(urls.deleteBranch(name), { method: 'DELETE' }))
+      return safeParse(deleteBranchResponseSchema, await res.json())
+    },
+    async rename(oldName: string, newName: string): Promise<RenameBranchResponse> {
+      const res = await requireOk(
+        await fetchFn(urls.deleteBranch(oldName), {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: newName }),
+        }),
+      )
+      return safeParse(renameBranchResponseSchema, await res.json())
+    },
+    async setHead(branch: string): Promise<SetHeadResponse> {
+      const res = await requireOk(
+        await fetchFn(urls.head, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ branch }),
+        }),
+      )
+      return safeParse(setHeadResponseSchema, await res.json())
+    },
+    async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
+      const res = await requireOk(
+        await fetchFn(urls.merge(source), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            into: args.into,
+            dryRun: args.dryRun ?? false,
+          }),
+        }),
+      )
+      return safeParse(mergeResponseSchema, await res.json())
+    },
+  }
+}
 
 /**
  * A document's branches as the UI reads and writes them — the seam between
