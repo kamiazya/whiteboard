@@ -75,6 +75,7 @@ import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
+import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
@@ -450,26 +451,6 @@ export function DaemonDocumentPage({
     setPreview(null)
   }, [controller.path])
 
-  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
-  /**
-   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
-   * deleting the subject of a conversation must not delete the conversation).
-   *
-   * Spatial documents only, and only an anchor that NAMES a node — the same
-   * rule the browser page keeps, for the same reason: a markdown document has
-   * no canvas to judge against and would call every node-anchored thread
-   * orphaned, which is the opposite of not knowing.
-   */
-  const resolveAnchor = useMemo(() => {
-    if (documentKind !== 'spatial') return undefined
-    const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
-    }
-  }, [documentKind, canvasValue])
-
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   /**
@@ -506,6 +487,29 @@ export function DaemonDocumentPage({
     [onChange],
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
+
+  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
+  /**
+   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
+   * deleting the subject of a conversation must not delete the conversation).
+   *
+   * Spatial documents only, and only an anchor that NAMES a node — the same
+   * rule the browser page keeps, for the same reason: a markdown document has
+   * no canvas to judge against and would call every node-anchored thread
+   * orphaned, which is the opposite of not knowing.
+   */
+  const resolveAnchor = useMemo(() => {
+    // Same reader as the browser page, deliberately: whether a passage is
+    // still there is a fact about the document, not about who keeps it.
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody)
+    if (documentKind !== 'spatial') return undefined
+    const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
+    return (thread: CommentThread): 'placed' | 'orphaned' => {
+      const { anchor } = thread
+      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
+      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
+    }
+  }, [documentKind, canvasValue, markdownBody])
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
