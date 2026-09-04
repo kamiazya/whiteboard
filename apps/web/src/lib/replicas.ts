@@ -7,6 +7,39 @@
  */
 import type { UserSettings } from './user-settings-store.js'
 
+export interface ReplicaEntryInput {
+  daemonBaseUrl: string
+  syncedAt: string
+  segment?: string
+  displayName?: string
+}
+
+/**
+ * The registry's one writer, shared by the background refresh and the
+ * post-promote registration so the two cannot shape an entry differently.
+ */
+export function withReplicaEntry(
+  current: UserSettings,
+  workspaceId: string,
+  entry: ReplicaEntryInput,
+): UserSettings {
+  return {
+    ...current,
+    storage: {
+      ...current.storage,
+      replicas: {
+        ...current.storage.replicas,
+        [workspaceId]: {
+          daemonBaseUrl: entry.daemonBaseUrl,
+          syncedAt: entry.syncedAt,
+          ...(entry.segment === undefined ? {} : { segment: entry.segment }),
+          ...(entry.displayName === undefined ? {} : { displayName: entry.displayName }),
+        },
+      },
+    },
+  }
+}
+
 export interface ReplicaMatch {
   /** The canonical daemon workspace id — the registry key and record key. */
   workspaceId: string
