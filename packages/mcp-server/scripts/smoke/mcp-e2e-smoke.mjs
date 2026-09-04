@@ -1086,6 +1086,77 @@ async function main() {
     `[e2e] wb_version_restore(targetPath) → ${copied.targetPath} (${copied.elementCount} node(s))`,
   )
 
+  // wb_version_restore with subtree — the THIRD of this tool's output
+  // shapes, and the one nothing reached. `in-place` and `into-target` are
+  // asserted above, so a drift in `restoredCount` was the one field of the
+  // three that could ship with every gate green: the MCP SDK validates
+  // structuredContent against outputSchema only on shapes something calls.
+  //
+  // The subtree is addressed by PATH PREFIX (`p === path || p.startsWith(
+  // `${path}/`)`), so the fixture needs a real descendant rather than a
+  // second sibling.
+  const treeRoot = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    path: 'e2e-tree',
+    kind: 'markdown',
+    markdown: '---\ntype: note\n---\nroot at the saved point',
+  })
+  const treeChild = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    path: 'e2e-tree/child',
+    kind: 'markdown',
+    markdown: '---\ntype: note\n---\nchild at the saved point',
+  })
+  const treeVersion = await callTool('wb_version_save', {
+    workspaceId: WORKSPACE_ID,
+    documentId: treeRoot.documentId,
+    label: 'e2e-subtree-point',
+  })
+  // Move the DESCENDANT away from the saved state. Asserting the rollback
+  // reached it is what makes this step about the mode rather than only its
+  // shape — a subtree restore that quietly touched the addressed document
+  // alone would satisfy every field above.
+  await callTool('wb_document_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId: treeChild.documentId,
+    markdown: '---\ntype: note\n---\nchild after the saved point',
+  })
+  const rolledBack = await callTool('wb_version_restore', {
+    workspaceId: WORKSPACE_ID,
+    documentId: treeRoot.documentId,
+    versionId: treeVersion.version.id,
+    subtree: true,
+  })
+  if (rolledBack.mode !== 'subtree' || rolledBack.restoredCount !== 2) {
+    throw new Error(
+      `wb_version_restore(subtree) returned unexpected shape: ${JSON.stringify(rolledBack)}`,
+    )
+  }
+  const childAfter = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentId: treeChild.documentId,
+  })
+  if (!childAfter.content.includes('child at the saved point')) {
+    throw new Error(
+      `subtree rollback did not reach the descendant: ${JSON.stringify(childAfter.content)}`,
+    )
+  }
+  await expectToolError(
+    'wb_version_restore',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId: treeRoot.documentId,
+      versionId: treeVersion.version.id,
+      subtree: true,
+      targetPath: 'e2e-tree-elsewhere',
+    },
+    'with subtree AND a distinct targetPath',
+    'cannot take a targetPath',
+  )
+  console.log(
+    `[e2e] wb_version_restore(subtree) → ${rolledBack.restoredCount} document(s) rolled back`,
+  )
+
   // wb_document_set → wb_document_get round-trip, including the core
   // facets (type/title/tags) — these are stored via writeCoreFacets, a
   // separate code path from the extension `facets` bucket below, so this is
