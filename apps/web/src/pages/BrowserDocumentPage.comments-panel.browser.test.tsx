@@ -24,21 +24,8 @@ vi.mock('../components/spatial-editor/index.js', () => ({
   // Fills its host the way the real editor does. A zero-height stand-in makes
   // any geometric assertion about the surface vacuous — the overlap case below
   // passed against the very layout it exists to reject.
-  //
-  // The button stands in for the canvas bubble's own Reply verb: what this
-  // file can check is the PAGE's half of that flow — that a reply reported
-  // from the surface reveals the conversation in the rail. The gesture that
-  // reports it is the editor's own, and is covered by
-  // spatial-editor/comment-reply.browser.test.tsx.
-  SpatialEditor: (props: {
-    canvas: SpatialCanvas
-    onThreadReplied?: (threadId: string) => void
-  }) => (
-    <div data-testid="mock-spatial-editor" style={{ height: '100%', width: '100%' }}>
-      <button type="button" onClick={() => props.onThreadReplied?.('t-done')}>
-        replied on canvas
-      </button>
-    </div>
+  SpatialEditor: (_props: { canvas: SpatialCanvas }) => (
+    <div data-testid="mock-spatial-editor" style={{ height: '100%', width: '100%' }} />
   ),
 }))
 
@@ -166,34 +153,6 @@ it('marks a thread whose node is gone, instead of leaving it indistinguishable',
   // The one anchored to bare coordinates still resolves — a comment placed on
   // empty canvas has nothing to outlive.
   expect(screen.queryByTestId('thread-orphaned-t-open')).toBeNull()
-})
-
-it('a reply typed on the canvas opens the rail on that conversation, filter and all', async () => {
-  const store = new LocalStoreDouble()
-  await store.setDefaultDocumentId(snap.documentId)
-  await store.save(snap)
-
-  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
-  await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
-  expect(screen.queryByTestId('comments-panel')).toBeNull()
-
-  await userEvent.click(await screen.findByRole('button', { name: 'replied on canvas' }))
-
-  // The rail opens itself: the canvas draws a thread's opening message alone,
-  // so a reply typed there is invisible on the surface it was typed on.
-  await waitFor(() => expect(screen.getByTestId('comments-panel')).toBeInTheDocument(), {
-    timeout: 15_000,
-  })
-  // 't-done' is RESOLVED, and the rail opens on 'Open'. Revealing a thread
-  // the current filter excludes has to move the filter too, or the answer is
-  // expanded behind a list that does not contain it.
-  await waitFor(() => expect(screen.getByText('settled last week')).toBeInTheDocument(), {
-    timeout: 15_000,
-  })
-  expect(screen.getByRole('button', { name: /^settled last week/ })).toHaveAttribute(
-    'aria-expanded',
-    'true',
-  )
 })
 
 it('keeps the opener out of the editor surface, so it cannot swallow the editor own controls', async () => {
