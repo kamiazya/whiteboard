@@ -62,8 +62,6 @@ import type {
   BoundingBox,
   MeasureText,
   ResolvedReference,
-  SpatialPalette,
-  SpatialPresetKey,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
@@ -72,7 +70,6 @@ import {
   COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
   edgeLabelAnchor,
-  flattenDrawnEdgePath,
   outlineContentBox,
   placeCommentBubble,
   SPATIAL_DARK_PALETTE,
@@ -124,14 +121,7 @@ import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import {
-  distanceToPolyline,
-  findFreeSpot,
-  hitTest,
-  indexNodeBoxes,
-  type NodeBox,
-  unionBox,
-} from './geometry.js'
+import { distanceToPolyline, findFreeSpot, hitTest, indexNodeBoxes } from './geometry.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
@@ -148,7 +138,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
-import { type MinimapNode, MinimapOverlay } from './MinimapOverlay.js'
+import { MinimapOverlay } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
@@ -162,7 +152,7 @@ import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { requiredTextNodeHeight } from './scene-render.js'
-import { keyedWithoutPrefix, renderedCanvasKeyed } from './scene-render-core.js'
+import { keyedWithoutPrefix } from './scene-render-core.js'
 import {
   EMPTY_SELECTION,
   reduceSelection,
@@ -188,6 +178,7 @@ import { useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
+import { useSceneProjection } from './use-scene-projection.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
@@ -493,33 +484,6 @@ function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
   }
 }
 
-/**
- * Node boxes for the minimap overview, with each authored colour resolved to
- * the accent the scene already uses for it. A preset key resolves through
- * the given palette; a hex passes through; an unstyled node carries no
- * colour and the overview falls back to its muted default.
- *
- * Looks up each box's node by id via a `Map` built once, rather than
- * `nodes.find` per box (O(n) per lookup, O(n^2) over the whole canvas) —
- * `find`-first and `Map`-last-wins cannot diverge for valid input, since
- * node id uniqueness is a schema invariant (spatial.ts's `superRefine`
- * rejects a duplicate node id before a canvas is ever constructed).
- */
-export function buildMinimapNodes(
-  nodes: SpatialCanvas['nodes'],
-  boxes: readonly NodeBox[],
-  palette: SpatialPalette,
-): readonly MinimapNode[] {
-  const byId = new Map(nodes.map((node) => [node.id, node]))
-  const colorOf = (id: string): string | undefined => {
-    const color = byId.get(id)?.color
-    if (color === undefined) return undefined
-    if (color.startsWith('#')) return color
-    return palette.presets[color as SpatialPresetKey]?.stroke
-  }
-  return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
-}
-
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
   function SpatialEditor(
     {
@@ -750,51 +714,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       fileRefOptions,
       missingFileRefs,
     )
-    // The committed surface's keyed projection, derived from the scene the
-    // worker (or sync path) delivered — ~3ms of stringify against the
-    // 66-125ms layout, so the worker protocol stays plain-data. The patch
-    // container below consumes it; the plain `svg` string is no longer
-    // read here.
-    const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
-    // Routed edge paths in canvas coordinates, for edge hit-testing and the
-    // selection highlight. Edges have no area, so selection is a
-    // distance-to-polyline test against a zoom-adjusted tolerance. The
-    // hit/highlight path is the DRAWN line — rounded corners flattened and
-    // line-jump hops arced over — via the same decomposition the SVG
-    // backend serializes, so a tap and the highlight land on the ink.
-    const edgePaths = useMemo(
-      () =>
-        scene.nodes.flatMap((node) =>
-          node.kind === 'edge'
-            ? [
-                {
-                  id: node.id,
-                  path: flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true),
-                },
-              ]
-            : [],
-        ),
-      [scene],
-    )
-    // Comment chrome (pins and bubbles) from the committed scene, for
-    // hit-testing: the shapes carry `${commentId}/pin` / `/bubble` ids and
-    // the commentChrome marker (ADR-0025 decision 5), so the boxes a press
-    // is tested against are exactly the boxes the renderer painted — one
-    // producer for the geometry. Later entries draw on top, so hit-testing
-    // walks them in reverse.
-    const commentChromeBoxes = useMemo(
-      () =>
-        scene.nodes.flatMap((node) => {
-          if (node.kind !== 'shape' || node.commentChrome !== true || node.id === undefined)
-            return []
-          const cut = node.id.lastIndexOf('/')
-          if (cut <= 0) return []
-          const part = node.id.slice(cut + 1)
-          if (part !== 'pin' && part !== 'bubble') return []
-          return [{ commentId: node.id.slice(0, cut), part, bbox: node.bbox }]
-        }),
-      [scene],
-    )
+    const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
+      useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
     /**
      * What a comment's bubble is placed around — the same obstacle set
      * canvas-render's placer sees for it: every node that is not a group
@@ -1023,25 +944,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [boxes],
     )
 
-    /**
-     * Every selected node with the box it currently occupies, primary first.
-     *
-     * The resize handles surround the UNION of these rather than the primary
-     * alone: handles drawn around a group have to act on the group, or a
-     * three-node selection offers one node's handles and resizes that node
-     * while the other two watch.
-     */
-    const selectionMembers = useMemo(() => {
-      if (selectedId === null) return []
-      return [selectedId, ...extraIds].flatMap((id) => {
-        const entry = boxes.find((candidate) => candidate.id === id)
-        return entry === undefined ? [] : [{ id, box: entry.box }]
-      })
-    }, [selectedId, extraIds, boxes])
-    const selectionBox = useMemo(
-      () => unionBox(selectionMembers.map((member) => member.box)),
-      [selectionMembers],
-    )
     const isMultiSelection = selectionMembers.length > 1
 
     /**
@@ -1980,17 +1882,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
-    /**
-     * Node boxes for the overview, with each authored colour resolved to the
-     * accent the scene already uses for it. A preset key resolves through the
-     * current mode's palette; a hex passes through; an unstyled node carries
-     * no colour and the overview falls back to its muted default.
-     */
-    const minimapNodes = useMemo(() => {
-      const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
-      return buildMinimapNodes(canvas.nodes, boxes, palette)
-    }, [boxes, canvas, theme])
-
     /**
      * Pans so the union of all node boxes sits centered in the viewport,
      * keeping the current zoom (the hand-mode "where did my content go"
