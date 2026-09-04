@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { useState } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { celebrate } from '@/lib/celebrate'
@@ -609,5 +610,186 @@ describe('SettingsPage — storage evidence wiring', () => {
     // The step itself still reports connected — only the figure is absent.
     expect(await within(mobile).findByText('connected')).toBeTruthy()
     expect(mobile.querySelector('[data-journey-detail="daemon"]')).toBeNull()
+  })
+})
+
+// ConnectionsSection/FontsSection build their daemon-aware fetch inline on
+// every render (`createDaemonFetch(daemon.baseUrl, ...)`), so a re-render
+// with an unchanged daemon still hands DaemonApiContext a brand-new function
+// identity. Every consumer effect keyed on that identity (PairedOriginsCard's
+// load/fingerprint effects, FontsCard's refresh effect) then re-fires and
+// re-issues its daemon request — observable here as extra fetch calls with no
+// daemon change to justify them.
+describe('SettingsPage — daemon fetch identity is stable across unrelated re-renders', () => {
+  const DAEMON_A = { baseUrl: 'http://127.0.0.1:9999', token: 'tok-a' }
+  const DAEMON_B = { baseUrl: 'http://127.0.0.1:8888', token: 'tok-b' }
+
+  function jsonResponse(body: unknown, status = 200): Response {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { 'Content-Type': 'application/json' },
+    })
+  }
+
+  function countingFetch(counts: { grants: number; fonts: number }) {
+    return vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/api/pairing/grants')) {
+        counts.grants += 1
+        return jsonResponse({ grants: [] })
+      }
+      if (url.includes('/api/fonts')) {
+        counts.fonts += 1
+        return jsonResponse({ fonts: [] })
+      }
+      if (url.includes('/api/runtime/storage')) {
+        return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+      }
+      return jsonResponse({}, 404)
+    })
+  }
+
+  // Both mobile and desktop layouts mount the active section's content at
+  // once (see the module doc comment on SettingsPage), so PairedOriginsCard/
+  // FontsCard legitimately mount TWICE and fetch twice on first paint —
+  // and SettingsPage's own unrelated effects (queryPersistentStorage, etc.)
+  // settle shortly after mount and cause one more organic re-render. A count
+  // that keeps changing settles into a real steady state; this polls until
+  // two checks 100ms apart agree, so a baseline is taken only once nothing
+  // is still in flight.
+  async function waitForStableCount(getValue: () => number): Promise<number> {
+    let previous: number | null = null
+    await waitFor(
+      () => {
+        const current = getValue()
+        if (previous === null || current !== previous) {
+          previous = current
+          throw new Error('count still changing')
+        }
+      },
+      { timeout: 3000, interval: 100 },
+    )
+    return previous as unknown as number
+  }
+
+  // Swaps the `daemon` prop on click, letting a test drive an unrelated
+  // re-render (same values, a new object) or a real daemon change (new
+  // values) from outside SettingsPage.
+  function DaemonSwapHarness({
+    path,
+    initial,
+    swapTo,
+  }: {
+    path: string
+    initial?: { baseUrl: string; token: string | null }
+    swapTo?: { baseUrl: string; token: string | null }
+  }) {
+    const [daemon, setDaemon] = useState(initial)
+    return (
+      <div>
+        <button type="button" data-testid="swap-daemon" onClick={() => setDaemon(swapTo)}>
+          swap
+        </button>
+        <MemoryRouter initialEntries={[path]}>
+          <SettingsPage daemon={daemon} />
+        </MemoryRouter>
+      </div>
+    )
+  }
+
+  it('does not re-issue Connections requests on a re-render with the same daemon values', async () => {
+    const counts = { grants: 0, fonts: 0 }
+    vi.stubGlobal('fetch', countingFetch(counts))
+
+    render(
+      <DaemonSwapHarness
+        path="/settings/connections"
+        initial={DAEMON_A}
+        // Same baseUrl/token VALUES, but a new object — proves the memo key
+        // is the primitive fields, not object identity.
+        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: DAEMON_A.token }}
+      />,
+    )
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('Paired web apps')
+    const baseline = await waitForStableCount(() => counts.grants)
+    expect(baseline).toBeGreaterThanOrEqual(1)
+
+    fireEvent.click(screen.getByTestId('swap-daemon'))
+    const afterSwap = await waitForStableCount(() => counts.grants)
+    expect(afterSwap).toBe(baseline)
+  })
+
+  it('does not re-issue Fonts requests on a re-render with the same daemon values', async () => {
+    const counts = { grants: 0, fonts: 0 }
+    vi.stubGlobal('fetch', countingFetch(counts))
+
+    render(
+      <DaemonSwapHarness
+        path="/settings/fonts"
+        initial={DAEMON_A}
+        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: DAEMON_A.token }}
+      />,
+    )
+    const baseline = await waitForStableCount(() => counts.fonts)
+    expect(baseline).toBeGreaterThanOrEqual(1)
+
+    fireEvent.click(screen.getByTestId('swap-daemon'))
+    const afterSwap = await waitForStableCount(() => counts.fonts)
+    expect(afterSwap).toBe(baseline)
+  })
+
+  it('re-issues Connections requests when the daemon baseUrl actually changes', async () => {
+    const counts = { grants: 0, fonts: 0 }
+    vi.stubGlobal('fetch', countingFetch(counts))
+
+    render(<DaemonSwapHarness path="/settings/connections" initial={DAEMON_A} swapTo={DAEMON_B} />)
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('Paired web apps')
+    const baseline = await waitForStableCount(() => counts.grants)
+
+    fireEvent.click(screen.getByTestId('swap-daemon'))
+    const afterSwap = await waitForStableCount(() => counts.grants)
+    expect(afterSwap).toBeGreaterThan(baseline)
+  })
+
+  it('re-issues Connections requests when the daemon token changes to undefined', async () => {
+    const counts = { grants: 0, fonts: 0 }
+    vi.stubGlobal('fetch', countingFetch(counts))
+
+    render(
+      <DaemonSwapHarness
+        path="/settings/connections"
+        initial={DAEMON_A}
+        swapTo={{ baseUrl: DAEMON_A.baseUrl, token: null }}
+      />,
+    )
+    const mobile = screen.getByTestId('settings-mobile')
+    await within(mobile).findByText('Paired web apps')
+    const baseline = await waitForStableCount(() => counts.grants)
+
+    fireEvent.click(screen.getByTestId('swap-daemon'))
+    const afterSwap = await waitForStableCount(() => counts.grants)
+    expect(afterSwap).toBeGreaterThan(baseline)
+  })
+
+  it('renders the disconnected Connections and Fonts branches without a daemon, without throwing', () => {
+    expect(() =>
+      render(
+        <MemoryRouter initialEntries={['/settings/connections']}>
+          <SettingsPage />
+        </MemoryRouter>,
+      ),
+    ).not.toThrow()
+    expect(within(screen.getByTestId('settings-mobile')).getByText(/not connected/i)).toBeTruthy()
+    cleanup()
+    expect(() =>
+      render(
+        <MemoryRouter initialEntries={['/settings/fonts']}>
+          <SettingsPage />
+        </MemoryRouter>,
+      ),
+    ).not.toThrow()
+    expect(within(screen.getByTestId('settings-mobile')).getByText(/not connected/i)).toBeTruthy()
   })
 })

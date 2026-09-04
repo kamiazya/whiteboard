@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from './render-broker.js'
-import { renderKeyOf } from './render-key.js'
+import { outlineKeyOf, renderKeyOf } from './render-key.js'
 
 const drawn = { svg: '<svg/>', bounds: { x: 0, y: 0, w: 1, h: 1 } }
 const keyFor = (documentId: string, updatedAt = '2026-09-03T00:00:00Z') =>
@@ -135,5 +135,23 @@ describe('the in-tab render broker', () => {
 
     await broker.render(keyFor('doc-3'), produce)
     expect(produce).toHaveBeenCalledTimes(3)
+  })
+  // The whole basis for one map holding two families' answers. `render` is
+  // generic over what a family returns, and nothing at runtime checks that a
+  // caller asking for an outline is not handed an SVG — the key's `pipeline`
+  // axis is what makes that impossible, so it is asserted here rather than
+  // assumed by the cast.
+  it("never answers one family from the other family's entry", async () => {
+    const broker = createInTabRenderBroker()
+    const subject = { documentId: 'd1', kind: 'spatial' as const, updatedAt: 'v1' }
+    const rects = [{ x: 0, y: 0, w: 10, h: 10 }]
+
+    const svg = await broker.render(renderKeyOf(subject, 'light'), async () => drawn)
+    const outline = await broker.render(outlineKeyOf(subject), async () => rects)
+
+    expect(svg).toBe(drawn)
+    expect(outline).toBe(rects)
+    // Two entries for one document, not one entry answering twice.
+    expect(broker.size).toBe(2)
   })
 })

@@ -2,6 +2,11 @@ name: ci
 
 on:
   pull_request:
+  # For the merge queue: its speculative merge commits fire `merge_group`,
+  # and a required check that never reports on that event stalls the whole
+  # queue until timeout. Harmless while no queue is configured — the event
+  # simply never fires.
+  merge_group:
   push:
     branches: [main]
 

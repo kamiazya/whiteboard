@@ -18,6 +18,7 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { BrokeredPipeline } from './render-key.js'
 
 export type RenderSurfaceId =
   | 'list-row-thumbnail'
@@ -32,7 +33,7 @@ export type RenderSurfaceId =
  * geometry only — cheaper, and the only thing legible at 24px. `png-raster`
  * is the SVG drawn into a canvas and read back as PNG.
  */
-export type RenderPipeline = 'svg' | 'outline' | 'png-raster'
+export type RenderPipeline = BrokeredPipeline | 'png-raster'
 
 type KindCoverage = 'covered' | `not covered: ${string}`
 type BrokerUse = 'through' | `not yet: ${string}`
@@ -67,13 +68,12 @@ export const RENDER_SURFACES = {
   'tree-row-icon': {
     pipeline: 'outline',
     kinds: { spatial: 'covered', markdown: 'covered' },
-    broker:
-      'not yet: the outline pipeline has no measured duplication; moving it is a named follow-up',
+    broker: 'through',
   },
   favicon: {
     pipeline: 'outline',
     kinds: { spatial: 'covered', markdown: 'covered' },
-    broker: 'not yet: one render per page, so nothing to dedup; moves with the tree row',
+    broker: 'through',
   },
   'version-thumbnail': {
     pipeline: 'png-raster',

@@ -1,6 +1,6 @@
 import type { OperatorInfo, VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { History } from 'lucide-react'
-import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
@@ -400,17 +400,25 @@ export default function VersionTimeline({
   // unreachable — each row it drew was active by construction — and meant the
   // only way to see another variation's history was to switch onto it first.
   const visibleVersions = versions
-  const miniGraphRows = buildMiniGraph({
-    head,
-    branches: branchesState.branches,
-    versions: visibleVersions.map((v) => ({
-      id: v.id,
-      branchName: v.branchName ?? 'main',
-      createdAt: v.createdAt,
-      ...(v.restoredFrom === undefined ? {} : { restoredFrom: v.restoredFrom }),
-    })),
-  })
-  const miniGraphById = new Map(miniGraphRows.map((r) => [r.versionId, r]))
+  // Re-derived only off head/branches/versions — NOT off previewing,
+  // isRestoring, restoreError, stale, or loading, all of which change far
+  // more often and none of which buildMiniGraph (O(versions)) reads.
+  const { miniGraphById, versionsById } = useMemo(() => {
+    const rows = buildMiniGraph({
+      head,
+      branches: branchesState.branches,
+      versions: visibleVersions.map((v) => ({
+        id: v.id,
+        branchName: v.branchName ?? 'main',
+        createdAt: v.createdAt,
+        ...(v.restoredFrom === undefined ? {} : { restoredFrom: v.restoredFrom }),
+      })),
+    })
+    return {
+      miniGraphById: new Map(rows.map((r) => [r.versionId, r])),
+      versionsById: new Map(visibleVersions.map((v) => [v.id, v])),
+    }
+  }, [head, branchesState.branches, visibleVersions])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3">
@@ -463,9 +471,7 @@ export default function VersionTimeline({
               const row = miniGraphById.get(v.id)
               const author = versionAuthor(v.operator)
               const restoredSource =
-                row?.restoredFrom === undefined
-                  ? undefined
-                  : visibleVersions.find((other) => other.id === row.restoredFrom)
+                row?.restoredFrom === undefined ? undefined : versionsById.get(row.restoredFrom)
               const restoredFromTitle =
                 restoredSource === undefined ? null : versionTitle(restoredSource)
               return (

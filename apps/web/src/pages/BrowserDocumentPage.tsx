@@ -1,5 +1,5 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { CommentThread, DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -65,13 +65,16 @@ import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/brow
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -551,7 +554,7 @@ export function BrowserDocumentPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
-    annotations,
+    annotations: spatialAnnotations,
     loaded: canvasLoaded,
     onChange,
     externalVersion,
@@ -566,6 +569,7 @@ export function BrowserDocumentPage({
     setEdgeLock,
     backendError,
     clearLocalUndo,
+    readOutlineSource,
   } = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
@@ -696,6 +700,16 @@ export function BrowserDocumentPage({
    * not a rail that takes a third of the surface from everyone.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  /**
+   * This document's conversations, whichever half of the page holds them.
+   *
+   * A markdown document is given no BrowserBackend on purpose (see the
+   * `backend` memo), so the sync session it would speak through stays idle
+   * and its annotation channel answers `[]` forever. The markdown hook reads
+   * the same document-level `threads` plane off the host it already has, and
+   * from here down nothing cares which of the two did the reading.
+   */
+  const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
   /**
    * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
@@ -721,28 +735,39 @@ export function BrowserDocumentPage({
   /**
    * Appends the reader's reply to a conversation.
    *
-   * Goes through `onChange` like every other edit, so it is one undo step and
-   * rides the annotation channel — the alternative, a direct write, would put
-   * a second door onto the same plane with different history behaviour. The
-   * canvas argument is the CURRENT one unchanged: a reply touches no node and
-   * no edge, which is exactly why the command needed its own write path.
+   * On a spatial document it goes through `onChange` like every other edit,
+   * so it is one undo step and rides the annotation channel — a direct write
+   * there would put a second door onto the same plane with different history
+   * behaviour. The canvas argument is the CURRENT one unchanged: a reply
+   * touches no node and no edge, which is exactly why the command needed its
+   * own write path.
+   *
+   * A markdown document has no session for that command to travel through,
+   * so its reply goes to the host holding it instead. The two doors are not a
+   * duplicate: they lead to different documents, and the second exists
+   * precisely because the first is closed on a note.
    */
   const handleReply = useCallback(
     (threadId: string, body: string) => {
-      onChange(canvas, {
-        kind: 'reply-to-thread',
-        threadId,
-        message: {
-          id: crypto.randomUUID(),
-          body,
-          // No author: this app has no accounts, so there is no name to write
-          // that would not be invented. A message an MCP peer wrote carries
-          // the one its caller supplied, and the panel shows whichever it has.
-          createdAt: new Date().toISOString(),
-        },
-      })
+      const message = {
+        id: crypto.randomUUID(),
+        body,
+        // No author: this app has no accounts, so there is no name to write
+        // that would not be invented. A message an MCP peer wrote carries
+        // the one its caller supplied, and the panel shows whichever it has.
+        createdAt: new Date().toISOString(),
+      }
+      // A markdown document has no session to send a command through, so its
+      // reply goes to the host that holds it. Routing both through `onChange`
+      // would leave the rail's reply box present and inert on a note — the
+      // one thing the panel's contract says a host must not offer.
+      if (documentKind === 'markdown') {
+        markdownDoc.replyToThread(threadId, message)
+        return
+      }
+      onChange(canvas, { kind: 'reply-to-thread', threadId, message })
     },
-    [canvas, onChange],
+    [canvas, documentKind, markdownDoc.replyToThread, onChange],
   )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
@@ -813,10 +838,26 @@ export function BrowserDocumentPage({
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   // One shape for whichever kind this document is — the favicon draws
   // it today, and a tree row's icon draws the same one.
+  // Which owner holds THIS document — see `composeOutlineSource`, which is
+  // where the two of them and the reason are written down.
+  const readDocumentOutlineSource = useCallback(
+    (kind: DocumentKind): DocumentOutlineSource | null =>
+      composeOutlineSource(kind, readOutlineSource, markdownDoc),
+    [readOutlineSource, markdownDoc],
+  )
+
+  // One broker per page mount, for the tab icon's outline. It is the same
+  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
+  // a re-render, a sync-status change or a remount does not recompute a
+  // shape the document already has — the version key is what makes that safe.
+  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
+
   const documentOutline = useDocumentOutline({
+    documentId,
     kind: documentKind,
-    canvas: canvas,
-    markdownBody: documentKind === 'markdown' ? (markdownDoc.body ?? '') : null,
+    revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
+    readSource: readDocumentOutlineSource,
+    broker: outlineBroker,
   })
 
   useFavicon({
@@ -839,13 +880,30 @@ export function BrowserDocumentPage({
   if (renderState.kind === 'load-degraded') {
     return (
       <LoadDegradedView message={renderState.message}>
-        <button
-          type="button"
-          onClick={() => void startFresh()}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-        >
-          Start fresh
-        </button>
+        {/* WHICH recovery is offered follows what the failure knows, and
+            getting it wrong is destructive rather than merely unhelpful:
+            `Start fresh` deletes the record, which is the right last resort
+            for a document this build cannot read, and the worst possible
+            button for one whose read was simply blocked — the data is
+            intact and one click removes it. So the retry is what an
+            unavailable read gets, and it is the only affordance there. */}
+        {backendError === 'read-unavailable' ? (
+          <button
+            type="button"
+            onClick={() => window.location.reload()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Try again
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => void startFresh()}
+            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+          >
+            Start fresh
+          </button>
+        )}
       </LoadDegradedView>
     )
   }

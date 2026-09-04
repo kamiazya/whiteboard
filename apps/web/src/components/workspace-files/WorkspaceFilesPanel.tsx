@@ -212,7 +212,7 @@ export function WorkspaceFilesPanel({
   // The row-size rendition. Separate from `loadRender` on purpose: it asks
   // the worker for block geometry rather than a serialized SVG, which is
   // both cheaper and the only thing legible at 24px (see DocumentMinimap).
-  const loadOutline = useMemo(() => createRowOutlineLoader({ source }), [source])
+  const loadOutline = useMemo(() => createRowOutlineLoader({ source, broker }), [source, broker])
 
   const readList = useCallback(() => source.listDocuments(), [source])
 

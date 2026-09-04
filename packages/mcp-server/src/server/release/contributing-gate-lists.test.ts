@@ -90,7 +90,10 @@ describe('CONTRIBUTING describes the gates that actually exist', () => {
   // still saying the old number. Complementary to the name checks, never a
   // substitute — `release-gate-matrix.test.ts` pinned a chain at the right
   // length while a third of it did not run.
-  const WORDED = new Map([['six', 6]])
+  const WORDED = new Map([
+    ['five', 5],
+    ['six', 6],
+  ])
 
   it('states the number of pre-push checks correctly', () => {
     const stated = /runs (\w+) checks in parallel/.exec(contributing())

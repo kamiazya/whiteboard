@@ -32,7 +32,9 @@ export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers[
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
+import { sameAnnotations } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
+import { frontierOf } from './document-frontier.js'
 import {
   type ExportRequestHandlerDeps,
   handleIncomingExportRequest,
@@ -219,6 +221,47 @@ export interface DocumentSyncSession {
    * decide whether to offer the disclosure.
    */
   getCoreFacets(): StoredCoreFacets | undefined
+  /**
+   * A stable id for the document's CURRENT state — what a picture drawn from
+   * it right now would be a picture OF. `null` before the first snapshot.
+   *
+   * This is the version key every derived rendition of the document is
+   * memoised under (ADR-0027). `updatedAt` cannot serve: it is stamped per
+   * push, so between two pushes it names one value for a document that has
+   * changed many times, and a memo under it would serve the picture from
+   * before the edit — wrong rather than missing, the worst failure a cache
+   * has.
+   *
+   * The STATE frontier, not the oplog's. A document checked out to an older
+   * version SHOWS that version, and an oplog-derived key would claim the
+   * newest one. Measured before choosing: the state frontier moves on every
+   * edit and does not move on a commit that changed nothing, which is
+   * exactly the invalidation a derived picture wants.
+   *
+   * Loro's own encoding, base64'd, rather than a digest of the content: the
+   * value is loro's answer to "which state is this", not a second opinion
+   * that could disagree with it.
+   */
+  getFrontier(): string | null
+  /**
+   * The committed document as snapshot bytes, or null before the first
+   * snapshot.
+   *
+   * For handing the document to a worker without decoding it here: measured
+   * in a real browser, exporting costs 0.10ms at 12 nodes, 0.10 at 40 and
+   * 0.20 at 120, against 0.50 / 0.80 / 1.90ms to read the canvas out on this
+   * thread instead. The handover is the cheaper half by 5-9x and barely grows
+   * with the document, which is what makes moving the work a release rather
+   * than a relocation.
+   *
+   * Read it in the same synchronous block as `getFrontier()` and the two
+   * describe the same state: nothing can commit between two synchronous
+   * reads. `exports bytes that decode to the state its frontier names` pins
+   * that, because a refactor making either read async would break the
+   * pairing silently — and a picture memoised under the wrong version is the
+   * failure the version key exists to avoid.
+   */
+  exportSnapshot(): Uint8Array | null
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -443,34 +486,6 @@ function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: Edit
  * queued export requests, published canvas value + subscribers). Constructing
  * a new session for a backend swap therefore resets all of that for free.
  */
-/**
- * Whether two reads of the annotation layer say the same thing.
- *
- * Compares every message BODY, not just the counts: editing a comment's text
- * changes neither the thread count nor the message count, and is exactly the
- * change a cheaper comparison would swallow — the panel would go on showing
- * the old wording until something else moved.
- *
- * Order is significant and is not normalised away. `readAnnotations` fixes it
- * (threads first, legacy rows in map order) because `composeComments` fans a
- * later bubble around an earlier one, so two reads differing only in order
- * really do draw differently.
- */
-function sameAnnotations(a: readonly CommentThread[], b: readonly CommentThread[]): boolean {
-  if (a.length !== b.length) return false
-  return a.every((thread, index) => {
-    const other = b[index]
-    if (other === undefined) return false
-    if (thread.id !== other.id || thread.status !== other.status) return false
-    if (thread.messages.length !== other.messages.length) return false
-    if (JSON.stringify(thread.anchor) !== JSON.stringify(other.anchor)) return false
-    return thread.messages.every((message, messageIndex) => {
-      const otherMessage = other.messages[messageIndex]
-      return message.id === otherMessage?.id && message.body === otherMessage.body
-    })
-  })
-}
-
 export function createDocumentSyncSession(
   backend: DocumentBackend,
   deps: SessionDeps,
@@ -533,6 +548,14 @@ export function createDocumentSyncSession(
 
   function getCanvas(): SpatialCanvas {
     return currentCanvas
+  }
+
+  function exportSnapshot(): Uint8Array | null {
+    return doc === null ? null : doc.export({ mode: 'snapshot' })
+  }
+
+  function getFrontier(): string | null {
+    return doc === null ? null : frontierOf(doc)
   }
 
   function getAnnotations(): readonly CommentThread[] {
@@ -1064,6 +1087,8 @@ export function createDocumentSyncSession(
     canRedo,
     getAnnotations,
     getCanvas,
+    getFrontier,
+    exportSnapshot,
     subscribeAnnotations,
     subscribe,
     subscribeHistory,
