@@ -19,6 +19,12 @@ Never hand-edit the lockfile. If typecheck breaks after a lockfile change with "
 
 - Use the harness `Monitor` tool for anything that must be watched across turns (CI checks, PR states, deploys). A background subagent's polling loop dies with its turn — a subagent told to "keep polling" will silently stop.
 - If an executor agent is needed, pair it with a Monitor: the monitor detects the event, the main session wakes the agent for one action.
+- **A conflicted PR gets no `pull_request` CI run at all.** GitHub cannot build
+  the merge ref, so `ci.yml` never starts — while the checks that need no merge
+  commit (CodeQL, WIP) DO run, which reads exactly like a queue that has
+  stalled. The tell is `mergeable_state: "dirty"` on the PR, not anything in
+  Actions. Merge the base in and CI starts on the push. Misread once as a
+  blocker worth reporting, at 25 minutes and a check-in armed for it.
 
 ## Verifying on a Preview deployment
 
