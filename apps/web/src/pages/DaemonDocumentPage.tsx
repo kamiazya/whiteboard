@@ -1205,11 +1205,12 @@ export function DaemonDocumentPage({
                 <CommentsPanel
                   threads={annotations}
                   resolveAnchor={resolveAnchor}
-                  // Not while a past version is on screen: the editor is
-                  // replaced by DocumentPreview but this rail is not, and a
-                  // reply is a write to the LIVE document — sent from a
-                  // surface showing something else entirely.
-                  onReply={preview === null ? handleReply : undefined}
+                  // Not while a past version OR a variation preview is on
+                  // screen: the editor is replaced by DocumentPreview but
+                  // this rail is not, and a reply is a write to the LIVE
+                  // document — sent from a surface showing something else
+                  // entirely.
+                  onReply={preview === null && variationPreview === null ? handleReply : undefined}
                 />
               </aside>
             ) : null}
