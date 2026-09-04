@@ -108,6 +108,7 @@ function OutlineProbe({ body }: { body: string }) {
   const rects = useDocumentOutline({
     documentId: 'outline-probe',
     kind: 'markdown',
+    revision: body,
     readSource,
     broker,
   })

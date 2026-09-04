@@ -533,6 +533,7 @@ export function DaemonDocumentPage({
   const documentOutline = useDocumentOutline({
     documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
+    revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
     broker: outlineBroker,
   })

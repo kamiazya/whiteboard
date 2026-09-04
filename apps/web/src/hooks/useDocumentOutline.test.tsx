@@ -18,10 +18,12 @@ function Probe({
   source,
   outline,
   kind = 'spatial',
+  revision = 'r0',
 }: {
   source: () => DocumentOutlineSource | null
   outline: (s: DocumentOutlineSource) => Promise<readonly FaviconRect[] | null>
   kind?: 'spatial' | 'markdown'
+  revision?: unknown
 }) {
   // Stable identities: the hook's effect depends on all three, and a fresh
   // one per render would re-subscribe forever — and a fresh BROKER per render
@@ -32,7 +34,16 @@ function Probe({
   const produce = useCallback((s: DocumentOutlineSource) => outline(s), [outline])
   return (
     <div data-testid="count">
-      {useDocumentOutline({ documentId: 'd1', kind, readSource, broker, outline: produce }).length}
+      {
+        useDocumentOutline({
+          documentId: 'd1',
+          kind,
+          revision,
+          readSource,
+          broker,
+          outline: produce,
+        }).length
+      }
     </div>
   )
 }
@@ -127,5 +138,22 @@ describe('useDocumentOutline', () => {
     window.dispatchEvent(new CustomEvent(DOCUMENT_SYNC_CHANGED_EVENT))
     await waitFor(() => expect(outline).toHaveBeenCalledTimes(2))
     expect(getByTestId('count').textContent).toBe('2')
+  })
+  // The other trigger, and the one that matters in the running app: a
+  // markdown document typed into in browser mode fires no
+  // `whiteboard:doc_changed` at all, so an outline driven by the event alone
+  // never updates. Re-rendering with a new published value asks again.
+  it('asks again when the page re-renders with a changed document', async () => {
+    let frontier = 'v1'
+    const outline = vi.fn(async () => RECTS)
+    const source = () => spatialAt(frontier)
+    const { rerender, getByTestId } = render(
+      <Probe source={source} outline={outline} revision="r0" />,
+    )
+    await waitFor(() => expect(getByTestId('count').textContent).toBe('2'))
+
+    frontier = 'v2'
+    rerender(<Probe source={source} outline={outline} revision="r1" />)
+    await waitFor(() => expect(outline).toHaveBeenCalledTimes(2))
   })
 })

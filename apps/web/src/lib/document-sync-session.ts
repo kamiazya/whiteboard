@@ -29,9 +29,10 @@ import type {
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { encodeFrontiers, LoroDoc, UndoManager } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
+import { frontierOf } from './document-frontier.js'
 import {
   type ExportRequestHandlerDeps,
   handleIncomingExportRequest,
@@ -563,11 +564,7 @@ export function createDocumentSyncSession(
   }
 
   function getFrontier(): string | null {
-    if (doc === null) return null
-    // `btoa` over the raw bytes: this string only has to be stable and
-    // comparable, and it goes through `encodeURIComponent` before it ever
-    // reaches a path.
-    return btoa(String.fromCharCode(...new Uint8Array(encodeFrontiers(doc.frontiers()))))
+    return doc === null ? null : frontierOf(doc)
   }
 
   function getAnnotations(): readonly CommentThread[] {

@@ -9,11 +9,22 @@
  * IDLE priority — nobody waits on a tab icon — and the page holds the last
  * answer until a better one arrives.
  *
- * That ordering is also what makes the memo SAFE. The version key names the
- * COMMITTED state, and `onChange` publishes a canvas before it commits one,
- * so a key taken at render time would file the new picture under the old
- * version. `whiteboard:doc_changed` fires after the commit, which is the one
- * moment the bytes and the version agree — see `readOutlineSource`.
+ * Safety and freshness come from different places, which is what the two
+ * triggers are for. SAFETY is `readOutlineSource` reading the bytes and the
+ * version out of the same committed document in one synchronous block, so
+ * whatever is drawn is filed under the version it actually is. FRESHNESS is
+ * only about asking often enough, and is best-effort by design — nobody is
+ * waiting on a tab icon.
+ *
+ * So it asks on BOTH the document's change notification and the published
+ * value, rather than picking one. Measured in the running app: typing into a
+ * markdown document in browser mode fires no `whiteboard:doc_changed` at all
+ * (`dispatchIdentityEvent` returns early without a workspace identity, which
+ * is why `useDirtyState`'s save dot stays clean there too), so an outline
+ * driven by the event alone never updated. The published value is what
+ * covers that; the event is what covers a change that arrives without one.
+ * Asking twice for one state costs a map lookup — the version is the same,
+ * so the second ask is answered from the memo.
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -57,6 +68,7 @@ async function outlineInPool(
 export function useDocumentOutline({
   documentId,
   kind,
+  revision,
   readSource,
   broker,
   outline = outlineInPool,
@@ -64,6 +76,13 @@ export function useDocumentOutline({
   /** `null` before the page is editing a document; nothing is asked for then. */
   documentId: string | null
   kind: DocumentKind
+  /**
+   * Whatever the page re-renders with when this document changes — its
+   * canvas value or its body. Only its IDENTITY is read, never its content:
+   * what is drawn always comes from `readSource`, so this is a trigger and
+   * not a second source that could disagree with the version key.
+   */
+  revision: unknown
   /** Reads the bytes-or-body and the version TOGETHER; see its own doc. */
   readSource: (kind: DocumentKind) => DocumentOutlineSource | null
   broker: RenderBroker
@@ -107,7 +126,7 @@ export function useDocumentOutline({
       live = false
       window.removeEventListener(DOCUMENT_SYNC_CHANGED_EVENT, run)
     }
-  }, [documentId, kind, readSource, broker, outline])
+  }, [documentId, kind, revision, readSource, broker, outline])
 
   return rects
 }
