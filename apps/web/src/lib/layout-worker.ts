@@ -38,6 +38,8 @@ import {
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import type { ResolvedTheme } from '../hooks/useThemeMode'
 import { createSpatialContentCache } from './content-cache'
+import { outlineFromSpatial } from './document-outline.js'
+import { resolveRectColor } from './favicon.js'
 import {
   composeReferenceSeam,
   FONT_DEGRADED,
@@ -47,6 +49,8 @@ import {
   type MarkdownRailResponse,
   type MarkdownRenderRequest,
   type MarkdownRenderResponse,
+  type OutlineRequest,
+  type OutlineResponse,
 } from './layout-worker-protocol.js'
 
 const measure = createBrowserMeasureText()
@@ -101,9 +105,60 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 const fontReady = ensureViewerFontLoaded()
 
 self.onmessage = async (
-  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest>,
+  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest>,
 ) => {
   const request = event.data
+  if (request.type === 'outline') {
+    try {
+      if (request.body !== undefined) {
+        // The only arm that lays anything out, so the only one the font gate
+        // applies to: an outline measured with a system face puts its blocks
+        // where an export of the same body would not.
+        if ((await fontReady) !== 'loaded') {
+          const failed: OutlineResponse = {
+            type: 'failed',
+            id: request.id,
+            reason: FONT_DEGRADED,
+          }
+          self.postMessage(failed)
+          return
+        }
+        const { blocks } = layoutMarkdownOutline(request.body, {
+          measure,
+          maxWidth: request.maxWidth,
+        })
+        const done: OutlineResponse = {
+          type: 'outlined',
+          id: request.id,
+          // A scene block carries no colour of its own; resolving it here is
+          // what makes a markdown outline the same TYPE as a spatial one to
+          // every consumer, rather than one each consumer has to default.
+          rects: blocks.map((block) => ({ ...block, color: resolveRectColor(undefined) })),
+        }
+        self.postMessage(done)
+        return
+      }
+      // A corrupt snapshot throws here and lands in the catch below as a
+      // `failed` reply — the row keeps its kind icon and the tab its static
+      // one. It must not take the worker down: every request queued behind it
+      // belongs to a different document.
+      const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+      const done: OutlineResponse = {
+        type: 'outlined',
+        id: request.id,
+        rects: outlineFromSpatial(canvas),
+      }
+      self.postMessage(done)
+    } catch (error) {
+      const failed: OutlineResponse = {
+        type: 'failed',
+        id: request.id,
+        reason: error instanceof Error ? error.message : String(error),
+      }
+      self.postMessage(failed)
+    }
+    return
+  }
   if (request.type === 'markdown-render') {
     try {
       // Same font gate as the other two: a thumbnail measured with a system
