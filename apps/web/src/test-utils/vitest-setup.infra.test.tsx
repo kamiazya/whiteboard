@@ -1,3 +1,4 @@
+// biome-ignore lint/plugin: intentionally leaks fake timers with no local vi.useRealTimers() to prove the shared vitest.setup.ts teardown restores and reports them
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { clearHookOrderLog, readHookOrderLog, runSharedTestTeardown } from '../../vitest.setup.js'
