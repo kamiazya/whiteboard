@@ -4,9 +4,12 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
+import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
+import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
@@ -23,6 +26,7 @@ import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
+import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import {
   DAEMON_HISTORY_CAPABILITIES,
   type VersionPreviewSession,
@@ -172,6 +176,13 @@ export function DaemonDocumentPage({
   // does not remount, and a panel left open across a switch would be listing
   // the departed document's versions under the arrived document's name.
   const [historyOpen, setHistoryOpen] = useState(false)
+  /**
+   * Whether the comments rail is open. Per-user view state, written nowhere,
+   * and NOT cleared on a document switch: what a switch changes is the list,
+   * not whether the reader wanted to be looking at one. Same decision the
+   * browser page took.
+   */
+  const [commentsOpen, setCommentsOpen] = useState(false)
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
@@ -322,6 +333,7 @@ export function DaemonDocumentPage({
     setEdgeLock,
     syncStatus,
     readOutlineSource,
+    annotations,
   } = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
@@ -431,8 +443,55 @@ export function DaemonDocumentPage({
     setPreview(null)
   }, [controller.path])
 
+  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
+  /**
+   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
+   * deleting the subject of a conversation must not delete the conversation).
+   *
+   * Spatial documents only, and only an anchor that NAMES a node — the same
+   * rule the browser page keeps, for the same reason: a markdown document has
+   * no canvas to judge against and would call every node-anchored thread
+   * orphaned, which is the opposite of not knowing.
+   */
+  const resolveAnchor = useMemo(() => {
+    if (documentKind !== 'spatial') return undefined
+    const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
+    return (thread: CommentThread): 'placed' | 'orphaned' => {
+      const { anchor } = thread
+      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
+      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
+    }
+  }, [documentKind, canvasValue])
+
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
+  /**
+   * Appends the reader's reply to a conversation.
+   *
+   * Through `onChange` like every other edit here, so it is one undo step and
+   * rides the annotation channel back — the alternative, a direct write to
+   * the doc, would put a second door onto the same plane with different
+   * history behaviour. The canvas argument is the CURRENT one unchanged: a
+   * reply touches no node and no edge, which is why the command has its own
+   * write path at all.
+   */
+  const handleReply = useCallback(
+    (threadId: string, body: string) => {
+      onChange(canvasValueRef.current, {
+        kind: 'reply-to-thread',
+        threadId,
+        message: {
+          id: crypto.randomUUID(),
+          body,
+          // No author: this app has no accounts, so there is no name to write
+          // that would not be invented. A message an MCP peer wrote carries
+          // the one its caller supplied, and the panel shows whichever it has.
+          createdAt: new Date().toISOString(),
+        },
+      })
+    },
+    [onChange],
+  )
   const setMarkdownBody = useCallback(
     (next: string) => {
       onChange(canvasValueRef.current, { kind: 'set-body', text: next })
@@ -748,6 +807,34 @@ export function DaemonDocumentPage({
                       }
                       actions={
                         <>
+                          {/* The opener belongs in the document's own actions
+                              row, not floated over the editor: measured on the
+                              browser page, a control in the surface's
+                              top-right corner sat on top of the markdown
+                              editor's catalog trigger and intercepted every
+                              click meant for it. Both editor kinds put chrome
+                              in their corners, and the annotation layer is a
+                              document-level concern. */}
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            aria-label={
+                              openThreadCount === 0
+                                ? 'Comments'
+                                : `Comments, ${openThreadCount} open`
+                            }
+                            aria-pressed={commentsOpen}
+                            onClick={() => setCommentsOpen((open) => !open)}
+                            // A toggle has to LOOK toggled: without this the
+                            // rail's open state was announced to a screen
+                            // reader and invisible to everyone else.
+                            className={TOGGLE_STATE_CLASS}
+                          >
+                            <MessageSquare aria-hidden="true" className="size-4" />
+                            {openThreadCount > 0 ? (
+                              <span className="ml-1 text-xs">{openThreadCount}</span>
+                            ) : null}
+                          </Button>
                           {exportError && (
                             <span className="text-destructive truncate text-xs" role="alert">
                               {exportError}
@@ -889,69 +976,93 @@ export function DaemonDocumentPage({
               Create a canvas
             </Button>
           </div>
-        ) : preview ? (
-          <DocumentPreview past={preview.past} theme={resolvedTheme} />
         ) : (
-          <DocumentEditorSurface
-            kind={documentKind}
-            documentKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-            markdown={{
-              body: markdownBody,
-              setBody: setMarkdownBody,
-              theme: resolvedTheme,
-              meta: coreFacets ?? { type: documentKind },
-              resolveAlias,
-              resolveTitle,
-              linkTargets,
-              onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
-              resolveEmbed,
-            }}
-            spatial={() => (
-              <SpatialEditorPane
-                className="relative h-full min-h-0"
-                editorKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-                canvasLoaded={canvasLoaded}
-                editorRef={spatialEditorRef}
-                agentTouchedNodeIds={agentActivity.touchedNodeIds}
-                canvas={canvasValue}
-                onChange={onChange}
-                externalVersion={externalVersion}
-                theme={resolvedTheme}
-                // File-node reference = the target's immutable id (rename-
-                // safe); the label shows its current path and the current
-                // canvas is excluded. Legacy documents still carry path refs,
-                // which resolveRefPath misses and switchDocument takes as-is.
-                fileRefOptions={controller.documents
-                  .filter((entry) => entry.path !== canvas?.path)
-                  .map((entry) => ({
-                    file: entry.id,
-                    label: entry.path,
-                    kind: entry.kind,
-                  }))}
-                onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
-                missingFileRef={missingFileRef}
-                fileSeams={fileSeams}
-                lockedNodeIds={lockedNodeIds}
-                lockedEdgeIds={lockedEdgeIds}
-                onToggleNodeLock={setNodeLock}
-                onToggleEdgeLock={setEdgeLock}
-                nodeInEditor={nodeInEditor}
-                history={{
-                  onUndo: () => void undo(),
-                  onRedo: () => void redo(),
-                  canUndo: canUndo(),
-                  canRedo: canRedo(),
-                }}
-                overlayTitle={canvas?.path ?? 'Untitled'}
-                resolveAlias={resolveAlias}
-                resolveEmbed={resolveEmbed}
-                resolveTitle={resolveTitle}
-                linkTargets={linkTargets}
-              >
-                <AgentPresenceChip summary={agentActivity.summary} />
-              </SpatialEditorPane>
-            )}
-          />
+          /* The annotation layer's document-level surface (ADR-0026
+             decision 5) sits BESIDE the editor rather than inside it,
+             because one panel serves both document kinds and a markdown
+             document has no canvas chrome to host one. Its opener lives in
+             the document actions row above, in flow. */
+          <div className="flex h-full min-h-0">
+            <div className="relative min-w-0 flex-1">
+              {preview ? (
+                <DocumentPreview past={preview.past} theme={resolvedTheme} />
+              ) : (
+                <DocumentEditorSurface
+                  kind={documentKind}
+                  documentKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+                  markdown={{
+                    body: markdownBody,
+                    setBody: setMarkdownBody,
+                    theme: resolvedTheme,
+                    meta: coreFacets ?? { type: documentKind },
+                    resolveAlias,
+                    resolveTitle,
+                    linkTargets,
+                    onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
+                    resolveEmbed,
+                  }}
+                  spatial={() => (
+                    <SpatialEditorPane
+                      className="relative h-full min-h-0"
+                      editorKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+                      canvasLoaded={canvasLoaded}
+                      editorRef={spatialEditorRef}
+                      agentTouchedNodeIds={agentActivity.touchedNodeIds}
+                      canvas={canvasValue}
+                      onChange={onChange}
+                      externalVersion={externalVersion}
+                      theme={resolvedTheme}
+                      // File-node reference = the target's immutable id (rename-
+                      // safe); the label shows its current path and the current
+                      // canvas is excluded. Legacy documents still carry path refs,
+                      // which resolveRefPath misses and switchDocument takes as-is.
+                      fileRefOptions={controller.documents
+                        .filter((entry) => entry.path !== canvas?.path)
+                        .map((entry) => ({
+                          file: entry.id,
+                          label: entry.path,
+                          kind: entry.kind,
+                        }))}
+                      onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
+                      missingFileRef={missingFileRef}
+                      fileSeams={fileSeams}
+                      lockedNodeIds={lockedNodeIds}
+                      lockedEdgeIds={lockedEdgeIds}
+                      onToggleNodeLock={setNodeLock}
+                      onToggleEdgeLock={setEdgeLock}
+                      nodeInEditor={nodeInEditor}
+                      history={{
+                        onUndo: () => void undo(),
+                        onRedo: () => void redo(),
+                        canUndo: canUndo(),
+                        canRedo: canRedo(),
+                      }}
+                      overlayTitle={canvas?.path ?? 'Untitled'}
+                      resolveAlias={resolveAlias}
+                      resolveEmbed={resolveEmbed}
+                      resolveTitle={resolveTitle}
+                      linkTargets={linkTargets}
+                    >
+                      <AgentPresenceChip summary={agentActivity.summary} />
+                    </SpatialEditorPane>
+                  )}
+                />
+              )}
+            </div>
+            {commentsOpen ? (
+              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
+                <CommentsPanel
+                  threads={annotations}
+                  resolveAnchor={resolveAnchor}
+                  // Not while a past version is on screen: the editor is
+                  // replaced by DocumentPreview but this rail is not, and a
+                  // reply is a write to the LIVE document — sent from a
+                  // surface showing something else entirely.
+                  onReply={preview === null ? handleReply : undefined}
+                />
+              </aside>
+            ) : null}
+          </div>
         )}
         {capabilities.merge && canvas && (
           <MergeToast
