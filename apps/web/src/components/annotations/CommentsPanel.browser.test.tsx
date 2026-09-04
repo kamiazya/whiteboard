@@ -15,7 +15,7 @@ const OPEN: CommentThread = {
   status: 'open',
   messages: [
     { id: 'm1', body: 'tighten the copy here', createdAt: '2026-09-03T00:00:00.000Z' },
-    { id: 'm2', body: 'agreed', createdAt: '2026-09-03T01:00:00.000Z' },
+    { id: 'm2', body: 'agreed', author: 'assistant', createdAt: '2026-09-03T01:00:00.000Z' },
   ],
 }
 
@@ -78,4 +78,53 @@ it('says which filter emptied the list, rather than showing one blank state for 
   cleanup()
   render(<CommentsPanel threads={[]} />)
   await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no comments/i)
+})
+
+it('opens a thread onto its whole conversation, not just the line the list shows', async () => {
+  // The gap this closes: the list could say "2 messages" and offer no way to
+  // read the second one. An MCP peer can reply, so that second message is
+  // routinely the ANSWER to the question in the first.
+  render(<CommentsPanel threads={[OPEN]} />)
+
+  expect(page.getByText('agreed').query()).toBeNull()
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  await expect.element(page.getByText('agreed')).toBeInTheDocument()
+  // Both messages, in the order the thread holds them.
+  await expect.element(page.getByText('tighten the copy here')).toBeInTheDocument()
+})
+
+it('names the author of a message that has one, and says nothing for a message that does not', async () => {
+  // `okfActor` is a bare single-line string with no kind, and this app has no
+  // accounts, so there is nothing to infer a human-vs-AI badge FROM. The
+  // honest surface is the name when one was written and silence otherwise.
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  await expect.element(page.getByText('assistant')).toBeInTheDocument()
+})
+
+it('sends a reply from the opened thread, carrying the thread it belongs to', async () => {
+  const replies: { threadId: string; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onReply={(threadId, body) => replies.push({ threadId, body })}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  await userEvent.fill(page.getByRole('textbox', { name: /reply/i }), 'will do')
+  await userEvent.click(page.getByRole('button', { name: /^reply$/i }))
+
+  expect(replies).toEqual([{ threadId: 't-open', body: 'will do' }])
+})
+
+it('offers no reply box when the host wired no reply handler', async () => {
+  // A host that cannot write (a read-only view, or one with no session)
+  // should not show a control that silently does nothing.
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  expect(page.getByRole('textbox', { name: /reply/i }).query()).toBeNull()
 })

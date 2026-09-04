@@ -90,12 +90,12 @@ it('editing a comment opens the draft over its drawn bubble, in the same quadran
   // The drawn bubble is above the anchor (the node holds down-right)...
   expect(bubbleTop).toBeLessThan(300)
 
+  // Through the context menu, which reaches the editor without opening the
+  // card first — the subject here is where the DRAFT lands, and the card
+  // would only add a step between the press and it.
   const r = root.getBoundingClientRect()
-  const at = { pointerId: 1, clientX: r.left + 300, clientY: r.top + 300 }
-  fireEvent.pointerDown(root, { button: 0, ...at })
-  fireEvent.pointerUp(root, at)
-  fireEvent.pointerDown(root, { button: 0, ...at })
-  fireEvent.pointerUp(root, at)
+  fireEvent.contextMenu(root, { clientX: r.left + 300, clientY: r.top + 300, button: 2 })
+  await userEvent.click(page.getByRole('menuitem', { name: 'Edit comment' }))
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
   // ...and so is the draft that replaces it.
   expect(composeOrigin().y).toBeLessThan(300)

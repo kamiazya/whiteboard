@@ -713,6 +713,33 @@ export function BrowserDocumentPage({
     }
   }, [documentKind, canvas])
 
+  /**
+   * Appends the reader's reply to a conversation.
+   *
+   * Goes through `onChange` like every other edit, so it is one undo step and
+   * rides the annotation channel — the alternative, a direct write, would put
+   * a second door onto the same plane with different history behaviour. The
+   * canvas argument is the CURRENT one unchanged: a reply touches no node and
+   * no edge, which is exactly why the command needed its own write path.
+   */
+  const handleReply = useCallback(
+    (threadId: string, body: string) => {
+      onChange(canvas, {
+        kind: 'reply-to-thread',
+        threadId,
+        message: {
+          id: crypto.randomUUID(),
+          body,
+          // No author: this app has no accounts, so there is no name to write
+          // that would not be invented. A message an MCP peer wrote carries
+          // the one its caller supplied, and the panel shows whichever it has.
+          createdAt: new Date().toISOString(),
+        },
+      })
+    },
+    [canvas, onChange],
+  )
+
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
   const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
@@ -1174,6 +1201,7 @@ export function BrowserDocumentPage({
                       resolveAlias={resolveAlias}
                       resolveEmbed={resolveEmbed}
                       linkTargets={linkTargets}
+                      threads={annotations}
                     />
                   </div>
                 )}
@@ -1185,7 +1213,15 @@ export function BrowserDocumentPage({
           </div>
           {commentsOpen ? (
             <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-              <CommentsPanel threads={annotations} resolveAnchor={resolveAnchor} />
+              <CommentsPanel
+                threads={annotations}
+                resolveAnchor={resolveAnchor}
+                // Not while a past version is on screen: the editor is
+                // replaced by DocumentPreview but this rail is not, and a
+                // reply is a write to the LIVE document — sent from a
+                // surface showing something else entirely.
+                onReply={preview === null ? handleReply : undefined}
+              />
             </aside>
           ) : null}
         </div>

@@ -24,6 +24,9 @@ export function commentMenuItems({
   setCommentCompose,
   applyResult,
 }: CommentMenuItemsInput): ContextMenuItem[] {
+  // Deliberately NO Reply row. Pressing the comment opens its card, whose
+  // reply box is already open — a menu row would be a third gesture to the
+  // act this surface exists for, and a second place for the same one.
   return [
     {
       label: 'Edit comment',
