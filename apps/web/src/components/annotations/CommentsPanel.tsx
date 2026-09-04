@@ -49,6 +49,17 @@ export interface CommentsPanelProps {
    * offer, and saying so by omission is the honest form.
    */
   readonly onReply?: (threadId: string, body: string) => void
+  /**
+   * A conversation the HOST wants shown — the other end of `onSelect`, for
+   * when the reader reached a thread through the surface instead of through
+   * this list (pressing its gutter marker in a markdown body).
+   *
+   * It expands the thread and, when the current filter would have hidden it,
+   * widens the filter: a resolved conversation the reader explicitly asked
+   * for must not open into an empty list, which reads as the press doing
+   * nothing.
+   */
+  readonly revealThreadId?: string | null
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -63,13 +74,40 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
-export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
+export function CommentsPanel({
+  threads,
+  resolveAnchor,
+  onSelect,
+  onReply,
+  revealThreadId = null,
+}: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+
+  // Adjusting state during render on a changed prop, rather than in an
+  // effect: an effect would paint the list once without the thread the
+  // reader just asked for.
+  //
+  // Seeded `null`, never `revealThreadId`. The rail is MOUNTED by the same
+  // press that names the thread — the host opens the panel and selects in
+  // one go — so seeding it with the incoming id makes the first render
+  // "already seen", and the panel arrives with the conversation collapsed.
+  // Measured: the rail opened and stopped exactly there.
+  const [lastRevealed, setLastRevealed] = useState<string | null>(null)
+  if (revealThreadId !== lastRevealed) {
+    setLastRevealed(revealThreadId)
+    if (revealThreadId !== null) {
+      setOpenThreadId(revealThreadId)
+      setDraft('')
+      const revealed = threads.find((t) => t.id === revealThreadId)
+      if (revealed !== undefined && !matches(revealed, filter)) setFilter('all')
+    }
+  }
+
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
 
   function toggle(thread: CommentThread): void {

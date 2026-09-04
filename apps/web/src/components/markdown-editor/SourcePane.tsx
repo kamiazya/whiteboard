@@ -113,6 +113,13 @@ export interface SourcePaneApi {
   replacePinned: (markup: string) => void
   /** Drops the pin without writing anything. */
   clearPin: () => void
+  /**
+   * Dispatches state effects into the live view, WITHOUT claiming focus —
+   * the seam for a host extension whose data changes while the view lives.
+   * `run` cannot serve that: it focuses the editor afterwards, which is
+   * right for a toolbar press and wrong for data arriving on its own.
+   */
+  applyEffects: (effects: readonly StateEffect<unknown>[]) => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -315,6 +322,9 @@ export function SourcePane({
         },
         clearPin: () => {
           view.dispatch({ effects: setPinnedRange.of(null) })
+        },
+        applyEffects: (effects) => {
+          if (effects.length > 0) view.dispatch({ effects: [...effects] })
         },
         focus: () => view.focus(),
         topVisibleLine: () => {

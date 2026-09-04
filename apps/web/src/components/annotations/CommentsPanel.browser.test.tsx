@@ -128,3 +128,29 @@ it('offers no reply box when the host wired no reply handler', async () => {
 
   expect(page.getByRole('textbox', { name: /reply/i }).query()).toBeNull()
 })
+
+it('opens the conversation the host asks for, widening a filter that would have hidden it', async () => {
+  // The other end of onSelect: the reader reached this thread through the
+  // BODY (its gutter marker), so the rail has to arrive on it already open.
+  // A resolved one is the case that would otherwise open into an empty list
+  // under the default Open filter, which reads as the press doing nothing.
+  // Two messages, because the first one is the list EXCERPT and shows as soon
+  // as the filter widens — asserting on it alone would pass with the thread
+  // still collapsed. Only the second proves it was opened.
+  const twoMessages: CommentThread = {
+    ...RESOLVED,
+    messages: [
+      ...RESOLVED.messages,
+      { id: 'm3b', body: 'and here is why', createdAt: '2026-09-03T00:40:00.000Z' },
+    ],
+  }
+  const utils = render(<CommentsPanel threads={[OPEN, twoMessages]} />)
+  expect(page.getByText('this one is done').query()).toBeNull()
+
+  utils.rerender(<CommentsPanel threads={[OPEN, twoMessages]} revealThreadId="t-resolved" />)
+
+  await expect.element(page.getByText('and here is why')).toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'All' }))
+    .toHaveAttribute('aria-pressed', 'true')
+})
