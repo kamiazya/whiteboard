@@ -62,6 +62,7 @@ import type {
   BoundingBox,
   MeasureText,
   ResolvedReference,
+  SpatialPalette,
   SpatialPresetKey,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -123,7 +124,14 @@ import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import { distanceToPolyline, findFreeSpot, hitTest, indexNodeBoxes, unionBox } from './geometry.js'
+import {
+  distanceToPolyline,
+  findFreeSpot,
+  hitTest,
+  indexNodeBoxes,
+  type NodeBox,
+  unionBox,
+} from './geometry.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
@@ -140,7 +148,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
-import { MinimapOverlay } from './MinimapOverlay.js'
+import { MinimapOverlay, type MinimapNode } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
@@ -482,6 +490,33 @@ function trySetPointerCapture(root: HTMLElement, pointerId: number): void {
   } catch {
     // best-effort — see doc comment above
   }
+}
+
+/**
+ * Node boxes for the minimap overview, with each authored colour resolved to
+ * the accent the scene already uses for it. A preset key resolves through
+ * the given palette; a hex passes through; an unstyled node carries no
+ * colour and the overview falls back to its muted default.
+ *
+ * Looks up each box's node by id via a `Map` built once, rather than
+ * `nodes.find` per box (O(n) per lookup, O(n^2) over the whole canvas) —
+ * `find`-first and `Map`-last-wins cannot diverge for valid input, since
+ * node id uniqueness is a schema invariant (spatial.ts's `superRefine`
+ * rejects a duplicate node id before a canvas is ever constructed).
+ */
+export function buildMinimapNodes(
+  nodes: SpatialCanvas['nodes'],
+  boxes: readonly NodeBox[],
+  palette: SpatialPalette,
+): readonly MinimapNode[] {
+  const byId = new Map(nodes.map((node) => [node.id, node]))
+  const colorOf = (id: string): string | undefined => {
+    const color = byId.get(id)?.color
+    if (color === undefined) return undefined
+    if (color.startsWith('#')) return color
+    return palette.presets[color as SpatialPresetKey]?.stroke
+  }
+  return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
 }
 
 export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>(
@@ -1960,13 +1995,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const minimapNodes = useMemo(() => {
       const palette = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
-      const colorOf = (id: string): string | undefined => {
-        const color = canvas.nodes.find((n) => n.id === id)?.color
-        if (color === undefined) return undefined
-        if (color.startsWith('#')) return color
-        return palette.presets[color as SpatialPresetKey]?.stroke
-      }
-      return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
+      return buildMinimapNodes(canvas.nodes, boxes, palette)
     }, [boxes, canvas, theme])
 
     /**
