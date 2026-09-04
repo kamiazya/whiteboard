@@ -76,6 +76,7 @@ import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
+import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
@@ -723,6 +724,13 @@ export function BrowserDocumentPage({
    * matched against the body, which is the markdown projection's job.
    */
   const resolveAnchor = useMemo(() => {
+    // A markdown document CAN tell now: a text anchor's passage is either
+    // still findable in the body or it is gone (see text-anchor.ts). Until
+    // that reader existed this branch answered `undefined` for every note,
+    // which the panel correctly read as "this host cannot tell" — true then,
+    // and a thread whose sentence had been deleted looked exactly like one
+    // whose sentence was still there.
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body)
     if (documentKind !== 'spatial') return undefined
     const nodeIds = new Set(canvas.nodes.map((node) => node.id))
     return (thread: CommentThread): 'placed' | 'orphaned' => {
@@ -730,7 +738,7 @@ export function BrowserDocumentPage({
       if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
-  }, [documentKind, canvas])
+  }, [documentKind, canvas, markdownDoc.body])
 
   /**
    * Appends the reader's reply to a conversation.
