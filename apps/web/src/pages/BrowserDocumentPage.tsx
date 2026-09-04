@@ -57,6 +57,7 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
+import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
@@ -641,7 +642,10 @@ export function BrowserDocumentPage({
       // picture to the state the save is about to mark. Awaiting the save
       // first meant an edit made during it was drawn onto the older point —
       // a picture of content that version does not contain.
-      const picture = exportScene('png')
+      const picture = captureBookmarkPicture(documentKind, {
+        exportScene,
+        body: markdownDoc.body,
+      })
       const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
       if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('saved')

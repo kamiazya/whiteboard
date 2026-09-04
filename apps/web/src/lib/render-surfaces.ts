@@ -79,8 +79,7 @@ export const RENDER_SURFACES = {
     pipeline: 'png-raster',
     kinds: {
       spatial: 'covered',
-      markdown:
-        'not covered: the picture is exportScene(png), which draws the SPATIAL canvas, and a markdown document publishes none — so a daemon-kept markdown version stores a 1x1 blank and its row draws an empty box',
+      markdown: 'covered',
     },
     broker:
       'not yet: written once at save and read back as stored bytes, so there is no repeated render for an in-tab memo to join — and png-raster is deliberately outside brokeredPipelineSchema',
