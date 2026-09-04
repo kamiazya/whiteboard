@@ -17,6 +17,7 @@ import {
 } from '../lib/local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import { mergeToSnapshot } from '../lib/merge-to-snapshot.js'
+import { trackIndexWrite } from '../lib/pending-index-writes.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 
@@ -214,7 +215,7 @@ export function useBrowserDocumentController(
   // savePromiseRef/pendingSnapshotRef so the second caller picks up and awaits
   // that newly-started save instead of returning true while it is still
   // in flight.
-  const flushSave = useCallback(async (): Promise<boolean> => {
+  const runFlush = useCallback(async (): Promise<boolean> => {
     for (;;) {
       if (savePromiseRef.current !== null) {
         const priorOk = await savePromiseRef.current
@@ -258,6 +259,15 @@ export function useBrowserDocumentController(
       // while this save was in flight.
     }
   }, [])
+
+  // Registered as outstanding for as long as the whole loop runs, not just
+  // the one write inside it: a caller that queued a snapshot the loop has not
+  // reached yet is exactly the case the barrier exists for.
+  // Registered for as long as the whole loop runs, not just the one write
+  // inside it: a keystroke whose snapshot the loop has not reached yet holds
+  // no transaction, and that is exactly the window a read must not slip
+  // through. See lib/pending-index-writes.ts.
+  const flushSave = useCallback((): Promise<boolean> => trackIndexWrite(runFlush()), [runFlush])
 
   useEffect(() => {
     let cancelled = false

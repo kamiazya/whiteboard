@@ -42,6 +42,7 @@ import {
 import { z } from 'zod'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
+import { indexWritesSettled, trackIndexWrite } from './pending-index-writes.js'
 
 /**
  * A row as stored: the port's own entry shape plus the `workspaceId` the
@@ -95,7 +96,15 @@ export class IdbDocumentIndex implements DocumentIndex {
     mode: IDBTransactionMode,
     body: (tx: IDBTransaction) => Promise<T>,
   ): Promise<T> {
-    return inTransaction(this.dbName, stores, mode, body)
+    // The one chokepoint for both directions, which is why the ordering rule
+    // lives here rather than in each caller: a write is registered as
+    // outstanding, and a read waits for the ones already issued. See
+    // pending-index-writes.ts for what transaction ordering alone does not
+    // cover. An empty set costs a read one microtask.
+    if (mode === 'readwrite') {
+      return trackIndexWrite(inTransaction(this.dbName, stores, mode, body))
+    }
+    return indexWritesSettled().then(() => inTransaction(this.dbName, stores, mode, body))
   }
 
   async createWorkspace({
