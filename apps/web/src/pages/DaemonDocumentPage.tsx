@@ -1053,6 +1053,7 @@ export function DaemonDocumentPage({
                       resolveEmbed={resolveEmbed}
                       resolveTitle={resolveTitle}
                       linkTargets={linkTargets}
+                      threads={annotations}
                     >
                       <AgentPresenceChip summary={agentActivity.summary} />
                     </SpatialEditorPane>

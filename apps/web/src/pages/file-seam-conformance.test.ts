@@ -302,6 +302,36 @@ describe('document page document-level chrome', () => {
   })
 })
 
+/**
+ * `threads=` must reach the spatial pane on BOTH pages, and specifically
+ * inside their own spatial slot — the same reaches-subject discipline the
+ * "spatial editor pane is built once" scan above applies to the pane itself.
+ *
+ * `threads=` also appears once more per page, on `<CommentsPanel`, which sits
+ * OUTSIDE the spatial slot by design (it is document-level chrome, not
+ * canvas-level — see `SHARED_DOCUMENT_CHROME` above). So this checks that
+ * SOME occurrence lands inside the slot, not that every occurrence does; an
+ * entry for a `threads=` that stopped reaching the pane at all fails the same
+ * as the pane never having been found in the "built once" scan above.
+ */
+describe('document page threads reach the spatial pane', () => {
+  it.each(PAGES)('%s passes threads= inside its spatial slot', async (page) => {
+    const source = await read(page)
+    const [start, end] = spatialSlotRange(source)
+    expect(start, `${page} has no spatial slot`).toBeGreaterThan(-1)
+
+    const offsets: number[] = []
+    for (let i = source.indexOf('threads='); i !== -1; i = source.indexOf('threads=', i + 1)) {
+      offsets.push(i)
+    }
+    expect(offsets.length, `${page} never passes threads= to anything`).toBeGreaterThan(0)
+    expect(
+      offsets.some((at) => at >= start && at <= end),
+      `${page} never passes threads= inside its spatial slot`,
+    ).toBe(true)
+  })
+})
+
 describe('canvas page file seams', () => {
   it.each(PAGES)('%s hands the shared seams to the pane', async (page) => {
     const source = await read(page)
