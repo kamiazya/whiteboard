@@ -98,3 +98,24 @@ describe('peek', () => {
     expect(within(menu).queryByRole('menuitem', { name: 'Preview' })).toBeNull()
   })
 })
+
+describe('peek follows the list', () => {
+  it('a document deleted behind the panel closes its peek instead of ghosting', async () => {
+    coarse = true
+    let rows: readonly (typeof entries)[number][] = entries
+    const source = fakeFilesSource({ listDocuments: () => Promise.resolve(rows) })
+    const { rerender } = render(
+      <WorkspaceFilesPanel source={source} onOpenDocument={vi.fn()} revision={0} />,
+    )
+
+    const menu = await openCardMenu()
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Preview' }))
+    await screen.findByRole('dialog', { name: /Meeting notes/ })
+
+    // The document vanishes elsewhere; `revision` is the panel's documented
+    // "changed behind this panel's back" signal.
+    rows = []
+    rerender(<WorkspaceFilesPanel source={source} onOpenDocument={vi.fn()} revision={1} />)
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: /Meeting notes/ })).toBeNull())
+  })
+})
