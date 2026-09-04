@@ -1,4 +1,4 @@
-// Lint-the-linter: the GritQL plugin (tools/biome-plugins/test-flake-shapes.grit)
+// Lint-the-linter: the GritQL plugin (tools/biome-plugins/*.grit)
 // is config, and config regresses silently — a pattern edit that stops
 // matching leaves `pnpm lint` green over the exact shapes it was built to
 // catch. So a fixture pair pins both directions: the bad fixture must yield
@@ -14,12 +14,12 @@ import { test } from 'node:test'
 const REPO_ROOT = join(import.meta.dirname, '../..')
 const FIXTURES = join(import.meta.dirname, 'fixtures/biome-plugin')
 
-function lint(file) {
+function lint(file, plugin = 'tools/biome-plugins/test-flake-shapes.grit') {
   const dir = mkdtempSync(join(tmpdir(), 'biome-plugin-guard-'))
   writeFileSync(
     join(dir, 'biome.json'),
     JSON.stringify({
-      plugins: [join(REPO_ROOT, 'tools/biome-plugins/test-flake-shapes.grit')],
+      plugins: [join(REPO_ROOT, plugin)],
       formatter: { enabled: false },
       linter: { rules: { correctness: { noUnusedVariables: 'off' } } },
     }),
@@ -48,4 +48,23 @@ test('the good fixture trips none of the four rules', () => {
     out,
     /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/,
   )
+})
+
+// The logger rule lives in its own plugin because its scope is the opposite
+// of the flake shapes': production source under packages/mcp-server/src/
+// server/**, never a test file. The good fixture carries the three shapes
+// that must stay silent — fields-first, a bare message, and a real printf
+// call — because the printf carve-out is the one a tightening edit would
+// take out first.
+const LOGGER_PLUGIN = 'tools/biome-plugins/logger-argument-order.grit'
+
+test('the bad logger fixture trips the argument-order rule on every call', () => {
+  const out = lint(join(FIXTURES, 'bad-logger.ts'), LOGGER_PLUGIN)
+  const hits = out.match(/Message first, argument second/g) ?? []
+  assert.equal(hits.length, 2, `expected both wrong calls flagged, got ${hits.length}`)
+})
+
+test('the good logger fixture trips nothing', () => {
+  const out = lint(join(FIXTURES, 'good-logger.ts'), LOGGER_PLUGIN)
+  assert.doesNotMatch(out, /Message first, argument second/)
 })
