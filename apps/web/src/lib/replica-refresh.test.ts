@@ -6,7 +6,12 @@
  * off the critical path, registry written only on a successful pull.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { resetReplicaRefreshForTests, scheduleReplicaRefresh } from './replica-refresh.js'
+import {
+  resetReplicaRefreshForTests,
+  scheduleReplicaPush,
+  scheduleReplicaRefresh,
+} from './replica-refresh.js'
+import { withReplicaEntry } from './replicas.js'
 import { createUserSettingsStore } from './user-settings-store.js'
 
 const BASE = 'http://127.0.0.1:3099'
@@ -153,5 +158,91 @@ describe('scheduleReplicaRefresh', () => {
     scheduleReplicaRefresh(deps({ cache }))
     await vi.waitFor(() => expect(cache).toHaveBeenCalledTimes(1))
     expect(createUserSettingsStore().load().storage.replicas?.[WS]).toBeUndefined()
+  })
+})
+
+describe('scheduleReplicaPush', () => {
+  const FRONTIER_SYNCED = 'c3luY2Vk' // "synced"
+  const FRONTIER_LOCAL = 'bG9jYWw=' // "local"
+
+  function seedEntry(syncedFrontier?: string) {
+    createUserSettingsStore().update((current) =>
+      withReplicaEntry(current, WS, {
+        daemonBaseUrl: BASE,
+        syncedAt: '2026-09-01T12:00:00.000Z',
+        segment: 'dev',
+        ...(syncedFrontier === undefined ? {} : { syncedFrontier }),
+      }),
+    )
+  }
+
+  function pushDeps(over?: Record<string, unknown>) {
+    return {
+      fetch: listStub([{ workspaceId: WS, segment: 'dev' }]),
+      daemonBaseUrl: BASE,
+      workspaceId: 'dev',
+      schedule: (run: () => void) => run(),
+      readStoredFrontier: vi.fn().mockResolvedValue(FRONTIER_LOCAL),
+      push: vi.fn().mockResolvedValue({
+        kind: 'ok',
+        syncedAt: '2026-09-01T12:06:00.000Z',
+        syncedFrontier: FRONTIER_LOCAL,
+      }),
+      ...over,
+    }
+  }
+
+  it('a dirty replica ships, and the registry keeps its other fields', async () => {
+    seedEntry(FRONTIER_SYNCED)
+    const d = pushDeps()
+    scheduleReplicaPush(d as never)
+    await vi.waitFor(() => expect(d.push).toHaveBeenCalledTimes(1))
+    expect(d.push.mock.calls[0]?.[0]).toMatchObject({
+      workspaceId: WS,
+      syncedFrontier: FRONTIER_SYNCED,
+    })
+    await vi.waitFor(() => {
+      const entry = createUserSettingsStore().load().storage.replicas?.[WS]
+      expect(entry?.syncedFrontier).toBe(FRONTIER_LOCAL)
+      expect(entry?.syncedAt).toBe('2026-09-01T12:06:00.000Z')
+      // The merge write must not drop what it did not mention.
+      expect(entry?.segment).toBe('dev')
+    })
+  })
+
+  it('byte-equal frontiers ship nothing — no push, no network', async () => {
+    seedEntry(FRONTIER_LOCAL)
+    const d = pushDeps({ readStoredFrontier: vi.fn().mockResolvedValue(FRONTIER_LOCAL) })
+    scheduleReplicaPush(d as never)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(d.push).not.toHaveBeenCalled()
+  })
+
+  it('no registry entry for this daemon ships nothing', async () => {
+    const d = pushDeps()
+    scheduleReplicaPush(d as never)
+    await new Promise((r) => setTimeout(r, 20))
+    expect(d.push).not.toHaveBeenCalled()
+  })
+
+  it('an entry with NO recorded frontier ships (the one-time snapshot era)', async () => {
+    seedEntry(undefined)
+    const d = pushDeps()
+    scheduleReplicaPush(d as never)
+    await vi.waitFor(() => expect(d.push).toHaveBeenCalledTimes(1))
+    expect(d.push.mock.calls[0]?.[0]?.syncedFrontier).toBeUndefined()
+  })
+
+  it('a failed push leaves the registry alone and the next resolve retries', async () => {
+    seedEntry(FRONTIER_SYNCED)
+    const failing = vi.fn().mockResolvedValue({ kind: 'failed', reason: 'offline' })
+    const d = pushDeps({ push: failing })
+    scheduleReplicaPush(d as never)
+    await vi.waitFor(() => expect(failing).toHaveBeenCalledTimes(1))
+    expect(createUserSettingsStore().load().storage.replicas?.[WS]?.syncedFrontier).toBe(
+      FRONTIER_SYNCED,
+    )
+    scheduleReplicaPush(d as never)
+    await vi.waitFor(() => expect(failing).toHaveBeenCalledTimes(2))
   })
 })

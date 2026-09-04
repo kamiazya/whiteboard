@@ -52,6 +52,55 @@ function daemonRecord(...paths: Array<{ path: string; documentId: string }>): Lo
 describe('cacheDaemonWorkspace', () => {
   beforeEach(clearWhiteboardDb)
 
+  it("reports the DAEMON's own frontier, not the merged local one, and keeps local edits", async () => {
+    // The pull merges daemon bytes into a replica that may carry offline
+    // edits. `syncedFrontier` claims what the DAEMON is known to hold — so
+    // it must come from the pulled bytes alone. Deriving it from the merged
+    // record would mark local edits as already-sent, and the push would
+    // silently skip them forever.
+    const docs = new BrowserWorkspaceDocs()
+    const local = new LoroDoc()
+    createWorkspaceDocumentAtPath(local, {
+      path: 'offline/note',
+      documentId: DOC_B,
+      kind: 'markdown',
+    })
+    local.commit()
+    await docs.save(DAEMON_WS, local)
+
+    const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
+    const result = await cacheDaemonWorkspace({
+      fetch: snapshotStub(record),
+      daemonBaseUrl: BASE,
+      workspaceId: DAEMON_WS,
+      workspaceDocs: docs,
+    })
+    if (result.kind !== 'ok') throw new Error(`pull failed: ${result.reason}`)
+
+    // The local edit survived the merge...
+    const merged = await docs.open(DAEMON_WS)
+    expect(
+      readWorkspaceDocuments(merged!)
+        .map((e) => e.documentId)
+        .sort(),
+    ).toEqual([DOC_A, DOC_B].sort())
+    // ...and the reported frontier covers the daemon's ops but NOT the
+    // local edit: an update exported from it still carries something.
+    const { VersionVector } = await import('loro-crdt')
+    const synced = VersionVector.decode(
+      Uint8Array.from(atob(result.syncedFrontier), (c) => c.charCodeAt(0)),
+    )
+    const pending = merged!.export({ mode: 'update', from: synced })
+    const probe = new LoroDoc()
+    probe.import(record.export({ mode: 'snapshot' }))
+    probe.import(pending)
+    expect(
+      readWorkspaceDocuments(probe)
+        .map((e) => e.documentId)
+        .sort(),
+    ).toEqual([DOC_A, DOC_B].sort())
+  })
+
   it('stores the pulled daemon record in the browser planes as a replica', async () => {
     const record = daemonRecord({ path: 'notes/plan', documentId: DOC_A })
     const result = await cacheDaemonWorkspace({

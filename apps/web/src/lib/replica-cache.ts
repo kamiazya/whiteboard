@@ -21,6 +21,17 @@ import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 
+/** VersionVector bytes as a registry-storable string. */
+export function encodeVersionForRegistry(bytes: Uint8Array): string {
+  let out = ''
+  for (const b of bytes) out += String.fromCharCode(b)
+  return btoa(out)
+}
+
+export function decodeVersionFromRegistry(encoded: string): Uint8Array {
+  return Uint8Array.from(atob(encoded), (c) => c.charCodeAt(0))
+}
+
 export interface CacheDaemonWorkspaceOptions {
   fetch: typeof globalThis.fetch
   daemonBaseUrl: string
@@ -31,7 +42,18 @@ export interface CacheDaemonWorkspaceOptions {
 }
 
 export type CacheDaemonWorkspaceResult =
-  | { kind: 'ok'; syncedAt: string; documentCount: number }
+  | {
+      kind: 'ok'
+      syncedAt: string
+      documentCount: number
+      /**
+       * What the DAEMON is known to hold, from the pulled bytes ALONE —
+       * never from the merged record, which may already carry offline
+       * edits the daemon has not seen. The push exports from this point;
+       * deriving it from the merge would mark local edits as sent.
+       */
+      syncedFrontier: string
+    }
   | { kind: 'failed'; reason: string }
 
 export async function cacheDaemonWorkspace(
@@ -46,6 +68,8 @@ export async function cacheDaemonWorkspace(
       return { kind: 'failed', reason: `Snapshot request failed (${res.status}).` }
     }
     const bytes = new Uint8Array(await res.arrayBuffer())
+    const daemonOnly = new LoroDoc()
+    daemonOnly.import(bytes)
     const doc = (await workspaceDocs.open(workspaceId)) ?? new LoroDoc()
     doc.import(bytes)
     await workspaceDocs.save(workspaceId, doc)
@@ -53,6 +77,7 @@ export async function cacheDaemonWorkspace(
       kind: 'ok',
       syncedAt: new Date().toISOString(),
       documentCount: readWorkspaceDocuments(doc).length,
+      syncedFrontier: encodeVersionForRegistry(daemonOnly.oplogVersion().encode()),
     }
   } catch {
     // A thrown fetch (daemon offline mid-pull) surfaces as a structured

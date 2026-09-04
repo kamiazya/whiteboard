@@ -217,6 +217,7 @@ export function PromoteWorkspaceSection({
               withReplicaEntry(current, targetId, {
                 daemonBaseUrl: daemon.baseUrl,
                 syncedAt: cache.syncedAt,
+                syncedFrontier: cache.syncedFrontier,
                 ...(target?.segment === undefined ? {} : { segment: target.segment }),
                 ...(target?.displayName === undefined ? {} : { displayName: target.displayName }),
               }),
