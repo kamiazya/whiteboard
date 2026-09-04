@@ -290,6 +290,11 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
   hostRef: 'cleared on switch',
 
   saveState: 'cleared on switch',
+  // The conversations on THIS document. Left standing across a switch it
+  // lists the departed document's threads beside the arrived one's body,
+  // over a reply box that writes by thread id — into whichever document
+  // actually holds it.
+  annotations: 'cleared on switch',
 
   loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
   scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',
@@ -325,7 +330,7 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
   commentsOpen:
-    'no subject: whether the rail is open, not what is in it — the threads themselves arrive on the session\u2019s annotation channel and are republished per document, so a switch changes the LIST while leaving the reader where they chose to be',
+    'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
