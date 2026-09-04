@@ -23,6 +23,7 @@ export {
   readNodeLocks,
   readSpatialCanvas,
   readTrustFacets,
+  reconcileSpatialCanvas,
   type SpatialBatchWriter,
   setEdgeLock,
   setNodeLock,
