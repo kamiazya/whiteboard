@@ -13,7 +13,7 @@
  * second one here would silently answer for the preview.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import { RAIL_WIDTH_PX } from './preview-width.js'
 import {
@@ -47,7 +47,12 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
     return () => observer.disconnect()
   }, [])
 
-  const geometry = railGeometry(blocks, { railHeight, railWidth: RAIL_WIDTH_PX })
+  // `viewport` changes on every scroll tick and must not force this back to
+  // O(blocks) — only `blocks`/`railHeight` change the geometry itself.
+  const geometry = useMemo(
+    () => railGeometry(blocks, { railHeight, railWidth: RAIL_WIDTH_PX }),
+    [blocks, railHeight],
+  )
   const frame = viewportFrame(viewport, geometry)
 
   const seekTo = useCallback(
