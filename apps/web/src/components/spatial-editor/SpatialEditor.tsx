@@ -148,7 +148,7 @@ import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
-import { MinimapOverlay, type MinimapNode } from './MinimapOverlay.js'
+import { type MinimapNode, MinimapOverlay } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
