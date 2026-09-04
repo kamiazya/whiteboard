@@ -4,6 +4,7 @@ import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { folderContents } from './folder-contents.js'
 import { formatRelative } from './format-relative.js'
+import { useLongPressMenu } from './use-long-press.js'
 
 /**
  * What a click in the contents pane means. A folder and a document are
@@ -20,7 +21,13 @@ export interface FolderContentsListProps {
   /** The folder being looked inside. `''` is the workspace root. */
   folder: string
   onOpen: (target: FolderContentsOpen) => void
-  /** Right-click on a document card — the object-action menu hook. */
+  /**
+   * The committed open — double-click, or Enter on a focused card. Space
+   * keeps the native button click (select-and-preview), so a keyboard user
+   * has both verbs where a mouse user has two gestures.
+   */
+  onActivateDocument?: (entry: WorkspaceDocumentEntry) => void
+  /** Right-click or touch long-press on a document card — the object-action menu hook. */
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
@@ -43,6 +50,7 @@ export function FolderContentsList({
   documents,
   folder,
   onOpen,
+  onActivateDocument,
   onDocumentContextMenu,
   selectedPath,
   renderThumbnail,
@@ -52,6 +60,14 @@ export function FolderContentsList({
     () => folderContents(documents, folder),
     [documents, folder],
   )
+  const longPress = useLongPressMenu(
+    onDocumentContextMenu === undefined
+      ? undefined
+      : (path, x, y) => {
+          const entry = here.find((row) => row.path === path)
+          if (entry !== undefined) onDocumentContextMenu(entry, x, y)
+        },
+  )
 
   if (folders.length === 0 && here.length === 0) {
     return <p className={cn('text-muted-foreground text-sm', className)}>This folder is empty.</p>
@@ -59,6 +75,7 @@ export function FolderContentsList({
 
   return (
     <ul
+      {...longPress}
       className={cn('grid grid-cols-[repeat(auto-fill,minmax(9rem,1fr))] gap-2 p-0.5', className)}
     >
       {folders.map((child) => (
@@ -90,8 +107,24 @@ export function FolderContentsList({
         <li key={entry.documentId}>
           <button
             type="button"
+            data-doc-path={entry.path}
             aria-current={entry.path === selectedPath ? 'true' : undefined}
             onClick={() => onOpen({ kind: 'document', document: entry })}
+            onDoubleClick={
+              onActivateDocument === undefined ? undefined : () => onActivateDocument(entry)
+            }
+            onKeyDown={
+              onActivateDocument === undefined
+                ? undefined
+                : (event) => {
+                    if (event.key === 'Enter') {
+                      // Without this the keydown ALSO fires the native
+                      // button click, selecting after the open.
+                      event.preventDefault()
+                      onActivateDocument(entry)
+                    }
+                  }
+            }
             onContextMenu={
               onDocumentContextMenu === undefined
                 ? undefined

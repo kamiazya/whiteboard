@@ -6,6 +6,11 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
 export interface WorkspaceFileTreeProps {
   documents: readonly WorkspaceDocumentEntry[]
   onOpen: (document: WorkspaceDocumentEntry) => void
+  /**
+   * The committed open — double-click, or Enter on a focused row. Space
+   * keeps the native button click (select-and-preview).
+   */
+  onActivate?: (document: WorkspaceDocumentEntry) => void
   /** The document the preview is showing, so the two agree. */
   selectedPath?: string
   /**
@@ -65,11 +70,13 @@ function buildTree(documents: readonly WorkspaceDocumentEntry[]): TreeNode[] {
 function TreeItem({
   node,
   onOpen,
+  onActivate,
   renderIcon,
   selectedPath,
 }: {
   node: TreeNode
   onOpen: (document: WorkspaceDocumentEntry) => void
+  onActivate?: (document: WorkspaceDocumentEntry) => void
   renderIcon?: (document: WorkspaceDocumentEntry) => ReactNode
   selectedPath?: string
 }) {
@@ -110,6 +117,21 @@ function TreeItem({
             type="button"
             aria-current={node.canvas.path === selectedPath ? 'true' : undefined}
             onClick={() => node.canvas && onOpen(node.canvas)}
+            onDoubleClick={
+              onActivate === undefined ? undefined : () => node.canvas && onActivate(node.canvas)
+            }
+            onKeyDown={
+              onActivate === undefined
+                ? undefined
+                : (event) => {
+                    if (event.key === 'Enter' && node.canvas) {
+                      // Without this the keydown ALSO fires the native
+                      // button click, selecting after the open.
+                      event.preventDefault()
+                      onActivate(node.canvas)
+                    }
+                  }
+            }
             className="hover:bg-accent hover:text-accent-foreground aria-[current]:bg-accent aria-[current]:text-accent-foreground flex min-w-0 items-center gap-1.5 rounded px-1.5 py-0.5 text-left text-sm"
           >
             {/* A caller-supplied miniature when there is one; otherwise the
@@ -146,6 +168,7 @@ function TreeItem({
               key={child.path}
               node={child}
               onOpen={onOpen}
+              onActivate={onActivate}
               renderIcon={renderIcon}
               selectedPath={selectedPath}
             />
@@ -171,6 +194,7 @@ function TreeItem({
 export function WorkspaceFileTree({
   documents,
   onOpen,
+  onActivate,
   renderIcon,
   selectedPath,
   className,
@@ -192,6 +216,7 @@ export function WorkspaceFileTree({
           key={node.path}
           node={node}
           onOpen={onOpen}
+          onActivate={onActivate}
           renderIcon={renderIcon}
           selectedPath={selectedPath}
         />
