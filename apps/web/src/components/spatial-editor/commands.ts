@@ -20,6 +20,7 @@
  */
 
 import type {
+  CommentMessage,
   CanvasColor,
   CanvasComment,
   CanvasEdge,
@@ -190,6 +191,25 @@ export type EditorLeafCommand =
       readonly kind: 'set-comment-text'
       readonly id: string
       readonly text: string
+    }
+  | {
+      /**
+       * Appends a message to an existing conversation (ADR-0026 decision 2).
+       *
+       * The one command in this union that leaves the CANVAS untouched: a
+       * reply changes no node and no edge, and it cannot travel through the
+       * `x-whiteboard.comments` envelope the other comment commands use,
+       * because that shape holds a single `text` per comment with nowhere
+       * for a second message to sit. It is committed by writing the thread's
+       * messages map directly — see the sync session's own case for it.
+       *
+       * It stays a command rather than a session method so a reply is one
+       * undo step like every other edit, and so the annotation channel
+       * republishes on the same path.
+       */
+      readonly kind: 'reply-to-thread'
+      readonly threadId: string
+      readonly message: CommentMessage
     }
 
 /**
@@ -677,6 +697,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return patchComment(canvas, command.id, { x: command.x, y: command.y })
     case 'set-comment-text':
       return patchComment(canvas, command.id, { text: command.text })
+    case 'reply-to-thread':
+      // Identity, and deliberately: the conversation is a plane beside the
+      // canvas, so a reply has no canvas effect to compute. Returning the
+      // same reference keeps the union-wide "nothing changed → same object"
+      // contract that callers memoise on.
+      return canvas
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,
       // preserving the union-wide "nothing changed → same object" contract.

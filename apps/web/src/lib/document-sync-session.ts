@@ -19,6 +19,7 @@ import {
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
+  writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
@@ -79,6 +80,13 @@ function commandTargetKey(command: EditorCommand): string {
     case 'move-comment':
     case 'set-comment-text':
       return `comment:${command.id}`
+    case 'reply-to-thread':
+      // Keyed by MESSAGE, not by thread. Every other key here dedupes to the
+      // last value for one target, which is right when the target holds one
+      // value — a node's position, a comment's text. A reply APPENDS: two
+      // replies to the same thread inside one debounce window are two
+      // messages, and a `thread:` key would silently commit only the second.
+      return `message:${command.message.id}`
     case 'set-body':
       // One key for the whole body: `text` is always the complete document,
       // so a burst of keystrokes inside one debounce window collapses to the
@@ -279,6 +287,16 @@ function writeCommandTarget(
       writeCanvasComment(doc, comment)
       return true
     }
+    case 'reply-to-thread':
+      // Always "handled", like set-body below and for the same reason: the
+      // fallback writes the whole SpatialCanvas, and a conversation lives in
+      // the threads plane BESIDE it — a full resync would rewrite the canvas
+      // and never touch the message. There is no missing-target case to fall
+      // back from either: writeThreadMessage is a documented no-op for a
+      // thread this replica does not hold, which is deliberate (replying must
+      // never be the write that opens a container).
+      writeThreadMessage(doc, command.threadId, command.message)
+      return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
       // whole SpatialCanvas, which would leave the body container untouched
