@@ -48,13 +48,13 @@ import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
-import { type BranchMeta, branchesApi } from '../hooks/useBranches.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import {
   createDaemonFetch,
