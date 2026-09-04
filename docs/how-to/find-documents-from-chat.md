@@ -10,8 +10,9 @@ What it covers:
   meaning lives in its relations, so they are searchable content)
 - document names and paths
 
-Japanese (and other CJK) queries work without any dictionary or download.
-Results come back ranked, with a context excerpt around each match, and can
+Japanese (and other CJK) queries work without any dictionary or download,
+down to a single character — 「た」 finds 「たささたはな」, so a query answers
+while it is still being typed. Results come back ranked, with a context excerpt around each match, and can
 be narrowed by `kind` (markdown / spatial) or by tags.
 
 Example prompts:

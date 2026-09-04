@@ -78,6 +78,26 @@ describe('local body search', () => {
     ])
   })
 
+  it('finds a Japanese name by its first character', async () => {
+    // What a Japanese reader types first is one character. Bigram-only
+    // indexing answered nothing for it, and the panel had already shown the
+    // document from its name — so the row appeared and then vanished.
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const id = await seedMarkdown(index, 'notes/kana', 'ひらがなだけの本文です。')
+    await index.setDocumentName({
+      workspaceId: getBrowserWorkspaceId(),
+      documentId: id,
+      name: 'たささたはな',
+    })
+    await seedMarkdown(index, 'notes/other', 'Nothing relevant here at all.')
+    const source = createLocalFilesSource()
+
+    expect((await source.searchDocuments('た')).map((h) => h.document.path)).toEqual(['notes/kana'])
+    // The control: the widening is a match, not a list of everything.
+    expect(await source.searchDocuments('ぬ')).toEqual([])
+  })
+
   it('answers nothing for an empty query', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)

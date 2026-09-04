@@ -18,7 +18,7 @@ import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
-import { searchDocuments } from './search-documents.js'
+import { searchDocuments, withNameMatches } from './search-documents.js'
 import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
@@ -771,11 +771,17 @@ export function WorkspaceFilesPanel({
                       // flight, the names and paths already in hand are a
                       // real answer rather than a blank pane.
                       searchDocuments(documents, query).map((document) => ({ document }))
-                    : hits.map((hit) => ({
-                        document: hit.document,
-                        contexts: hit.contexts,
-                        ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
-                      }))
+                    : withNameMatches(
+                        hits.map((hit) => ({
+                          document: hit.document,
+                          contexts: hit.contexts,
+                          ...(hit.lexicalRank === undefined
+                            ? {}
+                            : { lexicalRank: hit.lexicalRank }),
+                        })),
+                        documents,
+                        query,
+                      )
                 }
                 query={query}
                 searchedContents={activeTag === null && hits !== null}

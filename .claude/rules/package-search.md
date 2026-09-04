@@ -11,6 +11,17 @@ paths:
   character bigrams (`tokenize`). Dictionary-free by design — Japanese,
   Chinese and Korean all work with zero download, trading precision for
   recall the way every dictionary-free engine does.
+- **Indexing and querying are deliberately asymmetric.** `tokenizeForIndex`
+  emits every CJK character on its own as well as the bigrams; `tokenize`,
+  the query side, does not. Symmetric bigrams cannot answer a
+  one-character query at all — a name is one CJK run, so it yields bigrams
+  only and 「た」 matches none of them, which is the first keystroke of
+  nearly every Japanese query. Widening the QUERY instead would buy that
+  case at the price of 「検索」 matching anything containing 索. Widen what
+  a document is found by, not what a query demands (Lucene spells the same
+  choice `outputUnigrams`). The scoreboard's pinned per-category nDCG and
+  recall were unchanged by it — take that measurement again before
+  touching either side.
 - BM25 ranking over a caller-supplied corpus (`fullTextSearch`), plus the
   match excerpts a result row shows (`snippetAround`).
 - **The one definition of what text a document contributes**
