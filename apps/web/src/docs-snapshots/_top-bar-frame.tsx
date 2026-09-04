@@ -26,6 +26,11 @@ export function TopBarFrame({ testId, width, height, scene }: TopBarFrameProps) 
         workspaceId="ws_main"
         path="design/architecture"
         onToggleFullscreen={() => undefined}
+        // WorkspaceTopBar itself renders no title (retired in #1004); the
+        // host page supplies it. Mirrors the minimal wiring
+        // WorkspaceTopBar.test.tsx uses, since this fixture has no rename UI
+        // to demonstrate.
+        titleSlot={(identity) => <span>{identity.name}</span>}
       />
       <div style={{ height: `calc(100% - ${TOP_BAR_HEIGHT_PX}px)` }}>
         <CanvasViewer

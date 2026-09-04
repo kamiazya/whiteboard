@@ -2,6 +2,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, it } from 'vitest'
 import { page } from 'vitest/browser'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
@@ -15,6 +16,12 @@ afterEach(cleanup)
 describe('docs snapshot: onboarding chooser', () => {
   it('captures the empty-workspace chooser', async () => {
     const store = new LocalStoreDouble()
+    // Named so the page's h1 (visible since #1129) reads as a workspace a
+    // person named, not the raw ULID the seeded double falls back to.
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      displayName: 'Main workspace',
+    })
 
     render(
       <MemoryRouter initialEntries={['/']}>
@@ -32,6 +39,9 @@ describe('docs snapshot: onboarding chooser', () => {
     await waitFor(() => {
       if (!document.body.textContent?.includes('What will you make first?')) {
         throw new Error('chooser not settled')
+      }
+      if (document.querySelector('h1')?.textContent !== 'Main workspace') {
+        throw new Error('workspace name not yet rendered')
       }
     })
 
