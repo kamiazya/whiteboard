@@ -1,6 +1,8 @@
 language js
 
-// Executable half of four flake shapes from .claude/rules/integrator-flow.md.
+// Executable half of four flake shapes from .claude/rules/integrator-flow.md,
+// plus one shape that is not a flake but fails the same way: the run reports
+// green while covering less than it appears to.
 // Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair per rule).
 any {
   // A retried waitFor callback re-fires any action inside it, so the action
@@ -50,6 +52,23 @@ any {
     register_diagnostic(
       span = $program,
       message = "vi.useFakeTimers() with no vi.useRealTimers() anywhere in this file: a leaked fake-timer state runs into whatever the suite executes next. Restore it (typically in afterEach), or say why a shared teardown already does.",
+      severity = "error"
+    )
+  },
+  // A focused test silently drops every OTHER test in its file. vitest
+  // reports the survivors as skipped and exits 0, so CI is green over a file
+  // that ran one case — the same "a smaller total reads like good news"
+  // hazard AGENTS.md records for a mis-filtered `--project` run, in-file.
+  //
+  // Biome's own noFocusedTests is not enabled here (verified by linting a
+  // fixture carrying `it.only` and getting no diagnostic), and nothing else
+  // in the repo looks for it. Measured 0 occurrences when this was added, so
+  // it costs nothing to keep out.
+  `$runner.only($_, $_)` where {
+    $runner <: or { `it`, `test`, `describe` },
+    register_diagnostic(
+      span = $runner,
+      message = "A focused test drops every other test in this file and still exits 0 — CI goes green having run one case. Remove `.only` before committing.",
       severity = "error"
     )
   }

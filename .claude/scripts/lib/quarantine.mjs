@@ -1,6 +1,8 @@
 // Quarantine ledger over test files: parse `QUARANTINE(...)` markers and
 // judge them against Fowler's bounded-quarantine rule (cap + age), so a
-// parked flaky test cannot silently become a permanent skip.
+// parked flaky test cannot silently become a permanent skip — and find the
+// skips that carry no marker at all, which the cap and the age limit cannot
+// see because both judge what declared itself.
 // Marker grammar, one line, directly above the skipped test:
 //   // QUARANTINE(<YYYY-MM-DD> <issue-ref>): <reason>
 // <issue-ref> names the whiteboard issue (e.g. wb:issues/foo) per the
@@ -13,6 +15,11 @@ const QUARANTINE_CAP = 8
 const QUARANTINE_MAX_AGE_DAYS = 14
 
 const MARKER = /^\s*\/\/\s*QUARANTINE\(([^)]*)\):\s*(.*)$/
+
+// `\b` after `skip` is what keeps `skipIf` out: a test whose PREMISE this
+// environment cannot establish should skip and say so (AGENTS.md asks for it
+// probed rather than inferred), and that is not a park.
+const SKIP = /\b(?:it|test|describe)\.skip\b/
 
 export function parseQuarantineMarkers(source, file) {
   const markers = []
@@ -27,6 +34,25 @@ export function parseQuarantineMarkers(source, file) {
     markers.push({ file, line: i + 1, date, issue, reason: m[2].trim() })
   }
   return markers
+}
+
+/**
+ * Skips with no marker above them.
+ *
+ * The cap and the age limit judge what DECLARED itself, so before this an
+ * undeclared skip was outside the whole mechanism — never counted, never
+ * aged out. The cheapest way to park a test permanently was to leave the
+ * marker off, which is the graveyard the cap exists to prevent.
+ */
+export function findUndeclaredSkips(source, file) {
+  const lines = source.split('\n')
+  const found = []
+  for (let i = 0; i < lines.length; i++) {
+    if (!SKIP.test(lines[i])) continue
+    if (i > 0 && MARKER.test(lines[i - 1])) continue
+    found.push({ file, line: i + 1, text: lines[i].trim() })
+  }
+  return found
 }
 
 export function judgeQuarantine(markers, nowMs) {
@@ -57,6 +83,7 @@ const TEST_FILE = /\.test\.(ts|tsx|mts|mjs)$/
 
 export function scanRepoQuarantine(repoRoot = join(import.meta.dirname, '../../..')) {
   const markers = []
+  const undeclaredSkips = []
   let scannedFiles = 0
   const walk = (dir) => {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -65,10 +92,12 @@ export function scanRepoQuarantine(repoRoot = join(import.meta.dirname, '../../.
       if (entry.isDirectory()) walk(path)
       else if (TEST_FILE.test(entry.name)) {
         scannedFiles++
-        markers.push(...parseQuarantineMarkers(readFileSync(path, 'utf8'), path))
+        const source = readFileSync(path, 'utf8')
+        markers.push(...parseQuarantineMarkers(source, path))
+        undeclaredSkips.push(...findUndeclaredSkips(source, path))
       }
     }
   }
   for (const root of SCAN_ROOTS) walk(join(repoRoot, root))
-  return { markers, scannedFiles }
+  return { markers, undeclaredSkips, scannedFiles }
 }

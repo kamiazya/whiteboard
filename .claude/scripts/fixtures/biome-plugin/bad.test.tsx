@@ -19,3 +19,8 @@ export async function badKeystrokes() {
 export function badTimers() {
   vi.useFakeTimers()
 }
+
+// biome-ignore lint/suspicious/noExportsInTest: fixture, never executed
+export const badFocus = () => {
+  it.only('focused, so the rest of this file never runs', () => {})
+}
