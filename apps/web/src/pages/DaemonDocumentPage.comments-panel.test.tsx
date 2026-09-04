@@ -364,3 +364,25 @@ describe('DaemonDocumentPage comments panel', () => {
     expect(panel().getByText('still needs a decision')).toBeTruthy()
   })
 })
+
+/** Every thread resolved: the zero-open branch of the opener's label. */
+function allResolvedSnapshot(): Uint8Array {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, { nodes: [], edges: [] })
+  writeCommentThread(doc, {
+    id: 't-settled',
+    anchor: { kind: 'spatial', x: 20, y: 30 },
+    status: 'resolved',
+    messages: [{ id: 'm-settled', body: 'settled last week' }],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+describe('DaemonDocumentPage comments opener with zero open threads', () => {
+  it("reads plain 'Comments' and carries no count badge", async () => {
+    await renderSpatial(new FakeBackend(allResolvedSnapshot))
+    const opener = await screen.findByRole('button', { name: 'Comments' })
+    // The badge is the only digit the opener ever renders; zero open = none.
+    expect(opener.textContent ?? '').not.toMatch(/\d/)
+  })
+})
