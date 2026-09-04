@@ -128,8 +128,8 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     await router.navigate(-1)
     const cards = await screen.findAllByTestId('card-title', undefined, { timeout: 15_000 })
     expect(cards).toHaveLength(2)
-    const backSubtitles = screen.getAllByTestId('card-subtitle')
-    const noteIndex = backSubtitles.findIndex((el) => el.textContent?.includes('markdown'))
+    const backBadges = screen.getAllByTestId('card-kind-badge')
+    const noteIndex = backBadges.findIndex((el) => el.getAttribute('data-kind') === 'markdown')
     expect(noteIndex).toBeGreaterThanOrEqual(0)
 
     // Reopening the note restores the typed body from the same store.
