@@ -1,6 +1,6 @@
 # ADR-0023: A workspace has one keeper; every other copy is a replica
 
-**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: sync scheduling beyond the once-per-session refresh, and offline replica EDITS (decision 3 shipped read-only v1)
+**Status:** Accepted — decisions 1–5 are implemented; the dated notes under each decision say what landed when. Remaining later work: offline replica EDITS (decision 3 shipped read-only v1)
 
 ## Context
 
@@ -147,6 +147,16 @@ decisions 1–4 depends on it.
 > `DaemonDocumentPage` schedules `scheduleReplicaRefresh` on every daemon
 > workspace resolve — once per (daemon, workspace) per session, off the
 > critical path.
+>
+> **Freshness, 2026-09-04:** the dedupe holds only while the registry entry
+> is within `REPLICA_STALE_AFTER_MS` (15 min), so a long working session
+> re-pulls on a later resolve instead of letting its replica age all day;
+> a failed pull writes no entry and is retried on the next resolve; an
+> in-flight pull is never doubled. Still no timer loop — the ceiling is
+> resolves, and each re-fire costs the one snapshot pull a visit already
+> pays. The popover's replica notice now states the age ("Last synced …"),
+> because a reader deciding whether to trust the offline copy needs it in
+> the same breath as the claim.
 
 ## Consequences
 
