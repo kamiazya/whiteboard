@@ -7,11 +7,23 @@ const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
  * Could this text hold a cluster at all?
  *
  * Nothing below U+0300 joins the character before it — no combining mark, no
- * regional indicator, no ZWJ, no conjoining jamo — so for text made only of
- * those, code points ARE graphemes and the cheap walk is already right. The
- * claim is checked exhaustively against the segmenter in this file's test
- * rather than reasoned about, because a joiner that slips through is a label
- * that fragments with nothing red.
+ * regional indicator, no ZWJ, no conjoining jamo — with exactly one
+ * exception, LF after CR, which is why CR is named here beside the
+ * threshold. The claim is checked against the segmenter over BOTH axes in
+ * this file's test rather than reasoned about, because a joiner that slips
+ * through is a label that fragments with nothing red — and CRLF is the one
+ * that did slip through, under a sweep that read as exhaustive while varying
+ * only the candidate joiner.
+ *
+ * CR rather than LF, because a lone LF is ordinary in a body while a lone CR
+ * is not, so keying on the LEADER leaves LF-only text on the cheap path.
+ *
+ * Only one direction of error exists: answering `true` for text that holds
+ * no cluster costs a slower walk over the same units, while answering
+ * `false` for text that holds one cuts it in half. So the threshold may only
+ * ever be made MORE eager — which is also why most edits to this function
+ * cannot be caught by a test, and why the mutation lane reports them as
+ * survivors.
  *
  * Deliberately coarse: it sends Japanese, Chinese and Korean down the
  * segmenter path even though most of their text carries no clusters. A
@@ -21,7 +33,10 @@ const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
  * say whether a string HAS a cluster, which is the work being avoided.
  */
 function mayCluster(text: string): boolean {
-  for (let i = 0; i < text.length; i += 1) if (text.charCodeAt(i) >= 0x0300) return true
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i)
+    if (code >= 0x0300 || code === 0x000d) return true
+  }
   return false
 }
 

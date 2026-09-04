@@ -873,10 +873,16 @@ the table alone.
     non-empty input: one glyph over the edge still says a label is there.
     **The cut falls between GRAPHEMES**, the never-empty unit included: a lone
     👨 is not a narrower family emoji. It is GATED, since segmenting is not
-    free — text with no code point at or above U+0300 cannot hold a cluster
-    (verified exhaustively against the segmenter in `truncate.test.ts`), so it
-    walks code points; measured on the bench's overflowing-label rows, ASCII
-    pays 1.2x and an emoji-bearing label 5.8x. Coarse on purpose, and a
+    free — text with no code point at or above U+0300 and no CR cannot hold a
+    cluster, so it walks code points; measured on the bench's
+    overflowing-label rows, ASCII pays 1.2x and an emoji-bearing label 5.8x.
+    CRLF is the ONE join below U+0300 and it shipped unhandled, because the
+    check swept candidate joiners against nine hand-picked predecessors —
+    exhaustive in one direction only, and `\r` was not among the nine. It now
+    sweeps both, in ~600ms against 2.2s pairwise: one segmentation per
+    candidate over every sub-U+0300 predecessor (a join can only LOWER the
+    segment count), then each suspect re-tested pairwise, since that probe
+    also flags a candidate that joins what FOLLOWS it. Coarse on purpose, and a
     tighter gate is a dead end worth not re-walking: "can this character join
     something" answers yes for every precomposed Hangul syllable, since one
     may follow a jamo L. Only the segmenter can say whether a string HAS a
