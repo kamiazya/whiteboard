@@ -41,7 +41,9 @@ export interface BrowserIndexPageProps {
    * the transition and this page is never unmounted — its load effect does
    * not re-run, and the list shows the state from before the navigation
    * (measured: onboarding create → immediate Back rendered onboarding again
-   * over a workspace holding the document). App passes `location.key`.
+   * over a workspace holding the document). App passes the LOCATION OBJECT —
+   * not `location.key`, which is per-history-entry and comes back UNCHANGED
+   * from a Back (measured: keyed on it, the stale list survived).
    */
   revision?: unknown
 }
@@ -121,6 +123,11 @@ export function BrowserIndexPage({
     // the right trade: the handle is what the address already carries, and it
     // is true about the workspace on screen.
     setWorkspaceName(null)
+    // Cleared on every re-load, not only set on failure: this effect now
+    // re-runs on ordinary Backs (`revision`), so a transient failure's alert
+    // would otherwise outlive the successful retry indefinitely (measured:
+    // fail-once-then-succeed left the alert over a correct list).
+    setError(null)
     // Its own chain, deliberately not folded into the documents load below: a
     // name that will not load leaves the heading on the handle, which is still
     // true, and must not surface as "Failed to load documents from this

@@ -53,14 +53,31 @@ async function selectCard(title: string) {
 }
 
 describe('BrowserIndexPage', () => {
+  it('a load that failed once stops claiming so after a retry succeeds', async () => {
+    // The load effect re-runs on ordinary Backs now (`revision`), so a
+    // transient failure's alert must not outlive the successful retry.
+    const store = await seededStore([])
+    const failingOnce = vi
+      .spyOn(store.index, 'listDocuments')
+      .mockRejectedValueOnce(new Error('transient'))
+    const { page, rerender } = renderPage(store, 'route-a')
+    await screen.findByRole('alert')
+    failingOnce.mockRestore()
+
+    rerender(page('route-b'))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(screen.getByText('What will you make first?')).toBeTruthy()
+  })
+
   it('re-lists when the revision moves — the route came back to a page that never left', async () => {
     // react-router v7 wraps navigations in startTransition, so a Back during
     // a lazy destination's chunk load ABORTS the transition and this page is
     // never unmounted — its load effect does not re-run, and the list shows
     // the state from before whatever the navigation was about (measured:
     // onboarding create -> immediate Back rendered onboarding again over a
-    // workspace holding the document). App passes location.key as `revision`;
-    // any change to it must re-read.
+    // workspace holding the document). App passes the location OBJECT as
+    // `revision` (its identity moves on every navigation; location.key is
+    // per-entry and a Back restores the same one); any change must re-read.
     const store = await seededStore([])
     const { page, rerender } = renderPage(store, 'route-a')
     await screen.findByText('What will you make first?')
