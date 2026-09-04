@@ -1,6 +1,6 @@
 # ADR-0022: A variation is not in the address, and the default one has no name to put there
 
-**Status:** Accepted — records the current shape and fixes the grammar for a later increment
+**Status:** Accepted — decision 2 revisited on 2026-09-05 (see the dated note); decision 1 unchanged
 
 ## Context
 
@@ -50,6 +50,20 @@ Decision 1 is the durable one: whatever addresses a variation later — a URL
 segment, a query parameter, something else — the default is never decorated.
 Decision 2 is a scope decision for now and may be revisited; decision 1
 constrains what revisiting it may look like.
+
+> **Note (2026-09-05): decision 2 revisited — a non-default variation is now
+> addressable, as a READ-ONLY view.** `?v=<name>` on a daemon document's
+> address opens that variation's tip through the same read-only projection
+> version previews use (`GET .../branches/:name/document`), without moving
+> HEAD. Sharing and bookmarking a variation work; switching stays a shared
+> act behind an explicit control on the preview banner, which also carries
+> the combine lead-in. Decision 1 held exactly as written: the default is
+> never decorated — `?v=main` strips back to the plain address (even while
+> HEAD is elsewhere), and so does a `?v` naming the current HEAD, so there
+> is still exactly one address for the page a plain URL means. The rejected
+> per-reader EDITING variation stays rejected; a per-reader read-only VIEW
+> is what shipped, and it is a different thing — nothing anyone draws lands
+> in it.
 
 ## Consequences
 

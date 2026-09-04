@@ -55,6 +55,11 @@ function makeApp(
     performMerge?: PerformMergeFn
     renameInVersions?: RenameInVersionsFn
     countVersionsOnBranch?: (sid: string, path: string, branch: string) => Promise<number>
+    loadDocumentAtTip?: (
+      sid: string,
+      path: string,
+      tip: string,
+    ) => Promise<import('../../shared/api-contracts/document.js').VersionDocumentResponse | null>
   } = {},
 ) {
   const app = new Hono()
@@ -1025,5 +1030,84 @@ describe('POST /api/workspaces/:sid/documents/:path/branches/:source/merge', () 
       body: JSON.stringify({ into: 'main' }),
     })
     expect(res.status).toBe(501)
+  })
+})
+
+describe('GET /api/workspaces/:sid/documents/:path/branches/:name/document', () => {
+  // The read that makes a variation ADDRESSABLE (ADR-0022's later increment):
+  // content at the branch tip, projected read-only, without moving HEAD.
+  const seed = async (app: Hono, name: string) => {
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+    expect(res.status).toBe(201)
+  }
+
+  it('projects the branch tip through the injected loadDocumentAtTip', async () => {
+    const calls: string[][] = []
+    const app = makeApp({
+      // A tip only exists once something recorded one; fromVersionId is the
+      // route-level way to mint a branch with a concrete tip.
+      resolveFromVersionFrontiers: async () => 'dGlwLWZyb250aWVycw==',
+      loadDocumentAtTip: async (sid, path, tip) => {
+        calls.push([sid, path, tip])
+        return { kind: 'markdown', body: '# at the tip' }
+      },
+    })
+    const created = await app.request('/api/workspaces/s1/documents/canvas-a/branches', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name: 'idea', fromVersionId: 'v_0123456789abcdef' }),
+    })
+    expect(created.status).toBe(201)
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/idea/document')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ kind: 'markdown', body: '# at the tip' })
+    expect(calls).toEqual([['s1', 'canvas-a', 'dGlwLWZyb250aWVycw==']])
+  })
+
+  it('passes an empty tip for an uninitialized branch (its content is the live document)', async () => {
+    const calls: string[] = []
+    const app = makeApp({
+      loadDocumentAtTip: async (_sid, _path, tip) => {
+        calls.push(tip)
+        return { kind: 'spatial', canvas: { nodes: [], edges: [] } }
+      },
+    })
+    await seed(app, 'fresh')
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/fresh/document')
+    expect(res.status).toBe(200)
+    expect(calls).toEqual([''])
+  })
+
+  it('returns 404 for a branch that does not exist', async () => {
+    const app = makeApp({ loadDocumentAtTip: async () => ({ kind: 'markdown', body: '' }) })
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/nope/document')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 404 when the seam cannot check the tip out', async () => {
+    const app = makeApp({
+      loadDocumentAtTip: async () => null,
+    })
+    await seed(app, 'gone')
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/gone/document')
+    expect(res.status).toBe(404)
+  })
+
+  it('returns 501 when the deployment has no loadDocumentAtTip', async () => {
+    const app = makeApp()
+    await seed(app, 'idea')
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/idea/document')
+    expect(res.status).toBe(501)
+  })
+
+  it('returns structured 400 for an invalid branch name', async () => {
+    const app = makeApp({ loadDocumentAtTip: async () => null })
+    const res = await app.request('/api/workspaces/s1/documents/canvas-a/branches/%20/document')
+    expect(res.status).toBe(400)
+    expect(apiErrorBodySchema.safeParse(await res.json()).success).toBe(true)
   })
 })

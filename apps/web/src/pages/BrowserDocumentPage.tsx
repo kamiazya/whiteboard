@@ -34,10 +34,7 @@ import {
   BROWSER_HISTORY_CAPABILITIES,
   type VersionPreviewSession,
 } from '../components/VersionTimeline'
-import {
-  BookmarkAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/BookmarkAction.js'
+import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
@@ -91,6 +88,7 @@ import {
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
+import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -313,7 +311,7 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    setSaveVersionOutcome(null)
+    clearSaveVersionOutcome()
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
@@ -633,28 +631,34 @@ export function BrowserDocumentPage({
   // dot is small, so the panel a finger opens has to carry one too — the
   // daemon page's panel does. Announced on the window like every other
   // save, which is what clears the dot and refreshes the list.
-  const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
-  const saveVersionFromPanel = async (label: string): Promise<void> => {
-    if (versionsBackend === null || documentPath === null || savingVersion) return
-    // The document this run is about, fixed before the first await. The page
-    // switches documents without remounting, so a save that started on A can
-    // settle after B is on screen — and the scope-reset effect has already
-    // cleared the outcome by then, so the message would appear under B as if
-    // B had been saved. Same residual `handleDuplicate` guards against.
-    const startedOn = currentDocumentIdRef.current
-    setSavingVersion(true)
-    setSaveVersionOutcome(null)
+  const {
+    saving: savingVersion,
+    outcome: saveVersionOutcome,
+    run: runVersionSave,
+    clearOutcome: clearSaveVersionOutcome,
+  } = useVersionSaveFlow(currentDocumentIdRef, async (label) => {
+    // Narrowed by the precondition in `saveVersionFromPanel` below, which
+    // never calls `run` (so never reaches this body) while either is null.
+    if (versionsBackend === null || documentPath === null) {
+      throw new Error('saveVersionFromPanel: no versions backend or document path')
+    }
+    // Captured BEFORE the save, not after. `exportScene` reads the live
+    // scene synchronously at call time, so starting it here binds the
+    // picture to the state the save is about to mark. Awaiting the save
+    // first meant an edit made during it was drawn onto the older point —
+    // a picture of content that version does not contain.
+    const picture = exportScene('png')
+    let saved: Awaited<ReturnType<typeof versionsBackend.save>>
     try {
-      // Captured BEFORE the save, not after. `exportScene` reads the live
-      // scene synchronously at call time, so starting it here binds the
-      // picture to the state the save is about to mark. Awaiting the save
-      // first meant an edit made during it was drawn onto the older point —
-      // a picture of content that version does not contain.
-      const picture = exportScene('png')
-      const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('saved')
+      saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+    } catch (err) {
+      log.warn('save version from the History panel failed', err)
+      throw err
+    }
+    // The rest is the post-save announce work — thumbnail attach, the
+    // event that clears the dot and refreshes the History panel — run only
+    // once the guard has confirmed this save's document is still on screen.
+    return () => {
       // The picture rides with the bookmark, as it does on the daemon page —
       // one path through the seam, so a browser-kept row is not the one that
       // silently has no picture. Not awaited: the bookmark has landed, and
@@ -687,13 +691,11 @@ export function BrowserDocumentPage({
           detail: { workspaceId: 'local', path: documentPath },
         }),
       )
-    } catch (err) {
-      log.warn('save version from the History panel failed', err)
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('failed')
-    } finally {
-      if (currentDocumentIdRef.current === startedOn) setSavingVersion(false)
     }
+  })
+  const saveVersionFromPanel = async (label: string): Promise<void> => {
+    if (versionsBackend === null || documentPath === null) return
+    await runVersionSave(label)
   }
 
   // The second phase of the page state. `pageState` above is derived from what

@@ -2,7 +2,12 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
-import { reconcileDocContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readDocumentKind,
+  readMarkdownBody,
+  readSpatialCanvas,
+  reconcileDocContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
@@ -12,6 +17,7 @@ import {
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
+import type { VersionDocumentResponse } from '../shared/api-contracts/document.js'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { errorMessage } from '../shared/error-message.js'
 import {
@@ -564,6 +570,42 @@ export function createApp(options: AppOptions) {
           await saveDocument(sid, path, doc, { overwrite: true })
           // The workspace record's funnel broadcasts the persisted bytes;
           // no per-document fan-out remains.
+        },
+        // One variation's content, read-only, at its tip — the projection
+        // GET /branches/:name/document serves. An empty tip names an
+        // uninitialized branch, whose content is the live document. Any
+        // failure to check the tip out answers null (a 404 upstream): this
+        // is a read, and an unreadable tip should refuse the preview, not
+        // report the store corrupt.
+        loadDocumentAtTip: async (sid, path, tipFrontiersBase64) => {
+          const project = (d: LoroDoc): VersionDocumentResponse =>
+            readDocumentKind(d) === 'markdown'
+              ? { kind: 'markdown', body: readMarkdownBody(d) }
+              : { kind: 'spatial', canvas: readSpatialCanvas(d) }
+          try {
+            if (tipFrontiersBase64 === '') {
+              return project(await getDoc(sid, path))
+            }
+            const targetFrontiers = decodeBranchTipOrThrow(
+              sid,
+              path,
+              'document-read',
+              tipFrontiersBase64,
+            )
+            const past = await projectDocumentAtWorkspaceFrontiers(sid, path, targetFrontiers)
+            if (past !== null) return project(past)
+            // Legacy per-document lineage: the tip names the live doc's own oplog.
+            const doc = await getDoc(sid, path)
+            const clone = checkoutCloneOrThrow(
+              doc,
+              targetFrontiers,
+              `${sid}/branches/${path}.json#document-read.tipFrontiers`,
+              'tipFrontiers could not be checked out against the live document',
+            )
+            return project(clone)
+          } catch {
+            return null
+          }
         },
         // Notify all peers when the HEAD switch is complete.
         notifyHeadChanged: (sid, path, head) => sendHeadChanged(sid, path, head),

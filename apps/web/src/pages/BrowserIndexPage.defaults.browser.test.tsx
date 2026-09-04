@@ -10,6 +10,7 @@
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -20,6 +21,23 @@ claimIsolatedWhiteboardDb('browserindexpage-defaults')
 describe('list page, production wiring', () => {
   beforeEach(clearWhiteboardDb)
   afterEach(cleanup)
+
+  it('a create lands in this mount own list - Back can arrive before it ever unmounts', async () => {
+    // react-router wraps navigation in startTransition, so the editor's lazy
+    // chunk loads while THIS page is still mounted; a Back in that window
+    // returns to this same mount. Its list has to carry the document it just
+    // created, or onboarding sticks over a store that has one.
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BrowserIndexPage index={new IdbDocumentIndex()} onOpenDocument={() => {}} />
+      </MemoryRouter>,
+    )
+    await screen.findByText('What will you make first?', undefined, { timeout: 10_000 })
+    await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
+    const cards = await screen.findAllByTestId('card-title', undefined, { timeout: 10_000 })
+    expect(cards).toHaveLength(1)
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
 
   it('reads the index once, not once per render', async () => {
     // A default evaluated in the parameter list is a NEW value every render.

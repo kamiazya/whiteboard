@@ -50,6 +50,7 @@ const sources = import.meta.glob(
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
+    './pages/use-version-save-flow.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -82,11 +83,16 @@ const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
+// The save-a-version guard extracted to its own hook: part of the same
+// SCREEN by the same rule the panel's search/columns hooks are — its state
+// moved there, not away.
+const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
+  peek: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
@@ -373,7 +379,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE],
+    files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,

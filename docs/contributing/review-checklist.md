@@ -25,7 +25,7 @@ Use this checklist when reviewing or self-reviewing a pull request in this repos
 
 - [ ] Server code uses `getLogger(...)` — no `console.*` calls in `src/server/**`.
 - [ ] Updates are immutable — no in-place mutation of inputs.
-- [ ] Files stay under 800 lines; functions stay under 50 lines.
+- [ ] Files stay under 800 lines (enforced by `file-size-budget.test.ts` as a shrink-only grandfather list); functions stay under 50 lines.
 - [ ] Comments explain the enduring *why*, not the narrative of how the PR came about.
 
 ## Documentation

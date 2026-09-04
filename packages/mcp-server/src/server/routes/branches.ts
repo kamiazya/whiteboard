@@ -12,6 +12,7 @@ import {
   type SetHeadResponse,
   setHeadRequestSchema,
 } from '../../shared/api-contracts/branches.js'
+import type { VersionDocumentResponse } from '../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../shared/api-contracts/errors.js'
 import type { PerformMergeHookResult } from '../store/branch-merge.js'
 import {
@@ -71,6 +72,15 @@ export interface CreateBranchesRouterOptions {
   // Count function used by DELETE /branches/:name to return actual unmergedCommits.
   // If omitted, the route falls back to 0.
   countVersionsOnBranch?: (workspaceId: string, path: string, branchName: string) => Promise<number>
+  // Project the document's content at a branch tip, read-only, for
+  // GET /branches/:name/document. An empty tipFrontiersBase64 names an
+  // uninitialized branch, whose content is the live document. null means the
+  // tip could not be checked out. Deployments without this hook return 501.
+  loadDocumentAtTip?: (
+    workspaceId: string,
+    path: string,
+    tipFrontiersBase64: string,
+  ) => Promise<VersionDocumentResponse | null>
 }
 
 // Helper that turns ValidationError into a structured 400 response.
@@ -113,6 +123,7 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   const notifyHeadChanged = options.notifyHeadChanged
   const performMerge = options.performMerge
   const renameInVersions = options.renameInVersions
+  const loadDocumentAtTip = options.loadDocumentAtTip
   const countVersionsOnBranch = options.countVersionsOnBranch
   const branchConflict = (message: string) => ({ error: 'branch_conflict', message })
   const branchNotFound = (message: string) => ({ error: 'branch_not_found', message })
@@ -392,6 +403,41 @@ export function createBranchesRouter(options: CreateBranchesRouterOptions = {}) 
   // ── GET /api/workspaces/:sid/documents/:path/branches/:name/stats ──
   // Pre-check endpoint for the delete confirmation dialog.
   // Returns actual unmergedCommits plus isHead.
+  // ── GET /api/workspaces/:sid/documents/:path/branches/:name/document ──
+  // One variation's CONTENT, read-only, without moving HEAD — the read that
+  // makes a non-default variation addressable (ADR-0022). Same response
+  // shape as GET /versions/:id/document: a viewer needs something to draw.
+  onDocumentsRoute(app, 'get', ['branches', ':name', 'document'], async (c, sid, path, params) => {
+    const name = params.name as string
+    const bn = validateBranchNameOrRespond(name)
+    if (bn) return c.json(bn.body, bn.status)
+    if (!loadDocumentAtTip) {
+      return c.json(
+        {
+          error: 'unsupported_branch_document',
+          message: 'branch document reads are not supported in this deployment',
+        },
+        501,
+      )
+    }
+    try {
+      const state = await loadDocumentBranches(sid, path)
+      const branch = state.branches.find((b) => b.name === name)
+      if (!branch) {
+        return c.json(branchNotFound(`Branch "${name}" not found on ${sid}/${path}`), 404)
+      }
+      const past = await loadDocumentAtTip(sid, path, branch.tipFrontiers)
+      if (past === null) {
+        return c.json(branchNotFound(`Branch "${name}" tip could not be read`), 404)
+      }
+      return c.json(past)
+    } catch (err) {
+      const corrupt = handleCorruption(err)
+      if (corrupt) return c.json(corrupt.body, corrupt.status)
+      throw err
+    }
+  })
+
   onDocumentsRoute(app, 'get', ['branches', ':name', 'stats'], async (c, sid, path, params) => {
     const name = params.name as string
     const bn = validateBranchNameOrRespond(name)

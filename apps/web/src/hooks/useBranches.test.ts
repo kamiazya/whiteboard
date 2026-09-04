@@ -114,6 +114,38 @@ describe('branchesApi', () => {
     expect(firstCall?.[0]).toBe('/api/workspaces/sess_1/documents/canvas-a/branches')
   })
 
+  it('loadDocument() GETs the branch document URL and parses the past shape', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ kind: 'markdown', body: '# at the tip' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const api = branchesApi('sess_1', 'canvas-a')
+    const past = await api.loadDocument('idea/2')
+    expect(past).toEqual({ kind: 'markdown', body: '# at the tip' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/workspaces/sess_1/documents/canvas-a/branches/idea%2F2/document',
+    )
+  })
+
+  it('loadDocument() answers null on 404 (branch gone) and rejects on other errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"branch_not_found"}', { status: 404 })),
+    )
+    expect(await branchesApi('sess_1', 'canvas-a').loadDocument('gone')).toBeNull()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 500 })),
+    )
+    await expect(branchesApi('sess_1', 'canvas-a').loadDocument('sick')).rejects.toMatchObject({
+      status: 500,
+    })
+  })
+
   it('create() POSTs JSON body', async () => {
     const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () =>

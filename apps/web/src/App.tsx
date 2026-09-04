@@ -951,6 +951,13 @@ export function App({ providerState }: AppProps) {
                 onOpenDocument={(path) => {
                   if (browserHandle !== null) navigate(documentPath(browserHandle, path))
                 }}
+                // A Back during a lazy destination's load aborts the
+                // startTransition and leaves this page mounted. The location
+                // OBJECT is what still moves — its IDENTITY is new on every
+                // navigation, where `location.key` is per-history-entry and
+                // a Back restores the SAME key it mounted with (measured:
+                // keyed on it, the stale list survived the Back).
+                revision={location}
               />
             ) : (
               <BrowserDocumentPage

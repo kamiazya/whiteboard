@@ -89,7 +89,10 @@ export function FolderContentsList({
   return (
     <ul
       {...longPress}
-      className={cn('grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 p-0.5', className)}
+      className={cn(
+        'grid grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]',
+        className,
+      )}
     >
       {folders.map((child) => (
         <li key={child.path}>

@@ -16,6 +16,8 @@ import {
   renameBranchResponseSchema,
   type SetHeadResponse,
   setHeadResponseSchema,
+  type VersionDocumentResponse,
+  versionDocumentResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { ZodError } from 'zod'
 
@@ -40,6 +42,7 @@ export function buildBranchUrls(
   deleteBranch: (name: string) => string
   stats: (name: string) => string
   merge: (source: string) => string
+  branchDocument: (name: string) => string
 } {
   const safePath = encodeURIComponent(path)
   const base = `/api/workspaces/${workspaceId}/documents/${safePath}`
@@ -49,6 +52,7 @@ export function buildBranchUrls(
     deleteBranch: (name) => `${base}/branches/${encodeURIComponent(name)}`,
     stats: (name) => `${base}/branches/${encodeURIComponent(name)}/stats`,
     merge: (source) => `${base}/branches/${encodeURIComponent(source)}/merge`,
+    branchDocument: (name) => `${base}/branches/${encodeURIComponent(name)}/document`,
   }
 }
 
@@ -162,6 +166,15 @@ export function branchesApi(workspaceId: string, path: string, fetchFn: typeof f
       )
       return safeParse(setHeadResponseSchema, await res.json())
     },
+    // One variation's content at its tip, read-only — what ?v=<name> draws.
+    // null when the branch (or its tip) is gone: the caller shows "variation
+    // not found" and falls back to the live document.
+    async loadDocument(name: string): Promise<VersionDocumentResponse | null> {
+      const res = await fetchFn(urls.branchDocument(name))
+      if (res.status === 404) return null
+      await requireOk(res)
+      return safeParse(versionDocumentResponseSchema, await res.json())
+    },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(
         await fetchFn(urls.merge(source), {
@@ -235,6 +248,18 @@ export interface BranchesBackend {
     source: string,
     args: { into: string; dryRun?: boolean },
   ): Promise<MergeResponse>
+  /**
+   * One variation's content at its tip, read-only. `null` means the variation
+   * is not there — which is the whole truth for a keeper that has none, and
+   * the answer its caller already handles by falling back to the live
+   * document. A refusal would be worse: the caller would have to learn a
+   * second way to say the same thing.
+   */
+  loadDocument(
+    workspaceId: string,
+    path: string,
+    name: string,
+  ): Promise<VersionDocumentResponse | null>
 }
 
 /**
@@ -268,6 +293,7 @@ export function createDaemonBranchesBackend(fetchFn: typeof globalThis.fetch): B
     setHead: (workspaceId, path, branch) => api(workspaceId, path).setHead(branch),
     getStats: (workspaceId, path, name) => api(workspaceId, path).getStats(name),
     merge: (workspaceId, path, source, args) => api(workspaceId, path).merge(source, args),
+    loadDocument: (workspaceId, path, name) => api(workspaceId, path).loadDocument(name),
   }
 }
 
@@ -291,5 +317,6 @@ export function createBrowserBranchesBackend(): BranchesBackend {
     setHead: () => refuse('switch'),
     getStats: () => refuse('stats'),
     merge: () => refuse('merge'),
+    loadDocument: () => Promise.resolve(null),
   }
 }
