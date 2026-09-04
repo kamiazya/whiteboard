@@ -145,7 +145,12 @@ export function BrowserIndexPage({
     // accessor themselves — but it IS what this effect follows. Depending on
     // the value rather than calling it is the difference between a list that
     // re-reads on a switch and one that does not.
-  }, [index, clock, filesSource, activeWorkspace])
+    // `filesRevision` follows this page's own writes (create below, delete
+    // dialog): react-router wraps navigation in startTransition, so while a
+    // lazy page chunk loads this page stays mounted — and a Back in that
+    // window returns to THIS mount, whose list must already carry what it
+    // created or the onboarding empty state sticks over a non-empty store.
+  }, [index, clock, filesSource, activeWorkspace, filesRevision])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -213,6 +218,10 @@ export function BrowserIndexPage({
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
         await pointer.set(created.documentId)
+        // This page's own list must see the create even if it never
+        // unmounts (Back before the editor chunk mounts) — see the load
+        // effect's dependency note.
+        setFilesRevision((n) => n + 1)
         onOpenDocument(created.path)
       } catch {
         setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
