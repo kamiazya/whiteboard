@@ -77,7 +77,7 @@ A wall of LOWs buries the HIGHs — do not inflate. A false HIGH wastes triage; 
 
 For each `triaged.items[i]`:
 - `track: "task"` → `TaskCreate` on the live board (set `blockedBy`/`relatedTo` from the item). Do soon.
-- `track: "issue"` → a `tmp/issues/<slug>.md` with the ticketing frontmatter (see the `ticketing` skill). Durable backlog.
+- `track: "issue"` → a whiteboard document with `type: issue` (`wb_document_create` + `wb_document_set`; see the `ticketing` skill). Durable backlog.
 - **Skip dupes** of existing Tasks / tmp-issues (the triage agent flags `relatedTo`, but check the board yourself — it can't see it).
 - Quick wins (effort `S`, a few lines) that are safe and in-scope: per the resolve-on-the-spot discipline, just fix them now instead of filing.
 
@@ -88,5 +88,18 @@ Run it **after each fold/merge of a substantial slice**, and/or **weekly**, and 
 ## Discipline
 
 - Read-only: auditors and verifiers never edit.
-- Don't double-file: reconcile against the existing Task list + `tmp/issues/` before creating.
+- Don't double-file: reconcile against the existing Task list + open whiteboard issues (`wb_document_list`, `type: issue`) before creating.
 - Trust runtime: if an audit finding disagrees with what the running app/test actually does, the runtime wins — verify before filing.
+
+## Record the run
+
+After folding the survivors, append the run to the tracked ledger so the
+`audit-nudge` SessionStart hook stops counting from the last one:
+
+```
+node .claude/scripts/record-audit.mjs audit-triage
+```
+
+Commit `.claude/audit-log.jsonl` with the fold. The hook nudges every session
+once the newest `audit-triage` entry is older than 7 days — that is the
+"weekly" cadence made discoverable instead of remembered.
