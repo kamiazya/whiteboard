@@ -77,18 +77,38 @@ export interface RenderKeySubject {
   readonly updatedAt?: string
 }
 
-export function renderKeyOf(
-  subject: RenderKeySubject,
-  theme: ResolvedTheme,
-  pipeline: BrokeredPipeline = 'svg',
-): RenderKey {
+/** The key for the SVG a surface draws at size — the expensive family. */
+export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): RenderKey {
   return {
     buildId: RENDERER_BUILD_ID,
-    pipeline,
+    pipeline: 'svg',
     documentId: subject.documentId,
     kind: subject.kind,
     version: subject.updatedAt ?? null,
+    // Baked into a spatial SVG's own bytes; a markdown one takes its ink
+    // from page CSS, so one entry serves both themes.
     theme: subject.kind === 'spatial' ? theme : null,
+  }
+}
+
+/**
+ * The key for a document's OUTLINE — the rectangles a tree row's icon and
+ * the tab favicon draw.
+ *
+ * It takes no theme, and that is the point rather than an omission: outline
+ * colours are resolved from the light palette for both kinds, so a theme axis
+ * would double the entries to hold identical rectangles and make a theme
+ * toggle redraw every icon for nothing. A separate constructor rather than a
+ * third argument, so no caller has to pass a theme that would be ignored.
+ */
+export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
+  return {
+    buildId: RENDERER_BUILD_ID,
+    pipeline: 'outline',
+    documentId: subject.documentId,
+    kind: subject.kind,
+    version: subject.updatedAt ?? null,
+    theme: null,
   }
 }
 

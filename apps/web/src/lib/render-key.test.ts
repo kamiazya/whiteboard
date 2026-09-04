@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isMemoisableKey,
+  outlineKeyOf,
   RENDERER_BUILD_ID,
   renderKeyOf,
   renderKeyPath,
@@ -63,18 +64,31 @@ describe('renderKeyPath — the pipeline is part of the identity', () => {
   const subject = { documentId: 'd', kind: 'spatial' as const, updatedAt: 'v1' }
 
   it('keeps an outline of a document apart from its SVG', () => {
-    expect(renderKeyPath(renderKeyOf(subject, 'light', 'outline'))).not.toBe(
-      renderKeyPath(renderKeyOf(subject, 'light', 'svg')),
+    expect(renderKeyPath(outlineKeyOf(subject))).not.toBe(
+      renderKeyPath(renderKeyOf(subject, 'light')),
     )
   })
 
   it('names each family in the path, so a stored entry says what it holds', () => {
-    expect(renderKeyPath(renderKeyOf(subject, 'light', 'svg')).endsWith('.svg')).toBe(true)
-    expect(renderKeyPath(renderKeyOf(subject, 'light', 'outline')).endsWith('.svg')).toBe(false)
+    expect(renderKeyPath(renderKeyOf(subject, 'light')).endsWith('.svg')).toBe(true)
+    expect(renderKeyPath(outlineKeyOf(subject)).endsWith('.svg')).toBe(false)
   })
 
   it('defaults to the svg family, which every existing caller is', () => {
     expect(renderKeyOf(subject, 'light').pipeline).toBe('svg')
+  })
+
+  // An outline's colours are resolved from the LIGHT palette for both kinds,
+  // so the theme is not an axis of it at all. Carrying one would double the
+  // entries for nothing and, worse, make a theme toggle redraw every tree
+  // row icon to produce identical rectangles.
+  it('drops the theme axis for an outline, whose colours do not depend on it', () => {
+    expect(outlineKeyOf(subject).theme).toBeNull()
+    expect(renderKeyPath(outlineKeyOf(subject))).toBe(renderKeyPath(outlineKeyOf(subject)))
+  })
+
+  it('keeps the theme axis for a spatial SVG, whose palette is baked in', () => {
+    expect(renderKeyOf(subject, 'dark').theme).toBe('dark')
   })
 })
 
