@@ -18,6 +18,7 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { BrokeredPipeline } from './render-key.js'
 
 export type RenderSurfaceId =
   | 'list-row-thumbnail'
@@ -32,7 +33,7 @@ export type RenderSurfaceId =
  * geometry only — cheaper, and the only thing legible at 24px. `png-raster`
  * is the SVG drawn into a canvas and read back as PNG.
  */
-export type RenderPipeline = 'svg' | 'outline' | 'png-raster'
+export type RenderPipeline = BrokeredPipeline | 'png-raster'
 
 type KindCoverage = 'covered' | `not covered: ${string}`
 type BrokerUse = 'through' | `not yet: ${string}`

@@ -22,9 +22,30 @@ declare const __RENDERER_BUILD_ID__: string
 
 export const RENDERER_BUILD_ID: string = __RENDERER_BUILD_ID__
 
+/**
+ * The families the broker holds, which is NOT every pipeline a surface can
+ * take: `png-raster` is absent because nothing asks the broker for one, and
+ * naming it here would claim a storage shape this key cannot address.
+ * `render-surfaces.ts` widens this by exactly that member, so the two say the
+ * same thing about the families they share.
+ */
+export const brokeredPipelineSchema = z.enum(['svg', 'outline'])
+
+export type BrokeredPipeline = z.infer<typeof brokeredPipelineSchema>
+
 export const renderKeySchema = z.object({
   /** The code that would produce these bytes. */
   buildId: z.string().min(1),
+  /**
+   * WHICH picture of the document, not just which document.
+   *
+   * The broker holds one map, so without this axis a tree row's outline and
+   * a list row's SVG name the same entry — and the one that arrives first
+   * answers the other, in a type the caller has no reason to check. A path
+   * ending `.svg` while holding block geometry is the same mistake written
+   * down.
+   */
+  pipeline: brokeredPipelineSchema,
   documentId: z.string().min(1),
   kind: documentKindSchema,
   /**
@@ -56,9 +77,14 @@ export interface RenderKeySubject {
   readonly updatedAt?: string
 }
 
-export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): RenderKey {
+export function renderKeyOf(
+  subject: RenderKeySubject,
+  theme: ResolvedTheme,
+  pipeline: BrokeredPipeline = 'svg',
+): RenderKey {
   return {
     buildId: RENDERER_BUILD_ID,
+    pipeline,
     documentId: subject.documentId,
     kind: subject.kind,
     version: subject.updatedAt ?? null,
@@ -102,8 +128,20 @@ function segment(value: string): string {
  * what the OPFS store will address, and a leading build id makes retiring a
  * build's whole cache one directory removal rather than a scan.
  */
+/**
+ * What a family's bytes are. An outline is block geometry, so calling its
+ * entry `.svg` would misdescribe it to the OPFS store and to anyone reading
+ * a directory listing.
+ */
+const EXTENSION: Readonly<Record<BrokeredPipeline, string>> = {
+  svg: 'svg',
+  outline: 'json',
+}
+
 export function renderKeyPath(key: RenderKey): string {
   const version = key.version ?? ''
   const leaf = key.theme === null ? segment(version) : `${segment(version)}-${key.theme}`
-  return `${segment(key.buildId)}/${key.kind}/${segment(key.documentId)}/${leaf}.svg`
+  // The pipeline sits under the build id and above the kind, so a sweep can
+  // drop one family the way it can already drop one build: a directory.
+  return `${segment(key.buildId)}/${key.pipeline}/${key.kind}/${segment(key.documentId)}/${leaf}.${EXTENSION[key.pipeline]}`
 }
