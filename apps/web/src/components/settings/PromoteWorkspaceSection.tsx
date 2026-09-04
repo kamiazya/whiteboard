@@ -86,6 +86,11 @@ function describeResult(result: PromotionResultRecord): string {
   if (result.replicaSyncedAt !== undefined) {
     parts.push('The daemon workspace is now cached in this browser')
   }
+  if (result.localCopyRemoved === true) {
+    parts.push('The browser copy was removed — the cached replica serves offline reads')
+  } else {
+    parts.push('The original copy is kept in this browser')
+  }
   return `${parts.join('. ')}.`
 }
 
@@ -167,7 +172,7 @@ export function PromoteWorkspaceSection({
   }, [daemon, baseFetch])
 
   const runPromotion = useCallback(
-    async (targetId: string) => {
+    async (targetId: string, target?: WorkspaceIdentity) => {
       if (!daemon) return
       setFlow({ step: 'running', phase: 'record' })
       let record: PromotionResultRecord
@@ -193,6 +198,7 @@ export function PromoteWorkspaceSection({
         // itself already landed, so a failed pull costs only the cache line
         // on the report, never the promotion.
         let replicaSyncedAt: string | undefined
+        let localCopyRemoved = false
         if (outcome.kind === 'ok') {
           const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
           const cache = await cacheDaemonWorkspace({
@@ -201,8 +207,47 @@ export function PromoteWorkspaceSection({
             workspaceId: targetId,
             workspaceDocs: new BrowserWorkspaceDocs(),
           })
-          if (cache.kind === 'ok') replicaSyncedAt = cache.syncedAt
-          else log.warn('replica cache after promote failed', cache.reason)
+          if (cache.kind === 'ok') {
+            replicaSyncedAt = cache.syncedAt
+            // Register the replica NOW: findReplicaForHandle and the shell
+            // notice read the registry, and an entry that only appears on
+            // some later visit leaves the fresh cache invisible offline.
+            const { withReplicaEntry } = await import('../../lib/replicas.js')
+            settingsStore.update((current) =>
+              withReplicaEntry(current, targetId, {
+                daemonBaseUrl: daemon.baseUrl,
+                syncedAt: cache.syncedAt,
+                ...(target?.segment === undefined ? {} : { segment: target.segment }),
+                ...(target?.displayName === undefined ? {} : { displayName: target.displayName }),
+              }),
+            )
+            // The demote gate (ADR-0023 decision 2): delete the source
+            // record only when every image made it across AND the replica
+            // read back from this browser holds every promoted document.
+            // `missing` gates too: the file store folds read errors into
+            // "missing", so those references may be retryable — and the
+            // record is the retry vehicle.
+            if (outcome.blobs.failed.length === 0 && outcome.blobs.missing.length === 0) {
+              const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
+                '../../lib/demote-browser-workspace.js'
+              )
+              const carried = await replicaCarriesAll(
+                new BrowserWorkspaceDocs(),
+                targetId,
+                outcome.promotedDocumentIds,
+              )
+              if (carried) {
+                try {
+                  await demoteBrowserWorkspace(outcome.sourceWorkspaceId)
+                  localCopyRemoved = true
+                } catch (err) {
+                  // The move stands either way; a failed deletion only means
+                  // the old copy lingers, which the report says plainly.
+                  log.warn('demote after promote failed', err)
+                }
+              }
+            }
+          } else log.warn('replica cache after promote failed', cache.reason)
         }
         record =
           outcome.kind === 'ok'
@@ -212,6 +257,7 @@ export function PromoteWorkspaceSection({
                 workspaceId: targetId,
                 sourceWorkspaceId: outcome.sourceWorkspaceId,
                 ...(replicaSyncedAt === undefined ? {} : { replicaSyncedAt }),
+                localCopyRemoved,
                 ok: true,
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,
@@ -331,8 +377,9 @@ export function PromoteWorkspaceSection({
                   All {flow.documentCount} document{flow.documentCount === 1 ? '' : 's'} move to the
                   daemon workspace you choose, with their full edit history and referenced images.
                   If a path already exists there, both versions are kept and the existing one is
-                  marked shadowed — nothing is renamed or overwritten. Your documents also stay in
-                  this browser.
+                  marked shadowed — nothing is renamed or overwritten. Once every document and image
+                  is confirmed on the daemon, the old copy here is removed; this browser keeps a
+                  cached replica that opens read-only when the daemon cannot be reached.
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-1.5">
@@ -375,7 +422,12 @@ export function PromoteWorkspaceSection({
                 <Button
                   type="button"
                   data-testid="promote-confirm"
-                  onClick={() => void runPromotion(flow.targetId)}
+                  onClick={() =>
+                    void runPromotion(
+                      flow.targetId,
+                      flow.targets.find((ws) => ws.workspaceId === flow.targetId),
+                    )
+                  }
                 >
                   Move workspace
                 </Button>
