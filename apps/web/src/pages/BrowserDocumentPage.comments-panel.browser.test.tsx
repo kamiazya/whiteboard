@@ -246,3 +246,25 @@ it('shows the opener as pressed while the rail is open, not only to a screen rea
   // assertion exists to avoid.
   expect(open).not.toBe(closed)
 })
+
+it('replies from the rail, and the reply joins the conversation it was typed into', async () => {
+  // The whole local chain in one case: the panel's onReply dispatches
+  // `reply-to-thread`, the session writes it into the threads plane, and the
+  // annotation channel republishes — no remote echo involved, which is what
+  // makes it observable here at all.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+  await userEvent.click(await screen.findByText('still needs a decision'))
+
+  await userEvent.fill(await screen.findByRole('textbox', { name: /reply/i }), 'decided: ship it')
+  await userEvent.click(screen.getByRole('button', { name: /^reply$/i }))
+
+  await waitFor(() => expect(screen.getByText('decided: ship it')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+})

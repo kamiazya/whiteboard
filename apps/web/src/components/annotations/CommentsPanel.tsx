@@ -12,7 +12,7 @@
  * "show resolved" answers whether resolved comments are drawn when what a
  * reader wants at document level is which ones are still open.
  */
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
 import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
@@ -41,6 +41,13 @@ export interface CommentsPanelProps {
   readonly resolveAnchor?: (thread: CommentThread) => 'placed' | 'orphaned'
   /** Reveal the thread in the host's own surface. */
   readonly onSelect?: (thread: CommentThread) => void
+  /**
+   * Appends a message to a conversation. Absent hides the reply box entirely
+   * rather than showing a control that silently does nothing — a host with no
+   * write path (a read-only view, or one with no session yet) has no reply to
+   * offer, and saying so by omission is the honest form.
+   */
+  readonly onReply?: (threadId: string, body: string) => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -55,9 +62,57 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
-export function CommentsPanel({ threads, resolveAnchor, onSelect }: CommentsPanelProps) {
+/**
+ * Locale- and clock-independent, deliberately: `toLocaleString` reads the
+ * runner's timezone (so the same thread renders differently in CI than on a
+ * laptop) and a relative "2 days ago" would make every rendering depend on
+ * the wall clock. What a reader needs here is which message came first, and
+ * an absolute stamp answers that without either dependency. The machine-
+ * readable original rides along in `dateTime`.
+ */
+function stampOf(iso: string | undefined): { readonly text: string; readonly dateTime: string } {
+  if (iso === undefined) return { text: '', dateTime: '' }
+  const parsed = new Date(iso)
+  if (Number.isNaN(parsed.getTime())) return { text: '', dateTime: iso }
+  return { text: parsed.toISOString().slice(0, 16).replace('T', ' '), dateTime: iso }
+}
+
+/**
+ * Who wrote a message and when, or nothing when the message says neither.
+ *
+ * `okfActor` is a bare single-line string with no kind, and this app has no
+ * accounts, so there is nothing here to infer a human-vs-AI badge FROM. The
+ * name when one was written, and silence otherwise — inventing the
+ * distinction from a free string would be a guess wearing a badge.
+ */
+function MessageBy({ message }: { readonly message: CommentMessage | undefined }) {
+  if (message === undefined) return null
+  const stamp = stampOf(message.createdAt)
+  if (message.author === undefined && stamp.text === '') return null
+  return (
+    <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
+      {message.author !== undefined ? <span>{message.author}</span> : null}
+      {stamp.text !== '' ? <time dateTime={stamp.dateTime}>{stamp.text}</time> : null}
+    </span>
+  )
+}
+
+export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
+  // At most one conversation is open at a time. A panel of simultaneously
+  // expanded threads is a wall of text with no shape; reading one and
+  // replying to it is the act this surface serves.
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
+
+  function toggle(thread: CommentThread): void {
+    setOpenThreadId((current) => (current === thread.id ? null : thread.id))
+    // The draft belongs to the conversation it was typed into, so moving to
+    // another one starts empty rather than carrying half a sentence across.
+    setDraft('')
+    onSelect?.(thread)
+  }
 
   return (
     <section aria-label="Comments" data-testid="comments-panel" className="flex flex-col gap-2">
@@ -94,34 +149,96 @@ export function CommentsPanel({ threads, resolveAnchor, onSelect }: CommentsPane
         </p>
       ) : (
         <ul className="flex flex-col gap-1">
-          {shown.map((thread) => (
-            <li key={thread.id}>
-              <button
-                type="button"
-                onClick={() => onSelect?.(thread)}
-                className="w-full rounded px-2 py-1.5 text-left text-xs hover:bg-neutral-100 dark:hover:bg-neutral-800"
-              >
-                <span className="line-clamp-2 text-neutral-800 dark:text-neutral-200">
-                  {excerptOf(thread)}
-                </span>
-                <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
-                  {thread.messages.length > 1 ? (
-                    <span data-testid={`thread-message-count-${thread.id}`}>
-                      {thread.messages.length} messages
-                    </span>
-                  ) : null}
-                  {resolveAnchor?.(thread) === 'orphaned' ? (
-                    <span data-testid={`thread-orphaned-${thread.id}`}>
-                      {/* Said, not hidden: the conversation outlived what it
-                          was about, which is ordinary once a document is
-                          edited — not an error state. */}
-                      anchor gone
-                    </span>
-                  ) : null}
-                </span>
-              </button>
-            </li>
-          ))}
+          {shown.map((thread) => {
+            const expanded = thread.id === openThreadId
+            return (
+              <li key={thread.id}>
+                <button
+                  type="button"
+                  aria-expanded={expanded}
+                  aria-controls={`thread-${thread.id}`}
+                  onClick={() => toggle(thread)}
+                  className={cn(
+                    'w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
+                    TOGGLE_STATE_CLASS,
+                  )}
+                >
+                  <span className="line-clamp-2 text-neutral-800 dark:text-neutral-200">
+                    {excerptOf(thread)}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+                    <MessageBy message={thread.messages[0]} />
+                    {thread.messages.length > 1 ? (
+                      <span data-testid={`thread-message-count-${thread.id}`}>
+                        {thread.messages.length} messages
+                      </span>
+                    ) : null}
+                    {resolveAnchor?.(thread) === 'orphaned' ? (
+                      <span data-testid={`thread-orphaned-${thread.id}`}>
+                        {/* Said, not hidden: the conversation outlived what it
+                            was about, which is ordinary once a document is
+                            edited — not an error state. */}
+                        anchor gone
+                      </span>
+                    ) : null}
+                  </span>
+                </button>
+
+                {expanded ? (
+                  <div id={`thread-${thread.id}`} className="mt-1 flex flex-col gap-2 pl-2">
+                    {/* The REPLIES, not the whole conversation over again:
+                        the row above already carries the opening message,
+                        which is the conversation's subject. Repeating it here
+                        was the first shape and it read as the same sentence
+                        twice. Replies indent under their subject instead. */}
+                    {thread.messages.length > 1 ? (
+                      <ol className="flex flex-col gap-2 border-l pl-2">
+                        {thread.messages.slice(1).map((message) => (
+                          <li key={message.id} className="flex flex-col gap-0.5">
+                            <MessageBy message={message} />
+                            <p className="whitespace-pre-wrap text-xs text-neutral-800 dark:text-neutral-200">
+                              {message.body}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : null}
+
+                    {onReply === undefined ? null : (
+                      <form
+                        className="flex flex-col gap-1"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          const body = draft.trim()
+                          // An empty reply is not a message. Guarded here
+                          // rather than by disabling the button, so the
+                          // keyboard path (Enter in the field) is covered by
+                          // the same rule as the pointer one.
+                          if (body === '') return
+                          onReply(thread.id, body)
+                          setDraft('')
+                        }}
+                      >
+                        <textarea
+                          aria-label="Reply"
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          rows={2}
+                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="self-end rounded border px-2 py-1 text-xs hover:bg-accent"
+                        >
+                          Reply
+                        </button>
+                      </form>
+                    )}
+                  </div>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
       )}
     </section>
