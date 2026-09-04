@@ -3,6 +3,9 @@ import { type DocumentKind, documentIdSchema } from '@kamiazya/whiteboard-model'
 /** A document this editor can link to, as the composition root knows it. */
 export interface LinkTarget {
   readonly id: string
+  /** The written form of a reference — what `[[...]]` resolves. */
+  readonly path: string
+  /** What the picker SHOWS, and the label an id-form link carries. */
   readonly name: string
   readonly kind?: DocumentKind
 }
@@ -72,36 +75,33 @@ const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
 
 /**
  * What to write in the body for a chosen target, optionally displaying
- * `text` instead of the target's own name.
+ * `text` instead of the label the renderer would supply.
  *
- * The readable form wins where it works, because the reference is prose the
- * author will read again — but `[[Name]]` resolves only when exactly one
- * document carries that name (see codec's `createUniqueNameResolver`), so a
- * duplicate name would produce a link that silently stays literal text. The
- * picker is the one place that KNOWS which document was chosen, so it spends
- * that knowledge here: the opaque `[[<id>]]` form appears only when the
- * readable one would be wrong.
+ * The PATH is the written form: display names are retired from resolution
+ * (path + id are the only forms the reader resolves), and a bare `[[path]]`
+ * is labeled with the target's CURRENT display name at render time — so
+ * the default insert freezes nothing. Chosen display text still travels as
+ * the explicit alias, because the author asked for that exact prose.
  *
- * That form is unambiguous and unreadable, so it always carries an alias —
- * the display text if there is one, else the name it could not use as the
- * target. A reader gets prose either way; only the resolution changes.
+ * The opaque `[[<id>]]` form appears only when the path itself would
+ * mislead the reader's id-first rule — a path shaped exactly like a
+ * document id — or would not survive the bracket grammar. That form is
+ * unambiguous and unreadable, so it carries the display text or the name
+ * as its alias whenever one can be written.
  */
 export function linkMarkupFor(
   target: LinkTarget,
-  all: readonly LinkTarget[],
+  _all: readonly LinkTarget[],
   text?: string,
 ): string {
   const wanted = (text ?? '').trim()
   const alias = wanted === '' || UNWRITABLE_AS_ALIAS.test(wanted) ? null : wanted
-  const sameName = all.filter((candidate) => candidate.name === target.name)
-  const nameIsWritable =
-    sameName.length === 1 &&
-    !UNWRITABLE_IN_BRACKETS.test(target.name) &&
-    !readsAsDocumentId(target.name)
-  if (nameIsWritable) {
-    return alias === null || alias === target.name
-      ? `[[${target.name}]]`
-      : `[[${target.name}|${alias}]]`
+  const pathIsWritable =
+    !UNWRITABLE_IN_BRACKETS.test(target.path) && !readsAsDocumentId(target.path)
+  if (pathIsWritable) {
+    return alias === null || alias === target.path
+      ? `[[${target.path}]]`
+      : `[[${target.path}|${alias}]]`
   }
   const fallbackAlias = alias ?? (UNWRITABLE_AS_ALIAS.test(target.name) ? null : target.name)
   return fallbackAlias === null ? `[[${target.id}]]` : `[[${target.id}|${fallbackAlias}]]`

@@ -21,7 +21,7 @@ export interface RenderMarkdownPreviewOptions {
   readonly maxWidth: number
   readonly background?: string
   /**
-   * Maps `[[Name]]` aliases to canvas ids (codec's separate
+   * Maps `[[path]]` aliases to document ids (codec's separate
    * resolution pass over the parsed tree). Absent, only a bare `[[ULID]]`
    * references resolve; unresolved aliases stay literal bracket text.
    */
@@ -31,6 +31,8 @@ export interface RenderMarkdownPreviewOptions {
    * (canvas-render's layout seam, threaded through verbatim).
    */
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /** Labels a bare `[[path]]`/`[[id]]` with the target's current display name. */
+  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /** Renders math blocks (canvas-render's layout seam, threaded verbatim). */
   readonly renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences (canvas-render's layout seam, threaded verbatim). */
@@ -107,6 +109,7 @@ export function renderMarkdownPreview(
     background,
     resolveAlias,
     resolveEmbed,
+    resolveTitle,
     renderMath,
     renderDiagram,
   }: RenderMarkdownPreviewOptions,
@@ -116,6 +119,7 @@ export function renderMarkdownPreview(
     maxWidth,
     resolveAlias,
     resolveEmbed,
+    resolveTitle,
     renderMath,
     renderDiagram,
   })
@@ -182,6 +186,7 @@ function layoutScene(
     maxWidth,
     resolveAlias,
     resolveEmbed,
+    resolveTitle,
     renderMath,
     renderDiagram,
   }: Omit<RenderMarkdownPreviewOptions, 'background'>,
@@ -190,6 +195,7 @@ function layoutScene(
     return layoutMdastBlocks(resolveReferences(parseMarkdownBody(value), resolveAlias), {
       measure,
       maxWidth,
+      resolveTitle,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
       // A page, not an object. This pane runs to a readable measure, where the
       // node scale — cut so a heading cannot eat a third of a 280px box —

@@ -13,10 +13,11 @@ export interface PreviewPaneProps {
   measure: MeasureText
   background?: string
   theme?: ResolvedTheme
-  /** Maps `[[Name]]` aliases to canvas ids; see render-preview.ts. */
+  /** Maps `[[path]]` aliases to document ids; see render-preview.ts. */
   resolveAlias?: AliasResolver
   /** Resolves `![[embed]]` bodies for inline rendering; see render-preview.ts. */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  resolveTitle?: MdastLayoutOptions['resolveTitle']
   /** Renders math blocks; see render-preview.ts. */
   renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences; see render-preview.ts. */
@@ -65,6 +66,7 @@ export function PreviewPane({
   theme = 'light',
   resolveAlias,
   resolveEmbed,
+  resolveTitle,
   renderMath,
   renderDiagram,
   anchorsRef,
@@ -78,10 +80,21 @@ export function PreviewPane({
         background,
         resolveAlias,
         resolveEmbed,
+        resolveTitle,
         renderMath,
         renderDiagram,
       }),
-    [value, measure, maxWidth, background, resolveAlias, resolveEmbed, renderMath, renderDiagram],
+    [
+      value,
+      measure,
+      maxWidth,
+      background,
+      resolveAlias,
+      resolveEmbed,
+      resolveTitle,
+      renderMath,
+      renderDiagram,
+    ],
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors

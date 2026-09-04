@@ -134,79 +134,38 @@ export function movesForPathChange(
 
 export interface ReferenceRewritePlanInput {
   /**
-   * The naming table BEFORE the change: every document's path and name.
-   * Names still matter here even though name CHANGES are not followed —
-   * they share the alias space, so they decide whether an old path
-   * resolved at all and whether a new one will.
+   * The table BEFORE the change. Only ids matter beside the moves: display
+   * names are retired from resolution (the alias space is paths + ids), so
+   * a path cannot be shadowed by anything except a live document id.
    */
   readonly entries: readonly {
     readonly id: string
     readonly path: string
-    readonly name?: string
   }[]
   readonly moves: readonly DocumentMove[]
 }
 
 /**
- * Which aliases to rewrite to what, for one document's path move and/or
- * display-name change. The one policy decision lives here so both keepers
- * apply it identically; the mechanical rewriters above take the result.
+ * Which aliases to rewrite to what, for one path move (subtree moves pass
+ * one entry per carried document — `movesForPathChange`). The one policy
+ * decision lives here so both keepers apply it identically; the mechanical
+ * rewriters above take the result.
+ *
+ * Paths are unique by the index's own constraint, so the only alias
+ * question left is the reader's id-first rule: an alias spelling a LIVE
+ * document id resolves to that document no matter whose path it also is —
+ * such an old path is never rewritten, and such a new path falls back to
+ * the moved document's id, which survives everything.
  */
 export function planReferenceRewrite(
   input: ReferenceRewritePlanInput,
 ): ReadonlyMap<string, string> {
-  const { entries, moves } = input
-  const newPathOf = new Map(moves.map((move) => [move.movedId, move.to]))
-
-  // The alias space is FLAT: paths and display names resolve through one
-  // table (reference-aggregate builds its resolver from both). "Uniquely
-  // resolved" counts OWNERS, not column occurrences: a document whose name
-  // equals its own path is one owner, not a collision with itself —
-  // daemonLinkEntries dedupes exactly that case before the resolver sees it,
-  // and the first property run caught this function double-counting it.
-  const owners = (
-    project: (entry: ReferenceRewritePlanInput['entries'][number]) => readonly string[],
-  ): Map<string, Set<string>> => {
-    const byAlias = new Map<string, Set<string>>()
-    const claim = (alias: string, ownerId: string): void => {
-      const set = byAlias.get(alias) ?? new Set<string>()
-      set.add(ownerId)
-      byAlias.set(alias, set)
-    }
-    for (const entry of entries) {
-      for (const alias of project(entry)) claim(alias, entry.id)
-      // Every live document's ID is a reserved alias: the reader resolves a
-      // direct id FIRST, so an alias spelling one — a path can legally be 26
-      // Crockford characters — resolves to THAT document no matter whose
-      // path or name it also is. Claiming it here makes such an alias
-      // ambiguous-by-construction on both sides of the plan.
-      claim(entry.id, `id:${entry.id}`)
-    }
-    return byAlias
-  }
-  const uniquelyOwned = (
-    byAlias: Map<string, Set<string>>,
-    alias: string,
-    ownerId: string,
-  ): boolean => {
-    const set = byAlias.get(alias)
-    return set !== undefined && set.size === 1 && set.has(ownerId)
-  }
-
-  const before = owners((entry) =>
-    entry.name === undefined ? [entry.path] : [entry.path, entry.name],
-  )
-  // The table AFTER the change, to test whether each new path will resolve.
-  const after = owners((entry) => {
-    const path = newPathOf.get(entry.id) ?? entry.path
-    return entry.name === undefined ? [path] : [path, entry.name]
-  })
-
+  const liveIds = new Set(input.entries.map((entry) => entry.id))
   const plan = new Map<string, string>()
-  for (const { movedId, from, to } of moves) {
+  for (const { movedId, from, to } of input.moves) {
     if (to === from) continue
-    if (!uniquelyOwned(before, from, movedId)) continue
-    plan.set(from, uniquelyOwned(after, to, movedId) ? to : movedId)
+    if (liveIds.has(from)) continue
+    plan.set(from, liveIds.has(to) ? movedId : to)
   }
   return plan
 }

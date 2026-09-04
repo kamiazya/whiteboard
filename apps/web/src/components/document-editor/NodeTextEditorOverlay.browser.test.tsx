@@ -13,8 +13,11 @@ afterEach(cleanup)
 const BODY = '# Plan\n\n- one\n- two'
 
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-const TARGET_NAME = 'Weekly review'
-const targets = [{ id: TARGET_ID, name: TARGET_NAME, kind: 'markdown' as const }]
+// The PATH is the written/resolved form; the name only labels the picker.
+const TARGET_NAME = 'reviews/weekly'
+const targets = [
+  { id: TARGET_ID, path: TARGET_NAME, name: 'Weekly review', kind: 'markdown' as const },
+]
 const resolveAlias = (alias: string) => (alias === TARGET_NAME ? TARGET_ID : null)
 
 function renderOverlay(

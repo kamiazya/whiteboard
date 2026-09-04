@@ -8,11 +8,16 @@ import {
 } from './link-target.js'
 
 const targets: readonly LinkTarget[] = [
-  { id: '01JWEEK', name: 'Weekly review', kind: 'markdown' },
-  { id: '01JWEEK2', name: 'Weekly review 2026-08', kind: 'markdown' },
-  { id: '01JSPRINT', name: 'Sprint board', kind: 'spatial' },
-  { id: '01JDUPE1', name: 'untitled', kind: 'markdown' },
-  { id: '01JDUPE2', name: 'untitled', kind: 'markdown' },
+  { id: '01JWEEK', path: 'reviews/weekly', name: 'Weekly review', kind: 'markdown' },
+  {
+    id: '01JWEEK2',
+    path: 'reviews/weekly-2026-08',
+    name: 'Weekly review 2026-08',
+    kind: 'markdown',
+  },
+  { id: '01JSPRINT', path: 'sprint-board', name: 'Sprint board', kind: 'spatial' },
+  { id: '01JDUPE1', path: 'untitled', name: 'untitled', kind: 'markdown' },
+  { id: '01JDUPE2', path: 'untitled-2', name: 'untitled', kind: 'markdown' },
 ]
 
 describe('rankLinkTargets', () => {
@@ -30,9 +35,9 @@ describe('rankLinkTargets', () => {
   it('ranks exact name, then prefix, then contained', () => {
     const ranked = rankLinkTargets(
       [
-        { id: 'a', name: 'my weekly review', kind: 'markdown' },
-        { id: 'b', name: 'Weekly review 2026-08', kind: 'markdown' },
-        { id: 'c', name: 'Weekly review', kind: 'markdown' },
+        { id: 'a', path: 'pa', name: 'my weekly review', kind: 'markdown' },
+        { id: 'b', path: 'pb', name: 'Weekly review 2026-08', kind: 'markdown' },
+        { id: 'c', path: 'pc', name: 'Weekly review', kind: 'markdown' },
       ],
       'weekly review',
     )
@@ -45,32 +50,30 @@ describe('rankLinkTargets', () => {
 })
 
 describe('linkMarkupFor', () => {
-  it('writes the display name when it is unambiguous', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets)).toBe('[[Weekly review]]')
+  // The PATH is the written form: display names are retired from
+  // resolution, and a bare [[path]] is labeled with the target's current
+  // display name at render time — so no label is frozen into the body.
+  it('writes the bare path when no display text was chosen', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets)).toBe('[[reviews/weekly]]')
   })
 
-  it('carries a different display text as the alias', () => {
+  it('carries chosen display text as the alias', () => {
     expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'last week')).toBe(
-      '[[Weekly review|last week]]',
+      '[[reviews/weekly|last week]]',
     )
   })
 
   // The alias would be noise: it says exactly what the target already says.
-  it('omits an alias that matches the name', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'Weekly review')).toBe(
-      '[[Weekly review]]',
+  it('omits an alias that matches the path, and blank text', () => {
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'reviews/weekly')).toBe(
+      '[[reviews/weekly]]',
     )
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, '  ')).toBe('[[Weekly review]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, '  ')).toBe('[[reviews/weekly]]')
   })
 
-  // The id form is unambiguous but unreadable on its own — the name it came
-  // from is exactly what the reader needs, and the codec's alias half is
-  // where it goes.
-  it('always names the id form, using the display text or the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets, 'the first one')).toBe(
-      '[[01JDUPE1|the first one]]',
-    )
+  it('a shared display name changes nothing — paths are unique', () => {
+    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[untitled]]')
+    expect(linkMarkupFor(targets[4] as LinkTarget, targets)).toBe('[[untitled-2]]')
   })
 
   // The codec's scanner stops at the FIRST `]` and matches only if it is
@@ -83,39 +86,27 @@ describe('linkMarkupFor', () => {
     ['note]'],
     ['two\nlines'],
   ])('drops an alias the reference scanner cannot read: %s', (alias) => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, alias)).toBe('[[Weekly review]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, alias)).toBe('[[reviews/weekly]]')
   })
 
   // `|` is fine there: the scanner is already past the target half.
   it('keeps an alias containing a pipe', () => {
-    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a|b')).toBe('[[Weekly review|a|b]]')
+    expect(linkMarkupFor(targets[0] as LinkTarget, targets, 'a|b')).toBe('[[reviews/weekly|a|b]]')
   })
 
-  // The picker knows which one was chosen; the reader of `[[untitled]]`
-  // would not, and codec resolves an ambiguous alias to nothing. The name
-  // still travels, as the alias.
-  it('falls back to the id when two documents share the name', () => {
-    expect(linkMarkupFor(targets[3] as LinkTarget, targets)).toBe('[[01JDUPE1|untitled]]')
-  })
-
-  // Every character sequence the codec's own reference parser would read as
-  // something other than a plain name: `]]` closes the reference, a newline
-  // cannot appear in an inline one, and `|` starts the alias half. The last
-  // one is a name shaped exactly like a document id — with no scheme in the
-  // syntax, that IS the id form, so writing it as a target would link
-  // somewhere else entirely.
-  it.each([
-    ['weird ]] name'],
-    ['single ] bracket'],
-    ['two\nlines'],
-    ['A|B'],
-    ['01ARZ3NDEKTSV4RRFFQ69G5FAV'],
-  ])('uses the id when the name cannot be written inside brackets: %s', (name) => {
-    const odd: LinkTarget = { id: '01JODD', name, kind: 'markdown' }
-    // The name is unwritable as a TARGET, but the alias half is free text up
-    // to the closing bracket, so `|` and an id-shaped string are fine there.
-    const expected = /]|[\r\n]/.test(name) ? '[[01JODD]]' : `[[01JODD|${name}]]`
-    expect(linkMarkupFor(odd, [odd])).toBe(expected)
+  // A path shaped exactly like a document id: the syntax has no scheme, so
+  // that spelling IS the id form and would link somewhere else entirely.
+  // The id target is unreadable on its own, so the display name travels as
+  // the alias.
+  it('falls back to the id, labeled by the name, when the path reads as an id', () => {
+    const odd: LinkTarget = {
+      id: '01JODD',
+      path: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      name: 'Shadowy',
+      kind: 'markdown',
+    }
+    expect(linkMarkupFor(odd, [odd])).toBe('[[01JODD|Shadowy]]')
+    expect(linkMarkupFor(odd, [odd], 'the odd one')).toBe('[[01JODD|the odd one]]')
   })
 })
 

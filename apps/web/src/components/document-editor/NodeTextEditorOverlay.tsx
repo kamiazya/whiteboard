@@ -7,7 +7,7 @@ import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
 export interface NodeTextEditorOverlayProps
   extends Pick<
     MarkdownEditorProps,
-    'theme' | 'resolveAlias' | 'resolveEmbed' | 'linkTargets' | 'initialViewMode'
+    'theme' | 'resolveAlias' | 'resolveEmbed' | 'resolveTitle' | 'linkTargets' | 'initialViewMode'
   > {
   /**
    * Follows a wiki link out of this surface. Without it the editor's preview
@@ -44,6 +44,7 @@ export function NodeTextEditorOverlay({
   theme,
   resolveAlias,
   resolveEmbed,
+  resolveTitle,
   linkTargets,
   initialViewMode,
   onOpenDocument,
@@ -125,6 +126,7 @@ export function NodeTextEditorOverlay({
           theme={theme}
           resolveAlias={resolveAlias}
           resolveEmbed={resolveEmbed}
+          resolveTitle={resolveTitle}
           linkTargets={linkTargets}
           initialViewMode={initialViewMode}
           onOpenDocument={onOpenDocument === undefined ? undefined : followLink}

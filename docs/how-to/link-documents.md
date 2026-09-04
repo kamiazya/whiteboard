@@ -8,14 +8,18 @@ side. Works against a daemon-backed workspace.
 In a **markdown document**, type `[[` — a completion list of the
 workspace's documents opens as you type, ranked by match; Enter inserts the
 link. The toolbar's Link action offers the same list as a dialog (and also
-handles external URLs). A reference can name its target three ways:
+handles external URLs). A reference can name its target two ways:
 
-- `[[<document id>]]` — survives renames and moves; what the link picker
-  inserts when names are ambiguous.
-- `[[Display name]]` — resolves while exactly **one** document carries that
-  name. If a second document takes the same name, the link stops resolving
-  and renders as literal bracket text until the collision is undone.
-- `[[path]]` — resolves the document's current path the same way.
+- `[[path]]` — what the picker and completion insert. The link is shown
+  with the target's **current display name**, so it always reads naturally,
+  and moving the document rewrites references to the old path for you.
+- `[[<document id>]]` — survives everything; what the picker inserts for
+  the rare path that could be mistaken for an id.
+
+Write `[[path|your own words]]` when the link should read as something
+other than the target's name. A `[[Display name]]` is **not** a link — it
+stays literal bracket text; display names label links at render time
+instead of addressing them.
 
 On a **canvas**, a document embedded through the palette's Document entry,
 a file node pointing at a document path, and a `[[...]]` inside a text node
@@ -35,17 +39,18 @@ Below the linked-from list, **Mentioned, not linked** surfaces documents
 whose prose contains this document's display name without linking to it —
 candidates for a link the author never wrote. Click a row to open it and
 decide, or **Link it** to convert that document's mentions into real
-`[[...]]` links in one server-side operation — the readable `[[Name]]`
-when the name is unique, `[[<id>|Name]]` otherwise. Mentions inside canvas
+`[[...]]` links in one server-side operation — written as
+`[[path|Name]]`, so the prose keeps reading as the name. Mentions inside canvas
 labels are listed but never rewritten (a link in a label would render as
 literal brackets). The system still never links without a click — a link
 is the author's claim.
 
 ## Rules worth knowing
 
-- A link that does not resolve for the *reader* (an ambiguous name, an
-  unknown target) never appears as a connection either — the two surfaces
-  always agree.
+- A link that does not resolve for the *reader* (an unknown target, a
+  bracketed display name) never appears as a connection either — the two
+  surfaces always agree.
 - Deleting a document removes its outgoing references immediately.
-- Renaming a document breaks inbound `[[path]]` / `[[Display name]]` links
-  that used the old spelling, but never `[[<document id>]]` links.
+- Moving a document rewrites inbound `[[path]]` links to the new path.
+  Renaming (the display name) changes what links *show*, never what they
+  mean. `[[<document id>]]` links survive everything.

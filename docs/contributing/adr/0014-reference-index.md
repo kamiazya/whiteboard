@@ -1,6 +1,6 @@
 # ADR-0014: Cross-document references are a derived projection with an event-fed aggregate
 
-**Status:** Accepted
+**Status:** Accepted (amended 2026-09-04 — display names retired from resolution, see the dated note under Decision §1)
 
 ## Context
 
@@ -23,11 +23,27 @@ require redesign (an incremental, event-fed index) while starting simple.
 Nothing about references is written into any LoroDoc. A cross-document edge
 stored as CRDT content would need merge semantics of its own; a projection
 needs none and is rebuildable from the store at any time. Consistency with
-what a reader sees is the correctness bar: **a `[[Name]]` the reader leaves
+what a reader sees is the correctness bar: **a reference the reader leaves
 as literal text is never a backlink** — one shared scanner
 (`codec/references/scan.ts`) and one shared resolution rule
-(`codec/references/unique-name-resolver.ts`, aliases are paths *and*
-display names, ambiguity resolves to nothing) enforce this on both sides.
+(`codec/references/unique-name-resolver.ts`) enforce this on both sides.
+
+> **Amendment (2026-09-04, owner decision 2026-09-03).** As accepted, the
+> alias space was paths *and* display names, with ambiguity resolving to
+> nothing. That made every link only as durable as the workspace's weakest
+> naming collision: a `[[Name]]` could be broken by a THIRD document taking
+> the name, and a rename silently orphaned every reference written against
+> the old one. Display names are now **retired from resolution**: the alias
+> space is paths + document ids only, a bracketed display name is literal
+> text, and the display name reaches the reader at **render time** instead —
+> a bare `[[path]]` (or `[[id]]`) is labeled with the target's current name
+> (`resolveTitle` in canvas-render; an explicit `[[path|label]]` always
+> wins). The complementary half is that path references are now REPAIRED on
+> move: `codec/references/rewrite.ts` plans the rewrite and both keepers
+> apply it (`followReferencesAfterRename`, `local-files-source`). Stored
+> `[[Name]]` references were deliberately NOT migrated (they render as
+> visible literal text; 0.0.x no-compat policy). Everything below that
+> speaks of names in the alias table describes the design as accepted.
 
 ### 2. Extraction and resolution split at the CRDT boundary
 

@@ -15,8 +15,8 @@ afterEach(() => {
 })
 
 const TARGETS = [
-  { id: '01ARZ3NDEKTSV4RRFFQ69G5FAV', name: 'Release plan' },
-  { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'Retro notes' },
+  { id: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'release-plan', name: 'Release plan' },
+  { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-notes', name: 'Retro notes' },
 ]
 
 describe('wiki link completion (real browser)', () => {
@@ -52,7 +52,7 @@ describe('wiki link completion (real browser)', () => {
     await new Promise((resolve) => setTimeout(resolve, 120))
     await userEvent.keyboard('{Enter}')
     await vi.waitFor(() => {
-      expect(value).toBe('see [[Release plan]]')
+      expect(value).toBe('see [[release-plan]]')
     })
     // Accepting closed the popup rather than leaving it over the text.
     expect(document.querySelector('.cm-tooltip-autocomplete')).toBeNull()
@@ -83,7 +83,7 @@ describe('wiki link completion (real browser)', () => {
     })
     await userEvent.click(option)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[Retro notes]]')
+      expect(value).toBe('see [[retro-notes]]')
     })
   })
 
@@ -101,6 +101,11 @@ describe('wiki link completion (real browser)', () => {
           value={value}
           onChange={setValue}
           linkTargets={TARGETS}
+          // The inserted markup is the bare [[path]]; what the preview
+          // SHOWS is the render-time title, so the round-trip is only
+          // complete when both seams are wired the way a page wires them.
+          resolveAlias={(alias) => TARGETS.find((t) => t.path === alias)?.id ?? null}
+          resolveTitle={(documentId) => TARGETS.find((t) => t.id === documentId)?.name}
         />
       )
     }
@@ -164,7 +169,7 @@ describe('wiki link completion (real browser)', () => {
     touch('touchstart', rect.y + 4)
     touch('touchend', rect.y + 4)
     await vi.waitFor(() => {
-      expect(value).toBe('see [[Retro notes]]')
+      expect(value).toBe('see [[retro-notes]]')
     })
 
     // And a scroll gesture over the list must NOT commit: same events, but
@@ -197,7 +202,7 @@ describe('wiki link completion (real browser)', () => {
       }),
     )
     await new Promise((resolve) => setTimeout(resolve, 200))
-    expect(value).toBe('see [[Retro notes]] and [[Rel')
+    expect(value).toBe('see [[retro-notes]] and [[Rel')
   })
 
   it('plain prose never opens the popup', async () => {
