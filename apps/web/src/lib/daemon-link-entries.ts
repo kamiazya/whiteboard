@@ -10,21 +10,29 @@ import type { LinkTarget } from '../components/markdown-editor/link-target.js'
  */
 
 /**
- * What `[[...]]` may name: BOTH the display name and the path, because both
- * are identifiers a reader could reasonably type and neither is a superset
- * of the other. A collision between one document's name and another's path
- * is left for the resolver's own ambiguity rule to reject — that reference
- * stays literal text rather than resolving to a guess.
+ * What `[[...]]` may name: the PATH (and a document id, which the codec
+ * resolves before consulting any table). Display names are retired from
+ * resolution — path + id are the only written forms, and the display name
+ * appears at render time as the link's label instead (owner decision,
+ * 2026-09-03). A bracketed name is literal text, exactly as backlinks and
+ * the daemon's own aggregate treat it.
  */
 export function daemonLinkEntries(
   documents: readonly DocumentSummary[],
 ): readonly UniqueNameEntry[] {
-  return documents.flatMap((entry) => {
-    const byPath = { id: entry.id, name: entry.path }
-    return entry.displayName === undefined || entry.displayName === entry.path
-      ? [byPath]
-      : [{ id: entry.id, name: entry.displayName }, byPath]
-  })
+  return documents.map((entry) => ({ id: entry.id, name: entry.path }))
+}
+
+/**
+ * The render-time label for a linked document: what a bare `[[path]]` or
+ * `[[id]]` shows instead of its address. One lookup, shared by both pages
+ * so the two keepers cannot label the same link differently.
+ */
+export function daemonLinkTitles(
+  documents: readonly DocumentSummary[],
+): (documentId: string) => string | undefined {
+  const byId = new Map(documents.map((entry) => [entry.id, entry.displayName ?? entry.path]))
+  return (documentId) => byId.get(documentId)
 }
 
 /**
@@ -47,6 +55,7 @@ export function daemonLinkTargets(
     return [
       {
         id: entry.id,
+        path: entry.path,
         name: entry.displayName ?? entry.path,
         kind: entry.kind,
       },

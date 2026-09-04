@@ -117,20 +117,20 @@ export class ReferenceAggregate {
 
   /**
    * Every live document referencing `documentId`, resolved against the
-   * aggregate's CURRENT name table — the reader's rule exactly: `[[...]]`
-   * may name a path or a display name, and an ambiguous name resolves to
-   * nothing (mirrors apps/web's daemonLinkEntries + the codec resolver).
+   * aggregate's CURRENT path table — the reader's rule exactly: `[[...]]`
+   * may name a path or a document id, and nothing else (mirrors apps/web's
+   * daemonLinkEntries + the codec resolver).
    */
   backlinksOf(documentId: string): BacklinkEntry[] {
     const alive = this.entries()
     const target = alive.get(documentId)
     if (target === undefined) return []
 
+    // Paths only: display names are retired from resolution (path + id are
+    // the only written forms; names appear at render time instead), so a
+    // bracketed name is literal text here exactly as it is in the preview.
     const resolve = createUniqueNameResolver(
-      [...alive].flatMap(([id, facts]) => [
-        { id, name: facts.path },
-        ...(facts.name === undefined ? [] : [{ id, name: facts.name }]),
-      ]),
+      [...alive].map(([id, facts]) => ({ id, name: facts.path })),
     )
 
     const backlinks: BacklinkEntry[] = []

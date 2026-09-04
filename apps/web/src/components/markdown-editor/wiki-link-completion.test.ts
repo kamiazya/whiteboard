@@ -9,10 +9,10 @@ import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const ID_C = '01CX5ZZKBKACTAV9WEVGEMMVRA'
 const TARGETS: readonly LinkTarget[] = [
-  { id: ID_A, name: 'Release plan' },
-  { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name: 'Retro 8月' },
-  { id: ID_C, name: 'Dup' },
-  { id: '01DX5ZZKBKACTAV9WEVGEMMVRB', name: 'Dup' },
+  { id: ID_A, path: 'release-plan', name: 'Release plan' },
+  { id: '01BX5ZZKBKACTAV9WEVGEMMVRZ', path: 'retro-08', name: 'Retro 8月' },
+  { id: ID_C, path: 'dup', name: 'Dup' },
+  { id: '01DX5ZZKBKACTAV9WEVGEMMVRB', path: 'dup-2', name: 'Dup' },
 ]
 
 function complete(doc: string, pos: number) {
@@ -53,21 +53,22 @@ describe('wikiLinkCompletionSource', () => {
   it('accepting replaces the whole reference, brackets included', () => {
     const doc = '詳細は [[Re'
     const result = complete(doc, doc.length)
-    expect(accept(doc, result!, 0)).toBe('詳細は [[Release plan]]')
+    // The PATH is the written form; the render-time title shows the name.
+    expect(accept(doc, result!, 0)).toBe('詳細は [[release-plan]]')
   })
 
   it('keeps a preceding ! so an embed stays an embed', () => {
     const doc = '![[Re'
     const result = complete(doc, doc.length)
-    expect(accept(doc, result!, 0)).toBe('![[Release plan]]')
+    expect(accept(doc, result!, 0)).toBe('![[release-plan]]')
   })
 
-  it('falls back to the id form for a duplicated name', () => {
+  it('a duplicated name is no problem — paths are unique', () => {
     const doc = '[[Du'
     const result = complete(doc, doc.length)
     const index = result!.options.findIndex((o) => o.label === 'Dup')
     expect(index).toBeGreaterThanOrEqual(0)
-    expect(accept(doc, result!, index)).toBe(`[[${ID_C}|Dup]]`)
+    expect(accept(doc, result!, index)).toBe('[[dup]]')
   })
 
   it('inserts at the CURRENT bracket position even after the document changed above it', () => {
@@ -92,7 +93,7 @@ describe('wikiLinkCompletionSource', () => {
     const mappedFrom = PREFIX.length + before.length - 'Re'.length
     const mappedTo = PREFIX.length + before.length
     option.apply(view, option, mappedFrom, mappedTo)
-    expect(view.state.doc.toString()).toBe(`${PREFIX}詳細は [[Release plan]]`)
+    expect(view.state.doc.toString()).toBe(`${PREFIX}詳細は [[release-plan]]`)
     view.destroy()
   })
 

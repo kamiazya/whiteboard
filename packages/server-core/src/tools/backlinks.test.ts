@@ -75,24 +75,18 @@ describe('GET /backlinks', () => {
     expect(out.backlinks[0]?.contexts[0]).toContain('日程を確定')
   })
 
-  it('reports unique-name and path links, and refuses an ambiguous name', async () => {
+  it('only the path spelling links — a display name never resolves', async () => {
+    // Display names are retired from resolution (path + id are the only
+    // written forms; names appear at render time). [[Release plan]] is the
+    // target's NAME, so it stays literal text and never counts here.
     const deps = makeDeps()
     const { create, target, writeBody } = await seed(deps)
     const src = await create('a', 'markdown')
-    // Both bracket spellings the reader resolves: display name and path.
     await writeBody(src.documentId, 'see [[Release plan]] and [[target]]')
     const one = await backlinksOf(deps, target.documentId)
     expect(one.backlinks).toHaveLength(1)
-    expect(one.backlinks[0]?.contexts).toHaveLength(2)
-
-    // A second document takes the same name: the reader stops resolving that
-    // alias, so the name-link disappears as a backlink — while the path link,
-    // still unambiguous, survives.
-    await create('b', 'markdown', 'Release plan')
-    const after = await backlinksOf(deps, target.documentId)
-    expect(after.backlinks).toHaveLength(1)
-    expect(after.backlinks[0]?.contexts).toHaveLength(1)
-    expect(after.backlinks[0]?.contexts[0]).toContain('[[target]]')
+    expect(one.backlinks[0]?.contexts).toHaveLength(1)
+    expect(one.backlinks[0]?.contexts[0]).toContain('[[target]]')
   })
 
   it('reports spatial references: embed node, file-node path ref, text-node wikilink', async () => {
@@ -127,18 +121,16 @@ describe('GET /backlinks', () => {
     expect(out.backlinks[0]?.contexts).toHaveLength(3)
   })
 
-  it('a later rename onto a linked name kills the link, even one that pointed at its own author', async () => {
-    // Pinned from the shrunk counterexample the reference-semantics property
-    // found (against a deliberately mutated last-wins resolver): a document
-    // NAMED Plan writes [[Plan]] — unique, so it resolves to itself and the
-    // self-skip yields no backlink — then a SECOND document takes the name
-    // Plan. Resolution must collapse to ambiguity for everyone, not fall
-    // back to whichever entry happened to be written last.
+  it('renaming a document onto a bracketed word changes nothing — names never resolve', async () => {
+    // The predecessor of this test pinned name-ambiguity semantics; the
+    // name half of the alias space is retired outright, so the stronger
+    // truth is that NO rename can create or kill a link.
     const deps = makeDeps()
     const { create, writeBody } = await seed(deps)
     const other = await create('gamma', 'spatial', 'Note')
     const author = await create('alpha', 'markdown', 'Plan')
     await writeBody(author.documentId, 'see [[Plan]]')
+    expect((await backlinksOf(deps, author.documentId)).backlinks).toHaveLength(0)
     await deps.documentIndex.setDocumentName({
       workspaceId: WS,
       documentId: other.documentId,
@@ -170,7 +162,9 @@ describe('GET /backlinks', () => {
     await writeBody(aliasOnly.documentId, `see [[${targetId}|Release plan]]`)
 
     const out = await backlinksOf(deps, targetId)
-    expect(out.backlinks.map((b) => b.path).sort()).toEqual(['alias-only', 'linked-too'])
+    // 'linked-too' wrote the NAME in brackets — retired, so it is literal
+    // text: not a backlink, and (being inside brackets) not a mention either.
+    expect(out.backlinks.map((b) => b.path).sort()).toEqual(['alias-only'])
     expect(out.unlinkedMentions.map((m) => m.path).sort()).toEqual(['linked-too', 'plain-mention'])
     expect(out.unlinkedMentions.find((m) => m.path === 'plain-mention')?.contexts[0]).toContain(
       '前提が変わった',

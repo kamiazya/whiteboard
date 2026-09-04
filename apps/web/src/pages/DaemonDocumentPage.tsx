@@ -46,7 +46,11 @@ import {
   linkifyDocumentMentions,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
-import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
+import {
+  daemonLinkEntries,
+  daemonLinkTargets,
+  daemonLinkTitles,
+} from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
@@ -396,9 +400,10 @@ export function DaemonDocumentPage({
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
 
-  // `[[Name]]` aliases resolve against the same list the user can see — by
-  // display name AND by path, since only the path is addressable and only
-  // the name is the user's own word for the document.
+  // `[[path]]` aliases resolve against the same list the user can see;
+  // display names are retired from resolution and label the link at render
+  // time instead (`resolveTitle`).
+  const resolveTitle = useMemo(() => daemonLinkTitles(controller.documents), [controller.documents])
   const resolveAlias = useMemo(
     () => createUniqueNameResolver(daemonLinkEntries(controller.documents)),
     [controller.documents],
@@ -808,6 +813,7 @@ export function DaemonDocumentPage({
               theme: resolvedTheme,
               meta: coreFacets ?? { type: documentKind },
               resolveAlias,
+              resolveTitle,
               linkTargets,
               onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
               resolveEmbed,
@@ -861,6 +867,7 @@ export function DaemonDocumentPage({
                 overlayTitle={canvas?.path ?? 'Untitled'}
                 resolveAlias={resolveAlias}
                 resolveEmbed={resolveEmbed}
+                resolveTitle={resolveTitle}
                 linkTargets={linkTargets}
               >
                 <AgentPresenceChip summary={agentActivity.summary} />

@@ -38,8 +38,8 @@ import { followReferencesAfterRename } from './follow-rename.js'
 
 const WS = 'ws-pbt'
 const PATHS = ['alpha', 'alpha/leaf', 'beta', 'beta/leaf', 'gamma'] as const
-// 'beta/leaf' as a NAME collides with a path in the pool — the states the
-// follow plan's ambiguity and fallback rules exist for.
+// 'beta/leaf' as a NAME collides with a path in the pool — and must change
+// nothing anywhere, because display names are retired from resolution.
 const NAMES = ['Plan', 'Note', 'beta/leaf'] as const
 const SLOTS = [0, 1, 2] as const
 
@@ -177,14 +177,14 @@ class Model {
   }
 
   /**
-   * The reader's alias table: paths and display names share one space, and
-   * a document whose name equals its own path is ONE owner, not two — the
-   * real table dedupes that row before the resolver sees it.
+   * The reader's alias table: PATHS only. Display names are retired from
+   * resolution (path + id are the only written forms; names appear at
+   * render time), so a name matching an alias must change nothing here.
    */
   private owners(alias: string): Set<string> {
     const out = new Set<string>()
     for (const d of this.docs.values()) {
-      if (d.path === alias || d.name === alias) out.add(d.id)
+      if (d.path === alias) out.add(d.id)
     }
     return out
   }
@@ -203,33 +203,21 @@ class Model {
   /**
    * The intended follow semantics, written out independently of
    * planReferenceRewrite: apply the subtree's path change, then rewrite
-   * every token that uniquely resolved to a moved document — to its new
-   * path when that resolves uniquely too, else to its id.
+   * every moved path — paths are unique by the index's own constraint, so
+   * the only alias question left is the reader's id-first rule: an old
+   * path spelling a live document id is never rewritten, and a new path
+   * spelling one falls back to the moved document's id.
    */
   followMove(from: string, to: string): void {
-    const table = () =>
-      [...this.docs.values()].map((d) => ({ id: d.id, path: d.path, name: d.name }))
-    const ownersIn = (alias: string, rows: { id: string; path: string; name?: string }[]) => {
-      const out = new Set<string>()
-      for (const r of rows) if (r.path === alias || r.name === alias) out.add(r.id)
-      return out
-    }
-    const before = table()
+    const liveIds = new Set([...this.docs.values()].map((d) => d.id))
     const moved = this.movedBy(from)
     const moves = moved.map((d) => ({ id: d.id, from: d.path, to: to + d.path.slice(from.length) }))
     for (const d of moved) d.path = to + d.path.slice(from.length)
-    const after = table()
     const plan = new Map<string, string>()
     for (const m of moves) {
       if (m.to === m.from) continue
-      // An alias that spells a live document id resolves to THAT id first
-      // and is never rewritten; a new path that spells one never wins.
-      if (before.some((e) => e.id === m.from)) continue
-      const ob = ownersIn(m.from, before)
-      if (!(ob.size === 1 && ob.has(m.id))) continue
-      const oa = ownersIn(m.to, after)
-      const toIsUnique = oa.size === 1 && oa.has(m.id) && !after.some((e) => e.id === m.to)
-      plan.set(m.from, toIsUnique ? m.to : m.id)
+      if (liveIds.has(m.from)) continue
+      plan.set(m.from, liveIds.has(m.to) ? m.id : m.to)
     }
     for (const d of this.docs.values()) {
       d.bodyTokens = d.bodyTokens.map((t) => plan.get(t) ?? t)
@@ -326,11 +314,11 @@ describe('reference semantics under command sequences', () => {
         kind: 'markdown',
       })
       slots[1] = seedSource.documentId
-      // A SHADOWED alias on non-pool paths: X's path is also Y's display
-      // name, so '[[shadowed]]' is ambiguous and must stay literal through
-      // any move of X. Off-pool so it never contends with command traffic;
-      // X sits in slot 2 so the commands can move it. With this absent,
-      // dropping the plan's old-alias ambiguity guard survived the property.
+      // A SHADOW attempt on non-pool paths: X's path is also Y's display
+      // name — and that must change NOTHING, because display names are
+      // retired from resolution. '[[shadowed]]' resolves to X and follows
+      // X's moves, Y's name notwithstanding. Off-pool so it never contends
+      // with command traffic; X sits in slot 2 so the commands can move it.
       const seedShadowed = await wbDocumentCreate(deps, {
         workspaceId: WS,
         path: 'shadowed',

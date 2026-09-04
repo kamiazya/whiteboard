@@ -481,7 +481,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(picker.textContent).toContain('Neighbour note')
   })
 
-  it('a [[Name]] wikiLink resolves against the canvas list and clicking it opens that note', async () => {
+  it('a [[path]] wikiLink resolves, shows the display name, and opens that note', async () => {
     const store = new IdbDocumentIndex()
     const TARGET_ID = await seedIdbDocument(store, {
       path: 'target-note',
@@ -515,15 +515,17 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // elements (the title input and CodeMirror's content), so a click
     // locator on the contenteditable is ambiguous under strict mode.
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
-    // `[[` doubled: userEvent.keyboard's escape for a literal `[`.
-    await userEvent.keyboard('See [[[[Target note]] here.')
+    // `[[` doubled: userEvent.keyboard's escape for a literal `[`. The
+    // PATH is the written form; the display name appears at render time.
+    await userEvent.keyboard('See [[[[target-note]] here.')
 
     // The debounced preview resolves the alias into an anchor carrying the
-    // target's canvas id.
+    // target's document id, labeled with the CURRENT display name.
     const anchor = await waitFor(
       () => {
         const el = document.querySelector(`a[href="${TARGET_ID}"]`)
         expect(el).not.toBeNull()
+        expect((el as HTMLElement).textContent).toBe('Target note')
         return el as HTMLElement
       },
       { timeout: 10_000 },

@@ -1,4 +1,3 @@
-import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import {
   MARKDOWN_BODY_KEY,
   readDocumentKind,
@@ -82,19 +81,15 @@ export async function linkifyMentions(
   if (target.name === undefined) throw new NamelessLinkifyTargetError(input.targetDocumentId)
   const name = target.name
 
-  // The reader's rule decides the spelling: the readable [[Name]] only when
-  // resolution would land on the target, the explicit [[<id>|Name]] form
-  // otherwise — the same trade the link picker makes.
-  const resolve = createUniqueNameResolver(
-    entries.flatMap((entry) => [
-      { id: entry.documentId, name: entry.path },
-      ...(entry.name === undefined ? [] : [{ id: entry.documentId, name: entry.name }]),
-    ]),
-  )
-  const markup =
-    resolve(name) === input.targetDocumentId
-      ? `[[${name}]]`
-      : `[[${input.targetDocumentId}|${name}]]`
+  // The reader's rule decides the spelling: the PATH is the written form
+  // (display names are retired from resolution; the prose word survives as
+  // the label). The one path the reader would not resolve here is one that
+  // reads as a document id — ids resolve first — so that target links by
+  // its id, the spelling nothing can shadow. The same trade the link picker
+  // makes.
+  const markup = documentIdSchema.safeParse(target.path).success
+    ? `[[${input.targetDocumentId}|${name}]]`
+    : `[[${target.path}|${name}]]`
 
   const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const kind = source.kind ?? readDocumentKind(doc)

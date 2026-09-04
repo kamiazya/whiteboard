@@ -1,27 +1,23 @@
 /**
  * What a `[[reference]]` survives AT THE RESOLVER, measured rather than
- * assumed. The three accepted forms fail in complementary ways:
+ * assumed. Since display names were retired from resolution (owner
+ * decision, 2026-09-03), the accepted written forms are two:
  *
  *   | written as   | path move | display-name change |
  *   |--------------|-----------|---------------------|
  *   | the path     | breaks    | survives            |
- *   | the name     | survives  | breaks               |
  *   | the id       | survives  | survives            |
+ *   | the name     | never resolves — retired         |
  *
- * This is the contract, not a defect list: `daemonLinkEntries` accepts both
- * human forms on purpose, because both are identifiers a reader would type.
+ * The path cell's break is repaired one layer up — a move rewrites
+ * references written to the old path (codec's `planReferenceRewrite`,
+ * applied by the daemon's move route and by `local-files-source`). The
+ * repair cannot reach a body edited outside the workspace or pasted back
+ * in, so the cell stays true here at the resolver.
  *
- * The two breaking cells are answered differently, and on purpose:
- *
- * - the PATH cell is repaired one layer up — a move rewrites references
- *   written to the old path (codec's `planReferenceRewrite`, applied by the
- *   daemon's move route and by `local-files-source`). The repair cannot
- *   reach a body edited outside the workspace or pasted back in, so the
- *   cell stays true here at the resolver.
- * - the NAME cell is being RETIRED, not repaired: path + id become the only
- *   written forms, with display names shown at render time instead (owner
- *   decision, 2026-09-03). Following a form on its way out would have been
- *   work spent propping up the fragility being removed.
+ * The name row is the retirement itself: a `[[Name]]` written today stays
+ * literal bracket text whatever happens, and the display name reaches the
+ * reader at render time instead (`resolveTitle` labeling a bare `[[path]]`).
  */
 
 import {
@@ -60,9 +56,8 @@ const MOVED = listed('archive/login', 'Login flow')
 const RENAMED = listed('design/login', 'Sign-in flow')
 
 describe('what a [[reference]] survives', () => {
-  it('all three forms resolve while nothing has changed', () => {
+  it('both written forms resolve while nothing has changed', () => {
     expect(resolvedCount('[[design/login]]', HERE)).toBe(1)
-    expect(resolvedCount('[[Login flow]]', HERE)).toBe(1)
     expect(resolvedCount(`[[${ID}]]`, HERE)).toBe(1)
   })
 
@@ -73,11 +68,12 @@ describe('what a [[reference]] survives', () => {
     expect(resolvedCount('[[design/login]]', RENAMED)).toBe(1)
   })
 
-  // And the complementary half, which is why dropping the path form would
-  // not be a fix — it would trade one breakage for a more frequent one.
-  it('a reference written as the display name does not survive a rename', () => {
+  // The retired row: a display name never resolves, before or after any
+  // rename — the name reaches the reader at render time instead.
+  it('a reference written as the display name never resolves', () => {
+    expect(resolvedCount('[[Login flow]]', HERE)).toBe(0)
     expect(resolvedCount('[[Login flow]]', RENAMED)).toBe(0)
-    expect(resolvedCount('[[Login flow]]', MOVED)).toBe(1)
+    expect(resolvedCount('[[Login flow]]', MOVED)).toBe(0)
   })
 
   it('a reference written as the id survives both', () => {

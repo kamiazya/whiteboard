@@ -89,10 +89,15 @@ export interface MarkdownEditorProps {
    */
   title?: string
   /**
-   * Maps `[[Name]]` aliases to canvas ids for the preview (codec's
+   * Maps `[[path]]` aliases to document ids for the preview (codec's
    * separate resolution pass). Absent, only a bare `[[ULID]]` resolves.
    */
   resolveAlias?: AliasResolver
+  /**
+   * The current display name for a linked document — labels a bare
+   * `[[path]]`/`[[id]]` in the preview instead of its address.
+   */
+  resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
    * Documents this editor may link to. Supplied by the composition root,
    * which already holds the list its switcher shows. Absent (or empty) keeps
@@ -267,6 +272,7 @@ export function MarkdownEditor({
   meta,
   title,
   resolveAlias,
+  resolveTitle,
   linkTargets,
   onOpenDocument,
   resolveEmbed,
@@ -798,6 +804,7 @@ export function MarkdownEditor({
                   theme={theme}
                   resolveAlias={resolveAlias}
                   resolveEmbed={resolveEmbed}
+                  resolveTitle={resolveTitle}
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
                   anchorsRef={anchorsRef}

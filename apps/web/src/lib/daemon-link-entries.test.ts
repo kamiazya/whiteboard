@@ -1,14 +1,13 @@
 import { describe, expect, it } from 'vitest'
-import { daemonLinkEntries, daemonLinkTargets } from './daemon-link-entries.js'
+import { daemonLinkEntries, daemonLinkTargets, daemonLinkTitles } from './daemon-link-entries.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const OTHER = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
 
 describe('daemonLinkEntries', () => {
-  // The display name is the only identifier any screen shows, so it is the
-  // one a reference is written with. The path is an auto-generated address
-  // nothing invites you to type.
-  it('resolves a reference by the display name the user can see', () => {
+  // Display names are retired from resolution: the path is the written
+  // form (a move follows it), and the name labels the link at render time.
+  it('never resolves a display name', () => {
     const entries = daemonLinkEntries([
       {
         path: 'untitled-2',
@@ -18,12 +17,10 @@ describe('daemonLinkEntries', () => {
         kind: 'markdown',
       },
     ])
-    expect(entries).toContainEqual({ id: ID, name: '週次レビュー' })
+    expect(entries).toEqual([{ id: ID, name: 'untitled-2' }])
   })
 
-  // The path is the addressable identity and stays typeable, which is what
-  // makes a link survive a rename.
-  it('keeps the path resolvable alongside the name', () => {
+  it('keeps the path resolvable', () => {
     const entries = daemonLinkEntries([
       {
         path: 'untitled-2',
@@ -43,15 +40,26 @@ describe('daemonLinkEntries', () => {
     expect(entries).toEqual([{ id: ID, name: 'untitled' }])
   })
 
-  // Left for the resolver's own ambiguity rule to reject rather than
-  // silently picking one — a name colliding with another document's path is
-  // exactly the case where guessing is worse than a literal.
-  it('emits both colliding entries rather than dropping one', () => {
+  // With names out of the table, another document's name colliding with a
+  // path cannot shadow it: the path stays the alias's only owner.
+  it('a display name colliding with a path leaves the path resolvable', () => {
     const entries = daemonLinkEntries([
       { path: 'untitled-2', id: ID, updatedAt: '', kind: 'spatial' },
       { path: 'notes', id: OTHER, displayName: 'untitled-2', updatedAt: '', kind: 'spatial' },
     ])
-    expect(entries.filter((e) => e.name === 'untitled-2')).toHaveLength(2)
+    expect(entries.filter((e) => e.name === 'untitled-2')).toEqual([{ id: ID, name: 'untitled-2' }])
+  })
+})
+
+describe('daemonLinkTitles', () => {
+  it('labels by display name, falling back to the path, unknown ids to nothing', () => {
+    const titleOf = daemonLinkTitles([
+      { path: 'untitled-2', id: ID, displayName: '週次レビュー', updatedAt: '', kind: 'markdown' },
+      { path: 'notes', id: OTHER, updatedAt: '', kind: 'spatial' },
+    ])
+    expect(titleOf(ID)).toBe('週次レビュー')
+    expect(titleOf(OTHER)).toBe('notes')
+    expect(titleOf('01ARZ3NDEKTSV4RRFFQ69G5FAX')).toBeUndefined()
   })
 })
 
@@ -71,8 +79,8 @@ describe('daemonLinkTargets', () => {
         { path: 'notes', id: OTHER, updatedAt: '', kind: 'spatial' },
       ]),
     ).toEqual([
-      { id: ID, name: '週次レビュー', kind: 'markdown' },
-      { id: OTHER, name: 'notes', kind: 'spatial' },
+      { id: ID, path: 'untitled-2', name: '週次レビュー', kind: 'markdown' },
+      { id: OTHER, path: 'notes', name: 'notes', kind: 'spatial' },
     ])
   })
 })

@@ -62,13 +62,24 @@ describe('resolveReferences', () => {
     expect(children.children).toEqual([{ type: 'embed', documentId: ULID }])
   })
 
+  it('a resolved bare [[alias]] carries NO alias — the label is decided at render time', () => {
+    // The written target is an ADDRESS, not a caption: a bare [[design/login]]
+    // shows the target's current display name wherever one is known, so the
+    // node must not freeze the address into the label slot.
+    const root = paragraph('[[design/login]]')
+    const resolved = resolveReferences(root, (alias) => (alias === 'design/login' ? ULID : null))
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: undefined }])
+  })
+
   it('resolves [[alias]] to a wikiLink when the resolver returns non-null', () => {
     const root = paragraph('[[My Note]]')
     const resolved = resolveReferences(root, (alias) => (alias === 'My Note' ? ULID : null))
 
     const children = resolved.children[0]
     if (children.type !== 'paragraph') throw new Error('expected paragraph')
-    expect(children.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: 'My Note' }])
+    expect(children.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: undefined }])
   })
 
   it('leaves [[alias]] as text when the resolver returns null', () => {

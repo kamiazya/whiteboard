@@ -89,34 +89,33 @@ describe('planReferenceRewrite', () => {
     expect(plan.has('Login flow')).toBe(false)
   })
 
-  it('falls back to the id when the NEW path would not resolve uniquely', () => {
-    // Paths are unique among paths, but names share the alias space: the
-    // destination collides with another document's display name, so
-    // rewriting path -> path would produce a reference that resolves to
-    // nothing. The id survives everything.
-    const plan = planReferenceRewrite({
-      entries: table([
-        { id: MOVED, path: 'a/one' },
-        { id: OTHER, path: 'b/two', name: 'archive/login' },
-      ]),
-      moves: [{ movedId: MOVED, from: 'a/one', to: 'archive/login' }],
-    })
-    expect(plan.get('a/one')).toBe(MOVED)
-  })
-
-  it('skips an old path that collided with another document display name', () => {
-    // Paths are unique among paths, but the alias space is shared with
-    // names: if another document is NAMED "design/login", the alias was
-    // ambiguous and never resolved — rewriting it would resurrect a dead
-    // reference as a live one.
+  it('a display name cannot shadow a path — names are retired from resolution', () => {
+    // Another document NAMED exactly the old or new path changes nothing:
+    // the alias space is paths + ids only (display names appear at render
+    // time instead), so the path resolved before and the new path resolves
+    // after, name collisions notwithstanding.
     const plan = planReferenceRewrite({
       entries: table([
         { id: MOVED, path: 'design/login' },
         { id: OTHER, path: 'b/two', name: 'design/login' },
+        { id: '01DX5ZZKBKACTAV9WEVGEMMVRC', path: 'c/three', name: 'archive/login' },
       ]),
       moves: [{ movedId: MOVED, from: 'design/login', to: 'archive/login' }],
     })
-    expect(plan.has('design/login')).toBe(false)
+    expect(plan.get('design/login')).toBe('archive/login')
+  })
+
+  it('falls back to the id when the NEW path spells a live document id', () => {
+    // The reader resolves a direct id first, so a path that IS some
+    // document's id would resolve to that document, not the moved one.
+    const plan = planReferenceRewrite({
+      entries: table([
+        { id: MOVED, path: 'a/one' },
+        { id: OTHER, path: OTHER },
+      ]),
+      moves: [{ movedId: MOVED, from: 'a/one', to: OTHER }],
+    })
+    expect(plan.get('a/one')).toBe(MOVED)
   })
 
   it('never rewrites an alias that is also a live document id', () => {

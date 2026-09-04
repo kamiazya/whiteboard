@@ -71,6 +71,7 @@ export interface SpatialEditorPaneProps extends PassedThrough {
   overlayTitle: string
   resolveAlias: NodeTextEditorOverlayProps['resolveAlias']
   resolveEmbed: NodeTextEditorOverlayProps['resolveEmbed']
+  resolveTitle?: NodeTextEditorOverlayProps['resolveTitle']
   linkTargets: NodeTextEditorOverlayProps['linkTargets']
   /** The container's classes — the two pages sit in different grid shells. */
   className: string
@@ -89,6 +90,7 @@ export function SpatialEditorPane({
   overlayTitle,
   resolveAlias,
   resolveEmbed,
+  resolveTitle,
   linkTargets,
   className,
   editorRef,
@@ -147,6 +149,7 @@ export function SpatialEditorPane({
           theme={theme}
           resolveAlias={resolveAlias}
           resolveEmbed={resolveEmbed}
+          resolveTitle={resolveTitle}
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}
