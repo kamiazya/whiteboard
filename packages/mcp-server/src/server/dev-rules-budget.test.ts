@@ -68,7 +68,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // one bullet rather than by drift. The three worked cases live in the
   // `measured-change` skill, which is not always-on and costs nothing here.
   '.claude/rules/dev-flow.md': 26,
-  '.claude/rules/integrator-flow.md': 13,
+  // 14 since the CI-flakes section gained flake-watch's pointer — the
+  // watcher for the section's own second-occurrence rule, whose value is
+  // being discovered at session start rather than remembered. The file sat
+  // 33 characters under the boundary, so the bucket is bought by one
+  // sentence; the mechanism lives in the script's header, not here.
+  '.claude/rules/integrator-flow.md': 14,
   // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a

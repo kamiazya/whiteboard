@@ -28,6 +28,11 @@
             "type": "command",
             "command": "node .claude/scripts/stale-issues.mjs --quiet",
             "_comment": "Reports open issues whose declared OKF `sources` moved since their `generated.at`. Read-only, fails open, and silent when it has nothing to say or the daemon is not up \u2014 so it never delays or blocks a session start. Ordering against the ensure hook above is not guaranteed, which is why the script retries a refused connection briefly."
+          },
+          {
+            "type": "command",
+            "command": "node .claude/scripts/flake-watch.mjs --quiet",
+            "_comment": "The watcher for integrator-flow.md\u2019s second-occurrence rule: reports tests that failed main CI in >= 2 distinct runs in 14 days, from the annotations vitest already emits. Read-only, cached per run id under tmp/flake-watch/, fail-open and silent without gh or network."
           }
         ]
       }
