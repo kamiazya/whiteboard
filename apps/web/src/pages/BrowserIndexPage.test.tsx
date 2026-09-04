@@ -21,11 +21,9 @@ async function seededStore(snapshots: DocumentSnapshot[]) {
   return store
 }
 
-function renderPage(store: LocalStoreDouble) {
+function renderPage(store: LocalStoreDouble, revision?: unknown) {
   const onOpenDocument = vi.fn()
-  // React delegates events to the root; Radix portals render into
-  // document.body, so the body must be the React root for portal events.
-  const utils = render(
+  const page = (rev?: unknown) => (
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
@@ -33,13 +31,16 @@ function renderPage(store: LocalStoreDouble) {
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={onOpenDocument}
+        {...(rev === undefined ? {} : { revision: rev })}
       />
-    </MemoryRouter>,
-    {
-      container: document.body,
-    },
+    </MemoryRouter>
   )
-  return { onOpenDocument, ...utils }
+  // React delegates events to the root; Radix portals render into
+  // document.body, so the body must be the React root for portal events.
+  const utils = render(page(revision), {
+    container: document.body,
+  })
+  return { onOpenDocument, page, ...utils }
 }
 
 // The folder pane selects on click; opening goes through the preview pane's
@@ -52,6 +53,34 @@ async function selectCard(title: string) {
 }
 
 describe('BrowserIndexPage', () => {
+  it('re-lists when the revision moves — the route came back to a page that never left', async () => {
+    // react-router v7 wraps navigations in startTransition, so a Back during
+    // a lazy destination's chunk load ABORTS the transition and this page is
+    // never unmounted — its load effect does not re-run, and the list shows
+    // the state from before whatever the navigation was about (measured:
+    // onboarding create -> immediate Back rendered onboarding again over a
+    // workspace holding the document). App passes location.key as `revision`;
+    // any change to it must re-read.
+    const store = await seededStore([])
+    const { page, rerender } = renderPage(store, 'route-a')
+    await screen.findByText('What will you make first?')
+
+    // The create that happened before the aborted navigation.
+    await store.save({
+      documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'untitled',
+      name: 'Untitled',
+      updatedAt: '2026-09-05T00:00:00Z',
+      kind: 'spatial',
+    })
+
+    rerender(page('route-b'))
+    const titles = await screen.findAllByTestId('card-title')
+    expect(titles.some((el) => el.textContent === 'Untitled')).toBe(true)
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
   it('re-lists when the active workspace changes under it', async () => {
     // ADR-0019's switch is an in-SPA route change, so this page stays mounted
     // across one. Its load effect keyed on the index and the clock, neither of

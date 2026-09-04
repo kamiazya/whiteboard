@@ -34,6 +34,16 @@ export interface BrowserIndexPageProps {
   pointer?: DefaultDocumentPointer
   clock?: ContentClock
   onOpenDocument: (path: string) => void
+  /**
+   * Any value that changes when the route has RETURNED to this page without
+   * remounting it. react-router v7 wraps navigations in startTransition, so
+   * a Back issued while a lazy destination's chunk is still loading aborts
+   * the transition and this page is never unmounted — its load effect does
+   * not re-run, and the list shows the state from before the navigation
+   * (measured: onboarding create → immediate Back rendered onboarding again
+   * over a workspace holding the document). App passes `location.key`.
+   */
+  revision?: unknown
 }
 
 // The browser keeper's landing surface: the same three-pane document browser
@@ -61,6 +71,7 @@ export function BrowserIndexPage({
   pointer = defaultPointer,
   clock = defaultClock,
   onOpenDocument,
+  revision,
 }: BrowserIndexPageProps) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   // Consulted only for the onboarding decision below: a workspace whose list
@@ -144,8 +155,10 @@ export function BrowserIndexPage({
     // `activeWorkspace` is not read in the body — the helpers below read the
     // accessor themselves — but it IS what this effect follows. Depending on
     // the value rather than calling it is the difference between a list that
-    // re-reads on a switch and one that does not.
-  }, [index, clock, filesSource, activeWorkspace])
+    // re-reads on a switch and one that does not. `revision` is the same
+    // contract for the ROUTE: it moves when the address returns here while
+    // this page stayed mounted (see the prop's doc).
+  }, [index, clock, filesSource, activeWorkspace, revision])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
