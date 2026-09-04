@@ -225,6 +225,18 @@ describe('the spatial-editor-container hook means one thing', () => {
   })
 })
 
+/**
+ * Chrome that belongs to the DOCUMENT, not to the canvas — ADR-0026
+ * decision 5. `CommentsPanel` serves a markdown document exactly as it
+ * serves a spatial one (a note has no canvas to hang a per-node toggle on),
+ * so it deliberately does NOT join `SHARED_CANVAS_CHROME`: that group's own
+ * docblock is about chrome the PAGE positions around the editor, and this
+ * one is chrome that answers a question about the document as a whole.
+ * Kept as its own group so a reader does not have to infer the distinction
+ * from where an entry happens to sit.
+ */
+const SHARED_DOCUMENT_CHROME = ['CommentsPanel'] as const
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
     const missing: string[] = []
@@ -270,6 +282,23 @@ describe('document page canvas chrome', () => {
     for (const page of PAGES) {
       expect((await read(page)).length, `${page} is empty`).toBeGreaterThan(10_000)
     }
+  })
+})
+
+describe('document page document-level chrome', () => {
+  it.each(SHARED_DOCUMENT_CHROME)('both pages render %s', async (chrome) => {
+    const missing: string[] = []
+    for (const page of PAGES) {
+      const source = await read(page)
+      if (!renders(source, chrome)) missing.push(page)
+    }
+
+    expect(
+      missing,
+      `${chrome} is document-level chrome (ADR-0026 decision 5): a page that ` +
+        'omits it leaves that document kind with no way to reach its ' +
+        'conversations at all.',
+    ).toEqual([])
   })
 })
 
