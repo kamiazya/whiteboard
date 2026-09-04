@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   isMemoisableKey,
+  outlineKeyOf,
   RENDERER_BUILD_ID,
   renderKeyOf,
   renderKeyPath,
@@ -53,6 +54,44 @@ describe('renderKeyPath — every component unambiguous', () => {
 // completed render must not be remembered under it. The in-flight join is
 // still safe there — two panes asking at the same instant are asking about
 // the same bytes — and that distinction is the whole point of this flag.
+// The broker holds ONE map, so two families asking about the same document
+// must not name the same entry. Before the pipeline axis they did: both keys
+// were `<build>/<kind>/<doc>/<version>.svg`, so a tree row's outline and a
+// list row's SVG collided — and whichever arrived first answered the other,
+// with a type the caller had no reason to check. The `.svg` extension was
+// also a lie for half of them.
+describe('renderKeyPath — the pipeline is part of the identity', () => {
+  const subject = { documentId: 'd', kind: 'spatial' as const, updatedAt: 'v1' }
+
+  it('keeps an outline of a document apart from its SVG', () => {
+    expect(renderKeyPath(outlineKeyOf(subject))).not.toBe(
+      renderKeyPath(renderKeyOf(subject, 'light')),
+    )
+  })
+
+  it('names each family in the path, so a stored entry says what it holds', () => {
+    expect(renderKeyPath(renderKeyOf(subject, 'light')).endsWith('.svg')).toBe(true)
+    expect(renderKeyPath(outlineKeyOf(subject)).endsWith('.svg')).toBe(false)
+  })
+
+  it('defaults to the svg family, which every existing caller is', () => {
+    expect(renderKeyOf(subject, 'light').pipeline).toBe('svg')
+  })
+
+  // An outline's colours are resolved from the LIGHT palette for both kinds,
+  // so the theme is not an axis of it at all. Carrying one would double the
+  // entries for nothing and, worse, make a theme toggle redraw every tree
+  // row icon to produce identical rectangles.
+  it('drops the theme axis for an outline, whose colours do not depend on it', () => {
+    expect(outlineKeyOf(subject).theme).toBeNull()
+    expect(renderKeyPath(outlineKeyOf(subject))).toBe(renderKeyPath(outlineKeyOf(subject)))
+  })
+
+  it('keeps the theme axis for a spatial SVG, whose palette is baked in', () => {
+    expect(renderKeyOf(subject, 'dark').theme).toBe('dark')
+  })
+})
+
 describe('isMemoisableKey', () => {
   it('refuses a key with no version', () => {
     expect(isMemoisableKey(renderKeyOf({ documentId: 'd', kind: 'spatial' }, 'light'))).toBe(false)

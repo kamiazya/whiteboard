@@ -4,10 +4,16 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  DocumentKind,
+  SpatialCanvas,
+  StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
+import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import {
   type BackendErrorReason,
   createDocumentSyncSession,
@@ -79,6 +85,12 @@ export interface UseDocumentSyncResult {
    */
   coreFacets: StoredCoreFacets | undefined
   setCoreFacets: (facets: StoredCoreFacets) => void
+  /**
+   * What a picture of this document would be drawn from, paired with the id
+   * of the state it is. `null` until the first snapshot. See the callback for
+   * why the two are read together rather than exposed separately.
+   */
+  readOutlineSource: (kind: DocumentKind) => DocumentOutlineSource | null
   /** OKF core facets from the doc's sidecar map; undefined until hydrated or when never written. */
   lockedEdgeIds: ReadonlySet<string>
   setEdgeLock: (edgeId: string, locked: boolean) => void
@@ -341,6 +353,34 @@ export function useDocumentSync(
     sessionRef.current?.clearUndo()
   }, [])
 
+  /**
+   * What a picture of this document would be drawn from, with the id of the
+   * state it is — read TOGETHER.
+   *
+   * Both reads happen in this one synchronous block, which is the whole
+   * point of returning a pair rather than two accessors: nothing can commit
+   * between them, so the bytes and the version cannot describe different
+   * states. Handing a caller two functions instead would let it read the
+   * body after an edit and the version before it, and file the new picture
+   * under the old key — which serves the previous picture for as long as
+   * that key stands.
+   *
+   * `null` until the first snapshot: the absence of a version, which the
+   * broker declines to remember anything under.
+   */
+  const readOutlineSource = useCallback(
+    (documentKind: DocumentKind): DocumentOutlineSource | null => {
+      const session = sessionRef.current
+      if (session === null) return null
+      const frontier = session.getFrontier()
+      if (frontier === null) return null
+      if (documentKind === 'markdown') return { frontier, body: session.getMarkdownBody() }
+      const snapshot = session.exportSnapshot()
+      return snapshot === null ? null : { frontier, snapshot }
+    },
+    [],
+  )
+
   // Live affordance state for undo/redo buttons. Not memoized state: every
   // publish re-renders the consumer (setCanvas above), so reading through
   // the session on each render is always current and never stale.
@@ -457,6 +497,7 @@ export function useDocumentSync(
     markdownBody,
     coreFacets,
     setCoreFacets,
+    readOutlineSource,
     lockedEdgeIds,
     setEdgeLock,
     canRedo,

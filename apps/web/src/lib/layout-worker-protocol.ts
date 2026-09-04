@@ -32,6 +32,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
+import type { FaviconRect } from './favicon.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
 export type FileRefLabel = { readonly file: string; readonly label: string }
@@ -141,6 +142,56 @@ export type MarkdownRenderResponse =
       readonly svg: string
       /** What the SVG's own viewBox covers, so a caller can scale it. */
       readonly bounds: BoundingBox
+    }
+  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+
+/**
+ * A document whose OUTLINE is wanted, in one of the three shapes a caller can
+ * hold it in.
+ *
+ * One request rather than one per surface. A tree row's icon has only the
+ * stored bytes; the tab favicon has the live canvas the page is editing; a
+ * markdown document of either has a body and no boxes of its own. They differ
+ * in where the document came from and in nothing else, and a pipeline that
+ * forks on that is how markdown fell out of the SVG family in the first
+ * place (ADR-0027).
+ *
+ * The `body` arm is the only one that needs a real layout pass, and so the
+ * only one behind the font gate: a body measured with a system face puts its
+ * blocks somewhere else. The two spatial arms are a map over boxes the
+ * document already declares.
+ */
+type OutlineSubject =
+  | { readonly canvas: SpatialCanvas; readonly snapshot?: undefined; readonly body?: undefined }
+  | { readonly snapshot: Uint8Array; readonly canvas?: undefined; readonly body?: undefined }
+  | {
+      readonly body: string
+      readonly maxWidth: number
+      readonly canvas?: undefined
+      readonly snapshot?: undefined
+    }
+
+export type OutlineRequest = OutlineSubject & {
+  readonly type: 'outline'
+  readonly id: number
+}
+
+/**
+ * Rectangles in the document's own coordinates, COLOURED by the worker for
+ * both kinds.
+ *
+ * The colour is not decoration here. A scene block has none of its own, so
+ * the markdown side used to leave it absent and each consumer defaulted it
+ * (or, in the tree row's case, did not) — two producers of one type that
+ * differ, which is how a later consumer with no such default gets a surprise.
+ * Resolving it once, on the side that produces the rects, is what makes the
+ * two kinds interchangeable to every surface.
+ */
+export type OutlineResponse =
+  | {
+      readonly type: 'outlined'
+      readonly id: number
+      readonly rects: readonly FaviconRect[]
     }
   | { readonly type: 'failed'; readonly id: number; readonly reason: string }
 

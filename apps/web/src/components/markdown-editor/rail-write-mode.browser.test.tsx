@@ -1,7 +1,9 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
+import { useCallback, useMemo } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { useDocumentOutline } from '../../hooks/useDocumentOutline.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
+import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 const SHORT = '# One\n\nJust a line.\n'
@@ -98,10 +100,17 @@ describe('the rail in write mode', () => {
 // starts another fleet of workers — measurably enough to destabilise the
 // whole project.
 function OutlineProbe({ body }: { body: string }) {
+  const broker = useMemo(() => createInTabRenderBroker(), [])
+  // A version that moves with the text, which is what the real source's
+  // frontier does — without one the memo would answer the second body from
+  // the first body's entry, which is the case these tests are about.
+  const readSource = useCallback(() => ({ frontier: `len-${body.length}`, body }), [body])
   const rects = useDocumentOutline({
+    documentId: 'outline-probe',
     kind: 'markdown',
-    canvas: { nodes: [], edges: [] },
-    markdownBody: body,
+    revision: body,
+    readSource,
+    broker,
   })
   return <div data-testid="outline-count">{rects.length}</div>
 }
