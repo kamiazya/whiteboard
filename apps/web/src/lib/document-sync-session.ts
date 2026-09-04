@@ -34,6 +34,7 @@ import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { sameAnnotations } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
+import { frontierOf } from './document-frontier.js'
 import {
   type ExportRequestHandlerDeps,
   handleIncomingExportRequest,
@@ -220,6 +221,47 @@ export interface DocumentSyncSession {
    * decide whether to offer the disclosure.
    */
   getCoreFacets(): StoredCoreFacets | undefined
+  /**
+   * A stable id for the document's CURRENT state — what a picture drawn from
+   * it right now would be a picture OF. `null` before the first snapshot.
+   *
+   * This is the version key every derived rendition of the document is
+   * memoised under (ADR-0027). `updatedAt` cannot serve: it is stamped per
+   * push, so between two pushes it names one value for a document that has
+   * changed many times, and a memo under it would serve the picture from
+   * before the edit — wrong rather than missing, the worst failure a cache
+   * has.
+   *
+   * The STATE frontier, not the oplog's. A document checked out to an older
+   * version SHOWS that version, and an oplog-derived key would claim the
+   * newest one. Measured before choosing: the state frontier moves on every
+   * edit and does not move on a commit that changed nothing, which is
+   * exactly the invalidation a derived picture wants.
+   *
+   * Loro's own encoding, base64'd, rather than a digest of the content: the
+   * value is loro's answer to "which state is this", not a second opinion
+   * that could disagree with it.
+   */
+  getFrontier(): string | null
+  /**
+   * The committed document as snapshot bytes, or null before the first
+   * snapshot.
+   *
+   * For handing the document to a worker without decoding it here: measured
+   * in a real browser, exporting costs 0.10ms at 12 nodes, 0.10 at 40 and
+   * 0.20 at 120, against 0.50 / 0.80 / 1.90ms to read the canvas out on this
+   * thread instead. The handover is the cheaper half by 5-9x and barely grows
+   * with the document, which is what makes moving the work a release rather
+   * than a relocation.
+   *
+   * Read it in the same synchronous block as `getFrontier()` and the two
+   * describe the same state: nothing can commit between two synchronous
+   * reads. `exports bytes that decode to the state its frontier names` pins
+   * that, because a refactor making either read async would break the
+   * pairing silently — and a picture memoised under the wrong version is the
+   * failure the version key exists to avoid.
+   */
+  exportSnapshot(): Uint8Array | null
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -506,6 +548,14 @@ export function createDocumentSyncSession(
 
   function getCanvas(): SpatialCanvas {
     return currentCanvas
+  }
+
+  function exportSnapshot(): Uint8Array | null {
+    return doc === null ? null : doc.export({ mode: 'snapshot' })
+  }
+
+  function getFrontier(): string | null {
+    return doc === null ? null : frontierOf(doc)
   }
 
   function getAnnotations(): readonly CommentThread[] {
@@ -1037,6 +1087,8 @@ export function createDocumentSyncSession(
     canRedo,
     getAnnotations,
     getCanvas,
+    getFrontier,
+    exportSnapshot,
     subscribeAnnotations,
     subscribe,
     subscribeHistory,

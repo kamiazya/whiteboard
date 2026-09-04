@@ -2,6 +2,11 @@ name: ci
 
 on:
   pull_request:
+  # For the merge queue: its speculative merge commits fire `merge_group`,
+  # and a required check that never reports on that event stalls the whole
+  # queue until timeout. Harmless while no queue is configured — the event
+  # simply never fires.
+  merge_group:
   push:
     branches: [main]
 
@@ -245,7 +250,18 @@ jobs:
         run: pnpm --filter @kamiazya/whiteboard-canvas-viewer smoke:widget
 
   verify:
-    needs: [check, test-unit, test-jsdom, test-browser, widget-smoke]
+    # No `needs` on the test jobs, deliberately — measured 2026-09-04, that
+    # chain WAS the wall clock: pickup ~2min -> test-jsdom 5min -> verify
+    # 3min -> dry-run-docker 5min ≈ 14min for a 5-minute-max job graph.
+    # verify consumes nothing from the test jobs (fresh checkout + install),
+    # and the "a release tag points at a commit where the tests ran"
+    # property is carried by branch protection, which requires every test
+    # job INDIVIDUALLY (check, test-unit 1+2, test-jsdom, test-browser 1+2,
+    # widget-smoke — verified via the branch-protection API; the Actions
+    # token cannot read it, so no test can pin this and the settings page is
+    # the source of truth). What unchaining costs is only compute on a red
+    # run: verify's smokes run even when a test job fails, which on a free
+    # public repo is minutes, not money.
     runs-on: ubuntu-latest
     timeout-minutes: 30
     env:
@@ -367,7 +383,10 @@ jobs:
           if-no-files-found: error
 
   dry-run-docker:
-    needs: verify
+    # No `needs: verify`, deliberately: unlike dry-run-npm this job downloads
+    # no artifact from verify — it checks out and builds the image from
+    # source — so the edge was pure ordering, and it serialized the two
+    # longest jobs in the workflow back to back.
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

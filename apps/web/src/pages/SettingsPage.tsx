@@ -13,7 +13,15 @@ import {
   Waves,
   Wrench,
 } from 'lucide-react'
-import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AppVersionRow } from '@/components/settings/AppVersionRow'
 import { GestureTraceRow } from '@/components/settings/GestureTraceRow'
@@ -210,6 +218,17 @@ function ConnectionsSection({
   daemon?: ConnectedDaemon
   onDisconnected?: () => void
 }) {
+  // Keyed on the primitive fields, not `daemon` itself, so a re-render that
+  // rebuilds the same `daemon` object (a new reference, same values) does not
+  // rebuild this function — which would hand DaemonApiContext a new identity
+  // and re-fire every consumer effect keyed on it (PairedOriginsCard's
+  // load/fingerprint effects, StorageReportCard's fetch). Above the early
+  // return so hook order stays unconditional across the connected/
+  // disconnected branches; null-safe inside since `daemon` may be absent.
+  const daemonFetch = useMemo(
+    () => (daemon ? createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined) : undefined),
+    [daemon?.baseUrl, daemon?.token],
+  )
   if (!daemon) {
     return (
       <div className="space-y-6">
@@ -225,9 +244,8 @@ function ConnectionsSection({
       </div>
     )
   }
-  const daemonFetch = createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined)
   return (
-    <DaemonApiContext.Provider value={daemonFetch}>
+    <DaemonApiContext.Provider value={daemonFetch ?? null}>
       <div className="space-y-6">
         <section aria-label="Paired web apps">
           <PairedOriginsCard />
@@ -274,6 +292,13 @@ function stripScheme(baseUrl: string): string {
  * and saying so beats an empty list.
  */
 function FontsSection({ daemon }: { daemon?: ConnectedDaemon }) {
+  // See ConnectionsSection's daemonFetch comment: hoisted above the early
+  // return, keyed on the primitive fields so an unrelated re-render does not
+  // hand FontsCard's fetch-keyed effect a new identity to re-fire on.
+  const daemonFetch = useMemo(
+    () => (daemon ? createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined) : undefined),
+    [daemon?.baseUrl, daemon?.token],
+  )
   if (!daemon) {
     return (
       <section>
@@ -286,7 +311,7 @@ function FontsSection({ daemon }: { daemon?: ConnectedDaemon }) {
     )
   }
   return (
-    <DaemonApiContext.Provider value={createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined)}>
+    <DaemonApiContext.Provider value={daemonFetch ?? null}>
       <section aria-label="Fonts">
         <FontsCard />
       </section>

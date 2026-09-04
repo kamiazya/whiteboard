@@ -18,6 +18,25 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { FaviconRect } from './favicon.js'
 import { resolveRectColor } from './favicon.js'
 
+/**
+ * What a document's outline is computed FROM, paired with the id of the
+ * state it is.
+ *
+ * One value rather than two reads, because the pairing is the whole
+ * correctness of the memo above it: bytes from after an edit filed under the
+ * version from before it would serve the previous picture for as long as
+ * that version stands. The producer reads both in one synchronous block —
+ * nothing can commit between two synchronous reads — and hands them over
+ * together so no consumer can get it wrong.
+ *
+ * The two arms mirror the worker's own: a spatial document travels as the
+ * bytes nobody on this thread decoded, a markdown one as the body it has
+ * instead of boxes.
+ */
+export type DocumentOutlineSource =
+  | { readonly frontier: string; readonly snapshot: Uint8Array; readonly body?: undefined }
+  | { readonly frontier: string; readonly body: string; readonly snapshot?: undefined }
+
 export function outlineFromSpatial(canvas: SpatialCanvas): FaviconRect[] {
   return canvas.nodes.map((node) => ({
     x: node.x,

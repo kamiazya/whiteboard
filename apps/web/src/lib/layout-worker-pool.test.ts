@@ -321,6 +321,57 @@ describe('createLayoutWorkerPool', () => {
     pool.dispose()
   })
 
+  // The third band exists for work NOBODY is waiting on — a tab favicon is
+  // the case it was added for. `background` already means "not what the user
+  // asked for a moment ago", but a list of thumbnails is still something
+  // they are looking at; an icon that arrives a second late is not noticed
+  // at all. Without a band of its own it competes with the list on equal
+  // terms and wins slots by arrival order.
+  //
+  // Both have to be QUEUED for the ordering to be observable: a pool cannot
+  // reserve a slot against work that has not arrived yet, so the deferrable
+  // budget is filled first and the two contenders queue behind it.
+  it('serves queued background work before idle work that arrived earlier', async () => {
+    const factory = fakeWorkerFactory()
+    // Three workers: two may hold deferrable work, one stays free for an
+    // interactive request.
+    const pool = createLayoutWorkerPool({ size: 3, createWorker: factory.create })
+
+    const running = pool.run({ id: 1 }, 'background')
+    ignore(pool.run({ id: 2 }, 'background'))
+    ignore(pool.run({ id: 3 }, 'idle'))
+    ignore(pool.run({ id: 4 }, 'background'))
+
+    // The budget is full, so neither contender has run yet.
+    expect(factory.live.flatMap((w) => w.sent)).toEqual([1, 2])
+
+    factory.live[0].reply(1, {})
+    await running
+
+    // 4 goes ahead of 3, which was queued first: priority beats arrival, as
+    // it already does for interactive.
+    const sent = factory.live.flatMap((w) => w.sent)
+    expect(sent).toContain(4)
+    expect(sent).not.toContain(3)
+    pool.dispose()
+  })
+
+  // A band that could fill the fleet is not the lowest band, whatever it is
+  // called: a worker cannot be interrupted mid-message, so idle work holding
+  // every slot would make a list of thumbnails wait out renders nobody is
+  // looking at.
+  it('never lets idle work occupy more than one worker', async () => {
+    const factory = fakeWorkerFactory()
+    const pool = createLayoutWorkerPool({ size: 3, createWorker: factory.create })
+
+    ignore(pool.run({ id: 1 }, 'idle'))
+    ignore(pool.run({ id: 2 }, 'idle'))
+    ignore(pool.run({ id: 3 }, 'idle'))
+
+    expect(factory.live.filter((w) => w.inFlight > 0)).toHaveLength(1)
+    pool.dispose()
+  })
+
   it('defaults to interactive, so an unlabelled caller is never deprioritised', async () => {
     const factory = fakeWorkerFactory()
     const pool = createLayoutWorkerPool({ size: 1, createWorker: factory.create })

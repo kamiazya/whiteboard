@@ -17,7 +17,7 @@
 
 import { isMemoisableKey, type RenderKey, renderKeyPath } from './render-key.js'
 
-/** What a surface gets back. `null` is "nothing to draw", and it is an answer. */
+/** The SVG family's answer. `null` is "nothing to draw", and it is an answer. */
 export interface RenderResult {
   readonly svg: string
   readonly bounds: {
@@ -33,8 +33,15 @@ export interface RenderBroker {
    * The picture for `key`. `produce` runs at most once per key: a caller that
    * arrives while the same key is still in flight joins it rather than
    * starting a second render.
+   *
+   * Generic over what a family answers with, because two of them do not
+   * answer with the same thing — the SVG surfaces get a `RenderResult`, the
+   * outline surfaces get rectangles. What makes one map safe to hold both is
+   * the key's `pipeline` axis: two families never name the same entry, so a
+   * caller cannot be handed the other one's type. That axis exists for this,
+   * and `render-key.test.ts` pins it from both directions.
    */
-  render(key: RenderKey, produce: () => Promise<RenderResult | null>): Promise<RenderResult | null>
+  render<T>(key: RenderKey, produce: () => Promise<T | null>): Promise<T | null>
   /** Entries currently held. For tests and for the cap below. */
   readonly size: number
 }
@@ -54,22 +61,25 @@ export interface InTabRenderBrokerOptions {
 export function createInTabRenderBroker(options: InTabRenderBrokerOptions = {}): RenderBroker {
   const maxEntries = options.maxEntries ?? DEFAULT_MAX_ENTRIES
   // Insertion-ordered, so the oldest key is the first one `keys()` yields.
-  const done = new Map<string, RenderResult | null>()
+  // `unknown` rather than a union of every family's answer: the key's
+  // pipeline axis already keeps the families in separate entries, so a union
+  // here would only let a caller believe a cast was checked.
+  const done = new Map<string, unknown>()
   // Separate from `done` because an in-flight entry is not an answer yet, and
   // a rejection must leave nothing behind — a row whose fetch failed once must
   // not keep its kind icon for the rest of the session.
-  const inFlight = new Map<string, Promise<RenderResult | null>>()
+  const inFlight = new Map<string, Promise<unknown>>()
 
   return {
     get size() {
       return done.size
     },
-    render(key, produce) {
+    render<T>(key: RenderKey, produce: () => Promise<T | null>): Promise<T | null> {
       const path = renderKeyPath(key)
-      if (done.has(path)) return Promise.resolve(done.get(path) ?? null)
+      if (done.has(path)) return Promise.resolve((done.get(path) as T | undefined) ?? null)
 
       const joined = inFlight.get(path)
-      if (joined !== undefined) return joined
+      if (joined !== undefined) return joined as Promise<T | null>
 
       const work = produce()
         .then((result) => {

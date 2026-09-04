@@ -4,6 +4,7 @@ import {
   listVersionsResponseSchema,
   type MergeRequest,
   type MergeResponse,
+  type VersionEntry,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   AlertTriangle,
@@ -55,6 +56,28 @@ interface BadgeView {
   label: string
   tone: 'danger' | 'warning' | 'info'
   title: string
+}
+
+/**
+ * The most recent thumbnail-bearing version on a branch, or null.
+ *
+ * Single pass with a strictly-greater comparison, rather than filter+sort+[0]
+ * (an O(n log n) sort to read one extreme): a strictly-greater `createdAt`
+ * only replaces the running pick on a genuine improvement, so the FIRST
+ * array entry wins a tie — the same result `.sort((a, b) =>
+ * b.createdAt.localeCompare(a.createdAt))[0]` gave, since `Array.sort` is
+ * stable and a tie there keeps original order too.
+ */
+export function latestThumbnailVersion(
+  versions: readonly VersionEntry[],
+  branchName: string,
+): VersionEntry | null {
+  let latest: VersionEntry | null = null
+  for (const v of versions) {
+    if (!v.hasThumbnail || v.branchName !== branchName) continue
+    if (latest === null || v.createdAt.localeCompare(latest.createdAt) > 0) latest = v
+  }
+  return latest
 }
 
 function badgeLabel(badge: Record<string, unknown>): BadgeView {
@@ -273,14 +296,8 @@ export function MergeDialog({
           setThumbs({ target: null, source: null })
           return
         }
-        const latestFor = (name: string) => {
-          const matches = parsed.data.versions
-            .filter((v) => v.hasThumbnail && v.branchName === name)
-            .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-          return matches[0] ?? null
-        }
-        const tgt = latestFor(target.name)
-        const src = latestFor(source.name)
+        const tgt = latestThumbnailVersion(parsed.data.versions, target.name)
+        const src = latestThumbnailVersion(parsed.data.versions, source.name)
         setThumbs({
           target: tgt?.id ?? null,
           source: src?.id ?? null,

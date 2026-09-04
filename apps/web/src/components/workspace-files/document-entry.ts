@@ -3,6 +3,9 @@
  * needs it. It lives here rather than with any one pane because three of
  * them read it and none of them owns it.
  */
+
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+
 export interface WorkspaceDocumentEntry {
   readonly documentId: string
   readonly path: string
@@ -13,8 +16,18 @@ export interface WorkspaceDocumentEntry {
    * to `untitled-N`, which ADR-0008 measured and rejected).
    */
   readonly name?: string
-  /** Which editor opens it, and which shape its icon takes. */
-  readonly kind?: 'spatial' | 'markdown'
+  /**
+   * Which editor opens it, and which shape its icon takes.
+   *
+   * `DocumentKind` rather than a copy of its members. Written out by hand it
+   * is a parallel union that quietly EXCLUDES a newly added kind, so the
+   * places that route a row by kind never see one — and the compile error
+   * lands in whichever files-source builds the entry instead of at the
+   * decision that has to be made. Measured by adding a third kind: the row
+   * renderer and the row outliner both stayed silent, and `local-files-source`
+   * and `daemon-files-source` failed in their place.
+   */
+  readonly kind?: DocumentKind
   /** Absent for a daemon that does not record it; the card then carries no age. */
   readonly updatedAt?: string
   /**

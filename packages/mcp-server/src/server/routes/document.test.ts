@@ -16,6 +16,24 @@ const { clearCache } = await import('../store/doc-cache.js')
 
 // Dynamically import the Hono app.
 const { createDocumentRouter } = await import('./document.js')
+const { currentAutoVersionSignal, setAutoVersionTrigger } = await import(
+  './document/auto-version.js'
+)
+
+describe('auto-version signal registration', () => {
+  it('is registered by the time the router exists, with no import left in flight', () => {
+    // The registration used to ride on `void import('./ws.js').then(...)`,
+    // which nobody awaited. Two consequences, and this pins both: a WS
+    // message arriving before it landed signalled the no-op and took no
+    // checkpoint, and the promise outlived the test that built the router —
+    // measured at two still in flight when a file's last test ended, which is
+    // how a fully passing mcp-node run exits 1 on an EnvironmentTeardownError.
+    const sentinel = () => {}
+    setAutoVersionTrigger(sentinel)
+    createDocumentRouter()
+    expect(currentAutoVersionSignal()).not.toBe(sentinel)
+  })
+})
 
 // canvas.ts's own job is composing the canvas/*.ts sub-routers into one
 // router (see route-coverage.test.ts, which requires every route source

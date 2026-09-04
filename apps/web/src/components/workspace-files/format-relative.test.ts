@@ -34,9 +34,16 @@ describe('formatRelative', () => {
   it("pastDay: 'absolute' switches to M/D HH:MM after 24h, and only then", () => {
     expect(formatRelative('2026-08-22T03:00:00.000Z', { pastDay: 'absolute' })).toBe('9h ago')
     const stamp = formatRelative('2026-08-19T15:04:00.000Z', { pastDay: 'absolute' })
-    // Local-time rendering, so assert the shape and the minute field rather
-    // than a fixed hour.
-    expect(stamp).toMatch(/^8\/19 \d{2}:04$/)
+    // Local-time rendering, so the expected DAY and MINUTE both depend on
+    // the machine's offset — 15:04Z is already 8/20 00:04 in UTC+9, and a
+    // half-hour offset moves the minute. Derive the expectation from the
+    // same instant through Date's own local getters (an oracle independent
+    // of the formatter), instead of literals that only hold in UTC.
+    const local = new Date('2026-08-19T15:04:00.000Z')
+    const two = (n: number) => String(n).padStart(2, '0')
+    expect(stamp).toBe(
+      `${local.getMonth() + 1}/${local.getDate()} ${two(local.getHours())}:${two(local.getMinutes())}`,
+    )
   })
 
   it("invalid: 'echo' answers the raw string for an unparsable stamp", () => {

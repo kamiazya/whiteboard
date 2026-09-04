@@ -15,6 +15,7 @@ import {
   type WorkspaceRow,
   type WorkspaceSwitcherSource,
 } from './shell/WorkspaceMenu.js'
+import { formatRelative } from './workspace-files/format-relative.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -85,10 +86,11 @@ function ReplicaCacheNotice({
   if (workspaceId === null) return null
   const replica = settingsStore.load().storage.replicas?.[workspaceId]
   if (replica === undefined) return null
+  const age = formatRelative(replica.syncedAt)
   return (
     <p data-testid="replica-cache-notice" className="text-muted-foreground">
       A copy of this workspace is cached in this browser, and opens read-only when the daemon cannot
-      be reached.
+      be reached.{age === '' ? '' : ` Last synced ${age}.`}
     </p>
   )
 }

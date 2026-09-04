@@ -67,6 +67,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -320,6 +321,7 @@ export function DaemonDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
     syncStatus,
+    readOutlineSource,
   } = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
@@ -527,10 +529,18 @@ export function DaemonDocumentPage({
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
   // One shape for whichever kind this document is — the favicon draws
   // it today, and a tree row's icon draws the same one.
+  // One broker per page mount, for the tab icon's outline. It is the same
+  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
+  // a re-render, a sync-status change or a remount does not recompute a
+  // shape the document already has — the version key is what makes that safe.
+  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
+
   const documentOutline = useDocumentOutline({
+    documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
-    canvas: canvasValue,
-    markdownBody,
+    revision: documentKind === 'markdown' ? markdownBody : canvasValue,
+    readSource: readOutlineSource,
+    broker: outlineBroker,
   })
 
   useFavicon({

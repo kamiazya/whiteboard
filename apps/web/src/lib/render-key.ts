@@ -8,7 +8,7 @@
  * the wrong picture rather than failing.
  */
 
-import { documentKindSchema } from '@kamiazya/whiteboard-model'
+import { type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 
@@ -22,9 +22,30 @@ declare const __RENDERER_BUILD_ID__: string
 
 export const RENDERER_BUILD_ID: string = __RENDERER_BUILD_ID__
 
+/**
+ * The families the broker holds, which is NOT every pipeline a surface can
+ * take: `png-raster` is absent because nothing asks the broker for one, and
+ * naming it here would claim a storage shape this key cannot address.
+ * `render-surfaces.ts` widens this by exactly that member, so the two say the
+ * same thing about the families they share.
+ */
+export const brokeredPipelineSchema = z.enum(['svg', 'outline'])
+
+export type BrokeredPipeline = z.infer<typeof brokeredPipelineSchema>
+
 export const renderKeySchema = z.object({
   /** The code that would produce these bytes. */
   buildId: z.string().min(1),
+  /**
+   * WHICH picture of the document, not just which document.
+   *
+   * The broker holds one map, so without this axis a tree row's outline and
+   * a list row's SVG name the same entry — and the one that arrives first
+   * answers the other, in a type the caller has no reason to check. A path
+   * ending `.svg` while holding block geometry is the same mistake written
+   * down.
+   */
+  pipeline: brokeredPipelineSchema,
   documentId: z.string().min(1),
   kind: documentKindSchema,
   /**
@@ -49,20 +70,52 @@ export const renderKeySchema = z.object({
 
 export type RenderKey = z.infer<typeof renderKeySchema>
 
-/** The document fields a key is built from. */
+/**
+ * The document fields a key is built from.
+ *
+ * `kind` is `DocumentKind` rather than a hand-written copy of its members:
+ * a parallel union beside the schema is the drift this repo's Zod discipline
+ * exists to prevent, and here it would let a new kind be keyed as one of the
+ * old ones.
+ */
 export interface RenderKeySubject {
   readonly documentId: string
-  readonly kind: 'spatial' | 'markdown'
+  readonly kind: DocumentKind
   readonly updatedAt?: string
 }
 
+/** The key for the SVG a surface draws at size — the expensive family. */
 export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): RenderKey {
   return {
     buildId: RENDERER_BUILD_ID,
+    pipeline: 'svg',
     documentId: subject.documentId,
     kind: subject.kind,
     version: subject.updatedAt ?? null,
+    // Baked into a spatial SVG's own bytes; a markdown one takes its ink
+    // from page CSS, so one entry serves both themes.
     theme: subject.kind === 'spatial' ? theme : null,
+  }
+}
+
+/**
+ * The key for a document's OUTLINE — the rectangles a tree row's icon and
+ * the tab favicon draw.
+ *
+ * It takes no theme, and that is the point rather than an omission: outline
+ * colours are resolved from the light palette for both kinds, so a theme axis
+ * would double the entries to hold identical rectangles and make a theme
+ * toggle redraw every icon for nothing. A separate constructor rather than a
+ * third argument, so no caller has to pass a theme that would be ignored.
+ */
+export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
+  return {
+    buildId: RENDERER_BUILD_ID,
+    pipeline: 'outline',
+    documentId: subject.documentId,
+    kind: subject.kind,
+    version: subject.updatedAt ?? null,
+    theme: null,
   }
 }
 
@@ -102,8 +155,20 @@ function segment(value: string): string {
  * what the OPFS store will address, and a leading build id makes retiring a
  * build's whole cache one directory removal rather than a scan.
  */
+/**
+ * What a family's bytes are. An outline is block geometry, so calling its
+ * entry `.svg` would misdescribe it to the OPFS store and to anyone reading
+ * a directory listing.
+ */
+const EXTENSION: Readonly<Record<BrokeredPipeline, string>> = {
+  svg: 'svg',
+  outline: 'json',
+}
+
 export function renderKeyPath(key: RenderKey): string {
   const version = key.version ?? ''
   const leaf = key.theme === null ? segment(version) : `${segment(version)}-${key.theme}`
-  return `${segment(key.buildId)}/${key.kind}/${segment(key.documentId)}/${leaf}.svg`
+  // The pipeline sits under the build id and above the kind, so a sweep can
+  // drop one family the way it can already drop one build: a directory.
+  return `${segment(key.buildId)}/${key.pipeline}/${key.kind}/${segment(key.documentId)}/${leaf}.${EXTENSION[key.pipeline]}`
 }
