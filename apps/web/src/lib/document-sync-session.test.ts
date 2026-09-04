@@ -204,6 +204,55 @@ describe('createDocumentSyncSession', () => {
     expect(nodes).toHaveLength(twoNodeCanvas().nodes.length)
   })
 
+  // The version key every derived picture of this document is memoised under
+  // (ADR-0027). Its whole job is to move when the document does and to stay
+  // put when it does not — a key that misses a change serves the previous
+  // picture, which is the worst failure a cache can have: wrong rather than
+  // missing.
+  //
+  // It names the COMMITTED state, which is not the same instant as the
+  // published canvas value: `onChange` publishes immediately and commits on
+  // a debounce, so between those two the doc has not moved yet. Measured
+  // rather than assumed — reading it straight after `onChange` returns the
+  // pre-edit value, canvas text 'hello' -> 'edited' with the frontier
+  // unchanged. That is why the surface driven by this key is driven by the
+  // doc's own change notification (which fires after the commit) and not by
+  // the React state the editor renders from.
+  it('answers no frontier before a snapshot, and one that moves when the doc does', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    // Nothing hydrated: the ABSENCE of a version, so nothing is remembered
+    // under it rather than everything sharing one key.
+    expect(session.getFrontier()).toBeNull()
+
+    const canvas = twoNodeCanvas()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
+    const hydrated = session.getFrontier()
+    expect(hydrated).not.toBeNull()
+
+    // A remote update imports synchronously, so this is a committed change.
+    const doc = new LoroDoc()
+    doc.import(makeSnapshot(canvas))
+    writeSpatialCanvas(doc, {
+      ...canvas,
+      nodes: [{ ...TEXT_NODE_A, text: 'changed' }, TEXT_NODE_B],
+    })
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(session.getFrontier()).not.toBe(hydrated)
+  })
+
+  it('answers the same frontier when nothing has changed', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    expect(session.getFrontier()).toBe(session.getFrontier())
+  })
+
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())

@@ -29,7 +29,7 @@ import type {
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { LoroDoc, UndoManager } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
 import {
@@ -211,6 +211,28 @@ export interface DocumentSyncSession {
    * decide whether to offer the disclosure.
    */
   getCoreFacets(): StoredCoreFacets | undefined
+  /**
+   * A stable id for the document's CURRENT state — what a picture drawn from
+   * it right now would be a picture OF. `null` before the first snapshot.
+   *
+   * This is the version key every derived rendition of the document is
+   * memoised under (ADR-0027). `updatedAt` cannot serve: it is stamped per
+   * push, so between two pushes it names one value for a document that has
+   * changed many times, and a memo under it would serve the picture from
+   * before the edit — wrong rather than missing, the worst failure a cache
+   * has.
+   *
+   * The STATE frontier, not the oplog's. A document checked out to an older
+   * version SHOWS that version, and an oplog-derived key would claim the
+   * newest one. Measured before choosing: the state frontier moves on every
+   * edit and does not move on a commit that changed nothing, which is
+   * exactly the invalidation a derived picture wants.
+   *
+   * Loro's own encoding, base64'd, rather than a digest of the content: the
+   * value is loro's answer to "which state is this", not a second opinion
+   * that could disagree with it.
+   */
+  getFrontier(): string | null
   // Current published canvas value (empty canvas before the first snapshot).
   getCanvas(): SpatialCanvas
   // Registers a listener for every published canvas value. `origin` tags
@@ -515,6 +537,14 @@ export function createDocumentSyncSession(
 
   function getCanvas(): SpatialCanvas {
     return currentCanvas
+  }
+
+  function getFrontier(): string | null {
+    if (doc === null) return null
+    // `btoa` over the raw bytes: this string only has to be stable and
+    // comparable, and it goes through `encodeURIComponent` before it ever
+    // reaches a path.
+    return btoa(String.fromCharCode(...new Uint8Array(encodeFrontiers(doc.frontiers()))))
   }
 
   function getAnnotations(): readonly CommentThread[] {
@@ -1046,6 +1076,7 @@ export function createDocumentSyncSession(
     canRedo,
     getAnnotations,
     getCanvas,
+    getFrontier,
     subscribeAnnotations,
     subscribe,
     subscribeHistory,
