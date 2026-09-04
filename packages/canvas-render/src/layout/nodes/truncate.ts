@@ -1,6 +1,17 @@
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 
+/**
+ * `granularity` is stated rather than defaulted. Dropping the whole options
+ * object is equivalent — 'grapheme' IS the default — but naming it is what
+ * makes the unit this file cuts at readable at its declaration.
+ *
+ * The mutation lane reports emptying the STRING as a survivor. It is not one:
+ * `new Intl.Segmenter(undefined, { granularity: '' })` throws `RangeError` at
+ * module load, and applying it takes 34 test files down with it. The report is
+ * an artifact of that mutant being judged by zero tests — every file that
+ * would have caught it failed to import instead of failing an assertion.
+ */
 const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
 
 /**
@@ -24,6 +35,22 @@ const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
  * ever be made MORE eager — which is also why most edits to this function
  * cannot be caught by a test, and why the mutation lane reports them as
  * survivors.
+ *
+ * That is an invariant rather than an excuse, and it was measured: over the
+ * domain the cheap path actually serves — every character below U+0300, no
+ * CR — code-point iteration and grapheme segmentation agree on every one of
+ * 714,056 strings (all singles, all pairs, a stratified triple sample). So
+ * any edit that only makes this function ANSWER TRUE MORE OFTEN is
+ * output-equivalent by construction: it buys the segmenter, which is the
+ * right answer everywhere, at the price of walking text that did not need
+ * it. Only a bench can see those, which is why they are recorded as
+ * equivalent rather than chased.
+ *
+ * The edit that is NOT free is one that answers `false` for a string holding
+ * a cluster. Inverting the threshold does exactly that for a text made only
+ * of characters at or above U+0300, and every cluster test in this file
+ * except one sits beside ASCII, which alone sends the string down the
+ * segmenter path and hides it.
  *
  * Deliberately coarse: it sends Japanese, Chinese and Korean down the
  * segmenter path even though most of their text carries no clusters. A
@@ -106,6 +133,9 @@ export function fitToWidth(
   if (!Number.isFinite(maxWidth) || maxWidth <= 0) return { text }
   if (clampAdvance(measure(text, font).advanceWidth) <= maxWidth) return { text }
   let fitted = ''
+  // Read only when `fitted` is still empty, which can only happen if the loop
+  // broke on its FIRST iteration — so the guard below and an unconditional
+  // assignment cannot differ, and the mutation lane is right to survive it.
   let firstUnit = ''
   for (const unit of cutUnits(text)) {
     if (firstUnit === '') firstUnit = unit

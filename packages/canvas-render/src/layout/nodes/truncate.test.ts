@@ -374,4 +374,16 @@ describe('fitToWidth: cuts between characters a reader sees as one', () => {
     // smaller version of the family, it is a different picture.
     expect(fit('👨‍👩‍👧‍👦x', 5).text).toBe('👨‍👩‍👧‍👦')
   })
+
+  it('keeps it whole when NOTHING in the text is below U+0300', () => {
+    // The same rule with the ASCII taken away, and that is the whole test.
+    // Every other cluster case in this file sits beside plain text — an `x`,
+    // a `Task … done` label — and one character below U+0300 is enough on
+    // its own to send the string down the segmenter path. So none of them
+    // can see whether the GATE agrees about which strings may hold a
+    // cluster; they pass with it inverted. A text made only of characters at
+    // or above U+0300 is the one shape that asks it, and the answer under an
+    // inverted gate is a lone `👨`.
+    expect(fit('👨‍👩‍👧‍👦', 5).text).toBe('👨‍👩‍👧‍👦')
+  })
 })
