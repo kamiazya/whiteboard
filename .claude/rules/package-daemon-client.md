@@ -14,9 +14,9 @@ paths:
 - The document backends the browser drives a daemon with: `daemon-backend`
   (WS), `sse-backend` + `sse-stream-hub` (SSE), `select-document-transport`,
   and the `document-backend-contract` types they implement.
-- `api-client` (authorized fetch wrapper), `token-store`, `browser-tracing`
-  (lazy OpenTelemetry web SDK), `upload-files`, the ws message/protocol
-  contracts.
+- `api-client` (authorized fetch wrapper — injects a `traceparent` header
+  through @opentelemetry/api's no-op surface, no SDK shipped), `token-store`,
+  `upload-files`, the ws message/protocol contracts.
 - `test-utils/`: the backend contract suites apps/web runs against its own
   implementations (`document-backend-contract`, `sse-stream-source-contract`).
 

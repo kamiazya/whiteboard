@@ -1,6 +1,21 @@
+import { context, propagation } from '@opentelemetry/api'
 import { z } from 'zod'
-import { injectTraceContextIntoHeaders } from './browser-tracing.js'
 import { readDaemonTokenOnce } from './token-store.js'
+
+/**
+ * `@opentelemetry/api` is a tiny no-op surface: `propagation.inject` adds a
+ * `traceparent` header when (and only when) a real SDK has been registered
+ * by the embedding page. This package ships no SDK of its own — the
+ * lazy-loading `enableBrowserTracing` half was deleted as dead code
+ * (zero production callers; see docs/contributing/observability.md).
+ */
+function injectTraceContextIntoHeaders(headers: Headers, ctx = context.active()): void {
+  propagation.inject(ctx, headers, {
+    set(carrier, key, value) {
+      ;(carrier as Headers).set(key, value)
+    },
+  })
+}
 
 // Re-exported so daemon-pairing callers (apps/web's useDaemonConnection) can
 // verify the same module-singleton token store this file reads from,
