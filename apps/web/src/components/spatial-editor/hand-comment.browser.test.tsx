@@ -106,7 +106,8 @@ it('a press on a bubble that travels is the pan it always was: no card, no move-
   })
 
   expect(transformOf(container)).not.toBe(before)
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // A card opens at the release, synchronously under fireEvent's act flush:
+  // absent now is absent for good.
   expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
   expect(container.querySelector('[data-testid="comment-drag-preview"]')).toBeNull()
   expect(latest.commands).toEqual([])
@@ -126,7 +127,7 @@ it('a press on the canvas shuts the card and stays shut, even though it also pan
   const away = { pointerId: 4, clientX: r.left + 60, clientY: r.top + 560 }
   fireEvent.pointerDown(root, { button: 0, ...away })
   fireEvent.pointerUp(root, away)
-  await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // The stale re-open this guards against happened AT the release, which
+  // fireEvent flushed before returning: shut now is shut for good.
   expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
 })

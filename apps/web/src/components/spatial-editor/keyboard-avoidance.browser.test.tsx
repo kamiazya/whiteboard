@@ -327,6 +327,9 @@ it('a focused button raises no keyboard, so it moves nothing', async () => {
   ;(page.getByRole('button', { name: 'Close' }).element() as HTMLElement).focus()
 
   raiseKeyboard(fake, root, 300)
-  await new Promise((resolve) => setTimeout(resolve, 50))
+  // The hook answers a resize in an effect and re-passes once to settle; two
+  // frames is when both have run, and the transform is its whole answer.
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  await new Promise((resolve) => requestAnimationFrame(resolve))
   expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
 })

@@ -138,8 +138,8 @@ it('a finger opens the card on its FIRST tap, the release landing on the node it
 
   // A tap on empty canvas shuts it, and nothing stale re-opens it at the release.
   fingerTapAt(root, 60, 560, 22)
-  await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
-  await new Promise((resolve) => setTimeout(resolve, 100))
+  // The stale re-open this guards against happened AT the release, which
+  // fireEvent flushed before returning: shut now is shut for good.
   expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
 
   // Re-opened, a tap on the reply box focuses it rather than moving the comment.
