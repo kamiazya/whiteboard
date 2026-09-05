@@ -20,6 +20,7 @@ import type { z } from 'zod'
 import { readCanvasComments } from './annotations.js'
 import { migrateCanvasCommentsToThreads, writeThreadInto } from './comment-threads.js'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
+import { minimalChange } from './minimal-change.js'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
@@ -823,8 +824,14 @@ function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
  */
 export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
   const text = doc.getText(MARKDOWN_BODY_KEY)
-  text.delete(0, text.length)
-  if (body.length > 0) text.insert(0, body)
+  // Only what CHANGED. A whole-document replace is correct and ruinous:
+  // every character is deleted and re-inserted, so one keystroke ships the
+  // document again to every peer, grows the oplog by the document, and takes
+  // every rich-text mark down with the characters it removed — which is the
+  // annotation layer's passages. See `minimalChange` for the measurements.
+  const change = minimalChange(text.toString(), body)
+  if (change.to > change.from) text.delete(change.from, change.to - change.from)
+  if (change.insert.length > 0) text.insert(change.from, change.insert)
   // Only when there is something to clear. This runs on every keystroke in
   // the browser editor, where the canvas is already empty and an
   // unconditional rewrite would add CRDT operations — and a save — for a
