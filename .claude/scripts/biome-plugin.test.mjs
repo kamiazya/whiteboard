@@ -34,11 +34,10 @@ function lint(file, plugin = 'tools/biome-plugins/test-flake-shapes.grit') {
   }
 }
 
-test('the bad fixture trips ALL FIVE rules', () => {
+test('the bad fixture trips ALL FOUR rules', () => {
   const out = lint(join(FIXTURES, 'bad.test.tsx'))
   assert.match(out, /Side effect inside waitFor/)
   assert.match(out, /afterEach wipes document\.body/)
-  assert.match(out, /Non-ASCII character in a userEvent/)
   assert.match(out, /vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/)
   assert.match(out, /A focused test drops every other test/)
 })
@@ -47,8 +46,28 @@ test('the good fixture trips none of the four rules', () => {
   const out = lint(join(FIXTURES, 'good.test.tsx'))
   assert.doesNotMatch(
     out,
-    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)|A focused test drops every other test/,
+    /Side effect inside waitFor|afterEach wipes|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)|A focused test drops every other test/,
   )
+})
+
+// The non-ASCII keystroke rule is a browser-mode shape (jsdom synthesizes
+// the same string deterministically), so it lives in a plugin biome.json
+// scopes to *.browser.test.*. The bad fixture carries the four shapes it
+// must catch — plain receiver, a setup() alias, a template literal, and
+// type()'s second argument — because the receiver-bound form this replaced
+// missed the alias, and the good fixture carries the remedy (fill) with the
+// same non-ASCII text so a tightening edit cannot start flagging the fix.
+const BROWSER_PLUGIN = 'tools/biome-plugins/browser-test-shapes.grit'
+
+test('the bad browser fixture trips the non-ASCII keystroke rule on all four shapes', () => {
+  const out = lint(join(FIXTURES, 'bad.browser.test.tsx'), BROWSER_PLUGIN)
+  const hits = out.match(/Non-ASCII in a (?:keyboard|type)\(\) string/g) ?? []
+  assert.equal(hits.length, 4, `expected all four shapes flagged, got ${hits.length}:\n${out}`)
+})
+
+test('the good browser fixture trips nothing — fill with non-ASCII text is the remedy, not a hit', () => {
+  const out = lint(join(FIXTURES, 'good.browser.test.tsx'), BROWSER_PLUGIN)
+  assert.doesNotMatch(out, /Non-ASCII in a/)
 })
 
 // The logger rule lives in its own plugin because its scope is the opposite

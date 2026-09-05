@@ -12,9 +12,6 @@ export async function bad() {
   })
 }
 
-export async function badKeystrokes() {
-  await userEvent.keyboard('hello — world')
-}
 
 export function badTimers() {
   vi.useFakeTimers()
