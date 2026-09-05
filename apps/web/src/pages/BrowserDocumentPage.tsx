@@ -18,7 +18,6 @@ import { LoadDegradedView } from '../components/document-editor/LoadDegradedView
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
-import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import {
   AlertDialog,
@@ -50,6 +49,7 @@ import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -96,7 +96,7 @@ import {
 import { useMarkdownDocument } from './use-markdown-document.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
-// WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
+// WorkspaceTopBar statically imports Radix, lucide,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
 // @kamiazya/whiteboard-mcp/api-contracts client. None of that daemon-mode
 // weight is needed for the entry chunk of a page whose local mode never
@@ -184,15 +184,6 @@ export function BrowserDocumentPage({
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
-
-  // The connection is app-level, so the App-mounted shell draws it and this
-  // page only reports what it knows: while a document kept in this browser is open,
-  // the data lives in this browser and nowhere else. Cleared on unmount so an
-  // index page makes no claim of its own.
-  useEffect(() => {
-    setShellConnection({ state: { keeper: 'browser' } })
-    return () => setShellConnection(null)
-  }, [])
 
   // duplicateDocument() rejects on failure (see the controller hook) rather
   // than carrying its own error/pending state, so this page owns both: a
@@ -581,6 +572,7 @@ export function BrowserDocumentPage({
     backendError,
     clearLocalUndo,
     readOutlineSource,
+    persistence: syncPersistence,
   } = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
@@ -822,10 +814,34 @@ export function BrowserDocumentPage({
     })
   }, [createDocument])
 
-  // Tab favicon: persistence state as the status dot (degraded reads as
-  // offline — data is at risk either way), scene content as the minimap.
-  // Which owner holds THIS document — see `composeOutlineSource`, which is
-  // where the two of them and the reason are written down.
+  // One account of the document's writes over its three writers — the
+  // controller (renames), the markdown body's own save, and the spatial sync
+  // session — worst first, because the writer that is behind is the one
+  // holding unsaved work. A FACT, not a display state: the page shows nothing
+  // for the ordinary unsaved few hundred milliseconds while someone types.
+  // What it shows is the judgement below, and only when there is one.
+  const writes = mergePersistence(
+    mergePersistence(persistence, markdownDoc.saveState),
+    syncPersistence,
+  )
+  const storageHealth = useStorageHealth(writes)
+
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows: while a document kept in this browser
+  // is open, the data lives in this browser and nowhere else — and whether
+  // that browser is keeping it (`storage`). The last landed write goes with
+  // it, for the popover to answer "is it saved" on asking. Cleared on
+  // unmount so an index page makes no claim of its own.
+  const lastWrittenAt = writes.lastSavedAt
+  useEffect(() => {
+    setShellConnection({ state: { keeper: 'browser', storage: storageHealth }, lastWrittenAt })
+    return () => setShellConnection(null)
+  }, [storageHealth, lastWrittenAt])
+
+  // Tab favicon: the same judgement as the shell mark (quiet unless a write
+  // is stuck or refused), scene content as the minimap. Which owner holds
+  // THIS document — see `composeOutlineSource`, which is where the two of
+  // them and the reason are written down.
   const readDocumentOutlineSource = useCallback(
     (kind: DocumentKind): DocumentOutlineSource | null =>
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
@@ -837,8 +853,20 @@ export function BrowserDocumentPage({
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
-    status: browserFaviconStatus(persistence.kind),
+    status: browserFaviconStatus(storageHealth),
   })
+
+  // The facts themselves, published for tests and nothing else: hidden, so
+  // the row shows no save state, while a wait can still require a landed
+  // write that covers what was typed (`test-utils/wait-for-saved.ts`).
+  const persistenceFact = (
+    <span
+      hidden
+      data-testid="persistence-state"
+      data-save-state={writes.kind}
+      {...(writes.lastSavedAt === null ? {} : { 'data-last-saved-at': writes.lastSavedAt })}
+    />
+  )
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -999,8 +1027,8 @@ export function BrowserDocumentPage({
   // below is the point, not a coincidence.
   const onTitleChange = (next: string) => {
     void renameDocument(next).catch(() => {
-      // Surfaced through persistence state, which the save chip beside this
-      // box already renders.
+      // Surfaced through persistence state: a refused write reaches the
+      // shell mark as `failed`, and the page's degraded screen.
     })
   }
 
@@ -1013,15 +1041,9 @@ export function BrowserDocumentPage({
         <DocumentProperties
           inline
           key={documentId ?? 'no-canvas'}
-          // A markdown document has two writers — this page's controller and
-          // the body's own debounced save — and one dot. Showing the
-          // controller alone reported `Saved` over unwritten text, because a
-          // body edit never moves it.
-          status={
-            <SaveStatusChip
-              state={mergePersistence(renderState.persistence, markdownDoc.saveState)}
-            />
-          }
+          // No save state in the row: the shell mark answers for the keeper,
+          // and only when there is a condition. The hidden fact is for tests.
+          status={persistenceFact}
           actions={canvasRowActions}
           title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
@@ -1038,7 +1060,7 @@ export function BrowserDocumentPage({
       <DocumentProperties
         inline
         key={documentId ?? 'no-canvas'}
-        status={<SaveStatusChip state={renderState.persistence} />}
+        status={persistenceFact}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
         title={titleOf(documentName, documentPath)}

@@ -201,6 +201,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
       <ConnectionStatus
         state={connection?.state ?? null}
         daemonBaseUrl={daemonBaseUrl}
+        lastWrittenAt={connection?.lastWrittenAt ?? null}
         {...(activeName === undefined ? {} : { workspaceName: activeName })}
         workspaceMenu={
           // Rendered whenever a keeper published a switcher, INCLUDING when

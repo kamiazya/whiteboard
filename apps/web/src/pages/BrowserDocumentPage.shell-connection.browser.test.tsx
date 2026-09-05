@@ -53,11 +53,14 @@ describe('shell mark over a real document kept in this browser', () => {
     )
 
     const mark = await waitFor(() => screen.getByTestId('shell-mark-trigger'), { timeout: 5000 })
-    // The mark carries the keeper as a tone, so the WORD lives in the
-    // accessible name rather than in chrome — which is what makes the state
-    // readable to assistive tech that cannot see a colour.
+    // The WORD lives in the accessible name rather than in chrome — which is
+    // what makes the state readable to assistive tech that cannot see a
+    // colour. A browser that is keeping draws no cap at all: the mark speaks
+    // only for a condition, and there is none.
     expect(mark.getAttribute('aria-label')).toMatch(/browser/i)
-    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-tone')).toBe('neutral')
+    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBe('browser')
+    expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('ok')
+    expect(screen.queryByTestId('shell-mark-cap')).toBeNull()
     // The mark sits in the shell's own row, not inside the document's top bar
     // — that separation is the whole point of the move, and a DOM assertion is
     // the only thing that can tell the two rows apart.
@@ -70,6 +73,51 @@ describe('shell mark over a real document kept in this browser', () => {
     expect(
       await screen.findByText(/Connect a daemon \(MCP\) for automatic checkpoints/i),
     ).toBeInTheDocument()
+  })
+
+  // The one condition a browser-kept document can raise on its own: the
+  // store refuses a write. Driven through the real IndexedDB path with every
+  // transaction made to throw — the write the rename schedules fails inside
+  // the index, the controller reports it, and the mark has to show it. This
+  // is also the only place the failure reaches a person: the row itself
+  // draws no save state.
+  it('a refused write breaks the shell mark, with the word in its name', async () => {
+    renderApp()
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      { timeout: 5000 },
+    )
+    await waitFor(
+      () => expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('ok'),
+      { timeout: 5000 },
+    )
+
+    const transaction = IDBDatabase.prototype.transaction
+    IDBDatabase.prototype.transaction = () => {
+      throw new Error('storage refused the write (induced)')
+    }
+    try {
+      const title = await screen.findByRole('textbox', { name: /title/i })
+      fireEvent.change(title, { target: { value: 'Renamed while the store is down' } })
+      fireEvent.keyDown(title, { key: 'Enter' })
+      fireEvent.blur(title)
+
+      await waitFor(
+        () => expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('failed'),
+        { timeout: 5000 },
+      )
+      expect(screen.getByTestId('shell-mark-cap').getAttribute('data-shape')).toBe('ring')
+      expect(screen.getByTestId('shell-mark-stroke').getAttribute('class')).toMatch(
+        /wb-mark-broken/,
+      )
+      expect(screen.getByTestId('shell-mark-trigger').getAttribute('aria-label')).toMatch(
+        /write failed/i,
+      )
+      // Still no carrier in the document's own row.
+      expect(screen.queryByTestId('save-status-chip')).toBeNull()
+    } finally {
+      IDBDatabase.prototype.transaction = transaction
+    }
   })
 
   it('leaving the document takes the claim with it', async () => {

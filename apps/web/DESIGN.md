@@ -34,14 +34,18 @@ it — an annotation is not a selection, not a ruler, and not destruction — an
 deliberately not `--destructive`, which this product reserves for actions that
 cannot be undone.
 
-State colors outside the shadcn set live in ONE component,
-`components/StateDot.tsx`, which every chrome state carrier draws from:
-`emerald-500` = safe (saved, synced), `amber-500` = needs attention,
-`muted-foreground` = neutral/local. These are the ONLY approved uses of raw
-Tailwind palette colors in chrome, and a carrier picks a MEANING (`tone`)
-rather than a color. It also picks a SHAPE, which is what separates two
-carriers that share a tone: `filled` is a state the document is IN, `ring`
-one it is not in yet, `spinner` that same ring while the doing is in flight.
+State colour outside the shadcn set is ONE colour, `amber-500`, and it is
+drawn in one place, `components/shell/ShellMark.tsx`. It means "a condition
+that asks something of you" and nothing else. There is no colour for "safe":
+a document whose writes land and whose session is up draws NO state at all,
+because the routine state asks nothing and a mark lit for it would be lit
+always — which is what made the header restless while someone typed, and
+what the closed set below used to spend `emerald-500` on. What separates two
+conditions that share the one colour is SHAPE and MOTION: a filled cap is
+"not yet" (a write that is stuck, a session that is reconnecting — the latter
+also travels), a hollow cap on a broken stroke is "not keeping" (a refused
+write), a filled cap on a broken stroke is the daemon's "not keeping"
+(sync-off). The word for each lives in the accessible name and the popover.
 
 ## Rules
 
@@ -74,28 +78,35 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
     dimmed. The word moves to the accessible name and the popover's header,
     where assistive tech reads it either way.
 
-    Two gestures, both finite, one per direction. `sync-off` arriving keeps
-    the chip's attention echo verbatim. `reconnecting`/`sync-off` → `synced`
-    plays a recovery draw — the RARE moment, not the routine one. There is
-    deliberately no "a write landed" celebration: the daemon keeper has no
-    write-landed signal to hang one on (its `session` is derived from
-    transport liveness, not from an ack), so shipping it would light up for
-    browser-kept workspaces only and read as "the daemon is not saving" —
-    which is exactly what "never offer what the keeper cannot honour" below
-    forbids.
-  - **save-state chip** (`SaveStatusChip`) — did the last write to this
-    browser's storage land? Filled dot. Browser keeper only; on a daemon the
-    shell mark is what answers "is my work safe", and a second dot saying so
-    would be the same fact twice.
-  - **version dot** (`HeaderVersionDot`) — are there edits no named version
-    holds yet? RING, not filled, precisely because it shares the amber tone
-    with the save-state chip while asking something else. It carried the
-    filled amber and the name "save dot" until 2026-08-22, which made one
-    shape mean two things depending on the mode.
+    Two gestures, both finite, one per direction. A keeper giving up
+    (`sync-off`, a refused browser write) arrives with an attention echo.
+    `reconnecting`/`sync-off` → `synced` plays a recovery draw — the RARE
+    moment, not the routine one. There is deliberately no "a write landed"
+    celebration: the daemon keeper has no write-landed signal to hang one on
+    (its `session` is derived from transport liveness, not from an ack), so
+    shipping it would light up for browser-kept workspaces only and read as
+    "the daemon is not saving" — which is exactly what "never offer what the
+    keeper cannot honour" below forbids.
+
+    The mark answers for BOTH keepers now, each with the health it can
+    vouch for: the daemon's is its session; the browser's is its storage
+    (`StorageHealth` — whether the writes behind the open document are
+    landing, judged from the facts the sync session, the markdown save and
+    the controller report). A browser-kept document used to carry a second
+    carrier, a save-state chip beside its title, that went amber on every
+    keystroke and emerald half a second later. It was removed (2026-09-05)
+    rather than quietened: the unsaved few hundred milliseconds while
+    someone types are the ordinary state, ask nothing, and are not shown.
+    What is shown is a CONDITION — an edit unsaved past `STUCK_AFTER_MS`, or
+    a write the store refused — and "is it saved" is answered on asking, in
+    the mark's popover, with the time the last write landed.
+  - **version dot** — retired. `HeaderVersionDot` ("are there edits no named
+    version holds yet?") was removed with the version history rework
+    (#1245); the History panel is where a named version is taken and seen.
   - **AppShell gear's attention dot** — brand blue, actionable-todo only.
 
-  Anything else stateful in chrome needs this list amended first, and takes
-  its paint from `StateDot` rather than a fresh literal.
+  Anything else stateful in chrome needs this list amended first, takes
+  amber or nothing, and puts its word in the accessible name.
 - **The AppShell owns brand, connection and settings.** Every page mounts
   `AppShell` (the signature mark, the ALPHA honesty chip, the settings gear +
   attention dot) and never renders its own brand, connection or settings
@@ -422,7 +433,7 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   `--motion-ease-out` (soft ease-out — never bouncy in chrome).
   Entrances are fade + small rise/scale (0.98→1); no entrance animation
   without an explicit reason. **Stateful colour is the one paint-property
-  exception**: where the colour IS the state (`StateDot`'s tone, a hover
+  exception**: where the colour IS the state (the shell mark's cap, a hover
   affordance), it crosses with `transition-colors` on the normal token
   rather than cutting. There is no transform/opacity encoding of "which
   colour" that also works — stacking tones and fading between them breaks

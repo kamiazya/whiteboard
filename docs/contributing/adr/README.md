@@ -60,3 +60,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0025](0025-comment-editor-ux.md) | Comment editor UX: context-menu create, resolved toggle, authorless v1, pull-by-convention AI delivery | Accepted |
 | [ADR-0026](0026-annotation-layer.md) | The annotation layer — one plane per document, threads, and selector anchors | Proposed — design of record for comments beyond the canvas |
 | [ADR-0027](0027-render-broker.md) | Every picture of a document goes through one broker, and the cache is a memo | Accepted — in-tab broker landed; OPFS persistence and the SharedWorker implementation are follow-ups |
+| [ADR-0028](0028-quiet-persistence.md) | The routine save state is not shown; the shell mark speaks only for a condition | Accepted — the browser page's save chip is removed, the shell mark carries both keepers' health; writing at once (no debounce window) is the named follow-up |

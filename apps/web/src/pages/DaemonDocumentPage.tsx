@@ -49,7 +49,6 @@ import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
-import { useDirtyState } from '../hooks/useDirtyState.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -651,14 +650,13 @@ export function DaemonDocumentPage({
   )
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
-  const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
   useDocumentFavicon({
     settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
+    status: daemonFaviconStatus({ authError, syncStatus }),
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
@@ -776,7 +774,7 @@ export function DaemonDocumentPage({
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
       // identity-scoped event useDocumentSync fires on a broadcast — otherwise
-      // HeaderSaveDot never learns this save happened and stays dirty.
+      // nothing listening for the save (the version list, the tab) learns it happened.
       dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
     }
   })
@@ -984,7 +982,7 @@ export function DaemonDocumentPage({
             page, this one included, so it is the one carrier now. */}
             {(!capabilities.branches || !capabilities.merge) && (
               <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-                {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
+                {/* WorkspaceTopBar owns the real History/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
                 {!capabilities.branches && <CapabilityTeaser label="Variations" />}
