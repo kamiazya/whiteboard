@@ -66,13 +66,30 @@ export interface LayoutWorkerPool {
 /**
  * How many workers a thumbnail fleet gets.
  *
- * One core is left for the main thread, and the fleet is capped well below
- * the core count: past a handful, the queue is no longer what a list is
- * waiting on — fetching each document's bytes is — and every extra worker is
- * another module graph and another font registration paid at startup.
+ * One core is left for the main thread, and the fleet is capped at four.
+ * The cap once rested on a claim that fetching a document's bytes, not the
+ * render queue, is what a list waits on; that claim is false (a fetch is a
+ * near-constant 4-6ms against a render of 9-29ms that grows with the
+ * document), so the cap was re-measured on what a list actually does. Forty
+ * rows — twenty 20-section markdown bodies and twenty 40-node canvases — at
+ * `background` priority, two runs, real browser, four cores:
  *
- * The cap is a starting point, not a measurement. What would move it is the
- * real fill time of a real list, which needs the list to exist first.
+ *   size 1  warm 284-304ms   cold 2.4-2.9s
+ *   size 2  warm 253-263ms   cold 1.3-1.8s
+ *   size 3  warm 160-167ms   cold 1.2-2.1s
+ *   size 4  warm 137-141ms   cold 1.9-2.0s
+ *   size 6  warm 127-165ms   cold 2.0-2.3s
+ *
+ * Three things the numbers say. A list is RENDER-bound, so fill time tracks
+ * the slots it may use — and `background` gets `size - 1` of them, which is
+ * why sizes 1 and 2 are the same speed (one slot each). Past the core count
+ * the curve is flat inside its own noise, so on a four-core machine nothing
+ * above 4 is measurable HERE; whether an eight-core machine would use a
+ * fifth worker is unmeasured, and this cap is what leaves that question
+ * open rather than answering it. And the cold pass is 1-3s whatever the
+ * size — that is worker startup (module graph, WASM, font registration) paid
+ * once per list, not a cap effect, so a smaller fleet does not buy a faster
+ * first list.
  *
  * `navigator.hardwareConcurrency` is absent on some browsers; 2 is the
  * conservative answer there, not a guess at the machine.
