@@ -136,6 +136,40 @@ describe('canvas_view tool', () => {
     expect(reference?.canvas).toBeUndefined()
   })
 
+  test("names what the canvas's own text nodes embed, so the widget can resolve them", async () => {
+    // The widget lays THIS canvas out and its tool allowlist is canvas_view
+    // plus wb_canvas_edit, so there is no other side that ever reads a text
+    // node's body. A reference missing here is drawn as a bracket literal —
+    // while the same canvas through wb_scene_render resolves it, since that
+    // tool passes the whole bundle the shared loader already built.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          {
+            id: 't1',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 320,
+            height: 220,
+            text: 'Plan:\n\n![[notes]]',
+          },
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    const reference = result.references.notes
+    expect(reference?.documentId).toBe(NOTE_ID)
+    expect(reference?.name).toBe('Weekly')
+    expect(reference?.body).toContain('# Weekly notes')
+  })
+
   test('a referenced document that predates kinds is read as the canvas it was', async () => {
     // Neither the snapshot nor the index row says what it is: every pre-kind
     // document was spatial, so the reference carries its canvas rather than
