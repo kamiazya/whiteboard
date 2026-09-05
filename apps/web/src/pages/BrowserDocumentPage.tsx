@@ -1,5 +1,5 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -730,34 +730,45 @@ export function BrowserDocumentPage({
    * on submit — through the note's own door, since a note has no session
    * to send a command through.
    */
-  const [pendingAnchor, setPendingAnchor] = useState<TextAnchor | null>(null)
+  const [pendingAnchor, setPendingAnchor] = useState<AnnotationAnchor | null>(null)
   const requestComment = useCallback((anchor: TextAnchor) => {
     setPendingAnchor(anchor)
     setCommentsOpen(true)
     return true
+  }, [])
+  // The document as a whole has no place on any surface, so the rail is
+  // where that conversation starts — for a note and a canvas alike.
+  const requestDocumentComment = useCallback(() => {
+    setPendingAnchor({ kind: 'document' })
+    setCommentsOpen(true)
   }, [])
   const commentDraft = useMemo(
     () =>
       pendingAnchor === null
         ? undefined
         : {
-            about: pendingAnchor.quote.exact,
+            ...(pendingAnchor.kind === 'text' ? { about: pendingAnchor.quote.exact } : {}),
             onSubmit: (body: string) => {
               const id = crypto.randomUUID()
               const createdAt = new Date().toISOString()
-              markdownDoc.addThread({
+              const thread = {
                 id,
                 anchor: pendingAnchor,
-                status: 'open',
+                status: 'open' as const,
                 createdAt,
                 messages: [{ id: `${id}-m1`, body, createdAt }],
-              })
+              }
+              // A note writes through its own door (it has no session to
+              // send a command through); a canvas rides the sync session's
+              // command, like a reply does.
+              if (documentKind === 'markdown') markdownDoc.addThread(thread)
+              else onChange(canvas, { kind: 'create-thread', thread })
               setPendingAnchor(null)
               setOpenThreadId(id)
             },
             onCancel: () => setPendingAnchor(null),
           },
-    [pendingAnchor, markdownDoc.addThread],
+    [pendingAnchor, markdownDoc.addThread, documentKind, canvas, onChange],
   )
   /**
    * This document's conversations, whichever half of the page holds them.
@@ -1353,6 +1364,7 @@ export function BrowserDocumentPage({
                 // surface showing something else entirely.
                 onReply={preview === null ? handleReply : undefined}
                 draft={preview === null ? commentDraft : undefined}
+                onDraftDocument={preview === null ? requestDocumentComment : undefined}
               />
             ) : null}
           </div>

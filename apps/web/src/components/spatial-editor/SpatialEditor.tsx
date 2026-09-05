@@ -2614,9 +2614,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                         ],
                       })
                     }
-                  } else if (text.length > 0 && commentCompose.passage !== undefined) {
-                    // A passage of a node's text: a THREAD, since a flat
-                    // comment cannot carry where in the text it points.
+                  } else if (text.length > 0 && commentCompose.threadAnchor !== undefined) {
+                    // A passage of a node's text, or a node set: a THREAD,
+                    // since a flat comment cannot carry either anchor.
                     const id = (createId ?? defaultCreateId)()
                     const createdAt = new Date().toISOString()
                     applyResult({
@@ -2626,7 +2626,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                           kind: 'create-thread',
                           thread: {
                             id,
-                            anchor: commentCompose.passage,
+                            anchor: commentCompose.threadAnchor,
                             status: 'open',
                             createdAt,
                             messages: [{ id: `${id}-m1`, body: text, createdAt }],
@@ -2703,7 +2703,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     setCommentCompose({
                       point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
                       targetNodeId: selectedNode.id,
-                      passage: { ...anchor, nodeId: selectedNode.id },
+                      threadAnchor: { ...anchor, nodeId: selectedNode.id },
                     })
                     return true
                   }}

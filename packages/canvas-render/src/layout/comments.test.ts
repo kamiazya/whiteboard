@@ -32,11 +32,19 @@ const fakeAppearance: SpatialAppearanceResolver = {
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
     passage: { fill: '#d97706', fillOpacity: 0.22 },
+    region: { fill: 'none', stroke: '#d97706', strokeWidth: 1.5, strokeDasharray: '6 4' },
     resolvedOverlay: {
       pin: { fill: '#d97706', fillOpacity: 0.45 },
       bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
       leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
       passage: { fill: '#d97706', fillOpacity: 0.1 },
+      region: {
+        fill: 'none',
+        stroke: '#d97706',
+        strokeWidth: 1.5,
+        strokeDasharray: '6 4',
+        strokeOpacity: 0.45,
+      },
     },
   }),
 }
@@ -616,5 +624,83 @@ describe('a passage of a node’s text (the text arm naming a node)', () => {
       baseOptions({ threads: [passage('plan', 'resolved')], showResolved: true }),
     )
     expect(highlightsOf(shown.nodes)).toHaveLength(1)
+  })
+})
+
+describe('node sets and regions (the spatial arm with nodeIds or a rect)', () => {
+  const A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' } as const
+  const B = { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' } as const
+  const setThread = (status: 'open' | 'resolved' = 'open'): CommentThread => ({
+    id: 'set',
+    anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 10, height: 10 },
+    status,
+    messages: [{ id: 'm', body: 'these two' }],
+  })
+  const outlineOf = (nodes: readonly SceneNode[]) =>
+    shapesOf(nodes).find((shape) => shape.id === 'set/region')
+
+  it('outlines the box the live nodes occupy and stands the pin at its top-right corner', () => {
+    const thread = setThread()
+    // The flat projection carries a STALE corner (the nodes have moved
+    // since it was taken); the pin follows the live box, not the memory.
+    const scene = layoutSpatialCanvas(
+      {
+        nodes: [A, B],
+        edges: [],
+        'x-whiteboard': { comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }] },
+      },
+      baseOptions({ threads: [thread] }),
+    )
+    expect(outlineOf(scene.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 400, h: 250 })
+    expect(outlineOf(scene.nodes)?.appearance).toEqual({
+      fill: 'none',
+      stroke: '#d97706',
+      strokeWidth: 1.5,
+      strokeDasharray: '6 4',
+    })
+    expect(outlineOf(scene.nodes)?.commentChrome).toBe(true)
+    const pin = shapesOf(scene.nodes).find((shape) => shape.id === 'set/pin')
+    expect(pin?.bbox).toMatchObject({
+      x: 400 - COMMENT_PIN_SIZE_PX / 2,
+      y: -COMMENT_PIN_SIZE_PX / 2,
+    })
+    // The outline paints under the pin.
+    const ids = scene.nodes.map((n) => (n.kind === 'shape' ? n.id : undefined))
+    expect(ids.indexOf('set/region')).toBeLessThan(ids.indexOf('set/pin'))
+  })
+
+  it('falls back to the stored rect once every node is gone, and hides a resolved one unless asked', () => {
+    const orphan = layoutSpatialCanvas(
+      { nodes: [], edges: [] },
+      baseOptions({ threads: [setThread()] }),
+    )
+    expect(outlineOf(orphan.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 10, h: 10 })
+    const resolved = layoutSpatialCanvas(
+      { nodes: [A, B], edges: [] },
+      baseOptions({ threads: [setThread('resolved')] }),
+    )
+    expect(outlineOf(resolved.nodes)).toBeUndefined()
+    const shown = layoutSpatialCanvas(
+      { nodes: [A, B], edges: [] },
+      baseOptions({ threads: [setThread('resolved')], showResolved: true }),
+    )
+    expect(outlineOf(shown.nodes)?.appearance).toMatchObject({ strokeOpacity: 0.45 })
+  })
+
+  it('draws no outline for a point, node or edge anchor', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [A], edges: [] },
+      baseOptions({
+        threads: [
+          {
+            id: 'p',
+            anchor: { kind: 'spatial', nodeId: 'a', x: 0, y: 0 },
+            status: 'open',
+            messages: [{ id: 'm', body: 'x' }],
+          },
+        ],
+      }),
+    )
+    expect(shapesOf(scene.nodes).some((shape) => shape.id?.endsWith('/region'))).toBe(false)
   })
 })

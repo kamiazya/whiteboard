@@ -48,13 +48,23 @@ export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
  * the canvas, but its position is a place in a string, not a point. The
  * places a reader wants to comment on, and the arm that carries each:
  *
- * | place                              | arm       | reference | fallback        |
- * |------------------------------------|-----------|-----------|-----------------|
- * | a spot on the canvas               | `spatial` | —         | the point       |
- * | a node (text, file, link, group)   | `spatial` | `nodeId`  | the point       |
- * | an edge                            | `spatial` | `edgeId`  | the point       |
- * | a passage of a note's body         | `text`    | —         | quote + offsets |
- * | a passage of a text node's text    | `text`    | `nodeId`  | quote + offsets |
+ * | place                              | arm        | reference | fallback        |
+ * |------------------------------------|------------|-----------|-----------------|
+ * | a spot on the canvas               | `spatial`  | —         | the point       |
+ * | a node (text, file, link, group)   | `spatial`  | `nodeId`  | the point       |
+ * | an edge                            | `spatial`  | `edgeId`  | the point       |
+ * | several nodes at once (a selection)| `spatial`  | `nodeIds` | the rect        |
+ * | a region of the canvas             | `spatial`  | —         | the rect        |
+ * | a passage of a note's body         | `text`     | —         | quote + offsets |
+ * | a passage of a text node's text    | `text`     | `nodeId`  | quote + offsets |
+ * | the document as a whole            | `document` | —         | —               |
+ *
+ * A region is the spatial arm with a `width` and `height`: the rect is the
+ * position, the way the point is for the other spatial anchors, and a node
+ * set stores the rect its nodes occupied as the place an orphan is drawn
+ * from. The `document` arm is the one anchor with no position at all —
+ * the container is not on any surface, so nothing draws it in place and
+ * the panel is where it is read (ADR-0026 decision 5).
  *
  * The union is closed on purpose — a new format is a new arm here, so every
  * renderer's switch over it stays exhaustive rather than silently ignoring a
@@ -67,15 +77,33 @@ export const annotationAnchorSchema = z.discriminatedUnion('kind', [
       kind: z.literal('spatial'),
       nodeId: nodeIdSchema.optional(),
       edgeId: nodeIdSchema.optional(),
+      /** Several nodes the conversation is about at once — a selection, not a single object. */
+      nodeIds: z.array(nodeIdSchema).min(2, 'a node set names at least two nodes').optional(),
       // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
       // fractional anchor taken from a zoomed viewport survives the session
       // and then vanishes, because the next read drops what fails the schema.
       x: z.number().int(),
       y: z.number().int(),
+      /** With `height`: the anchor is a REGION with `x`/`y` its top-left corner. */
+      width: z.number().int().nonnegative().optional(),
+      height: z.number().int().nonnegative().optional(),
     })
     .strict()
-    .refine((anchor) => anchor.nodeId === undefined || anchor.edgeId === undefined, {
-      message: 'a spatial anchor names a node or an edge, not both',
+    .refine(
+      (anchor) =>
+        [anchor.nodeId, anchor.edgeId, anchor.nodeIds].filter((ref) => ref !== undefined).length <=
+        1,
+      { message: 'a spatial anchor names a node, an edge or a node set, not two of them' },
+    )
+    .refine(
+      (anchor) =>
+        anchor.nodeIds === undefined || new Set(anchor.nodeIds).size === anchor.nodeIds.length,
+      {
+        message: 'a node set names each node once',
+      },
+    )
+    .refine((anchor) => (anchor.width === undefined) === (anchor.height === undefined), {
+      message: 'a region has both a width and a height',
     }),
   z
     .object({
@@ -90,9 +118,51 @@ export const annotationAnchorSchema = z.discriminatedUnion('kind', [
     .refine((anchor) => anchor.end >= anchor.start, {
       message: 'a text anchor must not end before it starts',
     }),
+  z.object({ kind: z.literal('document') }).strict(),
 ])
 
 export type AnnotationAnchor = z.infer<typeof annotationAnchorSchema>
+export type SpatialAnchor = Extract<AnnotationAnchor, { kind: 'spatial' }>
+
+/** An axis-aligned rectangle in canvas coordinates. */
+export interface AnchorRect {
+  readonly x: number
+  readonly y: number
+  readonly width: number
+  readonly height: number
+}
+
+/**
+ * The rectangle a spatial anchor stands for, if it stands for one: the
+ * bounds of whichever of its nodes still exist, else the rect it stored.
+ * `undefined` for a point, node or edge anchor, which stand for no area.
+ *
+ * Live nodes first, because the reference is what survives the objects
+ * moving — a selection commented on and then dragged apart is still about
+ * those nodes, and the outline follows them. The stored rect is what an
+ * orphaned set is drawn from once every node is gone, the same role the
+ * point plays for a deleted node's comment.
+ */
+export function spatialAnchorRect(
+  anchor: SpatialAnchor,
+  nodeById?: (id: string) => CommentTargetNode | undefined,
+): AnchorRect | undefined {
+  if (anchor.nodeIds !== undefined) {
+    const live = anchor.nodeIds.flatMap((id) => {
+      const node = nodeById?.(id)
+      return node === undefined ? [] : [node]
+    })
+    if (live.length > 0) {
+      const left = Math.min(...live.map((node) => node.x))
+      const top = Math.min(...live.map((node) => node.y))
+      const right = Math.max(...live.map((node) => node.x + node.width))
+      const bottom = Math.max(...live.map((node) => node.y + node.height))
+      return { x: left, y: top, width: right - left, height: bottom - top }
+    }
+  }
+  if (anchor.width === undefined || anchor.height === undefined) return undefined
+  return { x: anchor.x, y: anchor.y, width: anchor.width, height: anchor.height }
+}
 
 /**
  * One message in a thread. Deliberately carries NEITHER an anchor nor a
@@ -185,12 +255,13 @@ export function threadFromCanvasComment(comment: CanvasComment): CommentThread {
   }
 }
 
-/** What the projection needs to know about a node: where its top-right corner is. */
+/** What the projection needs to know about a node: the box it occupies. */
 export interface CommentTargetNode {
   readonly id: string
   readonly x: number
   readonly y: number
   readonly width: number
+  readonly height: number
 }
 
 /**
@@ -202,7 +273,12 @@ export interface CommentTargetNode {
  *
  * Every arm projects, or says why not:
  * - `spatial` → the comment as it always was, its node or edge reference
- *   carried as `targetNodeId` / `targetEdgeId`.
+ *   carried as `targetNodeId` / `targetEdgeId`. A node set or a region has
+ *   no single object to carry, so it projects as a comment at the
+ *   top-right corner of the rect it stands for (`spatialAnchorRect`) —
+ *   the corner a node comment stands at, for the box the set occupies.
+ * - `document` → nothing: there is no place on the canvas for a comment
+ *   about the container, and the panel reads the thread directly.
  * - `text` naming a node → a node comment at that node's top-right corner,
  *   found through `nodeById`; the renderer follows the node from there. The
  *   node gone, there is no corner to stand at: `undefined`, which is the
@@ -229,13 +305,18 @@ export function canvasCommentFromThread(
     readonly targetNodeId?: string
     readonly targetEdgeId?: string
   }
+  if (anchor.kind === 'document') return undefined
   if (anchor.kind === 'spatial') {
-    place = {
-      x: anchor.x,
-      y: anchor.y,
-      ...(anchor.nodeId === undefined ? {} : { targetNodeId: anchor.nodeId }),
-      ...(anchor.edgeId === undefined ? {} : { targetEdgeId: anchor.edgeId }),
-    }
+    const rect = spatialAnchorRect(anchor, nodeById)
+    place =
+      rect !== undefined
+        ? { x: rect.x + rect.width, y: rect.y }
+        : {
+            x: anchor.x,
+            y: anchor.y,
+            ...(anchor.nodeId === undefined ? {} : { targetNodeId: anchor.nodeId }),
+            ...(anchor.edgeId === undefined ? {} : { targetEdgeId: anchor.edgeId }),
+          }
   } else {
     if (anchor.nodeId === undefined) return undefined
     const node = nodeById?.(anchor.nodeId)

@@ -135,6 +135,31 @@ describe("a passage of a node's text, the anchor a flat comment cannot carry", (
     expect(held?.status).toBe('resolved')
     expect(held?.messages[0]?.body).toBe('edited')
   })
+
+  it('keeps a node set and its rect the same way: the projection is a corner, not the anchor', () => {
+    const doc = new LoroDoc()
+    writeSpatialNode(doc, NODE)
+    const set = {
+      id: 't-set',
+      anchor: {
+        kind: 'spatial' as const,
+        nodeIds: [NODE.id, 'other'],
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+      },
+      status: 'open' as const,
+      messages: [{ id: 't-set-m1', body: 'these two' }],
+    }
+    writeCommentThread(doc, set)
+    const [projected] = commentsOf(doc)
+    expect(projected).toMatchObject({ x: NODE.x + NODE.width, y: NODE.y })
+    writeCanvasComment(doc, { ...(projected as CanvasComment), resolved: true })
+    const [held] = readCommentThreads(doc)
+    expect(held?.anchor).toEqual(set.anchor)
+    expect(held?.status).toBe('resolved')
+  })
 })
 
 describe('a thread another writer opened, edited from the canvas', () => {

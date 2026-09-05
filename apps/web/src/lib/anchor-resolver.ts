@@ -41,8 +41,14 @@ export function anchorResolverFor(subject: AnchorResolverSubject): AnchorResolve
     if (anchor.kind === 'spatial') {
       if (anchor.nodeId !== undefined) return nodes.has(anchor.nodeId) ? 'placed' : 'orphaned'
       if (anchor.edgeId !== undefined) return edgeIds.has(anchor.edgeId) ? 'placed' : 'orphaned'
+      // A set is about its members: placed while any of them is, since the
+      // outline still has something to enclose.
+      if (anchor.nodeIds !== undefined)
+        return anchor.nodeIds.some((id) => nodes.has(id)) ? 'placed' : 'orphaned'
       return 'placed'
     }
+    // The document itself cannot be gone while it is being read.
+    if (anchor.kind !== 'text') return 'placed'
     if (anchor.nodeId === undefined) return 'placed'
     const node = nodes.get(anchor.nodeId)
     if (node === undefined || node.type !== 'text') return 'orphaned'

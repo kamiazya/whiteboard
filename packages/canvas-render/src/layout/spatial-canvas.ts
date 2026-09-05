@@ -27,6 +27,7 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type {
+  AnchorRect,
   CanvasComment,
   CanvasEdge,
   CommentThread,
@@ -34,6 +35,7 @@ import type {
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
@@ -390,6 +392,12 @@ export interface ResolvedReference {
 interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   /** `threads`'s node passages, grouped by the node they are about. */
   readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
+  /**
+   * `threads`'s node sets and regions, by thread id: the box each stands
+   * for on THIS canvas (live node bounds, else the stored rect), which is
+   * where its outline is drawn and where its pin stands.
+   */
+  readonly regionsByThread: ReadonlyMap<string, RegionChrome>
   /** The contribution set actually in force, defaulted once at the entry
    *  point so no inner function repeats the `?? [visual]`. */
   readonly contributions: readonly RenderContribution[]
@@ -1248,6 +1256,7 @@ export function layoutSpatialCanvasWithAnchors(
     ...options,
     ...resolved,
     passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
+    regionsByThread: regionsOf(options.threads ?? [], canvas),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1284,6 +1293,7 @@ export function naturalNodeContentSize(
     // A natural size asks how big the box must be; a highlight adds no
     // extent beyond the words it sits under, so none is composed here.
     passagesByNode: new Map(),
+    regionsByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1405,8 +1415,13 @@ function layoutSpatialCanvasInternal(
       edgePaths.set(node.id, flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true))
     }
   }
+  // Region outlines go under the pins, over everything they enclose.
+  const regionContent = composeRegionOutlines(resolved)
   const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
-  return { scene: { nodes: [...nodeContent, ...content, ...commentContent] }, anchors }
+  return {
+    scene: { nodes: [...nodeContent, ...content, ...regionContent, ...commentContent] },
+    anchors,
+  }
 }
 
 /** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
@@ -1453,6 +1468,53 @@ export function commentAnchor(
     }
   }
   return { x: comment.x, y: comment.y }
+}
+
+/** A node set or region thread, with the box it stands for on this canvas. */
+interface RegionChrome {
+  readonly rect: AnchorRect
+  readonly resolved: boolean
+}
+
+function regionsOf(
+  threads: readonly CommentThread[],
+  canvas: SpatialCanvas,
+): ReadonlyMap<string, RegionChrome> {
+  const nodeById = (id: string) => canvas.nodes.find((node) => node.id === id)
+  const out = new Map<string, RegionChrome>()
+  for (const thread of threads) {
+    if (thread.anchor.kind !== 'spatial') continue
+    const rect = spatialAnchorRect(thread.anchor, nodeById)
+    if (rect !== undefined) out.set(thread.id, { rect, resolved: thread.status === 'resolved' })
+  }
+  return out
+}
+
+/** Outline radius (px): the pin's, so the chrome reads as one family. */
+const REGION_OUTLINE_RADIUS_PX = 6
+
+/**
+ * One dashed outline per node set or region: the box the conversation is
+ * about, drawn so its pin has something to point at. Ids `${threadId}/region`
+ * and `commentChrome: true`, like the pin. Resolved ones follow the pin's
+ * rule — drawn muted under `showResolved`, otherwise not at all.
+ */
+function composeRegionOutlines(options: ResolvedLayoutOptions): readonly SceneNode[] {
+  const chrome = options.appearance.resolveComment?.()
+  const out: SceneNode[] = []
+  for (const [threadId, { rect, resolved }] of options.regionsByThread) {
+    if (resolved && options.showResolved !== true) continue
+    const appearance = resolved ? chrome?.resolvedOverlay.region : chrome?.region
+    out.push({
+      kind: 'shape',
+      id: `${threadId}/region`,
+      commentChrome: true,
+      bbox: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      radius: REGION_OUTLINE_RADIUS_PX,
+      ...(appearance !== undefined ? { appearance } : {}),
+    })
+  }
+  return out
 }
 
 /**
@@ -1502,7 +1564,14 @@ function composeComments(
     // bare resolver (no `resolveComment`) still composes full geometry with
     // no appearance at all, resolved or not.
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    const anchor = commentAnchor(comment, canvas, edgePathOf)
+    // A node set's pin stands at the corner of the box its LIVE nodes
+    // occupy, read from the thread: the flat projection's point is where
+    // that box was when it was last projected, and the nodes move.
+    const region = options.regionsByThread.get(comment.id)
+    const anchor =
+      region !== undefined
+        ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+        : commentAnchor(comment, canvas, edgePathOf)
 
     // The text goes through the same mdast pipeline as a text node's body,
     // so wrapping (CJK included) and theming have one producer. A parse
@@ -1643,6 +1712,7 @@ export function layoutSpatialEdges(
     ...options,
     ...resolveContributions(options),
     passagesByNode: new Map(),
+    regionsByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,

@@ -539,19 +539,35 @@ export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc
  * nothing about the shape's whole reason for existing.
  */
 export const annotationAnchorArbitrary: fc.Arbitrary<AnnotationAnchor> = fc.oneof(
-  // A spatial anchor names a node, an edge, or nothing — never both, which
-  // the schema refuses, so the reference is drawn as one choice.
+  // A spatial anchor names a node, an edge, a node set, or nothing — never
+  // two of them, which the schema refuses, so the reference is drawn as one
+  // choice; a region (width + height) is drawn as one choice beside it.
   fc
     .tuple(
       fc.oneof(
-        fc.constant<{ nodeId?: string; edgeId?: string }>({}),
+        fc.constant<{ nodeId?: string; edgeId?: string; nodeIds?: string[] }>({}),
         nodeIdArbitrary.map((nodeId) => ({ nodeId })),
         nodeIdArbitrary.map((edgeId) => ({ edgeId })),
+        fc.uniqueArray(nodeIdArbitrary, { minLength: 2, maxLength: 4 }).map((nodeIds) => ({
+          nodeIds,
+        })),
       ),
       geometryArbitrary,
       geometryArbitrary,
+      fc.oneof(
+        fc.constant<{ width?: number; height?: number }>({}),
+        fc
+          .tuple(fc.nat({ max: 2000 }), fc.nat({ max: 2000 }))
+          .map(([width, height]) => ({ width, height })),
+      ),
     )
-    .map(([reference, x, y]) => ({ kind: 'spatial' as const, ...reference, x, y })),
+    .map(([reference, x, y, extent]) => ({
+      kind: 'spatial' as const,
+      ...reference,
+      x,
+      y,
+      ...extent,
+    })),
   fc
     .record(
       {
@@ -573,6 +589,7 @@ export const annotationAnchorArbitrary: fc.Arbitrary<AnnotationAnchor> = fc.oneo
     // `end` is derived rather than generated so the range is never backwards —
     // the schema rejects that, and a filter would just discard half the runs.
     .map(({ length, ...anchor }) => ({ ...anchor, end: anchor.start + length })),
+  fc.constant({ kind: 'document' as const }),
 )
 
 export const commentMessageArbitrary: fc.Arbitrary<CommentMessage> = fc.record(

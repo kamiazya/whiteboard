@@ -199,6 +199,32 @@ export function nodeMenuItems({
       icon: <Frame />,
       onSelect: () => groupSelection([node.id, ...extraIds]),
     })
+    // A conversation about the SELECTION, not one member: the spatial arm
+    // naming every member, with the box they occupy stored as the place
+    // the thread is drawn from once they are gone. The bubble opens at the
+    // box's top-right corner, where the layer will pin it.
+    const nodeIds = [node.id, ...extraIds]
+    const members = canvas.nodes.filter((entry) => nodeIds.includes(entry.id))
+    const left = Math.min(...members.map((entry) => entry.x))
+    const top = Math.min(...members.map((entry) => entry.y))
+    const right = Math.max(...members.map((entry) => entry.x + entry.width))
+    const bottom = Math.max(...members.map((entry) => entry.y + entry.height))
+    verbs.push({
+      label: 'Comment on selection',
+      icon: <MessageSquarePlus />,
+      onSelect: () =>
+        setCommentCompose({
+          point: { x: right, y: top },
+          threadAnchor: {
+            kind: 'spatial',
+            nodeIds,
+            x: Math.round(left),
+            y: Math.round(top),
+            width: Math.round(right - left),
+            height: Math.round(bottom - top),
+          },
+        }),
+    })
   }
   if (node.type === 'file' && isImageFileRef?.(node.file) !== true) {
     // A missing target makes Open a dead end (worse: the daemon's

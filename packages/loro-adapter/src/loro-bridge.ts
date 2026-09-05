@@ -1,4 +1,5 @@
 import {
+  type AnnotationAnchor,
   type CanvasComment,
   type CanvasEdge,
   canvasEdgeSchema,
@@ -262,6 +263,11 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 // Shared with writeCanvasComment/deleteCanvasComment below, so field
 // projection (including commentToFields' loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
+/** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
+function flatCanCarry(anchor: AnnotationAnchor): boolean {
+  return anchor.kind === 'spatial' && anchor.nodeIds === undefined && anchor.width === undefined
+}
+
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
   // `commentToFields` is still what refuses a non-finite anchor, loudly and
   // before anything is stored — a thread whose anchor fails the schema would
@@ -276,10 +282,11 @@ function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void
   }
   // A flat comment is a PROJECTION of its thread, and writing a projection
   // back verbatim loses what it could not carry. Two things it cannot:
-  // - a passage anchor. A thread on a node's text projects as a comment on
-  //   that node, and written back it would become the node's corner. The
-  //   text and the status are what a flat write can honestly change; the
-  //   anchor it saw is the one it keeps.
+  // - an anchor beyond a point, a node or an edge. A thread on a node's
+  //   text projects as a comment on that node, a node set or a region as a
+  //   comment at its corner, and written back each would become that
+  //   point. The text and the status are what a flat write can honestly
+  //   change; the anchor it saw is the one it keeps.
   // - the opening message's identity. The projection borrows the thread's
   //   id for its one message, which is right for a comment the canvas
   //   opened and wrong for one an MCP peer opened with a message id of its
@@ -293,7 +300,7 @@ function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void
   }
   writeThreadInto(doc, {
     ...incoming,
-    anchor: held.anchor.kind === 'text' ? held.anchor : incoming.anchor,
+    anchor: flatCanCarry(held.anchor) ? incoming.anchor : held.anchor,
     messages: [
       {
         ...edited,

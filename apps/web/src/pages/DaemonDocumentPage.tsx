@@ -4,7 +4,7 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
-import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
+import { type AnnotationAnchor, type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -557,18 +557,24 @@ export function DaemonDocumentPage({
   canvasValueRef.current = canvasValue
   // A passage waiting for its opening message; see the browser page. Here
   // the thread rides the sync session's command, like a reply does.
-  const [pendingAnchor, setPendingAnchor] = useState<TextAnchor | null>(null)
+  const [pendingAnchor, setPendingAnchor] = useState<AnnotationAnchor | null>(null)
   const requestComment = useCallback((anchor: TextAnchor) => {
     setPendingAnchor(anchor)
     setCommentsOpen(true)
     return true
+  }, [])
+  // The document as a whole has no place on any surface, so the rail is
+  // where that conversation starts — for a note and a canvas alike.
+  const requestDocumentComment = useCallback(() => {
+    setPendingAnchor({ kind: 'document' })
+    setCommentsOpen(true)
   }, [])
   const commentDraft = useMemo(
     () =>
       pendingAnchor === null
         ? undefined
         : {
-            about: pendingAnchor.quote.exact,
+            ...(pendingAnchor.kind === 'text' ? { about: pendingAnchor.quote.exact } : {}),
             onSubmit: (body: string) => {
               const id = crypto.randomUUID()
               const createdAt = new Date().toISOString()
@@ -1259,6 +1265,9 @@ export function DaemonDocumentPage({
                 // entirely.
                 onReply={preview === null && variationPreview === null ? handleReply : undefined}
                 draft={preview === null && variationPreview === null ? commentDraft : undefined}
+                onDraftDocument={
+                  preview === null && variationPreview === null ? requestDocumentComment : undefined
+                }
               />
             ) : null}
           </div>

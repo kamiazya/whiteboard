@@ -62,6 +62,12 @@ export interface SpatialCommentChromeAppearance {
    * lays them out, unpainted, the way a bare resolver lays pins out.
    */
   readonly passage?: Appearance
+  /**
+   * The outline around the box a node set or a region stands for (the
+   * spatial arm with `nodeIds` or a rect). Optional for the same reason
+   * as `passage`.
+   */
+  readonly region?: Appearance
 }
 
 /** What a resolver decided for the comment layer's chrome. */

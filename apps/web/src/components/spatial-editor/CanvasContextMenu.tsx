@@ -2,11 +2,15 @@
 
 import type { EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  AnnotationAnchor,
+  ClipboardFragment,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { verbCatalogItems } from '../markdown-editor/verb-catalog.js'
 import type { BoxMove } from './align.js'
@@ -64,12 +68,13 @@ export interface CommentComposeState {
   /** The edge the comment is about; the bubble opens on its routed path. */
   readonly targetEdgeId?: string
   /**
-   * A passage of a node's text (ADR-0026's text arm with a node reference):
-   * the commit opens a THREAD rather than a flat comment, since a flat
-   * comment cannot carry a passage. `targetNodeId` names the node as well,
-   * so the bubble opens at the node's corner like a node comment.
+   * An anchor the flat comment cannot carry — a passage of a node's text,
+   * a node set (ADR-0026's text arm with a node reference; the spatial arm
+   * with `nodeIds`): the commit opens a THREAD rather than a flat comment.
+   * `point` is where the bubble opens: the node's corner for a passage,
+   * the selection's top-right corner for a set.
    */
-  readonly passage?: TextAnchor
+  readonly threadAnchor?: AnnotationAnchor
   /**
    * Present when the bubble edits an EXISTING comment rather than drafting
    * a new one: the commit rewrites that comment's text instead of creating.

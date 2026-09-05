@@ -20,6 +20,14 @@ describe('anchorResolverFor on a canvas', () => {
     expect(at({ kind: 'spatial', x: 0, y: 0 })).toBe('placed')
   })
 
+  it('places a node set while any member lives, a region always, and the document always', () => {
+    const rect = { x: 0, y: 0, width: 5, height: 5 }
+    expect(at({ kind: 'spatial', nodeIds: ['n1', 'gone'], ...rect })).toBe('placed')
+    expect(at({ kind: 'spatial', nodeIds: ['gone', 'gone-too'], ...rect })).toBe('orphaned')
+    expect(at({ kind: 'spatial', ...rect })).toBe('placed')
+    expect(at({ kind: 'document' })).toBe('placed')
+  })
+
   it("judges a passage of a node's text against that node, and its node's presence", () => {
     const quote = { exact: 'plan' }
     expect(at({ kind: 'text', nodeId: 'n1', quote, start: 9, end: 13 })).toBe('placed')

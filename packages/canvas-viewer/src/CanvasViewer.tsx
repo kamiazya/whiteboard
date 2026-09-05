@@ -5,7 +5,7 @@ import {
   renderSceneToSvg,
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
@@ -37,6 +37,12 @@ export interface CanvasViewerProps {
    * card.
    */
   resolveReference?: (ref: string) => ResolvedReference | undefined
+  /**
+   * The document's conversations, for the chrome the flat comments inside
+   * `canvas` cannot carry — a passage's highlight, a node set's outline.
+   * The pins still come from the canvas's own projection.
+   */
+  threads?: readonly CommentThread[]
   testId?: string
   /**
    * Accessible name for the rendered canvas. The viewer cannot derive one:
@@ -58,6 +64,7 @@ export function CanvasViewer({
   background,
   measure,
   resolveReference,
+  threads,
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
@@ -107,6 +114,7 @@ export function CanvasViewer({
       measure: resolvedMeasure,
       appearance: VIEWER_APPEARANCE,
       ...(resolveReference === undefined ? {} : { resolveReference }),
+      ...(threads === undefined ? {} : { threads }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
@@ -137,6 +145,7 @@ export function CanvasViewer({
     padding,
     background,
     resolveReference,
+    threads,
     fontReady,
   ])
 

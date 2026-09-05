@@ -1,4 +1,5 @@
 import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
@@ -32,6 +33,13 @@ export interface MountCanvasViewerOptions {
    * is spelled that way here and `markdown` inside the layout.
    */
   references?: Readonly<Record<string, { label?: string; body?: MdastRoot }>>
+  /**
+   * The document's conversations, for what the scene's flat comments cannot
+   * carry: a passage's words, a node set's outline. Shaped as `canvas_view`'s
+   * `threads` payload — the model's own thread — so it crosses the widget
+   * boundary as data.
+   */
+  threads?: readonly CommentThread[]
 }
 
 export interface CanvasViewerHandle {
@@ -119,6 +127,7 @@ export function mountCanvasViewer(
         height: opts.height,
         testId: opts.testId,
         label: opts.label,
+        ...(opts.threads === undefined ? {} : { threads: opts.threads }),
         ...referenceSeams(opts.references),
       }),
     )

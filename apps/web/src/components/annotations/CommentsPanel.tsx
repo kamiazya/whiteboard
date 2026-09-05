@@ -12,7 +12,8 @@
  * "show resolved" answers whether resolved comments are drawn when what a
  * reader wants at document level is which ones are still open.
  */
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
+import { MessageSquarePlus } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
@@ -59,11 +60,20 @@ export interface CommentsPanelProps {
    * thread on submit and clears this on submit or cancel.
    */
   readonly draft?: {
-    /** What the conversation is about, as the reader would recognise it (the quoted passage). */
-    readonly about: string
+    /**
+     * What the conversation is about, as the reader would recognise it (the
+     * quoted passage). Absent, the draft is about the document itself.
+     */
+    readonly about?: string
     readonly onSubmit: (body: string) => void
     readonly onCancel: () => void
   }
+  /**
+   * Opens a draft about the document as a whole — the one anchor with no
+   * place on any surface, so this list is where it is started as well as
+   * read. Absent on a host with no write path, like `onReply`.
+   */
+  readonly onDraftDocument?: () => void
   /**
    * Appends a message to a conversation. Absent hides the reply box entirely
    * rather than showing a control that silently does nothing — a host with no
@@ -85,6 +95,19 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
+/**
+ * What a thread is about, for the anchors that have no in-place projection
+ * to say it for them: the document, a node set, a region. A pin, a passage
+ * highlight or an edge comment is found by its place; these are found here.
+ */
+export function anchorLabel(anchor: AnnotationAnchor): string | undefined {
+  if (anchor.kind === 'document') return 'whole document'
+  if (anchor.kind !== 'spatial') return undefined
+  if (anchor.nodeIds !== undefined) return `${anchor.nodeIds.length} nodes`
+  if (anchor.width !== undefined) return 'region'
+  return undefined
+}
+
 export function CommentsPanel({
   threads,
   resolveAnchor,
@@ -93,6 +116,7 @@ export function CommentsPanel({
   openThreadId: controlledOpenThreadId,
   onOpenThreadChange,
   draft,
+  onDraftDocument,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -138,10 +162,21 @@ export function CommentsPanel({
           className="flex flex-col gap-1 rounded border border-(--comment-accent) p-2"
         >
           <p className="text-xs text-muted-foreground">
-            Comment on{' '}
-            <q className="text-foreground" data-testid="comment-draft-about">
-              {draft.about}
-            </q>
+            {draft.about === undefined ? (
+              <>
+                Comment on{' '}
+                <span className="text-foreground" data-testid="comment-draft-about">
+                  the whole document
+                </span>
+              </>
+            ) : (
+              <>
+                Comment on{' '}
+                <q className="text-foreground" data-testid="comment-draft-about">
+                  {draft.about}
+                </q>
+              </>
+            )}
           </p>
           <ReplyComposer compact onReply={draft.onSubmit} autoFocus />
           <button
@@ -152,6 +187,17 @@ export function CommentsPanel({
             Cancel
           </button>
         </div>
+      ) : null}
+      {draft === undefined && onDraftDocument !== undefined ? (
+        <button
+          type="button"
+          data-testid="comment-on-document"
+          onClick={onDraftDocument}
+          className="flex items-center gap-1 self-start rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <MessageSquarePlus aria-hidden="true" className="size-3.5" />
+          Comment on the document
+        </button>
       ) : null}
       <fieldset aria-label="Filter comments" className="flex gap-1 border-0 p-0">
         {FILTERS.map(({ value, label }) => (
@@ -204,6 +250,11 @@ export function CommentsPanel({
                     {excerptOf(thread)}
                   </span>
                   <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+                    {anchorLabel(thread.anchor) === undefined ? null : (
+                      <span data-testid={`thread-about-${thread.id}`}>
+                        {anchorLabel(thread.anchor)}
+                      </span>
+                    )}
                     <MessageBy message={thread.messages[0]} />
                     {thread.messages.length > 1 ? (
                       <span data-testid={`thread-message-count-${thread.id}`}>

@@ -123,3 +123,33 @@ describe('CanvasViewer frames what it draws', () => {
     expect(svg?.getAttribute('viewBox')).not.toBeNull()
   })
 })
+
+describe('CanvasViewer draws the conversations it is handed', () => {
+  it('outlines a node set from `threads`, which the flat comments in the canvas cannot carry', () => {
+    const two: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 200, y: 100, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <CanvasViewer
+        canvas={two}
+        measure={fakeMeasure}
+        threads={[
+          {
+            id: 'set',
+            anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 1, height: 1 },
+            status: 'open',
+            messages: [{ id: 'm', body: 'these' }],
+          },
+        ]}
+      />,
+    )
+    const svg = container.innerHTML
+    // The outline around the box both nodes occupy, dashed.
+    expect(svg).toContain('<rect x="0" y="0" width="300" height="140"')
+    expect(svg).toContain('stroke-dasharray="6 4"')
+  })
+})

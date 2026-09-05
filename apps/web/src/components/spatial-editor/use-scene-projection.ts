@@ -79,7 +79,13 @@ export function useSceneProjection({
         // A passage highlight (`passage-<n>`) is the thread's chrome too: a
         // press on the quoted words opens the conversation like a press on
         // its bubble.
-        if (part !== 'pin' && part !== 'bubble' && !part.startsWith('passage-')) return []
+        if (
+          part !== 'pin' &&
+          part !== 'bubble' &&
+          part !== 'region' &&
+          !part.startsWith('passage-')
+        )
+          return []
         return [{ commentId: node.id.slice(0, cut), part, bbox: node.bbox }]
       }),
     [scene],

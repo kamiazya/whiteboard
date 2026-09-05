@@ -505,6 +505,16 @@ on — a menu row where the place is an object, a verb where it is text:
 | an edge | edge menu, "Comment on this" | `spatial` + `edgeId` |
 | a passage of a text node | the `comment` verb while editing the node (verb bar, touch bar, right-click catalog) | `text` + `nodeId` |
 | a passage of a note | the `comment` verb (toolbar, ⋯ catalog, touch bar) | `text` |
+| several nodes at once | node menu on a multi-selection, "Comment on selection" | `spatial` + `nodeIds` + the box they occupy |
+| a region of empty canvas | no entry yet in the editor — an agent names the rect through `wb_thread_edit` | `spatial` + `width`/`height` |
+| the document as a whole | the comments rail, "Comment on the document" — a note and a canvas alike | `document` |
+
+A node set is drawn as a dashed outline around the box its LIVE members
+occupy (`spatialAnchorRect`, model: the stored rect is only where an
+orphaned set is drawn from), with the pin at the box's top-right corner;
+the rail labels it "N nodes". A document-level thread is drawn nowhere —
+the container is on no surface — so the rail is both where it starts and
+where it is read, labelled "whole document".
 
 The `comment` verb is ONE entry in `MARKDOWN_EDITOR_VERBS`, so every bar
 that reads the table offers it; it is `interactive` with no wrap to degrade

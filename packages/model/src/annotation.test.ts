@@ -14,6 +14,8 @@ import {
   commentMessageSchema,
   commentThreadSchema,
   compareMessages,
+  type SpatialAnchor,
+  spatialAnchorRect,
   threadFromCanvasComment,
 } from './annotation.js'
 import type { CanvasComment } from './spatial.js'
@@ -38,6 +40,25 @@ describe('annotationAnchorSchema', () => {
     expect(
       annotationAnchorSchema.safeParse({ kind: 'spatial', nodeId: 'n1', x: 1, y: 2 }).success,
     ).toBe(true)
+  })
+
+  it('accepts a node set, a region, and the document itself; refuses a set that is not one', () => {
+    const ok = (anchor: unknown) => annotationAnchorSchema.safeParse(anchor).success
+    expect(ok({ kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 10, height: 10 })).toBe(
+      true,
+    )
+    expect(ok({ kind: 'spatial', x: 0, y: 0, width: 10, height: 10 })).toBe(true)
+    expect(ok({ kind: 'document' })).toBe(true)
+    // One node is a node comment, not a set; a repeated node is not a set of two.
+    expect(ok({ kind: 'spatial', nodeIds: ['a'], x: 0, y: 0 })).toBe(false)
+    expect(ok({ kind: 'spatial', nodeIds: ['a', 'a'], x: 0, y: 0 })).toBe(false)
+    // One reference per anchor, whichever pair.
+    expect(ok({ kind: 'spatial', nodeIds: ['a', 'b'], nodeId: 'c', x: 0, y: 0 })).toBe(false)
+    expect(ok({ kind: 'spatial', nodeIds: ['a', 'b'], edgeId: 'e', x: 0, y: 0 })).toBe(false)
+    // A rect is two numbers or none.
+    expect(ok({ kind: 'spatial', x: 0, y: 0, width: 10 })).toBe(false)
+    // The document arm carries nothing: a position on it would be a lie.
+    expect(ok({ kind: 'document', x: 0, y: 0 })).toBe(false)
   })
 
   it('requires integer spatial coordinates, because a reader drops a comment that fails the schema', () => {
@@ -216,9 +237,12 @@ describe('the generator covers every arm the schema declares', () => {
               ? 'spatial:node'
               : anchor.edgeId !== undefined
                 ? 'spatial:edge'
-                : 'spatial:point',
+                : anchor.nodeIds !== undefined
+                  ? 'spatial:set'
+                  : 'spatial:point',
           )
-        } else {
+          if (anchor.width !== undefined) seen.add('spatial:region')
+        } else if (anchor.kind === 'text') {
           seen.add(anchor.nodeId !== undefined ? 'text:node' : 'text:body')
         }
         return annotationAnchorSchema.safeParse(anchor).success
@@ -227,10 +251,13 @@ describe('the generator covers every arm the schema declares', () => {
     )
     for (const kind of ANNOTATION_ANCHOR_KINDS) expect(seen).toContain(kind)
     expect([...seen].sort()).toEqual([
+      'document',
       'spatial',
       'spatial:edge',
       'spatial:node',
       'spatial:point',
+      'spatial:region',
+      'spatial:set',
       'text',
       'text:body',
       'text:node',
@@ -245,8 +272,45 @@ describe('canvasCommentFromThread', () => {
     status: 'open',
     messages: [{ id: 'm1', body: 'look here', createdAt: '2026-09-02T00:00:00.000Z' }],
   })
-  const nodes = new Map([['n1', { id: 'n1', x: 100, y: 200, width: 50 }]])
+  const nodes = new Map([
+    ['n1', { id: 'n1', x: 100, y: 200, width: 50, height: 30 }],
+    ['n2', { id: 'n2', x: 300, y: 100, width: 40, height: 20 }],
+  ])
   const nodeById = (id: string) => nodes.get(id)
+
+  it('projects a node set at the top-right corner of the box its LIVE nodes occupy', () => {
+    // The stored rect is where the set stood when commented on; the nodes
+    // have moved since, and the comment follows them, not the memory.
+    const set = opened({
+      kind: 'spatial',
+      nodeIds: ['n1', 'n2', 'n-gone'],
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+    })
+    const projected = canvasCommentFromThread(set, nodeById)
+    expect(projected).toMatchObject({ x: 340, y: 100 })
+    expect(projected).not.toHaveProperty('targetNodeId')
+  })
+
+  it('projects a set whose nodes are all gone, and a plain region, from the stored rect', () => {
+    const orphan = opened({
+      kind: 'spatial',
+      nodeIds: ['n-gone', 'n-gone-too'],
+      x: 10,
+      y: 20,
+      width: 100,
+      height: 50,
+    })
+    expect(canvasCommentFromThread(orphan, nodeById)).toMatchObject({ x: 110, y: 20 })
+    const region = opened({ kind: 'spatial', x: 10, y: 20, width: 100, height: 50 })
+    expect(canvasCommentFromThread(region)).toMatchObject({ x: 110, y: 20 })
+  })
+
+  it('projects nothing for the document itself: the panel is its only surface', () => {
+    expect(canvasCommentFromThread(opened({ kind: 'document' }), nodeById)).toBeUndefined()
+  })
 
   it('projects a spatial anchor with its node or edge reference', () => {
     expect(
@@ -285,7 +349,10 @@ describe('canvasCommentFromThread', () => {
   it('round-trips a flat comment through a thread and back, reference included', () => {
     fc.assert(
       fc.property(annotationAnchorArbitrary, (anchor) => {
-        if (anchor.kind !== 'spatial') return true
+        // Only what the flat shape can carry: a node set and a region
+        // project to a corner and come back as a point, by construction.
+        if (anchor.kind !== 'spatial' || anchor.nodeIds !== undefined || anchor.width !== undefined)
+          return true
         const back = canvasCommentFromThread(opened(anchor))
         return (
           back !== undefined &&
@@ -294,5 +361,52 @@ describe('canvasCommentFromThread', () => {
         )
       }),
     )
+  })
+})
+
+describe('spatialAnchorRect', () => {
+  const nodes = new Map([
+    ['a', { id: 'a', x: 0, y: 0, width: 10, height: 10 }],
+    ['b', { id: 'b', x: 50, y: 30, width: 20, height: 5 }],
+  ])
+  const nodeById = (id: string) => nodes.get(id)
+
+  it('is the union of the live nodes for a set, whatever rect was stored', () => {
+    const anchor: SpatialAnchor = {
+      kind: 'spatial',
+      nodeIds: ['a', 'b'],
+      x: 9,
+      y: 9,
+      width: 1,
+      height: 1,
+    }
+    expect(spatialAnchorRect(anchor, nodeById)).toEqual({ x: 0, y: 0, width: 70, height: 35 })
+  })
+
+  it('falls back to the stored rect once every node of a set is gone, and for a bare region', () => {
+    const gone: SpatialAnchor = {
+      kind: 'spatial',
+      nodeIds: ['x', 'y'],
+      x: 1,
+      y: 2,
+      width: 3,
+      height: 4,
+    }
+    expect(spatialAnchorRect(gone, nodeById)).toEqual({ x: 1, y: 2, width: 3, height: 4 })
+    expect(spatialAnchorRect({ kind: 'spatial', x: 1, y: 2, width: 3, height: 4 })).toEqual({
+      x: 1,
+      y: 2,
+      width: 3,
+      height: 4,
+    })
+  })
+
+  it('is undefined for a point, a node and an edge: they stand for no area', () => {
+    expect(spatialAnchorRect({ kind: 'spatial', x: 1, y: 2 })).toBeUndefined()
+    expect(
+      spatialAnchorRect({ kind: 'spatial', nodeId: 'a', x: 1, y: 2 }, nodeById),
+    ).toBeUndefined()
+    // A set with no rect stored and no node alive has nowhere to be drawn.
+    expect(spatialAnchorRect({ kind: 'spatial', nodeIds: ['x', 'y'], x: 1, y: 2 })).toBeUndefined()
   })
 })

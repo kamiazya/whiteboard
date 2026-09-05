@@ -176,3 +176,44 @@ it('a conversation opened by the host is shown expanded, even under a filter tha
   await userEvent.click(page.getByText('tighten the copy here'))
   expect(onOpenThreadChange).toHaveBeenCalledWith('t-open')
 })
+
+it('says what a thread is about when nothing on a surface can: the document, a node set', async () => {
+  const whole: CommentThread = {
+    id: 't-doc',
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: 'm5', body: 'is this document still needed?' }],
+  }
+  const set: CommentThread = {
+    id: 't-set',
+    anchor: { kind: 'spatial', nodeIds: ['a', 'b', 'c'], x: 0, y: 0, width: 10, height: 10 },
+    status: 'open',
+    messages: [{ id: 'm6', body: 'these belong together' }],
+  }
+  render(<CommentsPanel threads={[OPEN, whole, set]} />)
+  await expect.element(page.getByTestId('thread-about-t-doc')).toHaveTextContent('whole document')
+  await expect.element(page.getByTestId('thread-about-t-set')).toHaveTextContent('3 nodes')
+  // A pin says where a spot comment is; the list adds nothing.
+  expect(document.querySelector('[data-testid="thread-about-t-open"]')).toBeNull()
+})
+
+it('offers to start a conversation about the whole document, when the host can write one', async () => {
+  const onDraftDocument = vi.fn()
+  render(<CommentsPanel threads={[OPEN]} onDraftDocument={onDraftDocument} />)
+  await userEvent.click(page.getByTestId('comment-on-document'))
+  expect(onDraftDocument).toHaveBeenCalledTimes(1)
+})
+
+it('labels a draft about the document as such, and hides the opener while a draft is up', async () => {
+  render(
+    <CommentsPanel
+      threads={[]}
+      onDraftDocument={() => {}}
+      draft={{ onSubmit: () => {}, onCancel: () => {} }}
+    />,
+  )
+  await expect
+    .element(page.getByTestId('comment-draft-about'))
+    .toHaveTextContent('the whole document')
+  expect(document.querySelector('[data-testid="comment-on-document"]')).toBeNull()
+})

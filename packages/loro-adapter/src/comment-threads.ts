@@ -40,6 +40,8 @@ function assertFiniteAnchor(thread: CommentThread): void {
   for (const [field, value] of [
     ['x', thread.anchor.x],
     ['y', thread.anchor.y],
+    ['width', thread.anchor.width ?? 0],
+    ['height', thread.anchor.height ?? 0],
   ] as const) {
     if (!Number.isFinite(value)) {
       throw new TypeError(
