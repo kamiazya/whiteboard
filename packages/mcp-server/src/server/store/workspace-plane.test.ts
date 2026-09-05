@@ -305,16 +305,11 @@ describe('DocumentStore conformance (production wiring: routed over a tree-backe
   // store — exactly the path the production dual-plane wiring depends on for
   // any document the tree does not (yet) hold.
   describeDocumentStoreConformance(async () => {
-    const db = await getDb(tempDir)
-    const inner = new LibsqlDocumentStore(db)
-    const index = new LoroWorkspaceDocumentIndex(
-      cacheBackedWorkspaceDocs(),
-      new FsBlobStore(joinPath(tempDir, 'blobs')),
-    )
+    const { inner, routed, index } = await stores()
     await index.createWorkspace({ workspaceId: 'conformance-ws' })
     await index.createDocument({ workspaceId: 'conformance-ws', path: 'seed', kind: 'spatial' })
     return {
-      store: new WorkspaceRoutedDocumentStore(inner),
+      store: routed,
       writeUnreadableRecord: (docRef) => inner.writeUnreadableRecord(docRef),
       // The file-level beforeEach/afterEach own tempDir + the db handle
       // (fresh per case), so there is nothing extra to tear down here.
