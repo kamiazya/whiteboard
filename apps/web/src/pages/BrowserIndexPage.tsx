@@ -234,14 +234,29 @@ export function BrowserIndexPage({
       // its signal to re-read, same contract as the daemon page's `revision`.
       setFilesRevision((revision) => revision + 1)
       if (failed.length > 0) {
+        const attempted = pendingDelete.paths.length
         // Held open on the count, because the list behind it has already
-        // changed: the ones that went are gone, and closing silently would
-        // read as "all deleted". The panel's own pruning leaves exactly the
-        // failures selected, so trying again is one press away.
+        // changed (refreshed above): the ones that went are gone, and closing
+        // silently would read as "all deleted". The panel's own pruning
+        // leaves exactly the failures selected.
+        //
+        // Narrowed to what failed, so pressing Delete again retries exactly
+        // those. This browser index no-ops a delete for an absent row, so a
+        // re-send would be harmless here — but the daemon page answers 404
+        // and its retry genuinely diverged, and one operation should not
+        // converge differently per keeper.
+        const only = failed.length === 1 ? snapshots?.find((s) => s.path === failed[0]) : undefined
+        setPendingDelete({
+          paths: failed,
+          // A lone survivor gets its NAME back: `Delete "2 documents"?` would
+          // be the count of the attempt, not of what it now offers to do.
+          displayName: only?.name ?? (failed[0] as string),
+          ...(only?.kind === undefined ? {} : { kind: only.kind }),
+        })
         setDeleteError(
-          failed.length === pendingDelete.paths.length
+          failed.length === attempted
             ? 'Failed to delete the document from this browser.'
-            : `${failed.length} of ${pendingDelete.paths.length} could not be deleted.`,
+            : `${failed.length} of ${attempted} could not be deleted.`,
         )
         return
       }

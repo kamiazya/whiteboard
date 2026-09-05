@@ -520,6 +520,59 @@ describe('BrowserIndexPage', () => {
     expect(screen.getAllByTestId('card-title')).toHaveLength(1)
   })
 
+  it('a partial bulk failure names the count and narrows the retry to what failed', async () => {
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+      {
+        documentId: '0Z258BEHMQTX0369CFJNRVY147',
+        workspaceId: 'local',
+        path: 'beta',
+        name: 'Beta',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'markdown',
+      },
+    ])
+    const attempted: string[] = []
+    const real = store.index.deleteDocument.bind(store.index)
+    let betaFails = true
+    store.index.deleteDocument = (args: { workspaceId: string; path: string }) => {
+      attempted.push(args.path)
+      if (args.path === 'beta' && betaFails) return Promise.reject(new Error('quota exceeded'))
+      return real(args)
+    }
+    renderPage(store)
+
+    const card = (await screen.findByText('Alpha')).closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 10, clientY: 10 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Select' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+    fireEvent.click((await screen.findByText('Beta')).closest('button') as HTMLElement)
+    fireEvent.click(
+      within(await screen.findByTestId('selection-bar')).getByRole('button', { name: 'Delete' }),
+    )
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(await within(dialog).findByText('1 of 2 could not be deleted.')).toBeTruthy()
+    // The lone survivor gets its NAME back rather than staying "2 documents",
+    // which would be the count of the attempt and not of what is now offered.
+    await waitFor(() => expect(within(dialog).getByText('Delete "Beta"?')).toBeTruthy())
+
+    betaFails = false
+    attempted.length = 0
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(attempted).toEqual(['beta'])
+  })
+
   it('shows each name over its own real path, which is never derived from that name', async () => {
     // Neither name carries ASCII, so a name-derived path would collapse both
     // to `untitled` / `untitled-2` — indistinguishable in the very column the

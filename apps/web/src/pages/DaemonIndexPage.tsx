@@ -550,15 +550,31 @@ export function DaemonIndexPage({
         }
       }
       if (failed.length > 0) {
-        // Not closed: the list behind the dialog has already changed, and
-        // closing silently would read as "all deleted". The panel's own
-        // pruning leaves exactly the failures selected.
+        const attempted = pendingDelete.paths.length
+        // Refreshed HERE rather than only in closeDeleteDialog, which this
+        // branch does not reach: the ones that went are gone, and a list
+        // still showing them behind the dialog contradicts the count above
+        // it. The panel's pruning then drops them from the selection too.
+        const isStale = () => selectedWorkspaceRef.current !== workspaceAtStart
+        void loadWorkspace(workspaceAtStart, isStale)
+        // Narrowed to what actually failed, so pressing Delete again retries
+        // exactly those. Left un-narrowed, a retry re-sent DELETE for every
+        // path the first attempt had already removed.
+        const only = failed.length === 1 ? rows.find((row) => row.path === failed[0]) : undefined
+        setPendingDelete({
+          paths: failed,
+          // A lone survivor gets its NAME back: a dialog reading
+          // `Delete "2 documents"?` would be the count of the attempt, not of
+          // what it is now offering to do.
+          displayName: only?.displayName ?? only?.path ?? `${failed.length} documents`,
+          ...(only?.kind === undefined ? {} : { kind: only.kind }),
+        })
         setDeleteError(
-          failed.length === pendingDelete.paths.length
+          failed.length === attempted
             ? lastError instanceof Error
               ? lastError.message
               : 'Failed to delete document.'
-            : `${failed.length} of ${pendingDelete.paths.length} could not be deleted.`,
+            : `${failed.length} of ${attempted} could not be deleted.`,
         )
         return
       }
