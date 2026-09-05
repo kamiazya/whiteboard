@@ -8,7 +8,7 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -51,6 +51,11 @@ import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
+import type {
+  DocumentKeeper,
+  DocumentKeeperAnswer,
+  DocumentKeeperEvents,
+} from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
@@ -77,21 +82,24 @@ export interface DaemonDocumentPageProps {
 }
 
 /**
- * The daemon keeper's document page: the controller over the daemon's REST
- * routes, the sync session over a WebSocket or SSE backend, the markdown
- * body off that same session, and the daemon's version rows — supplied to
- * the shared `DocumentPage` as one model (ADR-0004 decision 2: the
- * controller layer stays capability-selected, the page does not).
+ * The daemon keeper: the controller over the daemon's REST routes, the sync
+ * session over a WebSocket or SSE backend, the markdown body off that same
+ * session, and the daemon's version rows — answered to the shared
+ * `DocumentPage` as one model (ADR-0004 decision 2: the controller layer
+ * stays capability-selected, the page does not).
  */
-export function DaemonDocumentPage({
-  daemonBaseUrl,
-  workspaceId,
-  path,
-  token,
-  capabilities = DAEMON_CAPABILITIES,
-  createBackend,
-  onNavigateBack,
-}: DaemonDocumentPageProps) {
+function useDaemonDocument(
+  {
+    daemonBaseUrl,
+    workspaceId,
+    path,
+    token,
+    capabilities = DAEMON_CAPABILITIES,
+    createBackend,
+    onNavigateBack,
+  }: DaemonDocumentPageProps,
+  events: DocumentKeeperEvents,
+): DocumentKeeperAnswer {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
@@ -251,10 +259,6 @@ export function DaemonDocumentPage({
       }
     })()
   }, [canvas, variationPreview, daemonFetch, clearVariationParam])
-  // Bumped on any version_created broadcast (covers this button's own save,
-  // MCP tool saves, and other peers) so an open VersionTimeline updates
-  // without waiting for its 15s poll.
-  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -373,7 +377,9 @@ export function DaemonDocumentPage({
       : { contentDocumentId: backendState.contentDocumentId }),
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
-    onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
+    // Any version_created broadcast — this page's own save, MCP tool saves,
+    // other peers — re-reads the page's history column.
+    onVersionCreated: events.onVersionCreated,
     onViewportRequest: (payload) => applyViewportRequest(payload, spatialEditorRef.current),
     onAgentActivity: (payload) => reportAgentActivity(payload),
     identity: canvas ?? undefined,
@@ -630,11 +636,11 @@ export function DaemonDocumentPage({
   })
 
   if (pageState.kind === 'loading') {
-    return <DocumentPageSkeleton label="Connecting to daemon" />
+    return { kind: 'terminal', node: <DocumentPageSkeleton label="Connecting to daemon" /> }
   }
 
   if (pageState.kind === 'load-degraded') {
-    return <LoadDegradedView message={pageState.message} />
+    return { kind: 'terminal', node: <LoadDegradedView message={pageState.message} /> }
   }
 
   const documentKey = canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'
@@ -790,8 +796,7 @@ export function DaemonDocumentPage({
           versionId: parsed.data.version.id,
         }
       },
-      refreshSignal: versionRefreshSignal,
-      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
+      announceRefresh: events.onVersionCreated,
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this save must dispatch the same
@@ -912,9 +917,21 @@ export function DaemonDocumentPage({
     },
   }
 
-  return (
-    <DaemonApiContext.Provider value={daemonFetch}>
-      <DocumentPage model={model} />
-    </DaemonApiContext.Provider>
-  )
+  return {
+    kind: 'render',
+    model,
+    wrap: (page: ReactNode) => (
+      <DaemonApiContext.Provider value={daemonFetch}>{page}</DaemonApiContext.Provider>
+    ),
+  }
+}
+
+export const daemonKeeper: DocumentKeeper<DaemonDocumentPageProps> = {
+  kind: 'daemon',
+  useDocument: useDaemonDocument,
+}
+
+/** The shared page, bound to the daemon keeper — what App mounts under a daemon's routes. */
+export function DaemonDocumentPage(props: DaemonDocumentPageProps) {
+  return <DocumentPage keeper={daemonKeeper} props={props} />
 }

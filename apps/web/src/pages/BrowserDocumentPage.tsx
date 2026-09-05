@@ -4,7 +4,7 @@ import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -62,6 +62,11 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
 import { DocumentPage } from './DocumentPage.js'
+import type {
+  DocumentKeeper,
+  DocumentKeeperAnswer,
+  DocumentKeeperEvents,
+} from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
 import {
@@ -72,7 +77,7 @@ import { useMarkdownDocument } from './use-markdown-document.js'
 
 const log = getAppLogger('browser-document-page')
 
-interface BrowserDocumentPageProps {
+export interface BrowserDocumentPageProps {
   /** Defaults to the shared production index; injected by tests. */
   store?: DocumentIndex
   /**
@@ -108,23 +113,26 @@ function titleOf(name: string | null, path: string | null): string {
 }
 
 /**
- * The browser keeper's document page: the controller over IndexedDB, the
- * spatial sync session over `BrowserBackend`, the markdown body over its
- * own Loro binding, and the browser's version rows — supplied to the shared
- * `DocumentPage` as one model (ADR-0004 decision 2: the controller layer
- * stays capability-selected, the page does not).
+ * The browser keeper: the controller over IndexedDB, the spatial sync session
+ * over `BrowserBackend`, the markdown body over its own Loro binding, and the
+ * browser's version rows — answered to the shared `DocumentPage` as one model
+ * (ADR-0004 decision 2: the controller layer stays capability-selected, the
+ * page does not).
  */
-export function BrowserDocumentPage({
-  // Stable across renders (the shared accessor memoizes). Living here rather
-  // than in App keeps loro-crdt off the entry chunk
-  // (entry-graph-loro-free.test.ts).
-  store = sharedFoldingBrowserIndex(),
-  loro,
-  capabilities = BROWSER_CAPABILITIES,
-  initialPath,
-  pointer,
-  clock,
-}: BrowserDocumentPageProps) {
+function useBrowserDocument(
+  {
+    // Stable across renders (the shared accessor memoizes). Living here rather
+    // than in App keeps loro-crdt off the entry chunk
+    // (entry-graph-loro-free.test.ts).
+    store = sharedFoldingBrowserIndex(),
+    loro,
+    capabilities = BROWSER_CAPABILITIES,
+    initialPath,
+    pointer,
+    clock,
+  }: BrowserDocumentPageProps,
+  events: DocumentKeeperEvents,
+): DocumentKeeperAnswer {
   const {
     loro: resolvedLoro,
     snapshot,
@@ -542,15 +550,16 @@ export function BrowserDocumentPage({
   // falling through to the context's daemon fallback and issuing a request
   // to a daemon that is not there.
   const branchesBackend = useMemo(() => createBrowserBranchesBackend(), [])
-  // The History column refetches on a CHANGE of this signal. A manual save
-  // announces itself on the window (the page dispatches it after the keeper
-  // confirmed the save), which is the same event the daemon page bumps on.
-  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
-  // Scoped to THIS document's identity — an unchecked listener refreshed on
-  // any document's announcement, where the daemon page has always routed
-  // the same signal through identity-checked dispatch.
-  useIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, 'local', documentPath, () =>
-    setVersionRefreshSignal((n) => n + 1),
+  // A manual save announces itself on the window (dispatched after the
+  // keeper confirmed the save), and the page's history column re-reads on
+  // it. Scoped to THIS document's identity — an unchecked listener refreshed
+  // on any document's announcement, where the daemon keeper has always
+  // routed the same signal through identity-checked dispatch.
+  useIdentityEvent(
+    DOCUMENT_SYNC_VERSION_SAVED_EVENT,
+    'local',
+    documentPath,
+    events.onVersionCreated,
   )
 
   // The second phase of the page state. `pageState` above is derived from what
@@ -696,24 +705,48 @@ export function BrowserDocumentPage({
   )
 
   if (renderState.kind === 'load-degraded') {
-    return (
-      <LoadDegradedView message={renderState.message}>
-        {/* WHICH recovery is offered follows what the failure knows, and
+    return {
+      kind: 'terminal',
+      node: (
+        <LoadDegradedView message={renderState.message}>
+          {/* WHICH recovery is offered follows what the failure knows, and
             getting it wrong is destructive rather than merely unhelpful:
             `Start fresh` deletes the record, which is the right last resort
             for a document this build cannot read, and the worst possible
             button for one whose read was simply blocked — the data is
             intact and one click removes it. So the retry is what an
             unavailable read gets, and it is the only affordance there. */}
-        {backendError === 'read-unavailable' ? (
-          <button
-            type="button"
-            onClick={() => window.location.reload()}
-            className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-          >
-            Try again
-          </button>
-        ) : (
+          {backendError === 'read-unavailable' ? (
+            <button
+              type="button"
+              onClick={() => window.location.reload()}
+              className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+            >
+              Try again
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => void startFresh()}
+              className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
+            >
+              Start fresh
+            </button>
+          )}
+        </LoadDegradedView>
+      ),
+    }
+  }
+
+  if (renderState.kind === 'cleanup-completed') {
+    return {
+      kind: 'terminal',
+      node: (
+        <div
+          data-testid="cleanup-completed"
+          className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
+        >
+          <p className="text-sm text-muted-foreground">Canvas removed.</p>
           <button
             type="button"
             onClick={() => void startFresh()}
@@ -721,31 +754,13 @@ export function BrowserDocumentPage({
           >
             Start fresh
           </button>
-        )}
-      </LoadDegradedView>
-    )
-  }
-
-  if (renderState.kind === 'cleanup-completed') {
-    return (
-      <div
-        data-testid="cleanup-completed"
-        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="text-sm text-muted-foreground">Canvas removed.</p>
-        <button
-          type="button"
-          onClick={() => void startFresh()}
-          className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
-        >
-          Start fresh
-        </button>
-      </div>
-    )
+        </div>
+      ),
+    }
   }
 
   if (renderState.kind === 'loading') {
-    return <DocumentPageSkeleton label="Loading canvas" />
+    return { kind: 'terminal', node: <DocumentPageSkeleton label="Loading canvas" /> }
   }
 
   const loadedPath = renderState.snapshot.path
@@ -837,7 +852,6 @@ export function BrowserDocumentPage({
           throw err
         }
       },
-      refreshSignal: versionRefreshSignal,
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
       announceRefresh: () =>
@@ -971,11 +985,25 @@ export function BrowserDocumentPage({
     },
   }
 
-  return (
-    <VersionsBackendContext.Provider value={versionsBackend}>
-      <BranchesBackendContext.Provider value={branchesBackend}>
-        <DocumentPage model={model} />
-      </BranchesBackendContext.Provider>
-    </VersionsBackendContext.Provider>
-  )
+  return {
+    kind: 'render',
+    model,
+    wrap: (page: ReactNode) => (
+      <VersionsBackendContext.Provider value={versionsBackend}>
+        <BranchesBackendContext.Provider value={branchesBackend}>
+          {page}
+        </BranchesBackendContext.Provider>
+      </VersionsBackendContext.Provider>
+    ),
+  }
+}
+
+export const browserKeeper: DocumentKeeper<BrowserDocumentPageProps> = {
+  kind: 'browser',
+  useDocument: useBrowserDocument,
+}
+
+/** The shared page, bound to the browser keeper — what App mounts under the browser keeper's routes. */
+export function BrowserDocumentPage(props: BrowserDocumentPageProps) {
+  return <DocumentPage keeper={browserKeeper} props={props} />
 }

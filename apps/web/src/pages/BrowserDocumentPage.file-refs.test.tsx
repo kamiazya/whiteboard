@@ -1,67 +1,33 @@
 /**
- * File-reference identity on the browser page, the sibling of
- * DaemonDocumentPage.file-refs.test.tsx: a file node references the target
- * document's immutable id (rename- and move-safe, ADR-0008) while the address
- * bar names a path, so opening one crosses that boundary by lookup. An id the
- * list does not carry yet is a no-op rather than a navigation to nowhere.
+ * The browser keeper's own file-reference case. The shared scenarios (other
+ * documents offered as id refs under their label, an id ref opening its
+ * current path, the missing-ref rule) run against both keepers in
+ * `document-page.contract.tsx`. What is left here is where the keepers
+ * deliberately differ: an id the browser's list does not carry yet is a
+ * document the list has not caught up with, so following it does NOTHING
+ * rather than navigate to nowhere — the daemon page instead passes an unknown
+ * ref through as a legacy path (its own file has that case).
  */
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
+import {
+  latestEditorProps,
+  resetCapturedEditorProps,
+} from '../test-utils/capturing-spatial-editor.js'
+import { InMemoryLoroStore, LocalStoreDouble } from '../test-utils/local-index.js'
 
-// Captures the editor's file-ref props without mounting the real canvas —
-// what this file tests is the page's wiring, not the editor's rendering.
-let capturedEditorProps: SpatialEditorProps | null = null
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
-  return {
-    ...actual,
-    SpatialEditor: (props: SpatialEditorProps) => {
-      capturedEditorProps = props
-      return <div data-testid="stub-spatial-editor" />
-    },
-  }
+  const { CapturingSpatialEditor } = await import('../test-utils/capturing-spatial-editor.js')
+  return { ...actual, SpatialEditor: CapturingSpatialEditor }
 })
 
-vi.mock('../lib/browser-backend.js', () => ({
-  BrowserBackend: class {
-    connect(handlers: { onConnected: () => void }) {
-      handlers.onConnected()
-    }
-    disconnect() {}
-    pushLocalUpdate() {
-      return Promise.resolve()
-    }
-    getFile() {
-      return Promise.resolve(null)
-    }
-    putFile() {
-      return Promise.resolve()
-    }
-    sendClientReady() {}
-    sendExportResponse() {}
-  },
-}))
-
-class FakeLoroStore implements LoroStoreLike {
-  private byId = new Map<string, Uint8Array>()
-  async save(id: string, bytes: Uint8Array): Promise<void> {
-    this.byId.set(id, bytes)
-  }
-  createEmptySnapshot(): Uint8Array {
-    return new Uint8Array([1, 2, 3])
-  }
-  async load(id: string): Promise<LoroLoadResult> {
-    const bytes = this.byId.get(id)
-    if (bytes === undefined) return { kind: 'not-found' }
-    return { kind: 'ok', snapshot: bytes }
-  }
-}
+vi.mock('../lib/browser-backend.js', async () => {
+  const { FakeBrowserBackend } = await import('../test-utils/fake-browser-backend.js')
+  return { BrowserBackend: FakeBrowserBackend }
+})
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
@@ -82,9 +48,6 @@ async function seededStore(): Promise<LocalStoreDouble> {
   await store.save({
     documentId: TARGET_ID,
     workspaceId: getBrowserWorkspaceId(),
-    // Deliberately unlike both the id and the display name: a fixture where
-    // any of the three could stand in for another proves nothing about which
-    // one the wiring actually used.
     path: 'archive/target',
     name: 'Target',
     updatedAt: '2026-05-25T00:00:00.000Z',
@@ -103,7 +66,7 @@ async function mountPage(store: LocalStoreDouble) {
             store={store.index}
             pointer={store.pointer}
             clock={store.clock}
-            loro={new FakeLoroStore()}
+            loro={new InMemoryLoroStore()}
             initialPath="here"
           />
         ),
@@ -117,53 +80,21 @@ async function mountPage(store: LocalStoreDouble) {
   await waitFor(() => {
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Here')
   })
-  await waitFor(() => expect(capturedEditorProps?.fileRefOptions?.length).toBeGreaterThan(0))
+  await waitFor(() => expect(latestEditorProps()?.fileRefOptions?.length ?? 0).toBeGreaterThan(0))
   return router
 }
 
 afterEach(() => {
   cleanup()
-  capturedEditorProps = null
+  resetCapturedEditorProps()
 })
 
 describe('BrowserDocumentPage file references', () => {
-  it('offers every other document by id, labeled with its name', async () => {
-    await mountPage(await seededStore())
-    expect(capturedEditorProps?.fileRefOptions).toEqual([
-      { file: TARGET_ID, label: 'Target', kind: 'spatial' },
-    ])
-  })
-
-  it('opens a reference by resolving its id to that document’s current path', async () => {
-    const router = await mountPage(await seededStore())
-    await act(async () => {
-      capturedEditorProps?.onOpenFileRef?.(TARGET_ID)
-    })
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/w/default/d/archive/target')
-    })
-  })
-
-  it('marks refs matching neither a live id nor a live path as missing, sparing image refs', async () => {
-    // Same rule as the daemon page, deliberately: a legacy PATH ref (a
-    // document imported from elsewhere, or written before id refs existed)
-    // names a live document and must not render as a dangling
-    // "Missing reference" in browser mode alone.
-    const store = await seededStore()
-    await mountPage(store)
-    const missing = capturedEditorProps?.missingFileRef
-    expect(missing).toBeDefined()
-    expect(missing?.(TARGET_ID)).toBe(false)
-    expect(missing?.('archive/target')).toBe(false)
-    expect(missing?.('deleted-canvas-id')).toBe(true)
-    expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
-  })
-
   it('leaves the address bar alone for a reference the list does not carry', async () => {
     const router = await mountPage(await seededStore())
     const before = router.state.location.key
     await act(async () => {
-      capturedEditorProps?.onOpenFileRef?.('01ARZ3NDEKTSV4RRFFQ69G5FZZ')
+      latestEditorProps()?.onOpenFileRef?.('01ARZ3NDEKTSV4RRFFQ69G5FZZ')
     })
     // On the KEY, not the pathname: navigating to an id-shaped URL and then
     // having the URL→document effect repair it lands back on this same
