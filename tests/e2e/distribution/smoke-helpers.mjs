@@ -1,7 +1,10 @@
 #!/usr/bin/env node
-// Shared leak-detection helpers for distribution smoke scripts.
-// Only pure, behavior-invariant utilities belong here; process lifecycle,
-// temp-dir creation, and Docker helpers remain in each script.
+// Shared helpers for distribution smoke scripts: leak detection, plus the one
+// Docker build invocation both server-mode smokes have to get identical.
+// Process lifecycle and temp-dir creation remain in each script.
+
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 
 /**
  * Core security leak patterns: auth headers, JWTs, local filesystem paths,
@@ -66,4 +69,32 @@ export function assertNoLeak(label, text, extraLiterals = []) {
 export function scrubDevEnv(processEnv) {
   const { WHITEBOARD_DEV: _unused, ...rest } = processEnv
   return rest
+}
+
+/**
+ * `docker build` arguments for Dockerfile.server, `.node-version` included.
+ *
+ * Dockerfile.server declares `ARG NODE_VERSION` with no default, so a build
+ * that omits it resolves `FROM node:${NODE_VERSION}-alpine` to `node:-alpine`
+ * and fails on an invalid reference. Every call site therefore has to pass it,
+ * and every call site that forgot did so silently: the two Docker smokes only
+ * run on the release path, where the failure surfaces for the first time
+ * during a publish.
+ *
+ * @param {string} repoRoot
+ * @param {string} imageTag
+ * @returns {string[]} argv for `docker`, starting at `build`
+ */
+export function serverImageBuildArgv(repoRoot, imageTag) {
+  const nodeVersion = readFileSync(join(repoRoot, '.node-version'), 'utf-8').trim()
+  return [
+    'build',
+    '--build-arg',
+    `NODE_VERSION=${nodeVersion}`,
+    '-f',
+    join(repoRoot, 'Dockerfile.server'),
+    '-t',
+    imageTag,
+    repoRoot,
+  ]
 }

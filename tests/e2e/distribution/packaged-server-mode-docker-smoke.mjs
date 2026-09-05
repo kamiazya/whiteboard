@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, serverImageBuildArgv } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -187,10 +187,10 @@ const serverBaseUrl = useHostNetwork
 
 console.log('[docker-smoke] Building image (may take several minutes)…')
 {
-  const r = docker(
-    ['build', '-f', resolve(REPO_ROOT, 'Dockerfile.server'), '-t', IMAGE_TAG, REPO_ROOT],
-    { timeout: 600_000, stdio: 'inherit' },
-  )
+  const r = docker(serverImageBuildArgv(REPO_ROOT, IMAGE_TAG), {
+    timeout: 600_000,
+    stdio: 'inherit',
+  })
   if (r.status !== 0) fail('scenario 1: docker build failed')
   console.log('[docker-smoke] scenario 1 PASS: docker build succeeded')
 }
