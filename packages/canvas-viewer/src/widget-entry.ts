@@ -4,7 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
+import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import {
@@ -95,18 +95,17 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // host, and a malformed entry reaches canvas-render's layout seams as
 // whatever the host sent.
 //
-// Validated against the CANONICAL, fully-recursive `mdastRootSchema` — the
-// same schema `canvas_view` declares its payload with server-side — not a
-// looser shape check. A root-shaped body with an unrecognised child is not
-// something layout shrugs off: `layoutBlock`'s switch has no default case,
-// so one bad child throws out of `layoutSpatialCanvas` and takes the whole
-// canvas with it. Checking only `{type:'root', children: unknown[]}` here
-// and casting past the rest let exactly that through.
+// Validated as canvas-render's `LoadedReference` — the record `canvas_view`
+// declares its payload with server-side, and the one `referenceSeams` reads
+// — not a looser shape check. A canvas the CANONICAL `spatialCanvasSchema`
+// rejects is not something layout shrugs off, and a body is parsed by the
+// seams themselves, so a raw string is all that crosses.
 //
 // Applied PER REFERENCE, so strictness costs only the reference that fails.
 const referenceSchema = z.object({
-  label: z.string().optional(),
-  body: mdastRootSchema.optional(),
+  name: z.string().optional(),
+  body: z.string().optional(),
+  canvas: spatialCanvasSchema.optional(),
 })
 
 /** Keeps the references that parse, drops the ones that do not. */

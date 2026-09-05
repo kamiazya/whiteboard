@@ -9,6 +9,7 @@
  * take down the page.
  */
 
+import type { LoadedReference } from '@kamiazya/whiteboard-canvas-render'
 import {
   readCoreFacets,
   readMarkdownBody,
@@ -97,35 +98,27 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
 }
 
 /**
- * What an `![[embed]]` target loads as: a markdown document's raw body
- * (parsed once by the hook that caches it), or a spatial document's canvas
- * (drawn by the layout as a miniature). Declared here, in lib, because the
- * loaders that produce it live here and the hook above only consumes it.
- */
-export type MarkdownEmbedSource =
-  | { readonly body: string; readonly title?: string }
-  | { readonly canvas: SpatialCanvas; readonly title?: string }
-
-/**
- * Loads one `![[embed]]` target from the same store — the loader behind
- * `useMarkdownEmbedContent`'s cache, total like its spatial sibling above.
- * The workspace entry's kind decides what the target IS: a spatial document
+ * Loads one referenced document from the same store as canvas-render's
+ * `LoadedReference` — the record every keeper answers, so what a body or a
+ * canvas MEANS is decided once, in `referenceSeams`, and not here. The
+ * workspace entry's kind decides which half to read: a spatial document
  * answers its canvas, anything else its body. Kind comes from the index
  * rather than the content because the browser store writes it there, and a
- * spatial document's body is an empty string that says nothing.
+ * spatial document's body is an empty string that says nothing. Total like
+ * every loader here.
  */
-export async function loadMarkdownEmbedSource(
+export async function loadBrowserReference(
   documentId: string,
-): Promise<MarkdownEmbedSource | undefined> {
+): Promise<LoadedReference | undefined> {
   try {
     const doc = await loadDocumentContent(documentId)
     if (doc === null) return undefined
     const entry = await loadDocumentEntry(documentId)
-    const title = entry?.name !== undefined ? { title: entry.name } : {}
-    if (entry?.kind === 'spatial') return { ...title, canvas: readSpatialCanvas(doc) }
-    return { ...title, body: readMarkdownBody(doc) }
+    const name = entry?.name !== undefined ? { name: entry.name } : {}
+    if (entry?.kind === 'spatial') return { documentId, ...name, canvas: readSpatialCanvas(doc) }
+    return { documentId, ...name, body: readMarkdownBody(doc) }
   } catch (err) {
-    log.warn('embedded markdown load failed', { documentId, err })
+    log.warn('referenced document load failed', { documentId, err })
     return undefined
   }
 }

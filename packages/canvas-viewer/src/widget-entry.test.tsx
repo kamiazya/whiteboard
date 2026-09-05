@@ -382,27 +382,27 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 320, height: 220, file: 'notes' }],
     }
-    const body = { type: 'root', children: [{ type: 'paragraph', children: [] }] }
+    const body = 'a paragraph'
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
         workspaceId: 'ws-1',
         documentId: 'ws/path',
         scene,
-        references: { notes: { label: 'W', body } },
+        references: { notes: { name: 'W', body } },
       },
     })
 
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledWith(
       expect.any(HTMLElement),
-      expect.objectContaining({ references: { notes: { label: 'W', body } } }),
+      expect.objectContaining({ references: { notes: { name: 'W', body } } }),
     )
   })
 
-  it('drops a reference whose body is not real mdast, keeping the rest of the payload', async () => {
-    // The host is not trusted: `references` is parsed against the canonical
-    // mdastRootSchema. A root-shaped body with an undispatchable child would
-    // otherwise reach layout, where one bad child aborts the whole canvas.
+  it('drops a reference that is not a loaded document, keeping the rest of the payload', async () => {
+    // The host is not trusted: `references` is parsed as canvas-render's
+    // LoadedReference. A pre-parsed body (the old wire shape) or a canvas
+    // the canonical schema rejects would otherwise reach layout.
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
     await importFreshWidgetEntry()

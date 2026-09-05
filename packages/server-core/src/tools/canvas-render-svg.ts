@@ -11,8 +11,7 @@ import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
-import { type EmbedResolution, resolveEmbedTargets } from '../render/resolve-embeds.js'
-import { loadFileReferences, toResolvedReference } from '../render/resolve-file-references.js'
+import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -86,51 +85,29 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
       let scene: Scene
       if (kind === 'markdown') {
         const body = readMarkdownBody(doc)
-        const embeds = input.embedReferences
-          ? await resolveEmbedTargets(deps, input.workspaceId, [body])
+        const references = input.embedReferences
+          ? (await loadReferenceGraph(deps, input.workspaceId, { bodies: [body] })).seams
           : undefined
-        const whole = resolveReferences(parseMarkdownBody(body), embeds?.resolveAlias)
+        const whole = resolveReferences(parseMarkdownBody(body), references?.resolveAlias)
         const root =
           input.fragment === undefined ? whole : selectMarkdownSection(whole, input.fragment)
         if (root === undefined) {
           throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
         }
-        scene = composeMarkdownScene(root, measure, embeds)
+        scene = composeMarkdownScene(root, measure, { references })
       } else {
         const part =
           input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
         if (part === undefined) {
           throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'spatial')
         }
-        scene = composeCanvasScene(part, measure, await canvasSceneOptions(deps, input, part))
+        const references = input.embedReferences
+          ? (await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })).seams
+          : undefined
+        scene = composeCanvasScene(part, measure, { references })
       }
       const { width, height } = computeSceneDimensions(scene)
       return { svg: renderSceneToSvg(scene), width, height }
     },
-  }
-}
-
-/**
- * The opt-in resolution for a canvas: its file references loaded, then the
- * `![[...]]` embeds inside the referenced markdown bodies resolved too, so
- * the bodies parse with an alias resolver that already knows their targets.
- */
-async function canvasSceneOptions(
-  deps: ServerDeps,
-  input: CanvasRenderSvgInput,
-  canvas: Parameters<typeof loadFileReferences>[2],
-): Promise<Parameters<typeof composeCanvasScene>[2]> {
-  if (!input.embedReferences) return {}
-  const loaded = await loadFileReferences(deps, input.workspaceId, canvas)
-  const bodies = [...loaded.values()].flatMap((source) =>
-    source.body === undefined ? [] : [source.body],
-  )
-  const embeds: EmbedResolution = await resolveEmbedTargets(deps, input.workspaceId, bodies)
-  return {
-    references: new Map(
-      [...loaded].map(([ref, source]) => [ref, toResolvedReference(source, embeds.resolveAlias)]),
-    ),
-    resolveEmbed: embeds.resolveEmbed,
-    resolveTitle: embeds.resolveTitle,
   }
 }

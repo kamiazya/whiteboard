@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 /**
  * The verified user flow, locked in: a file node pointing at a markdown
  * document in the same workspace renders that document's prose inside the
@@ -52,7 +53,9 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveReference={(ref) => (ref === 'notes' ? { markdown: BODY } : undefined)}
+        references={referenceSeams(new Map(), {
+          extra: (ref) => (ref === 'notes' ? { markdown: BODY } : undefined),
+        })}
       />,
     )
 
@@ -66,7 +69,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveReference={() => ({ markdown: BODY, facets: CARD })}
+        references={referenceSeams(new Map(), { extra: () => ({ markdown: BODY, facets: CARD }) })}
       />,
     )
 
@@ -79,7 +82,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveReference={() => ({ facets: CARD })}
+        references={referenceSeams(new Map(), { extra: () => ({ facets: CARD }) })}
       />,
     )
 
@@ -94,7 +97,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        resolveReference={() => ({ markdown: long })}
+        references={referenceSeams(new Map(), { extra: () => ({ markdown: long }) })}
       />,
     )
 

@@ -3,9 +3,8 @@ import { redo, undo } from '@codemirror/commands'
 import type { Extension, StateCommand } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
-import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import {
   type CommentThread,
   documentIdSchema,
@@ -102,15 +101,13 @@ export interface MarkdownEditorProps {
    */
   title?: string
   /**
-   * Maps `[[path]]` aliases to document ids for the preview (codec's
-   * separate resolution pass). Absent, only a bare `[[ULID]]` resolves.
+   * Every reference seam the preview reads — `[[path]]` aliases to ids,
+   * display names for bare links, `![[embed]]` targets (a note's body or a
+   * canvas) — as the one bundle canvas-render's `referenceSeams` builds
+   * over what the host pre-fetched (see useReferenceSeams). Absent, only a
+   * bare `[[ULID]]` resolves and every embed stays a placeholder.
    */
-  resolveAlias?: AliasResolver
-  /**
-   * The current display name for a linked document — labels a bare
-   * `[[path]]`/`[[id]]` in the preview instead of its address.
-   */
-  resolveTitle?: MdastLayoutOptions['resolveTitle']
+  references?: ReferenceSeams
   /**
    * Documents this editor may link to. Supplied by the composition root,
    * which already holds the list its switcher shows. Absent (or empty) keeps
@@ -124,12 +121,6 @@ export interface MarkdownEditorProps {
    * are inert (their href is a bare ULID, not a URL).
    */
   onOpenDocument?: (documentId: string) => void
-  /**
-   * Resolves `![[embed]]` targets — a note's parsed body, or a canvas — so
-   * block embeds render inline (canvas-render's layout seam; the host
-   * pre-fetches, see useMarkdownEmbedContent).
-   */
-  resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
    * Injection seam for tests: the async engines behind math blocks and
    * diagram fences. Defaults to the real dynamically-imported
@@ -324,11 +315,9 @@ export function MarkdownEditor({
   theme = 'light',
   meta,
   title,
-  resolveAlias,
-  resolveTitle,
+  references,
   linkTargets,
   onOpenDocument,
-  resolveEmbed,
   fragmentLoaders,
   sourceExtensions,
   threads,
@@ -947,9 +936,7 @@ export function MarkdownEditor({
                   maxWidth={previewWidth}
                   measure={resolvedMeasure}
                   theme={theme}
-                  resolveAlias={resolveAlias}
-                  resolveEmbed={resolveEmbed}
-                  resolveTitle={resolveTitle}
+                  references={references}
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
                   anchorsRef={anchorsRef}

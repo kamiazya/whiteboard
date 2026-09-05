@@ -1,4 +1,4 @@
-import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
@@ -25,9 +25,9 @@ export interface CanvasViewerProps {
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
   /**
-   * A file node's reference resolved to what the host knows about it — a
-   * readable name, and a referenced MARKDOWN document's already-parsed
-   * body.
+   * What the host knows about the documents this canvas points at, as the
+   * one bundle `referenceSeams` builds — a readable name, a referenced
+   * markdown document's body, a referenced canvas.
    *
    * Synchronous by canvas-render's contract, which is why this package
    * takes the resolution as data rather than fetching it: the viewer is
@@ -36,7 +36,7 @@ export interface CanvasViewerProps {
    * side that can read another document. Absent keeps the plain reference
    * card.
    */
-  resolveReference?: (ref: string) => ResolvedReference | undefined
+  references?: ReferenceSeams
   testId?: string
   /**
    * Accessible name for the rendered canvas. The viewer cannot derive one:
@@ -57,7 +57,7 @@ export function CanvasViewer({
   padding,
   background,
   measure,
-  resolveReference,
+  references,
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
@@ -106,7 +106,9 @@ export function CanvasViewer({
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
       appearance: VIEWER_APPEARANCE,
-      ...(resolveReference === undefined ? {} : { resolveReference }),
+      // A viewer has no zoom to gate a miniature by: a referenced canvas
+      // draws at the node's intrinsic size, export's policy.
+      ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
@@ -136,7 +138,7 @@ export function CanvasViewer({
     renderHeight,
     padding,
     background,
-    resolveReference,
+    references,
     fontReady,
   ])
 

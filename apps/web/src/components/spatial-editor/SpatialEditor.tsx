@@ -58,11 +58,7 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type {
-  BoundingBox,
-  MeasureText,
-  ResolvedReference,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
@@ -315,7 +311,7 @@ export interface SpatialEditorProps {
    * A markdown body arrives parsed rather than raw so layout never runs a
    * markdown parse per file node per frame.
    */
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
+  readonly references?: ReferenceSeams
   /**
    * Stores a picked/dropped/pasted image and returns the reference to put
    * in the created file node, or undefined on failure (nothing is
@@ -472,7 +468,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       missingFileRef,
       paletteLeading,
-      resolveReference,
+      references,
       onAddImage,
       isImageFileRef,
     },
@@ -549,7 +545,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const { fileSeamOptions, missingFileRefs } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
-      resolveReference,
+      references,
       fileRefOptions,
       missingFileRef,
       resolvedMeasure,

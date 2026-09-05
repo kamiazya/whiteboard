@@ -44,18 +44,19 @@ export interface PrefetchRequest<V> {
 }
 
 /**
- * @param collect What this render needs, given everything already loaded.
- *   The `loaded` argument is what makes a TRANSITIVE closure possible (an
- *   embedded body referencing further documents); a consumer with no such
- *   closure ignores it. Called inside the effect, so it must be stable —
- *   wrap it in `useCallback` over the inputs it reads.
- * @returns The synchronous seam: a key that has not loaded, failed, or
- *   resolved to nothing all answer `undefined`, which is what every
- *   canvas-render seam treats as "keep the documented fallback".
+ * The cache itself, keyed — for a consumer that builds something over the
+ * whole of what has loaded (a reference graph) rather than looking keys up
+ * one at a time. `null` is the terminal "nothing here" slot described above.
+ *
+ * @param collect What this render needs, given everything already loaded
+ *   BY KEY. The `loaded` argument is what makes a TRANSITIVE closure
+ *   possible (an embedded body referencing further documents). Called
+ *   inside the effect, so it must be stable — wrap it in `useCallback` over
+ *   the inputs it reads.
  */
-export function usePrefetchedCache<V>(
-  collect: (loaded: readonly V[]) => readonly PrefetchRequest<V>[],
-): (key: string) => V | undefined {
+export function usePrefetchedEntries<V>(
+  collect: (loaded: ReadonlyMap<string, V>) => readonly PrefetchRequest<V>[],
+): ReadonlyMap<string, V | null> {
   const [cache, setCache] = useState<ReadonlyMap<string, V | null>>(new Map())
   const inflight = useRef<Set<string>>(new Set())
   const unmounted = useRef(false)
@@ -67,8 +68,8 @@ export function usePrefetchedCache<V>(
   }, [])
 
   useEffect(() => {
-    const loaded: V[] = []
-    for (const value of cache.values()) if (value !== null) loaded.push(value)
+    const loaded = new Map<string, V>()
+    for (const [key, value] of cache) if (value !== null) loaded.set(key, value)
     for (const { key, load } of collect(loaded)) {
       if (cache.has(key) || inflight.current.has(key)) continue
       inflight.current.add(key)
@@ -82,5 +83,24 @@ export function usePrefetchedCache<V>(
     }
   }, [cache, collect])
 
+  return cache
+}
+
+/**
+ * @param collect What this render needs, given everything already loaded.
+ *   The `loaded` argument is what makes a TRANSITIVE closure possible (an
+ *   embedded body referencing further documents); a consumer with no such
+ *   closure ignores it. Called inside the effect, so it must be stable —
+ *   wrap it in `useCallback` over the inputs it reads.
+ * @returns The synchronous seam: a key that has not loaded, failed, or
+ *   resolved to nothing all answer `undefined`, which is what every
+ *   canvas-render seam treats as "keep the documented fallback".
+ */
+export function usePrefetchedCache<V>(
+  collect: (loaded: readonly V[]) => readonly PrefetchRequest<V>[],
+): (key: string) => V | undefined {
+  const cache = usePrefetchedEntries<V>(
+    useCallback((loaded) => collect([...loaded.values()]), [collect]),
+  )
   return useCallback((key: string) => cache.get(key) ?? undefined, [cache])
 }

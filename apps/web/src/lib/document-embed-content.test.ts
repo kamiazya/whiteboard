@@ -13,7 +13,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
-import { loadMarkdownEmbedSource, resetEmbedIndexForTests } from './document-embed-content.js'
+import { loadBrowserReference, resetEmbedIndexForTests } from './document-embed-content.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
@@ -21,7 +21,7 @@ import { LoroStore } from './loro-store.js'
 
 claimIsolatedWhiteboardDb('document-embed-content')
 
-describe('loadMarkdownEmbedSource', () => {
+describe('loadBrowserReference', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
     resetEmbedIndexForTests()
@@ -37,8 +37,8 @@ describe('loadMarkdownEmbedSource', () => {
       name: 'The Spec',
     })
 
-    const source = await loadMarkdownEmbedSource(entry.documentId)
-    expect(source?.title).toBe('The Spec')
+    const source = await loadBrowserReference(entry.documentId)
+    expect(source?.name).toBe('The Spec')
   })
 
   it('resolves the name of a legacy record through the fold, not a second read path', async () => {
@@ -54,8 +54,8 @@ describe('loadMarkdownEmbedSource', () => {
     doc.getText('body').insert(0, 'legacy body')
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
-    const source = await loadMarkdownEmbedSource(entry.documentId)
-    expect(source).toEqual({ body: 'legacy body', title: 'Old Note' })
+    const source = await loadBrowserReference(entry.documentId)
+    expect(source).toEqual({ documentId: entry.documentId, body: 'legacy body', name: 'Old Note' })
   })
 
   it('answers a spatial document with its canvas rather than an empty body', async () => {
@@ -75,7 +75,7 @@ describe('loadMarkdownEmbedSource', () => {
     writeSpatialCanvas(doc, canvas)
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
-    const source = await loadMarkdownEmbedSource(entry.documentId)
-    expect(source).toEqual({ title: 'The Plan', canvas })
+    const source = await loadBrowserReference(entry.documentId)
+    expect(source).toEqual({ documentId: entry.documentId, name: 'The Plan', canvas })
   })
 })
