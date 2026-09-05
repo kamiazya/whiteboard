@@ -97,4 +97,11 @@ that is allowed because `publish:dry-run:docker` exits 0 with a skip line when n
 daemon answers, a fail-soft the `ci` and `local-release` aggregates must not have.
 
 Whether a gate is exercised on a pull request is the separate `prCoverage` axis,
-checked structurally against `ci.yml` by `gate-isomorphism.test.ts`.
+checked structurally against `ci.yml` by `gate-isomorphism.test.ts`. Its
+`conditional-workflow-step` kind is for a step that runs on SOME pull requests:
+the declared `condition` is compared against the step's real `if:`, so the two
+cannot drift, and `conditionReason` has to argue why the pull requests it skips
+cannot change the gate's answer. `publish:dry-run:docker` is the one gate on it —
+`tools/checks/src/docker-build-inputs.mjs` decides whether a diff reaches what
+`Dockerfile.server` compiles, deriving that set from the Dockerfile's own
+`pnpm --filter` targets rather than a list.

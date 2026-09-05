@@ -15,7 +15,12 @@
 
 /** @typedef {{ ok: true } | { ok: false, reason: string }} ValidationResult */
 
-const KNOWN_PR_COVERAGE_KINDS = new Set(['workflow-step', 'aggregate', 'exception'])
+const KNOWN_PR_COVERAGE_KINDS = new Set([
+  'workflow-step',
+  'conditional-workflow-step',
+  'aggregate',
+  'exception',
+])
 
 // Single authority for the closed vocabularies a gate's category,
 // expectedRuntimeBucket, and requiredFor tiers may use. Runtime validation
@@ -75,6 +80,7 @@ export function validatePrCoverage(prCoverage) {
   }
   switch (p.kind) {
     case 'workflow-step':
+    case 'conditional-workflow-step':
     case 'aggregate': {
       if (!isNonEmptyString(p.workflow)) {
         return { ok: false, reason: 'prCoverage.workflow must be a non-empty string' }
@@ -82,8 +88,25 @@ export function validatePrCoverage(prCoverage) {
       if (!isNonEmptyString(p.jobId)) {
         return { ok: false, reason: 'prCoverage.jobId must be a non-empty string' }
       }
-      if (p.kind === 'workflow-step' && !isNonEmptyString(p.stepName)) {
+      if (
+        (p.kind === 'workflow-step' || p.kind === 'conditional-workflow-step') &&
+        !isNonEmptyString(p.stepName)
+      ) {
         return { ok: false, reason: 'prCoverage.stepName must be a non-empty string' }
+      }
+      // A conditional step is exercised on SOME pull requests. Both extra
+      // fields exist so that stays a stated policy rather than a silent
+      // weakening of workflow-step: `condition` is checked against the step's
+      // real `if:` (a drifted copy fails), and `conditionReason` is the
+      // argument for why the pull requests it skips cannot change the gate's
+      // answer — the only part a reader cannot derive from the workflow.
+      if (p.kind === 'conditional-workflow-step') {
+        if (!isNonEmptyString(p.condition)) {
+          return { ok: false, reason: 'prCoverage.condition must be a non-empty string' }
+        }
+        if (!isNonEmptyString(p.conditionReason)) {
+          return { ok: false, reason: 'prCoverage.conditionReason must be a non-empty string' }
+        }
       }
       if (p.kind === 'aggregate') {
         if ('expectedCommandSubstrings' in p) {

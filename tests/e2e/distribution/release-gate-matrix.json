@@ -258,10 +258,12 @@
       "requiresNetwork": true,
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
-        "kind": "workflow-step",
+        "kind": "conditional-workflow-step",
         "workflow": "ci.yml",
         "jobId": "dry-run-docker",
-        "stepName": "Docker build dry-run"
+        "stepName": "Docker build dry-run",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "the step answers only whether Dockerfile.server still builds, so a pull request that changes nothing the image compiles cannot change its answer. The affecting set is derived, not listed: tools/checks/src/docker-build-inputs.mjs walks the workspace closure of the pnpm --filter targets read out of Dockerfile.server, and adds every manifest, patches/ and all root-level files. It fails open on any error resolving the diff, and pushes to main and merge_group runs pass 'always' so the last commit before a release tag is never skipped."
       }
     }
   ]

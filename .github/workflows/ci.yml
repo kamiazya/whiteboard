@@ -456,21 +456,49 @@ jobs:
     # longest jobs in the workflow back to back.
     runs-on: ubuntu-latest
     steps:
+      # fetch-depth 2 rather than 0: on a pull_request event the checked-out
+      # ref is the merge commit, whose first parent is the base branch tip, so
+      # HEAD^1 is the whole PR diff for one extra object instead of a full
+      # clone. The detect step below is the only thing that needs it.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 2
+
+      # The image build is 207s of this job's 260-410s and answers one
+      # question: does Dockerfile.server still build? A pull request that
+      # touches nothing the image compiles cannot change that answer, and 21
+      # of the last 40 main commits were exactly that (all apps/web or
+      # .claude). What counts as reaching the image is DERIVED — see
+      # tools/checks/src/docker-build-inputs.mjs.
+      #
+      # Gated per-STEP, not with a job-level `if:` or a workflow `paths:`
+      # filter. A `paths:` filter never reports the check at all and stalls a
+      # required-check merge; a job-level `if:` would need its own upstream
+      # job, and measured queue pickup here is 35-276s — a second hop can cost
+      # more than the build it saves. Skipping inside the job costs one
+      # checkout and leaves the check reporting normally.
+      - name: Detect docker build inputs
+        id: detect
+        run: node tools/checks/src/docker-build-inputs.mjs "${{ github.event_name == 'pull_request' && 'HEAD^1' || 'always' }}"
 
       - uses: ./.github/actions/setup-pnpm
+        if: steps.detect.outputs.docker == 'true'
 
       - name: Install dependencies
+        if: steps.detect.outputs.docker == 'true'
         run: pnpm install --frozen-lockfile
 
       # docker-container driver is required for the GHA cache backend used by
       # publish-dry-run-docker.mjs; the default docker driver can't export it.
       - uses: docker/setup-buildx-action@bb05f3f5519dd87d3ba754cc423b652a5edd6d2c # v4.2.0
+        if: steps.detect.outputs.docker == 'true'
 
       - name: Docker build dry-run
+        if: steps.detect.outputs.docker == 'true'
         run: pnpm publish:dry-run:docker
 
       - name: Upload docker dry-run metadata
+        if: steps.detect.outputs.docker == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: docker-image-dry-run-${{ github.run_id }}

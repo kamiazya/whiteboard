@@ -32,11 +32,13 @@ function readText(relPath: string): string {
 }
 
 interface PrCoverage {
-  kind: 'workflow-step' | 'aggregate' | 'exception'
+  kind: 'workflow-step' | 'conditional-workflow-step' | 'aggregate' | 'exception'
   workflow?: string
   jobId?: string
   stepName?: string
   reason?: string
+  condition?: string
+  conditionReason?: string
   expectedCommandSubstrings?: string[]
 }
 
@@ -170,6 +172,43 @@ describe('gate isomorphism: workflow-step coverage resolves structurally', () =>
         step!.run,
         `gate "${gate.id}": step "${coverage.stepName}" must run the gate's exact command`,
       ).toBe(gate.command)
+    }
+  })
+})
+
+// A conditional step is the one shape 'workflow-step' cannot express without
+// lying: its `if:` is by definition NOT in the always-true-on-PR allowlist, so
+// declaring it as a plain workflow-step would either fail that check or force
+// the allowlist open — and an allowlist widened to admit a real condition
+// stops meaning anything. The declared `condition` is checked against the
+// step's actual `if:` instead, so the two cannot drift.
+describe('gate isomorphism: conditional coverage matches the step condition it declares', () => {
+  it('every conditional-workflow-step prCoverage resolves and its condition equals the step if:', async () => {
+    const { extractWorkflowJobs } = await loadExtractor()
+    const jobs = extractWorkflowJobs(ciYaml)
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
+      const coverage = gate.prCoverage
+      if (coverage?.kind !== 'conditional-workflow-step') continue
+      expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
+      const job = jobs.find((j) => j.id === coverage.jobId)
+      expect(job, `gate "${gate.id}": job "${coverage.jobId}" not found in ci.yml`).toBeDefined()
+      expect(
+        isJobPrReachable(job!),
+        `gate "${gate.id}": job "${coverage.jobId}" has a non-pinned if: "${job!.if}" — a conditional gate is gated at the STEP, so the job itself must still report on every pull request`,
+      ).toBe(true)
+      const step = job!.steps.find((s) => s.name === coverage.stepName)
+      expect(
+        step,
+        `gate "${gate.id}": step "${coverage.stepName}" not found in job "${coverage.jobId}"`,
+      ).toBeDefined()
+      expect(
+        step!.run,
+        `gate "${gate.id}": step "${coverage.stepName}" must run the gate's exact command`,
+      ).toBe(gate.command)
+      expect(
+        step!.if,
+        `gate "${gate.id}": declared condition does not match step "${coverage.stepName}"'s actual if:`,
+      ).toBe(coverage.condition)
     }
   })
 })
