@@ -361,20 +361,57 @@ at all. `vi.defineHelper` was the one worth adopting (`executable-rungs.md`). Th
   `QUARANTINE(` markers in the tree, and the marker carries a date, an issue and a reason
   that a tag cannot.
 
-### jsdom creation is 38% of `web-jsdom` — worth its own change
+### Environment cost: a per-file `node` environment, and why NOT happy-dom
 
-Vitest 5's environment line reports what no earlier version did:
+Vitest 5's environment line reports what no earlier version did, and it named the largest
+single cost in the repo's largest project — larger than running the tests:
 
 ```
 Environment  |web-jsdom| jsdom was created 353 times · 234.29s total, 38% of tracked time
-Duration  218.95s (environment 38%, tests 33%, import 14%, setup 10%, transform 5%)
 ```
 
-One jsdom per file, 353 files, and it is the largest single cost in the repo's largest
-project — larger than running the tests. Not acted on here: the levers (`happy-dom`, or a
-per-file environment so only the files that need a DOM pay for one) each change what the
-tests run against, so each needs its own measured change. Recorded because the number only
-became visible at the upgrade.
+Two levers, both measured end to end. **One adopted, one refused.**
+
+**Adopted — `// @vitest-environment node` on the files that never touch a DOM.** 145 of
+web-jsdom's 353 files. The docblock keeps the file in its project, with its setup file and
+its CI job; it simply stops paying for a DOM it does not use.
+
+| | wall | environment share |
+|---|---|---|
+| the 149-file subset under jsdom | 82s | 46% (100.9s) |
+| the same subset under `node` | **47s** | **1%** |
+| whole project before | 219s | 38% (234.3s) |
+| whole project after | **188s** | **26%** (135.5s) |
+
+All 353 files and 3682 tests still pass. **The set is what the RUN says, not what a grep
+says**: a "no testing-library, no `document`/`window`/`localStorage`/`indexedDB`" scan
+proposed 149, and four failed with `ReferenceError: document is not defined` because the
+dependency is indirect (CodeMirror's completion source, three lib modules). Those four keep
+jsdom. The direction is the safe one — a file that needs a DOM and does not get one fails
+loudly on its first run, while a file that stops needing one merely keeps paying.
+
+**Refused — `happy-dom` as the environment.** It is faster, and that is not the question.
+Measured on the whole project on top of the change above: 188s → **158s (-16%)**,
+environment 26% → 16%, with 3 failures out of 3682. Two of the three are the reason:
+
+- `HeaderBranchChip` reads `getAttribute('style')` and expects `rgb(147, 51, 234)`. jsdom
+  serialises a hex colour to `rgb()` the way Chrome does; happy-dom keeps `#9333ea`. The
+  test's own comment already said which browser behaviour it was pinning.
+- `initial-tool` simulates private mode with `vi.spyOn(Storage.prototype, 'setItem')`. Under
+  jsdom `sessionStorage` routes through the prototype and the spy fires, so the test
+  exercises the `catch` branch it exists for. Under happy-dom it does not fire, the write
+  succeeds, and the assertion reads `'select'` where it expects `null`.
+
+That second one is the argument, and it is this repo's own recorded hazard: **a guard that
+never reaches its subject passes, and reads exactly like a guard that checked.** The failure
+was visible only because the assertion was strong. A test whose only claim was
+`expect(() => writeLastTool('select')).not.toThrow()` would have gone green under happy-dom
+while never entering the branch — silently, across a 353-file suite, wherever prototype-level
+interception is how a browser condition gets simulated. 16% does not buy that.
+
+(The third failure is happy-dom being MORE correct — `navigator.clipboard` is getter-only, as
+in a real browser, so the test's `Object.assign(navigator, …)` throws. That one is the test's
+sloppiness and would be worth fixing either way.)
 
 ### `injectCjsGlobals: false` — already held by a stronger rung
 
