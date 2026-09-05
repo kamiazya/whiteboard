@@ -12,8 +12,7 @@
  *   stateful). They are declared here so the catalog stays complete, and
  *   the matcher deliberately skips them.
  */
-import type { EditorTool } from './ToolPalette.js'
-
+import type { EditorTool } from '../../lib/editor-tool.js'
 export type ShortcutId =
   | 'toggle-lock'
   | 'zoom-in'

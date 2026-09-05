@@ -9,7 +9,8 @@ import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
-import { ConnectionStatus, connectionLabel, isSyncOff } from './connection/ConnectionStatus.js'
+import { isSyncOff } from '../lib/connection-state.js'
+import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
 import {
   WorkspaceMenu,
   type WorkspaceRow,

@@ -17,8 +17,8 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { imageRefId, isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import type { DocumentFileAdapter } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import type { DocumentFileAdapter } from './document-file-contract.js'
 
 const log = getAppLogger('daemon-file-adapter')
 

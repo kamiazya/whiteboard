@@ -1,5 +1,4 @@
-import type { ConnectionState } from '../components/connection/ConnectionStatus.js'
-
+import type { ConnectionState } from './connection-state.js'
 /**
  * What the page holding a live document session knows about its connection.
  *

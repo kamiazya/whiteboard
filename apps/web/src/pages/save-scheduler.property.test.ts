@@ -13,9 +13,9 @@
  * defects lived in.
  */
 import { afterAll, describe, expect, it } from 'vitest'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createSaveScheduler, type SaveTimer } from './save-scheduler.js'
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
 
 /** A fake host: one armed timer, one in-flight write, and what has landed. */
 class Harness {

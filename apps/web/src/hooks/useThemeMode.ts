@@ -1,12 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-
-// Stored preference. `'system'` defers to `prefers-color-scheme`, which lets
-// users keep the OS setting authoritative without sacrificing manual override.
-export type ThemeMode = 'light' | 'dark' | 'system'
-
-// What actually paints. Excalidraw and `<html class="dark">` only understand
-// concrete values, so we resolve `'system'` against `matchMedia` before use.
-export type ResolvedTheme = 'light' | 'dark'
+import type { ResolvedTheme, ThemeMode } from '../lib/theme.js'
 
 export const THEME_STORAGE_KEY = 'whiteboard:theme'
 

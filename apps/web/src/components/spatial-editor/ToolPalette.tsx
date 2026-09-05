@@ -40,9 +40,8 @@ import {
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import { CREATION_LABELS } from './creation-labels.js'
-
-export type EditorTool = 'select' | 'hand' | 'connect'
 
 /**
  * Drag payload for placing a creation where it is dropped: the kind travels
