@@ -24,6 +24,7 @@ import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
+import { HEADER_TOGGLE_CLASS } from '../ui/header-button.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
@@ -83,7 +84,7 @@ export function CanvasDisplaySettings({
               type="button"
               data-testid="canvas-settings-button"
               aria-label="Display settings"
-              className="text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5"
+              className={HEADER_TOGGLE_CLASS}
             >
               <SlidersHorizontal aria-hidden="true" className="size-4" />
             </button>

@@ -1,6 +1,7 @@
 import { Settings } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { HEADER_BUTTON_CLASS } from '@/components/ui/header-button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
 import { parseWorkspaceRoute, settingsPath } from '@/lib/app-routes'
@@ -8,6 +9,7 @@ import { browserWorkspaceIdOrNull } from '@/lib/browser-workspace-id'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
+import { cn } from '@/lib/utils'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
 import { isSyncOff } from '../lib/connection-state.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
@@ -188,7 +190,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         : workspaceLabel(activeRow)
 
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
+    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3 pointer-coarse:h-12">
       {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
           Switcher"): it names the workspace in its accessible name, opens the
           popover that lists the others, and carries the session state when a
@@ -322,7 +324,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
             state: { from: `${location.pathname}${location.search}` },
           })
         }
-        className="relative shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        className={cn(HEADER_BUTTON_CLASS, 'relative')}
       >
         {nudge && (
           <span

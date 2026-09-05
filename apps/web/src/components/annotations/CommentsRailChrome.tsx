@@ -9,16 +9,14 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import type { JSX } from 'react'
-import { Button } from '@/components/ui/button'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
-import { TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
+import { HEADER_WIDE_TOGGLE_CLASS } from '../ui/header-button.js'
 import { CommentsPanel } from './CommentsPanel.js'
 
 export function CommentsRailToggle({ rail }: { readonly rail: CommentsRail }): JSX.Element {
   return (
-    <Button
-      variant="ghost"
-      size="sm"
+    <button
+      type="button"
       aria-label={
         rail.openThreadCount === 0 ? 'Comments' : `Comments, ${rail.openThreadCount} open`
       }
@@ -26,13 +24,13 @@ export function CommentsRailToggle({ rail }: { readonly rail: CommentsRail }): J
       onClick={rail.toggle}
       // A toggle has to LOOK toggled: without this the rail's open state was
       // announced to a screen reader and invisible to everyone else.
-      className={TOGGLE_STATE_CLASS}
+      className={HEADER_WIDE_TOGGLE_CLASS}
     >
       <MessageSquare aria-hidden="true" className="size-4" />
       {rail.openThreadCount > 0 ? (
-        <span className="ml-1 text-xs">{rail.openThreadCount}</span>
+        <span className="text-xs tabular-nums">{rail.openThreadCount}</span>
       ) : null}
-    </Button>
+    </button>
   )
 }
 

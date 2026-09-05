@@ -1,7 +1,7 @@
 import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { FileText, LayoutDashboard, Waypoints } from 'lucide-react'
 import { useId, useState } from 'react'
-import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
+import { HEADER_WIDE_TOGGLE_CLASS } from '@/components/ui/header-button'
 import { cn } from '@/lib/utils'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -51,10 +51,7 @@ export function ConnectionsChip({ backlinks, mentions, onOpen, onLinkify }: Conn
             aria-controls={panelId}
             disabled={!loaded}
             onClick={() => setOpen((current) => !current)}
-            className={cn(
-              'text-muted-foreground hover:text-foreground flex shrink-0 items-center gap-1 rounded p-1.5 text-xs tabular-nums disabled:opacity-50',
-              TOGGLE_STATE_CLASS,
-            )}
+            className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
           >
             <Waypoints aria-hidden="true" className="size-4" />
             {loaded && backlinks.length}
