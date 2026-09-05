@@ -9,6 +9,20 @@ import {
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
+
+// Ports advance monotonically across the whole file INCLUDING repeat runs
+// (vitest --repeats re-executes a test body in the same process): undici's
+// global fetch pool keeps a keep-alive socket per origin, so a repeat that
+// re-binds the SAME port hands the next fetch a socket the previous run's
+// server already closed — observed as `SocketError: other side closed` on
+// the second run of any fetch-based case here. A fresh port per acquisition
+// makes every run a fresh origin; deterministic, no randomness.
+let nextPortBase = 4100
+async function acquirePort(): Promise<number> {
+  const port = await findAvailablePort(nextPortBase)
+  nextPortBase = port + 1
+  return port
+}
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { captureLogsForTests } from './log.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -128,7 +142,7 @@ describe('startHttpServer WS upgrade with allowedWebOrigins', () => {
   })
 
   it('threads allowedWebOrigins through to the real WS upgrade handler', async () => {
-    const port = await findAvailablePort(4100)
+    const port = await acquirePort()
     const hostedOrigin = 'https://kamiazya-whiteboard.pages.dev'
     running = await startHttpServer({
       port,
@@ -161,7 +175,7 @@ describe('startHttpServer oauth client registry', () => {
   // is handed a registry. This asserts the option actually reaches the real
   // Node HTTP server — the difference between a shipped endpoint and dead code.
   it('mounts /token on the real HTTP server when a registry is configured', async () => {
-    const port = await findAvailablePort(4200)
+    const port = await acquirePort()
     running = await startHttpServer({
       port,
       host: '127.0.0.1',
@@ -194,7 +208,7 @@ describe('startHttpServer oauth client registry', () => {
   })
 
   it('leaves /token unmounted when no registry is configured', async () => {
-    const port = await findAvailablePort(4300)
+    const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1' })
 
     const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
@@ -219,7 +233,7 @@ describe('startHttpServer daemonBaseUrl -> wb_pairing_link_create wiring', () =>
   })
 
   it('embeds the real bound host:port in the minted pairing link', async () => {
-    const port = await findAvailablePort(4650)
+    const port = await acquirePort()
     running = await startHttpServer({ port, host: '127.0.0.1' })
 
     const client = new Client({ name: 'http-server-pairing-test', version: '1.0.0' })
@@ -301,7 +315,7 @@ describe('startHttpServer ws-ticket mint→upgrade wiring (ADR-0005)', () => {
   })
 
   it('a ticket minted via POST /api/ws-ticket on the real server authorizes the real WS upgrade', async () => {
-    const port = await findAvailablePort(4400)
+    const port = await acquirePort()
     const clientId = 'whiteboard-hosted-web'
     const redirectUri = 'https://whiteboard.pages.dev/oauth/callback'
     const origin = `http://127.0.0.1:${port}`
@@ -389,7 +403,7 @@ describe('startHttpServer file-gc sweeper wiring', () => {
   })
 
   it('creates exactly one sweeper, starts it once, and close() stops it exactly once', async () => {
-    const port = await findAvailablePort(4500)
+    const port = await acquirePort()
     let factoryCalls = 0
     let startCalls = 0
     let stopCalls = 0
@@ -436,7 +450,7 @@ describe('startHttpServer file-gc sweeper wiring', () => {
   // WebSockets are still tearing down, which is materially worse now that
   // shutdown can also be waiting on an in-flight GC pass.
   it('two concurrent close() calls share one shutdown promise instead of the second resolving early', async () => {
-    const port = await findAvailablePort(4500)
+    const port = await acquirePort()
     let stopCalls = 0
     let resolveStop: (() => void) | undefined
     const stopGate = new Promise<void>((resolve) => {
@@ -488,7 +502,7 @@ describe('startHttpServer file-gc sweeper wiring', () => {
 // crashing with a stack trace that could leak filesystem paths.
 describe('startHttpServer bind-failure handling', () => {
   it('logs a classified EADDRINUSE record with no stack trace and exits instead of throwing', async () => {
-    const port = await findAvailablePort(4600)
+    const port = await acquirePort()
     const occupier = createServer()
     await new Promise<void>((resolve) => occupier.listen(port, '127.0.0.1', resolve))
     const capture = captureLogsForTests()
@@ -573,7 +587,7 @@ describe('workspace tail wiring', () => {
    */
   it('creates no tail when the interval is unset', async () => {
     delete process.env[ENV]
-    const port = await findAvailablePort(4600)
+    const port = await acquirePort()
     const { counts, factory } = countingTailFactory()
     running = await startHttpServer({
       port,
@@ -586,7 +600,7 @@ describe('workspace tail wiring', () => {
 
   it('creates, starts and stops exactly one tail when the interval is set', async () => {
     process.env[ENV] = '250'
-    const port = await findAvailablePort(4610)
+    const port = await acquirePort()
     const { counts, factory } = countingTailFactory()
     running = await startHttpServer({
       port,
@@ -652,7 +666,7 @@ describe('startHttpServer: backup scheduler wiring', () => {
    */
   it('passes a null destination through when nothing is configured', async () => {
     delete process.env[DIR_ENV]
-    const port = await findAvailablePort(4620)
+    const port = await acquirePort()
     const { counts, seen, factory } = countingSchedulerFactory()
     running = await startHttpServer({
       port,
@@ -666,7 +680,7 @@ describe('startHttpServer: backup scheduler wiring', () => {
 
   it('starts and stops exactly one scheduler when a destination is set', async () => {
     process.env[DIR_ENV] = '/srv/whiteboard-backups'
-    const port = await findAvailablePort(4630)
+    const port = await acquirePort()
     const { counts, seen, factory } = countingSchedulerFactory()
     running = await startHttpServer({
       port,
