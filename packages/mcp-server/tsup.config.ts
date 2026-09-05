@@ -19,6 +19,13 @@ export default defineConfig({
     'server/index': 'src/server/index.ts',
     'server/app': 'src/server/app.ts',
     'server/backup-restore': 'src/server/backup-restore.ts',
+    // The server-mode variant of the entry above. It was reachable only as a
+    // hashed chunk inside cli/index.js, so `dist/server/server-mode-backup-restore.js`
+    // — the path packaged-server-mode-backup-restore-smoke.mjs imports — did
+    // not exist after any build, and that smoke could not pass on any machine.
+    // It runs only on the release path, so its precondition check had never
+    // been reached.
+    'server/server-mode-backup-restore': 'src/server/server-mode-backup-restore.ts',
     'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
     'shared/data-dir-secure': 'src/shared/data-dir-secure.ts',
     'shared/package-version': 'src/shared/package-version.ts',
