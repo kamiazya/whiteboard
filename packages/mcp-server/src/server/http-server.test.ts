@@ -10,6 +10,11 @@ import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/cli
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 
+import { type RunningServer, startHttpServer } from './http-server.js'
+import { captureLogsForTests } from './log.js'
+import { authorizeWsUpgrade } from './routes/ws-auth.js'
+import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
+
 // Ports advance monotonically across the whole file INCLUDING repeat runs
 // (vitest --repeats re-executes a test body in the same process): undici's
 // global fetch pool keeps a keep-alive socket per origin, so a repeat that
@@ -23,10 +28,6 @@ async function acquirePort(): Promise<number> {
   nextPortBase = port + 1
   return port
 }
-import { type RunningServer, startHttpServer } from './http-server.js'
-import { captureLogsForTests } from './log.js'
-import { authorizeWsUpgrade } from './routes/ws-auth.js'
-import { ALL_AUTH_SCOPES } from './security/auth-strategy.js'
 
 describe('authorizeWsUpgrade', () => {
   it('rejects websocket upgrade without the daemon subprotocol token when token auth is enabled', () => {
