@@ -26,6 +26,11 @@ const paneSource = import.meta.glob('../components/document-editor/SpatialEditor
   import: 'default',
 })
 
+const railChromeSource = import.meta.glob('../components/annotations/CommentsRailChrome.tsx', {
+  query: '?raw',
+  import: 'default',
+})
+
 async function readPane(): Promise<string> {
   const loader = paneSource['../components/document-editor/SpatialEditorPane.tsx']
   expect(loader, 'no source loader for SpatialEditorPane').toBeDefined()
@@ -305,8 +310,9 @@ describe('document page document-level chrome', () => {
   // render the RAIL and the rail renders the panel — this keeps the
   // guarantee transitive rather than trusting the indirection.
   it('the shared rail chrome itself renders CommentsPanel', async () => {
-    const source = (await import('../components/annotations/CommentsRailChrome.tsx?raw'))
-      .default as string
+    const loader = railChromeSource['../components/annotations/CommentsRailChrome.tsx']
+    expect(loader, 'no source loader for CommentsRailChrome').toBeDefined()
+    const source = (await loader?.()) as string
     expect(renders(source, 'CommentsPanel')).toBe(true)
   })
 })
