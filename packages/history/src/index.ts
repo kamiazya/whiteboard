@@ -12,6 +12,11 @@ export {
   updateBranchTip,
 } from './branches/ops.js'
 export {
+  BRANCHES_PLANE_KEY,
+  readBranchesFromRecord,
+  writeBranchesToRecord,
+} from './branches/record-store.js'
+export {
   type BranchMeta,
   branchMetaSchema,
   DEFAULT_MAIN_COLOR,

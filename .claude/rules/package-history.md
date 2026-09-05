@@ -40,6 +40,19 @@ port over the tree — placement, not history.
   cap sparing lineage, and the sandwich between two manual saves.
 - `frontiers-base64.ts`: frontiers as text, over `atob`/`btoa` so no keeper
   reaches for `Buffer`.
+- `branches/record-store.ts`: the branches of one document read and written on
+  the WORKSPACE RECORD, over `loro-adapter`'s document plane. This is what
+  makes the feature keeper-independent — a branch is a name and a frontier of
+  the record, and the record already reaches every replica, so the browser
+  needs no second transport for it.
+
+  Two decisions inside it are load-bearing. Keys are branch NAMES on a
+  MERGEABLE plane, so two replicas that each make a branch converge on both;
+  a regular child container loses one side's whole plane with both sides
+  agreeing on the survivor, which is measured in `loro-crdt-usage` and
+  mutation-checked by this module's convergence case. And `head` is NOT in
+  the plane: it stays the node meta's `currentBranch`, because one pointer in
+  two places is a pointer that disagrees with itself.
 
 ## What does NOT belong here
 

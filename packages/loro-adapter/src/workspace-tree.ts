@@ -29,7 +29,7 @@ import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
-import { openMergeableMovableList } from './mergeable-containers.js'
+import { openMergeableMap, openMergeableMovableList } from './mergeable-containers.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -226,6 +226,50 @@ export function updateWorkspaceDocumentMeta(
   }
   doc.commit()
   return true
+}
+
+/**
+ * Opens a named PLANE on a document's node: a child map beside the meta
+ * fields, holding state that belongs to the document but is not one of them.
+ *
+ * The branch plane is what this exists for. A branch is a name and a frontier
+ * of the record, so it belongs to the document; it is also a growing keyed
+ * collection, which `workspaceNodeMetaSchema` is deliberately not — that
+ * schema is a fixed set of scalars, and `updateWorkspaceDocumentMeta`'s patch
+ * is `.strict()` so nothing can smuggle a collection through it.
+ *
+ * Mergeable, and this is the whole reason the primitive is here rather than
+ * at the call site: nothing pre-attaches a plane, so the FIRST replica to
+ * make a branch is the one that opens it, and two replicas doing that
+ * independently is the ordinary case rather than a rare one. A regular child
+ * container there loses one side's whole plane with both replicas agreeing
+ * on the survivor — see `mergeable-containers.ts` for the measurement.
+ *
+ * Returns null when no document carries the id. Callers that only READ take
+ * `readWorkspaceDocumentPlane` instead: opening writes an activation marker,
+ * so a read through this one would grow the record of every document anybody
+ * merely looked at.
+ */
+export function openWorkspaceDocumentPlane(
+  doc: LoroDoc,
+  documentId: string,
+  key: string,
+): LoroMap | null {
+  const node = nodeById(doc, documentId)
+  if (node === null) return null
+  return openMergeableMap(node.data, key)
+}
+
+/** The plane as it stands, or null when the document or the plane is absent. Never writes. */
+export function readWorkspaceDocumentPlane(
+  doc: LoroDoc,
+  documentId: string,
+  key: string,
+): LoroMap | null {
+  const node = nodeById(doc, documentId)
+  if (node === null) return null
+  const stored = node.data.get(key)
+  return stored instanceof LoroMap ? stored : null
 }
 
 /**
