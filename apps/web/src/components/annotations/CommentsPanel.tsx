@@ -13,7 +13,7 @@
  * reader wants at document level is which ones are still open.
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 import { MessageBy } from './message-meta.js'
@@ -45,6 +45,14 @@ export interface CommentsPanelProps {
   /** Reveal the thread in the host's own surface. */
   readonly onSelect?: (thread: CommentThread) => void
   /**
+   * Which conversation is open, when the HOST owns it — so the editor's
+   * in-place projection and this list agree on the answer, and a press on
+   * a gutter marker opens the same thread here. Absent, the panel keeps
+   * its own.
+   */
+  readonly openThreadId?: string | null
+  readonly onOpenThreadChange?: (threadId: string | null) => void
+  /**
    * Appends a message to a conversation. Absent hides the reply box entirely
    * rather than showing a control that silently does nothing — a host with no
    * write path (a read-only view, or one with no session yet) has no reply to
@@ -65,21 +73,52 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
-export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
+export function CommentsPanel({
+  threads,
+  resolveAnchor,
+  onSelect,
+  onReply,
+  openThreadId: controlledOpenThreadId,
+  onOpenThreadChange,
+}: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
-  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const [ownOpenThreadId, setOwnOpenThreadId] = useState<string | null>(null)
+  const openThreadId =
+    controlledOpenThreadId === undefined ? ownOpenThreadId : controlledOpenThreadId
+  const sectionRef = useRef<HTMLElement | null>(null)
+  // A conversation opened from OUTSIDE (a gutter marker, a bubble) may sit
+  // under the filter that hides it or below the fold; it is shown under All
+  // and scrolled to, since a press that opens nothing visible reads as dead.
+  useEffect(() => {
+    if (openThreadId === null) return
+    const thread = threads.find((entry) => entry.id === openThreadId)
+    if (thread === undefined) return
+    setFilter((current) => (matches(thread, current) ? current : 'all'))
+    const row = Array.from(sectionRef.current?.querySelectorAll('[aria-controls]') ?? []).find(
+      (el) => el.getAttribute('aria-controls') === `thread-${openThreadId}`,
+    )
+    // Optional: jsdom has no layout to scroll.
+    row?.scrollIntoView?.({ block: 'nearest' })
+  }, [openThreadId, threads])
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
 
   function toggle(thread: CommentThread): void {
-    setOpenThreadId((current) => (current === thread.id ? null : thread.id))
+    const next = openThreadId === thread.id ? null : thread.id
+    setOwnOpenThreadId(next)
+    onOpenThreadChange?.(next)
     onSelect?.(thread)
   }
 
   return (
-    <section aria-label="Comments" data-testid="comments-panel" className="flex flex-col gap-2">
+    <section
+      ref={sectionRef}
+      aria-label="Comments"
+      data-testid="comments-panel"
+      className="flex flex-col gap-2"
+    >
       <fieldset aria-label="Filter comments" className="flex gap-1 border-0 p-0">
         {FILTERS.map(({ value, label }) => (
           <button

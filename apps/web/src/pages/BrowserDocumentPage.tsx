@@ -6,7 +6,7 @@ import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, MessageSquare, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
+import { CommentsRail } from '../components/annotations/CommentsRail.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
@@ -713,6 +713,16 @@ export function BrowserDocumentPage({
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
   /**
+   * The conversation the reader has open — ONE answer for the rail and the
+   * editor's in-place projection, so a press on a gutter marker opens that
+   * thread in the rail, and a press on a rail row reveals its passage.
+   */
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const openThreadFromEditor = useCallback((threadId: string) => {
+    setOpenThreadId(threadId)
+    setCommentsOpen(true)
+  }, [])
+  /**
    * This document's conversations, whichever half of the page holds them.
    *
    * A markdown document is given no BrowserBackend on purpose (see the
@@ -1247,6 +1257,9 @@ export function BrowserDocumentPage({
                           linkTargets,
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
+                          threads: annotations,
+                          selectedThreadId: openThreadId,
+                          onSelectThread: openThreadFromEditor,
                         }
                   }
                   spatial={() => (
@@ -1299,17 +1312,18 @@ export function BrowserDocumentPage({
             editor's dock via paletteLeading above. */}
             </div>
             {commentsOpen ? (
-              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-                <CommentsPanel
-                  threads={annotations}
-                  resolveAnchor={resolveAnchor}
-                  // Not while a past version is on screen: the editor is
-                  // replaced by DocumentPreview but this rail is not, and a
-                  // reply is a write to the LIVE document — sent from a
-                  // surface showing something else entirely.
-                  onReply={preview === null ? handleReply : undefined}
-                />
-              </aside>
+              <CommentsRail
+                threads={annotations}
+                resolveAnchor={resolveAnchor}
+                openThreadId={openThreadId}
+                onOpenThreadChange={setOpenThreadId}
+                onClose={() => setCommentsOpen(false)}
+                // Not while a past version is on screen: the editor is
+                // replaced by DocumentPreview but this rail is not, and a
+                // reply is a write to the LIVE document — sent from a
+                // surface showing something else entirely.
+                onReply={preview === null ? handleReply : undefined}
+              />
             ) : null}
           </div>
         </DocumentPageShell>

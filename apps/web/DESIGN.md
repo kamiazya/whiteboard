@@ -449,10 +449,14 @@ never to a single vessel.
 
 ## Comment surfaces: two hosts, one set of parts
 
-A conversation is read and answered in two places — the card the canvas
-opens on a bubble, and the document-level panel both editors share
-(ADR-0026 decision 5) — and a third will come when markdown gets its
-in-place projection. The parts are shared, not the pattern:
+A conversation is read and answered in three places — the card the canvas
+opens on a bubble, the markdown editor's in-place projection (a highlight
+over the passage and a gutter marker in the source, a marker beside the
+block in the preview; `markdown-editor/comment-anchors.ts`), and the
+document-level panel both editors share (ADR-0026 decision 5), riding in
+`CommentsRail`: a column where there is width, a sheet over the editor
+under 768px, the same two shapes the history panel takes. The parts are
+shared, not the pattern:
 `annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
 Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
 `ThreadReplies` (the replies under the subject line). A host composes
@@ -489,6 +493,14 @@ comment card, and shipped that way to a phone:
 The card itself is a non-modal dialog: it slides inside the root's edge like
 the context menu, a press on the canvas dismisses it like a menu, and Escape
 does too.
+
+**Which conversation is open is the PAGE's answer, held once.** The rail
+and the in-place projection both read it and both may change it: a press on
+a gutter or preview marker opens the rail on that thread, a press on a rail
+row reveals its passage (centred, unless already on screen). Two surfaces
+each keeping their own "open" is how a marker would open one thread while
+the rail showed another. The canvas card still keeps its own open comment;
+folding it into the same state is the next increment.
 
 ## A toggle looks toggled, and says so once
 

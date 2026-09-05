@@ -222,6 +222,13 @@ jumps to the anchor. Each editor keeps its own in-place projection — the canva
 its pins and bubbles, markdown an inline highlight plus a gutter marker — and
 the panel is the document-level control the user asked for.
 
+*Status (2026-09-05):* the markdown projection shipped as
+`apps/web/src/components/markdown-editor/comment-anchors.ts` (source: highlight +
+gutter marker, positions mapped through edits; preview: a marker beside the
+block the passage starts in, since the exact words would need canvas-render to
+know about threads). The panel rides in `CommentsRail`, a column or a sheet by
+width, and the page holds the one open-thread answer both surfaces share.
+
 The filter stays **per-user view state, never written to the shared document**
 (ADR-0025 decision 2's other half, which survives intact): one person's filter
 must not change what another sees.

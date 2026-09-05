@@ -227,7 +227,8 @@ describe('the spatial-editor-container hook means one thing', () => {
 
 /**
  * Chrome that belongs to the DOCUMENT, not to the canvas — ADR-0026
- * decision 5. `CommentsPanel` serves a markdown document exactly as it
+ * decision 5. `CommentsRail` (the vessel the comments panel rides in, a
+ * column or a sheet by width) serves a markdown document exactly as it
  * serves a spatial one (a note has no canvas to hang a per-node toggle on),
  * so it deliberately does NOT join `SHARED_CANVAS_CHROME`: that group's own
  * docblock is about chrome the PAGE positions around the editor, and this
@@ -235,7 +236,7 @@ describe('the spatial-editor-container hook means one thing', () => {
  * Kept as its own group so a reader does not have to infer the distinction
  * from where an entry happens to sit.
  */
-const SHARED_DOCUMENT_CHROME = ['CommentsPanel'] as const
+const SHARED_DOCUMENT_CHROME = ['CommentsRail'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
@@ -307,7 +308,7 @@ describe('document page document-level chrome', () => {
  * inside their own spatial slot — the same reaches-subject discipline the
  * "spatial editor pane is built once" scan above applies to the pane itself.
  *
- * `threads=` also appears once more per page, on `<CommentsPanel`, which sits
+ * `threads=` also appears more per page — on `<CommentsRail`, which sits
  * OUTSIDE the spatial slot by design (it is document-level chrome, not
  * canvas-level — see `SHARED_DOCUMENT_CHROME` above). So this checks that
  * SOME occurrence lands inside the slot, not that every occurrence does; an

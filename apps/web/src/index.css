@@ -58,6 +58,8 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
+  /* The annotation layer's amber, canvas-render's comment pin fill (spatial-palette.ts). */
+  --comment-accent: #d97706;
   /*
    * The manipulation layer's own vocabulary — selection, handles, connect,
    * marquee (--manipulation) and snap guides (--manipulation-guide). The
@@ -91,6 +93,7 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
+  --comment-accent: #fbbf24;
   --manipulation: oklch(0.707 0.165 254.62);
   --manipulation-guide: oklch(0.709 0.159 293.54);
   --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
@@ -189,6 +192,45 @@
     font-weight: 400;
     font-style: normal;
     color: var(--muted-foreground);
+  }
+
+  /*
+   * The annotation layer's in-place projection in the source pane
+   * (markdown-editor/comment-anchors.ts): a passage a conversation is about,
+   * and the gutter marker on its line. The same comment hue the canvas
+   * draws its bubbles in, at a wash — the passage stays readable, and the
+   * open one reads stronger than the rest.
+   */
+  .cm-comment-anchor {
+    background: color-mix(in oklch, var(--comment-accent) 22%, transparent);
+    border-bottom: 1px solid color-mix(in oklch, var(--comment-accent) 60%, transparent);
+  }
+
+  .cm-comment-anchor-resolved {
+    background: color-mix(in oklch, var(--muted-foreground) 14%, transparent);
+    border-bottom-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  }
+
+  .cm-comment-anchor-selected {
+    background: color-mix(in oklch, var(--comment-accent) 40%, transparent);
+    border-bottom-width: 2px;
+  }
+
+  .cm-comment-marker {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 22px;
+    height: 1.7em;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--comment-accent);
+    cursor: pointer;
+  }
+
+  .cm-comment-marker-selected svg {
+    fill: color-mix(in oklch, var(--comment-accent) 35%, transparent);
   }
 
   /*

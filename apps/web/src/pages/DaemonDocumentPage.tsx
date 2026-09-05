@@ -10,7 +10,7 @@ import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
+import { CommentsRail } from '../components/annotations/CommentsRail.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
@@ -289,6 +289,13 @@ export function DaemonDocumentPage({
    * browser page took.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  // One open conversation for the rail and the editor's projection alike;
+  // see the browser page for why.
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const openThreadFromEditor = useCallback((threadId: string) => {
+    setOpenThreadId(threadId)
+    setCommentsOpen(true)
+  }, [])
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
@@ -1153,6 +1160,9 @@ export function DaemonDocumentPage({
                     linkTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
+                    threads: annotations,
+                    selectedThreadId: openThreadId,
+                    onSelectThread: openThreadFromEditor,
                   }}
                   spatial={() => (
                     <SpatialEditorPane
@@ -1204,18 +1214,19 @@ export function DaemonDocumentPage({
               )}
             </div>
             {commentsOpen ? (
-              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-                <CommentsPanel
-                  threads={annotations}
-                  resolveAnchor={resolveAnchor}
-                  // Not while a past version OR a variation preview is on
-                  // screen: the editor is replaced by DocumentPreview but
-                  // this rail is not, and a reply is a write to the LIVE
-                  // document — sent from a surface showing something else
-                  // entirely.
-                  onReply={preview === null && variationPreview === null ? handleReply : undefined}
-                />
-              </aside>
+              <CommentsRail
+                threads={annotations}
+                resolveAnchor={resolveAnchor}
+                openThreadId={openThreadId}
+                onOpenThreadChange={setOpenThreadId}
+                onClose={() => setCommentsOpen(false)}
+                // Not while a past version OR a variation preview is on
+                // screen: the editor is replaced by DocumentPreview but
+                // this rail is not, and a reply is a write to the LIVE
+                // document — sent from a surface showing something else
+                // entirely.
+                onReply={preview === null && variationPreview === null ? handleReply : undefined}
+              />
             ) : null}
           </div>
         )}

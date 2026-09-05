@@ -8,6 +8,7 @@ import {
   type StateCommand,
   StateEffect,
   StateField,
+  type TransactionSpec,
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
@@ -129,6 +130,13 @@ export interface SourcePaneApi {
   bottomVisibleLine: () => number
   /** Scrolls so `line` sits in the middle of the viewport. */
   revealLine: (line: number) => void
+  /**
+   * Applies a transaction WITHOUT taking focus — `run` focuses, which is
+   * right for a verb the user invoked and wrong for state the host pushes
+   * in (the annotation layer's threads arriving over the network must not
+   * pull the caret out of whatever the reader is doing).
+   */
+  dispatch: (spec: TransactionSpec) => void
 }
 
 export interface SourcePaneProps {
@@ -334,6 +342,7 @@ export function SourcePane({
           const fraction = block.height > 0 ? (bottom - block.top) / block.height : 0
           return line + Math.max(0, Math.min(1, fraction))
         },
+        dispatch: (spec) => view.dispatch(spec),
         revealLine: (line: number) => {
           const clamped = Math.max(1, Math.min(view.state.doc.lines, Math.round(line)))
           const pos = view.state.doc.line(clamped).from

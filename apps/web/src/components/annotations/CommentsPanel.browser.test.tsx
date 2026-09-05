@@ -3,7 +3,7 @@
 // changes — jsdom alone is disallowed for interaction by AGENTS.md.
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -148,4 +148,31 @@ it('sends on Cmd/Ctrl+Enter here too — the chord the canvas card already answe
   expect(
     (page.getByRole('textbox', { name: /reply/i }).element() as HTMLTextAreaElement).value,
   ).toBe('')
+})
+
+it('a conversation opened by the host is shown expanded, even under a filter that hid it', async () => {
+  // The gutter marker on a resolved passage opens THAT thread; a rail still
+  // filtered to Open would then show nothing opened, which reads as dead.
+  const onOpenThreadChange = vi.fn()
+  render(
+    <CommentsPanel
+      threads={[OPEN, RESOLVED]}
+      openThreadId={RESOLVED.id}
+      onOpenThreadChange={onOpenThreadChange}
+    />,
+  )
+  await expect.element(page.getByText('this one is done')).toBeInTheDocument()
+  expect(
+    page
+      .getByRole('button', { name: /this one is done/ })
+      .element()
+      .getAttribute('aria-expanded'),
+  ).toBe('true')
+  expect(page.getByRole('button', { name: 'All' }).element().getAttribute('aria-pressed')).toBe(
+    'true',
+  )
+
+  // The host owns the answer: a press reports the change rather than making it.
+  await userEvent.click(page.getByText('tighten the copy here'))
+  expect(onOpenThreadChange).toHaveBeenCalledWith('t-open')
 })

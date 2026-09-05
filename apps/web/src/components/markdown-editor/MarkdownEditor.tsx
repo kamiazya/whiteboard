@@ -6,7 +6,12 @@ import { keymap } from '@codemirror/view'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
-import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  documentIdSchema,
+  type StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
+import { MessageSquare } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -20,9 +25,11 @@ import {
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { resolveTextAnchor } from '../../lib/text-anchor.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
+import { commentAnchors, setCommentThreads, setSelectedCommentThread } from './comment-anchors.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import {
@@ -131,6 +138,21 @@ export interface MarkdownEditorProps {
    * and `value` flows only outward (preview, word count).
    */
   sourceExtensions?: readonly Extension[]
+  /**
+   * The document's conversations, for the in-place projection (ADR-0026
+   * decision 5): each text-anchored thread's passage is highlighted in the
+   * source and marked in the gutter. The document-level panel beside the
+   * editor lists them; this is where a reader finds one while reading.
+   */
+  threads?: readonly CommentThread[]
+  /**
+   * The conversation the reader has open, drawn stronger and brought on
+   * screen when it changes. Owned by the host, so the panel and this
+   * projection agree on which one that is.
+   */
+  selectedThreadId?: string | null
+  /** A press on a gutter marker: the host opens that conversation. */
+  onSelectThread?: (threadId: string) => void
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -279,6 +301,9 @@ export function MarkdownEditor({
   resolveEmbed,
   fragmentLoaders,
   sourceExtensions,
+  threads,
+  selectedThreadId = null,
+  onSelectThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   // [[ completion reads targets through a ref: the source is installed once
@@ -318,10 +343,26 @@ export function MarkdownEditor({
     ],
     [],
   )
-  const paneExtensions = useMemo(
-    () => [completionExtension, ...(sourceExtensions ?? [])],
-    [completionExtension, sourceExtensions],
+  // The marker's callback goes through a ref for the same reason the link
+  // targets do: the extension is installed once at view creation.
+  const onSelectThreadRef = useRef(onSelectThread)
+  onSelectThreadRef.current = onSelectThread
+  const annotationExtension = useMemo(
+    () => commentAnchors((threadId) => onSelectThreadRef.current?.(threadId)),
+    [],
   )
+  const paneExtensions = useMemo(
+    () => [completionExtension, annotationExtension, ...(sourceExtensions ?? [])],
+    [completionExtension, annotationExtension, sourceExtensions],
+  )
+  // Threads and the open conversation are pushed into the view as state,
+  // not read by it: the pane is created once, the layer keeps changing.
+  useEffect(() => {
+    sourceApiRef.current?.dispatch({ effects: setCommentThreads.of(threads ?? []) })
+  }, [threads])
+  useEffect(() => {
+    sourceApiRef.current?.dispatch({ effects: setSelectedCommentThread.of(selectedThreadId) })
+  }, [selectedThreadId])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
   // preview would draw them, and rendering per raw keystroke would race
@@ -388,6 +429,18 @@ export function MarkdownEditor({
   // Whether the pane the rail maps has anything to scroll. Read from the same
   // element on the same tick as the viewport above, for the same reason.
   const [railHasScroll, setRailHasScroll] = useState(false)
+  /**
+   * The annotation layer's projection onto the PREVIEW: one marker beside
+   * the laid-out block a thread's passage starts in, at the y the rail's
+   * own line-to-document mapping gives that line. A highlight over the
+   * exact words would need canvas-render to know about threads; the block
+   * marker is what the layout already answers, and it is enough to find a
+   * conversation while reading.
+   */
+  const [previewMarkers, setPreviewMarkers] = useState<
+    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
+  >([])
+  const previewInnerRef = useRef<HTMLDivElement | null>(null)
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -616,6 +669,39 @@ export function MarkdownEditor({
     // previous width produced.
   }, [effectiveMode, debouncedValue, previewWidth])
 
+  // Keyed on railBlocks because that is the state the preview's render
+  // updates: the anchors it maps through arrive in the same ref write.
+  useEffect(() => {
+    if (effectiveMode === 'write' || threads === undefined || threads.length === 0) {
+      setPreviewMarkers([])
+      return
+    }
+    const inner = previewInnerRef.current
+    const svg = inner?.querySelector('svg')
+    if (inner === null || inner === undefined || !(svg instanceof SVGElement)) {
+      setPreviewMarkers([])
+      return
+    }
+    const svgTop = svg.getBoundingClientRect().top - inner.getBoundingClientRect().top
+    const tail = {
+      totalLines: totalSourceLines(debouncedValue),
+      contentHeight: railContentHeight(blocksRef.current),
+    }
+    const next: { threadId: string; top: number; selected: boolean }[] = []
+    for (const thread of threads) {
+      if (thread.anchor.kind !== 'text') continue
+      const resolved = resolveTextAnchor(debouncedValue, thread.anchor)
+      if (resolved.kind !== 'placed') continue
+      const line = debouncedValue.slice(0, resolved.start).split('\n').length
+      next.push({
+        threadId: thread.id,
+        top: svgTop + documentYForLine(anchorsRef.current, line, tail),
+        selected: thread.id === selectedThreadId,
+      })
+    }
+    setPreviewMarkers(next)
+  }, [effectiveMode, railBlocks, threads, debouncedValue, selectedThreadId])
+
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {
       const rect = rootRef.current?.getBoundingClientRect()
@@ -812,9 +898,33 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div
-              className="mx-auto px-6 py-8"
+              ref={previewInnerRef}
+              className="relative mx-auto px-6 py-8"
               style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
             >
+              {previewMarkers.map((marker) => (
+                <button
+                  key={marker.threadId}
+                  type="button"
+                  data-testid="comment-preview-marker"
+                  data-thread-id={marker.threadId}
+                  aria-label="Open comment"
+                  onClick={() => onSelectThread?.(marker.threadId)}
+                  // In the column's own left padding, on the block's top edge.
+                  style={{ top: marker.top }}
+                  className={cn(
+                    'absolute left-0 flex size-6 items-center justify-center rounded text-(--comment-accent) hover:bg-accent',
+                    marker.selected && 'bg-accent',
+                  )}
+                >
+                  <MessageSquare
+                    aria-hidden="true"
+                    className="size-3.5"
+                    fill={marker.selected ? 'currentColor' : 'none'}
+                    fillOpacity={0.35}
+                  />
+                </button>
+              ))}
               {effectiveMode === 'read' && meta !== undefined && (
                 <DocumentHeader title={title} meta={meta} />
               )}
