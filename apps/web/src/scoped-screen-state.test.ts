@@ -51,6 +51,7 @@ const sources = import.meta.glob(
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/DaemonDocumentPage.tsx',
+    './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
   ],
@@ -86,6 +87,10 @@ const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
+// The shared page both keepers render through (ADR-0004 decision 1). The
+// history column, the armed bookmark and the version being looked at moved
+// HERE from both keeper pages, not away; the two hooks below moved with them.
+const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
 // The save-a-version guard extracted to its own hook: part of the same
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
@@ -353,7 +358,7 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
 }
 
-const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
   historyOpen: 'cleared on switch',
   // The past state being looked at. Restoring one the person opened on the
@@ -362,6 +367,11 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',
+  currentScopeRef:
+    'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
+}
+
+const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   versionRefreshSignal:
     'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
@@ -394,14 +404,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
-  ...DOCUMENT_PAGE_HOOK_STATE,
-
-  historyOpen: 'cleared on switch',
-  // The past state being looked at, exactly as on the browser page:
-  // restoring one the person opened on the DEPARTED document would apply
-  // that version id to the arrived one.
-  preview: 'cleared on switch',
-  bookmarkArmed: 'cleared on switch',
   // A read-only view of ONE document's variation tip (ADR-0022). `?v` is
   // not stripped by a switch — `switchDocument` sets the path and nothing
   // else — so the effect that owns this re-resolves the same NAME against
@@ -433,8 +435,6 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
   canvasesRef:
     'no subject: mirrors the WORKSPACE’s document list, reassigned every render — a document switch does not change which documents exist',
-  currentDocumentPathRef:
-    'no subject: mirrors the scope itself, written during render — it is what a handler outliving a switch asks to find out what arrived rather than trusting its own closure',
   canvasValueRef:
     'no subject: mirrors the current canvas value, reassigned every render — it is how a write sends the CURRENT canvas rather than the one its closure captured',
 }
@@ -461,13 +461,19 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    ledger: DOCUMENT_PAGE_STATE,
+    label: 'DocumentPage',
+    scanRefs: true,
+  },
+  {
+    files: [BROWSER_DOCUMENT_PAGE],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
   },
   {
-    files: [DAEMON_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DAEMON_DOCUMENT_PAGE],
     ledger: DAEMON_DOCUMENT_PAGE_STATE,
     label: 'DaemonDocumentPage',
     scanRefs: true,
