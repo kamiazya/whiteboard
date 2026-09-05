@@ -82,6 +82,18 @@ export type LayoutRequest = LayoutSubject & {
   readonly suppressedBodyNodeIds?: readonly string[]
   /** Draw resolved comments too (the editor's per-user toggle). */
   readonly showResolved?: boolean
+  /**
+   * Where this answer may be REMEMBERED, as the render key's own path — the
+   * worker's persistent tier (ADR-0027 decision 5) reads it before working
+   * and writes it after, so the cache lives beside the bytes rather than on
+   * the thread that asked.
+   *
+   * Absent means "do not remember this". A key that cannot notice its
+   * document changing is exactly that case, and the caller decides it with
+   * `isMemoisableKey` — the same gate the in-memory map uses, so the two
+   * tiers cannot disagree about which entries are safe.
+   */
+  readonly cacheKey?: string
 }
 
 /**
@@ -133,6 +145,18 @@ export type MarkdownRenderRequest = {
   readonly id: number
   readonly body: string
   readonly maxWidth: number
+  /**
+   * Where this answer may be REMEMBERED, as the render key's own path — the
+   * worker's persistent tier (ADR-0027 decision 5) reads it before working
+   * and writes it after, so the cache lives beside the bytes rather than on
+   * the thread that asked.
+   *
+   * Absent means "do not remember this". A key that cannot notice its
+   * document changing is exactly that case, and the caller decides it with
+   * `isMemoisableKey` — the same gate the in-memory map uses, so the two
+   * tiers cannot disagree about which entries are safe.
+   */
+  readonly cacheKey?: string
 }
 
 export type MarkdownRenderResponse =
@@ -174,6 +198,18 @@ type OutlineSubject =
 export type OutlineRequest = OutlineSubject & {
   readonly type: 'outline'
   readonly id: number
+  /**
+   * Where this answer may be REMEMBERED, as the render key's own path — the
+   * worker's persistent tier (ADR-0027 decision 5) reads it before working
+   * and writes it after, so the cache lives beside the bytes rather than on
+   * the thread that asked.
+   *
+   * Absent means "do not remember this". A key that cannot notice its
+   * document changing is exactly that case, and the caller decides it with
+   * `isMemoisableKey` — the same gate the in-memory map uses, so the two
+   * tiers cannot disagree about which entries are safe.
+   */
+  readonly cacheKey?: string
 }
 
 /**
