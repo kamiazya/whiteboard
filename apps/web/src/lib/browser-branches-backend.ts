@@ -43,11 +43,24 @@ const RESTING: DocumentBranchesState = {
   head: 'main',
 }
 
+/**
+ * `backend` is nullable, and that is load-bearing rather than defensive.
+ *
+ * The browser page has no `BrowserBackend` for a markdown document — its body
+ * is persisted by its own path — and none at all until the document loads. A
+ * caller that answered `null` to the context in those cases would fall
+ * through to the context's DAEMON fallback and start issuing requests to a
+ * daemon that is not there, which is the single regression this provider was
+ * mounted to prevent. So the browser keeper always answers, and says
+ * truthfully that a document with no record-holding backend has no branches.
+ */
 export function createBrowserBranchesBackend(deps: {
-  readonly backend: BrowserBackend
+  readonly backend: BrowserBackend | null
 }): BranchesBackend {
+  const backend = deps.backend
+  const refuse = (what: string) => Promise.reject(new BranchesUnsupportedError(what))
   const read = (): DocumentBranchesState =>
-    deps.backend.readRecord((doc, documentId) => readBranchesFromRecord(doc, documentId)) ?? RESTING
+    backend?.readRecord((doc, documentId) => readBranchesFromRecord(doc, documentId)) ?? RESTING
 
   /**
    * One branch operation: read the state, run the pure step, write what it
@@ -57,7 +70,7 @@ export function createBrowserBranchesBackend(deps: {
   const mutate = <T>(
     step: (state: DocumentBranchesState) => { next: DocumentBranchesState | null; result: T },
   ): Promise<T> =>
-    deps.backend.mutateRecord((doc, documentId) => {
+    (backend as BrowserBackend).mutateRecord((doc, documentId) => {
       const { next, result } = step(readBranchesFromRecord(doc, documentId))
       if (next !== null) writeBranchesToRecord(doc, documentId, next)
       return result
@@ -72,11 +85,11 @@ export function createBrowserBranchesBackend(deps: {
    * clone is what moves; the live record the page is drawing does not.
    */
   const cloneRecord = (): { clone: LoroDoc; documentId: string } | null =>
-    deps.backend.readRecord((doc, documentId) => {
+    backend?.readRecord((doc, documentId) => {
       const clone = new LoroDoc()
       clone.import(doc.export({ mode: 'snapshot' }))
       return { clone, documentId }
-    })
+    }) ?? null
 
   /** The document as one branch's tip has it, or null when there is no such branch. */
   const atTip = (name: string): LoroDoc | null => {
@@ -94,13 +107,14 @@ export function createBrowserBranchesBackend(deps: {
   }
 
   return {
-    hasBranches: true,
+    hasBranches: backend !== null,
 
     async list() {
       return read()
     },
 
     async create(_workspaceId, _path, args): Promise<BranchMeta> {
+      if (backend === null) return refuse('create')
       return mutate((state) =>
         createBranchOp(state, scope, {
           name: args.name,
@@ -114,10 +128,12 @@ export function createBrowserBranchesBackend(deps: {
     },
 
     async remove(_workspaceId, _path, name) {
+      if (backend === null) return refuse('delete')
       return mutate((state) => deleteBranchOp(state, scope, name))
     },
 
     async rename(_workspaceId, _path, oldName, newName) {
+      if (backend === null) return refuse('rename')
       const branch = await mutate((state) => renameBranchOp(state, scope, oldName, newName))
       // No version rows carry a branch name in this keeper yet, so a rename
       // renames nothing else. Reported as zero rather than omitted: the field
@@ -126,10 +142,12 @@ export function createBrowserBranchesBackend(deps: {
     },
 
     async setHead(_workspaceId, _path, branch) {
+      if (backend === null) return refuse('switch')
       return mutate((state) => setHeadOp(state, scope, branch))
     },
 
     async getStats(_workspaceId, _path, name) {
+      if (backend === null) return refuse('stats')
       const state = read()
       // `unmergedCommits` is zero for the same reason the daemon answers zero:
       // tip adoption has no commit count to report, and a number invented here
@@ -138,6 +156,7 @@ export function createBrowserBranchesBackend(deps: {
     },
 
     async merge(_workspaceId, _path, source, args) {
+      if (backend === null) return refuse('merge')
       if (args.dryRun !== true) {
         throw new BranchesUnsupportedError('committing a merge is not implemented in the browser')
       }

@@ -1,10 +1,12 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import {
-  BranchesUnsupportedError,
-  createBrowserBranchesBackend,
-  createDaemonBranchesBackend,
-} from './branches-backend.js'
+import { branchlessBackendContract } from './branches-backend.contract.js'
+import { createDaemonBranchesBackend } from './branches-backend.js'
+import { BrowserBackend } from './browser-backend.js'
+import { createBrowserBranchesBackend } from './browser-branches-backend.js'
+
+/** Any document: this file never delivers a record, so nothing reads it. */
+const TARGET = { documentId: '01JZZZZZZZZZZZZZZZZZZZZZZZ', path: 'doc', kind: 'spatial' } as const
 
 /**
  * The seam exists for ONE reason, and it is a default rather than a feature.
@@ -21,39 +23,52 @@ import {
  * request to a daemon that is not there.
  */
 describe('the browser keeper answers for branches instead of reaching for a daemon', () => {
-  it('answers the resting state: one lane, main, no request', async () => {
-    const backend = createBrowserBranchesBackend()
-    expect(await backend.list('ws', 'doc')).toEqual({ branches: [], head: 'main' })
+  /**
+   * A backend whose record has not been delivered — which is what a page has
+   * before its document loads, and all this file needs. What the browser
+   * keeper DOES with a delivered record is the contract's business, run
+   * against real IndexedDB in `branches-backend.contract.browser.test.tsx`;
+   * what is left here is the one property that is about the seam rather than
+   * about branches.
+   */
+  const browserBackend = () =>
+    createBrowserBranchesBackend({ backend: new BrowserBackend(TARGET) })
+
+  // The state the page is in for a markdown document, and before any document
+  // loads. It must not be expressed as a `null` context value: that falls
+  // through to the DAEMON backend and issues requests to a daemon that is not
+  // there, which is what mounting a browser provider exists to stop.
+  describe('with no record-holding backend', () => {
+    branchlessBackendContract(() => createBrowserBranchesBackend({ backend: null }))
+
+    it('makes no fetch while answering and refusing', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch')
+      const backend = createBrowserBranchesBackend({ backend: null })
+      await backend.list('ws', 'doc')
+      await backend.setHead('ws', 'doc', 'x').catch(() => {})
+      expect(fetchSpy).not.toHaveBeenCalled()
+      fetchSpy.mockRestore()
+    })
   })
 
-  it('refuses every mutator with a typed error rather than a request', async () => {
-    const backend = createBrowserBranchesBackend()
-    // Named one at a time rather than looped, so a method ADDED to the seam
-    // and left unimplemented here is a type error rather than a silent gap —
-    // a loop over Object.keys would pass over whatever it happened to find.
-    await expect(backend.create('ws', 'doc', { name: 'x' })).rejects.toBeInstanceOf(
-      BranchesUnsupportedError,
-    )
-    await expect(backend.remove('ws', 'doc', 'x')).rejects.toBeInstanceOf(BranchesUnsupportedError)
-    await expect(backend.rename('ws', 'doc', 'x', 'y')).rejects.toBeInstanceOf(
-      BranchesUnsupportedError,
-    )
-    await expect(backend.setHead('ws', 'doc', 'x')).rejects.toBeInstanceOf(BranchesUnsupportedError)
-    await expect(backend.getStats('ws', 'doc', 'x')).rejects.toBeInstanceOf(
-      BranchesUnsupportedError,
-    )
-    await expect(backend.merge('ws', 'doc', 'x', { into: 'main' })).rejects.toBeInstanceOf(
-      BranchesUnsupportedError,
-    )
+  it('answers the resting state before its record arrives: main, and no request', async () => {
+    expect(await browserBackend().list('ws', 'doc')).toEqual({
+      branches: [{ name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '' }],
+      head: 'main',
+    })
   })
 
-  it('makes no fetch at all — the refusal is local, not a request that failed', async () => {
-    // The assertion the two above cannot make between them: `list` could
-    // answer the resting state from a request it made and discarded, and a
-    // mutator could reject because a fetch rejected. Either would reintroduce
-    // exactly the traffic this seam exists to stop.
+  it('makes no fetch at all — what it cannot do yet fails locally, not as a request', async () => {
+    // The property this whole seam exists for, and the one the cases above
+    // cannot make between them: `list` could answer from a request it made
+    // and discarded, and a mutator could reject because a fetch rejected.
+    // Either would reintroduce exactly the traffic the seam stops.
+    //
+    // It outlived the branchless backend it was written for. That backend is
+    // gone — the browser keeper has branches now — and the assertion is the
+    // same either way: this keeper reaches its own storage or nothing.
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
-    const backend = createBrowserBranchesBackend()
+    const backend = browserBackend()
     await backend.list('ws', 'doc')
     await backend.setHead('ws', 'doc', 'x').catch(() => {})
     expect(fetchSpy).not.toHaveBeenCalled()

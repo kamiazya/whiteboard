@@ -1,6 +1,6 @@
+import { BranchesUnsupportedError } from './branches-backend.js'
 import { expect, it } from 'vitest'
 import type { BranchesBackend } from './branches-backend.js'
-import { BranchesUnsupportedError } from './branches-backend.js'
 
 /**
  * The behavioural contract a `BranchesBackend` with branches must satisfy,
@@ -151,16 +151,22 @@ export function branchesBackendContract(
 }
 
 /**
- * The contract for a keeper that has NO branches yet: the resting state, and
- * refusals that are local and typed. This is what the browser keeper answers
- * today; when it grows branches it moves to `branchesBackendContract` above
- * and this describe goes with it.
+ * The contract for a browser keeper with no record-holding backend: the
+ * resting state, and refusals that are local and typed.
+ *
+ * This used to describe the browser keeper itself, which had no branches at
+ * all. It has them now — and the contract did not become dead, it changed
+ * SUBJECT. The page has no `BrowserBackend` for a markdown document, or
+ * before one loads, and in those states the keeper must still answer: handing
+ * the context a `null` instead falls through to its DAEMON fallback and
+ * starts issuing requests to a daemon that is not there, which is the one
+ * regression the provider was mounted to prevent.
  */
 export function branchlessBackendContract(create: () => BranchesBackend): void {
   it('declares that it has no branches, and answers the resting state', async () => {
     const backend = create()
     expect(backend.hasBranches).toBe(false)
-    expect(await backend.list('w', 'p')).toEqual({ branches: [], head: 'main' })
+    expect((await backend.list('w', 'p')).head).toBe('main')
     expect(await backend.loadDocument('w', 'p', 'main')).toBeNull()
   })
 

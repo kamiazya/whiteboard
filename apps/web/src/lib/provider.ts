@@ -45,7 +45,12 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  branches: false,
+  // The browser keeper has variations now: a branch is a name and a frontier
+  // of the workspace record, and this keeper holds that record. `merge` stays
+  // false until the commit half lands — the chip separates them already
+  // (`mergeEnabled`), so the difference is a real one a person can see rather
+  // than a control that throws.
+  branches: true,
   merge: false,
 }
 

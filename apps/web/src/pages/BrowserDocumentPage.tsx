@@ -34,7 +34,7 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
-import { createBrowserBranchesBackend } from '../lib/branches-backend.js'
+import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
@@ -497,12 +497,13 @@ function useBrowserDocument(
   )
   const versionsEnabled = versionsBackend !== null
 
-  // Unconditional, unlike `versionsBackend`: this keeper has no branches at
-  // all, so there is nothing to build it out of and nothing that could make
-  // it unavailable. Mounting it is what stops a branch consumer on this page
-  // falling through to the context's daemon fallback and issuing a request
-  // to a daemon that is not there.
-  const branchesBackend = useMemo(() => createBrowserBranchesBackend(), [])
+  // Built on the backend, because a branch is a frontier of the record the
+  // backend holds and a branch write goes through the same queue its edits
+  // do. Mounting it is also what stops a branch consumer on this page falling
+  // through to the context's daemon fallback and issuing a request to a
+  // daemon that is not there — which was this provider's whole job while the
+  // keeper had no branches, and remains true now that it has them.
+  const branchesBackend = useMemo(() => createBrowserBranchesBackend({ backend }), [backend])
   // A manual save announces itself on the window (dispatched after the
   // keeper confirmed the save), and the page's history column re-reads on
   // it. Scoped to THIS document's identity — an unchecked listener refreshed
