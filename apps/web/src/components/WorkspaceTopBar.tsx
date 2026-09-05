@@ -1,6 +1,6 @@
 import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
+import { HEADER_BUTTON_CLASS, HEADER_TOGGLE_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { cn } from '../lib/utils.js'
@@ -212,7 +212,7 @@ export default function WorkspaceTopBar({
                 type="button"
                 onClick={onNavigateBack}
                 aria-label="Back to documents"
-                className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className={HEADER_BUTTON_CLASS}
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -252,10 +252,7 @@ export default function WorkspaceTopBar({
                 aria-label="History"
                 aria-expanded={historyOpen}
                 onClick={onToggleHistory}
-                className={cn(
-                  'shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
-                  TOGGLE_STATE_CLASS,
-                )}
+                className={HEADER_TOGGLE_CLASS}
               >
                 <History aria-hidden="true" className="size-4" />
               </button>

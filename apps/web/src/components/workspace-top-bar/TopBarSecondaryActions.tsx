@@ -1,14 +1,15 @@
 import { EllipsisVertical, Maximize2, Minimize2 } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '../../components/ui/button.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu.js'
+import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { isFullscreenSupported } from '../../lib/fullscreen-support.js'
+import { cn } from '../../lib/utils.js'
 
 interface TopBarSecondaryActionsProps {
   /**
@@ -46,15 +47,14 @@ export function TopBarSecondaryActions({
         {showFullscreen && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <Button
-                variant="ghost"
-                size="sm"
-                className="size-8 p-0"
+              <button
+                type="button"
+                className={HEADER_BUTTON_CLASS}
                 onClick={onToggleFullscreen}
                 aria-label={fullscreenLabel}
               >
-                <FullscreenIcon className="size-3.5" />
-              </Button>
+                <FullscreenIcon className="size-4" />
+              </button>
             </TooltipTrigger>
             <TooltipContent>{fullscreenLabel} (f)</TooltipContent>
           </Tooltip>
@@ -67,7 +67,7 @@ export function TopBarSecondaryActions({
             type="button"
             aria-label="View options"
             data-testid="topbar-more-actions-trigger"
-            className="relative shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground min-[400px]:hidden"
+            className={cn(HEADER_BUTTON_CLASS, 'min-[400px]:hidden')}
           >
             <EllipsisVertical className="size-4" />
           </button>

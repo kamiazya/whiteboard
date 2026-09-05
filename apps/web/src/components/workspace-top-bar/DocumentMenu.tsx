@@ -1,12 +1,12 @@
 import { Download, EllipsisVertical } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
-import { Button } from '../../components/ui/button.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '../../components/ui/dropdown-menu.js'
+import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 
@@ -59,16 +59,14 @@ export function DocumentMenu({ onExport, triggerRef, children }: DocumentMenuPro
       <Tooltip>
         <TooltipTrigger asChild>
           <DropdownMenuTrigger asChild>
-            <Button
+            <button
               ref={triggerRef}
               type="button"
               aria-label="More actions"
-              variant="ghost"
-              size="sm"
-              className="size-7 p-0"
+              className={HEADER_BUTTON_CLASS}
             >
               <EllipsisVertical aria-hidden="true" className="size-4" />
-            </Button>
+            </button>
           </DropdownMenuTrigger>
         </TooltipTrigger>
         <TooltipContent>More actions</TooltipContent>
