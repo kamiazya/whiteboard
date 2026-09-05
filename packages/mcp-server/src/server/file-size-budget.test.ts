@@ -102,7 +102,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/canvas-edit.ts': 948,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
-  'packages/loro-adapter/src/workspace-tree.ts': 1032,
+  // Raised from 1032 by the document PLANE primitives — a mergeable child
+  // map on a document's node, and the read that never opens one. They sit
+  // here rather than in a new file because `nodeById` is this module's, and
+  // because a plane is a tree-node concept: splitting it out would export
+  // the node lookup for one caller. The prose is most of the 44 lines and is
+  // the point of them — a plane opened the regular way loses one replica's
+  // whole plane with both sides agreeing on the survivor.
+  // Raised again from 1076 by PLANE NAMESPACING — the `plane:` prefix, and
+  // the two readers that now skip it. Nearly all of it is the reason: a
+  // plane in the node's flat namespace is carried into
+  // `projectWorkspaceDocument` and written back by the next content save,
+  // from whatever the projection held when it was taken. Measured through
+  // the daemon's merge before the fix, a branch tip read back as "" with
+  // nothing red, which is precisely the comment's job to prevent a second
+  // time.
+  'packages/loro-adapter/src/workspace-tree.ts': 1116,
   'packages/canvas-render/src/svg/backend.ts': 991,
   // Raised from 921 when the page became a KEEPER — its wiring answers the
   // `DocumentKeeper` contract (the hook signature, the two terminal answers,
