@@ -512,13 +512,26 @@ describe('performBranchMerge', () => {
     )
     await saveDocumentBranches(SID, PATH, state)
     await branchesStore.setHead(SID, PATH, 'feature')
-    // The failure injection point moved with the fan-out: the cleanup
-    // reconcile now fails at the workspace record's save instead of at a
-    // broadcast dep that no longer exists. Every save fails (not just once):
-    // the head switch's own fail-soft branch-HEAD mirror also saves the
-    // record now, and a single-shot rejection would be consumed there,
-    // letting the reconcile under test succeed.
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockRejectedValue(new Error('save boom'))
+    // The failure injection point moves again, because branches moved onto
+    // the record: the head switch is now itself a record SAVE, so rejecting
+    // every save would fail the switch this case needs to have SUCCEEDED and
+    // would test nothing. So the rejection is armed at the one moment
+    // between the two — `sendHeadChanged`, which the cleanup calls after the
+    // switch has persisted and before the reconcile. (HEAD is `feature` here
+    // and the target is `main`, so the commit path's own `sendHeadChanged`
+    // does not run; this is the only call.)
+    const realSave = DocumentStoreWorkspaceDocs.prototype.save
+    let failSaves = false
+    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockImplementation(async function (
+      this: InstanceType<typeof DocumentStoreWorkspaceDocs>,
+      ...args: Parameters<typeof realSave>
+    ) {
+      if (failSaves) throw new Error('save boom')
+      return realSave.apply(this, args)
+    })
+    deps.sendHeadChanged.mockImplementation(() => {
+      failSaves = true
+    })
     const cap = captureLogsForTests('warning')
 
     try {
