@@ -129,7 +129,15 @@ describe('workspace document planes', () => {
 
     // Whatever a document exports, imports, renders or digests, it is this
     // projection — so a plane appearing here would leak into all of them.
-    expect(Object.keys(projected?.toJSON() ?? {})).not.toContain(PLANE)
+    //
+    // Matched by SUFFIX, which catches the key under any namespacing and
+    // under none. `not.toContain(PLANE)` was the first form and it goes
+    // vacuous the moment planes are namespaced: `plane:branches` is not
+    // `branches`, so it passes while the projection carries the plane. The
+    // prefix is deliberately not spelled here either — a test that repeats
+    // the constant it is checking only proves the constant equals itself.
+    const projectedKeys = Object.keys(projected?.toJSON() ?? {})
+    expect(projectedKeys.filter((key) => key.endsWith(PLANE))).toEqual([])
   })
 
   it('leaves the document reading as itself, and a meta field unreadable as a plane', () => {
