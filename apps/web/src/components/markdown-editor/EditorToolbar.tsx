@@ -1,9 +1,19 @@
 import type { StateCommand } from '@codemirror/state'
 import type { LucideIcon } from 'lucide-react'
-import { BookOpen, Columns2, MoreHorizontal, PenLine, Redo2, Undo2 } from 'lucide-react'
+import {
+  BookOpen,
+  Columns2,
+  MessageSquarePlus,
+  MoreHorizontal,
+  PenLine,
+  Redo2,
+  Undo2,
+} from 'lucide-react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
+import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 import { MarkdownVerbBar } from './MarkdownVerbBar.js'
+import { touchFormattingBarShown } from './verb-bar-layout.js'
 
 export type MarkdownViewMode = 'write' | 'split' | 'read'
 
@@ -31,6 +41,17 @@ export interface EditorToolbarProps {
    */
   readonly onUndo?: () => void
   readonly onRedo?: () => void
+  /**
+   * Opens a conversation about what the caret is on. Absent means this host
+   * has no annotation layer, and no such control is offered.
+   */
+  readonly onComment?: () => void
+  /**
+   * Whether there is any prose for a conversation to be about. Derived from
+   * the body rather than from the caret: a caret move re-renders nothing, so
+   * a caret-derived enabled state would be stale the moment a reader tapped.
+   */
+  readonly commentAvailable?: boolean
 }
 
 interface ModeOption {
@@ -117,10 +138,49 @@ export function EditorToolbar({
   openLinkPicker,
   onUndo,
   onRedo,
+  onComment,
+  commentAvailable = false,
 }: EditorToolbarProps) {
+  // Subscribed for the re-render; the predicate is what decides, and is the
+  // same one the docked bar and keyboard avoidance read, so the three cannot
+  // disagree about whether that bar is on screen.
+  useActiveMarkdownEditor()
+  // A phone shows BOTH bars at once, and measured, five of their verbs were
+  // the same five. While the docked bar is carrying the formatting, this bar
+  // carries what that bar does not — the annotation entry, which otherwise
+  // has no button anywhere and is reachable only through the ⋯ catalog. The
+  // verbs come back the moment the docked bar goes (a desktop, or a caret
+  // outside the editor), so the swap loses nothing.
+  const dockedBarHasTheVerbs = touchFormattingBarShown()
   return (
     <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
-      {catalogAvailable && runVerb !== undefined ? (
+      {dockedBarHasTheVerbs ? (
+        <div className="flex flex-1 items-center gap-1">
+          {onComment !== undefined && (
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  aria-label="Comment"
+                  aria-disabled={!commentAvailable}
+                  data-testid="editor-comment-trigger"
+                  // Keep the caret where it is: the conversation's scope is
+                  // resolved from it, and a focused trigger would move it.
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    if (commentAvailable) onComment()
+                  }}
+                  className="text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-ring inline-flex h-7 items-center gap-1.5 rounded-md px-2 text-xs transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none aria-disabled:pointer-events-none aria-disabled:opacity-40"
+                >
+                  <MessageSquarePlus aria-hidden className="size-4" />
+                  Comment
+                </button>
+              </TooltipTrigger>
+              <TooltipContent>Comment on this paragraph</TooltipContent>
+            </Tooltip>
+          )}
+        </div>
+      ) : catalogAvailable && runVerb !== undefined ? (
         // No overflow doorway of its own: ⋯ beside the view modes is the
         // complete catalog and stays. It is not the same list twice — the
         // catalog offers the heading LEVELS directly, where the bar has one

@@ -27,7 +27,6 @@ import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
 import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
-import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
@@ -37,6 +36,7 @@ import {
   placeThreads,
   setAnnotationProjection,
 } from './annotation-decorations.js'
+import { useAnnotationEntry } from './annotation-scope.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
@@ -787,6 +787,8 @@ export function MarkdownEditor({
     return () => host.removeEventListener('contextmenu', onContextMenu)
   }, [openCatalogAt])
 
+  const annotation = useAnnotationEntry(value, sourceApiRef, onComposeThread)
+
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
     // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
     // things that write MARKUP into the body: Comment writes nothing there
@@ -794,9 +796,6 @@ export function MarkdownEditor({
     // that table would give the keymap a shortcut for it and the verb bar a
     // button, both of which would then have to resolve a scope the table
     // cannot describe.
-    const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
-    const anchor =
-      selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
     return verbCatalogItems({
       headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
       run: (command) => sourceApiRef.current?.run(command),
@@ -810,13 +809,13 @@ export function MarkdownEditor({
             },
           }
         : {}),
-      ...(onComposeThread !== undefined && anchor !== null
-        ? { composeThread: () => onComposeThread(anchor) }
+      ...(annotation.open !== undefined && annotation.anchor() !== null
+        ? { composeThread: annotation.open }
         : {}),
     })
     // `catalog` is read so the rows are rebuilt on each opening: the
     // selection they describe is the one at THAT moment.
-  }, [catalog, linkTargets, onComposeThread, value])
+  }, [annotation, catalog, linkTargets, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
@@ -833,6 +832,8 @@ export function MarkdownEditor({
         wordCount={wordCount}
         onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
         catalogAvailable={effectiveMode !== 'read'}
+        onComment={annotation.open}
+        commentAvailable={value.trim() !== ''}
         runVerb={(command) => {
           sourceApiRef.current?.run(command)
         }}
