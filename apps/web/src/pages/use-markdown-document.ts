@@ -455,6 +455,14 @@ export function useMarkdownDocument(
   // Becoming visible is the same event name and must not flush. The
   // scheduler is read through its ref at fire time, so this effect never
   // re-arms on a scheduler change — it only needs the document's scope.
+  //
+  // Covers a tab that is HIDDEN and keeps running (measured in Chromium:
+  // the write reaches IndexedDB within 50ms of the signal, with the tab's
+  // scripts frozen so the debounce could not be what landed it). A tab
+  // closed or reloaded inside the window is torn down before the flush's
+  // asynchronous chain reaches the store and still loses the edit; closing
+  // that gap means writing at once rather than a better signal — see the
+  // same note in document-sync-session.ts.
   useEffect(() => {
     if (!enabled || documentId === null) return
     if (typeof document === 'undefined' || typeof window === 'undefined') return

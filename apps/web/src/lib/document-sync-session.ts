@@ -727,6 +727,15 @@ export function createDocumentSyncSession(
   // is not delivered on mobile and `unload` is unreliable everywhere), so the
   // write goes out on them. Becoming visible again is the same event name
   // and must NOT flush — that would write mid-gesture on every tab switch.
+  //
+  // What this covers, measured in Chromium with the tab's scripts frozen
+  // after the signal so the debounce could not be what landed it: a tab that
+  // is HIDDEN (switched away, backgrounded) keeps running, and the write
+  // reaches IndexedDB within 50ms. A tab CLOSED or reloaded inside the window
+  // is torn down before the asynchronous chain behind the flush reaches the
+  // store, and the edit is still lost — the same as without this listener.
+  // Closing that last gap means not having a window at all (write at once,
+  // commit later), not a better signal.
   function onVisibilityChange(): void {
     if (document.visibilityState === 'hidden') onCanvasChange.flush()
   }
