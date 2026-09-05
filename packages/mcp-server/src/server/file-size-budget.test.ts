@@ -156,8 +156,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // "anything changed" check on a frontier, and the record's is what the
   // store saves), and the pair's `flush` signals BEFORE it flushes, because
   // the edit flush's commit reaches `subscribeLocalUpdates` only on a later
-  // microtask and a flush alone would find nothing armed.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 987,
+  // microtask and a flush alone would find nothing armed. Raised again to 997
+  // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
+  // throw escapes as an unhandled rejection that reddens a whole run while
+  // every test passes.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 997,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

@@ -501,8 +501,18 @@ function useBrowserDocument(
       // A document with no path yet has nowhere to file a row; the record
       // is what a checkpoint points at, so both must be there.
       if (documentPath === null) return
-      const record = backend?.readRecord((doc) => doc) ?? null
-      if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
+      // Total, and deliberately so. This runs inside Loro's local-update
+      // subscriber, where a throw does not fail the edit — it escapes as an
+      // UNHANDLED REJECTION, which vitest reports as `Errors 1` with every
+      // test still passing and only the exit code red. A missed checkpoint is
+      // not worth that, and nothing here is worth failing an edit for either:
+      // a backend that cannot answer for a record has no record to bookmark.
+      try {
+        const record = backend?.readRecord?.((doc) => doc) ?? null
+        if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
+      } catch (err) {
+        log.warn('could not arm an automatic checkpoint', err)
+      }
     }
     return {
       signal,
