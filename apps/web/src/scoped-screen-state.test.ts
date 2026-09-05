@@ -119,6 +119,8 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
     'no subject: a refused create, carrying a kind and the store’s words — no path of its own',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
   query: 'no subject: what was typed; the results it produces are `hits`, which IS cleared',
+  lastCardCount:
+    'no subject: how MANY cards the last listing drew, never which — and it has to outlive the switch on purpose, because sizing the placeholder grid to the outgoing list is what holds the layout still while the incoming one loads',
 }
 
 const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {

@@ -22,7 +22,21 @@ export default defineProject({
     // real cost to keep flaking.
     testTimeout: 20_000,
     // `vitest bench` only — `vitest run` never picks these up, since
-    // `include` above matches *.test.ts and nothing else.
-    benchmark: { include: ['src/**/*.bench.ts'] },
+    // `include` above matches *.test.ts and nothing else. Bench mode runs
+    // them under a sibling project named `canvas-render-node (bench)`, and
+    // that full string is what `--project` has to be given (`pnpm bench`).
+    benchmark: {
+      include: ['src/**/*.bench.ts'],
+      // Vite's module runner serves ESM exports through getters, and the
+      // edge search calls its own helpers (edge-rules, edge-geometry) tens
+      // of millions of times per run, so vitest warns that the getters skew
+      // the numbers. The two fixes it offers do not apply here: a local
+      // alias in the bench file only bypasses the bench file's OWN imports,
+      // not the source's internal ones, and native ESM cannot resolve this
+      // package's `.js` specifiers to `.ts` sources. The overhead is the
+      // same on both sides of an interleaved before/after on one machine,
+      // which is the only comparison `measured-change` allows anyway.
+      suppressExportGetterWarnings: true,
+    },
   },
 })

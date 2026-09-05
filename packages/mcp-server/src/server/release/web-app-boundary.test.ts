@@ -547,20 +547,20 @@ describe('collectTransitiveViolations', () => {
     expect(violations).toEqual([])
   })
 
-  it('resolves a .tsx source file (second extension candidate)', () => {
+  it('resolves a .tsx source file', () => {
     writeFileSync(join(dir, 'entry.ts'), "export * from './Component.js'\n")
     writeFileSync(join(dir, 'Component.tsx'), 'export const x = 1\n')
     expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
   })
 
-  it('resolves a directory-style import via its index.ts (third candidate)', () => {
+  it('resolves a directory-style import via its index.ts', () => {
     mkdirSync(join(dir, 'feature'))
     writeFileSync(join(dir, 'entry.ts'), "export * from './feature.js'\n")
     writeFileSync(join(dir, 'feature/index.ts'), 'export const x = 1\n')
     expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
   })
 
-  it('resolves a directory-style import via its index.tsx (fourth candidate)', () => {
+  it('resolves a directory-style import via its index.tsx', () => {
     mkdirSync(join(dir, 'widget'))
     writeFileSync(join(dir, 'entry.ts'), "export * from './widget.js'\n")
     writeFileSync(join(dir, 'widget/index.tsx'), 'export const x = 1\n')

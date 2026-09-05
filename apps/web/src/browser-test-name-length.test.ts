@@ -1,8 +1,13 @@
 // A browser test that fails writes a Playwright trace, and vitest then COPIES
-// that trace into `.vitest-attachments/` under a name flattened from its path.
-// When that name exceeds the filesystem's 255-byte limit the copy throws
-// ENAMETOOLONG — and the throw lands in the file's teardown, so vitest abandons
-// the REST OF THE FILE.
+// that trace into the repo-root `.vitest/attachments/` under a name flattened
+// from its path. When that name exceeds the filesystem's 255-byte limit the
+// copy throws ENAMETOOLONG — and the throw lands in the file's teardown, so
+// vitest abandons the REST OF THE FILE.
+//
+// Re-measured on vitest 5.0.0 (the directory moved from `.vitest-attachments/`
+// at that upgrade): one real failure's copy was 186 characters for an 86-
+// character sanitized title, which is exactly FIXED_OVERHEAD below plus the
+// title — the name shape did not change, so neither did the budget.
 //
 // Measured, by forcing one failure in BrowserDocumentPage.rename twice:
 //
