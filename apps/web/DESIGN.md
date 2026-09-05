@@ -528,7 +528,19 @@ does too. A press on comment chrome opens it under EITHER tool — the hand
 tool takes every plain press as a pan, but a comment is chrome, not content,
 and the release decides: a press that never travelled past the slop opens
 the card, one that travelled was the pan (hand) or the pin drag (select) it
-became on its first move. The press arms nothing visible until then, on
+became on its first move. The same line runs through the hand tool's MENU:
+a right-click, or a stationary touch long-press, opens the context menu
+there too, carrying the annotation layer's verb for what is under the press
+and nothing else — "Comment here" on a spot, "Comment on this" on a node or
+an edge, a comment's own lifecycle on its bubble — and the press selects
+nothing on the way (`context-menu-items/annotation-verbs.tsx` is the one
+definition those rows and the Select menus share). The hand tool used to
+open no menu at all, because an EDIT affordance surfacing mid-pan was the
+harm on a phone; a comment verb is not one, and a reader panning around a
+canvas has as much reason to talk about it as one selecting on it. The
+long-press timer is armed under the hand tool for the same reason, and it
+strands no pan: a finger that travels clears it before it fires, and one
+that does not has not panned. The press arms nothing visible until then, on
 purpose: arming the pin drag at the press took the committed copy out of the
 surface under a touch pointer implicitly captured on it, and its release
 then died on a detached node — every later tap replayed the stale press.

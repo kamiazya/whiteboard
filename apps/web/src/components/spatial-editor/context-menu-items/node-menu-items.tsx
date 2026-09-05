@@ -45,6 +45,7 @@ import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { nodePropertyItems } from '../facet-widgets/index.js'
 import { type GestureState, reduceGesture } from '../gestures.js'
+import { commentOnNodeItem } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
 
 export interface NodeMenuItemsInput {
@@ -124,19 +125,7 @@ export function nodeMenuItems({
   // 3. the destructive entry, alone at the bottom.
   const properties: ContextMenuItem[] = []
   const verbs: ContextMenuItem[] = []
-  // Anchored at the node's top-right corner, the same convention the MCP
-  // `comment` op uses, so a comment reads the same whoever made it. A
-  // comment is ABOUT the node and never touches it, which is why it is
-  // the one verb a LOCKED node keeps beside Unlock.
-  const commentOnThis: ContextMenuItem = {
-    label: 'Comment on this',
-    icon: <MessageSquarePlus />,
-    onSelect: () =>
-      setCommentCompose({
-        point: { x: node.x + node.width, y: node.y },
-        targetNodeId: node.id,
-      }),
-  }
+  const commentOnThis = commentOnNodeItem(node, setCommentCompose)
   if (node.type === 'group') {
     verbs.push({
       label: 'Edit label',

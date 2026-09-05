@@ -7,7 +7,7 @@ import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whit
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { page } from 'vitest/browser'
+import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -130,4 +130,93 @@ it('a press on the canvas shuts the card and stays shut, even though it also pan
   // The stale re-open this guards against happened AT the release, which
   // fireEvent flushed before returning: shut now is shut for good.
   expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
+})
+
+const menuLabels = (container: HTMLElement) =>
+  [...container.querySelectorAll('[role="menuitem"]')].map((item) => item.textContent?.trim())
+
+function touch(el: HTMLElement, type: string, x: number, y: number, pointerId = 7) {
+  const r = el.getBoundingClientRect()
+  el.dispatchEvent(
+    new PointerEvent(type, {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.left + x,
+      clientY: r.top + y,
+      pointerId,
+      pointerType: 'touch',
+      isPrimary: true,
+      button: type === 'pointerdown' ? 0 : -1,
+      buttons: type === 'pointerup' ? 0 : 1,
+    }),
+  )
+}
+
+// Panning is not a reason to be unable to talk about what is on the canvas.
+// The hand tool keeps CONTENT out of reach — a press pans, nothing selects,
+// nothing edits — while the annotation layer stays reachable the way it is
+// under Select: a right-click, or a stationary touch long-press, opens the
+// menu with the comment verbs alone.
+it('a right-click under the hand tool offers the annotation verbs alone, and selects nothing', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await ready(container)
+  const r = root.getBoundingClientRect()
+
+  fireEvent.contextMenu(root, { clientX: r.left + 60, clientY: r.top + 560 })
+  expect(menuLabels(container)).toEqual(['Comment here', 'Show resolved comments'])
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+
+  // Over the node: its comment verb, and none of its edit verbs — and the
+  // node is not selected by the press, since hand mode never selects.
+  fireEvent.contextMenu(root, { clientX: r.left + 200, clientY: r.top + 150 })
+  expect(menuLabels(container)).toEqual(['Comment on this'])
+  expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
+})
+
+it('Comment here from the hand-tool menu composes and commits a point-anchored comment', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await ready(container)
+  const r = root.getBoundingClientRect()
+
+  fireEvent.contextMenu(root, { clientX: r.left + 60, clientY: r.top + 560 })
+  await userEvent.click(page.getByRole('menuitem', { name: 'Comment here' }))
+  await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
+  await userEvent.keyboard('seen while panning')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+  await vi.waitFor(() =>
+    expect(latest.commands.map((entry) => entry.kind)).toContain('create-comment'),
+  )
+  expect(latest.commands[0]).toMatchObject({
+    kind: 'create-comment',
+    comment: { x: 60, y: 560, text: 'seen while panning' },
+  })
+})
+
+it('a stationary touch long-press under the hand tool opens the comment verbs, and lifting opens no card', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await ready(container)
+  const before = transformOf(container)
+
+  // On the bubble: the comment's own menu (its lifecycle), and the release
+  // that follows the menu must not ALSO open the card — the press was
+  // spent on the menu.
+  touch(root, 'pointerdown', BUBBLE.x, BUBBLE.y)
+  await new Promise((resolve) => setTimeout(resolve, 650))
+  await vi.waitFor(() => expect(menuLabels(container)).toEqual(['Edit comment', 'Resolve']))
+  touch(root, 'pointerup', BUBBLE.x, BUBBLE.y)
+  // Closing the menu is the condition waited on: a card the release had
+  // opened would have rendered by the time the menu is gone, and a plain
+  // dispatch outside act() commits its render a tick later than the event.
+  await userEvent.keyboard('{Escape}')
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="context-menu"]')).toBeNull())
+  expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
+  expect(transformOf(container)).toBe(before)
+  expect(latest.commands).toEqual([])
 })

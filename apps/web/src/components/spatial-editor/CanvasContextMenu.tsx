@@ -18,6 +18,7 @@ import { verbCatalogItems } from '../markdown-editor/verb-catalog.js'
 import type { BoxMove } from './align.js'
 import { alignableBoxesOf } from './align.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
+import { annotationVerbItems } from './context-menu-items/annotation-verbs.js'
 import { canvasMenuItems } from './context-menu-items/canvas-menu-items.js'
 import { commentMenuItems } from './context-menu-items/comment-menu-items.js'
 import { edgeMenuItems } from './context-menu-items/edge-menu-items.js'
@@ -35,6 +36,12 @@ export interface ContextMenuTarget {
   readonly point: Point
   /** The ⋯ control opens the same catalog in the icon-grid or sheet vessel. */
   readonly variant?: 'list' | 'grid' | 'sheet'
+  /**
+   * The hand tool's menu: the annotation layer's verb for what is under the
+   * press and nothing else. Panning keeps content out of reach; a
+   * conversation about it is not content (`annotation-verbs.tsx`).
+   */
+  readonly verbs?: 'annotation'
   /**
    * A right-click INSIDE a node's text editor: the menu is the editing
    * catalog for that text (the note editor's own), not the canvas's. The
@@ -247,74 +254,83 @@ export function CanvasContextMenu({
         })
       : comment !== undefined
         ? commentMenuItems({ comment, canvasRef, edgePathOf, setCommentCompose, applyResult })
-        : node === undefined && edge !== undefined
-          ? edgeMenuItems({
+        : contextMenu.verbs === 'annotation'
+          ? annotationVerbItems({
+              node,
               edge,
               point: contextMenu.point,
               setCommentCompose,
-              theme,
-              isEdgeLocked,
-              edgeLockEnabled,
-              applyResult,
-              setEdgeLabelEditId,
-              setSelectedEdgeId,
-              onToggleEdgeLock,
+              showResolvedComments,
+              setShowResolvedComments,
             })
-          : node === undefined
-            ? canvasMenuItems({
+          : node === undefined && edge !== undefined
+            ? edgeMenuItems({
+                edge,
                 point: contextMenu.point,
-                canvas,
-                canvasRef,
-                isLocked,
-                fileRefOptions,
-                onAddImage,
-                pendingImagePointRef,
-                imageInputRef,
-                pasteClipboard,
-                createNodeAt,
-                setLinkDialog,
-                createGroupAtViewportCenter,
-                setDocumentPicker,
-                applyBoxMoves,
                 setCommentCompose,
-                showResolvedComments,
-                setShowResolvedComments,
-              })
-            : nodeMenuItems({
-                node,
-                canvas,
-                canvasRef,
                 theme,
-                gestureState,
-                isLocked,
-                lockEnabled,
                 isEdgeLocked,
-                extraIds,
-                selectedId,
-                isImageFileRef,
-                missingFileRef,
-                fileRefOptions,
-                facetRegistry,
-                selectedAlignableBoxes,
-                pendingBackgroundGroupIdRef,
-                imageInputRef,
+                edgeLockEnabled,
                 applyResult,
-                applyBoxMoves,
-                copySelection,
-                cutSelection,
-                duplicateSelection,
-                reorderSelection,
-                groupSelection,
-                openLinkNode,
-                onOpenFileRef,
-                onAddImage,
-                onToggleNodeLock,
-                setGroupLabelEditId,
-                setLinkDialog,
-                setDocumentPicker,
-                setFacetPanelOpen,
-                setCommentCompose,
+                setEdgeLabelEditId,
+                setSelectedEdgeId,
+                onToggleEdgeLock,
               })
+            : node === undefined
+              ? canvasMenuItems({
+                  point: contextMenu.point,
+                  canvas,
+                  canvasRef,
+                  isLocked,
+                  fileRefOptions,
+                  onAddImage,
+                  pendingImagePointRef,
+                  imageInputRef,
+                  pasteClipboard,
+                  createNodeAt,
+                  setLinkDialog,
+                  createGroupAtViewportCenter,
+                  setDocumentPicker,
+                  applyBoxMoves,
+                  setCommentCompose,
+                  showResolvedComments,
+                  setShowResolvedComments,
+                })
+              : nodeMenuItems({
+                  node,
+                  canvas,
+                  canvasRef,
+                  theme,
+                  gestureState,
+                  isLocked,
+                  lockEnabled,
+                  isEdgeLocked,
+                  extraIds,
+                  selectedId,
+                  isImageFileRef,
+                  missingFileRef,
+                  fileRefOptions,
+                  facetRegistry,
+                  selectedAlignableBoxes,
+                  pendingBackgroundGroupIdRef,
+                  imageInputRef,
+                  applyResult,
+                  applyBoxMoves,
+                  copySelection,
+                  cutSelection,
+                  duplicateSelection,
+                  reorderSelection,
+                  groupSelection,
+                  openLinkNode,
+                  onOpenFileRef,
+                  onAddImage,
+                  onToggleNodeLock,
+                  setGroupLabelEditId,
+                  setLinkDialog,
+                  setDocumentPicker,
+                  setFacetPanelOpen,
+                  setCommentCompose,
+                })
 
   return (
     <ContextMenu

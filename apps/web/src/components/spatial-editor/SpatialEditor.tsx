@@ -810,10 +810,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * the press started (a node move's 'pressing' state, marquee arming):
      * the press has become a menu invocation, not a drag.
      *
-     * The navigation machine decides WHETHER to arm — hand mode never does,
-     * because the press below it starts a pan and this teardown would strand
-     * it mid-drag — and the timer itself stays here, where the menu, the
-     * haptic and the pulse live.
+     * The navigation machine decides WHETHER to arm (a second finger never
+     * does), and the timer itself stays here, where the menu, the haptic
+     * and the pulse live. Under the hand tool the press below started a
+     * pan; a finger still enough for the timer to fire never advanced it,
+     * so the teardown strands nothing — a finger that moves clears the
+     * timer before it can fire (see handlePointerMove).
      */
     const armLongPress = (pointerId: number, screen: Point) => {
       clearLongPress()
@@ -834,6 +836,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           gestureTrace.recordReset('long-press-menu', Math.round(performance.now()))
           lastPressRef.current = null
           doublePressRef.current = null
+          // The press is spent on the menu: the release that follows must
+          // not ALSO open the card of the comment it landed on.
+          pressedCommentRef.current = null
           // The native long-press this replaces gave a system haptic; keep
           // that cue so the menu opening under a still-down finger reads as
           // deliberate, not glitchy.
@@ -1164,11 +1169,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const openContextMenuAt = (screenPoint: Point) => {
-      // Hand mode is navigation-ONLY: surfacing the edit menu on a touch
-      // long-press there made phone panning fall into editing mid-gesture
-      // (user report 2026-08-08). Switching to Select is the explicit gate
-      // into editing affordances.
-      if (tool === 'hand') return
       const point = screenToCanvas(screenPoint, viewport)
       // A comment under the pointer gets ITS menu — and leaves the node or
       // edge selection alone, since the menu is about the comment.
@@ -1188,6 +1188,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // to stay right-clickable or Unlock would be unreachable. Only the
       // selection side effect below is skipped for it.
       const hitId = hitTest(boxes, point)
+      // Hand mode keeps CONTENT out of reach — a press pans, nothing
+      // selects, nothing edits — but a conversation about what is on screen
+      // is not content, and a reader panning has as much reason to open one
+      // as a reader selecting. So the menu opens with the annotation verb
+      // for what is under the press and nothing else, and the press selects
+      // nothing along the way: an editing affordance surfacing mid-pan was
+      // the harm (user report 2026-08-08), and a comment verb is not one.
+      if (tool === 'hand') {
+        const hitEdge =
+          hitId === undefined
+            ? edgePaths.find(
+                (edge) =>
+                  distanceToPolyline(point, edge.path) <= EDGE_HIT_TOLERANCE_PX / viewport.zoom,
+              )
+            : undefined
+        setContextMenu({
+          x: screenPoint.x,
+          y: screenPoint.y,
+          nodeId: hitId,
+          edgeId: hitEdge?.id,
+          point,
+          verbs: 'annotation',
+        })
+        return
+      }
       // Node and edge selection stay mutually exclusive here too (see the
       // pointerdown path): Delete acts on a selected edge FIRST, so leaving
       // the other object type selected makes Delete remove the wrong thing.

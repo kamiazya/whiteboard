@@ -297,9 +297,13 @@ describe('long press arming', () => {
     })
   })
 
-  it('is never armed in hand mode, where its teardown would strand a live pan', () => {
+  it('is armed under the hand tool too: its menu is the annotation layer, which panning does not put out of reach', () => {
     const { effects } = run([down(1, { x: 10, y: 20 })])
-    expect(effects.filter((effect) => effect.kind === 'arm-long-press')).toEqual([])
+    expect(effects).toContainEqual({
+      kind: 'arm-long-press',
+      pointerId: 1,
+      screen: { x: 10, y: 20 },
+    })
   })
 })
 
