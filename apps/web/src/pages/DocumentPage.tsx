@@ -33,6 +33,7 @@ import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.j
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
+import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -283,14 +284,15 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
+  // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
+  // back, title, menus — steps aside with the shell's row above it, which
+  // owns the control and floats the way back out. The dock stays because
+  // editing is what the extra space is for.
+  const { isFullscreen } = useFullscreen()
 
   return (
     <DocumentPageShell
       srTitle={model.srTitle}
-      {...(model.shell?.mainRef === undefined ? {} : { mainRef: model.shell.mainRef })}
-      {...(model.shell?.mainClassName === undefined
-        ? {}
-        : { mainClassName: model.shell.mainClassName })}
       aside={
         inspector === 'history' && versions.enabled ? (
           <VersionPanel
@@ -358,7 +360,7 @@ function DocumentPageBody({
       }
       header={
         <>
-          {topBar !== null && topBar.hidden !== true && (
+          {topBar !== null && !isFullscreen && (
             <Suspense
               fallback={
                 <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
@@ -421,12 +423,6 @@ function DocumentPageBody({
                 {...(topBar.onNavigateBack === undefined
                   ? {}
                   : { onNavigateBack: topBar.onNavigateBack })}
-                {...(topBar.isFullscreen === undefined
-                  ? {}
-                  : { isFullscreen: topBar.isFullscreen })}
-                {...(topBar.onToggleFullscreen === undefined
-                  ? {}
-                  : { onToggleFullscreen: topBar.onToggleFullscreen })}
                 {...(topBar.branchRefreshSignal === undefined
                   ? {}
                   : { branchRefreshSignal: topBar.branchRefreshSignal })}
@@ -447,7 +443,6 @@ function DocumentPageBody({
         </>
       }
     >
-      {model.slots.overlay}
       {model.slots.replaceEditor ?? (
         <div className="relative h-full min-h-0 min-w-0">
           {preview ? (

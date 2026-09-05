@@ -1,5 +1,4 @@
-import type { ReactNode, Ref } from 'react'
-import { cn } from '../../lib/utils.js'
+import type { ReactNode } from 'react'
 
 /**
  * The two-row grid shell both document pages stand in.
@@ -23,19 +22,16 @@ import { cn } from '../../lib/utils.js'
  * 768px it is a bottom sheet, positioned against this row so it covers the
  * editor and not the top bar above it.
  *
- * `mainRef` and `mainClassName` exist for one caller and one reason that
- * travel together: the browser page fullscreens this element, and a
- * fullscreened element without its own background is composited over black —
- * so it passes the ref it fullscreens and `bg-background` to stand behind
- * it. The daemon page has no fullscreen affordance and passes neither.
+ * Nothing here goes fullscreen: the shell fullscreens the whole document
+ * (`hooks/use-fullscreen.ts`), so this element needs no ref to be promoted
+ * through and no ground of its own — a `<main>` promoted to the top layer
+ * alone used to composite over black, and carried `bg-background` for it.
  */
 export function DocumentPageShell({
   srTitle,
   header,
   children,
   aside,
-  mainRef,
-  mainClassName,
 }: {
   /** The page's visually-hidden `<h1>` landmark text. */
   srTitle: string
@@ -45,14 +41,9 @@ export function DocumentPageShell({
   children: ReactNode
   /** The document's inspector, beside the editor row (a sheet over it when narrow). */
   aside?: ReactNode
-  mainRef?: Ref<HTMLElement>
-  mainClassName?: string
 }) {
   return (
-    <main
-      ref={mainRef}
-      className={cn('relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]', mainClassName)}
-    >
+    <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         <h1 className="sr-only">{srTitle}</h1>
         {header}

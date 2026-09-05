@@ -14,7 +14,7 @@
  * a named position rather than by a keeper branch inside it.
  */
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import type { ComponentProps, ReactNode, Ref, RefObject } from 'react'
+import type { ComponentProps, ReactNode, RefObject } from 'react'
 import type { ConnectionsPanelProps } from '../components/connections/ConnectionsChip.js'
 import type { MarkdownDocumentSession } from '../components/document-editor/DocumentEditorSurface.js'
 import type { SpatialEditorPaneProps } from '../components/document-editor/SpatialEditorPane.js'
@@ -40,10 +40,6 @@ export interface DocumentPageModel {
   readonly documentKind: DocumentKind
   readonly srTitle: string
   readonly capabilities: WhiteboardCapabilities
-  readonly shell?: {
-    readonly mainRef?: Ref<HTMLElement>
-    readonly mainClassName?: string
-  }
   /** The live sync session; the backend behind it is the keeper's. */
   readonly sync: UseDocumentSyncResult
   readonly markdown: Pick<
@@ -127,12 +123,8 @@ export interface DocumentPageModel {
     readonly path: string
     readonly dataMode?: 'daemon' | 'local'
     readonly onNavigateBack?: () => void
-    readonly isFullscreen?: boolean
-    readonly onToggleFullscreen?: () => void
     readonly branchRefreshSignal?: number
     readonly onPreviewVariation?: (name: string) => void
-    /** The whole row steps aside (fullscreen); the page draws no fallback then either. */
-    readonly hidden?: boolean
   } | null
   /** A read-only state drawn in place of the editor that is not a version (a variation's tip). */
   readonly readOnlyPast: PastDocument | null
@@ -147,8 +139,6 @@ export interface DocumentPageModel {
     readonly afterMenu?: ReactNode
     /** Header rows under the top bar (banners, notices, teasers). */
     readonly headerExtras?: ReactNode
-    /** Floating over the editor area (the exit-fullscreen control). */
-    readonly overlay?: ReactNode
     /** Rendered INSTEAD of the editor row (an empty state). */
     readonly replaceEditor?: ReactNode
     /** After the editor row, inside the shell (a toast). */
