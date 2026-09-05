@@ -88,15 +88,14 @@ const ciYaml = readText('.github/workflows/ci.yml')
 // Deliberate, reviewed allowlist. Growing this set is a real test edit, not a
 // silent config change — that friction is the point.
 //
-// It is EMPTY, and that is the outcome rather than an oversight. Its two
-// entries were the Docker gates, opted out because they need a daemon and a
-// multi-minute build. Both now run in ci.yml's dry-run-docker job against the
-// image that job already built, so neither needs an exception any more. Their
-// old reason claimed "the release-candidate docker path exercised by the
-// dry-run-docker job", which was never true — that job builds an image and
-// never runs a container — and the prose said so for as long as nothing
-// checked it.
-const EXCEPTION_ALLOWLIST = new Set<string>([])
+// It holds ONE gate. Its sibling smoke:docker left the list: it now runs in
+// ci.yml's dry-run-docker job against the image that job already built, and
+// its ten scenarios pass. smoke:docker-backup-restore stays, but with a reason
+// that is now a measurement instead of prose — running it is what showed it
+// asserts against a route the server no longer has. The old reason for both
+// ("the release-candidate docker path exercised by the dry-run-docker job")
+// was never true: that job builds an image and never runs a container.
+const EXCEPTION_ALLOWLIST = new Set<string>(['smoke:docker-backup-restore'])
 
 function isJobPrReachable(job: WorkflowJob): boolean {
   return job.if === null || ALWAYS_TRUE_ON_PR_IF.has(job.if)

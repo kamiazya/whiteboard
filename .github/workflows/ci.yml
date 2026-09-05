@@ -526,27 +526,10 @@ jobs:
           WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
         run: pnpm smoke:docker
 
-      # This smoke drives the backup helpers from the HOST against the
-      # container's mounted volume, so it needs dist/ — which the image build
-      # produces inside the image and does not leave behind. Only this one
-      # needs it; smoke:docker talks to the container over HTTP and passed
-      # without it.
-      #
-      # `build:server` rather than `build`: the extra two steps in `build`
-      # copy the canvas-viewer widget and the export font into dist, and the
-      # widget copy FAILS unless canvas-viewer's widget was built first (the
-      # verify job builds it explicitly for that reason). None of it is
-      # reachable from the backup helpers, so this skips ~a minute of work
-      # this smoke does not use.
-      - name: Build mcp-server for the host-side backup helpers
-        if: steps.detect.outputs.docker == 'true'
-        run: pnpm --filter @kamiazya/whiteboard-mcp build:server
-
-      - name: Server-mode docker backup/restore smoke
-        if: steps.detect.outputs.docker == 'true'
-        env:
-          WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
-        run: pnpm smoke:docker-backup-restore
+      # smoke:docker-backup-restore is NOT here, and its matrix exception says
+      # why: running it revealed that it asserts against an API surface the
+      # product no longer has. Adding it needs the smoke rewritten against the
+      # current API first, which is its own change.
 
       - name: Upload docker dry-run metadata
         if: steps.detect.outputs.docker == 'true'
