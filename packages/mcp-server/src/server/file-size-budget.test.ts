@@ -135,7 +135,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // than a merge — a document is never in both — and the comment saying so is
   // most of the 14 lines.
   'packages/mcp-server/src/server/store/document-store.ts': 1145,
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 926,
+  // Raised from 926 by the version STORE being built once and shared. A
+  // merge's pre-merge point cannot go through the versions seam — that
+  // `save` carries a label and nothing else, while a checkpoint has to say
+  // it is automatic and which variation it belongs to — so the store is
+  // built here and handed to both seams, and the comment saying why is most
+  // of the seven lines.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 933,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

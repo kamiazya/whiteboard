@@ -50,9 +50,16 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  // `merge` stays false until the commit half lands. The chip separates it
-  // from having branches already (`mergeEnabled`), so this is a real
-  // difference a person can see rather than a control that throws.
+  // The browser keeper can commit a merge now, so this flag is on borrowed
+  // time: both keepers agree, and a flag both keepers agree on is not a
+  // capability — `provider.capability-reach.test.ts` refuses it by name the
+  // moment it is flipped, exactly as it refused `branches`.
+  //
+  // It stays false for one increment because turning it true retires the
+  // capability SYSTEM rather than this flag: `WhiteboardCapabilities` has
+  // nothing else left in it, and the prop threads through App, both pages,
+  // the top bar and `CapabilityTeaser`. That is its own diff to review, and
+  // it is what turns the browser's merge on.
   merge: false,
 }
 
