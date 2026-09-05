@@ -20,6 +20,7 @@ import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { Button } from '../components/ui/button.js'
 import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
+import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
@@ -28,7 +29,7 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
+import { type BranchMeta, createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -102,6 +103,11 @@ function useDaemonDocument(
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  // This keeper's branches, over the same authorized fetch: the one supplier
+  // for the `?v=` preview below and for every consumer under the provider
+  // (chip, banner, dialog), so a hosted page paired to a loopback daemon
+  // cannot have half of them fall back to its own origin.
+  const branches = useMemo(() => createDaemonBranchesBackend(daemonFetch), [daemonFetch])
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -194,10 +200,9 @@ function useDaemonDocument(
     }
     const { workspaceId: wsId, path: docPath } = canvas
     let cancelled = false
-    const api = branchesApi(wsId, docPath, daemonFetch)
     void (async () => {
       try {
-        const state = await api.list()
+        const state = await branches.list(wsId, docPath)
         if (cancelled) return
         if (variationParam === 'main' || variationParam === state.head) {
           clearVariationParam()
@@ -208,7 +213,7 @@ function useDaemonDocument(
           clearVariationParam()
           return
         }
-        const past = await api.loadDocument(variationParam)
+        const past = await branches.loadDocument(wsId, docPath, variationParam)
         if (cancelled) return
         if (past === null) {
           setVariationNotice(`Variation «${variationParam}» could not be read`)
@@ -240,7 +245,7 @@ function useDaemonDocument(
     canvas?.path,
     variationParam,
     capabilities.branches,
-    daemonFetch,
+    branches,
     clearVariationParam,
     branchRefreshSignal,
   ])
@@ -250,14 +255,14 @@ function useDaemonDocument(
     const { workspaceId: wsId, path: docPath } = canvas
     void (async () => {
       try {
-        await branchesApi(wsId, docPath, daemonFetch).setHead(variationPreview.name)
+        await branches.setHead(wsId, docPath, variationPreview.name)
         setBranchRefreshSignal((n) => n + 1)
         clearVariationParam()
       } catch {
         setVariationNotice('Switching to this variation failed')
       }
     })()
-  }, [canvas, variationPreview, daemonFetch, clearVariationParam])
+  }, [canvas, variationPreview, branches, clearVariationParam])
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -859,9 +864,7 @@ function useDaemonDocument(
               branches={variationPreview.branches}
               onSwitch={switchToVariation}
               onExit={clearVariationParam}
-              runMerge={(src, args) =>
-                branchesApi(canvas.workspaceId, canvas.path, daemonFetch).merge(src, args)
-              }
+              runMerge={(src, args) => branches.merge(canvas.workspaceId, canvas.path, src, args)}
             />
           )}
           {variationNotice !== null && (
@@ -921,7 +924,9 @@ function useDaemonDocument(
     kind: 'render',
     model,
     wrap: (page: ReactNode) => (
-      <DaemonApiContext.Provider value={daemonFetch}>{page}</DaemonApiContext.Provider>
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <BranchesBackendContext.Provider value={branches}>{page}</BranchesBackendContext.Provider>
+      </DaemonApiContext.Provider>
     ),
   }
 }

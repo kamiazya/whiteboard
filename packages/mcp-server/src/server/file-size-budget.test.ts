@@ -102,12 +102,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   'packages/loro-adapter/src/workspace-tree.ts': 1032,
   'packages/canvas-render/src/svg/backend.ts': 991,
-  // Raised from 921: the page became a KEEPER — its wiring now answers the
+  // Raised from 921 when the page became a KEEPER — its wiring answers the
   // `DocumentKeeper` contract (the hook signature, the two terminal answers,
   // the provider `wrap`, the bound component) instead of rendering the page
-  // itself. Paid once per keeper, and the same conversion took the browser
-  // page below from 981 to 926, so the pair is 38 lines smaller than before.
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 938,
+  // itself — and from 938 when its branches moved behind the seam: one
+  // supplier built here, mounted for every consumer under it, in place of
+  // four call sites building their own. Both are paid once; the keeper
+  // conversion also took the browser page below from 981 to 926.
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
   'apps/web/src/lib/document-sync-session.ts': 1366,
   'packages/mcp-server/src/server/store/document-store.ts': 1131,
   'apps/web/src/pages/BrowserDocumentPage.tsx': 926,
