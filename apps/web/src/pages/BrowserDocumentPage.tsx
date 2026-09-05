@@ -77,6 +77,7 @@ import {
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
+import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -341,22 +342,25 @@ export function BrowserDocumentPage({
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
-  // [[path]] resolution for the markdown preview: display names are
-  // retired from resolution (path + id are the only written forms), and
-  // the name labels the link at render time via `resolveTitle` instead.
-  // `createUniqueNameResolver` takes {id, name}; a stored row says
-  // `documentId`, so the projection is explicit rather than structural.
-  const resolveAlias = useMemo(
+  // [[path]] resolution for the markdown preview goes through the same
+  // link-entries table the daemon page reads; a stored row says
+  // `documentId`/`name`, so the projection onto LinkableDocument is
+  // explicit rather than structural.
+  const linkableDocuments = useMemo(
     () =>
-      createUniqueNameResolver(
-        documents.map((entry) => ({ id: entry.documentId, name: entry.path })),
-      ),
+      documents.map((entry) => ({
+        id: entry.documentId,
+        path: entry.path,
+        displayName: entry.name,
+        kind: entry.kind,
+      })),
     [documents],
   )
-  const resolveTitle = useMemo(() => {
-    const byId = new Map(documents.map((entry) => [entry.documentId, entry.name]))
-    return (documentId: string) => byId.get(documentId)
-  }, [documents])
+  const resolveAlias = useMemo(
+    () => createUniqueNameResolver(linkEntries(linkableDocuments)),
+    [linkableDocuments],
+  )
+  const resolveTitle = useMemo(() => linkTitles(linkableDocuments), [linkableDocuments])
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -396,18 +400,20 @@ export function BrowserDocumentPage({
     [pathOfDocument, navigate],
   )
 
-  const linkTargets = useMemo(
+  // From switcherOptions rather than the raw list: the open document's row
+  // is overlaid with its live snapshot, so the picker never offers a stale
+  // name for the document being edited.
+  const pickerTargets = useMemo(
     () =>
-      switcherOptions
-        // Never the open document itself: a link's whole job is to reach
-        // some OTHER document, and backlinks skip self-references anyway.
-        .filter((entry) => entry.documentId !== documentId)
-        .map((entry) => ({
+      linkTargets(
+        switcherOptions.map((entry) => ({
           id: entry.documentId,
           path: entry.path,
-          name: entry.name,
+          displayName: entry.name,
           kind: entry.kind,
         })),
+        { excludeDocumentId: documentId ?? undefined },
+      ),
     [switcherOptions, documentId],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
@@ -1184,7 +1190,7 @@ export function BrowserDocumentPage({
                           title: titleOf(documentName, documentPath),
                           resolveAlias,
                           resolveTitle,
-                          linkTargets,
+                          linkTargets: pickerTargets,
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
                           threads: annotations,
@@ -1232,7 +1238,7 @@ export function BrowserDocumentPage({
                         resolveAlias={resolveAlias}
                         resolveEmbed={resolveEmbed}
                         resolveTitle={resolveTitle}
-                        linkTargets={linkTargets}
+                        linkTargets={pickerTargets}
                         threads={annotations}
                       />
                     </div>

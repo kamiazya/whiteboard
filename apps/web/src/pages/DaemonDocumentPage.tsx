@@ -64,14 +64,10 @@ import {
   linkifyDocumentMentions,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
-import {
-  daemonLinkEntries,
-  daemonLinkTargets,
-  daemonLinkTitles,
-} from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
+import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -574,16 +570,16 @@ export function DaemonDocumentPage({
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
   // time instead (`resolveTitle`).
-  const resolveTitle = useMemo(() => daemonLinkTitles(controller.documents), [controller.documents])
+  const resolveTitle = useMemo(() => linkTitles(controller.documents), [controller.documents])
   const resolveAlias = useMemo(
-    () => createUniqueNameResolver(daemonLinkEntries(controller.documents)),
+    () => createUniqueNameResolver(linkEntries(controller.documents)),
     [controller.documents],
   )
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
-  const linkTargets = useMemo(
+  const pickerTargets = useMemo(
     () =>
-      daemonLinkTargets(controller.documents, {
+      linkTargets(controller.documents, {
         excludeDocumentId: controller.documents.find((d) => d.path === controller.path)?.id,
       }),
     [controller.documents, controller.path],
@@ -1071,7 +1067,7 @@ export function DaemonDocumentPage({
                     meta: coreFacets ?? { type: documentKind },
                     resolveAlias,
                     resolveTitle,
-                    linkTargets,
+                    linkTargets: pickerTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
                     threads: annotations,
@@ -1122,7 +1118,7 @@ export function DaemonDocumentPage({
                       resolveAlias={resolveAlias}
                       resolveEmbed={resolveEmbed}
                       resolveTitle={resolveTitle}
-                      linkTargets={linkTargets}
+                      linkTargets={pickerTargets}
                       threads={annotations}
                     >
                       <AgentPresenceChip summary={agentActivity.summary} />
