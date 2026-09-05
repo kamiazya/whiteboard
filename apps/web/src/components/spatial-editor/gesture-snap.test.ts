@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { indexNodeBoxes } from './geometry.js'
+import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import type { GestureState } from './gestures.js'
 

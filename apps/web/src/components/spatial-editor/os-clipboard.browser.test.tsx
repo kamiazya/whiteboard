@@ -8,7 +8,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
 import { clearClipboardFragmentForTests } from '../../lib/clipboard-store.js'
-import type { EditorCommand } from './commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)

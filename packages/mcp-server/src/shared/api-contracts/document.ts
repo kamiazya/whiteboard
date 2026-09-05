@@ -273,6 +273,13 @@ export const documentSummarySchema = z.object({
   // DocumentEntry so the daemon-connected file browser can badge it the way
   // the browser-kept one does.
   shadowed: z.literal(true).optional(),
+  // The identity of the document's content as of this listing — what a
+  // cached picture of it is a picture OF. Opaque, equality only. Carried
+  // from the port's `DocumentEntry`, and optional for its reason: an index
+  // that does not hold the content cannot derive one. The daemon's tree index
+  // always does, so in practice every row has it; a client that finds it
+  // absent must not memoise a render of that row.
+  contentDigest: z.string().min(1).optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({

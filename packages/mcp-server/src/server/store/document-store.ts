@@ -1109,7 +1109,9 @@ export async function renameDocumentPath(
 // ── list documents from the workspace record ──
 export async function listDocuments(
   workspaceId: string,
-): Promise<Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind'>[]> {
+): Promise<
+  Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind' | 'contentDigest'>[]
+> {
   validateWorkspaceId(workspaceId)
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
   if (workspaceDoc === null) return []
@@ -1124,5 +1126,6 @@ export async function listDocuments(
     // and the epoch is the honest "unknown" for our own pre-release data.
     updatedAt: new Date(entry.updatedAt ?? entry.createdAt ?? 0).toISOString(),
     kind: entry.kind,
+    contentDigest: entry.contentDigest,
   }))
 }

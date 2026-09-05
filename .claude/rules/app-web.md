@@ -47,25 +47,26 @@ Done so far, in the order that paid best:
    `files-source`, `rail-geometry` and `link-target` now live flat in
    `lib/` — none of them knew React, and the two files-source
    implementations in `lib/` were importing their own contract from above.
+2. **Types into `lib/`** (retired 8, no runtime change): `ThemeMode` /
+   `ResolvedTheme` → `lib/theme`, `LoadedFileDocument` /
+   `DocumentFileAdapter` → `lib/document-file-contract`, `SessionHealth` /
+   `ConnectionState` / `isSyncOff` → `lib/connection-state`, `EditorTool` →
+   `lib/editor-tool`, `BrowserPersistenceState` →
+   `lib/browser-persistence-state`. The hook or component that owned each
+   now imports it like everyone else; nothing re-exports the old path.
 
-Still open (15):
+3. **The spatial editor's pure core** (retired 4): `viewport`, `geometry`,
+   `minimap` and `commands` now live in `lib/spatial/`, with
+   `SpatialEditorHandle` beside the `Viewport` it names
+   (`lib/spatial/editor-handle`) — none of them React; `commands` alone
+   had 12 production importers and 23 test importers, all re-pointed.
 
-2. **Types into `lib/`** (13 edges, no runtime change): `ResolvedTheme` out
-   of `hooks/useThemeMode` (3 importers in `lib/`, 21 overall),
-   `DocumentFileAdapter` / `LoadedFileDocument` out of
-   `hooks/use-document-file-seams` (2), `EditorCommand` /
-   `EditorLeafCommand` out of `spatial-editor/commands` (2), and one each
-   of `ConnectionState`, `SpatialEditorHandle`, `EditorTool`,
-   `BrowserPersistenceState`.
-3. **The render glue `lib/layout-worker.ts` runs off the main thread**
+Still open (3):
+
+4. **The render glue `lib/layout-worker.ts` runs off the main thread**
    (3 value edges): `spatial-editor/scene-render`, `scene-render-core`,
    `markdown-editor/render-preview`. A worker importing from
    `components/` is the clearest sign those are not components.
-4. **`spatial-editor/minimap`** (1 value edge, `favicon.ts` draws the
-   favicon with it): pure, but it reads `NodeBox` from
-   `spatial-editor/geometry`, which reads `Point` from `viewport` — so it
-   moves with that pair or not at all; 21 importers of `geometry` say
-   this is its own increment.
 
 ## What the other guards already cover
 

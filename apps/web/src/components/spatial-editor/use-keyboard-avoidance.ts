@@ -9,14 +9,14 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
+import type { BBoxLike, ContainerSize, Viewport } from '../../lib/spatial/viewport.js'
+import { panToShowTarget } from '../../lib/spatial/viewport.js'
 import {
   canvasVerbBarShown,
   DESKTOP_BAR_HEIGHT_PX,
   TOUCH_BAR_HEIGHT_PX,
   touchFormattingBarShown,
 } from '../markdown-editor/verb-bar-layout.js'
-import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
-import { panToShowTarget } from './viewport.js'
 
 /**
  * Screen px kept visible below the edited node's box, so the exit strip

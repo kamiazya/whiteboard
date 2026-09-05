@@ -33,7 +33,6 @@ import type { ReactElement } from 'react'
 import { useEffect } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { documentPath } from '../lib/app-routes.js'
 import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
@@ -43,6 +42,7 @@ import {
   listLocalDocuments,
 } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
+import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
   loroDocumentsKeys,

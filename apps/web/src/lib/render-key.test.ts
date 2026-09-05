@@ -8,20 +8,20 @@ import {
   renderKeySchema,
 } from './render-key.js'
 
-const spatial = { documentId: 'doc-1', kind: 'spatial' as const, updatedAt: '2026-09-03T00:00:00Z' }
+const spatial = { documentId: 'doc-1', kind: 'spatial' as const, state: '2026-09-03T00:00:00Z' }
 const markdown = {
   documentId: 'doc-2',
   kind: 'markdown' as const,
-  updatedAt: '2026-09-03T00:00:00Z',
+  state: '2026-09-03T00:00:00Z',
 }
 
 // The daemon contract declares `id` opaque and deliberately not
-// pattern-bound, and `updatedAt` is a plain string beside it. So path syntax
+// pattern-bound, and the content state is a plain string beside it. So path syntax
 // inside either is not excluded by anything upstream, and the path is both
 // this cache's map key and the address the OPFS store will use.
 describe('renderKeyPath — every component unambiguous', () => {
-  const md = (documentId: string, updatedAt: string) =>
-    renderKeyOf({ documentId, kind: 'markdown' as const, updatedAt }, 'light')
+  const md = (documentId: string, state: string) =>
+    renderKeyOf({ documentId, kind: 'markdown' as const, state }, 'light')
 
   it('keeps two documents apart when a separator moves between id and version', () => {
     // Unencoded, both of these join to `<build>/markdown/a/b/c.svg` — two
@@ -61,7 +61,7 @@ describe('renderKeyPath — every component unambiguous', () => {
 // with a type the caller had no reason to check. The `.svg` extension was
 // also a lie for half of them.
 describe('renderKeyPath — the pipeline is part of the identity', () => {
-  const subject = { documentId: 'd', kind: 'spatial' as const, updatedAt: 'v1' }
+  const subject = { documentId: 'd', kind: 'spatial' as const, state: 'v1' }
 
   it('keeps an outline of a document apart from its SVG', () => {
     expect(renderKeyPath(outlineKeyOf(subject))).not.toBe(
@@ -131,13 +131,13 @@ describe('renderKeyOf', () => {
   })
 
   it('changes when the document does', () => {
-    const later = { ...spatial, updatedAt: '2026-09-03T01:00:00Z' }
+    const later = { ...spatial, state: '2026-09-03T01:00:00Z' }
     expect(renderKeyPath(renderKeyOf(later, 'light'))).not.toBe(
       renderKeyPath(renderKeyOf(spatial, 'light')),
     )
   })
 
-  // A keeper that does not stamp updatedAt still gets a key; what it loses is
+  // A keeper that reports no content state still gets a key; what it loses is
   // the ability to notice a change, which is a persistence concern and not a
   // reason to render the same document twice inside one sitting.
   it('accepts a document with no version stamp', () => {

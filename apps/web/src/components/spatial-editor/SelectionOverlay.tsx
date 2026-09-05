@@ -1,8 +1,8 @@
 /** Selection outline + resize handles + in-flight connect line, drawn in canvas space. */
 import { hasCoarsePointer } from '../../lib/platform.js'
-import type { Box, ResizeHandleKind } from './geometry.js'
-import { cornerHitBoxes, edgeBandBoxes, resizeHandleBoxes } from './geometry.js'
-import type { Point } from './viewport.js'
+import type { Box, ResizeHandleKind } from '../../lib/spatial/geometry.js'
+import { cornerHitBoxes, edgeBandBoxes, resizeHandleBoxes } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 export interface SelectionOverlayProps {
   readonly box: Box

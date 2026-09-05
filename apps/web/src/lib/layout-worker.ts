@@ -36,7 +36,6 @@ import {
   renderMarkdownPreview,
 } from '../components/markdown-editor/render-preview.js'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
-import type { ResolvedTheme } from '../hooks/useThemeMode'
 import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
@@ -53,6 +52,7 @@ import {
   type OutlineResponse,
 } from './layout-worker-protocol.js'
 import { readRenderEntry, writeRenderEntry } from './render-store.js'
+import type { ResolvedTheme } from './theme.js'
 
 const measure = createBrowserMeasureText()
 

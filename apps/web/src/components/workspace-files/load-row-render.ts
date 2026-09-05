@@ -30,7 +30,6 @@
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { WorkspaceFilesSource } from '../../lib/files-source.js'
@@ -38,6 +37,7 @@ import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-wo
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 
 export interface DocumentRender {
   readonly svg: string
@@ -169,7 +169,9 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
         {
           documentId: document.documentId,
           kind: renderedKind(document),
-          ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
+          // The CONTENT's identity, never the stamp: a merge can change the
+          // one and leave the other where it was (see document-entry.ts).
+          ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
         },
         deps.theme,
       )

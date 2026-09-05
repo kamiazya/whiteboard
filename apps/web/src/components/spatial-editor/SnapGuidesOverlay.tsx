@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import type { NodeBox } from './geometry.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 
 /**
  * The rulers justifying the current snap, in canvas space. Dashed with a

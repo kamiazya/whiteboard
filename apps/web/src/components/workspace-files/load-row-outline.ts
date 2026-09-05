@@ -131,7 +131,7 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
       const key = outlineKeyOf({
         documentId: document.documentId,
         kind: outlinedKind(document),
-        ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
+        ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
       })
       return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
     } catch {

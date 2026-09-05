@@ -30,9 +30,9 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { applyCommand } from '../components/spatial-editor/commands.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import type { EditorCommand } from './spatial/commands.js'
+import { applyCommand } from './spatial/commands.js'
 
 // Spies on the module's logger so a fallback-to-full-resync (which always
 // logs a warning first, see commitToDoc's doc comment) is directly

@@ -17,8 +17,8 @@ import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
+import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
-import type { EditorCommand } from '../commands.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
 export interface NodePropertiesContext {

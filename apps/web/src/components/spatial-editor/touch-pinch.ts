@@ -1,4 +1,4 @@
-import type { Point } from './viewport.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 /**
  * Pure math for the two-finger touch gesture: given the previous and next

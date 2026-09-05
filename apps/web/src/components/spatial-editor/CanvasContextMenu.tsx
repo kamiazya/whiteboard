@@ -4,7 +4,8 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { Point } from '../../lib/spatial/viewport.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import type { BoxMove } from './align.js'
 import { alignableBoxesOf } from './align.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
@@ -14,7 +15,6 @@ import { edgeMenuItems } from './context-menu-items/edge-menu-items.js'
 import { nodeMenuItems } from './context-menu-items/node-menu-items.js'
 import type { FileRefOption } from './DocumentPickerDialog.js'
 import type { GestureResult, GestureState } from './gestures.js'
-import type { Point } from './viewport.js'
 
 /** Open right-click menu: screen position (root-relative) + hit target. */
 export interface ContextMenuTarget {

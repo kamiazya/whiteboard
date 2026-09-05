@@ -4,8 +4,8 @@
  * outlining only the extras left the primary looking untouched, so a
  * Select All over three nodes read as though it had skipped one.
  */
-import type { NodeBox } from './geometry.js'
-import type { Point } from './viewport.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 export interface MemberOutlinesOverlayProps {
   readonly selectionMembers: readonly NodeBox[]

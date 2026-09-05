@@ -11,11 +11,11 @@
 import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { LoroStore } from '../lib/loro-store.js'
+import type { EditorCommand } from '../lib/spatial/commands.js'
 
 const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
 

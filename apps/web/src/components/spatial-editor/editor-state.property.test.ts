@@ -61,15 +61,16 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
-import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
-import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
   applyCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
   type EditorCommand,
-} from './commands.js'
-import type { Box, ResizeHandleKind } from './geometry.js'
+} from '../../lib/spatial/commands.js'
+import type { Box, ResizeHandleKind } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
+import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { carriedByGesture } from './gesture-view.js'
 import {
   createIdleState,
@@ -86,7 +87,6 @@ import {
   selectionMembers,
 } from './selection.js'
 import type { ShortcutId } from './shortcuts.js'
-import type { Point } from './viewport.js'
 
 /**
  * The initial document is GENERATED, not fixed, and the geometry is drawn

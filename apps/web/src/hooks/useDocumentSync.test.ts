@@ -29,9 +29,9 @@ vi.mock('@kamiazya/whiteboard-canvas-viewer', async (importOriginal) => ({
   withViewerFontEmbedded: embedSpy,
 }))
 
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { applyCommand } from '../components/spatial-editor/commands.js'
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
+import type { EditorCommand } from '../lib/spatial/commands.js'
+import { applyCommand } from '../lib/spatial/commands.js'
 import { type UseDocumentSyncResult, useDocumentSync } from './useDocumentSync.js'
 
 type FakeBackendControl = {

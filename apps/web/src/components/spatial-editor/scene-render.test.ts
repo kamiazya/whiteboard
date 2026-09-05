@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { indexNodeBoxes } from './geometry.js'
+import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import { renderCanvasToSvg } from './scene-render.js'
 
 function fakeMeasure(text: string) {

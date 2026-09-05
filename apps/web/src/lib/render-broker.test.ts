@@ -3,8 +3,8 @@ import { createInTabRenderBroker } from './render-broker.js'
 import { outlineKeyOf, renderKeyOf } from './render-key.js'
 
 const drawn = { svg: '<svg/>', bounds: { x: 0, y: 0, w: 1, h: 1 } }
-const keyFor = (documentId: string, updatedAt = '2026-09-03T00:00:00Z') =>
-  renderKeyOf({ documentId, kind: 'spatial' as const, updatedAt }, 'light')
+const keyFor = (documentId: string, state = '2026-09-03T00:00:00Z') =>
+  renderKeyOf({ documentId, kind: 'spatial' as const, state }, 'light')
 
 /** A producer that does not settle until the test says so. */
 function deferred() {
@@ -143,7 +143,7 @@ describe('the in-tab render broker', () => {
   // assumed by the cast.
   it("never answers one family from the other family's entry", async () => {
     const broker = createInTabRenderBroker()
-    const subject = { documentId: 'd1', kind: 'spatial' as const, updatedAt: 'v1' }
+    const subject = { documentId: 'd1', kind: 'spatial' as const, state: 'v1' }
     const rects = [{ x: 0, y: 0, w: 10, h: 10 }]
 
     const svg = await broker.render(renderKeyOf(subject, 'light'), async () => drawn)
