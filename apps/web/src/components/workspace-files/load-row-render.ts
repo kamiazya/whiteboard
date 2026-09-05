@@ -169,7 +169,9 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
         {
           documentId: document.documentId,
           kind: renderedKind(document),
-          ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
+          // The CONTENT's identity, never the stamp: a merge can change the
+          // one and leave the other where it was (see document-entry.ts).
+          ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
         },
         deps.theme,
       )

@@ -194,6 +194,7 @@ export function createLocalFilesSource(
         ...(stamps.has(entry.documentId)
           ? { updatedAt: stamps.get(entry.documentId) as string }
           : {}),
+        ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
       }))
     },
 
