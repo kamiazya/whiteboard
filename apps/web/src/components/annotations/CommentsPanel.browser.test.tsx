@@ -73,11 +73,11 @@ it('says which filter emptied the list, rather than showing one blank state for 
 
   // Open is the default and this document has none — but it DOES have a
   // conversation, so "no comments yet" would be a lie.
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no open/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no open/i)
 
   cleanup()
   render(<CommentsPanel threads={[]} />)
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no comments/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no comments/i)
 })
 
 it('opens a thread onto its whole conversation, not just the line the list shows', async () => {

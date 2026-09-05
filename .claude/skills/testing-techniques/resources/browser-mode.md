@@ -44,7 +44,7 @@ failures, and asking for focus back removed ten of eleven in one run.
   reported for a list that never opened. Raising the query timeout buys a slower identical
   failure.
 
-### Strict locators `[v5]`
+### Strict locators
 
 `browser.locators.exact` defaults to `true`: `page.getByText('Item')` matches an element whose
 text is exactly `Item`, case-sensitively, and no longer `Item 1`. `toHaveTextContent(x)` is an
@@ -56,12 +56,12 @@ await expect.element(page.getByTestId('empty')).toHaveTextContent('No comments y
 ```
 
 `{ exact: false }` on one call, or `browser: { locators: { exact: false } }` project-wide,
-restores substring matching. Why it matters here: the held-`/title/i` shape bound to the
-OUTGOING page's title because a loose match had two candidates; a strict match has one. On
-this tree: 2 RegExp `toHaveTextContent` calls (`CommentsPanel.browser.test.tsx`) and ~1389
-`getBy*` sites to re-read at the upgrade.
+restores substring matching. The installed build sets `locators.exact ??= true` (its type
+comment still says `false`; the runtime wins). Why it matters here: the held-`/title/i`
+shape bound to the OUTGOING page's title because a loose match had two candidates; a strict
+match has one.
 
-### Locator failure output as an ARIA tree `[v5]`
+### Locator failure output as an ARIA tree
 
 ```ts
 export default defineConfig({
@@ -114,7 +114,7 @@ Vitest 5 moves attachments to `.vitest/attachments/`, so the budget is re-measur
   `WHITEBOARD_TRACE_SNAPSHOTS` env var because `--browser.trace=on` merges into the config
   object and cannot re-enable what the config turned off (measured).
 
-### DOM replay without the resource recording: `browser.traceView` `[v5]`
+### DOM replay without the resource recording: `browser.traceView`
 
 ```ts
 export default defineConfig({

@@ -11,9 +11,7 @@ that run is never the isolated one.
    ```bash
    for i in 1 2 3 4 5; do pnpm exec vitest run <file>; done
    ```
-   Vitest 4.1 ignores config-level `test.repeats` (measured, which is why the loop exists).
-
-   ### Repeat every test in-process: `--repeats` `[v5]`
+   ### Repeat every test in-process: `--repeats`
 
    ```bash
    vitest run --repeats=5 <file>        # every test runs 5 times; any failing repetition fails it
@@ -23,7 +21,8 @@ that run is never the isolated one.
    value wins). This is NOT `retry`: `retry` re-runs only a failure and so hides a flake,
    `repeats` runs the passes too and so exposes one. It catches a DIFFERENT class from the
    fresh-process loop — state carried between repetitions of the same test in one process —
-   so it complements the loop rather than replacing it.
+   so CI runs both on every changed test file: the five fresh processes, then one
+   `--repeats=3` pass (`stress-changed-tests` in `ci.yml`).
 2. **Once inside the whole project it belongs to.** The costliest `web-browser` test measures
    1.5s with its file alone, 1.6s with the twelve IndexedDB-heavy page files together, and
    30–39s with all 115 browser files in flight. An isolated green proves nothing about the run

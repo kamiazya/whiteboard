@@ -5,16 +5,14 @@ pages. Anything not scoped to the test that made it is inherited by whatever run
 
 ## Mocks
 
-- **Call history must not leak between tests.** `test.clearMocks: true` runs
-  `vi.clearAllMocks()` before every test (history cleared, implementations kept);
-  `mockReset` also drops implementations; `restoreMocks` restores spied originals. Set
-  `clearMocks: true` explicitly on Vitest 4 — it is the Vitest 5 default `[v5]`, and turning
-  it on as its own slice makes an order-dependent test surface on its own rather than inside
-  the upgrade diff. `clearMocks: false` restores the v4 behaviour.
-- **`vi.mock` / `vi.unmock` / `vi.hoisted` are top-level only.** Vitest 4 warns on a call
-  nested in a function or block; Vitest 5 throws with the location `[v5]`. Dynamic mocking
-  inside a test is `vi.doMock` + a dynamic import after it — the one legitimate reason for an
-  in-body `await import()`.
+- **Call history does not leak between tests.** `test.clearMocks` defaults to `true`:
+  `vi.clearAllMocks()` runs before every test (history cleared, implementations kept).
+  `mockReset` also drops implementations; `restoreMocks` restores spied originals. A test
+  that WANTS history from a previous test is order-dependent by construction — restructure
+  it rather than setting `clearMocks: false`.
+- **`vi.mock` / `vi.unmock` / `vi.hoisted` are top-level only.** A call nested in a function
+  or block throws with its location. Dynamic mocking inside a test is `vi.doMock` + a
+  dynamic import after it — the one legitimate reason for an in-body `await import()`.
 - **A test file imports statically unless it mocks what it imports.** An in-body
   `await import()` of a literal specifier charges that module graph's transform-and-load to
   the per-test timeout (blows first under a full parallel run); at module scope it can still
@@ -24,7 +22,7 @@ pages. Anything not scoped to the test that made it is inherited by whatever run
   `resetModules` in the file or a computed specifier (`pathToFileURL(...)`) are recognised
   structurally, anything else deliberate carries `// lazy-import: <reason>` on the line above.
 
-### Conditional mocking: `vi.when` `[v5]`
+### Conditional mocking: `vi.when`
 
 ```ts
 const findById = vi.fn()
@@ -41,13 +39,12 @@ equality and accept asymmetric matchers; `thenReturn` / `thenResolve` / `thenRej
 `thenReturnOnce` and a `times` option to bound a behaviour to N calls. `toHaveBeenExhausted`
 turns "this mock was set up for a call that never came" into a failure instead of silence.
 
-### Browser-mode automocks stay automocked `[v5]`
+### Browser-mode automocks stay automocked
 
-`vi.mock('./module')` with no factory in a browser test now returns `undefined` from every
-export rather than falling through to the real implementation (the Vitest 4 behaviour).
-`vi.mock('./module', { spy: true })` keeps the real calls while tracking them. Eight
-`web-browser` files call `vi.mock`, all with factories today, so nothing here changes at
-the upgrade.
+`vi.mock('./module')` with no factory in a browser test returns `undefined` from every
+export rather than falling through to the real implementation. `vi.mock('./module',
+{ spy: true })` keeps the real calls while tracking them. Eight `web-browser` files call
+`vi.mock`, all with factories.
 
 ## Storage and the filesystem
 
@@ -59,9 +56,8 @@ the upgrade.
   can run at once) and `globalSetup` empties it before every run — a database migrated by an
   older branch once died with unhandled `IncompatibleDatabaseError` while every test passed.
   `vitest-data-dir.test.ts` guards the isolation.
-- **Per-worker names**: Vitest 5 makes `VITEST_POOL_ID` / `VITEST_WORKER_ID` 1-based. Nothing
-  in the repo reads them today (measured); anything that derives a database or port from one
-  re-checks its arithmetic at upgrade.
+- **Per-worker names**: `VITEST_POOL_ID` / `VITEST_WORKER_ID` are 1-based. Nothing in the
+  repo reads them (measured).
 - `vi.stubEnv` / `vi.stubGlobal` restore with `vi.unstubAllEnvs()` / `vi.unstubAllGlobals()`
   or the `unstubEnvs` / `unstubGlobals` config; an env left set is the same leak as a fake
   clock.

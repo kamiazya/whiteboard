@@ -25,11 +25,11 @@ mistake — strongest first:
 A shape that costs a real defect twice earns a higher rung. How to move one up is
 `resources/executable-rungs.md`.
 
-**`[v5]` on a heading** means the feature needs Vitest ≥ 5. This tree's version is the
-`vitest:` line of `pnpm-workspace.yaml`'s catalog; a config key the installed version does
-not know is ignored silently, so check before relying on one. Each such entry carries its
-API and a snippet, because the feature is newer than the reader's training — it lives
-beside the situation it serves, never in a file named after the version.
+The resources describe the INSTALLED vitest — the `vitest:` line of `pnpm-workspace.yaml`'s
+catalog (5.0.0 since 2026-09-05). A config key the installed version does not know is
+ignored silently, so check the version before relying on one. Features newer than a
+reader's training carry their API and a snippet, beside the situation each serves — never
+in a file named after a version, which only a reader who already knows the feature opens.
 
 ## Open the resource for the situation
 

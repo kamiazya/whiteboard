@@ -25,8 +25,8 @@ catalog:
   # shared build/test tooling
   typescript: "^6.0.3"
   vite: "^8.2.0"
-  vitest: "^4.1.10"
-  "@vitest/browser-playwright": "^4.1.10"
+  vitest: "^5.0.0"
+  "@vitest/browser-playwright": "^5.0.0"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
   unified: "^11.0.5"
   remark-parse: "^11.0.0"
@@ -38,7 +38,7 @@ catalog:
   # One version everywhere, because a break-opportunity difference between the
   # browser and Node would desync the byte-identical-SVG guarantee.
   css-line-break: "^2.1.0"
-  "@vitest/coverage-v8": "^4.1.10"
+  "@vitest/coverage-v8": "^5.0.0"
   # mcp-server's first InversifyJS composition root (DI wiring only, no
   # decorators/reflect-metadata) — pinned old enough to clear minimumReleaseAge.
   inversify: "^8.1.3"
@@ -58,6 +58,13 @@ minimumReleaseAgeExclude:
   - js-yaml
   - fast-uri
   - ip-address
+  # NOT a security patch: a deliberate feature exception for the Vitest 5
+  # major (published 2026-09-03, SLSA provenance attested on the registry),
+  # taken so the test-stability work could land on it rather than wait the
+  # window out. Self-expiring — prune on or after 2026-09-11, when 5.0.0 is
+  # older than the window and these entries stop doing anything.
+  - vitest
+  - "@vitest/*"
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

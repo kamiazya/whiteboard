@@ -1,10 +1,10 @@
 # Running and configuring vitest in this repo
 
-Projects, filters, pools, caches, artifacts, reporters, benchmarks and `expect` extensions.
-Entries tagged `[v5]` need Vitest ≥ 5; this tree's version is the `vitest:` line of
-`pnpm-workspace.yaml`'s catalog (4.1.10 today). A config key the installed version does not
-know is IGNORED silently, so a `[v5]` option in a v4 config does nothing rather than failing
-— check the version before relying on one.
+Projects, filters, pools, caches, artifacts, reporters, benchmarks and `expect` extensions,
+as they are on the installed Vitest — the `vitest:` line of `pnpm-workspace.yaml`'s catalog
+(5.0.0 since 2026-09-05). A config key the installed version does not know is IGNORED
+silently, so an option from a newer release does nothing rather than failing; check the
+version before relying on one.
 
 ## Projects and filters
 
@@ -16,7 +16,7 @@ know is IGNORED silently, so a `[v5]` option in a v4 config does nothing rather 
   the whole `--project` set is empty (`resources/isolation-and-state.md`). Match the local
   command to the CI job and treat a low count as a missed filter.
 
-### `-p` shorthand and nested projects `[v5]`
+### `-p` shorthand and nested projects
 
 `vitest -p mcp-node` is `--project mcp-node`. A config file referenced from `test.projects`
 may itself declare `projects`; the children are named `parent (child)` and `-p parent` runs
@@ -30,14 +30,14 @@ export default defineConfig({ test: { projects: ['./unit.config.ts', './e2e.conf
 Do NOT nest here yet: `vitest-projects.mjs` regex-scans the ROOT config for quoted
 `*.config.ts` paths, and a nested list would silently leave CI's shared-layer step.
 
-### Inline projects inherit the root config and share one Vite server `[v5]`
+### Inline projects inherit the root config and share one Vite server
 
 Inline `test.projects` entries inherit root `plugins` / `resolve.alias` (`extends: true` is
 the default; `extends: false` isolates) and reuse the root Vite server (`sharedViteServer`,
 default `true`; `false` re-instantiates plugins per project). Every project here is a
 referenced file, so neither applies until one becomes inline.
 
-### `testNamePattern` matches the full suite chain `[v5]`
+### `testNamePattern` matches the full suite chain
 
 `-t` matches against `suite > test` joined by `' > '`, not by spaces: `-t adds` or
 `-t 'math.*adds'`, never `-t 'math adds'`. No script or CI job on this tree passes `-t`.
@@ -46,12 +46,16 @@ referenced file, so neither applies until one becomes inline.
 
 - Timeouts per project are ceilings sized on a recorded measurement
   (`resources/async-and-timers.md`). `mcp-smoke` serialises through `maxWorkers: 1`.
-- The duration line names where the time goes; on Vitest 5 it carries percentages `[v5]`:
-  `Duration 3.76s (environment 79%, import 13%, transform 6%, tests 1%, setup 1%)`. A high
-  `import` share is the in-body `await import()` and heavy-static-graph class; a high
-  `environment` share is jsdom setup, where `vmForks`/`vmThreads` pools help.
+- The duration line names where the time goes, in percentages:
+  `Duration 4.82s (import 73%, transform 14%, tests 13%, worker 1%)` (arch-lint-node, measured).
+  A high `import` share is the in-body `await import()` and heavy-static-graph class; a high
+  `environment` share is jsdom setup, where `vmForks`/`vmThreads` pools help. Below it vitest
+  prints a hint when the timings suggest a cheaper configuration — e.g. `Isolate 13 workers
+  spawned · ~264ms startup each … at least ~881ms faster with isolate: false`. A hint is a
+  measurement, not an instruction: `isolate: false` reuses workers across files, which is
+  exactly the state-leak surface `isolation-and-state.md` is about.
 
-### `vitest doctor` `[v5]`
+### `vitest doctor`
 
 ```bash
 vitest doctor
@@ -61,7 +65,7 @@ Runs the suite under alternative configurations (pools, isolation, environments)
 a recommendation. Run it once at the upgrade and paste the output in the PR; it is the
 measurement the pool choice should rest on.
 
-### `fsModuleCache` `[v5]`
+### `fsModuleCache`
 
 ```ts
 export default defineConfig({ test: { fsModuleCache: true } })
@@ -72,41 +76,39 @@ fresh-process stress runs included). Plugins whose output depends on more than t
 declare it through `defineCacheKeyGenerator`. Candidate for the import-cost timeout class;
 verify with the duration breakdown before and after, on a quiet tree.
 
-### `injectCjsGlobals: false` `[v5]`
+### `injectCjsGlobals: false`
 
 Stops vitest injecting `module`, `exports`, `require`, `__filename`, `__dirname` into ES
 modules. Shared-layer packages must not read `__dirname` anyway (`architecture-map.md` rule
 1), so a test that passed only because vitest injected it would then fail honestly.
 
-### Worker ids `[v5]`
+### Worker ids
 
-`VITEST_POOL_ID` / `VITEST_WORKER_ID` start at 1, not 0. Nothing on this tree reads them;
-anything deriving a database name or port from one adjusts at the upgrade.
+`VITEST_POOL_ID` / `VITEST_WORKER_ID` start at 1, not 0 (they were 0-based before Vitest 5).
+Nothing on this tree reads them.
 
 ## Artifacts and reporters
 
 - Browser failure traces: `<package>/tmp/vitest-traces`, most recent run only
   (`resources/browser-mode.md`).
-- `.gitignore` carries `.vitest-attachments/` for the attachments vitest copies out of a
-  failing browser test.
+### One `.vitest/` directory for everything
 
-### One `.vitest/` directory for everything `[v5]`
-
-| Artifact | Vitest 4 | Vitest 5 |
-|---|---|---|
-| attachments | `.vitest-attachments/` | `.vitest/attachments/` |
-| failure screenshots | `__screenshots__/` | `.vitest/attachments/failure-screenshots/` |
-| blob reports (`--reporter=blob`) | `.vitest-reports/` | `.vitest/blob/` |
-| HTML reporter | `html/` | `.vitest/` (`outputDir`) |
-| JSON / JUnit reporters | stdout | `.vitest/json/`, `.vitest/junit/` |
+| Artifact | Path |
+|---|---|
+| attachments (what vitest copies out of a failing browser test) | `.vitest/attachments/` |
+| failure screenshots | `.vitest/attachments/failure-screenshots/` |
+| blob reports (`--reporter=blob`) | `.vitest/blob/` |
+| HTML reporter | `.vitest/` (`outputDir`) |
+| JSON / JUnit reporters | `.vitest/json/`, `.vitest/junit/` |
 
 One `.gitignore` entry (`.vitest/`). Third-party reporters get the same convention through
 `vitest.createReport(scope)`. `toMatchScreenshot` has its own
 `browser.expect.toMatchScreenshot.screenshotDirectory`. The 155-char browser title budget
-(`browser-test-name-length.test.ts`) was measured against the flattened name under
-`.vitest-attachments/` and is re-measured at the upgrade.
+(`browser-test-name-length.test.ts`) is measured against the flattened attachment name; the
+directory moved here from `.vitest-attachments/` at the Vitest 5 upgrade and the budget's
+measurement is re-taken by that test's forced-failure recipe.
 
-### Single-file HTML report `[v5]`
+### Single-file HTML report
 
 ```ts
 export default defineConfig({ test: { reporters: [['html', { singleFile: true }]] } })
@@ -115,12 +117,12 @@ export default defineConfig({ test: { reporters: [['html', { singleFile: true }]
 Inlines the UI assets, metadata and attachments — including `traceView` replays — into one
 `index.html`, which is the shape a CI artifact wants.
 
-### Merging reports across environments `[v5]`
+### Merging reports across environments
 
 `vitest --merge-reports` now merges blob reports from NON-sharded runs in different
 environments — the shape CI's split browser / jsdom / node jobs produce.
 
-### Reporter details `[v5]`
+### Reporter details
 
 JSON reporter `filterMeta`; JUnit reporter accepts jest-junit-compatible naming options;
 `TestCase.logs()` exposes a test's console output to reporters and the advanced API (what
@@ -128,21 +130,22 @@ JSON reporter `filterMeta`; JUnit reporter accepts jest-junit-compatible naming 
 and `test.each` placeholders format through `pretty-format` (interpolated strings are no
 longer quoted — snapshots and `-t` patterns that quoted them change).
 
-### Vitest UI and the browser orchestrator need the printed URL `[v5]`
+### Vitest UI and the browser orchestrator need the printed URL
 
 `/__vitest__/` requires a token and `/__vitest_test__/` a `sessionId`, both in the URL vitest
 prints at startup. Do not hand-build either. `browser.api` moved to top-level `api`.
 
 ## Benchmarks (`pnpm bench`)
 
-`vitest bench --project canvas-render-node` runs `packages/canvas-render/src/**/*.bench.ts`.
-The discipline — instrument first, interleaved runs, a second bench in the same process is
-not a control — is the `measured-change` skill. The API is Vitest's:
+`vitest bench --project "canvas-render-node (bench)"` runs
+`packages/canvas-render/src/**/*.bench.ts`. **Bench mode runs each project's benchmark
+files under a sibling project whose name carries a ` (bench)` suffix, and that full string
+is what `--project` / `-p` must be given** — measured: `--project canvas-render-node` and
+`-p canvas-render-node` both answer `No projects matched the filter`. The discipline —
+instrument first, interleaved runs, a second bench in the same process is not a control —
+is the `measured-change` skill.
 
-- **Vitest 4**: `import { bench, describe } from 'vitest'`; `bench('name', fn)` at module
-  scope; `pnpm bench | grep <name> | awk ...` parses the table.
-
-### `bench` as a test-context fixture `[v5]`
+### `bench` as a test-context fixture
 
 ```ts
 import { expect, test } from 'vitest'
@@ -160,22 +163,39 @@ test('single', async ({ bench }) => {
 })
 ```
 
-`bench` is no longer a top-level import: it is destructured from the test context inside
-`test()` in a benchmark file, which gives benchmarks fixtures, lifecycle hooks, retries,
-filtering and assertions. `writeResult` stores a run; `bench.from()` replays a stored
-baseline for comparison, which is the interleaved before/after `measured-change` asks for,
-done by the runner. Custom benchmark providers replace Tinybench; output lands in the
-`default` and `json` reporters. REMOVED: module-scope `bench()`, `bench.skip/only/todo`,
+`bench` is not a top-level import: it is destructured from the test context inside
+`test()` in a benchmark file (the fixture throws in an ordinary test file), which gives
+benchmarks fixtures, lifecycle hooks, retries, filtering and assertions. Options:
+
+- **`{ timeout: 0 }` on every bench test.** A benchmark's duration IS its output, and the
+  project's per-test ceiling applies to bench tests too — the edge search's four rows
+  measured 101s against `canvas-render-node`'s 20s and failed on it.
+- `bench.compare(...regs, { time, iterations })` prints ONE table for its rows; a pair that
+  is the measurement (plain vs styled) belongs in one `compare`, not two tests.
+- `bench('name', { writeResult: './tmp/bench/name.json' }, fn)` stores the result on a
+  successful run (overwritten each time, not written when `fn` throws);
+  `bench.from('before', './tmp/bench/name.json')` replays it as a row of the same table —
+  a same-machine, same-sitting before/after done by the runner. `perProject: true` with
+  `${projectName}` in the path spreads it across projects.
+- The module runner serves ESM exports through getters, and a hot loop that calls its own
+  module's helpers tens of millions of times trips `Benchmark Warning … accessed module
+  export getters too many times`. `const _fn = fn` in the bench file only bypasses the
+  bench file's imports, not the source's internal ones, and native ESM cannot resolve this
+  repo's `.js` specifiers to `.ts` — so `canvas-render` sets
+  `benchmark.suppressExportGetterWarnings: true` and says why. The overhead is identical on
+  both sides of an interleaved comparison, which is the only comparison allowed anyway.
+
+Custom benchmark providers replace Tinybench; output lands in the `default` and `json`
+reporters. Gone since Vitest 5: module-scope `bench()`, `bench.skip/only/todo`,
 `benchmark.reporters` / `outputFile` / `compare` / `outputJson`, `--compare`,
-`--outputJson`. Three files on this tree use the v4 shape:
-`packages/canvas-render/src/layout/{edges/spatial-edges,nodes/mdast-blocks,spatial-canvas}.bench.ts`.
+`--outputJson`.
 
 ## Custom matchers
 
 None on this tree today. `expect.extend({ toBeFoo(received, ...) { return { pass, message } } })`
 plus a module augmentation for the type.
 
-### `Matchers<R, T>` `[v5]`
+### `Matchers<R, T>`
 
 ```ts
 declare module 'vitest' {
@@ -186,12 +206,12 @@ declare module 'vitest' {
 }
 ```
 
-`Assertion<T>` became `Assertion<R, T>` (`Assertion<void, string>`, `Assertion<Promise<void>,
-string>`). Custom matchers can reach the underlying Chai `assertion` object. Also `[v5]`:
-`toThrow('')` matches ANY error message (use `/^$/` for an empty one), and `vi.useFakeTimers()`
-fakes `Temporal` (`fakeTimers.toNotFake: ['Temporal']` opts out).
+`Assertion<R, T>` (`Assertion<void, string>`, `Assertion<Promise<void>, string>`). Custom
+matchers can reach the underlying Chai `assertion` object. Also: `toThrow('')` matches ANY
+error message (use `/^$/` for an empty one), and `vi.useFakeTimers()` fakes `Temporal`
+(`fakeTimers.toNotFake: ['Temporal']` opts out).
 
-## Coverage `[v5]`
+## Coverage
 
 `coverage.autoAttachSubprocess` tracks `node:child_process` / `node:worker_threads` under
 the v8 provider; `coverage.thresholds.perFile` accepts objects and glob thresholds no longer

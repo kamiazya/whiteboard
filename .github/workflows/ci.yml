@@ -204,13 +204,20 @@ jobs:
         if: steps.changed.outputs.files != ''
         # Fresh vitest process per iteration on purpose: module state, test
         # order and process env all reset, which is closer to the conditions
-        # a flake needs than one long in-process repeat (and config-level
-        # test.repeats is ignored by vitest 4.1 anyway — measured).
+        # a flake needs than one long in-process repeat.
         run: |
           for i in 1 2 3 4 5; do
             echo "=== stress run $i/5 ==="
             pnpm exec vitest run --passWithNoTests ${{ steps.changed.outputs.files }}
           done
+
+      - name: Repeat changed tests in-process (3x)
+        if: steps.changed.outputs.files != ''
+        # The complementary class: state carried between repetitions of the
+        # SAME test in one process (a leaked timer, a module-level cache, a
+        # handle that was "most recent" last time). `--repeats` runs the
+        # passes too, which is what separates it from `retry`.
+        run: pnpm exec vitest run --repeats=3 --passWithNoTests ${{ steps.changed.outputs.files }}
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
