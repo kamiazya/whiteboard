@@ -50,7 +50,7 @@ export const renderKeySchema = z.object({
   kind: documentKindSchema,
   /**
    * What the document's content WAS when it was drawn — a list row's content
-   * digest, the open document's committed frontier — or null from a keeper
+   * digest, the open document's own content digest — or null from a keeper
    * that cannot say.
    *
    * Null is not a version that happens to be missing — it is the absence of
@@ -58,7 +58,7 @@ export const renderKeySchema = z.object({
    * `isMemoisableKey`). A re-read of the list produces the identical key, so
    * remembering a completed render under it would serve the old picture for
    * as long as the tab is open. It is also what stops persistence being safe
-   * until a real frontier reaches this surface.
+   * until a real content state reaches this surface.
    */
   version: z.string().nullable(),
   /**
@@ -84,7 +84,8 @@ export interface RenderKeySubject {
   readonly kind: DocumentKind
   /**
    * The identity of the document's content at the moment it is drawn — a
-   * list row's `contentDigest`, the open document's committed frontier.
+   * list row's `contentDigest`, the open document's own content digest —
+   * the same function, so a row and the document it lists share one entry.
    * Opaque, equality only. Absent when the keeper cannot say, and then
    * nothing may be memoised (`isMemoisableKey`).
    *

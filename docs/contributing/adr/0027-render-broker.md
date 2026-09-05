@@ -256,6 +256,17 @@ Still open, and named rather than assumed:
   one picture wherever it is kept. It travels through `documentEntrySchema`,
   `documentSummarySchema` and `WorkspaceDocumentEntry`, and `RenderKeySubject`
   names its field `state` because a timestamp is no longer what fills it.
+  The OPEN document keys the same way: `getContentState()` digests the
+  session's own document with the same function (`contentDigestOfDocument`),
+  and the browser-kept markdown document likewise — so a list row and the
+  document it lists share one entry rather than naming one content two ways,
+  which is what the state frontier used to do here. Measured before unifying:
+  a tree node, a projection and a fresh document digest identically once
+  empty containers are normalised away, which the tree pre-attaches and a
+  fresh document does not. The sync session still writes the document on a
+  debounce, so straight after `onChange` the published canvas is ahead of the
+  key; the key and the bytes are read from one document and always describe
+  one state, and the document's post-write notification stays the trigger.
   Cost measured on a 200-document workspace: within noise of the listing
   itself, because the walk already pays the `toJSON` the digest hashes.
 
