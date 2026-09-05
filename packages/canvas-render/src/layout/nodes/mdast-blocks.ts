@@ -1,3 +1,4 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type {
   MdastCellPhrasingContent,
   MdastFlowContent,
@@ -204,9 +205,29 @@ export interface MdastLayoutOptions {
    * contract); an embed mixed into prose stays a link run, labeled with
    * `title` when known.
    */
-  readonly resolveEmbed?: (
-    documentId: string,
-  ) => { readonly title?: string; readonly root: MdastRoot } | undefined
+  readonly resolveEmbed?: (documentId: string) => EmbeddedDocument | undefined
+  /**
+   * Draws a canvas-targeted embed's miniature into the box the typesetter
+   * reserves for it. The typesetter owns the frame, the title and the
+   * vertical space; the composer owns the picture, because laying a canvas
+   * out is the composer's job and this cluster may not import it
+   * (`layer-boundary.test.ts`). Same resolver class as `resolveEmbed`:
+   * synchronous, total from this side (a throw or `undefined` keeps the
+   * framed title with nothing under it). The public `layoutMdastBlocks`
+   * defaults it to the spatial composer; only this module's raw entry
+   * leaves it unset.
+   */
+  readonly layoutEmbeddedCanvas?: (
+    canvas: SpatialCanvas,
+    box: EmbeddedCanvasBox,
+  ) => EmbeddedCanvasMiniature | undefined
+  /**
+   * Documents already on the embed recursion path when this body is itself
+   * embedded content — a canvas text node's body, a file node's markdown —
+   * so the cycle and depth checks span the markdown/canvas boundary rather
+   * than restarting on each side of it. Absent at the top level.
+   */
+  readonly embedPath?: readonly string[]
   /**
    * The current display name for a linked document, labeling a bare
    * `[[path]]` at render time (an explicit `|label` always wins). Separate
@@ -227,6 +248,32 @@ export interface RenderedSvgFragment {
   readonly height?: number
 }
 
+/**
+ * What an embed target resolves to: a markdown document's parsed body, or a
+ * spatial document's canvas. Discriminated by which field is present, the
+ * way `ResolvedReference` is on the spatial side.
+ */
+export type EmbeddedDocument =
+  | { readonly title?: string; readonly root: MdastRoot }
+  | { readonly title?: string; readonly canvas: SpatialCanvas }
+
+/** The box a canvas miniature may occupy, in the body's own coordinates. */
+export interface EmbeddedCanvasBox {
+  readonly x: number
+  readonly y: number
+  readonly maxWidth: number
+  readonly maxHeight: number
+  /** The recursion path INCLUDING the canvas being drawn. */
+  readonly embedPath: readonly string[]
+}
+
+/** A miniature already placed inside its box; `w`/`h` is the extent used. */
+export interface EmbeddedCanvasMiniature {
+  readonly nodes: readonly SceneNode[]
+  readonly w: number
+  readonly h: number
+}
+
 /** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
 const EMBED_DEPTH_CAP = 3
 
@@ -243,7 +290,7 @@ function tryResolveTitle(options: ResolvedMdastOptions, documentId: string): str
 function tryResolveEmbed(
   options: ResolvedMdastOptions,
   documentId: string,
-): { readonly title?: string; readonly root: MdastRoot } | undefined {
+): EmbeddedDocument | undefined {
   try {
     return options.resolveEmbed?.(documentId)
   } catch {
@@ -1262,6 +1309,10 @@ function layoutEmbedBlock(
   if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
   if (resolved === undefined) return placeholder('unresolvable')
   const nextPath = [...embedPath, documentId]
+  if ('canvas' in resolved) {
+    if (options.layoutEmbeddedCanvas === undefined) return placeholder('unresolvable')
+    return layoutCanvasEmbedBlock(documentId, resolved.canvas, cursor, options, nextPath)
+  }
   const children = resolved.root.children.map((child) =>
     layoutBlock(child, cursor, options, 0, nextPath),
   )
@@ -1274,6 +1325,76 @@ function layoutEmbedBlock(
 }
 
 /**
+ * The tallest a canvas miniature gets, as a share of its width: a canvas is
+ * scaled to the column, and a tall one is scaled further so one embed cannot
+ * push the rest of the page below the fold. 4:3 rather than 16:9 because a
+ * canvas grows in both directions and a wide cap crops the vertical one
+ * first.
+ */
+const CANVAS_EMBED_MAX_ASPECT = 3 / 4
+
+/**
+ * A canvas-targeted embed: a panel in the code block's chrome, the target's
+ * name as a link along its top (the same run an inline embed emits, so the
+ * name comes from the one resolver and the link opens the canvas), and the
+ * composer's miniature fitted underneath. The frame is drawn under
+ * `embedResolved` rather than as a sibling so the rail, the digest and every
+ * scene transform keep seeing ONE block for one embed.
+ */
+function layoutCanvasEmbedBlock(
+  documentId: string,
+  canvas: SpatialCanvas,
+  cursor: Cursor,
+  options: ResolvedMdastOptions,
+  embedPath: readonly string[],
+): EmbedResolvedNode {
+  const startX = cursor.x
+  const startY = cursor.y
+  const pad = options.theme.codeBlockPaddingPx
+  cursor.x = startX + pad
+  cursor.y = startY + pad
+  const title = layoutPhrasing(
+    [{ type: 'embed', documentId }],
+    cursor,
+    options,
+    options.theme.bodyFontSizePx,
+  )
+  cursor.x = startX
+  const titleHeight = title.lineCount * bodyLineHeightPx(options.theme)
+  const innerWidth = Math.max(0, options.maxWidth - 2 * pad)
+  const box: EmbeddedCanvasBox = {
+    x: startX + pad,
+    y: startY + pad + titleHeight + pad,
+    maxWidth: innerWidth,
+    maxHeight: innerWidth * CANVAS_EMBED_MAX_ASPECT,
+    embedPath,
+  }
+  let miniature: EmbeddedCanvasMiniature | undefined
+  try {
+    miniature = options.layoutEmbeddedCanvas?.(canvas, box)
+  } catch {
+    miniature = undefined
+  }
+  // An empty or unfittable canvas leaves the panel at the title's height;
+  // the second pad is the gap above a miniature, so it is only paid for one.
+  const contentBottom = miniature === undefined ? startY + pad + titleHeight : box.y + miniature.h
+  const height = contentBottom + pad - startY
+  const frame: ShapeSceneNode = {
+    kind: 'shape',
+    bbox: { x: startX, y: startY, w: options.maxWidth, h: height },
+    radius: options.theme.cornerRadiusPx,
+    appearance: panelPaint(options.theme, options.theme.panelOpacity),
+  }
+  cursor.y = startY + height + options.theme.blockGapPx
+  return {
+    kind: 'embedResolved',
+    bbox: { x: startX, y: startY, w: options.maxWidth, h: height },
+    documentId,
+    children: [frame, ...title.runs, ...(miniature?.nodes ?? [])],
+  }
+}
+
+/**
  * The single mdast -> scene-graph render path. The exact same function
  * feeds preview, a spatial text node host, and export — there is no
  * separate HTML renderer.
@@ -1281,7 +1402,9 @@ function layoutEmbedBlock(
 export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions): Scene {
   const cursor: Cursor = { y: 0, x: 0 }
   const resolved = resolveTheme(options)
-  const nodes = root.children.map((child) => layoutBlock(child, cursor, resolved, 0))
+  const nodes = root.children.map((child) =>
+    layoutBlock(child, cursor, resolved, 0, options.embedPath ?? []),
+  )
   return { nodes }
 }
 

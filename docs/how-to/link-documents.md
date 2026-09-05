@@ -25,6 +25,24 @@ On a **canvas**, a document embedded through the palette's Document entry,
 a file node pointing at a document path, and a `[[...]]` inside a text node
 all count as references too.
 
+## Embed a document
+
+Write `![[path]]` (or `![[<document id>]]`) on a line of its own to show
+the target *inside* this document instead of linking out to it:
+
+- A **markdown** target renders its body inline, as if the text were
+  written here. Embeds nest, three levels deep; a document that embeds
+  itself, directly or through another, shows a placeholder at the point
+  the loop closes.
+- A **canvas** target renders as a framed miniature of the whole canvas,
+  scaled to the column, under its display name. The name is a link that
+  opens the canvas. File nodes inside the miniature keep their card form;
+  only the canvas you open expands them.
+
+An `![[...]]` mixed into a sentence behaves like a `[[...]]` link labelled
+with the target's name. An embed counts as a link for the Connections chip
+below, so the embedded document lists this one as linking to it.
+
 ## See what links back
 
 Every document's header carries a Connections chip (the waypoints icon)

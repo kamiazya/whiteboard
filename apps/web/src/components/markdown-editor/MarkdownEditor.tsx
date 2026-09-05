@@ -125,9 +125,9 @@ export interface MarkdownEditorProps {
    */
   onOpenDocument?: (documentId: string) => void
   /**
-   * Resolves `![[embed]]` targets' parsed bodies so block embeds render
-   * inline (canvas-render's layout seam; the host pre-fetches, see
-   * useMarkdownEmbedContent).
+   * Resolves `![[embed]]` targets — a note's parsed body, or a canvas — so
+   * block embeds render inline (canvas-render's layout seam; the host
+   * pre-fetches, see useMarkdownEmbedContent).
    */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
