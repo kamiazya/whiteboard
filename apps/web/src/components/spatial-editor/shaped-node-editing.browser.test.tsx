@@ -10,6 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeAll, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -60,10 +61,6 @@ function Host({ start }: { start: SpatialCanvas }) {
       />
     </div>
   )
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 /** The committed scene's text content — the SVG's, never the editor's. */

@@ -13,6 +13,7 @@ import { SpatialEditor } from './SpatialEditor.js'
 // sibling shifts it into the scene — where it becomes unclickable. This file
 // asserts on real click targets, so it needs real styles.
 import '../../index.css'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 
 afterEach(cleanup)
 
@@ -44,10 +45,6 @@ function makeHost() {
     )
   }
   return { Host, latest }
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function connectToolButton(container: HTMLElement): HTMLButtonElement {
