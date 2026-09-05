@@ -108,6 +108,12 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // workspace on screen. Its own effect, since the handle can arrive after
   // the source.
   recentIds: 'cleared on switch',
+  // A COUNTER, not a subject: it names no document and no path, and its
+  // only job is to tell the derived `changed` memo that this panel wrote a
+  // baseline. Surviving a switch is harmless — the memo also keys on
+  // `documents` and `workspace`, both of which change with the scope.
+  seenRevision:
+    'no subject: a bump counter for the changed-dot memo, naming nothing that belongs to a workspace',
   // Paths, and paths collide across workspaces — `untitled` is the first
   // document in most. A selection carried across a switch would address the
   // departed workspace's names into the store now on screen, in a BULK

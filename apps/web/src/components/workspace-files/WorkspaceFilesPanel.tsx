@@ -20,6 +20,7 @@ import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/file
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { readRecentIds, recordRecentDocument } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
+import { readSeenDigest, recordSeenDocument } from '../../lib/seen-documents.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -163,6 +164,12 @@ export function WorkspaceFilesPanel({
    * preview that followed a multi-selection would have to pick one.
    */
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
+  /**
+   * Bumped when this panel records a baseline, so the derived `changed` set
+   * below recomputes. Storage is not reactive and this is the only writer in
+   * the tab, so a counter is the whole subscription.
+   */
+  const [seenRevision, setSeenRevision] = useState(0)
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -312,6 +319,14 @@ export function WorkspaceFilesPanel({
     if (scope !== undefined) {
       recordRecentDocument(scope, entry.documentId)
       setRecentIds(readRecentIds(scope))
+      // The baseline for the changed dot: what this device is about to SEE.
+      // Only when the keeper derived one — a row with no digest has nothing
+      // to compare later, and a missing baseline must read as "no dot", not
+      // as "changed".
+      if (entry.contentDigest !== undefined) {
+        recordSeenDocument(scope, entry.documentId, entry.contentDigest)
+        setSeenRevision((revision) => revision + 1)
+      }
     }
     onOpenDocumentRef.current?.(entry.path)
   }, [])
@@ -374,6 +389,31 @@ export function WorkspaceFilesPanel({
     }
     onRequestDeleteMany?.(paths)
   }
+
+  /**
+   * The documents whose content differs from what this device last opened.
+   *
+   * Compared on `contentDigest`, never `updatedAt`: `document-entry.ts`
+   * records the measurement that a merge does not consult the stamp, so a
+   * signal built on it can call a document unchanged in the one case this
+   * dot exists for — something rewriting it while the person was elsewhere.
+   *
+   * A document with no recorded baseline is absent from the set, so an
+   * unopened document is silent rather than announced as changed.
+   */
+  const changed = useMemo(() => {
+    if (documents === null || workspace === undefined) return undefined
+    const marked = new Set<string>()
+    for (const entry of documents) {
+      if (entry.contentDigest === undefined) continue
+      const seen = readSeenDigest(workspace, entry.documentId)
+      if (seen !== undefined && seen !== entry.contentDigest) marked.add(entry.documentId)
+    }
+    return marked
+    // `seenRevision` is not read by the body — it is the signal that this
+    // panel wrote a baseline, which is the only way the answer changes
+    // without `documents` changing too.
+  }, [documents, workspace, seenRevision])
 
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
@@ -1092,6 +1132,7 @@ export function WorkspaceFilesPanel({
                           : setSelected(target.document)
                   }
                   {...(selection === null ? { selection: undefined } : { selection })}
+                  {...(changed === undefined ? {} : { changed })}
                   {...(onOpenDocument === undefined || selection !== null
                     ? {}
                     : { onActivateDocument: openEntry })}
