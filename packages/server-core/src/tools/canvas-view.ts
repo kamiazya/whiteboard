@@ -29,6 +29,8 @@ import { loadDocument } from './document-io.js'
  */
 export const canvasViewReferenceSchema = z
   .object({
+    /** The canonical id, so the seams answer by id when the node wrote a path. */
+    documentId: documentIdSchema.optional(),
     /** The document's display name, so the node's label is not a raw id. */
     name: z.string().optional(),
     /** Present only for a markdown document: its raw body. */
@@ -113,6 +115,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
               [
                 node.file,
                 {
+                  ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
                   ...(loaded.name !== undefined ? { name: loaded.name } : {}),
                   ...(loaded.body !== undefined ? { body: loaded.body } : {}),
                   ...(loaded.canvas !== undefined ? { canvas: loaded.canvas } : {}),

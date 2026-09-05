@@ -2,7 +2,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
-import { referenceTargets } from './targets.js'
+import { REFERENCE_BUDGET, referenceTargets } from './targets.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -31,6 +31,39 @@ describe('referenceTargets', () => {
       loaded: graphOf({ 'notes/plan': { documentId: NOTE_ID, body: '![[deeper]]' } }),
     })
     expect(targets).toEqual(['notes/plan', 'boards/roadmap', 'deeper'])
+  })
+
+  it('walks a loaded canvas as well as a loaded body, so a nested file node loads', () => {
+    // Root canvas -> spatial A -> file node B: B is drawn inside A's
+    // miniature, so it has to be one fetch away like a body's embed is.
+    const nested: SpatialCanvas = {
+      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'boards/b' }],
+      edges: [],
+    }
+    const targets = referenceTargets({
+      bodies: ['![[boards/a]]'],
+      loaded: graphOf({ 'boards/a': { documentId: BOARD_ID, canvas: nested } }),
+    })
+    expect(targets).toEqual(['boards/a', 'boards/b'])
+  })
+
+  it("stops at the layout's embed depth, so a link graph is never loaded whole", () => {
+    // Root -> d1 -> d2 -> d3 -> d4: d3 is the last level the layout draws,
+    // so what d3 names is never asked for, however much has loaded.
+    const loaded = graphOf({
+      d1: { body: '![[d2]]' },
+      d2: { body: '![[d3]]' },
+      d3: { body: '![[d4]]' },
+      d4: { body: '![[d5]]' },
+    })
+    expect(referenceTargets({ bodies: ['![[d1]]'], loaded })).toEqual(['d1', 'd2', 'd3'])
+  })
+
+  it('caps the total at a budget, and says so in order of discovery', () => {
+    const body = Array.from({ length: 300 }, (_, i) => `[[n${i}]]`).join(' ')
+    const targets = referenceTargets({ bodies: [body] })
+    expect(targets).toHaveLength(REFERENCE_BUDGET)
+    expect(targets[0]).toBe('n0')
   })
 })
 

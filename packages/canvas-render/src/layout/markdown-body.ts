@@ -42,6 +42,10 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
           ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
           ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
+          // The whole bundle, not the two seams a body reads: a canvas
+          // embedded in a note has file nodes of its own, and those read
+          // `resolveReference`, which the note's layout never touches.
+          ...(options.references !== undefined ? { references: options.references } : {}),
           ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
           ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
         }),

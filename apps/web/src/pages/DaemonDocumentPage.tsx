@@ -65,6 +65,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -632,14 +633,8 @@ export function DaemonDocumentPage({
       // No name. A document's name is the workspace's (ADR-0009 decision 2)
       // and the daemon summary carries no display name, so there is none to
       // label the embed with — the facets deliberately no longer hold one.
-      // The summary DOES carry the kind, which decides what the target is: a
-      // spatial document's canvas, or a markdown document's body.
-      const kind = controller.documents.find((entry) => entry.id === documentId)?.kind
-      const id = documentId !== null ? { documentId } : {}
-      if (kind === 'spatial') {
-        return loaded.canvas === undefined ? undefined : { ...id, canvas: loaded.canvas }
-      }
-      return loaded.body === undefined ? undefined : { ...id, body: loaded.body }
+      // The summary DOES carry the kind, which decides what the target is.
+      return loadedReferenceOf(loaded, controller.documents, target, documentId)
     },
     [fileAdapter, controller.documents],
   )

@@ -36,7 +36,9 @@ const SCAN_DIRS = [
   'packages/mcp-server/src',
 ]
 
-const SEAM = '(?:resolveAlias|resolveTitle|resolveEmbed|resolveReference)'
+const SEAM_NAME = '(?:resolveAlias|resolveTitle|resolveEmbed|resolveReference)'
+/** The name as a bare, quoted, or computed key — all three name the same seam. */
+const SEAM = `(?:${SEAM_NAME}|['"]${SEAM_NAME}['"]|\\[\\s*['"]${SEAM_NAME}['"]\\s*\\])`
 
 /**
  * A seam DEFINED rather than passed: an object key or a binding whose
@@ -48,12 +50,15 @@ const SEAM = '(?:resolveAlias|resolveTitle|resolveEmbed|resolveReference)'
 const DEFINITION_PATTERNS: readonly { readonly pattern: RegExp; readonly shape: string }[] = [
   {
     pattern: new RegExp(
-      `\\b${SEAM}\\s*[:=]\\s*(?:async\\s*)?(?:\\([^)]*\\)\\s*(?::[^=]*)?=>|[A-Za-z_$][\\w$]*\\s*=>|function\\b)`,
+      `(?:\\b|(?=\\[|['"]))${SEAM}\\s*[:=]\\s*(?:async\\s*)?(?:\\([^)]*\\)\\s*(?::[^=]*)?=>|[A-Za-z_$][\\w$]*\\s*=>|function\\b)`,
     ),
     shape: 'an arrow function or `function` assigned to a seam name',
   },
   {
-    pattern: new RegExp(`^\\s*(?:async\\s+)?${SEAM}\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`, 'm'),
+    pattern: new RegExp(
+      `^\\s*(?:async\\s+)?${SEAM}\\s*(?:<[^>]*>)?\\s*\\([^)]*\\)\\s*(?::[^{]*)?\\{`,
+      'm',
+    ),
     shape: 'a method-shorthand seam',
   },
 ]
@@ -88,7 +93,43 @@ const files: string[] = []
 for (const dir of SCAN_DIRS) walk(join(REPO_ROOT, dir), files)
 const production = files.filter((path) => !isTest(path))
 
+/** What the patterns must catch, and what they must let through. */
+const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines: boolean }[] = [
+  { source: 'const x = { resolveEmbed: (id) => undefined }', defines: true },
+  { source: 'const x = { resolveEmbed: async (id: string): Promise<X> => y }', defines: true },
+  { source: 'const resolveReference = (ref) => undefined', defines: true },
+  { source: 'const resolveTitle = function (id) { return id }', defines: true },
+  { source: "const x = { 'resolveReference': (ref) => undefined }", defines: true },
+  { source: 'const x = { ["resolveAlias"]: (alias) => null }', defines: true },
+  {
+    source: 'const x = {\n  resolveReference(ref) {\n    return undefined\n  },\n}',
+    defines: true,
+  },
+  {
+    source: 'const x = {\n  resolveReference<T>(ref: T): X {\n    return y\n  },\n}',
+    defines: true,
+  },
+  {
+    source: 'const x = {\n  async resolveEmbed(id: string) {\n    return y\n  },\n}',
+    defines: true,
+  },
+  { source: 'const x = { resolveReference: options.resolveReference }', defines: false },
+  { source: 'const x = { resolveEmbed: seams.resolveEmbed, resolveTitle }', defines: false },
+  { source: 'const resolveAlias = useMemo(() => table, [table])', defines: false },
+  { source: 'referenceSeams(graph, { resolveAlias, resolveTitle })', defines: false },
+  { source: '// resolveEmbed: (id) => this is prose about a seam', defines: false },
+  { source: '/* const resolveReference = (ref) => in a comment */', defines: false },
+]
+
 describe('references resolve in one place', () => {
+  it('recognises a seam definition in every spelling, and passes a hand-over through', () => {
+    for (const { source, defines } of DEFINITION_FIXTURES) {
+      const stripped = stripComments(source)
+      const hit = DEFINITION_PATTERNS.some(({ pattern }) => pattern.test(stripped))
+      expect(hit, source).toBe(defines)
+    }
+  })
+
   it('scans a tree worth scanning', () => {
     // An empty scan agrees with every rule; the count is what keeps it honest.
     expect(production.length).toBeGreaterThan(200)

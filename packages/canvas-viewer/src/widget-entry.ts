@@ -7,6 +7,7 @@ import { WIDGET_FONTS } from 'virtual:widget-fonts'
 import {
   type CommentThread,
   commentThreadSchema,
+  documentIdSchema,
   spatialCanvasSchema,
 } from '@kamiazya/whiteboard-model'
 import { App } from '@modelcontextprotocol/ext-apps'
@@ -107,6 +108,7 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 //
 // Applied PER REFERENCE, so strictness costs only the reference that fails.
 const referenceSchema = z.object({
+  documentId: documentIdSchema.optional(),
   name: z.string().optional(),
   body: z.string().optional(),
   canvas: spatialCanvasSchema.optional(),

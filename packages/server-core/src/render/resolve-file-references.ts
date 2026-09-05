@@ -67,7 +67,9 @@ export async function loadReferencedDocument(
 
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
-  const kind = readDocumentKind(doc) ?? entry.kind
+  // Neither known reads as spatial, the kind every pre-kind document was —
+  // the same fallback wb_scene_render takes for the document it renders.
+  const kind = readDocumentKind(doc) ?? entry.kind ?? 'spatial'
   if (kind === 'markdown') {
     return { documentId: entry.documentId, ...name, body: readMarkdownBody(doc) }
   }

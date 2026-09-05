@@ -488,6 +488,7 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
+    ...(options.references !== undefined ? { references: options.references } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
     ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
     embedPath: [...options.activeEmbedPath],

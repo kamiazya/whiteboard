@@ -136,6 +136,40 @@ describe('canvas_view tool', () => {
     expect(reference?.canvas).toBeUndefined()
   })
 
+  test('a referenced document that predates kinds is read as the canvas it was', async () => {
+    // Neither the snapshot nor the index row says what it is: every pre-kind
+    // document was spatial, so the reference carries its canvas rather than
+    // nothing at all.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const OLD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8VC'
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'old-board',
+      documentId: OLD_ID,
+      name: 'Old board',
+    })
+    await seedDoc(store, OLD_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'o', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'OLD' }],
+        edges: [],
+      })
+    })
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'f3', type: 'file', x: 0, y: 0, width: 300, height: 200, file: OLD_ID }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.references[OLD_ID]?.canvas?.nodes[0]).toMatchObject({ id: 'o' })
+    expect(result.references[OLD_ID]?.body).toBeUndefined()
+  })
+
   test('carries a referenced spatial document as its canvas, so the widget draws a miniature', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
@@ -166,6 +200,9 @@ describe('canvas_view tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.references[BOARD_ID]?.name).toBe('Board two')
+    // The id rides on the record so the widget's seams can answer by id
+    // when the node wrote a path.
+    expect(result.references[BOARD_ID]?.documentId).toBe(BOARD_ID)
     expect(result.references[BOARD_ID]?.canvas?.nodes[0]).toMatchObject({ id: 'x' })
     expect(result.references[BOARD_ID]?.body).toBeUndefined()
   })
