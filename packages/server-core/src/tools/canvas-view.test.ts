@@ -8,6 +8,7 @@
 // the payload.
 
 import {
+  writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -93,7 +94,36 @@ describe('canvas_view tool', () => {
     expect(result.scene.nodes.map((node) => node.id).sort()).toEqual(['f1', 't1'])
   })
 
-  test('carries the referenced markdown document body, parsed', async () => {
+  test('carries the document threads beside the scene, so the widget can draw what pins cannot say', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const thread = {
+      id: 'set',
+      anchor: {
+        kind: 'spatial' as const,
+        nodeIds: ['t1', 'f1'],
+        x: 0,
+        y: 0,
+        width: 520,
+        height: 220,
+      },
+      status: 'open' as const,
+      messages: [{ id: 'm', body: 'both of these' }],
+    }
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeCommentThread(doc, thread))
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(canvasViewOutputSchema.parse(result).threads).toEqual([thread])
+    // The projection still rides in the scene: the widget's pins come from
+    // there, at the corner of the box the set occupies.
+    expect(result.scene['x-whiteboard']?.comments).toEqual([
+      expect.objectContaining({ id: 'set', x: 520, y: 0, text: 'both of these' }),
+    ])
+  })
+
+  test('carries the referenced markdown document as its name and raw body', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
     const tool = createCanvasViewTool(makeDeps(store))
@@ -101,8 +131,80 @@ describe('canvas_view tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     const reference = result.references[NOTE_ID]
-    expect(reference?.label).toBe('Weekly')
-    expect(reference?.body?.children[0]).toMatchObject({ type: 'heading', depth: 1 })
+    expect(reference?.name).toBe('Weekly')
+    expect(reference?.body).toContain('# Weekly notes')
+    expect(reference?.canvas).toBeUndefined()
+  })
+
+  test('a referenced document that predates kinds is read as the canvas it was', async () => {
+    // Neither the snapshot nor the index row says what it is: every pre-kind
+    // document was spatial, so the reference carries its canvas rather than
+    // nothing at all.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const OLD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8VC'
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'old-board',
+      documentId: OLD_ID,
+      name: 'Old board',
+    })
+    await seedDoc(store, OLD_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'o', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'OLD' }],
+        edges: [],
+      })
+    })
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'f3', type: 'file', x: 0, y: 0, width: 300, height: 200, file: OLD_ID }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.references[OLD_ID]?.canvas?.nodes[0]).toMatchObject({ id: 'o' })
+    expect(result.references[OLD_ID]?.body).toBeUndefined()
+  })
+
+  test('carries a referenced spatial document as its canvas, so the widget draws a miniature', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const BOARD_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8VB'
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      path: 'board-2',
+      documentId: BOARD_ID,
+      kind: 'spatial',
+      name: 'Board two',
+    })
+    await seedDoc(store, BOARD_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'INNER' }],
+        edges: [],
+      })
+    })
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'f2', type: 'file', x: 0, y: 0, width: 300, height: 200, file: BOARD_ID }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.references[BOARD_ID]?.name).toBe('Board two')
+    // The id rides on the record so the widget's seams can answer by id
+    // when the node wrote a path.
+    expect(result.references[BOARD_ID]?.documentId).toBe(BOARD_ID)
+    expect(result.references[BOARD_ID]?.canvas?.nodes[0]).toMatchObject({ id: 'x' })
+    expect(result.references[BOARD_ID]?.body).toBeUndefined()
   })
 
   test('validates against its own outputSchema, which the widget parses', () => {
@@ -113,19 +215,26 @@ describe('canvas_view tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
-      references: { [NOTE_ID]: { label: 'Weekly', body: { type: 'root', children: [] } } },
+      threads: [],
+      references: { [NOTE_ID]: { name: 'Weekly', body: '# Weekly' } },
     })
     expect(parsed.success).toBe(true)
   })
 
-  test('rejects a reference body that is not a real mdast root', () => {
-    const parsed = canvasViewOutputSchema.safeParse({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      scene: { nodes: [], edges: [] },
-      references: { x: { body: { type: 'nonsense' } } },
-    })
-    expect(parsed.success).toBe(false)
+  test('rejects a reference that is not a loaded document: a parsed body, or an unknown field', () => {
+    for (const references of [
+      { x: { body: { type: 'root', children: [] } } },
+      { x: { label: 'old spelling' } },
+      { x: { canvas: { nodes: 'nope' } } },
+    ]) {
+      const parsed = canvasViewOutputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        scene: { nodes: [], edges: [] },
+        references,
+      })
+      expect(parsed.success, JSON.stringify(references)).toBe(false)
+    }
   })
 
   test('returns an empty reference map for a canvas with no file nodes', async () => {

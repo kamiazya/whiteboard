@@ -21,7 +21,7 @@
  */
 import { Fragment, type ReactNode, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { HexColorInput, HexColorPicker } from 'react-colorful'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils.js'
 
 /** Gap kept between the menu and the editor edge when nudging it inside. */
 const MENU_EDGE_MARGIN_PX = 4

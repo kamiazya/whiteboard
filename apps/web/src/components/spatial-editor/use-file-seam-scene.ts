@@ -1,8 +1,11 @@
-import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type MeasureText,
+  overlayReferences,
+  type ReferenceSeams,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
-import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 
@@ -29,7 +32,8 @@ export interface FileSeamSceneInputs {
   readonly canvas: SpatialCanvas
   /** The live viewport zoom — the LOD gate compares on-screen pixel size. */
   readonly zoom: number
-  readonly resolveReference: ((ref: string) => ResolvedReference | undefined) | undefined
+  /** The host's reference seams, absent when the host resolves nothing. */
+  readonly references: ReferenceSeams | undefined
   readonly fileRefOptions: readonly FileRefOption[] | undefined
   readonly missingFileRef: ((file: string) => boolean) | undefined
   readonly resolvedMeasure: MeasureText
@@ -53,12 +57,13 @@ export interface FileSeamSceneInputs {
 export function useFileSeamScene({
   canvas,
   zoom,
-  resolveReference,
+  references,
   fileRefOptions,
   missingFileRef,
   resolvedMeasure,
   theme,
 }: FileSeamSceneInputs) {
+  const resolveReference = references?.resolveReference
   const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
   useEffect(() => {
     if (resolveReference === undefined) return
@@ -120,7 +125,7 @@ export function useFileSeamScene({
   )
   const fileSeamOptions = useMemo(
     () => ({
-      resolveReference: composeReferenceSeam({
+      resolveReference: overlayReferences({
         content: resolveReference,
         labels: fileRefLabelMap,
         missing: missingRefSet,

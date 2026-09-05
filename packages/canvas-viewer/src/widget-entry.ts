@@ -4,7 +4,12 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
+import {
+  type CommentThread,
+  commentThreadSchema,
+  documentIdSchema,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
 import {
@@ -95,19 +100,35 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // host, and a malformed entry reaches canvas-render's layout seams as
 // whatever the host sent.
 //
-// Validated against the CANONICAL, fully-recursive `mdastRootSchema` — the
-// same schema `canvas_view` declares its payload with server-side — not a
-// looser shape check. A root-shaped body with an unrecognised child is not
-// something layout shrugs off: `layoutBlock`'s switch has no default case,
-// so one bad child throws out of `layoutSpatialCanvas` and takes the whole
-// canvas with it. Checking only `{type:'root', children: unknown[]}` here
-// and casting past the rest let exactly that through.
+// Validated as canvas-render's `LoadedReference` — the record `canvas_view`
+// declares its payload with server-side, and the one `referenceSeams` reads
+// — not a looser shape check. A canvas the CANONICAL `spatialCanvasSchema`
+// rejects is not something layout shrugs off, and a body is parsed by the
+// seams themselves, so a raw string is all that crosses.
 //
 // Applied PER REFERENCE, so strictness costs only the reference that fails.
 const referenceSchema = z.object({
-  label: z.string().optional(),
-  body: mdastRootSchema.optional(),
+  documentId: documentIdSchema.optional(),
+  name: z.string().optional(),
+  body: z.string().optional(),
+  canvas: spatialCanvasSchema.optional(),
 })
+
+/**
+ * Keeps the threads that parse, drops the ones that do not — per thread, like
+ * the references, so one malformed conversation costs the highlight of that
+ * conversation and never the scene.
+ */
+function parseThreads(raw: readonly unknown[] | undefined) {
+  if (raw === undefined) return undefined
+  const kept: CommentThread[] = []
+  for (const value of raw) {
+    const parsed = commentThreadSchema.safeParse(value)
+    if (parsed.success) kept.push(parsed.data)
+    else console.error('[whiteboard-widget] dropping unparseable thread:', parsed.error)
+  }
+  return kept.length > 0 ? kept : undefined
+}
 
 /** Keeps the references that parse, drops the ones that do not. */
 function parseReferences(raw: Record<string, unknown> | undefined) {
@@ -133,6 +154,7 @@ const toolResultEnvelopeSchema = z.object({
       // the widget would go blank because a document it merely POINTS AT
       // was malformed.
       references: z.record(z.string(), z.unknown()).optional(),
+      threads: z.array(z.unknown()).optional(),
     })
     .catchall(z.unknown())
     .optional(),
@@ -143,6 +165,7 @@ function extractCanvasIdAndScene(payload: unknown): {
   documentId?: string
   scene?: unknown
   references?: MountCanvasViewerOptions['references']
+  threads?: MountCanvasViewerOptions['threads']
 } {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
@@ -152,6 +175,7 @@ function extractCanvasIdAndScene(payload: unknown): {
     documentId: structuredContent?.documentId,
     scene: structuredContent?.scene,
     references: parseReferences(structuredContent?.references),
+    threads: parseThreads(structuredContent?.threads),
   }
 }
 
@@ -188,7 +212,7 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { workspaceId, documentId, scene, references } = extractCanvasIdAndScene(payload)
+  const { workspaceId, documentId, scene, references, threads } = extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -204,6 +228,7 @@ function applyToolResult(
     mountCanvasViewer(container, {
       scene,
       ...(references === undefined ? {} : { references }),
+      ...(threads === undefined ? {} : { threads }),
     }),
   )
   onValidResult(workspaceId, documentId, result.value)

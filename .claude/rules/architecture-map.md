@@ -175,4 +175,19 @@ was — wired at one, leaving export drawing every fence plain. `highlightCode`
 remains an option, so a caller can substitute a tokeniser or pass a no-op; only
 the direction of the default changed.
 
+**What a document points at is resolved in ONE place, and passed as a
+bundle.** `canvas-render/src/references/` holds what a keeper loads a
+reference into (`LoadedReference`), the one definition of what counts as one
+(`referenceTargets`), and the one builder of the four seams a layout reads
+(`referenceSeams`: `resolveAlias`/`resolveTitle`/`resolveEmbed`/
+`resolveReference`). A composition root supplies I/O and passes the bundle as
+`references`; it never writes a seam's body. Why: the layout is total, so a
+seam a root forgot never failed — the web preview drew a canvas behind
+`![[path]]` while `wb_scene_render` refused the document, all green.
+`tools/arch-lint`'s `reference-seams-check.test.ts` fails on a seam defined
+by hand outside that module (passing one along, `overlayReferences`, or
+handing the builder an alias table is fine). The gap that remains, so nobody
+rediscovers it: the editor's canvas text-node bodies take no markdown seams,
+because the layout worker cannot receive a function.
+
 The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.

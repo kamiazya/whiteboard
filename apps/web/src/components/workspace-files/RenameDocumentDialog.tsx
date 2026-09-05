@@ -6,7 +6,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '../../components/ui/dialog.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentPathField } from './DocumentPathField.js'
 

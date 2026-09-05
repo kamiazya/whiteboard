@@ -7,10 +7,10 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
-import { DESTRUCTIVE_COPY, type DestructiveActionId } from '@/lib/destructive-copy'
-import { kindNoun } from '@/lib/kind-noun'
+} from '../../components/ui/alert-dialog.js'
+import { Button } from '../../components/ui/button.js'
+import { DESTRUCTIVE_COPY, type DestructiveActionId } from '../../lib/destructive-copy.js'
+import { kindNoun } from '../../lib/kind-noun.js'
 
 export interface DeleteDocumentDialogProps {
   // The document pending deletion, or null when the dialog is closed.

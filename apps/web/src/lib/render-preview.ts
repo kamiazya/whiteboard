@@ -1,4 +1,9 @@
-import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MdastLayoutOptions,
+  MeasureText,
+  ReferenceSeams,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   type KeyedSvgRender,
   layoutMdastBlocks,
@@ -8,7 +13,6 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  type AliasResolver,
   parseMarkdownBlockLines,
   parseMarkdownBody,
   resolveReferences,
@@ -23,24 +27,19 @@ export interface RenderMarkdownPreviewOptions {
   readonly maxWidth: number
   readonly background?: string
   /**
-   * Maps `[[path]]` aliases to document ids (codec's separate
-   * resolution pass over the parsed tree). Absent, only a bare `[[ULID]]`
-   * references resolve; unresolved aliases stay literal bracket text.
+   * Every reference seam at once — `[[path]]` aliases (codec's separate
+   * resolution pass over the parsed tree), display names, embed targets —
+   * as the bundle canvas-render's `referenceSeams` builds. Absent, only a
+   * bare `[[ULID]]` resolves, unresolved aliases stay literal bracket text,
+   * and every embed is a placeholder.
    */
-  readonly resolveAlias?: AliasResolver
-  /**
-   * Resolves an embed target's parsed body for inline rendering
-   * (canvas-render's layout seam, threaded through verbatim).
-   */
-  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly references?: ReferenceSeams
   /**
    * The app theme an embedded CANVAS is painted in, so its miniature matches
    * the page around it. The markdown itself is themed by the host's
    * inherited fill, not here; absent, a miniature takes the light theme.
    */
   readonly theme?: ResolvedTheme
-  /** Labels a bare `[[path]]`/`[[id]]` with the target's current display name. */
-  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /** Renders math blocks (canvas-render's layout seam, threaded verbatim). */
   readonly renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences (canvas-render's layout seam, threaded verbatim). */
@@ -115,10 +114,8 @@ export function renderMarkdownPreview(
     measure,
     maxWidth,
     background,
-    resolveAlias,
-    resolveEmbed,
+    references,
     theme,
-    resolveTitle,
     renderMath,
     renderDiagram,
   }: RenderMarkdownPreviewOptions,
@@ -126,10 +123,8 @@ export function renderMarkdownPreview(
   const scene = layoutScene(value, {
     measure,
     maxWidth,
-    resolveAlias,
+    references,
     theme,
-    resolveEmbed,
-    resolveTitle,
     renderMath,
     renderDiagram,
   })
@@ -194,32 +189,32 @@ function layoutScene(
   {
     measure,
     maxWidth,
-    resolveAlias,
-    resolveEmbed,
+    references,
     theme,
-    resolveTitle,
     renderMath,
     renderDiagram,
   }: Omit<RenderMarkdownPreviewOptions, 'background'>,
 ): Scene {
   try {
-    return layoutMdastBlocks(resolveReferences(parseMarkdownBody(value), resolveAlias), {
-      measure,
-      maxWidth,
-      resolveTitle,
-      canvasAppearance: createEditorAppearance(theme ?? 'light'),
-      fontFamily: SPATIAL_THEME_FONT_FAMILY,
-      // A page, not an object. This pane runs to a readable measure, where the
-      // node scale — cut so a heading cannot eat a third of a 280px box —
-      // reads timid. Set on `layoutScene` rather than at the preview's own
-      // call so the minimap rail, which maps THESE blocks, is laid out from
-      // the same metrics; two scales here would have the rail marking a
-      // document the reader is not looking at.
-      theme: MARKDOWN_THEME_DOCUMENT,
-      ...(resolveEmbed !== undefined ? { resolveEmbed } : {}),
-      ...(renderMath !== undefined ? { renderMath } : {}),
-      ...(renderDiagram !== undefined ? { renderDiagram } : {}),
-    })
+    return layoutMdastBlocks(
+      resolveReferences(parseMarkdownBody(value), references?.resolveAlias),
+      {
+        measure,
+        maxWidth,
+        canvasAppearance: createEditorAppearance(theme ?? 'light'),
+        fontFamily: SPATIAL_THEME_FONT_FAMILY,
+        // A page, not an object. This pane runs to a readable measure, where the
+        // node scale — cut so a heading cannot eat a third of a 280px box —
+        // reads timid. Set on `layoutScene` rather than at the preview's own
+        // call so the minimap rail, which maps THESE blocks, is laid out from
+        // the same metrics; two scales here would have the rail marking a
+        // document the reader is not looking at.
+        theme: MARKDOWN_THEME_DOCUMENT,
+        ...(references !== undefined ? { references } : {}),
+        ...(renderMath !== undefined ? { renderMath } : {}),
+        ...(renderDiagram !== undefined ? { renderDiagram } : {}),
+      },
+    )
   } catch {
     return { nodes: [] }
   }

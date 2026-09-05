@@ -1,10 +1,12 @@
 // Multi-select slice (a): shift-click membership, group move, batch delete.
 // Marquee selection is deliberately deferred — it needs the pan-gesture
 // decision recorded on the task. Real pointer input throughout.
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { page, userEvent } from 'vitest/browser'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -327,4 +329,74 @@ it('member outlines include the edges between members, not edges leaving the are
   )
   const edgeHighlights = [...container.querySelectorAll('[data-testid="member-outlines"] polyline')]
   expect(edgeHighlights.map((el) => el.getAttribute('data-edge-id'))).toEqual(['ab'])
+})
+
+it('Comment on selection opens a thread about every member, outlined as one box', async () => {
+  const commands: EditorCommand[] = []
+  function CapturingHost() {
+    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    // The page hands the editor the document's threads once the session
+    // echoes them; this host plays that part for the thread it creates.
+    const [threads, setThreads] = useState<readonly CommentThread[]>([])
+    return (
+      <div style={{ width: 800, height: 600 }}>
+        <SpatialEditor
+          defaultTool="select"
+          canvas={canvas}
+          threads={threads}
+          createId={() => 't-set'}
+          onChange={(next, command) => {
+            commands.push(command)
+            if (command.kind === 'create-thread') setThreads((held) => [...held, command.thread])
+            setCanvas(next)
+          }}
+          theme="light"
+        />
+      </div>
+    )
+  }
+  const { container } = render(<CapturingHost />)
+  const root = rootOf(container)
+
+  press(root, 150, 130)
+  await frame()
+  press(root, 350, 130, { shift: true })
+  await frame()
+  const r = root.getBoundingClientRect()
+  root.dispatchEvent(
+    new MouseEvent('contextmenu', {
+      bubbles: true,
+      cancelable: true,
+      clientX: r.left + 150,
+      clientY: r.top + 130,
+      button: 2,
+    }),
+  )
+  await userEvent.click(page.getByRole('menuitem', { name: 'Comment on selection' }))
+  await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
+  await userEvent.keyboard('these two')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+  await vi.waitFor(() => expect(commands.some((c) => c.kind === 'create-thread')).toBe(true))
+  const created = commands.find((c) => c.kind === 'create-thread') as { thread: CommentThread }
+  expect(created.thread.anchor).toEqual({
+    kind: 'spatial',
+    nodeIds: ['a', 'b'],
+    x: 100,
+    y: 100,
+    width: 320,
+    height: 60,
+  })
+  // Drawn: the outline around both, and the pin at the box's top-right.
+  await vi.waitFor(() => {
+    const rects = [...container.querySelectorAll('svg rect')]
+    expect(
+      rects.some(
+        (rect) =>
+          rect.getAttribute('stroke-dasharray') === '6 4' &&
+          rect.getAttribute('width') === '320' &&
+          rect.getAttribute('height') === '60',
+      ),
+    ).toBe(true)
+  })
 })

@@ -1,4 +1,4 @@
-import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutMdastBlocks,
   MARKDOWN_THEME_DOCUMENT,
@@ -16,8 +16,8 @@ import { MCP_SCENE_APPEARANCE } from './compose-canvas-scene.js'
 const MARKDOWN_SCENE_WIDTH_PX = 720
 
 export interface ComposeMarkdownSceneOptions {
-  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
+  /** The bundle `referenceSeams` builds; absent keeps every embed a placeholder. */
+  readonly references?: ReferenceSeams
 }
 
 /**
@@ -37,7 +37,6 @@ export function composeMarkdownScene(
     fontFamily: SPATIAL_THEME_FONT_FAMILY,
     theme: MARKDOWN_THEME_DOCUMENT,
     canvasAppearance: MCP_SCENE_APPEARANCE,
-    ...(options?.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
-    ...(options?.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
+    ...(options?.references !== undefined ? { references: options.references } : {}),
   })
 }

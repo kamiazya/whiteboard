@@ -7,9 +7,9 @@ import {
   useState,
 } from 'react'
 import { createPortal } from 'react-dom'
-import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
-import { cn } from '@/lib/utils'
+import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { trackKeyboardDock } from '../../lib/software-keyboard.js'
+import { cn } from '../../lib/utils.js'
 import { DOCK_BUTTON_CLASS } from '../ui/dock-button.js'
 import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 import {

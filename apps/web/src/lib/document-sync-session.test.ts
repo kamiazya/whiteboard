@@ -701,6 +701,97 @@ describe('createDocumentSyncSession', () => {
     unsubscribe()
   })
 
+  it('a thread on a passage of a node reaches the plane, and the canvas as a comment on the node', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const node: SpatialNode = {
+      id: 'n1',
+      type: 'text',
+      x: 100,
+      y: 200,
+      width: 50,
+      height: 30,
+      text: 'the plan',
+    }
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [node], edges: [] })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 't-passage',
+        anchor: { kind: 'text', nodeId: 'n1', quote: { exact: 'plan' }, start: 4, end: 8 },
+        status: 'open',
+        messages: [{ id: 't-passage-m1', body: 'right word?' }],
+      },
+    }
+    const next = applyCommand(session.getCanvas(), command)
+    // Optimistic: the reducer already shows a pin on the node.
+    expect(next['x-whiteboard']?.comments).toEqual([
+      { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'right word?' },
+    ])
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations()[0]?.anchor).toEqual(command.thread.anchor)
+    expect(session.getCanvas()['x-whiteboard']?.comments?.[0]).toMatchObject({
+      id: 't-passage',
+      targetNodeId: 'n1',
+    })
+  })
+
+  it('resolving and editing reach the thread for ANY anchor, which the flat path cannot', async () => {
+    // A note's passage and a document-level thread have no projection in
+    // the canvas envelope, so `set-comment-resolved` / `set-comment-text`
+    // — which travel through it — never reach them. These two write the
+    // plane directly, and the canvas projection follows where one exists.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't-doc',
+      anchor: { kind: 'document' },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'is this document still needed?', author: 'human:yuki' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const before = session.getCanvas()
+    const resolveCommand: EditorCommand = {
+      kind: 'set-thread-status',
+      threadId: 't-doc',
+      status: 'resolved',
+    }
+    session.onChange(applyCommand(before, resolveCommand), resolveCommand)
+    const editCommand: EditorCommand = {
+      kind: 'edit-thread-message',
+      threadId: 't-doc',
+      message: {
+        id: 'm1',
+        body: 'is this document still needed? (edited)',
+        author: 'human:yuki',
+        editedAt: '2026-09-05T12:00:00.000Z',
+      },
+      opening: true,
+    }
+    session.onChange(applyCommand(before, editCommand), editCommand)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const [held] = session.getAnnotations()
+    expect(held?.status).toBe('resolved')
+    expect(held?.messages[0]).toMatchObject({
+      id: 'm1',
+      body: 'is this document still needed? (edited)',
+      author: 'human:yuki',
+      editedAt: '2026-09-05T12:00:00.000Z',
+    })
+  })
+
   it('a local reply reaches the thread, which no comment command could carry', async () => {
     // The gap this closes: every other comment command travels through the
     // CANVAS envelope (`x-whiteboard.comments`), and that shape holds one

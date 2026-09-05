@@ -203,7 +203,7 @@ function stateNames(source: string): Slot[] {
  * switch — most should — but whether anything can act through it afterwards.
  */
 function refNames(source: string): Slot[] {
-  return [...source.matchAll(/const (\w+) = useRef/g)].map((m) => ({
+  return [...source.matchAll(/const (\w+) = useRef\b/g)].map((m) => ({
     name: m[1],
     // A ref has no setter: clearing one is an assignment to `.current`.
     reset: new RegExp(`${m[1]}\\.current\\s*=\\s*${EMPTY}`),
@@ -349,6 +349,8 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   composeAnchor: 'cleared on switch',
   open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
+  threadsRef:
+    'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {

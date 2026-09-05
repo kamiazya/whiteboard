@@ -6,13 +6,14 @@
  * number instead of a mounted editor.
  */
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import { useFileSeamScene } from './use-file-seam-scene.js'
 
 const measure: MeasureText = () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })
-const resolveReference = () => undefined
+const references = referenceSeams(new Map())
 
 function fileNode(
   id: string,
@@ -32,7 +33,7 @@ function renderSeam(canvas: SpatialCanvas, zoom: number) {
       useFileSeamScene({
         canvas: c,
         zoom: z,
-        resolveReference,
+        references,
         fileRefOptions: undefined,
         missingFileRef: undefined,
         resolvedMeasure: measure,
@@ -94,7 +95,7 @@ describe('useFileSeamScene LOD gate', () => {
       useFileSeamScene({
         canvas: canvasOf([fileNode('a', 400, 300)]),
         zoom: 1,
-        resolveReference: undefined,
+        references: undefined,
         fileRefOptions: undefined,
         missingFileRef: undefined,
         resolvedMeasure: measure,

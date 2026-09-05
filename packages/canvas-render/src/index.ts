@@ -38,6 +38,7 @@ export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
 } from './layout/nodes/spatial-appearance.js'
+export { findPassage } from './layout/passage-highlight.js'
 export { scaleScene } from './layout/scale-scene.js'
 export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {
@@ -55,6 +56,7 @@ export {
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
+  type EdgePathLookup,
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
@@ -64,6 +66,14 @@ export {
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
+export {
+  overlayReferences,
+  type ReferenceSeams,
+  type ReferenceSeamsOptions,
+  referenceSeams,
+} from './references/seams.js'
+export { referenceTargets } from './references/targets.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'

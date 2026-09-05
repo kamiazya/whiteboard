@@ -1,5 +1,5 @@
 import { useId } from 'react'
-import { documentPathPrefix, workspacePath } from '@/lib/app-routes'
+import { documentPathPrefix, workspacePath } from '../../lib/app-routes.js'
 
 /**
  * A document's path, edited as the tail of the URL it actually is.

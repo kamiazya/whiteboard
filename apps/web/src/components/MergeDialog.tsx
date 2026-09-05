@@ -16,10 +16,10 @@ import {
   Loader2,
 } from 'lucide-react'
 import { type JSX, useEffect, useMemo, useState } from 'react'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
-import { safeErrorCopy } from '@/lib/error-copy'
-import { dispatchMergeCommitted } from '@/lib/merge-committed-event'
-import { cn, displayBranchName } from '@/lib/utils'
+import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
+import { dispatchMergeCommitted } from '../lib/merge-committed-event.js'
+import { cn, displayBranchName } from '../lib/utils.js'
 import { Button } from './ui/button.js'
 import {
   Dialog,

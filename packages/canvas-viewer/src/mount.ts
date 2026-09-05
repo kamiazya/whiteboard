@@ -1,5 +1,5 @@
-import type { ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { type LoadedReference, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
@@ -25,13 +25,21 @@ export interface MountCanvasViewerOptions {
   // cannot filter on the host's behalf.
   messageHandler?: (event: MessageEvent) => void
   /**
-   * Resolved file references, keyed by the node's raw `file` value — the
-   * plain-data form of `CanvasViewer`'s resolver prop, because a function
-   * cannot cross the host↔widget boundary this API sits behind. Shaped to
-   * match `canvas_view`'s `references` payload exactly, which is why `body`
-   * is spelled that way here and `markdown` inside the layout.
+   * Loaded file references, keyed by the node's raw `file` value — the
+   * plain-data form of `CanvasViewer`'s seams prop, because a function
+   * cannot cross the host↔widget boundary this API sits behind. It is
+   * canvas-render's `LoadedReference` on the wire, exactly `canvas_view`'s
+   * `references` payload, so the seams are built here by the same
+   * `referenceSeams` every other surface uses.
    */
-  references?: Readonly<Record<string, { label?: string; body?: MdastRoot }>>
+  references?: Readonly<Record<string, LoadedReference>>
+  /**
+   * The document's conversations, for what the scene's flat comments cannot
+   * carry: a passage's words, a node set's outline. Shaped as `canvas_view`'s
+   * `threads` payload — the model's own thread — so it crosses the widget
+   * boundary as data.
+   */
+  threads?: readonly CommentThread[]
 }
 
 export interface CanvasViewerHandle {
@@ -74,22 +82,14 @@ function readEmbeddedScene(): unknown {
 }
 
 /**
- * Turns the plain reference map into the synchronous resolver prop.
- * Returns nothing when there is no map, so a host that supplies none leaves
+ * The plain map, as the seams every other surface builds from the same
+ * record — so a kind the server starts sending draws here the day it does.
+ * Nothing when there is no map, so a host that supplies none leaves
  * `CanvasViewer` exactly as it was before this existed.
  */
-function referenceSeams(references: MountCanvasViewerOptions['references']) {
+function viewerReferences(references: MountCanvasViewerOptions['references']) {
   if (references === undefined) return {}
-  return {
-    resolveReference: (ref: string): ResolvedReference | undefined => {
-      const entry = references[ref]
-      if (entry === undefined) return undefined
-      return {
-        ...(entry.label !== undefined ? { label: entry.label } : {}),
-        ...(entry.body !== undefined ? { markdown: entry.body } : {}),
-      }
-    },
-  }
+  return { references: referenceSeams(new Map(Object.entries(references))) }
 }
 
 export function mountCanvasViewer(
@@ -119,7 +119,8 @@ export function mountCanvasViewer(
         height: opts.height,
         testId: opts.testId,
         label: opts.label,
-        ...referenceSeams(opts.references),
+        ...(opts.threads === undefined ? {} : { threads: opts.threads }),
+        ...viewerReferences(opts.references),
       }),
     )
   })

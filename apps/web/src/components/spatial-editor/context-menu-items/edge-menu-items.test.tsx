@@ -18,6 +18,8 @@ describe('edgeMenuItems', () => {
     const onToggleEdgeLock = vi.fn()
     const items = edgeMenuItems({
       edge: baseEdge,
+      point: { x: 0, y: 0 },
+      setCommentCompose: vi.fn(),
       theme: 'light',
       isEdgeLocked: () => true,
       edgeLockEnabled: true,
@@ -34,6 +36,8 @@ describe('edgeMenuItems', () => {
   it('an unlocked edge offers arrows/sides/color rows, then label, lock, and delete', () => {
     const items = edgeMenuItems({
       edge: baseEdge,
+      point: { x: 0, y: 0 },
+      setCommentCompose: vi.fn(),
       theme: 'light',
       isEdgeLocked: () => false,
       edgeLockEnabled: true,
@@ -49,6 +53,7 @@ describe('edgeMenuItems', () => {
       'options', // Color
       'separator',
       'action', // Edit label
+      'action', // Comment on this
       'action', // Lock
       'separator',
       'action', // Delete
@@ -58,13 +63,16 @@ describe('edgeMenuItems', () => {
     expect(items[2]).toMatchObject({ label: 'To side' })
     expect(items[3]).toMatchObject({ label: 'Color' })
     expect(items[5]).toMatchObject({ label: 'Edit label' })
-    expect(items[6]).toMatchObject({ label: 'Lock' })
-    expect(items[8]).toMatchObject({ label: 'Delete', danger: true })
+    expect(items[6]).toMatchObject({ label: 'Comment on this' })
+    expect(items[7]).toMatchObject({ label: 'Lock' })
+    expect(items[9]).toMatchObject({ label: 'Delete', danger: true })
   })
 
   it('omits Lock when no lock callback is wired (edgeLockEnabled false)', () => {
     const items = edgeMenuItems({
       edge: baseEdge,
+      point: { x: 0, y: 0 },
+      setCommentCompose: vi.fn(),
       theme: 'light',
       isEdgeLocked: () => false,
       edgeLockEnabled: false,
@@ -81,6 +89,8 @@ describe('edgeMenuItems', () => {
     const setSelectedEdgeId = vi.fn()
     const items = edgeMenuItems({
       edge: baseEdge,
+      point: { x: 0, y: 0 },
+      setCommentCompose: vi.fn(),
       theme: 'light',
       isEdgeLocked: () => false,
       edgeLockEnabled: false,

@@ -3,11 +3,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DESTRUCTIVE_COPY } from '@/lib/destructive-copy'
 import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from '../lib/browser-workspace-id.js'
+import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'

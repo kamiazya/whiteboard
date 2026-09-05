@@ -15,9 +15,9 @@ import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
-import { cn } from '@/lib/utils'
+import { TOGGLE_STATE_CLASS } from '../../../components/ui/dock-button.js'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
+import { cn } from '../../../lib/utils.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */

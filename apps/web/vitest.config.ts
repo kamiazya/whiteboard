@@ -14,7 +14,6 @@ export default defineConfig({
   plugins: [react(), svgr(), wasm(), topLevelAwait()],
   resolve: {
     alias: {
-      '@': resolve(__dirname, 'src'),
       // Subpath aliases must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(

@@ -6,7 +6,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
-import { layoutMdastBlocks } from '../index.js'
+import { type LoadedReference, layoutMdastBlocks, referenceSeams } from '../index.js'
 import type { SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 
@@ -43,6 +43,31 @@ function textOf(nodes: readonly SceneNode[]): string[] {
 }
 
 describe('layoutMdastBlocks (public) — canvas embeds', () => {
+  it('a file node inside the embedded canvas draws the document it references', () => {
+    // The note's layout reads two seams; the canvas it embeds reads a third
+    // (`resolveReference`, for its file nodes). Forwarding two by hand is
+    // how the nested canvas drew every file node as an empty card.
+    const NOTE = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+    const withFile: SpatialCanvas = {
+      nodes: [{ id: 'f', type: 'file', x: 0, y: 0, width: 400, height: 300, file: NOTE }],
+      edges: [],
+    }
+    const scene = layoutMdastBlocks(body, {
+      measure: createFakeMeasure(),
+      maxWidth: 600,
+      fontFamily: 'sans-serif',
+      references: referenceSeams(
+        new Map<string, LoadedReference>([
+          [A, { documentId: A, name: 'Board', canvas: withFile }],
+          [NOTE, { documentId: NOTE, name: 'Note', body: 'PROSE FROM THE NOTE' }],
+        ]),
+      ),
+    })
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected an embedResolved block')
+    expect(textOf(embed.children)).toContain('PROSE FROM THE NOTE')
+  })
+
   it('draws the embedded canvas scaled into the column with no composer supplied', () => {
     const maxWidth = 600
     const scene = layoutMdastBlocks(body, {

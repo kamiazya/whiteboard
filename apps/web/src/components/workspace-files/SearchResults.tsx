@@ -15,7 +15,7 @@
 
 import { LayoutGrid, List } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
 import { useLongPressMenu } from './use-long-press.js'

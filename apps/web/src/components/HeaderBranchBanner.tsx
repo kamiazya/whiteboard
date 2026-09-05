@@ -1,10 +1,10 @@
 import { AlertTriangle, GitMerge } from 'lucide-react'
 import { type JSX, useEffect, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import type { MergeResult } from '@/hooks/useBranches'
-import { useBranches } from '@/hooks/useBranches'
-import { MERGE_COMMITTED_EVENT, parseMergeCommittedEvent } from '@/lib/merge-committed-event'
-import { displayBranchName } from '@/lib/utils'
+import { Button } from '../components/ui/button.js'
+import type { MergeResult } from '../hooks/useBranches.js'
+import { useBranches } from '../hooks/useBranches.js'
+import { MERGE_COMMITTED_EVENT, parseMergeCommittedEvent } from '../lib/merge-committed-event.js'
+import { displayBranchName } from '../lib/utils.js'
 import { MergeDialog } from './MergeDialog'
 
 // Show a banner under the header when the current branch is ahead of main.

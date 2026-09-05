@@ -58,16 +58,13 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type {
-  BoundingBox,
-  MeasureText,
-  ResolvedReference,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
+  commentAnchor,
   edgeLabelAnchor,
   outlineContentBox,
   placeCommentBubble,
@@ -79,11 +76,18 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { forwardRef, type ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
-import { writeLastTool } from '@/lib/initial-tool'
+import {
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
+import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
@@ -108,6 +112,7 @@ import {
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import type { BoxMove } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
@@ -118,6 +123,7 @@ import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
+import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
@@ -315,7 +321,7 @@ export interface SpatialEditorProps {
    * A markdown body arrives parsed rather than raw so layout never runs a
    * markdown parse per file node per frame.
    */
-  readonly resolveReference?: (ref: string) => ResolvedReference | undefined
+  readonly references?: ReferenceSeams
   /**
    * Stores a picked/dropped/pasted image and returns the reference to put
    * in the created file node, or undefined on failure (nothing is
@@ -424,6 +430,13 @@ function navigationPointerKind(pointerType: string): PointerKind {
 const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 
+/**
+ * Screen px a press on a comment may wander before it is a pin drag rather
+ * than a tap. A finger's tap is never perfectly still, and below this the
+ * release opens the card instead of moving the comment by nothing.
+ */
+const COMMENT_PRESS_SLOP_PX = 4
+
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const ZOOM_WHEEL_FACTOR = 1.1
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
@@ -472,7 +485,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onOpenFileRef,
       missingFileRef,
       paletteLeading,
-      resolveReference,
+      references,
       onAddImage,
       isImageFileRef,
     },
@@ -549,7 +562,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const { fileSeamOptions, missingFileRefs } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
-      resolveReference,
+      references,
       fileRefOptions,
       missingFileRef,
       resolvedMeasure,
@@ -568,15 +581,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
-    // While that edit is open, keep its node above the virtual keyboard —
-    // the keyboard overlays the page without resizing it, so this pan is
-    // the only thing standing between edit mode and an invisible subject.
-    useKeyboardAvoidance({
-      editingBox: editingTextNodeId === undefined ? undefined : selection?.box,
-      rootRef,
-      containerSizeOf,
-      setViewport,
-    })
+    // Whatever text entry has focus inside the root — a node's editor, the
+    // comment compose bubble, a label, the thread card's reply box — stays
+    // above the virtual keyboard: the keyboard overlays the page without
+    // resizing it, so this pan is the only thing standing between typing
+    // and an invisible subject. Focus-driven, so no editor has to be wired.
+    useKeyboardAvoidance({ rootRef, containerSizeOf, setViewport })
     const {
       showResolvedComments,
       setShowResolvedComments,
@@ -602,6 +612,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         theme,
         suppressedBodyNodeIds,
         showResolved: showResolvedComments,
+        threads,
       },
       fileSeamOptions,
       fileRefOptions,
@@ -609,6 +620,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
       useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    /**
+     * The routed path of an edge, as drawn — for a comment about an edge to
+     * open its bubble on the path (canvas-render's `commentAnchor`), the
+     * same producer the layer pins it with.
+     */
+    const edgePathOf = useCallback(
+      (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
+      [edgePaths],
+    )
     const {
       commentPlacementObstacles,
       hitTestComment,
@@ -622,7 +642,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, commentChromeBoxes })
+    } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -869,6 +889,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           case 'clear-press-memory':
             lastPressRef.current = null
             doublePressRef.current = null
+            // A second finger made this a pinch; the comment under the
+            // first is not being opened.
+            pressedCommentRef.current = null
             break
           case 'cancel-manipulation':
             applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
@@ -906,13 +929,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * canvas surface. The root's gesture handlers must ignore those:
      * capturing the pointer on such a press retargets the subsequent
      * `click` to the capturing root, so the control's own onClick never
-     * fires — a press on "Add note" silently did nothing. Overlay controls
-     * opt in via `data-editor-overlay`; a per-control stopPropagation is
-     * exactly the thing someone forgets (this bug), so the guard lives here
-     * where forgetting is impossible.
+     * fires — a press on "Add note" silently did nothing. The answer is
+     * `isEditorOverlayTarget`, shared with the native touch refuser so the
+     * two guards cannot disagree about what chrome is; a per-control
+     * stopPropagation is exactly the thing someone forgets (this bug), so
+     * the guard lives here where forgetting is impossible.
      */
-    const isOverlayEvent = (e: React.SyntheticEvent) =>
-      e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
+    const isOverlayEvent = (e: React.SyntheticEvent) => isEditorOverlayTarget(e.target)
 
     /**
      * Add or remove one node from the multi-selection, shared by shift-click
@@ -958,6 +981,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(selectableBoxes, point)
+      // A press on the canvas surface shuts the open conversation, the way
+      // a pointerdown outside a menu shuts the menu. It is the one dismissal
+      // a phone has: there is no Escape, and the card covers the bubble
+      // whose second press would otherwise toggle it. A press on the open
+      // comment's own chrome (its pin, which the card leaves uncovered) is
+      // left to the release, which toggles it shut as before.
+      if (openCommentId !== null && hitTestComment(point) !== openCommentId) {
+        setOpenCommentId(null)
+      }
+      // A press on a comment's chrome is remembered BEFORE navigation gets
+      // the press, because in hand mode navigation takes every plain press
+      // as a pan and never hands it back — and a comment is chrome, not
+      // content: a reader panning around a canvas has as much reason to
+      // open a conversation as one selecting on it. The release decides
+      // (see handlePointerUp): a press that never travelled opens the card
+      // under either tool; one that travelled was the pan (hand) or the
+      // pin drag (select) it became on the way.
+      const hitCommentId = e.button === 0 ? hitTestComment(point) : undefined
+      if (hitCommentId !== undefined) {
+        const comment = commentById(hitCommentId)
+        if (comment !== undefined) {
+          pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
+        }
+      }
       // Navigation answers first, and answers for its own state. Everything
       // it owns — which finger is down, whether two of them are driving the
       // viewport, whether this press continues a gather — lives in one value
@@ -994,34 +1041,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (navigation.preventDefault === true) e.preventDefault()
       if (!navigation.fallThrough) return
       if (e.button !== 0) return
-      // A comment's chrome floats above content, so it is tested before the
-      // nodes under it. A press on it never falls through to node or
-      // marquee handling: a press that stays put OPENS the conversation at
-      // the release, and one that travels drags the pin of a point-anchored
-      // comment. A node-anchored comment's anchor IS its node's corner, so
-      // its pin does not drag — moving the node is how it moves (and the
-      // comment rides along).
+      // A comment's chrome floats above content, so it was tested before
+      // the nodes under it (above). A press on it never falls through to
+      // node or marquee handling: a press that stays put OPENS the
+      // conversation at the release, and one that travels drags the pin of
+      // a point-anchored comment. A node-anchored comment's anchor IS its
+      // node's corner, so its pin does not drag — moving the node is how it
+      // moves (and the comment rides along).
       //
       // There is deliberately no double-press-to-edit here any more. A
       // single press now opens the card, whose own top-right Edit is the
       // successor: the second press of a pair would land on that card, which
       // stops propagation, so the pairing could never complete.
-      const hitCommentId = hitTestComment(point)
-      if (hitCommentId !== undefined) {
-        const comment = commentById(hitCommentId)
-        if (comment === undefined) return
-        pressedCommentRef.current = comment.id
-        if (comment.targetNodeId === undefined) {
-          setCommentDrag({
-            comment,
-            startPoint: point,
-            live: null,
-            obstacles: commentPlacementObstacles(comment.id),
-            dropped: null,
-          })
-        }
-        return
-      }
+      if (pressedCommentRef.current !== null) return
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -1102,11 +1134,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+      const root = rootRef.current
+      if (root === null) return
+      // Inside a node's text editor the object is the TEXT: the menu is the
+      // editing catalog (the note editor's own, Comment included), the way
+      // the note editor answers a right-click on a selection.
+      const editor = getActiveMarkdownEditor()
+      if (
+        editor !== null &&
+        e.target instanceof Element &&
+        e.target.closest('[data-testid="text-node-editor"]') !== null
+      ) {
+        e.preventDefault()
+        const at = clientPointToRootLocal(e, root)
+        setContextMenu({
+          x: at.x,
+          y: at.y,
+          nodeId: undefined,
+          edgeId: undefined,
+          point: screenToCanvas(at, viewport),
+          editor,
+        })
+        return
+      }
       if (isOverlayEvent(e)) return
       // Replace the browser menu with the object's own action menu.
       e.preventDefault()
-      const root = rootRef.current
-      if (root === null) return
       openContextMenuAt(clientPointToRootLocal(e, root))
     }
 
@@ -1200,6 +1253,41 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         capturePointer(root, e.pointerId)
       }
+      // A comment press that travels past the slop is spent as a press.
+      // Under the select tool it becomes the pin drag of a point-anchored
+      // comment (a node-anchored one's anchor is its node's corner, and
+      // moving the node is how it moves); under the hand tool it was a pan,
+      // which navigation below is already running and which the release
+      // must not turn into an opened card. Decided BEFORE navigation because
+      // a pan's moves never fall through. Capture FIRST for the drag: it
+      // takes the committed copy out of the surface, and a touch pointer's
+      // implicit capture sits on that copy.
+      const pressedComment = pressedCommentRef.current
+      if (
+        pressedComment !== null &&
+        commentDrag === null &&
+        Math.hypot(
+          screenPoint.x - pressedComment.startScreen.x,
+          screenPoint.y - pressedComment.startScreen.y,
+        ) >= COMMENT_PRESS_SLOP_PX
+      ) {
+        pressedCommentRef.current = null
+        if (
+          tool !== 'hand' &&
+          !spaceDownRef.current &&
+          pressedComment.comment.targetNodeId === undefined
+        ) {
+          capturePointer(root, e.pointerId)
+          setCommentDrag({
+            comment: pressedComment.comment,
+            startPoint: pressedComment.startPoint,
+            live: screenToCanvas(screenPoint, viewport),
+            obstacles: commentPlacementObstacles(pressedComment.comment.id),
+            dropped: null,
+          })
+          return
+        }
+      }
       const navigation = runNavigation(
         root,
         {
@@ -1252,16 +1340,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
         e.timeStamp,
       )
+      // Consumed here whatever happens next, so a press on a comment can
+      // never open its card two gestures later. A press that never
+      // travelled opens the card under EITHER tool: in hand mode the press
+      // armed a pan that this release is ending, and the machine answers
+      // for that pan — but the pan moved nothing, and the comment's answer
+      // comes first. (A travelled press was spent on the first move.)
+      const pressedComment = pressedCommentRef.current
+      pressedCommentRef.current = null
+      if (pressedComment !== null && commentDrag === null) {
+        toggleCommentCard(pressedComment.comment.id)
+        return
+      }
       // A release the machine answered was navigation — a finger leaving a
       // gather or a pinch, or the end of a pan. None of them run the click
       // and marquee semantics below: the sequence was never a gesture on the
       // canvas, and treating its release as one would re-collapse the very
       // selection the gather just built.
       if (!navigation.fallThrough) return
-      // Consumed here whatever happens next, so a press on a comment can
-      // never open its card two gestures later.
-      const pressedComment = pressedCommentRef.current
-      pressedCommentRef.current = null
       if (commentDrag !== null) {
         if (commentDrag.dropped !== null) return
         const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
@@ -1296,11 +1392,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           state: { kind: 'idle' },
           commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
         })
-        return
-      }
-      if (pressedComment !== null) {
-        // A node-anchored comment arms no drag, so its release arrives here.
-        toggleCommentCard(pressedComment)
         return
       }
       const armed = doublePressRef.current
@@ -1779,7 +1870,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
             minHeight: 0,
-            overflow: 'hidden',
+            // `clip`, not `hidden`: a hidden-overflow box is still a scroll
+            // container, and the browser scrolls one silently to reveal a
+            // focused control — tapping a reply box on a card that overhung
+            // the bottom edge shifted the whole canvas 38px under a viewport
+            // state that knew nothing about it, and the keyboard pan then
+            // aimed at where the card had been. `clip` forbids that scroll
+            // outright; the viewport is the only thing that moves the canvas.
+            overflow: 'clip',
             touchAction: 'none',
             outline: 'none',
             cursor: tool === 'hand' ? 'grab' : undefined,
@@ -2118,6 +2216,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setContextMenu={setContextMenu}
               canvas={canvas}
               canvasRef={canvasRef}
+              edgePathOf={edgePathOf}
               theme={theme}
               gestureState={gestureState}
               isEdgeLocked={isEdgeLocked}
@@ -2513,7 +2612,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <TextNodeEditor
                 exitHintScale={1 / viewport.zoom}
                 box={commentDraftBox(
-                  commentCompose.point,
+                  // An edge comment opens ON the routed path, where the layer
+                  // will pin it — one producer for the geometry.
+                  commentCompose.targetEdgeId === undefined
+                    ? commentCompose.point
+                    : commentAnchor(
+                        {
+                          id: '',
+                          text: ' ',
+                          x: commentCompose.point.x,
+                          y: commentCompose.point.y,
+                          targetEdgeId: commentCompose.targetEdgeId,
+                        },
+                        canvas,
+                        edgePathOf,
+                      ),
                   commentPlacementObstacles(commentCompose.editing?.id),
                 )}
                 initialText={commentCompose.editing?.initialText ?? ''}
@@ -2538,8 +2651,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                         ],
                       })
                     }
+                  } else if (text.length > 0 && commentCompose.threadAnchor !== undefined) {
+                    // A passage of a node's text, or a node set: a THREAD,
+                    // since a flat comment cannot carry either anchor.
+                    const id = (createId ?? defaultCreateId)()
+                    const createdAt = new Date().toISOString()
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        {
+                          kind: 'create-thread',
+                          thread: {
+                            id,
+                            anchor: commentCompose.threadAnchor,
+                            status: 'open',
+                            createdAt,
+                            messages: [{ id: `${id}-m1`, body: text, createdAt }],
+                          },
+                        } as const,
+                      ],
+                    })
                   } else if (text.length > 0) {
-                    const { point, targetNodeId } = commentCompose
+                    const { point, targetNodeId, targetEdgeId } = commentCompose
                     applyResult({
                       state: { kind: 'idle' },
                       commands: [
@@ -2555,6 +2688,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                             text,
                             createdAt: new Date().toISOString(),
                             ...(targetNodeId === undefined ? {} : { targetNodeId }),
+                            ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
                           },
                         } as const,
                       ],
@@ -2591,6 +2725,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
                   })()}
                   initialText={selectedNode.text}
+                  // The conversations about passages of this node's text,
+                  // highlighted over the draft; and the comment verb's seam,
+                  // which attaches the caret's scope to this node and opens
+                  // the compose bubble at the node's corner, where a node
+                  // comment opens. The editor commits on the blur the bubble
+                  // causes, so the passage the anchor quotes is the text
+                  // that gets committed.
+                  threads={threads?.filter(
+                    (thread) =>
+                      thread.anchor.kind === 'text' && thread.anchor.nodeId === selectedNode.id,
+                  )}
+                  onRequestComment={(anchor) => {
+                    setCommentCompose({
+                      point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
+                      targetNodeId: selectedNode.id,
+                      threadAnchor: { ...anchor, nodeId: selectedNode.id },
+                    })
+                    return true
+                  }}
                   exitHintTop={selection.box.y + selection.box.height + 6}
                   exitHintScale={1 / viewport.zoom}
                   centerContent={scene.nodes.some(

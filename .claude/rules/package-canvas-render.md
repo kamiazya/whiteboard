@@ -934,6 +934,30 @@ the table alone.
     `layout/text-wrapping-quality.test.ts` is the scoreboard for all of this;
     see the Tests section.
 
+14. **`references/` is the one producer of the reference seams.**
+    `LoadedReference` is the record a keeper answers for one referenced
+    document — name, raw body, canvas, each optional and independent, none
+    of them saying which KIND it is. `referenceSeams(graph, options)` reads
+    the graph of those records (keyed by the reference as written, `null`
+    for "looked up, nothing there") and builds `resolveAlias`,
+    `resolveTitle`, `resolveEmbed` and `resolveReference` together, so the
+    one rule that decides what a record is — a body means markdown, whatever
+    else it carries; only a bodiless record offers its canvas; a file node
+    draws an empty canvas as the card while an embed keeps its frame — is
+    applied identically to a file node and to a `![[embed]]`. A surface adds
+    what only it knows through `options.extra` (an image asset's URL, a
+    facet card) and hands the builder its own alias table and names, which
+    answer ahead of any load. `referenceTargets` is the matching single
+    definition of what to load; `overlayReferences` layers plain-data chrome
+    (labels, dangling marks) for the layout worker and the main thread
+    alike. Both layouts accept the bundle as `references` and apply it under
+    the individual seams (`withReferenceSeams`), which stay for a test
+    probing one alone. The reason is the drift class decision #11 already
+    names: every root wrote these by hand, each answered a different subset,
+    and the total layout hid the difference. `tools/arch-lint`'s
+    `reference-seams-check.test.ts` refuses a seam defined outside this
+    directory.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,

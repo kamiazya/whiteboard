@@ -17,11 +17,11 @@
  */
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { VersionsBackendContext } from '@/contexts/VersionsBackendContext'
-import type { VersionsBackend } from '@/lib/versions-backend'
+import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
+import type { VersionsBackend } from '../lib/versions-backend.js'
 import VersionTimeline from './VersionTimeline.js'
 
-vi.mock('@/lib/app-logger', () => ({
+vi.mock('../lib/app-logger.js', () => ({
   getAppLogger: () => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(), debug: vi.fn() }),
 }))
 

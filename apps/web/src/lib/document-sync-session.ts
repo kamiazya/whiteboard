@@ -17,6 +17,7 @@ import {
   readThreadMarks,
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
+  setCommentThreadStatus,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
@@ -101,6 +102,13 @@ function commandTargetKey(command: EditorCommand): string {
       // replies to the same thread inside one debounce window are two
       // messages, and a `thread:` key would silently commit only the second.
       return `message:${command.message.id}`
+    case 'edit-thread-message':
+      // Keyed by the message it rewrites, so an edit and a reply to the same
+      // thread inside one window are two writes, and two edits of the same
+      // message are the last one.
+      return `message:${command.message.id}`
+    case 'set-thread-status':
+      return `thread-status:${command.threadId}`
     case 'create-thread':
       // Keyed by THREAD, unlike the reply above: what this command carries is
       // the whole conversation, so two of them for the same id inside one
@@ -384,6 +392,16 @@ function writeCommandTarget(
       // back from either: writeThreadMessage is a documented no-op for a
       // thread this replica does not hold, which is deliberate (replying must
       // never be the write that opens a container).
+      writeThreadMessage(doc, command.threadId, command.message)
+      return true
+    case 'set-thread-status':
+      // Same plane, same reason: a status lives on the thread, and the
+      // fallback's whole-canvas write would never reach a note's thread.
+      setCommentThreadStatus(doc, command.threadId, command.status)
+      return true
+    case 'edit-thread-message':
+      // `writeThreadMessage` upserts by message id, so an edit is the same
+      // write a reply is, aimed at a message the thread already holds.
       writeThreadMessage(doc, command.threadId, command.message)
       return true
     case 'create-thread':

@@ -88,7 +88,15 @@ function alwaysOnFiles(): string[] {
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
-  '.claude/rules/architecture-map.md': 14,
+  // 15 since the reference-resolution paragraph: where a document's
+  // references resolve (canvas-render's `references/`), the guard that
+  // keeps every surface on it, and the one gap left. Always-on because the
+  // defect it closes was invisible to every other gate — a seam a root
+  // forgot drew a placeholder, never a failure — so it is worth a paragraph
+  // every session reads. Trimmed once before pinning: the first draft
+  // crossed into 16, and the measurements it carried belong in the guard's
+  // own header, not here.
+  '.claude/rules/architecture-map.md': 15,
   // 26 since the design checkpoints gained `benefit` — the column a change's
   // worth is claimed in, which decides how it gets verified. The entry sits
   // beside `blastRadius` and `userReach` because it is a peer required field,
@@ -135,7 +143,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 22
 // built, because "can this character join something" answers yes for every
 // precomposed Hangul syllable. Raised rather than trimmed — this test exists
 // to make crossing a bucket a decision, not to forbid it.
-const CANVAS_RENDER_BUDGET = 78
+// 80 since decision #14, the `references/` module: what it holds, the rule
+// that no root writes a seam's body, and the gap the layout worker leaves.
+// Path-scoped, so paid only by a session in canvas-render — where the two
+// thousand characters are the module's design record.
+const CANVAS_RENDER_BUDGET = 80
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

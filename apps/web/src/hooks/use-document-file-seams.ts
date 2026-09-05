@@ -15,20 +15,24 @@
  * the card — a broken reference never takes down a page.
  */
 
-import type { FacetCardData, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import {
+  type FacetCardData,
+  type LoadedReference,
+  type ReferenceSeams,
+  referenceSeams,
+} from '@kamiazya/whiteboard-canvas-render'
+import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getAppLogger } from '../lib/app-logger.js'
 import { collectFileRefs } from '../lib/document-embed-content.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
-
-const log = getAppLogger('canvas-file-seams')
 
 export interface UseDocumentFileSeamsOptions {
   readonly canvas: SpatialCanvas
   readonly adapter: DocumentFileAdapter
+  /** The page's list-based alias table and names, ahead of any load. */
+  readonly resolveAlias?: AliasResolver
+  readonly resolveTitle?: (documentId: string) => string | undefined
   /**
    * Reference -> an opaque revision marker (the referenced canvas's
    * `updatedAt`). A moved marker is what makes an edit made elsewhere show up
@@ -39,11 +43,12 @@ export interface UseDocumentFileSeamsOptions {
 
 export interface DocumentFileSeams {
   /**
-   * Everything this hook has loaded for one reference, in canvas-render's
-   * own record. The layout ranks the fields; this hook only says which of
-   * them it can answer.
+   * Every reference seam over what this hook has loaded, built by
+   * canvas-render's `referenceSeams` — the layout ranks the fields, this
+   * hook only reaches the keeper and adds what a file reference carries
+   * beyond its document (an image asset, a facet card).
    */
-  resolveReference: (ref: string) => ResolvedReference | undefined
+  references: ReferenceSeams
   onAddImage: (file: File) => Promise<string | undefined>
   isImageFileRef: (file: string) => boolean
 }
@@ -51,6 +56,8 @@ export interface DocumentFileSeams {
 export function useDocumentFileSeams({
   canvas,
   adapter,
+  resolveAlias,
+  resolveTitle,
   stampOf,
 }: UseDocumentFileSeamsOptions): DocumentFileSeams {
   // `null` = the adapter answered "there is nothing here". It has to OCCUPY
@@ -146,70 +153,49 @@ export function useDocumentFileSeams({
     }
   }, [canvas, imageUrls])
 
-  /**
-   * A markdown document is not a canvas to embed, whichever way it was
-   * stored — and the two storage shapes differ, so a node-count test alone
-   * is not enough. Written through the container it reads back as a canvas
-   * with NO nodes; a document predating that reads back as one holding a
-   * single text node (`okf-body`, which IS the body). Offered as a canvas,
-   * the first draws an empty frame and the second the same prose crushed to
-   * thumbnail size — both outrank the markdown rank and both show strictly
-   * less. Having a body is what says "markdown document" independently of
-   * which side wrote it.
-   */
-  const embeddableCanvas = useCallback(
-    (document: LoadedFileDocument): SpatialCanvas | undefined => {
-      if (document.body !== undefined) return undefined
-      const canvas = document.canvas
-      return canvas === undefined || canvas.nodes.length === 0 ? undefined : canvas
-    },
-    [],
-  )
-  // Parsed here rather than in the resolver, and memoized on the loaded
-  // content rather than per call: canvas-render invokes the seam during
-  // layout, for every file node, on every re-layout — so a parse inside it
-  // would re-run remark on every frame of a drag.
-  const markdownBodies = useMemo(() => {
-    const parsed = new Map<string, MdastRoot>()
+  // The shared record per reference: what this keeper loaded, minus the
+  // facets, which are a surface extra below. `null` keeps the terminal
+  // "nothing here" slot so the seams answer without the layout retrying.
+  const graph = useMemo(() => {
+    const entries = new Map<string, LoadedReference | null>()
     for (const [ref, document] of embedContent) {
-      const body = document?.body
-      if (body === undefined || body.trim().length === 0) continue
-      try {
-        parsed.set(ref, parseMarkdownBody(body))
-      } catch (err) {
-        // Same totality rule as the seams themselves: an unparseable body
-        // costs that one reference its prose, never the page.
-        log.warn('referenced markdown body failed to parse', { ref, err })
-      }
+      entries.set(
+        ref,
+        document === null
+          ? null
+          : {
+              ...(document.name !== undefined ? { name: document.name } : {}),
+              ...(document.body !== undefined ? { body: document.body } : {}),
+              ...(document.canvas !== undefined ? { canvas: document.canvas } : {}),
+            },
+      )
     }
-    return parsed
+    return entries
   }, [embedContent])
 
-  const resolveReference = useCallback(
-    (ref: string): ResolvedReference | undefined => {
-      // Checked first and returned alone: an image reference is never loaded
-      // as a document, so there is nothing else to carry, and the layout
-      // ranks an image above everything anyway.
-      const href = imageUrls.get(ref)
-      if (href !== undefined) return { image: { href } }
-
-      const document = embedContent.get(ref)
-      if (document === undefined || document === null) return undefined
-      const canvas = embeddableCanvas(document)
-      const markdown = markdownBodies.get(ref)
-      const facets = toFacetCard(ref, document.facets, document.name)
-      return {
-        ...(canvas !== undefined ? { canvas } : {}),
-        ...(markdown !== undefined ? { markdown } : {}),
-        ...(facets !== undefined ? { facets } : {}),
-      }
-    },
-    [embedContent, embeddableCanvas, imageUrls, markdownBodies],
+  const references = useMemo(
+    () =>
+      referenceSeams(graph, {
+        ...(resolveAlias !== undefined ? { resolveAlias } : {}),
+        ...(resolveTitle !== undefined ? { resolveTitle } : {}),
+        extra: (ref) => {
+          // Checked first and returned alone: an image reference is never
+          // loaded as a document, so there is nothing else to carry, and the
+          // layout ranks an image above everything anyway.
+          const href = imageUrls.get(ref)
+          if (href !== undefined) return { image: { href } }
+          const document = embedContent.get(ref)
+          if (document === undefined || document === null) return undefined
+          const facets = toFacetCard(ref, document.facets, document.name)
+          return facets === undefined ? undefined : { facets }
+        },
+      }),
+    [graph, embedContent, imageUrls, resolveAlias, resolveTitle],
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
 
-  return { resolveReference, onAddImage, isImageFileRef }
+  return { references, onAddImage, isImageFileRef }
 }
 
 /**

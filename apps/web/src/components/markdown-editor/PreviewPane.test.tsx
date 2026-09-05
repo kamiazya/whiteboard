@@ -1,6 +1,6 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { fakeMeasure } from '@/test-utils/fake-measure'
+import { fakeMeasure } from '../../test-utils/fake-measure.js'
 import { PreviewPane } from './PreviewPane.js'
 
 afterEach(() => {

@@ -19,18 +19,20 @@
  * produce a canvas with a dangling edge endpoint.
  */
 
-import type {
-  CanvasColor,
-  CanvasComment,
-  CanvasEdge,
-  ClipboardFragment,
-  CommentMessage,
-  CommentThread,
-  EdgeRoutingStyle,
-  LineJumps,
-  SpatialCanvas,
-  SpatialNode,
-  StoredCoreFacets,
+import {
+  type CanvasColor,
+  type CanvasComment,
+  type CanvasEdge,
+  type ClipboardFragment,
+  type CommentMessage,
+  type CommentThread,
+  type CommentThreadStatus,
+  canvasCommentFromThread,
+  type EdgeRoutingStyle,
+  type LineJumps,
+  type SpatialCanvas,
+  type SpatialNode,
+  type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../clipboard-fragment.js'
@@ -214,21 +216,40 @@ export type EditorLeafCommand =
     }
   | {
       /**
-       * Opens a new conversation (ADR-0026 decision 5's create half).
-       *
-       * Beside `reply-to-thread` for the same reason and with the same
-       * consequence: it leaves the CANVAS untouched, so it cannot travel
-       * through the `x-whiteboard.comments` envelope, and it is committed by
-       * writing the threads plane directly.
-       *
-       * The thread arrives whole rather than as an anchor plus a first
-       * message, because `commentThreadSchema` requires at least one message
-       * — there is no legal empty thread to create and then fill, and a
-       * compose surface that has not been submitted yet is UI state, not a
-       * half-written document.
+       * Opens a conversation whose anchor a flat comment cannot carry — a
+       * passage of a node's text, today. The thread itself is what the sync
+       * session writes; on the canvas it appears as its projection (a
+       * comment on the node, at its corner), appended so the renderer draws
+       * a pin without waiting for the annotation channel. A colliding id is
+       * a no-op, like create-comment.
        */
       readonly kind: 'create-thread'
       readonly thread: CommentThread
+    }
+  | {
+      /**
+       * Closes or reopens a conversation in the threads plane — for every
+       * kind of anchor, which is what `set-comment-resolved` cannot do: that
+       * one travels through the flat projection, and a note's passage or a
+       * document-level thread has no projection to travel in. On the canvas
+       * the projected comment's flag follows, so the pin mutes without
+       * waiting for the annotation channel.
+       */
+      readonly kind: 'set-thread-status'
+      readonly threadId: string
+      readonly status: CommentThreadStatus
+    }
+  | {
+      /**
+       * Rewrites one message of a conversation, `editedAt` stamped by the
+       * caller. The projected comment's text follows when the message is
+       * the opening one — the only one the canvas draws.
+       */
+      readonly kind: 'edit-thread-message'
+      readonly threadId: string
+      readonly message: CommentMessage
+      /** Whether this is the conversation's opening message — the one the canvas draws. */
+      readonly opening: boolean
     }
 
 /**
@@ -716,13 +737,26 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return patchComment(canvas, command.id, { x: command.x, y: command.y })
     case 'set-comment-text':
       return patchComment(canvas, command.id, { text: command.text })
+    case 'create-thread': {
+      const projected = canvasCommentFromThread(command.thread, (id) =>
+        canvas.nodes.find((node) => node.id === id),
+      )
+      return projected === undefined ? canvas : createComment(canvas, projected)
+    }
     case 'reply-to-thread':
-    case 'create-thread':
       // Identity, and deliberately: the conversation is a plane beside the
-      // canvas, so neither opening one nor replying to one has a canvas
-      // effect to compute. Returning the same reference keeps the union-wide
+      // canvas, so a reply has no canvas effect to compute. Returning the same reference keeps the union-wide
       // "nothing changed → same object" contract that callers memoise on.
       return canvas
+    case 'set-thread-status':
+      // The projection follows when there is one; a thread with no pin on
+      // this canvas (a note's passage, the document) leaves it untouched.
+      return patchComment(canvas, command.threadId, { resolved: command.status === 'resolved' })
+    case 'edit-thread-message':
+      // Only the opening message is drawn, so only its edit reaches the pin.
+      return command.opening
+        ? patchComment(canvas, command.threadId, { text: command.message.body })
+        : canvas
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,
       // preserving the union-wide "nothing changed → same object" contract.

@@ -12,7 +12,7 @@ vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {

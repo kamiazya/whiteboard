@@ -141,6 +141,51 @@ describe('useMarkdownDocument annotations', () => {
     await waitFor(() => expect(saves.length).toBeGreaterThan(0), { timeout: 3000 })
   })
 
+  it('closes a conversation and rewrites its opening message, which a note can do nowhere else', async () => {
+    // A note has no canvas card, so the rail is the only place its thread
+    // can be resolved or its subject corrected — and the rail's door on the
+    // browser page is this hook.
+    const doc = new LoroDoc()
+    writeCommentThread(doc, {
+      id: 't-open',
+      anchor: { kind: 'text', quote: { exact: 'the second paragraph' }, start: 12, end: 32 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'is this still true?', author: 'human:yuki' }],
+    })
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const store: LoroStoreLike = {
+      async save() {},
+      createEmptySnapshot() {
+        return new Uint8Array()
+      },
+      async load() {
+        return { kind: 'ok', snapshot } as never
+      },
+    }
+    const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+    await waitFor(() => expect(result.current.annotations.length).toBe(1))
+
+    await act(async () => {
+      result.current.setThreadStatus('t-open', 'resolved')
+      result.current.editMessage('t-open', {
+        id: 'm1',
+        body: 'is this still true? (it was)',
+        author: 'human:yuki',
+        editedAt: '2026-09-05T12:00:00.000Z',
+      })
+    })
+
+    await waitFor(() => expect(result.current.annotations[0]?.status).toBe('resolved'))
+    expect(result.current.annotations[0]?.messages).toEqual([
+      {
+        id: 'm1',
+        body: 'is this still true? (it was)',
+        author: 'human:yuki',
+        editedAt: '2026-09-05T12:00:00.000Z',
+      },
+    ])
+  })
+
   it('answers empty for a document with no conversations, rather than throwing', async () => {
     const store = storeHolding(() => {})
     const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))

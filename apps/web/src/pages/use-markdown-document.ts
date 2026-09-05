@@ -35,13 +35,19 @@ import {
   readMarkdownBody,
   readThreadMarks,
   resolveWorkspaceDocumentById,
+  setCommentThreadStatus,
   setWorkspaceDocumentName,
   writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { CommentMessage, CommentThread, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type {
+  CommentMessage,
+  CommentThread,
+  CommentThreadStatus,
+  StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
@@ -206,6 +212,10 @@ export interface MarkdownDocumentState {
    * either by hand.
    */
   readonly replyToThread: (threadId: string, message: CommentMessage) => void
+  /** Closes or reopens a conversation; the same one-key write the sync session makes for a canvas. */
+  readonly setThreadStatus: (threadId: string, status: CommentThreadStatus) => void
+  /** Rewrites a message the thread holds (an upsert by id, like a reply). */
+  readonly editMessage: (threadId: string, message: CommentMessage) => void
   /**
    * Opens a conversation on this document, whole.
    *
@@ -630,6 +640,18 @@ export function useMarkdownDocument(
     writeThreadMessage(host.containers, threadId, message)
   }, [])
 
+  const setThreadStatus = useCallback((threadId: string, status: CommentThreadStatus) => {
+    const host = hostRef.current
+    if (host === null) return
+    setCommentThreadStatus(host.containers, threadId, status)
+  }, [])
+
+  const editMessage = useCallback((threadId: string, message: CommentMessage) => {
+    const host = hostRef.current
+    if (host === null) return
+    writeThreadMessage(host.containers, threadId, message)
+  }, [])
+
   const createThread = useCallback((thread: CommentThread) => {
     const host = hostRef.current
     if (host === null) return
@@ -669,6 +691,8 @@ export function useMarkdownDocument(
     annotations,
     threadMarks,
     replyToThread,
+    setThreadStatus,
+    editMessage,
     createThread,
   }
 }

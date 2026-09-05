@@ -7,12 +7,13 @@
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { readCommentThreads, writeThreadMessage } from './comment-threads.js'
+import { readCommentThreads, writeCommentThread, writeThreadMessage } from './comment-threads.js'
 import {
   deleteCanvasComment,
   readSpatialCanvas,
   writeCanvasComment,
   writeSpatialCanvas,
+  writeSpatialNode,
 } from './loro-bridge.js'
 
 const COMMENT: CanvasComment = {
@@ -85,6 +86,104 @@ describe('the threads plane is the source of truth for comments', () => {
       createdAt: '2026-09-03T00:00:00.000Z',
     })
     expect(commentsOf(doc)[0]?.text).toBe('tighten this')
+  })
+})
+
+describe("a passage of a node's text, the anchor a flat comment cannot carry", () => {
+  const passage = {
+    id: 't-passage',
+    anchor: { kind: 'text' as const, nodeId: 'n1', quote: { exact: 'plan' }, start: 4, end: 8 },
+    status: 'open' as const,
+    messages: [{ id: 'm1', body: 'is this the right word?' }],
+  }
+  const NODE = {
+    id: 'n1',
+    type: 'text' as const,
+    x: 100,
+    y: 200,
+    width: 50,
+    height: 30,
+    text: 'the plan',
+  }
+
+  it('projects onto the canvas as a comment on that node, standing at its corner', () => {
+    const doc = new LoroDoc()
+    writeSpatialNode(doc, NODE)
+    writeCommentThread(doc, passage)
+    expect(commentsOf(doc)).toEqual([
+      { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'is this the right word?' },
+    ])
+  })
+
+  it('projects nothing once the node is gone — orphaned, not moved', () => {
+    const doc = new LoroDoc()
+    writeCommentThread(doc, passage)
+    expect(commentsOf(doc)).toEqual([])
+    expect(readCommentThreads(doc).map((t) => t.id)).toEqual(['t-passage'])
+  })
+
+  it('keeps the passage when the flat projection is written back with new text or status', () => {
+    // Resolve and edit-text travel as flat comment writes; a projection
+    // written back verbatim would turn the passage into the node's corner.
+    const doc = new LoroDoc()
+    writeSpatialNode(doc, NODE)
+    writeCommentThread(doc, passage)
+    const [projected] = commentsOf(doc)
+    writeCanvasComment(doc, { ...(projected as CanvasComment), text: 'edited', resolved: true })
+    const [held] = readCommentThreads(doc)
+    expect(held?.anchor).toEqual(passage.anchor)
+    expect(held?.status).toBe('resolved')
+    expect(held?.messages[0]?.body).toBe('edited')
+  })
+
+  it('keeps a node set and its rect the same way: the projection is a corner, not the anchor', () => {
+    const doc = new LoroDoc()
+    writeSpatialNode(doc, NODE)
+    const set = {
+      id: 't-set',
+      anchor: {
+        kind: 'spatial' as const,
+        nodeIds: [NODE.id, 'other'],
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 300,
+      },
+      status: 'open' as const,
+      messages: [{ id: 't-set-m1', body: 'these two' }],
+    }
+    writeCommentThread(doc, set)
+    const [projected] = commentsOf(doc)
+    expect(projected).toMatchObject({ x: NODE.x + NODE.width, y: NODE.y })
+    writeCanvasComment(doc, { ...(projected as CanvasComment), resolved: true })
+    const [held] = readCommentThreads(doc)
+    expect(held?.anchor).toEqual(set.anchor)
+    expect(held?.status).toBe('resolved')
+  })
+})
+
+describe('a thread another writer opened, edited from the canvas', () => {
+  it('rewrites the opening message rather than adding one that sorts ahead of it', () => {
+    // An MCP peer mints its own message ids; the canvas projection borrows
+    // the thread's. Written back under the thread's id, the edit used to
+    // ADD a message, which sorted first and left the original as a reply.
+    const doc = new LoroDoc()
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 1, y: 2 },
+      status: 'open',
+      messages: [
+        { id: 't1-m1', body: 'opened by an agent', createdAt: '2026-09-01T00:00:00.000Z' },
+        { id: 't1-m2', body: 'a reply', createdAt: '2026-09-02T00:00:00.000Z' },
+      ],
+    })
+    const [projected] = commentsOf(doc)
+    writeCanvasComment(doc, { ...(projected as CanvasComment), text: 'opened by an agent, edited' })
+    const [held] = readCommentThreads(doc)
+    expect(held?.messages.map((m) => [m.id, m.body])).toEqual([
+      ['t1-m1', 'opened by an agent, edited'],
+      ['t1-m2', 'a reply'],
+    ])
   })
 })
 
