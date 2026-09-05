@@ -21,22 +21,23 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser capabilities: no merge — and neither versions nor branches is a capability', () => {
+  it('resolves to the browser keeper, carrying nothing but which keeper it is', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({ kind: 'browser', capabilities: { merge: false } })
-    // A flag both keepers set the same way is not a capability, and each of
-    // these left for that reason as the browser keeper grew the feature:
-    // `versions` when it kept its own history, `branches` when it kept its
-    // own variations on the workspace record.
-    expect(state.kind === 'browser' && 'versions' in state.capabilities).toBe(false)
-    expect(state.kind === 'browser' && 'branches' in state.capabilities).toBe(false)
+    expect(state).toEqual({ kind: 'browser' })
   })
 
-  it('daemon capabilities: merge, which is the one thing the keepers still differ on', () => {
+  it('resolves to the daemon keeper, carrying its base URL and nothing else', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({ kind: 'daemon', capabilities: { merge: true } })
-    expect(state.kind === 'daemon' && 'branches' in state.capabilities).toBe(false)
+    expect(state).toEqual({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
+
+  // `toEqual` above rather than `toMatchObject`, deliberately: the assertion
+  // this pair replaces is what a `capabilities` map would fail. Four flags
+  // lived there and left one at a time as the browser keeper grew each
+  // feature — `workspaces`, `versions`, `branches`, `merge` — each because a
+  // flag both keepers set the same way declares no difference. An exact
+  // equality is what stops a fifth arriving without that argument being made
+  // again.
 
   it('descriptor JSON contains no token Authorization Bearer secret fields', () => {
     const daemonState = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })

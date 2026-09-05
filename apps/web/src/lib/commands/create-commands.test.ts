@@ -1,12 +1,11 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { BROWSER_CAPABILITIES } from '../provider.js'
 import { createWhiteboardCommands } from './create-commands.js'
 import { CommandError, type WhiteboardCommandDeps } from './types.js'
 
 function baseDeps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
-    provider: { kind: 'browser', capabilities: BROWSER_CAPABILITIES },
+    provider: { kind: 'browser' },
     canvas: { documentId: 'c1', name: 'Canvas 1' },
     ...overrides,
   }
@@ -35,7 +34,6 @@ describe('createWhiteboardCommands.getAppContext', () => {
         provider: {
           kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
-          capabilities: BROWSER_CAPABILITIES,
         },
         canvas: { workspaceId: 'ws1', documentId: 'my-canvas', name: 'my-canvas' },
       }),
@@ -87,7 +85,6 @@ describe('createWhiteboardCommands.getAppContext', () => {
         provider: {
           kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
-          capabilities: BROWSER_CAPABILITIES,
         },
         canvas: { documentId: 'c1', name: 'Canvas 1' },
       }),
@@ -107,7 +104,6 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const poisoned = {
       kind: 'daemon',
       daemonBaseUrl: 'http://127.0.0.1:9999',
-      capabilities: BROWSER_CAPABILITIES,
       token: 'shh',
       authorization: 'Bearer shh',
       secret: 'shh',

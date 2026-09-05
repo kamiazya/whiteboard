@@ -186,33 +186,6 @@ describe('DaemonDocumentPage branches', () => {
       vi.unstubAllGlobals()
     })
 
-    it('shows the Combine teaser when capabilities.merge is false, and still the chip', async () => {
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{
-              merge: false,
-            }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      // The chip is here even though merge is off: having variations and
-      // being able to combine them are separate, and the chip hides only its
-      // merge entry point. There is no Variations teaser any more — both
-      // keepers have variations, so the flag that drove it is gone.
-      expect(await screen.findByTestId('header-branch-chip')).toBeTruthy()
-      expect(screen.queryByText('Variations')).toBeNull()
-      expect(screen.getByText('Combine')).toBeTruthy()
-    })
-
     it('refetches the branch list when the backend reports an externally observed HEAD change', async () => {
       const fetchMock = branchesFetchMock([
         { name: 'main', color: '#1971c2' },
@@ -340,7 +313,7 @@ describe('DaemonDocumentPage branches', () => {
       )
     }
 
-    it('renders MergeToast and shows it once a merge_committed event fires when capabilities.merge is true', async () => {
+    it('renders MergeToast and shows it once a merge_committed event fires', async () => {
       await act(async () => {
         render(
           <DaemonDocumentPage
@@ -363,32 +336,6 @@ describe('DaemonDocumentPage branches', () => {
 
       await waitFor(() => expect(screen.getByTestId('merge-toast')).toBeTruthy())
       expect(screen.getByTestId('merge-toast').textContent).toContain('feature-x')
-    })
-
-    it('does not mount MergeToast when capabilities.merge is false', async () => {
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{
-              merge: false,
-            }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      await act(async () => {
-        dispatchMergeCommitted()
-      })
-
-      // MergeToast's own listener is never mounted, so the event is a no-op here.
-      expect(screen.queryByTestId('merge-toast')).toBeNull()
     })
 
     it('wires MergeToast onRestored to clearLocalUndo (restore fetch clears the toast via the shared daemon fetch)', async () => {

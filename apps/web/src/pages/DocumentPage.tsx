@@ -438,7 +438,6 @@ function DocumentPageBody({
                 {...(topBar.onPreviewVariation === undefined
                   ? {}
                   : { onPreviewVariation: topBar.onPreviewVariation })}
-                capabilities={model.capabilities}
                 // Whatever the document holds: a keeper writes a history for
                 // every kind, and gating this on the editor is what left a
                 // markdown document's checkpoints unreachable.

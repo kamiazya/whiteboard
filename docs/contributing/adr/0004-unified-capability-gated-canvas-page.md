@@ -192,3 +192,42 @@ workspace can resolve to zero documents).
 Named follow-up: the markdown body's two write paths (the browser hook's own
 scheduler versus the sync session) are a separate increment — unifying them
 changes when a save lands, and that is judged by measurement, not by refactor.
+
+## Addendum (2026-09-05): the capability gate dissolved, and what replaced it
+
+Decision 1's "capability-gated chrome" no longer describes what ships. The
+gate is gone — not loosened, removed — because the map it read became empty.
+
+Each flag left for the same reason, and the sequence is the argument:
+`workspaces` when the browser keeper stopped being definitionally
+single-workspace ([ADR-0019](0019-workspace-identity.md)), `versions` when it
+kept its own history, `branches` when it kept its variations on the workspace
+record, and `merge` when it committed one. A flag both keepers set the same
+way gates nothing, and the copy built on it promises a difference that is not
+there. With the last one gone `WhiteboardCapabilities` had no members, so the
+map went with it rather than standing as a shape waiting for a difference to
+appear. `ProviderState` now says which keeper answers and nothing else.
+
+This does not retract the decision — it records that the decision's own
+premise expired. The premise was Context's first bullet: "Branches, the
+version-history timeline, and the branch banner / merge toast are daemon-only
+concepts; browser-local has no equivalent state." That is false now. Every one
+of them is state the browser keeper keeps, and the ADR's real subject — ONE
+page rather than two — is what survived and is now unconditional.
+
+What replaced the flags is the part worth carrying forward: **where the
+keepers still differ, the difference is a fact about a DOCUMENT or a PANEL,
+not about a keeper**, answered where it is known rather than at the provider.
+`BranchesBackend`'s `hasBranches` says a markdown body has no record-holding
+backend and therefore no variations — which is per document, and no
+provider-level flag could ever have said it. `VersionTimelineCapabilities`
+says the browser's version rows carry no branch to lane by. Each is answered
+by something that cannot forget to mention it, which a flag threaded through
+four components as an optional prop defaulting to `true` structurally could.
+
+Deleted with the map: `CapabilityTeaser` (chrome that existed to explain an
+absence there is no longer one of) and `provider.capability-reach.test.ts`
+(the guard that refused a flag both keepers agree on — it had nothing left to
+judge, and an empty map kept "for later" is the one thing it could never have
+refused). `keeper-parity.test.ts` loses its `capability` answer for the same
+reason; a real declared difference would bring both back together.

@@ -11,7 +11,6 @@ import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -41,7 +40,6 @@ import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
-import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -71,7 +69,6 @@ export interface DaemonDocumentPageProps {
   // (DaemonBackend's wsToken); when the #wb= flow also seeded
   // window.__WHITEBOARD_DAEMON_TOKEN__, that global wins for the WS.
   token?: string
-  capabilities?: WhiteboardCapabilities
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
@@ -94,7 +91,6 @@ function useDaemonDocument(
     workspaceId,
     path,
     token,
-    capabilities = DAEMON_CAPABILITIES,
     createBackend,
     onNavigateBack,
   }: DaemonDocumentPageProps,
@@ -723,7 +719,6 @@ function useDaemonDocument(
     documentKey,
     documentKind,
     srTitle: 'Whiteboard (daemon)',
-    capabilities,
     sync,
     markdown: {
       body: markdownBody,
@@ -757,7 +752,7 @@ function useDaemonDocument(
     overlayTitle: canvas?.path ?? 'Untitled',
     exportFilenameBase: canvas?.path ?? 'canvas',
     commands: {
-      provider: { kind: 'daemon', daemonBaseUrl, capabilities },
+      provider: { kind: 'daemon', daemonBaseUrl },
       // The daemon canvas summary carries no display name yet (only
       // path/updatedAt) — the path doubles as `name` until that changes.
       canvas:
@@ -889,24 +884,10 @@ function useDaemonDocument(
             </div>
           )}
           {canvas && <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />}
-          {/* This row only exists when it carries something meaningful: a
-              capability this keeper does not have. A daemon with full
-              capabilities — the common local case — gets no extra header row
-              at all (every header row costs canvas height on a phone). The
-              shell switcher names the workspace on every page, so it is the
-              one carrier of that; raw identifiers are not chrome (ADR-0019). */}
-          {!capabilities.merge && (
-            <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-              {/* WorkspaceTopBar owns the real History/HeaderBranchChip
-                  affordances once a canvas is selected; these page-level teasers
-                  only surface guidance while the capability itself is unavailable. */}
-              {!capabilities.merge && <CapabilityTeaser label="Combine" />}
-            </div>
-          )}
         </>
       ),
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
-      footer: capabilities.merge && canvas && (
+      footer: canvas && (
         <MergeToast
           workspaceId={canvas.workspaceId}
           path={canvas.path}
