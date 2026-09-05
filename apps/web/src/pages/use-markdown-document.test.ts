@@ -65,6 +65,61 @@ describe('useMarkdownDocument CRDT exposure', () => {
   })
 })
 
+// The debounce holds text that is already on screen, and a tab that goes
+// away inside the window loses it — closed, switched, backgrounded on a
+// phone. Nothing on screen says so. hidden/pagehide are the last signals a
+// page reliably gets, so the write goes out on them instead of waiting.
+describe('flushes the debounced save when the page goes away', () => {
+  function withVisibility(state: DocumentVisibilityState): () => void {
+    Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+    return () => {
+      delete (document as { visibilityState?: unknown }).visibilityState
+    }
+  }
+
+  async function typeThen(fire: () => void): Promise<number> {
+    const store = fakeStore()
+    const { result, unmount } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+    await waitFor(() => expect(result.current.doc).not.toBeNull())
+    act(() => {
+      result.current.setBody('typed just before leaving')
+    })
+    fire()
+    // The flushed save reaches the store through microtasks alone, so two
+    // macrotask ticks are enough for it to have landed — and are nowhere
+    // near the 500ms debounce, so a save counted here was the signal's, not
+    // the timer's. A fixed delay would be the same assertion made slower.
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    const saves = store.saves.length
+    unmount()
+    return saves
+  }
+
+  it('on visibilitychange to hidden', async () => {
+    const restore = withVisibility('hidden')
+    try {
+      expect(await typeThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(1)
+    } finally {
+      restore()
+    }
+  })
+
+  it('on pagehide', async () => {
+    expect(await typeThen(() => window.dispatchEvent(new Event('pagehide')))).toBe(1)
+  })
+
+  // The control: becoming VISIBLE shares the event name and must not flush.
+  it('not on visibilitychange to visible', async () => {
+    const restore = withVisibility('visible')
+    try {
+      expect(await typeThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(0)
+    } finally {
+      restore()
+    }
+  })
+})
+
 describe('flush/load ordering across an effect cycle', () => {
   it('a reload sees the edits the unmount flush was still writing', async () => {
     // The cleanup flushes the pending debounce with a fire-and-forget save;

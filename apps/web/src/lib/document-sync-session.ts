@@ -834,7 +834,40 @@ export function createDocumentSyncSession(
     commitPendingTargets()
   }
 
+  // The window holds edits that are already on screen, and a tab that goes
+  // away inside it loses them. `pagehide` and `visibilitychange` → hidden are
+  // the last signals a page reliably gets (Page Lifecycle API; `beforeunload`
+  // is not delivered on mobile and `unload` is unreliable everywhere), so the
+  // write goes out on them. Becoming visible again is the same event name
+  // and must NOT flush — that would write mid-gesture on every tab switch.
+  //
+  // What this covers, measured in Chromium with the tab's scripts frozen
+  // after the signal so the debounce could not be what landed it: a tab that
+  // is HIDDEN (switched away, backgrounded) keeps running, and the write
+  // reaches IndexedDB within 50ms. A tab CLOSED or reloaded inside the window
+  // is torn down before the asynchronous chain behind the flush reaches the
+  // store, and the edit is still lost — the same as without this listener.
+  // Closing that last gap means not having a window at all (write at once,
+  // commit later), not a better signal.
+  function onVisibilityChange(): void {
+    if (document.visibilityState === 'hidden') onCanvasChange.flush()
+  }
+  function onPageHide(): void {
+    onCanvasChange.flush()
+  }
+  function listenForPageLeaving(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+  }
+  function stopListeningForPageLeaving(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('pagehide', onPageHide)
+  }
+
   function connect(): void {
+    listenForPageLeaving()
     backend.connect({
       onConnected() {
         if (isStale()) return
@@ -1070,6 +1103,7 @@ export function createDocumentSyncSession(
     // calls doc.commit() synchronously, but its subscribeLocalUpdates
     // callback fires on a later microtask — see the comment on that
     // subscription for why it has no isStale() guard.
+    stopListeningForPageLeaving()
     onCanvasChange.flush()
     disposed = true
     // Bumps the shared apply generation unconditionally, mirroring the
