@@ -30,7 +30,7 @@ export function CanvasVerbBar() {
   return (
     <div
       data-testid="canvas-verb-bar"
-      className="border-border bg-background/95 absolute inset-x-0 top-0 z-30 flex items-center border-b px-2 backdrop-blur-sm"
+      className="border-border bg-background/95 absolute inset-x-0 top-0 z-30 flex items-center border-b px-chrome backdrop-blur-sm"
       style={{ height: DESKTOP_BAR_HEIGHT_PX }}
     >
       <MarkdownVerbBar

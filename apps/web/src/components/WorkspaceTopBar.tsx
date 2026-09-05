@@ -152,7 +152,7 @@ export default function WorkspaceTopBar({
     return (
       <header
         data-testid="version-preview-bar"
-        className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-primary/40 bg-primary/5 px-3"
+        className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-primary/40 bg-primary/5 px-chrome"
       >
         <span className="min-w-0 flex-1 leading-tight">
           <b className="block truncate text-sm font-medium">Viewing {preview.title}</b>
@@ -197,7 +197,7 @@ export default function WorkspaceTopBar({
   }
 
   return (
-    <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
+    <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-chrome">
       {/* Left side: the way out, then the page's title segment. */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {onNavigateBack && (

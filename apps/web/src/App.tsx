@@ -885,7 +885,7 @@ export function App({ providerState }: AppProps) {
           // both need a fresh human approval on the daemon's consent page.
           <div
             role="alert"
-            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-chrome py-1.5 text-xs text-destructive"
           >
             <span>
               This daemon's identity changed — automatic reconnection was refused. If you rotated or
@@ -909,7 +909,7 @@ export function App({ providerState }: AppProps) {
           // browser's local-network permission still being closed.
           <div
             role="alert"
-            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-3 py-1.5 text-xs text-destructive"
+            className="flex shrink-0 items-center justify-between gap-2 bg-destructive/10 px-chrome py-1.5 text-xs text-destructive"
           >
             <span>
               Pairing didn't complete: {grantConnection.detail}. If your browser asked for

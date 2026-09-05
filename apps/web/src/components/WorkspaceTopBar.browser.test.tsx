@@ -123,3 +123,23 @@ describe('WorkspaceTopBar browser mode', () => {
     expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull()
   })
 })
+describe('landscape display cutout', () => {
+  // `viewport-fit=cover` (index.html) lays the page out UNDER the cutout, so
+  // a full-width bar with a plain gutter puts its first and last control —
+  // the way back, the kebab — beneath the camera housing in landscape. The
+  // padding sits on the bar rather than on a wrapper so the bar's own border
+  // and background still reach the screen edge; only the content moves in.
+  // The browser layer is the only one that can see this: `px-chrome` is a
+  // Tailwind `@utility`, and a name that fails to compile emits NO rule at
+  // all rather than an error, which a class-list check would pass right over.
+  it('pads the top bar to the safe area rather than a fixed gutter', () => {
+    const { container } = renderTopBar()
+    const header = container.querySelector('header') as HTMLElement
+    // The utility compiled and reached this element: 0px would mean it did not.
+    expect(getComputedStyle(header).paddingLeft).toBe('12px')
+    // …and it is the safe-area one. On a machine with no cutout every inset
+    // is 0px, so the floor makes `px-chrome` and `px-3` numerically identical
+    // and only the declaration separates them.
+    expect(header.className).toContain('px-chrome')
+  })
+})
