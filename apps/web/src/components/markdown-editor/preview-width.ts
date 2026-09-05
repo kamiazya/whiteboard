@@ -6,7 +6,7 @@
 // where the bug was, not the wiring: the budget ignored the padding the
 // preview SVG adds to itself, and a floor meant to guarantee a readable
 // measure silently guaranteed the opposite on a narrow screen.
-import { PREVIEW_PADDING_PX } from './render-preview.js'
+import { PREVIEW_PADDING_PX } from '../../lib/render-preview.js'
 
 /** Horizontal padding of the document column (`px-6` on both sides). */
 export const PREVIEW_COLUMN_PADDING_PX = 48
