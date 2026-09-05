@@ -17,7 +17,7 @@ carry the detail, loaded on demand rather than here:
 - **`testing-techniques`** — HOW to write one that stays green under the full parallel run,
   how to prove it is stable, and how a property or Stryker survivor is closed. Open the one
   `resources/*.md` for your situation (async/timers, browser mode, isolation, property and
-  mutation, stability checks, naming and structure, executable rungs, Vitest 5).
+  mutation, stability checks, naming and structure, executable rungs, configuration, upgrade).
 
 The write-time rules, so the skill is a lookup rather than a prerequisite:
 

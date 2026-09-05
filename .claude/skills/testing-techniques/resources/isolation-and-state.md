@@ -5,13 +5,16 @@ pages. Anything not scoped to the test that made it is inherited by whatever run
 
 ## Mocks
 
-- **Vitest 5 defaults `clearMocks` to `true`**: `vi.clearAllMocks()` runs before every test,
-  so call history no longer carries from one test into the next while implementations stay.
-  `mockReset` / `restoreMocks` stay off. Pre-adopt it in the v4 configs as its own slice so an
-  order-dependent test surfaces on its own rather than inside the upgrade diff.
-- **`vi.mock` / `vi.unmock` / `vi.hoisted` are top-level only.** Vitest 4 warned on a nested
-  call; Vitest 5 throws. Dynamic mocking inside a test is `vi.doMock` + a dynamic import after
-  it — the one legitimate reason for an in-body `await import()`.
+- **Call history must not leak between tests.** `test.clearMocks: true` runs
+  `vi.clearAllMocks()` before every test (history cleared, implementations kept);
+  `mockReset` also drops implementations; `restoreMocks` restores spied originals. Set
+  `clearMocks: true` explicitly on Vitest 4 — it is the Vitest 5 default `[v5]`, and turning
+  it on as its own slice makes an order-dependent test surface on its own rather than inside
+  the upgrade diff. `clearMocks: false` restores the v4 behaviour.
+- **`vi.mock` / `vi.unmock` / `vi.hoisted` are top-level only.** Vitest 4 warns on a call
+  nested in a function or block; Vitest 5 throws with the location `[v5]`. Dynamic mocking
+  inside a test is `vi.doMock` + a dynamic import after it — the one legitimate reason for an
+  in-body `await import()`.
 - **A test file imports statically unless it mocks what it imports.** An in-body
   `await import()` of a literal specifier charges that module graph's transform-and-load to
   the per-test timeout (blows first under a full parallel run); at module scope it can still
@@ -20,13 +23,31 @@ pages. Anything not scoped to the test that made it is inherited by whatever run
   `tools/arch-lint/src/test-lazy-import-check.test.ts` scans for it; `vi.mock` / `doMock` /
   `resetModules` in the file or a computed specifier (`pathToFileURL(...)`) are recognised
   structurally, anything else deliberate carries `// lazy-import: <reason>` on the line above.
-- **Conditional mocking**: Vitest 5's `vi.when(fn).calledWith(...).thenResolve(...)`
-  replaces a `mockImplementation` that branches on its arguments; arguments match by deep
-  equality and accept asymmetric matchers, and `expect(fn).toHaveBeenExhausted()` verifies
-  every registered behaviour was consumed.
-- **Browser automocks stay automocked** in Vitest 5 — exports return `undefined` instead of
-  falling through to the real implementation. `vi.mock(path, { spy: true })` keeps real calls
-  while tracking them. Eight `web-browser` files call `vi.mock`, all with factories today.
+
+### Conditional mocking: `vi.when` `[v5]`
+
+```ts
+const findById = vi.fn()
+vi.when(findById)
+  .calledWith(1).thenResolve({ id: 1, name: 'Ella' })
+  .calledWith(2).thenResolve({ id: 2, name: 'Gracie' })
+  .calledWith(expect.any(Number)).thenReject(new Error('not found'))
+
+expect(findById).toHaveBeenExhausted()   // every registered behaviour was consumed
+```
+
+Replaces a `mockImplementation` that branches on its arguments. Arguments match by deep
+equality and accept asymmetric matchers; `thenReturn` / `thenResolve` / `thenReject`, with
+`thenReturnOnce` and a `times` option to bound a behaviour to N calls. `toHaveBeenExhausted`
+turns "this mock was set up for a call that never came" into a failure instead of silence.
+
+### Browser-mode automocks stay automocked `[v5]`
+
+`vi.mock('./module')` with no factory in a browser test now returns `undefined` from every
+export rather than falling through to the real implementation (the Vitest 4 behaviour).
+`vi.mock('./module', { spy: true })` keeps the real calls while tracking them. Eight
+`web-browser` files call `vi.mock`, all with factories today, so nothing here changes at
+the upgrade.
 
 ## Storage and the filesystem
 
@@ -68,10 +89,9 @@ pages. Anything not scoped to the test that made it is inherited by whatever run
   `web-node`), and **treat a test count far below CI's as evidence the filter missed**.
 - Every project config carries a `name:`; `tools/checks/src/vitest-projects.mjs` throws on
   one without, because the shared-layer CI step derives its `--project` list from them.
-- Vitest 5 adds `-p` as shorthand and nested projects (a referenced config may declare its own
-  `projects`). **Do not nest yet**: that derivation regex-scans the ROOT `vitest.config.ts`
-  for quoted `*.config.ts` paths, and a nested list would silently leave the CI step
-  (`resources/vitest-5.md`).
+- Filters, the `-p` shorthand and nested projects, pools and caches are
+  `resources/configuration.md` — including why nested `projects` must wait for that
+  derivation to understand them.
 
 ## Environment premises
 

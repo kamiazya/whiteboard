@@ -141,6 +141,10 @@ expectation edited, has demonstrated it changed nothing but speed.
 
 ## Performance: `pnpm bench`
 
+The bench API itself (module-scope `bench` on Vitest 4; a `bench` test-context fixture with
+`bench.compare`, `toBeFasterThan` and stored baselines via `bench.from()` on Vitest 5) is
+`testing-techniques/resources/configuration.md` › Benchmarks.
+
 `vitest bench` (`packages/canvas-render/src/layout/edges/spatial-edges.bench.ts`),
 never a hand-rolled `performance.now()` loop — you need the variance and the
 sample count to know whether you measured anything.

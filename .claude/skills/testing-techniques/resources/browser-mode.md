@@ -43,11 +43,35 @@ failures, and asking for focus back removed ten of eleven in one run.
   a click on a dismissing menu is consumed and "the list does not contain this item" is
   reported for a list that never opened. Raising the query timeout buys a slower identical
   failure.
-- **Vitest 5 locators are strict by default**: `locators.exact` is on, so `getByText('Item')`
-  no longer matches `Item 1`, and `toHaveTextContent` is an exact string comparison (a RegExp
-  goes to the new `toMatchTextContent`). `browser.locators.errorFormat: 'aria'` prints the
-  ARIA tree of the searched subtree on a miss — shorter than the HTML and exactly what
-  `getByRole` / `getByLabelText` match against. Fallout and adoption: `resources/vitest-5.md`.
+
+### Strict locators `[v5]`
+
+`browser.locators.exact` defaults to `true`: `page.getByText('Item')` matches an element whose
+text is exactly `Item`, case-sensitively, and no longer `Item 1`. `toHaveTextContent(x)` is an
+exact string comparison; partial or RegExp matching is the new matcher:
+
+```ts
+await expect.element(page.getByTestId('empty')).toMatchTextContent(/no comments/i)  // partial / RegExp
+await expect.element(page.getByTestId('empty')).toHaveTextContent('No comments yet') // exact
+```
+
+`{ exact: false }` on one call, or `browser: { locators: { exact: false } }` project-wide,
+restores substring matching. Why it matters here: the held-`/title/i` shape bound to the
+OUTGOING page's title because a loose match had two candidates; a strict match has one. On
+this tree: 2 RegExp `toHaveTextContent` calls (`CommentsPanel.browser.test.tsx`) and ~1389
+`getBy*` sites to re-read at the upgrade.
+
+### Locator failure output as an ARIA tree `[v5]`
+
+```ts
+export default defineConfig({
+  test: { browser: { locators: { errorFormat: 'aria' } } }, // 'html' | 'aria' | 'all'
+})
+```
+
+On a miss, the error prints the ARIA snapshot of the searched subtree — roles and accessible
+names, which is exactly what `getByRole` / `getByLabelText` match against, and far shorter
+than the raw HTML. `'all'` prints both.
 
 ## Teardown
 
@@ -89,10 +113,32 @@ Vitest 5 moves attachments to `.vitest/attachments/`, so the budget is re-measur
   file; it traces every test, so never point it at the suite. The switch is the
   `WHITEBOARD_TRACE_SNAPSHOTS` env var because `--browser.trace=on` merges into the config
   object and cannot re-enable what the config turned off (measured).
-- Vitest 5 adds `browser.traceView`, a provider-independent DOM-snapshot replay shown in the
-  UI and HTML reporter. It records DOM snapshots, not served resources, so it may be the
-  DOM view the default trace lacks at a fraction of the size — a hypothesis to measure on
-  the same 16-file subset before trusting it (`resources/vitest-5.md`).
+
+### DOM replay without the resource recording: `browser.traceView` `[v5]`
+
+```ts
+export default defineConfig({
+  test: {
+    browser: {
+      traceView: true,   // or { enabled: true, inlineImages: true, recordCanvas: true }
+    },
+  },
+})
+```
+
+CLI: `vitest --browser.traceView`. Records a DOM snapshot at every interaction, assertion and
+`page.mark`, and replays them step by step — interacted elements highlighted, failed steps
+in red, keyboard navigation — in the browser UI, the Vitest UI and the HTML reporter, for
+local runs and CI failures alike. Provider-independent, no separate viewer. Artifacts land
+under `.vitest/`. `recordCanvas` includes canvas pixels but weakens the replay iframe's
+sandbox (canvas redraw needs script execution); `inlineImages` embeds image data so a
+single-file HTML report stays portable. Pair it with the single-file HTML reporter
+(`resources/configuration.md`) to upload one `index.html` from CI.
+
+Why it matters here: this records DOM snapshots rather than every served resource, which is
+what made Playwright's `snapshots: true` cost 302MB per 16 files. Whether it is the missing
+DOM view at a fraction of the size is a HYPOTHESIS until measured on the same subset
+(`resources/vitest-upgrade.md`).
 
 ## Dependency optimisation
 

@@ -20,9 +20,22 @@ error attributed to whatever test is running by then, or nowhere.
 
 ## `expect.poll` and `waitFor`
 
-- **`expect.poll` in Vitest 5 fails when the callback has not settled within `timeout`**;
-  Vitest 4 let a late-resolving callback pass. The callback receives an `AbortSignal` —
-  pass it to any `fetch` or long wait so the abandoned attempt stops rather than piling up.
+- `expect.poll(fn, { timeout, interval })` re-runs `fn` until the matcher passes; always
+  `await` it. Under Vitest 4 a callback that resolves AFTER the deadline still passes.
+
+### `expect.poll` fails on timeout and hands the callback an `AbortSignal` `[v5]`
+
+```ts
+await expect.poll(async ({ signal }) => {
+  const response = await fetch('/api/status', { signal })
+  return response.status
+}, { timeout: 1000, interval: 50 }).toBe(200)
+```
+
+A callback that has not settled inside `timeout` now rejects the assertion instead of
+passing late, and the `signal` aborts the in-flight attempt so abandoned polls do not pile
+up behind the next test. 14 `expect.poll` sites on this tree; any that relied on the late
+pass surface at the upgrade.
 - **No side effect inside `waitFor`.** A retried callback re-fires `fireEvent` / `userEvent`
   / `render`, so the action double-fires under load and the failure blames the assertion.
   Fire outside, assert inside. Lint rejects it (the `waitFor` side-effect rule).

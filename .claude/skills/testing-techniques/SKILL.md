@@ -1,6 +1,6 @@
 ---
 name: testing-techniques
-description: The whiteboard repo's automated-testing technique catalogue — how to write a vitest test that stays green under a full parallel run (async assertions, fake timers, browser mode, mocks and isolation), how to prove a test is stable before pushing (repeats, stress, quarantine budget), how property-based and mutation testing close the loop on a test that asserts nothing, which flake shapes are already caught by an executable rung (GritQL plugin, setup-file guard, arch-lint scan) and how to add one, and what Vitest 5 changes for each of those. Use when writing or reviewing a test, when a test flakes or times out, when a property or Stryker survivor needs triage, or when planning the Vitest 5 upgrade. For WHICH layer a test belongs in, see test-layer-selection.
+description: The whiteboard repo's automated-testing technique catalogue — how to write a vitest test that stays green under a full parallel run (async assertions, fake timers, browser mode, mocks and isolation), how to prove a test is stable before pushing (repeats, stress, quarantine budget), how property-based and mutation testing close the loop on a test that asserts nothing, which flake shapes are already caught by an executable rung (GritQL plugin, setup-file guard, arch-lint scan) and how to add one, and the vitest features (including Vitest 5's: traceView, strict locators, vi.when, --repeats, expect.poll with AbortSignal, fsModuleCache, vitest doctor, the bench fixture) that serve each. Use when writing or reviewing a test, when a test flakes or times out, when a property or Stryker survivor needs triage, when configuring or running vitest, or when upgrading it. For WHICH layer a test belongs in, see test-layer-selection.
 ---
 
 # Testing techniques (whiteboard)
@@ -25,6 +25,12 @@ mistake — strongest first:
 A shape that costs a real defect twice earns a higher rung. How to move one up is
 `resources/executable-rungs.md`.
 
+**`[v5]` on a heading** means the feature needs Vitest ≥ 5. This tree's version is the
+`vitest:` line of `pnpm-workspace.yaml`'s catalog; a config key the installed version does
+not know is ignored silently, so check before relying on one. Each such entry carries its
+API and a snippet, because the feature is newer than the reader's training — it lives
+beside the situation it serves, never in a file named after the version.
+
 ## Open the resource for the situation
 
 | Situation | Resource |
@@ -36,7 +42,8 @@ A shape that costs a real defect twice earns a higher rung. How to move one up i
 | a property test, a Stryker survivor, a generator that reaches nothing, a coverage ledger | `resources/property-and-mutation.md` |
 | "is this test stable?" — repeats, stress, isolation vs full run, quarantine, flake-watch | `resources/stability-checks.md` |
 | adding a GritQL shape, a setup-file guard, or a source-scan test | `resources/executable-rungs.md` |
-| what Vitest 5 changes, mapped to this repo's traps; the upgrade checklist | `resources/vitest-5.md` |
+| projects and filters, pools and caches, `.vitest/` artifacts and reporters, benchmarks, custom matchers, coverage | `resources/configuration.md` |
+| moving to a new vitest major: breaking changes measured against this tree, and the order to land them | `resources/vitest-upgrade.md` |
 
 ## Write-time checklist (the shapes that cost the most, in one screen)
 
