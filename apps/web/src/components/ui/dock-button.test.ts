@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { CLUSTER_BUTTON_CLASS } from '../../components/history-cluster/HistoryCluster.js'
 import { TOOL_BUTTON_CLASS } from '../../components/spatial-editor/ToolPalette.js'

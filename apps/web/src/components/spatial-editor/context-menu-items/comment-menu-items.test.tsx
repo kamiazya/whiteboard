@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { commentMenuItems } from './comment-menu-items.js'
@@ -14,6 +15,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose: vi.fn(),
       applyResult: vi.fn(),
     })
@@ -27,6 +29,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose,
       applyResult: vi.fn(),
     })
@@ -43,6 +46,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment: resolved,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose: vi.fn(),
       applyResult,
     })

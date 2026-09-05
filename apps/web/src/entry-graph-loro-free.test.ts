@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The entry chunk's critical path is everything App.tsx reaches through
 // STATIC imports: Vite modulepreloads each of those chunks from index.html,
 // so a fresh visitor downloads them before first paint. loro-crdt's WASM

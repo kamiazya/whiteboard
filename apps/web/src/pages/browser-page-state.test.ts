@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'

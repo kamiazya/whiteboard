@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import { contentStateOf } from './document-state.js'

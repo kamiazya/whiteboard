@@ -4,7 +4,7 @@
  * or reopen. There is no removal anywhere (ADR-0025 decision 2): closing
  * the conversation is the only way to put a comment away.
  */
-import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
+import { commentAnchor, type EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw } from 'lucide-react'
 import type { MutableRefObject } from 'react'
@@ -14,6 +14,8 @@ import type { ContextMenuItem } from '../ContextMenu.js'
 export interface CommentMenuItemsInput {
   readonly comment: CanvasComment
   readonly canvasRef: MutableRefObject<SpatialCanvas>
+  /** The routed edge paths, so a comment about an edge opens its editor on the path. */
+  readonly edgePathOf: EdgePathLookup
   readonly setCommentCompose: CanvasCommands['setCommentCompose']
   readonly applyResult: CanvasCommands['applyResult']
 }
@@ -21,6 +23,7 @@ export interface CommentMenuItemsInput {
 export function commentMenuItems({
   comment,
   canvasRef,
+  edgePathOf,
   setCommentCompose,
   applyResult,
 }: CommentMenuItemsInput): ContextMenuItem[] {
@@ -35,7 +38,7 @@ export function commentMenuItems({
       // draws from — so the bubble opens exactly over the drawn one.
       onSelect: () =>
         setCommentCompose({
-          point: commentAnchor(comment, canvasRef.current),
+          point: commentAnchor(comment, canvasRef.current, edgePathOf),
           editing: { id: comment.id, initialText: comment.text },
         }),
     },

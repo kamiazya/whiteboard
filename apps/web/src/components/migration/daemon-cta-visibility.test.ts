@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { DaemonProbeResult } from '../../lib/daemon-probe.js'
 import { defaultUserSettings, type UserSettings } from '../../lib/user-settings-store.js'

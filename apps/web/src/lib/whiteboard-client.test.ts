@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { documentSnapshotSchema } from './whiteboard-client.js'

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Preventive properties over hitTest — the click-resolution contract the
 // editor's selection, drag, edit, and context-menu paths all share. Pins
 // the container-yield rule (an unfilled group frame never steals a click

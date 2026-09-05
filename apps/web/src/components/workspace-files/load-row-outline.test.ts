@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'

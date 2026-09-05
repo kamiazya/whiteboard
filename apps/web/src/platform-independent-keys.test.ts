@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Guard: no test may drive a BROWSER shortcut whose chord differs per
  * platform.

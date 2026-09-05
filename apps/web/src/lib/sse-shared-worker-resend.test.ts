@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * What happens to a tab's edit when the daemon refuses the write.
  *

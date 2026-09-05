@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Pure clipboard-fragment helpers (editor-completeness slice 2): extract a
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.

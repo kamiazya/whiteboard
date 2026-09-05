@@ -57,6 +57,27 @@ A shape whose textual form has too many legitimate instances stays prose: the he
 shape flags ~90% false positives as a scan (audit-triage 2026-08-21), so it is reader judgement
 plus resolver-taking helpers instead.
 
+## Helpers: point the failure at the call site
+
+An assertion helper's failure leads with the helper's own `expect` line, which is never where
+the problem is. `vi.defineHelper` strips the helper's frames:
+
+```ts
+export const assertLedger = vi.defineHelper(function assertLedger<K extends string>(
+  what: string, ledger: Record<K, SurfaceCoverage>, tally: Record<K, number>,
+): void { /* … */ })
+```
+
+Measured on a forced ledger failure — plain, the stack leads with
+`❯ assertLedger src/test-utils/coverage-ledger.ts:70:9` and quotes the helper's source before
+naming the caller; wrapped, it is `❯ src/zz-helper-probe.test.ts:11:3` and nothing else. The
+message is identical either way; what changes is which file the reader opens first, and for a
+ledger that is the test owning the surface that grew, never the shared helper.
+
+Wrapped here: `assertLedger`, `assertScannedLedger`, `focusEditable`,
+`assertNoSetStateInRenderWarning`. Wrap a helper when it ASSERTS; a helper that only builds a
+fixture has no failure to relocate.
+
 ## Adding a setup-file guard
 
 The rung for "every test in this project, at runtime". `apps/web/vitest.setup.ts`'s

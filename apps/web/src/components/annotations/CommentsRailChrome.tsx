@@ -64,6 +64,7 @@ export function CommentsRailAside({
         composeAnchor={writable ? rail.composeAnchor : null}
         onCreateThread={writable ? rail.createThread : undefined}
         onCancelCompose={rail.cancelCompose}
+        onComposeDocument={writable ? () => rail.composeThread({ kind: 'document' }) : undefined}
       />
     </aside>
   )

@@ -1,4 +1,4 @@
-import { expect, type vi } from 'vitest'
+import { expect, vi } from 'vitest'
 
 // React's warning text for an unguarded/cross-component setState-during-render
 // violation. Distinct from the sanctioned "adjust state during render for the
@@ -13,9 +13,11 @@ const REACT_SETSTATE_IN_RENDER_RE =
  * React setState-in-render warning. Scoped to that specific warning (not "zero
  * console.error calls") so intentional error logging on other paths is allowed.
  */
-export function assertNoSetStateInRenderWarning(errorSpy: ReturnType<typeof vi.spyOn>): void {
-  const matchingCalls = (errorSpy.mock.calls as unknown[][]).filter((args) =>
-    args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
-  )
-  expect(matchingCalls).toEqual([])
-}
+export const assertNoSetStateInRenderWarning = vi.defineHelper(
+  function assertNoSetStateInRenderWarning(errorSpy: ReturnType<typeof vi.spyOn>): void {
+    const matchingCalls = (errorSpy.mock.calls as unknown[][]).filter((args) =>
+      args.some((arg) => typeof arg === 'string' && REACT_SETSTATE_IN_RENDER_RE.test(arg)),
+    )
+    expect(matchingCalls).toEqual([])
+  },
+)

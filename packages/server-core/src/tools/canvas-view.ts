@@ -1,4 +1,6 @@
+import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  commentThreadSchema,
   documentIdSchema,
   spatialCanvasSchema,
   workspaceIdSchema,
@@ -46,6 +48,12 @@ export const canvasViewOutputSchema = z
     /** The document itself: the widget lays it out, it is not pre-rendered. */
     scene: spatialCanvasSchema,
     /**
+     * The document's conversations, for what the scene's flat projection
+     * cannot carry: a passage's words, a node set's outline. The pins still
+     * come from the projection inside `scene`, as the web canvas draws them.
+     */
+    threads: z.array(commentThreadSchema),
+    /**
      * File reference -> what it resolves to. Keyed by the raw `file` value
      * on the node, which is what the widget's seam is called with.
      */
@@ -84,6 +92,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         workspaceId: input.workspaceId,
         documentId: input.documentId,
         scene: canvas,
+        threads: readAnnotations(doc),
         // `markdown` -> `body` is the one place the internal record and the
         // wire disagree. The record is canvas-render's `ResolvedReference`,
         // which names every content kind it can carry; this schema names

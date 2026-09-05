@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'

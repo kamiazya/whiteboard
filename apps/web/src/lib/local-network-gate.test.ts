@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { decideConnectGate, explainProbeFailure } from './local-network-gate.js'
 

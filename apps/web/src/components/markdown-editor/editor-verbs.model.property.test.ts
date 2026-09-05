@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The markdown editor's verbs as ONE state machine over the caret's line,
  * checked by command sequences (fast-check model-based testing) and judged

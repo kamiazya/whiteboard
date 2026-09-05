@@ -248,3 +248,53 @@ it('abandons the passage when the reader cancels', async () => {
 
   expect(cancels).toBe(1)
 })
+
+it('says what a thread is about when nothing on a surface can: the document, a node set', async () => {
+  const whole: CommentThread = {
+    id: 't-doc',
+    anchor: { kind: 'document' },
+    status: 'open',
+    messages: [{ id: 'm5', body: 'is this document still needed?' }],
+  }
+  const set: CommentThread = {
+    id: 't-set',
+    anchor: { kind: 'spatial', nodeIds: ['a', 'b', 'c'], x: 0, y: 0, width: 10, height: 10 },
+    status: 'open',
+    messages: [{ id: 'm6', body: 'these belong together' }],
+  }
+  render(<CommentsPanel threads={[OPEN, whole, set]} />)
+  await expect.element(page.getByTestId('thread-about-t-doc')).toHaveTextContent('whole document')
+  await expect.element(page.getByTestId('thread-about-t-set')).toHaveTextContent('3 nodes')
+  // A pin says where a spot comment is; the list adds nothing.
+  expect(page.getByTestId('thread-about-t-open').query()).toBeNull()
+})
+
+it('offers to start a conversation about the whole document, and says so on the compose box', async () => {
+  // The one anchor with no place on any surface: nothing in an editor can
+  // open it, so the list carries the opener — hidden once a box is up.
+  let composes = 0
+  const utils = render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onCreateThread={() => {}}
+      onComposeDocument={() => {
+        composes += 1
+      }}
+    />,
+  )
+  await userEvent.click(page.getByTestId('comment-on-document'))
+  expect(composes).toBe(1)
+
+  utils.rerender(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={{ kind: 'document' }}
+      onCreateThread={() => {}}
+      onComposeDocument={() => {}}
+    />,
+  )
+  await expect
+    .element(page.getByTestId('comments-panel-compose-about'))
+    .toHaveTextContent('About the whole document')
+  expect(page.getByTestId('comment-on-document').query()).toBeNull()
+})

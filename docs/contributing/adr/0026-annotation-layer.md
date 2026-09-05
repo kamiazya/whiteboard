@@ -186,6 +186,36 @@ text arm is written. The design holds without it (quote + position is what
 Hypothesis and Google Docs ship); it is materially better with it, because a
 cursor is exact under merge where a quote is a search.
 
+*Amended 2026-09-05 — the reference names any object of the surface.* The
+spatial arm's reference is `nodeId` **or** `edgeId` (never both): an edge is
+as much an object of the canvas as a node, and a reader has as much to say
+about a connection as about what it connects; the pin rides the edge's
+routed path, re-projected from the stored point on each layout, and stands
+at the point when the edge is gone. The text arm gains the reference this
+decision said every arm has: an optional `nodeId` naming the text node whose
+text holds the passage — a passage inside a node lives on the canvas, but
+its position is a place in a string, not a point. Absent, the passage is the
+note's own body. A node passage projects onto the canvas as a comment on
+that node, at its corner (`canvasCommentFromThread`, model); the flat
+projection written back keeps the passage it could not carry. The words
+themselves are highlighted on the canvas (`layoutSpatialCanvas`'s `threads`
+option: the passage is re-found in the node's laid-out runs by its quote,
+since the runs hold rendered text and the offsets are into the source) and
+inside the node's editor while it is edited. What a reader
+can comment on, and which arm carries it, is the table on
+`annotationAnchorSchema`. *Amended 2026-09-05, second time:* the spatial
+arm may also name a SET of nodes (`nodeIds`, at least two, one reference
+per anchor still) and carry a rect (`width`/`height`, the region it stands
+for — stored for a set as the place an orphan is drawn from, since the live
+box is the members' own bounds); and a `document` arm, the one anchor with
+no position, names the document as a whole. Neither is a new object on an
+existing surface in the sense above: a set is several references on one
+arm, a region is the spatial arm's position in a second shape, and the
+document is on no surface at all, which is why it is an arm rather than a
+reference. The MCP Apps widget receives the threads plane beside the scene
+(`canvas_view`'s `threads`), so it draws passages and outlines like every
+other surface.
+
 **The union stays closed.** Every format is in this repo, and a closed union
 buys the exhaustiveness checking the renderers rely on — the same decision
 `canvas-render` made for its scene-node union. A plugin-registered anchor kind

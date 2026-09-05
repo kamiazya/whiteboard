@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 import { describe, expect, it, vi } from 'vitest'
 

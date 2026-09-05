@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A component nothing renders is a component nobody can reach, and its own
  * test is what makes it look alive.

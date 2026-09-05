@@ -29,6 +29,7 @@ import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
+import { formatRelative } from '../components/workspace-files/format-relative.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
@@ -193,8 +194,9 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
       >
         <span className="font-medium">{displayName ?? workspaceId}</span>
         {' — the daemon that keeps this workspace is unreachable. '}
-        This is the copy cached in this browser (synced {new Date(syncedAt).toLocaleString()}).
-        Edits save here and ship to the daemon when it returns.
+        This is the copy cached in this browser (synced{' '}
+        {formatRelative(syncedAt, { pastDay: 'absolute' })}). Edits save here and ship to the daemon
+        when it returns.
       </div>
       {state.kind === 'loading' && <p className="p-4 text-sm text-muted-foreground">Loading…</p>}
       {state.kind === 'missing' && (

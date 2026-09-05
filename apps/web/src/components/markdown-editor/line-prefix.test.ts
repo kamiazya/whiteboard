@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The block and list bands' commands on the cases the model test cannot
 // spell out: caret placement, multi-line selections, indentation, and the
 // empty line the bar is most often pressed on.

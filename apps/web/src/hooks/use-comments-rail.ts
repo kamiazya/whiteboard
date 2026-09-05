@@ -22,6 +22,7 @@ import type {
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
 
 /** The keeper-specific write door — the only injected half. */
@@ -127,12 +128,9 @@ export function useCommentsRail(args: {
   const resolveAnchor = useMemo(() => {
     if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody, threadMarks)
     if (documentKind !== 'spatial' || canvas === null) return undefined
-    const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
-    }
+    // Every reference a canvas anchor can carry — a node, an edge, a node
+    // set, a passage of a node's text — judged by one reader.
+    return anchorResolverFor({ kind: 'spatial', canvas })
   }, [documentKind, canvas, markdownBody, threadMarks])
 
   /**

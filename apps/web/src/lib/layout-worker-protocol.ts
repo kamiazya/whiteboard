@@ -30,7 +30,7 @@ import type {
   ResolvedReference,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -82,6 +82,8 @@ export type LayoutRequest = LayoutSubject & {
   readonly suppressedBodyNodeIds?: readonly string[]
   /** Draw resolved comments too (the editor's per-user toggle). */
   readonly showResolved?: boolean
+  /** The document's conversations, for passage highlights inside text nodes. */
+  readonly threads?: readonly CommentThread[]
   /**
    * Where this answer may be REMEMBERED, as the render key's own path — the
    * worker's persistent tier (ADR-0027 decision 5) reads it before working

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The source pane's half of the annotation layer: which passages of the body
  * a conversation is drawn over, and what happens to one whose passage is

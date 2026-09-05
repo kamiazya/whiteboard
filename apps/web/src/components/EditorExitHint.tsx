@@ -90,6 +90,9 @@ export function EditorExitHint({
       <div
         data-testid="editor-exit-hint"
         data-editor-overlay={canvasOverlay ? true : undefined}
+        // Keyboard avoidance keeps this strip above the keyboard along with
+        // the editor it belongs to; the attribute is how it knows one is up.
+        data-editor-exit-hint={canvasOverlay ? true : undefined}
         className={cn(
           'bg-background border-border inline-flex items-center rounded-[6px] border select-none',
           placement === undefined && className,
@@ -151,6 +154,7 @@ export function EditorExitHint({
     <span
       aria-hidden="true"
       data-testid="editor-exit-hint"
+      data-editor-exit-hint={canvasOverlay ? true : undefined}
       className={cn(
         'text-muted-foreground pointer-events-none inline-flex items-center gap-1 text-[11px] leading-none whitespace-nowrap select-none',
         className,

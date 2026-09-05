@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { deriveCapabilityTier } from './capability-tier.js'
 import type { DaemonProbeResult } from './daemon-probe.js'

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The node branch's composition rules, pinned as plain function calls: items
 // are data, so presence/order/label assertions and handler-spy assertions
 // need no DOM. The one genuinely untested slice (per the design) is the last
@@ -220,5 +221,29 @@ describe('nodeMenuItems', () => {
         { kind: 'set-node-color', id: 'b', color: '1' },
       ],
     })
+  })
+})
+
+describe('Comment on selection', () => {
+  it('opens a compose about every member, at the corner of the box they occupy', () => {
+    const b: SpatialNode = { id: 'b', type: 'text', x: 40, y: 20, width: 10, height: 30, text: 'B' }
+    const canvas: SpatialCanvas = { nodes: [textNode, b], edges: [] }
+    const setCommentCompose = vi.fn()
+    const items = nodeMenuItems(
+      baseInput(textNode, canvas, { extraIds: new Set(['b']), setCommentCompose }),
+    )
+    const item = items.find((entry) => labelOf(entry) === 'Comment on selection')
+    expect(item).toBeDefined()
+    ;(item as { onSelect: () => void }).onSelect()
+    expect(setCommentCompose).toHaveBeenCalledWith({
+      point: { x: 50, y: 0 },
+      threadAnchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 50, height: 50 },
+    })
+  })
+
+  it('is not offered for a single node: that is Comment on this', () => {
+    const canvas: SpatialCanvas = { nodes: [textNode], edges: [] }
+    const items = nodeMenuItems(baseInput(textNode, canvas))
+    expect(items.map(labelOf)).not.toContain('Comment on selection')
   })
 })

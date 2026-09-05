@@ -1,3 +1,4 @@
+// @vitest-environment node
 // App reaches every page through React.lazy(). In a test run that dynamic
 // import is resolved by the dev server while a `findBy*` query counts down its
 // 1000ms retry budget, so a page that is neither mocked nor pre-imported turns

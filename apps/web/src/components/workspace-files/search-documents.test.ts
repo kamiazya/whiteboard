@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { searchDocuments } from './search-documents.js'

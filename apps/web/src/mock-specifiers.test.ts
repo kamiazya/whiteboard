@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * `vi.mock('./x.js', factory)` names a module by a STRING, and nothing
  * checks the string. A mock for a path nothing imports is registered and

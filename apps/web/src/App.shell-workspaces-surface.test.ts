@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Every place the shell is rendered hands it a workspace source.
  *

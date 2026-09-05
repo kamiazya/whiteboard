@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { buildMiniGraph, type MiniGraphInput } from './mini-graph.js'

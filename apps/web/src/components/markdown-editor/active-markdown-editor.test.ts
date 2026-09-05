@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The one place the keyboard-docked bar learns which CodeMirror host it is
 // talking to. Registration is by identity so a host that unmounts after a
 // newer one took over cannot clear the newer one.
@@ -11,7 +12,7 @@ import {
 } from './active-markdown-editor.js'
 
 function fakeEditor(): ActiveMarkdownEditor {
-  return { run: vi.fn(), headingLevel: () => 0 }
+  return { run: vi.fn(), headingLevel: () => 0, focus: vi.fn(), selectedRange: () => null }
 }
 
 describe('active markdown editor registry', () => {

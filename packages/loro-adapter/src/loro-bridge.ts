@@ -1,4 +1,5 @@
 import {
+  type AnnotationAnchor,
   type CanvasComment,
   type CanvasEdge,
   canvasEdgeSchema,
@@ -18,7 +19,11 @@ import {
 } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 import { readCanvasComments } from './annotations.js'
-import { migrateCanvasCommentsToThreads, writeThreadInto } from './comment-threads.js'
+import {
+  migrateCanvasCommentsToThreads,
+  readCommentThreads,
+  writeThreadInto,
+} from './comment-threads.js'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
 import { minimalChange } from './minimal-change.js'
 
@@ -259,13 +264,53 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 // Shared with writeCanvasComment/deleteCanvasComment below, so field
 // projection (including commentToFields' loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
+/** Whether `canvasCommentFromThread` carries this anchor without loss: a point, a node, an edge. */
+function flatCanCarry(anchor: AnnotationAnchor): boolean {
+  return anchor.kind === 'spatial' && anchor.nodeIds === undefined && anchor.width === undefined
+}
+
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
   // `commentToFields` is still what refuses a non-finite anchor, loudly and
   // before anything is stored — a thread whose anchor fails the schema would
   // be dropped by every reader instead.
   commentToFields(comment)
   migrateCanvasCommentsToThreads(doc)
-  writeThreadInto(doc, threadFromCanvasComment(comment))
+  const incoming = threadFromCanvasComment(comment)
+  const held = readCommentThreads(doc).find((thread) => thread.id === comment.id)
+  if (held === undefined) {
+    writeThreadInto(doc, incoming)
+    return
+  }
+  // A flat comment is a PROJECTION of its thread, and writing a projection
+  // back verbatim loses what it could not carry. Two things it cannot:
+  // - an anchor beyond a point, a node or an edge. A thread on a node's
+  //   text projects as a comment on that node, a node set or a region as a
+  //   comment at its corner, and written back each would become that
+  //   point. The text and the status are what a flat write can honestly
+  //   change; the anchor it saw is the one it keeps.
+  // - the opening message's identity. The projection borrows the thread's
+  //   id for its one message, which is right for a comment the canvas
+  //   opened and wrong for one an MCP peer opened with a message id of its
+  //   own: written under the thread's id, an edit ADDED a message and
+  //   sorted it ahead of the original, which then read as a reply.
+  const opening = held.messages[0]
+  const edited = incoming.messages[0]
+  if (opening === undefined || edited === undefined) {
+    writeThreadInto(doc, incoming)
+    return
+  }
+  writeThreadInto(doc, {
+    ...incoming,
+    anchor: flatCanCarry(held.anchor) ? incoming.anchor : held.anchor,
+    messages: [
+      {
+        ...edited,
+        id: opening.id,
+        ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
+        ...(opening.author === undefined ? {} : { author: opening.author }),
+      },
+    ],
+  })
 }
 
 /** Returns false (writing nothing) when the comment id is absent. */
@@ -543,7 +588,9 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   // is not this reader's job — `readAnnotations` answers it for a markdown
   // document too. What stays here is only the lossy projection into the flat
   // shape the canvas renderer still takes.
-  const comments = readCanvasComments(doc)
+  // With the nodes in hand: a passage of a node's text projects as a comment
+  // on that node, which needs the node's corner to stand at.
+  const comments = readCanvasComments(doc, (id) => nodes.find((node) => node.id === id))
 
   const hasEnvelope = Object.values(envelope).some((value) => value !== undefined)
   if (!hasEnvelope && comments.length === 0) return { nodes, edges }
@@ -871,7 +918,8 @@ export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefi
  * an OP — a workspace tree node's meta map, unlike a doc's roots, which are
  * implicit. Such a host must pre-attach these when the document node is
  * created: otherwise the first READ of a missing container attaches it via
- * `getOrCreateContainer`, and that stray local op clears the UndoManager's
+ * `openMergeableMap`/`openMergeableText`, and that stray local op clears the
+ * UndoManager's
  * redo stack. Measured: create → undo → read → redo left the document empty,
  * while the same sequence without the read redid fine.
  *

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { type Box, scaleBoxWithin, unionBox } from '../../lib/spatial/geometry.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
