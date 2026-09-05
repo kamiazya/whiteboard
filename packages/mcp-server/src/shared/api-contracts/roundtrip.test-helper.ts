@@ -1,7 +1,6 @@
-/**
- * Parse a value through the JSON wire format (stringify → parse → schema.parse)
- * so api-contract tests can assert that no fields drift across serialization.
- */
-export function roundtrip<T>(schema: { parse: (v: unknown) => T }, value: T): T {
-  return schema.parse(JSON.parse(JSON.stringify(value)))
-}
+// Moved to @kamiazya/whiteboard-daemon-client (the browser-safe client
+// half, now a shared-layer package arch-lint can scan structurally).
+// This shim keeps every old path — internal relative imports, the
+// published subpath exports, and tsup entries — working until the
+// import rewrite lands; do not add new imports through it.
+export * from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
