@@ -16,7 +16,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
-import type { MarkdownEmbedSource } from '../hooks/use-markdown-embed-content.js'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from './document-file-contract.js'
@@ -96,6 +95,16 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
     return undefined
   }
 }
+
+/**
+ * What an `![[embed]]` target loads as: a markdown document's raw body
+ * (parsed once by the hook that caches it), or a spatial document's canvas
+ * (drawn by the layout as a miniature). Declared here, in lib, because the
+ * loaders that produce it live here and the hook above only consumes it.
+ */
+export type MarkdownEmbedSource =
+  | { readonly body: string; readonly title?: string }
+  | { readonly canvas: SpatialCanvas; readonly title?: string }
 
 /**
  * Loads one `![[embed]]` target from the same store — the loader behind

@@ -14,11 +14,10 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { loadMarkdownEmbedSource } from '../lib/document-embed-content.js'
+import { loadMarkdownEmbedSource, type MarkdownEmbedSource } from '../lib/document-embed-content.js'
 import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 const log = getAppLogger('markdown-embed-content')
@@ -26,13 +25,7 @@ const log = getAppLogger('markdown-embed-content')
 /** What the layout's `resolveEmbed` seam answers: a parsed body or a canvas. */
 export type MarkdownEmbedEntry = EmbeddedDocument
 
-/**
- * A markdown target is its raw body (parsed here, once per load); a spatial
- * target is its canvas, which the layout draws as a miniature.
- */
-export type MarkdownEmbedSource =
-  | { readonly body: string; readonly title?: string }
-  | { readonly canvas: SpatialCanvas; readonly title?: string }
+export type { MarkdownEmbedSource }
 
 export type MarkdownEmbedLoader = (documentId: string) => Promise<MarkdownEmbedSource | undefined>
 
