@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The stored-bytes predicate, pinned directly: the conformance suite can
  * only reach it with values a real structured clone produces, and a clone

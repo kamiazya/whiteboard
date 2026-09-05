@@ -1,8 +1,8 @@
 import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { FileText, LayoutDashboard, Waypoints } from 'lucide-react'
 import { useId, useState } from 'react'
-import { HEADER_WIDE_TOGGLE_CLASS } from '@/components/ui/header-button'
-import { cn } from '@/lib/utils'
+import { HEADER_WIDE_TOGGLE_CLASS } from '../../components/ui/header-button.js'
+import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export type ConnectionsBacklink = DocumentBacklinksResponse['backlinks'][number]

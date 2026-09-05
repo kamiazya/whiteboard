@@ -24,7 +24,7 @@
  * finds these constants by scanning rather than by name.
  */
 
-import { TOGGLE_STATE_CLASS } from './dock-button'
+import { TOGGLE_STATE_CLASS } from './dock-button.js'
 
 const HEADER_BUTTON_BASE_CLASS =
   'inline-flex shrink-0 items-center justify-center rounded-md text-muted-foreground transition-[color,background-color] duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'

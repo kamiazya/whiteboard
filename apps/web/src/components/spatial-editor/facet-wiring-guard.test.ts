@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Core surfaces publish contribution points and know NO facet domain — the
 // agreed governance line (spec: "facetのUIを既存面に手で書き足す線形拡張は
 // しない"). Two increments shipped hand-wired facet UI anyway, so the rule

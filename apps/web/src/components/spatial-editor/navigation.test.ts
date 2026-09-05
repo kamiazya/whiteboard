@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The navigation machine's behaviour, stated at the model level.
  *

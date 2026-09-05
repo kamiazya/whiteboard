@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Containment property for frameViewport: whenever the fit-zoom is not
 // clamped at MIN_ZOOM, the framed box stays fully inside the container
 // (inset by the frame margin), and the content center always lands on the

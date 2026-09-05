@@ -1,6 +1,7 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { CLUSTER_BUTTON_CLASS } from '@/components/history-cluster/HistoryCluster'
-import { TOOL_BUTTON_CLASS } from '@/components/spatial-editor/ToolPalette'
+import { CLUSTER_BUTTON_CLASS } from '../../components/history-cluster/HistoryCluster.js'
+import { TOOL_BUTTON_CLASS } from '../../components/spatial-editor/ToolPalette.js'
 import { DOCK_BUTTON_HEIGHT_CLASS } from './dock-button'
 
 /**

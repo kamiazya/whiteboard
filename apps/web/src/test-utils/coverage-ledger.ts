@@ -31,7 +31,7 @@
  * See `.claude/rules/coverage-ledger.md` for when a surface earns one, and
  * — the half that matters more — when it does not.
  */
-import { expect } from 'vitest'
+import { expect, vi } from 'vitest'
 
 /** Whether a test exercises a member of the surface, or deliberately does not. */
 export type SurfaceCoverage = 'covered' | `not modelled: ${string}`
@@ -57,7 +57,7 @@ export function emptyTally<K extends string>(
  * @param what  Singular noun for one member, used in both messages —
  *              "EditorCommand kind", "shortcut", "editing verb".
  */
-export function assertLedger<K extends string>(
+export const assertLedger = vi.defineHelper(function assertLedger<K extends string>(
   what: string,
   ledger: Record<K, SurfaceCoverage>,
   tally: Record<K, number>,
@@ -75,7 +75,7 @@ export function assertLedger<K extends string>(
       ).toBe(0)
     }
   }
-}
+})
 
 /**
  * The same both-sides check, for a ledger whose key set is SCANNED out of
@@ -96,7 +96,7 @@ export function assertLedger<K extends string>(
  * that stops matching reports itself here as "every entry is stale", which
  * sends the reader to the wrong file entirely.
  */
-export function assertScannedLedger(
+export const assertScannedLedger = vi.defineHelper(function assertScannedLedger(
   scanned: readonly string[],
   ledger: Record<string, unknown>,
   messages: { readonly unclassified: string; readonly stale: string },
@@ -111,4 +111,4 @@ export function assertScannedLedger(
     [...declared].filter((name) => !held.has(name)),
     messages.stale,
   ).toEqual([])
-}
+})

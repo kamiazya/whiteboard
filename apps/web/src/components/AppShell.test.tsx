@@ -4,10 +4,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
-} from '@/lib/browser-workspace-id'
-import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
-import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
-import { createUserSettingsStore } from '@/lib/user-settings-store'
+} from '../lib/browser-workspace-id.js'
+import { resetInstallPromptForTests } from '../lib/install-prompt-store.js'
+import { resetShellStatusForTests, setShellConnection } from '../lib/shell-status-store.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { AppShell, type AppShellWorkspaces } from './AppShell.js'
 

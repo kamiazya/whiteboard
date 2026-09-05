@@ -1,6 +1,7 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '@/test-utils/fast-check'
 import { type Box, scaleBoxWithin, unionBox } from '../../lib/spatial/geometry.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 
 const box = (x: number, y: number, width: number, height: number): Box => ({ x, y, width, height })
 
@@ -68,7 +69,13 @@ const coord = fc.integer({ min: -500, max: 500 })
 const extent = fc.integer({ min: 1, max: 500 })
 const anyBox = fc.record({ x: coord, y: coord, width: extent, height: extent })
 
-describe('scaleBoxWithin properties', () => {
+// 15s, not the project's 5s default: the identity property alone measures
+// 1194ms for its 200 runs on an IDLE machine, and CI's stress job runs every
+// changed file's repeats in one two-core process — 5s expired there twice
+// (two different seeds, both `Test timed out`, i.e. the property never
+// failed; integrator-flow.md's load-dependent family). Budget sized on the
+// measurement, never a pinned seed.
+describe('scaleBoxWithin properties', { timeout: 15_000 }, () => {
   fcTest.prop([anyBox, anyBox], withDefaults())(
     'is the identity when the enclosing box is unchanged',
     (enclosing, member) => {

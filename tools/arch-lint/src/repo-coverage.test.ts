@@ -94,10 +94,14 @@ const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/
 )
 
 /**
- * `apps/web/tsconfig.json`'s `paths` entry, as a repo-relative prefix swap.
- * The only alias any scanned package uses; the rest import relatively.
+ * No scanned package declares a path alias any more — apps/web's `@/` was
+ * retired with its mechanism (tsconfig paths + vite/vitest aliases deleted),
+ * so a reintroduced `@/` import fails to RESOLVE before any scan sees it.
+ * The map stays because the alias-following capability is pinned by
+ * cycle-check.test.ts with its own fixture: a package that adds an alias
+ * must declare it here or its edges silently leave the cycle graph.
  */
-const CYCLE_SCAN_ALIASES = { '@/': 'apps/web/src/' } as const
+const CYCLE_SCAN_ALIASES = {} as const
 
 describe('composition-root dependency direction', () => {
   for (const packageDir of COMPOSITION_ROOTS) {

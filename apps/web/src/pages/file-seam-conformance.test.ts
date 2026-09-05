@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Both document pages must offer the same document-level chrome.
  *

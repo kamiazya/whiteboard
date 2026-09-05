@@ -1,7 +1,6 @@
 import type {
-  MdastLayoutOptions,
   MeasureText,
-  ResolvedReference,
+  ReferenceSeams,
   Scene,
   SpatialLayoutDegradation,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -10,7 +9,7 @@ import {
   layoutSpatialCanvas,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
@@ -36,20 +35,15 @@ function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
 }
 
 /**
- * What a caller has already resolved for this canvas's file references.
- * Absent — the default — keeps the scene a pure function of the canvas
- * snapshot.
+ * What a caller has already resolved for everything this canvas points at
+ * — its file nodes, and the links and embeds inside every body — as the
+ * one bundle `referenceSeams` builds. Absent — the default — keeps the
+ * scene a pure function of the canvas snapshot.
  */
 export interface ComposeCanvasSceneOptions {
-  readonly references?: ReadonlyMap<string, ResolvedReference>
-  /**
-   * What a `![[embed]]` inside a laid-out body resolves to, and what labels
-   * a bare `[[link]]` — the markdown seams, forwarded to every body the
-   * composer lays out (a text node's, a referenced document's). Absent
-   * keeps the placeholders, which is the pure render's answer.
-   */
-  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
+  readonly references?: ReferenceSeams
+  /** The document's conversations, for passage highlights inside text nodes. */
+  readonly threads?: readonly CommentThread[]
 }
 
 /**
@@ -78,14 +72,11 @@ export function composeCanvasScene(
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
+    ...(options?.threads === undefined ? {} : { threads: options.threads }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.
-    ...(references === undefined
-      ? {}
-      : { resolveReference: (ref: string) => references.get(ref), expandFileNode: () => true }),
-    ...(options?.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
-    ...(options?.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
+    ...(references === undefined ? {} : { references, expandFileNode: () => true }),
   })
 }
 

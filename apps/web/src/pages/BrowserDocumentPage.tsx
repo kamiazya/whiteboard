@@ -47,7 +47,7 @@ import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
-import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
+import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -416,10 +416,13 @@ export function BrowserDocumentPage({
       ),
     [switcherOptions, documentId],
   )
-  // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
-  const resolveEmbed = useMarkdownEmbedContent({
+  // Every document the body points at, pre-fetched so the layout's sync
+  // seams have content; the list-based alias table and names answer ahead
+  // of any load.
+  const references = useReferenceSeams({
     body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
     resolveAlias,
+    resolveTitle,
   })
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
@@ -735,6 +738,14 @@ export function BrowserDocumentPage({
         if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
         else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
       },
+      setThreadStatus: (threadId, status) => {
+        if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
+        else onChange(canvas, { kind: 'set-thread-status', threadId, status })
+      },
+      editMessage: (threadId, message, opening) => {
+        if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
+        else onChange(canvas, { kind: 'edit-thread-message', threadId, message, opening })
+      },
     },
   })
 
@@ -753,6 +764,8 @@ export function BrowserDocumentPage({
   const fileSeams = useDocumentFileSeams({
     canvas,
     adapter: BROWSER_FILE_ADAPTER,
+    resolveAlias,
+    resolveTitle,
     stampOf: useMemo(
       () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
       [documents],
@@ -1188,11 +1201,9 @@ export function BrowserDocumentPage({
                           theme: resolvedTheme,
                           meta: markdownDoc.coreFacets,
                           title: titleOf(documentName, documentPath),
-                          resolveAlias,
-                          resolveTitle,
+                          references,
                           linkTargets: pickerTargets,
                           onOpenDocument: (id) => navigateToDocument(id),
-                          resolveEmbed,
                           threads: annotations,
                           threadMarks,
                           selectedThreadId: commentsRail.selectedThreadId,
@@ -1230,9 +1241,6 @@ export function BrowserDocumentPage({
                           canRedo: canRedo(),
                         }}
                         overlayTitle={documentName ?? 'Untitled'}
-                        resolveAlias={resolveAlias}
-                        resolveEmbed={resolveEmbed}
-                        resolveTitle={resolveTitle}
                         linkTargets={pickerTargets}
                         threads={annotations}
                       />

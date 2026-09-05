@@ -1,8 +1,8 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { UseBranchesResult } from '@/hooks/useBranches'
-import { dispatchMergeCommitted, type MergeCommittedDetail } from '@/lib/merge-committed-event'
+import type { UseBranchesResult } from '../hooks/useBranches.js'
+import { dispatchMergeCommitted, type MergeCommittedDetail } from '../lib/merge-committed-event.js'
 
 // MergeDialog touches Excalidraw-adjacent thumbnail fetches; nothing to stub here since
 // this component only mounts MergeDialog behind a closed `open={false}` state by default.
@@ -27,8 +27,9 @@ const state: { current: UseBranchesResult } = {
   },
 }
 
-vi.mock('@/hooks/useBranches', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/useBranches')>('@/hooks/useBranches')
+vi.mock('../hooks/useBranches.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('../hooks/useBranches.js')>('../hooks/useBranches.js')
   return {
     ...actual,
     useBranches: () => state.current,

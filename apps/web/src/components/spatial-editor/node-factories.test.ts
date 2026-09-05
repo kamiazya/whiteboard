@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import { describe, expect, it } from 'vitest'
 import { NEW_NODE_WIDTH } from './gestures.js'

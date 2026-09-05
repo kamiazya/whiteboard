@@ -126,14 +126,30 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
         strokeWidth: 1,
         strokeDasharray: COMMENT_LEADER_DASH,
       }
+      // The pin's own amber at a wash: the passage stays readable, and the
+      // highlight reads as the same object as the pin beside it. The same
+      // 22% the note's source pane paints its passages with.
+      const passage: Appearance = { fill: palette.comment.pin.fill, fillOpacity: 0.22 }
+      // A dashed outline in the pin's amber, unfilled: it says "these" without
+      // covering them, the way the leader says "this one" without joining.
+      const region: Appearance = {
+        fill: 'none',
+        stroke: palette.comment.pin.fill,
+        strokeWidth: 1.5,
+        strokeDasharray: '6 4',
+      }
       return {
         pin,
         bubble,
         leader,
+        passage,
+        region,
         resolvedOverlay: {
           pin: muteForResolved(pin),
           bubble: muteForResolved(bubble),
           leader: muteForResolved(leader),
+          passage: { ...passage, fillOpacity: 0.1 },
+          region: { ...region, strokeOpacity: 0.45 },
         },
       }
     },

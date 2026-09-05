@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The manipulation layer — selection, handles, connect, marquee, snap
  * guides — speaks ONE color vocabulary, defined once in index.css and read

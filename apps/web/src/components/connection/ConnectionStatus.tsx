@@ -29,7 +29,7 @@
  */
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { settingsPath } from '@/lib/app-routes'
+import { settingsPath } from '../../lib/app-routes.js'
 import {
   type ConnectionState,
   isNotKeeping,
@@ -43,6 +43,10 @@ import { ShellMark } from '../shell/ShellMark.js'
 function formatWrittenAt(iso: string): string {
   const at = new Date(iso)
   if (Number.isNaN(at.getTime())) return iso
+  // A save time in the status popover is read as a clock time beside the
+  // reader's own, not as an age — "written at 10:32", never "written 4m
+  // ago" — so it is not formatRelative's stamp.
+  // time-format-is-deliberate: a clock time, not an age
   return at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
 }
 

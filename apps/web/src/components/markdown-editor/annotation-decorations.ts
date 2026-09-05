@@ -31,7 +31,7 @@ import {
 } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
-import { type LivePassage, resolveTextAnchor } from '@/lib/text-anchor'
+import { type LivePassage, resolveTextAnchor } from '../../lib/text-anchor.js'
 
 /** Where one conversation sits in the body as it stands right now. */
 export interface PlacedThread {
@@ -197,6 +197,16 @@ export interface AnnotationHandlers {
  * in through `setAnnotationProjection`, because the view is created once per
  * mount and a changing extension array would not reach it.
  */
+/**
+ * The marks alone, for a host with no margin to put a gutter in — a text
+ * node's editor sits in the node's own box, and a gutter there shifts the
+ * words away from where the committed render draws them. The projection
+ * still travels in through `setAnnotationProjection`.
+ */
+export function annotationMarks(): Extension {
+  return annotationField
+}
+
 export function annotationDecorations(handlers: AnnotationHandlers = {}): Extension {
   return [
     annotationField,

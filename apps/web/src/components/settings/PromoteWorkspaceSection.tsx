@@ -18,7 +18,7 @@
  * bundle until the user actually reaches for promotion.
  */
 import { useCallback, useEffect, useId, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '../../components/ui/button.js'
 import {
   Dialog,
   DialogContent,
@@ -26,12 +26,12 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
-import { getAppLogger } from '@/lib/app-logger'
-import { createDaemonFetch, listWorkspaces } from '@/lib/daemon-api-client'
-import type { ConnectedDaemon } from '@/lib/daemon-auth-fetch'
-import type { PromotionResultRecord, UserSettings } from '@/lib/user-settings-store'
-import { type WorkspaceIdentity, workspaceLabel } from '@/lib/workspace-handle'
+} from '../../components/ui/dialog.js'
+import { getAppLogger } from '../../lib/app-logger.js'
+import { createDaemonFetch, listWorkspaces } from '../../lib/daemon-api-client.js'
+import type { ConnectedDaemon } from '../../lib/daemon-auth-fetch.js'
+import type { PromotionResultRecord, UserSettings } from '../../lib/user-settings-store.js'
+import { type WorkspaceIdentity, workspaceLabel } from '../../lib/workspace-handle.js'
 
 const log = getAppLogger('promote-workspace-section')
 

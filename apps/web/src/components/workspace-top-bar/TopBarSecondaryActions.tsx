@@ -5,11 +5,11 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { HEADER_BUTTON_CLASS } from '@/components/ui/header-button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { isFullscreenSupported } from '@/lib/fullscreen-support'
-import { cn } from '@/lib/utils'
+} from '../../components/ui/dropdown-menu.js'
+import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import { isFullscreenSupported } from '../../lib/fullscreen-support.js'
+import { cn } from '../../lib/utils.js'
 
 interface TopBarSecondaryActionsProps {
   /**

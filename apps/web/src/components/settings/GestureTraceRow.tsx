@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { gestureTrace } from '@/components/spatial-editor/gesture-trace'
+import { gestureTrace } from '../../components/spatial-editor/gesture-trace.js'
 
 const BUTTON_CLASS =
   'shrink-0 rounded-md border border-primary px-3 py-1 text-xs font-semibold text-primary hover:bg-primary/5'

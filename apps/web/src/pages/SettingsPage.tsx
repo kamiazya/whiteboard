@@ -23,31 +23,35 @@ import {
   useSyncExternalStore,
 } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { AppVersionRow } from '@/components/settings/AppVersionRow'
-import { GestureTraceRow } from '@/components/settings/GestureTraceRow'
-import { PromoteWorkspaceSection } from '@/components/settings/PromoteWorkspaceSection'
-import type { PersistStepState } from '@/components/settings/SetupJourney'
-import { findVisibleJourneyBadge, SetupJourney } from '@/components/settings/SetupJourney'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import { useThemeMode } from '@/hooks/useThemeMode'
-import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
-import { celebrate } from '@/lib/celebrate'
-import { createDaemonFetch } from '@/lib/daemon-api-client'
-import type { ConnectedDaemon } from '@/lib/daemon-auth-fetch'
-import { disconnectFromDaemon } from '@/lib/disconnect-daemon'
-import type { FaviconStyle } from '@/lib/favicon'
-import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
+import { FontsCard } from '../components/FontsCard.js'
+import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
+import { StorageReportCard } from '../components/StorageReportCard.js'
+import { AppVersionRow } from '../components/settings/AppVersionRow.js'
+import { GestureTraceRow } from '../components/settings/GestureTraceRow.js'
+import { PromoteWorkspaceSection } from '../components/settings/PromoteWorkspaceSection.js'
+import type { PersistStepState } from '../components/settings/SetupJourney.js'
+import { findVisibleJourneyBadge, SetupJourney } from '../components/settings/SetupJourney.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useThemeMode } from '../hooks/useThemeMode.js'
+import { parseSettingsRoute, type SettingsSection, settingsPath } from '../lib/app-routes.js'
+import { celebrate } from '../lib/celebrate.js'
+import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import type { ConnectedDaemon } from '../lib/daemon-auth-fetch.js'
+import { disconnectFromDaemon } from '../lib/disconnect-daemon.js'
+import type { FaviconStyle } from '../lib/favicon.js'
+import {
+  getInstallState,
+  promptInstall,
+  subscribeInstallState,
+} from '../lib/install-prompt-store.js'
 import {
   type BrowserStorageEstimate,
   ensurePersistentStorage,
   queryPersistentStorage,
   queryStorageEstimate,
-} from '@/lib/persistent-storage'
-import { createUserSettingsStore } from '@/lib/user-settings-store'
-import { FontsCard } from '../components/FontsCard.js'
-import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
-import { StorageReportCard } from '../components/StorageReportCard.js'
+} from '../lib/persistent-storage.js'
+import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
 export interface SettingsPageProps {
   daemon?: ConnectedDaemon

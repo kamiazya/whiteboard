@@ -63,6 +63,10 @@
                 "type": "string",
                 "minLength": 1
               },
+              "targetEdgeId": {
+                "type": "string",
+                "minLength": 1
+              },
               "resolved": {
                 "type": "boolean"
               }

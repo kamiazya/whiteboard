@@ -81,17 +81,28 @@ the same for a `screen`-based test. Reach for `toMatchTextContent(/…/)` only w
 element genuinely holds a longer string you are matching part of — not to restore a
 container assertion that was never about the container.
 
-### Locator failure output as an ARIA tree
+### Locator failure output already carries an ARIA tree
 
-```ts
-export default defineConfig({
-  test: { browser: { locators: { errorFormat: 'aria' } } }, // 'html' | 'aria' | 'all'
-})
+A locator miss prints the ARIA snapshot of the searched subtree — roles and accessible names,
+which is exactly what `getByRole` / `getByLabelText` match against — above the HTML.
+Measured on a forced miss:
+
+```
+VitestBrowserElementError: Cannot find element with locator: getByRole('menuitem', { name: 'Nope' })
+
+ARIA tree:
+- dialog "Settings":
+  - button "Save"
+  - list:
+    - listitem: Alpha
+
+HTML: …
 ```
 
-On a miss, the error prints the ARIA snapshot of the searched subtree — roles and accessible
-names, which is exactly what `getByRole` / `getByLabelText` match against, and far shorter
-than the raw HTML. `'all'` prints both.
+`browser.locators.errorFormat` defaults to `'all'`, so this is on with no configuration;
+`'aria'` only drops the HTML half and `'html'` drops the tree. Read the tree first when a
+query misses — "no `menu` role anywhere" answers the dismissing-menu shape above in one
+line, where the HTML dump does not.
 
 ## Teardown
 
@@ -102,6 +113,15 @@ than the raw HTML. `'all'` prints both.
 - `web-browser`'s `browser-setup.ts` loads the app's real stylesheet: without it Tailwind
   classes compute to nothing, an unstyled dock collides with the scene, and Playwright reports
   a click that never lands — which reads like a hang.
+
+## What cannot cancel an overrun
+
+The test context's `{ signal }` is aborted on timeout, bail and Ctrl+C — and there is nothing
+in browser mode to hand it to. `userEvent.keyboard` is `(text: string) => Promise<void>`, and
+the whole `UserEvent` interface declares no signal or options bag on any method. So the
+overrun that keeps typing into the next test cannot be cancelled from the test side; the
+60s budget below is still the only bound on it. Use `{ signal }` where the TEST itself awaits
+cancellable work (a `fetch`, a poll of your own), not for user events.
 
 ## Timeouts
 

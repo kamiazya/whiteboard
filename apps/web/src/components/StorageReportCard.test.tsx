@@ -1,8 +1,8 @@
 import { storageCategorySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import { drainSchedulerMacrotasks } from '@/test-utils/scheduler-drain.js'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { drainSchedulerMacrotasks } from '../test-utils/scheduler-drain.js'
 import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 
 const PAYLOAD = {

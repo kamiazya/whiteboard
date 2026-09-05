@@ -1,5 +1,8 @@
-import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import type { AliasResolver } from '@kamiazya/whiteboard-codec'
+import type {
+  MdastLayoutOptions,
+  MeasureText,
+  ReferenceSeams,
+} from '@kamiazya/whiteboard-canvas-render'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import { type PreviewBlockAnchor, renderMarkdownPreview } from '../../lib/render-preview.js'
@@ -13,11 +16,8 @@ export interface PreviewPaneProps {
   measure: MeasureText
   background?: string
   theme?: ResolvedTheme
-  /** Maps `[[path]]` aliases to document ids; see render-preview.ts. */
-  resolveAlias?: AliasResolver
-  /** Resolves `![[embed]]` targets (a body or a canvas) for inline rendering; see render-preview.ts. */
-  resolveEmbed?: MdastLayoutOptions['resolveEmbed']
-  resolveTitle?: MdastLayoutOptions['resolveTitle']
+  /** Every reference seam at once; see render-preview.ts. */
+  references?: ReferenceSeams
   /** Renders math blocks; see render-preview.ts. */
   renderMath?: MdastLayoutOptions['renderMath']
   /** Renders diagram fences; see render-preview.ts. */
@@ -64,9 +64,7 @@ export function PreviewPane({
   measure,
   background,
   theme = 'light',
-  resolveAlias,
-  resolveEmbed,
-  resolveTitle,
+  references,
   renderMath,
   renderDiagram,
   anchorsRef,
@@ -78,25 +76,12 @@ export function PreviewPane({
         measure,
         maxWidth,
         background,
-        resolveAlias,
-        resolveEmbed,
+        references,
         theme,
-        resolveTitle,
         renderMath,
         renderDiagram,
       }),
-    [
-      value,
-      measure,
-      maxWidth,
-      background,
-      resolveAlias,
-      resolveEmbed,
-      theme,
-      resolveTitle,
-      renderMath,
-      renderDiagram,
-    ],
+    [value, measure, maxWidth, background, references, theme, renderMath, renderDiagram],
   )
   useEffect(() => {
     if (anchorsRef) anchorsRef.current = anchors

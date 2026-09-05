@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 // The drag ghost renders the carried node's REAL content — including an
 // expanded canvas embed. Omitting the embed resolvers from the ghost's
 // one-shot render made an inline miniature drag as a plain card and snap
@@ -51,7 +52,9 @@ it('drags an expanded embed with its miniature content in the ghost', async () =
         onChange={() => {}}
         theme="light"
         fileRefOptions={[{ file: 'child', label: 'child canvas' }]}
-        resolveReference={(ref) => (ref === 'child' ? { canvas: inner } : undefined)}
+        references={referenceSeams(new Map(), {
+          extra: (ref) => (ref === 'child' ? { canvas: inner } : undefined),
+        })}
       />
     </div>,
   )

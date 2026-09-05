@@ -2,7 +2,7 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
-import { HEADER_TOGGLE_CLASS } from '@/components/ui/header-button'
+import { HEADER_TOGGLE_CLASS } from '../../components/ui/header-button.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 

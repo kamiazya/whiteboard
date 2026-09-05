@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { minimalChange } from './minimal-change.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'

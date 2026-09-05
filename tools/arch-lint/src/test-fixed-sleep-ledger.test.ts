@@ -61,7 +61,6 @@ const LEDGER: Record<string, number> = {
   'apps/web/src/components/workspace-files/open-wayfinding.test.tsx': 2,
   'apps/web/src/docs-snapshots/onboarding-chooser.docs-snapshot.test.tsx': 1,
   'apps/web/src/hooks/use-document-file-seams.test.tsx': 3,
-  'apps/web/src/hooks/use-markdown-embed-content.test.tsx': 2,
   'apps/web/src/lib/browser-backend.browser.test.tsx': 1,
   'apps/web/src/lib/browser-backend.restore.browser.test.tsx': 1,
   'apps/web/src/lib/browser-idb-migration.browser.test.tsx': 1,

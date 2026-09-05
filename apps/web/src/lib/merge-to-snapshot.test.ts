@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { Loro } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { mergeToSnapshot } from './merge-to-snapshot.js'

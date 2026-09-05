@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The empty-canvas branch's composition rules: paste only with a clipboard
 // fragment, creation entries always, document/image only when the host wires
 // them, Tidy only once there is a second node to tidy against.

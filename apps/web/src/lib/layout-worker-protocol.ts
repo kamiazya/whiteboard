@@ -24,13 +24,8 @@
  * Dates that a JSON round trip would quietly drop.
  */
 
-import type {
-  BoundingBox,
-  EdgeAnchorPair,
-  ResolvedReference,
-  Scene,
-} from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { BoundingBox, EdgeAnchorPair, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -82,6 +77,8 @@ export type LayoutRequest = LayoutSubject & {
   readonly suppressedBodyNodeIds?: readonly string[]
   /** Draw resolved comments too (the editor's per-user toggle). */
   readonly showResolved?: boolean
+  /** The document's conversations, for passage highlights inside text nodes. */
+  readonly threads?: readonly CommentThread[]
   /**
    * Where this answer may be REMEMBERED, as the render key's own path — the
    * worker's persistent tier (ADR-0027 decision 5) reads it before working
@@ -261,41 +258,6 @@ export type LayoutResponse =
  * the caller must stop asking rather than retry.
  */
 export const FONT_DEGRADED = 'font-degraded'
-
-/**
- * The reference seam, layered: whatever CONTENT the host resolved, with the
- * plain-data chrome (readable labels, dangling refs) on top.
- *
- * ONE producer for both threads. The worker rebuilds its seam from the two
- * lists in the request and the main thread builds the same seam from the
- * callbacks it has; two hand-written compositions of "label overrides
- * content" is exactly how the offloaded and synchronous renders of one
- * canvas start disagreeing about what it says.
- *
- * Returns `undefined` when nothing is supplied, so a host that wires none
- * leaves the layout exactly as it was before any of this existed.
- */
-export function composeReferenceSeam(parts: {
-  readonly content?: (ref: string) => ResolvedReference | undefined
-  readonly labels?: ReadonlyMap<string, string>
-  readonly missing?: ReadonlySet<string>
-}): ((ref: string) => ResolvedReference | undefined) | undefined {
-  const { content, labels, missing } = parts
-  const hasLabels = labels !== undefined && labels.size > 0
-  const hasMissing = missing !== undefined && missing.size > 0
-  if (content === undefined && !hasLabels && !hasMissing) return undefined
-  return (ref) => {
-    const resolved = content?.(ref)
-    const label = hasLabels ? labels.get(ref) : undefined
-    const isMissing = hasMissing && missing.has(ref)
-    if (resolved === undefined && label === undefined && !isMissing) return undefined
-    return {
-      ...resolved,
-      ...(label !== undefined ? { label } : {}),
-      ...(isMissing ? { missing: true } : {}),
-    }
-  }
-}
 
 /**
  * Whether a canvas's render options can cross the wire at all.

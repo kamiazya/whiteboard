@@ -5,10 +5,10 @@ import {
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { HEADER_BUTTON_CLASS } from '@/components/ui/header-button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { SceneExportFormat } from '@/hooks/useDocumentSync'
+} from '../../components/ui/dropdown-menu.js'
+import { HEADER_BUTTON_CLASS } from '../../components/ui/header-button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 
 interface DocumentMenuProps {
   /**

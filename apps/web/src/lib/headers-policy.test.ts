@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import appsWebPkgRaw from '../../package.json?raw'
 import headersContent from '../../public/_headers?raw'

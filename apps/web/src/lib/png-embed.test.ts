@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Editable-PNG embedding: an exported PNG carries the JSON Canvas document
 // in an iTXt chunk (the draw.io pattern), so a shared screenshot IS the
 // canvas — exact node coordinates included — not just pixels of it.

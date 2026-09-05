@@ -13,14 +13,14 @@ const mockLog = vi.hoisted(() => ({
   debug: vi.fn(),
 }))
 
-vi.mock('@/lib/app-logger', () => ({
+vi.mock('../lib/app-logger.js', () => ({
   getAppLogger: () => mockLog,
 }))
 
 const buildMiniGraphSpy = vi.fn()
 
-vi.mock('@/lib/mini-graph', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('@/lib/mini-graph')>()
+vi.mock('../lib/mini-graph.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../lib/mini-graph.js')>()
   return {
     ...actual,
     buildMiniGraph: (...args: Parameters<typeof actual.buildMiniGraph>) => {

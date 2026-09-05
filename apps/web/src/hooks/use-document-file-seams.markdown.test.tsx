@@ -50,8 +50,10 @@ describe("a resolved reference's markdown body", () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: BODY })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
-    const root = result.current.resolveReference('notes')?.markdown
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('notes')?.markdown).toBeDefined(),
+    )
+    const root = result.current.references.resolveReference('notes')?.markdown
     expect(root?.type).toBe('root')
     expect(root?.children[0]).toMatchObject({ type: 'heading', depth: 1 })
   })
@@ -67,8 +69,10 @@ describe("a resolved reference's markdown body", () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('diagram')?.canvas).toBeUndefined())
-    expect(result.current.resolveReference('diagram')?.markdown).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('diagram')?.canvas).toBeUndefined(),
+    )
+    expect(result.current.references.resolveReference('diagram')?.markdown).toBeUndefined()
   })
 
   it('returns undefined for a whitespace-only body, keeping the lower-ranked card', async () => {
@@ -78,8 +82,10 @@ describe("a resolved reference's markdown body", () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: '   \n\n  ' })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('empty')?.facets).toBeUndefined())
-    expect(result.current.resolveReference('empty')?.markdown).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('empty')?.facets).toBeUndefined(),
+    )
+    expect(result.current.references.resolveReference('empty')?.markdown).toBeUndefined()
   })
 
   it('keeps the canvas seam quiet for a daemon-shaped markdown document', async () => {
@@ -111,13 +117,15 @@ describe("a resolved reference's markdown body", () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
-    expect(result.current.resolveReference('notes')?.canvas).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('notes')?.markdown).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('notes')?.canvas).toBeUndefined()
   })
 
   it('returns undefined for a reference that never loaded', () => {
     const { result } = mount(canvasWith('gone'), makeAdapter())
-    expect(result.current.resolveReference('gone')?.markdown).toBeUndefined()
+    expect(result.current.references.resolveReference('gone')?.markdown).toBeUndefined()
   })
 
   it('parses each body once, not once per resolver call', async () => {
@@ -127,12 +135,14 @@ describe("a resolved reference's markdown body", () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: BODY })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('notes')?.markdown).toBeDefined())
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('notes')?.markdown).toBeDefined(),
+    )
     // Referential equality is the observable form of "parsed once": a
     // resolver that parsed per call would hand back a fresh tree each time,
     // and canvas-render calls this for every file node on every re-layout.
-    expect(result.current.resolveReference('notes')?.markdown).toBe(
-      result.current.resolveReference('notes')?.markdown,
+    expect(result.current.references.resolveReference('notes')?.markdown).toBe(
+      result.current.references.resolveReference('notes')?.markdown,
     )
   })
 
@@ -145,7 +155,9 @@ describe("a resolved reference's markdown body", () => {
       makeAdapter({ loadDocument: vi.fn(async () => ({ body: '\uD800' })) }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('bad')?.canvas).toBeUndefined())
-    expect(() => result.current.resolveReference('bad')?.markdown).not.toThrow()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('bad')?.canvas).toBeUndefined(),
+    )
+    expect(() => result.current.references.resolveReference('bad')?.markdown).not.toThrow()
   })
 })

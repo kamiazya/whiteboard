@@ -2,7 +2,7 @@
 // bubbles composed into the SVG scene AFTER nodes and edges, so they paint
 // above content on every surface — widget, viewer, export — with no per-
 // surface wiring. Placement floats near the anchor; nothing here is stored.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type {
@@ -31,10 +31,20 @@ const fakeAppearance: SpatialAppearanceResolver = {
     pin: { fill: '#d97706' },
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
+    passage: { fill: '#d97706', fillOpacity: 0.22 },
+    region: { fill: 'none', stroke: '#d97706', strokeWidth: 1.5, strokeDasharray: '6 4' },
     resolvedOverlay: {
       pin: { fill: '#d97706', fillOpacity: 0.45 },
       bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
       leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
+      passage: { fill: '#d97706', fillOpacity: 0.1 },
+      region: {
+        fill: 'none',
+        stroke: '#d97706',
+        strokeWidth: 1.5,
+        strokeDasharray: '6 4',
+        strokeOpacity: 0.45,
+      },
     },
   }),
 }
@@ -250,6 +260,51 @@ describe('comment layer', () => {
     const danglingPin = pinOf(dangling.nodes, 'c1')
     expect(danglingPin?.bbox.x).toBe(50 - COMMENT_PIN_SIZE_PX / 2)
     expect(danglingPin?.bbox.y).toBe(70 - COMMENT_PIN_SIZE_PX / 2)
+  })
+
+  it('rides the target edge: pinned on its routed path, at the point nearest the stored anchor', () => {
+    // Two nodes side by side, so the edge between them is a straight line
+    // at their shared centre height; the comment is stored well below it.
+    const left: SpatialNode = {
+      id: 'a',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      text: 'a',
+    }
+    const right: SpatialNode = {
+      id: 'b',
+      type: 'text',
+      x: 400,
+      y: 0,
+      width: 100,
+      height: 100,
+      text: 'b',
+    }
+    const canvas: SpatialCanvas = {
+      nodes: [left, right],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      'x-whiteboard': {
+        comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
+      },
+    }
+    const scene = layoutSpatialCanvas(canvas, baseOptions())
+    const edge = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'e1',
+    )
+    const ys = new Set((edge?.path ?? []).map((point) => point.y))
+    expect(ys.size).toBe(1)
+    const [edgeY] = ys
+    const pin = pinOf(scene.nodes, 'c1')
+    expect(pin?.bbox.y).toBe((edgeY as number) - COMMENT_PIN_SIZE_PX / 2)
+    expect(pin?.bbox.x).toBe(250 - COMMENT_PIN_SIZE_PX / 2)
+
+    // The edge gone, the comment stands where it was stored — orphaned in
+    // the panel, never dropped from the canvas.
+    const dangling = layoutSpatialCanvas({ ...canvas, edges: [] }, baseOptions())
+    expect(pinOf(dangling.nodes, 'c1')?.bbox.y).toBe(130 - COMMENT_PIN_SIZE_PX / 2)
   })
 
   it('does not draw a resolved comment — the record stays in the document, not on the canvas', () => {
@@ -491,5 +546,161 @@ describe('comment layer', () => {
       expect(withoutObstacle.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
       expect(withObstacle.bbox.y + withObstacle.bbox.h).toBe(100 - COMMENT_BUBBLE_OFFSET_PX)
     })
+  })
+})
+
+describe('a passage of a node’s text (the text arm naming a node)', () => {
+  const NOTE: SpatialNode = {
+    id: 'n1',
+    type: 'text',
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 100,
+    text: 'ship the plan by friday',
+  }
+  const passage = (exact: string, status: CommentThread['status'] = 'open'): CommentThread => ({
+    id: 't1',
+    anchor: { kind: 'text', nodeId: 'n1', quote: { exact }, start: 0, end: 1 },
+    status,
+    messages: [{ id: 'm1', body: 'about it' }],
+  })
+  const highlightsOf = (nodes: readonly SceneNode[]) =>
+    shapesOf(nodes).filter((shape) => shape.id?.startsWith('t1/passage-'))
+
+  it('highlights exactly the quoted words, measured with the run’s own font, behind the run', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan')] }),
+    )
+    const run = runsOf(scene.nodes).find((r) => r.text.includes('plan'))
+    expect(run).toBeDefined()
+    const size = run?.appearance?.fontSize as number
+    const [box] = highlightsOf(scene.nodes)
+    expect(box).toBeDefined()
+    // The fake measurer: 0.6em per character. "ship the " is nine.
+    expect(box?.bbox).toEqual({
+      x: (run?.bbox.x as number) + 9 * 0.6 * size,
+      y: run?.bbox.y,
+      w: 4 * 0.6 * size,
+      h: run?.bbox.h,
+    })
+    expect(box?.commentChrome).toBe(true)
+    expect(box?.appearance).toEqual({ fill: '#d97706', fillOpacity: 0.22 })
+    // Painted before the run, so the words stay on top.
+    const order = scene.nodes.indexOf(box as (typeof scene.nodes)[number])
+    const runIndex = scene.nodes.findIndex(
+      (n) =>
+        (n.kind === 'paragraph' || n.kind === 'heading') && n.runs.includes(run as TextRunNode),
+    )
+    expect(order).toBeLessThan(runIndex)
+  })
+
+  it('follows a passage across a wrap with one box per line', () => {
+    // Narrow enough that "plan by" breaks: the second box starts at its line's start.
+    const scene = layoutSpatialCanvas(
+      { nodes: [{ ...NOTE, width: 110 }], edges: [] },
+      baseOptions({ threads: [passage('plan by friday')] }),
+    )
+    const boxes = highlightsOf(scene.nodes)
+    expect(boxes.length).toBeGreaterThan(1)
+    const ys = new Set(boxes.map((b) => b.bbox.y))
+    expect(ys.size).toBe(boxes.length)
+  })
+
+  it('draws nothing for a quote the rendered text does not hold, or a resolved passage by default', () => {
+    const gone = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('monday')] }),
+    )
+    expect(highlightsOf(gone.nodes)).toEqual([])
+    const resolved = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan', 'resolved')] }),
+    )
+    expect(highlightsOf(resolved.nodes)).toEqual([])
+    const shown = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan', 'resolved')], showResolved: true }),
+    )
+    expect(highlightsOf(shown.nodes)).toHaveLength(1)
+  })
+})
+
+describe('node sets and regions (the spatial arm with nodeIds or a rect)', () => {
+  const A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' } as const
+  const B = { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' } as const
+  const setThread = (status: 'open' | 'resolved' = 'open'): CommentThread => ({
+    id: 'set',
+    anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 10, height: 10 },
+    status,
+    messages: [{ id: 'm', body: 'these two' }],
+  })
+  const outlineOf = (nodes: readonly SceneNode[]) =>
+    shapesOf(nodes).find((shape) => shape.id === 'set/region')
+
+  it('outlines the box the live nodes occupy and stands the pin at its top-right corner', () => {
+    const thread = setThread()
+    // The flat projection carries a STALE corner (the nodes have moved
+    // since it was taken); the pin follows the live box, not the memory.
+    const scene = layoutSpatialCanvas(
+      {
+        nodes: [A, B],
+        edges: [],
+        'x-whiteboard': { comments: [{ id: 'set', x: 5, y: 5, text: 'these two' }] },
+      },
+      baseOptions({ threads: [thread] }),
+    )
+    expect(outlineOf(scene.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 400, h: 250 })
+    expect(outlineOf(scene.nodes)?.appearance).toEqual({
+      fill: 'none',
+      stroke: '#d97706',
+      strokeWidth: 1.5,
+      strokeDasharray: '6 4',
+    })
+    expect(outlineOf(scene.nodes)?.commentChrome).toBe(true)
+    const pin = shapesOf(scene.nodes).find((shape) => shape.id === 'set/pin')
+    expect(pin?.bbox).toMatchObject({
+      x: 400 - COMMENT_PIN_SIZE_PX / 2,
+      y: -COMMENT_PIN_SIZE_PX / 2,
+    })
+    // The outline paints under the pin.
+    const ids = scene.nodes.map((n) => (n.kind === 'shape' ? n.id : undefined))
+    expect(ids.indexOf('set/region')).toBeLessThan(ids.indexOf('set/pin'))
+  })
+
+  it('falls back to the stored rect once every node is gone, and hides a resolved one unless asked', () => {
+    const orphan = layoutSpatialCanvas(
+      { nodes: [], edges: [] },
+      baseOptions({ threads: [setThread()] }),
+    )
+    expect(outlineOf(orphan.nodes)?.bbox).toEqual({ x: 0, y: 0, w: 10, h: 10 })
+    const resolved = layoutSpatialCanvas(
+      { nodes: [A, B], edges: [] },
+      baseOptions({ threads: [setThread('resolved')] }),
+    )
+    expect(outlineOf(resolved.nodes)).toBeUndefined()
+    const shown = layoutSpatialCanvas(
+      { nodes: [A, B], edges: [] },
+      baseOptions({ threads: [setThread('resolved')], showResolved: true }),
+    )
+    expect(outlineOf(shown.nodes)?.appearance).toMatchObject({ strokeOpacity: 0.45 })
+  })
+
+  it('draws no outline for a point, node or edge anchor', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [A], edges: [] },
+      baseOptions({
+        threads: [
+          {
+            id: 'p',
+            anchor: { kind: 'spatial', nodeId: 'a', x: 0, y: 0 },
+            status: 'open',
+            messages: [{ id: 'm', body: 'x' }],
+          },
+        ],
+      }),
+    )
+    expect(shapesOf(scene.nodes).some((shape) => shape.id?.endsWith('/region'))).toBe(false)
   })
 })

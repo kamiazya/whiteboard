@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The sentences in `lib/destructive-copy.ts` must exist in exactly one
  * place. This scans every source file under `apps/web/src` and fails when
@@ -35,7 +36,7 @@ import {
   type DestructiveActionId,
   type DestructiveDescription,
   destructiveCopyFragments,
-} from '@/lib/destructive-copy'
+} from './lib/destructive-copy.js'
 
 const sources = import.meta.glob('./**/*.{ts,tsx}', {
   query: '?raw',

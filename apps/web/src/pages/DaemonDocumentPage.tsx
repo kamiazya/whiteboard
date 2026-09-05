@@ -48,10 +48,7 @@ import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
-import {
-  type MarkdownEmbedLoader,
-  useMarkdownEmbedContent,
-} from '../hooks/use-markdown-embed-content.js'
+import { type ReferenceLoader, useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -68,6 +65,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -485,12 +483,22 @@ export function DaemonDocumentPage({
     [daemonFetch, daemonBaseUrl, canvas?.workspaceId, canvas?.path, resolveRefPath],
   )
 
+  // `[[path]]` aliases resolve against the same list the user can see;
+  // display names are retired from resolution and label the link at render
+  // time instead (`resolveTitle`).
+  const resolveTitle = useMemo(() => linkTitles(controller.documents), [controller.documents])
+  const resolveAlias = useMemo(
+    () => createUniqueNameResolver(linkEntries(controller.documents)),
+    [controller.documents],
+  )
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
   // updatedAt, exactly as in browser mode.
   const fileSeams = useDocumentFileSeams({
     canvas: canvasValue,
     adapter: fileAdapter,
+    resolveAlias,
+    resolveTitle,
     // Keyed by BOTH id and path so id refs and legacy path refs each find
     // their staleness stamp.
     stampOf: useMemo(
@@ -578,17 +586,18 @@ export function DaemonDocumentPage({
       createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
       replyToThread: (threadId, message) =>
         onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
+      setThreadStatus: (threadId, status) =>
+        onChange(canvasValueRef.current, { kind: 'set-thread-status', threadId, status }),
+      editMessage: (threadId, message, opening) =>
+        onChange(canvasValueRef.current, {
+          kind: 'edit-thread-message',
+          threadId,
+          message,
+          opening,
+        }),
     },
   })
 
-  // `[[path]]` aliases resolve against the same list the user can see;
-  // display names are retired from resolution and label the link at render
-  // time instead (`resolveTitle`).
-  const resolveTitle = useMemo(() => linkTitles(controller.documents), [controller.documents])
-  const resolveAlias = useMemo(
-    () => createUniqueNameResolver(linkEntries(controller.documents)),
-    [controller.documents],
-  )
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
   const pickerTargets = useMemo(
@@ -624,26 +633,25 @@ export function DaemonDocumentPage({
       cancelled = true
     }
   }, [daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId, connectionsRefresh])
-  const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
-    async (documentId) => {
-      const target = await fileAdapter.loadDocument(documentId)
-      if (target === undefined) return undefined
-      // No title. A document's title is the workspace's (ADR-0009 decision
-      // 2) and the daemon summary carries no display name, so there is none
-      // to label the embed with — the facets deliberately no longer hold one.
-      // The summary DOES carry the kind, which decides what the target is: a
-      // spatial document's canvas, or a markdown document's body.
-      const kind = controller.documents.find((entry) => entry.id === documentId)?.kind
-      if (kind === 'spatial')
-        return target.canvas === undefined ? undefined : { canvas: target.canvas }
-      return target.body === undefined ? undefined : { body: target.body }
+  const loadReference = useCallback<ReferenceLoader>(
+    async (target, documentId) => {
+      // The adapter resolves a legacy path reference itself, so the target
+      // as written is what it takes when the list knew no id for it.
+      const loaded = await fileAdapter.loadDocument(documentId ?? target)
+      if (loaded === undefined) return undefined
+      // No name. A document's name is the workspace's (ADR-0009 decision 2)
+      // and the daemon summary carries no display name, so there is none to
+      // label the embed with — the facets deliberately no longer hold one.
+      // The summary DOES carry the kind, which decides what the target is.
+      return loadedReferenceOf(loaded, controller.documents, target, documentId)
     },
     [fileAdapter, controller.documents],
   )
-  const resolveEmbed = useMarkdownEmbedContent({
+  const references = useReferenceSeams({
     body: markdownBody ?? '',
     resolveAlias,
-    load: loadEmbedSource,
+    resolveTitle,
+    load: loadReference,
   })
 
   const commands = useWhiteboardCommands({
@@ -1084,11 +1092,9 @@ export function DaemonDocumentPage({
                     setBody: setMarkdownBody,
                     theme: resolvedTheme,
                     meta: coreFacets ?? { type: documentKind },
-                    resolveAlias,
-                    resolveTitle,
+                    references,
                     linkTargets: pickerTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
-                    resolveEmbed,
                     threads: annotations,
                     // Only a markdown document has a body for a mark to live
                     // in, and this branch is the one that renders one.
@@ -1130,9 +1136,6 @@ export function DaemonDocumentPage({
                         canRedo: canRedo(),
                       }}
                       overlayTitle={canvas?.path ?? 'Untitled'}
-                      resolveAlias={resolveAlias}
-                      resolveEmbed={resolveEmbed}
-                      resolveTitle={resolveTitle}
                       linkTargets={pickerTargets}
                       threads={annotations}
                     >

@@ -54,8 +54,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // '@' matches vitest.config.ts / tsconfig's app-source root.
-      '@': resolve(__dirname, 'src'),
       // '@docs-assets' is unique to this config: only the snapshot fixtures
       // that generate docs/assets/ need to read files under docs/assets/.
       '@docs-assets': DOCS_ASSETS_DIR,

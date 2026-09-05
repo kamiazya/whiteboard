@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -104,8 +105,10 @@ describe('wiki link completion (real browser)', () => {
           // The inserted markup is the bare [[path]]; what the preview
           // SHOWS is the render-time title, so the round-trip is only
           // complete when both seams are wired the way a page wires them.
-          resolveAlias={(alias) => TARGETS.find((t) => t.path === alias)?.id ?? null}
-          resolveTitle={(documentId) => TARGETS.find((t) => t.id === documentId)?.name}
+          references={referenceSeams(new Map(), {
+            resolveAlias: (alias) => TARGETS.find((t) => t.path === alias)?.id ?? null,
+            resolveTitle: (documentId) => TARGETS.find((t) => t.id === documentId)?.name,
+          })}
         />
       )
     }

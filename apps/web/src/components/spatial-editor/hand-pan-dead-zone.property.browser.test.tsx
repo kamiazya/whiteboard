@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 /**
  * Hand tool: every press on the canvas surface pans, wherever it lands and
  * at whatever zoom.
@@ -24,9 +25,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { fc } from '@/test-utils/fast-check'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import type { Viewport } from '../../lib/spatial/viewport.js'
+import { fc } from '../../test-utils/fast-check.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -96,7 +97,9 @@ function Host({ handle }: { handle: React.RefObject<SpatialEditorHandle | null> 
         onChange={(next) => setCanvas(next)}
         theme="light"
         fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-        resolveReference={(ref) => (ref === 'ref-1' ? { canvas: referenced } : undefined)}
+        references={referenceSeams(new Map(), {
+          extra: (ref) => (ref === 'ref-1' ? { canvas: referenced } : undefined),
+        })}
       />
     </div>
   )

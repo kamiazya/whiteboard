@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { deriveNewDocumentPath } from './derive-new-document-path.js'

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * `vi.mock('./x.js', factory)` names a module by a STRING, and nothing
  * checks the string. A mock for a path nothing imports is registered and
@@ -42,9 +43,7 @@ function mockSpecifiers(source: string): string[] {
 /** Resolves a specifier from a glob key to another glob key, or null for a bare package specifier. */
 function resolveLocal(fromKey: string, specifier: string): { local: boolean; key: string | null } {
   let path: string
-  if (specifier.startsWith('@/')) {
-    path = `./${specifier.slice(2)}`
-  } else if (specifier.startsWith('.')) {
+  if (specifier.startsWith('.')) {
     const dir = fromKey.split('/').slice(0, -1)
     for (const segment of specifier.split('/')) {
       if (segment === '.') continue

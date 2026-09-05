@@ -1,17 +1,16 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
-import type { Extension, StateCommand } from '@codemirror/state'
+import type { Extension } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
-import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import {
   type CommentThread,
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { MessageSquarePlus } from 'lucide-react'
+import { MessageSquare } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -40,12 +39,6 @@ import {
 } from './annotation-decorations.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
-import {
-  levelCommand,
-  MARKDOWN_EDITOR_VERBS,
-  type MarkdownVerbBand,
-  selfContainedCommand,
-} from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
@@ -58,7 +51,7 @@ import {
 } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
-import { VERB_ICONS } from './verb-icons.js'
+import { verbCatalogItems } from './verb-catalog.js'
 import {
   wikiLinkCompletionSource,
   wikiLinkCompletionTheme,
@@ -102,15 +95,13 @@ export interface MarkdownEditorProps {
    */
   title?: string
   /**
-   * Maps `[[path]]` aliases to document ids for the preview (codec's
-   * separate resolution pass). Absent, only a bare `[[ULID]]` resolves.
+   * Every reference seam the preview reads — `[[path]]` aliases to ids,
+   * display names for bare links, `![[embed]]` targets (a note's body or a
+   * canvas) — as the one bundle canvas-render's `referenceSeams` builds
+   * over what the host pre-fetched (see useReferenceSeams). Absent, only a
+   * bare `[[ULID]]` resolves and every embed stays a placeholder.
    */
-  resolveAlias?: AliasResolver
-  /**
-   * The current display name for a linked document — labels a bare
-   * `[[path]]`/`[[id]]` in the preview instead of its address.
-   */
-  resolveTitle?: MdastLayoutOptions['resolveTitle']
+  references?: ReferenceSeams
   /**
    * Documents this editor may link to. Supplied by the composition root,
    * which already holds the list its switcher shows. Absent (or empty) keeps
@@ -124,12 +115,6 @@ export interface MarkdownEditorProps {
    * are inert (their href is a bare ULID, not a URL).
    */
   onOpenDocument?: (documentId: string) => void
-  /**
-   * Resolves `![[embed]]` targets — a note's parsed body, or a canvas — so
-   * block embeds render inline (canvas-render's layout seam; the host
-   * pre-fetches, see useMarkdownEmbedContent).
-   */
-  resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
    * Injection seam for tests: the async engines behind math blocks and
    * diagram fences. Defaults to the real dynamically-imported
@@ -324,11 +309,9 @@ export function MarkdownEditor({
   theme = 'light',
   meta,
   title,
-  resolveAlias,
-  resolveTitle,
+  references,
   linkTargets,
   onOpenDocument,
-  resolveEmbed,
   fragmentLoaders,
   sourceExtensions,
   threads,
@@ -484,6 +467,18 @@ export function MarkdownEditor({
   // change, so unlike the anchors — read imperatively inside a scroll
   // handler — these have to be state.
   const [railBlocks, setRailBlocks] = useState<readonly RailBlock[]>([])
+  /**
+   * The annotation layer's projection onto the PREVIEW: one marker beside
+   * the laid-out block a thread's passage starts in, at the y the rail's
+   * own line-to-document mapping gives that line. A highlight over the
+   * exact words would need canvas-render to know about this document's
+   * threads; the block marker is what the layout already answers, and it
+   * is enough to find a conversation while reading.
+   */
+  const [previewMarkers, setPreviewMarkers] = useState<
+    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
+  >([])
+  const previewInnerRef = useRef<HTMLDivElement | null>(null)
   const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
   // Whether the pane the rail maps has anything to scroll. Read from the same
   // element on the same tick as the viewport above, for the same reason.
@@ -716,6 +711,48 @@ export function MarkdownEditor({
     // previous width produced.
   }, [effectiveMode, debouncedValue, previewWidth])
 
+  // Keyed on railBlocks because that is the state the preview's render
+  // updates: the anchors it maps through arrive in the same ref write.
+  // Placement goes through `placeThreads`, the same reader the source pane
+  // and the rail use, so a thread the rail calls lost gets no marker.
+  useEffect(() => {
+    if (effectiveMode === 'write' || projectedThreads.length === 0) {
+      setPreviewMarkers([])
+      return
+    }
+    const inner = previewInnerRef.current
+    const svg = inner?.querySelector('svg')
+    if (inner === null || inner === undefined || !(svg instanceof SVGElement)) {
+      setPreviewMarkers([])
+      return
+    }
+    const svgTop = svg.getBoundingClientRect().top - inner.getBoundingClientRect().top
+    const tail = {
+      totalLines: totalSourceLines(debouncedValue),
+      contentHeight: railContentHeight(blocksRef.current),
+    }
+    setPreviewMarkers(
+      placeThreads(debouncedValue, projectedThreads, projectedMarks).map((placed) => ({
+        threadId: placed.threadId,
+        top:
+          svgTop +
+          documentYForLine(
+            anchorsRef.current,
+            debouncedValue.slice(0, placed.from).split('\n').length,
+            tail,
+          ),
+        selected: placed.threadId === selectedThreadId,
+      })),
+    )
+  }, [
+    effectiveMode,
+    railBlocks,
+    projectedThreads,
+    projectedMarks,
+    debouncedValue,
+    selectedThreadId,
+  ])
+
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {
       const rect = rootRef.current?.getBoundingClientRect()
@@ -751,67 +788,8 @@ export function MarkdownEditor({
   }, [openCatalogAt])
 
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
-    const level = sourceApiRef.current?.headingLevel() ?? 0
-    const run = (command: StateCommand) => () => {
-      sourceApiRef.current?.run(command)
-      setCatalog(null)
-    }
-    // Every row is derived from MARKDOWN_EDITOR_VERBS, so a verb added
-    // there reaches both the catalog and the source pane's keymap without a
-    // second edit — which is what the two hand-kept lists this replaced
-    // could not promise.
-    const items: ContextMenuItem[] = []
-    let band: MarkdownVerbBand | null = null
-    for (const spec of MARKDOWN_EDITOR_VERBS) {
-      if (band !== null && spec.band !== band) items.push({ kind: 'separator' })
-      band = spec.band
-
-      if (spec.action.kind === 'levels') {
-        items.push({
-          kind: 'options',
-          label: spec.label,
-          options: spec.action.levels.map((option) => ({
-            label: option.label,
-            selected: level === option.level,
-            onSelect: run(levelCommand(option.level)),
-          })),
-        })
-        continue
-      }
-
-      // The one verb that asks before it writes. With nothing to pick from
-      // there is nothing to ask, and it falls through to the wrap the table
-      // declares for exactly that case.
-      const icon = VERB_ICONS[spec.id]
-      if (
-        spec.action.kind === 'interactive' &&
-        linkTargets !== undefined &&
-        linkTargets.length > 0
-      ) {
-        items.push({
-          label: spec.label,
-          icon,
-          onSelect: () => {
-            const scope = sourceApiRef.current?.pinScope()
-            if (scope === undefined) return
-            setCatalog(null)
-            setLinkPicker({ query: scope.text, text: scope.text })
-          },
-        })
-        continue
-      }
-
-      const command = selfContainedCommand(spec)
-      // A verb with neither a dialog nor a self-contained command has no
-      // plain row to render. Only `levels` is that today, and it returned
-      // above; this is what keeps a future action kind from rendering a
-      // dead menu item.
-      if (command === null) continue
-      items.push({ label: spec.label, icon, onSelect: run(command) })
-    }
-
     // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
-    // things that write MARKUP into the body: this one writes nothing there
+    // things that write MARKUP into the body: Comment writes nothing there
     // at all, it opens a conversation in the layer beside it. Putting it in
     // that table would give the keymap a shortcut for it and the verb bar a
     // button, both of which would then have to resolve a scope the table
@@ -819,18 +797,25 @@ export function MarkdownEditor({
     const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
     const anchor =
       selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
-    if (onComposeThread !== undefined && anchor !== null) {
-      items.push({ kind: 'separator' })
-      items.push({
-        label: 'Comment on this',
-        icon: <MessageSquarePlus aria-hidden />,
-        onSelect: () => {
-          setCatalog(null)
-          onComposeThread(anchor)
-        },
-      })
-    }
-    return items
+    return verbCatalogItems({
+      headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
+      run: (command) => sourceApiRef.current?.run(command),
+      close: () => setCatalog(null),
+      ...(linkTargets !== undefined && linkTargets.length > 0
+        ? {
+            openLinkPicker: () => {
+              const scope = sourceApiRef.current?.pinScope()
+              if (scope === undefined) return
+              setLinkPicker({ query: scope.text, text: scope.text })
+            },
+          }
+        : {}),
+      ...(onComposeThread !== undefined && anchor !== null
+        ? { composeThread: () => onComposeThread(anchor) }
+        : {}),
+    })
+    // `catalog` is read so the rows are rebuilt on each opening: the
+    // selection they describe is the one at THAT moment.
   }, [catalog, linkTargets, onComposeThread, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
@@ -933,9 +918,33 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div
-              className="mx-auto px-6 py-8"
+              ref={previewInnerRef}
+              className="relative mx-auto px-6 py-8"
               style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
             >
+              {previewMarkers.map((marker) => (
+                <button
+                  key={marker.threadId}
+                  type="button"
+                  data-testid="comment-preview-marker"
+                  data-thread-id={marker.threadId}
+                  aria-label="Open comment"
+                  onClick={() => onSelectThread?.(marker.threadId)}
+                  // In the column's own left padding, on the block's top edge.
+                  style={{ top: marker.top }}
+                  className={cn(
+                    'absolute left-0 flex size-6 items-center justify-center rounded text-(--annotation) hover:bg-accent',
+                    marker.selected && 'bg-accent',
+                  )}
+                >
+                  <MessageSquare
+                    aria-hidden="true"
+                    className="size-3.5"
+                    fill={marker.selected ? 'currentColor' : 'none'}
+                    fillOpacity={0.35}
+                  />
+                </button>
+              ))}
               {effectiveMode === 'read' && meta !== undefined && (
                 <DocumentHeader title={title} meta={meta} />
               )}
@@ -947,9 +956,7 @@ export function MarkdownEditor({
                   maxWidth={previewWidth}
                   measure={resolvedMeasure}
                   theme={theme}
-                  resolveAlias={resolveAlias}
-                  resolveEmbed={resolveEmbed}
-                  resolveTitle={resolveTitle}
+                  references={references}
                   renderMath={renderMath}
                   renderDiagram={renderDiagram}
                   anchorsRef={anchorsRef}

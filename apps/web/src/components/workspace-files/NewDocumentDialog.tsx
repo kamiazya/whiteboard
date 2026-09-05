@@ -7,7 +7,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '../../components/ui/dialog.js'
 import { DocumentPathField } from './DocumentPathField.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 

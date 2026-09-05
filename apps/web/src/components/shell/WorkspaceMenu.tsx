@@ -13,8 +13,8 @@
 
 import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
-import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
+import { workspaceHandle, workspaceLabel } from '../../lib/workspace-handle.js'
 
 /**
  * Where the workspaces come from and how one is made or renamed — the half
