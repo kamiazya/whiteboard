@@ -317,7 +317,7 @@ describe('VersionTimeline', () => {
     expect(screen.getByText(/4 els/)).toBeTruthy()
 
     await waitFor(() => {
-      expect(document.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(3)
+      expect(document.querySelectorAll('[data-testid="version-lane"]').length).toBe(3)
     })
 
     // Branch tabs are gone, so no tab role should exist.
@@ -333,9 +333,9 @@ describe('VersionTimeline', () => {
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
-      expect(document.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(3)
+      expect(document.querySelectorAll('[data-testid="version-lane"]').length).toBe(3)
     })
-    const dots = [...document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')]
+    const dots = [...document.querySelectorAll('[data-testid="version-lane"] circle')]
     expect(dots.length).toBe(3)
 
     const rings = dots.filter((c) => c.getAttribute('fill') === 'none')
@@ -404,7 +404,7 @@ describe('VersionTimeline', () => {
       expect(screen.getByText(/Alice/)).toBeTruthy()
     })
 
-    const circles = document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')
+    const circles = document.querySelectorAll('[data-testid="version-lane"] circle')
     expect(circles).toHaveLength(3)
     // Each lane keeps its own BranchMeta.color, on the stroke whichever shape
     // the dot takes — that is what makes a ring readable as the same lane.
@@ -840,7 +840,7 @@ describe('VersionTimeline HEAD polling', () => {
     // every lane is shown either way — but which of them is the active one.
     // The `feature` row becomes solid and the two `main` rows become rings.
     await waitFor(() => {
-      const dots = [...document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')]
+      const dots = [...document.querySelectorAll('[data-testid="version-lane"] circle')]
       const solid = dots.filter((c) => c.getAttribute('fill') !== 'none')
       expect(solid).toHaveLength(1)
       expect(solid[0]?.getAttribute('stroke')).toBe('#9333ea')
