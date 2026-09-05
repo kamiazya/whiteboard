@@ -80,7 +80,7 @@
     "@cyclonedx/cyclonedx-npm": "^5.0.0",
     "@huggingface/transformers": "^4.2.0",
     "@secretlint/secretlint-rule-pattern": "13.0.2",
-    "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
+    "@secretlint/secretlint-rule-preset-recommend": "13.0.5",
     "@tanstack/intent": "^0.0.40",
     "concurrently": "^9",
     "knip": "6.26.0",
