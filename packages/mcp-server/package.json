@@ -157,6 +157,7 @@
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
     "@kamiazya/whiteboard-daemon-client": "workspace:*",
+    "@kamiazya/whiteboard-history": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",

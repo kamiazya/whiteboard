@@ -1,6 +1,11 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
+  autoVersionsOverCap,
+  MAX_AUTO_PER_DOCUMENT,
+  sandwichedAutoVersionIds,
+} from '@kamiazya/whiteboard-history'
+import {
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -36,7 +41,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // entry. CRDT history cannot be forgotten, so route-level restore writes
 // reverse ops on top of the live doc rather than overwriting it.
 
-const MAX_AUTO_PER_DOCUMENT = 50
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 
 // z.infer of the shared wire schema, not a hand-written twin: a separately
@@ -471,29 +475,11 @@ export class FileVersionStore implements VersionStore {
       .orderBy('id', 'asc')
       .execute()
 
-    const toDelete: string[] = []
-    const byBranch = new Map<string, typeof rows>()
-    for (const row of rows) {
-      const list = byBranch.get(row.branchName) ?? []
-      list.push(row)
-      byBranch.set(row.branchName, list)
-    }
-    for (const [, list] of byBranch) {
-      // Find first/last manual indexes. With <2 manuals there is no
-      // sandwich, so the branch is left untouched.
-      let firstManualIdx = -1
-      let lastManualIdx = -1
-      for (let i = 0; i < list.length; i++) {
-        if (list[i].auto !== 1) {
-          if (firstManualIdx === -1) firstManualIdx = i
-          lastManualIdx = i
-        }
-      }
-      if (firstManualIdx === -1 || lastManualIdx === firstManualIdx) continue
-      for (let i = firstManualIdx + 1; i < lastManualIdx; i++) {
-        if (list[i].auto === 1) toDelete.push(list[i].id)
-      }
-    }
+    // Which rows go is the mechanic's call (@kamiazya/whiteboard-history);
+    // the rows, the delete and the thumbnail blobs are this store's.
+    const toDelete = sandwichedAutoVersionIds(
+      rows.map((row) => ({ id: row.id, branchName: row.branchName, auto: row.auto === 1 })),
+    )
     if (toDelete.length === 0) return { deletedCount: 0, deletedIds: [] }
     await db
       .deleteFrom('versions')
@@ -577,13 +563,9 @@ export class FileVersionStore implements VersionStore {
       .orderBy('id', 'desc')
       .execute()
     if (autos.length <= MAX_AUTO_PER_DOCUMENT) return
-    // Lineage outlives the cap. A restore records its merge point as an
-    // automatic version, so without this both ENDS of a restore are ordinary
-    // sweep candidates: the merge itself, and the point it named. Losing
-    // either leaves a history that once explained where a state came from
-    // and no longer can — and unlike a swept checkpoint, that is not
-    // recoverable by editing again. A merge is rare, so the cap it stretches
-    // is stretched by very little.
+    // Lineage outlives the cap — the mechanic's rule
+    // (@kamiazya/whiteboard-history's `autoVersionsOverCap`); the referenced
+    // set is what this store knows about its own rows.
     const referenced = new Set(
       (
         await db
@@ -594,10 +576,7 @@ export class FileVersionStore implements VersionStore {
           .execute()
       ).flatMap((r) => (r.restoredFrom === null ? [] : [r.restoredFrom])),
     )
-    const toRemove = autos
-      .slice(MAX_AUTO_PER_DOCUMENT)
-      .filter((r) => r.restoredFrom === null && !referenced.has(r.id))
-      .map((r) => r.id)
+    const toRemove = autoVersionsOverCap(autos, referenced)
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')

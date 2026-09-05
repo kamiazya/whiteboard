@@ -57,9 +57,9 @@ describe('opening a thread from the body', () => {
     })
   })
 
-  it('offers no row with nothing selected, because there is no passage to quote', async () => {
+  it("quotes the caret's whole block with nothing selected, rather than guessing at a word", async () => {
     const onComposeThread = vi.fn()
-    const { container, getByRole, queryByRole } = render(
+    const { container, getByRole } = render(
       <MarkdownEditor
         initialViewMode="write"
         value={BODY}
@@ -70,13 +70,22 @@ describe('opening a thread from the body', () => {
     await selectFromStart(container, 9, 0)
 
     await userEvent.click(getByRole('button', { name: 'Editing actions' }))
-    // Unlike every formatting verb, this one cannot resolve its own scope
-    // from the caret: the word under it is a guess about what the reader
-    // meant, and it would be stored as though they had said it.
-    expect(queryByRole('menuitem', { name: 'Comment on this' })).toBeNull()
-    // The rest of the catalog is unaffected — this is one absent row, not a
-    // catalog that failed to open.
-    expect(queryByRole('menuitem', { name: 'Bold' })).not.toBeNull()
+    await userEvent.click(getByRole('menuitem', { name: 'Comment on this' }))
+
+    // The row used to be absent here, on the reasoning every formatting verb
+    // still follows: the WORD under a caret is a guess about what the reader
+    // meant, and storing it forever as though they had said it is wrong. A
+    // BLOCK is not that guess — a paragraph is a unit a reader points at,
+    // and it is what they have already pointed at by putting the caret in
+    // it. Absence cost more than the guess would have: selecting a passage
+    // on a phone is a drag between two handles, so on the surface with no
+    // right-click there was no reachable way to open a conversation at all.
+    expect(onComposeThread).toHaveBeenCalledWith({
+      kind: 'text',
+      quote: { exact: BODY },
+      start: 0,
+      end: BODY.length,
+    })
   })
 
   it('offers no row at all when the host takes no threads', async () => {

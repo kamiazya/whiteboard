@@ -1,23 +1,15 @@
+import { branchMetaSchema, documentBranchesStateSchema } from '@kamiazya/whiteboard-history'
 import { z } from 'zod'
 
 // Request / response schemas for the /api/workspaces/:sid/documents/:path/branches
 // family. Imported by the route handler (validates incoming bodies + types its
 // `c.json(...)` responses) and the React client (parses fetch responses) so a
 // wire-format change has exactly one place to update.
-
-export const branchMetaSchema = z.object({
-  name: z.string(),
-  tipFrontiers: z.string(),
-  baseBranch: z.string().optional(),
-  baseVersionId: z.string().optional(),
-  color: z.string(),
-  createdAt: z.string(),
-})
-
-export const documentBranchesStateSchema = z.object({
-  branches: z.array(branchMetaSchema),
-  head: z.string(),
-})
+//
+// What a branch IS is not the wire's to say: `branchMetaSchema` and the
+// document's branch state are `@kamiazya/whiteboard-history`'s, re-exported
+// here so the route, the client and the mechanic parse one shape.
+export { branchMetaSchema, documentBranchesStateSchema }
 
 export const createBranchRequestSchema = z.object({
   name: z.string().min(1),
@@ -80,8 +72,7 @@ export const mergeResponseSchema = z.object({
   deletedSource: z.string().optional(),
 })
 
-export type BranchMeta = z.infer<typeof branchMetaSchema>
-export type DocumentBranchesState = z.infer<typeof documentBranchesStateSchema>
+export type { BranchMeta, DocumentBranchesState } from '@kamiazya/whiteboard-history'
 export type CreateBranchRequest = z.infer<typeof createBranchRequestSchema>
 export type CreateBranchResponse = z.infer<typeof createBranchResponseSchema>
 export type DeleteBranchResponse = z.infer<typeof deleteBranchResponseSchema>

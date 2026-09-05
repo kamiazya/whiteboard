@@ -100,6 +100,7 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
+    "@kamiazya/whiteboard-history": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",

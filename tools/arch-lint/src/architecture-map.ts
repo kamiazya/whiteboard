@@ -134,6 +134,17 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // ports while `ports` is deliberately closed to loro-crdt.
     allowedThirdParty: ['loro-crdt'],
   },
+  '@kamiazya/whiteboard-history': {
+    // A document's history as pure mechanics over the workspace record:
+    // branch (variation) operations, merge planning, the checkpoint scheduler
+    // and version retention. Both keepers run them; what differs between the
+    // keepers is where the rows live, which stays in each composition root.
+    // loro-crdt because a tip is a frontier of the record and a merge plan is
+    // three projections of it; zod because the branch schema is the one
+    // source the wire contract re-exports.
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-loro-adapter'],
+    allowedThirdParty: ['loro-crdt', 'zod'],
+  },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
@@ -200,7 +211,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // server-core: the version-entry and operator contracts the /api routes
   // publish are defined beside the routes' own logic and re-exported here.
   '@kamiazya/whiteboard-daemon-client': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-server-core'],
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-server-core',
+      // history: the branch schema its `/branches` contract re-exports.
+      '@kamiazya/whiteboard-history',
+    ],
     // @opentelemetry/api alone: the no-op propagation surface api-client
     // injects trace headers through when the embedding page registers a real
     // SDK. The SDK packages themselves were deleted with the dead

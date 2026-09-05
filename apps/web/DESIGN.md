@@ -139,6 +139,44 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   such facts, so the mark is the shell's; the document's own title, actions
   and history are the page's. The dividing question is not importance, it is
   whether the answer survives navigation.
+- **Every control in the two chrome rows serves one of four roles, and its
+  ROLE follows from its subject.** The roles are:
+
+  | role | asks | where it lives |
+  |---|---|---|
+  | **identity** | where am I? | the mark (workspace), the document's title, the way back |
+  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties, comments, connections, history |
+  | **act** | what do I do to this document? | ONE `⋯`, in ADR-0006's band order |
+  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display…` inside the `⋯` (subject: this canvas) |
+
+  Two things follow, and both were violations before this rule existed:
+
+  - **Inspect is one slot, not N toggles.** Properties, comments,
+    connections and history each owned their own open state, and nothing
+    said they were alternatives. Captured on a phone before the retune: the
+    display popover, the comments rail and the history sheet all up at
+    once, over an editor with room for one. `lib/inspector.ts` declares the
+    union and `InspectorPanel` is the single vessel — a fifth panel joins
+    them rather than opening beside them.
+  - **A view control's ROW follows its subject, not its convenience.**
+    Fullscreen asks how much screen the app gets, which does not change
+    when a document opens, so it is the shell's. Display settings ask how
+    THIS canvas is drawn, so they are the document's — and being one
+    plugin's worth of edge routing, they earn a menu row rather than an
+    icon in a row the title wants.
+
+  What this rule refuses is the control with no answer: an affordance added
+  to whichever row its implementing file already rendered. That is how the
+  rows came to hold five button spellings, a second `⋯` a header above the
+  first, and a fullscreen toggle whose subject was a `<main>` element.
+  `header-button-surface.test.ts` is the mechanical half — one class set,
+  and the count per file pinned by equality from both sides, so a new
+  control cannot arrive without changing a number there. Which role it
+  serves stays a reader's judgement: the controls are written per-file and
+  are not declared anywhere one scan could enumerate, and until they are (a
+  registry every header control registers with is the upgrade path) a
+  per-item table here would be the hand-kept list this file exists to
+  replace.
 - **The mark IS the switcher, and the row does not name the workspace.** The
   strip is `[mark] ALPHA <spacer> gear` and nothing else. The mark states
   which workspace you are in through its ACCESSIBLE name
@@ -603,6 +641,40 @@ canvas-render composes behind the runs (from the `threads` it is handed;
 the pin still comes from the flat projection the optimistic state holds),
 the export through the same layout, and the MCP Apps widget from the
 `threads` `canvas_view` hands it.
+
+The source pane's gutter reserves its width whether or not the document has
+any conversations, so a thread arriving from a peer cannot reflow the body
+sideways under whoever is typing in it — and it PAINTS nothing, so that
+reserve reads as the body's own margin until a marker appears in it. The
+rule lives in the editor's own `EditorView.theme` and not in `index.css`,
+which is the whole reason it was missing: CodeMirror injects its base theme
+unlayered, and this app's stylesheet is inside a Tailwind `@layer`, which
+loses to unlayered rules whatever its specificity. Unoverridden, that base
+theme's light grey fill and light right border painted a near-white band
+down the left of every note on the dark theme, on a document with no
+comments at all.
+
+**Opening one takes a caret, not a selection.** The scope is the reader's
+selection when there is one and otherwise the BLOCK their caret is in
+(`lib/block-range-at`), which is a different claim from the one every
+formatting verb makes about the word under a caret: a word is a guess at
+what someone meant, and a paragraph is a unit they have already pointed at.
+Requiring the selection is what made the layer unreachable on the surface
+that needs it most — selecting a passage on a phone is a drag between two
+handles, and a phone has no right-click. On a blank line the nearest block
+is taken rather than none, because a control's enabled state has to derive
+from something that re-renders it and a caret does not; the one remaining
+null, a body with no prose, is derivable from the value and is the only
+case the entry is inert for.
+
+**Where that entry lives on a phone is the toolbar the docked bar makes
+redundant.** With the caret in the body a phone shows two bars, and five of
+their verbs were the same five — Heading, Bold, Italic, Bullet list, Task.
+So while `touchFormattingBarShown()` is true, the toolbar under the header
+swaps its formatting cluster for what the docked bar does not carry: the
+annotation entry. The verbs return the moment that bar goes (a desktop, or
+a caret outside the editor), so the swap costs nothing and the duplicate
+row is spent on the one affordance that had no button anywhere.
 
 ## A toggle looks toggled, and says so once
 
