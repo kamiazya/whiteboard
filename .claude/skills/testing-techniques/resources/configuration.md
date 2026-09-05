@@ -284,6 +284,50 @@ process runs, so there is nothing to attach to. The project that does spawn real
 `mcp-smoke`, is not in the coverage command — putting it there is the change worth arguing
 about, and this option is only useful after it.
 
+### `detectAsyncLeaks` — a real detector, currently reporting one upstream artefact 25 times
+
+```bash
+vitest run --detect-async-leaks --project <name>    # node projects only; ignored in browser mode
+```
+
+Reports async resources still open when a test file finishes, with the import that created
+them. It is diagnostic, not a gate — the run stays green.
+
+On this tree it reports **25 PIPEWRAP leaks, and every one is the same upstream artefact**.
+Bisected to a minimal reproducer: `import { unified } from 'unified'` — no plugin, no
+`.parse()`, nothing else in the file. Every leaking file's import graph reaches `unified`
+(most through `@kamiazya/whiteboard-codec`'s markdown pipeline); no non-leaker's does. Not
+`process.stdout` (a probe touching `isTTY` reports nothing), not the remark plugins
+(`remark-gfm`, `remark-math`, `remark-stringify` and `yaml` each import clean), not the
+cross-package alias (`@kamiazya/whiteboard-model` imports clean), and not project-specific
+(it reproduces inside `codec-node` on codec's own index).
+
+So: do not wire it into CI. Twenty-five copies of one artefact would bury the first real
+leak. Reach for it when hunting a specific leaked timer or handle, and discount any report
+whose pointer lands on a `unified` import. Re-measure if the codec's markdown stack changes —
+if the count moves away from 25, something new is leaking.
+
+### `expect.schemaMatching` — not better at the sites this repo has
+
+`expect(value).toEqual(expect.schemaMatching(zodSchema))` validates against any Standard
+Schema v1 object. The repo's five candidate sites are all
+`expect(() => schema.parse(x)).not.toThrow()`, and measured side by side on the same failure
+both messages carry the same Zod issues — `not.toThrow` prints them as a plain list,
+`schemaMatching` as a `SchemaMatching{…}` deep-equal diff. Neither is clearly better, so the
+existing sites stay as they are.
+
+Where it earns its place is the shape `not.toThrow` cannot express at all — one field of a
+larger object, checked against a schema inside a single equality:
+
+```ts
+expect(response).toEqual({
+  id: expect.any(String),
+  config: expect.schemaMatching(runtimeConfigSchema),
+})
+```
+
+Reach for it there; do not churn a passing `not.toThrow` into it.
+
 ### `injectCjsGlobals: false` — already held by a stronger rung
 
 It would make a shared-layer package reading `__dirname` fail at test time. `tools/arch-lint`'s
