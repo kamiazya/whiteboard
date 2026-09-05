@@ -1,4 +1,3 @@
-// @vitest-environment node
 /**
  * The failure mode this covers is not a thrown error: a module shared worker
  * whose chunk fails to load constructs FINE and reports through `onerror`

@@ -383,12 +383,25 @@ its CI job; it simply stops paying for a DOM it does not use.
 | whole project before | 219s | 38% (234.3s) |
 | whole project after | **188s** | **26%** (135.5s) |
 
-All 353 files and 3682 tests still pass. **The set is what the RUN says, not what a grep
-says**: a "no testing-library, no `document`/`window`/`localStorage`/`indexedDB`" scan
-proposed 149, and four failed with `ReferenceError: document is not defined` because the
-dependency is indirect (CodeMirror's completion source, three lib modules). Those four keep
-jsdom. The direction is the safe one — a file that needs a DOM and does not get one fails
-loudly on its first run, while a file that stops needing one merely keeps paying.
+**The set is what the RUN says, not what a grep says** — and not what ONE run says either.
+
+A "no testing-library, no `document`/`window`/`localStorage`/`indexedDB`" scan proposed 149.
+Four failed immediately with `ReferenceError: document is not defined`, the dependency being
+indirect (CodeMirror's completion source, three lib modules). The remaining 145 passed a full
+`web-jsdom` run — and **two of them still failed in CI**, under
+`stress-changed-tests`'s five fresh processes and `--repeats=3`:
+
+- `sse-shared-stream-source.test.ts` installs its own `FakeSharedWorker` over
+  `globalThis.SharedWorker`, so it reads as DOM-free and passes alone; its eviction path
+  does not survive repetition without jsdom (`expected [] to have a length of 1`).
+- `save-scheduler.property.test.ts` timed out at 5000ms with a seed in its name — the
+  budget shape, not a counterexample (`async-and-timers.md`), and only under load.
+
+Both went back to jsdom; 141 remain. **Certify an environment swap under the stress shape,
+never under one pass**: three fresh runs plus `--repeats=3` over the whole annotated set is
+what the CI step does and what this now clears. The direction is still the safe one — a file
+that needs a DOM and does not get one fails, loudly or under repetition, where a file that
+stops needing one merely keeps paying.
 
 **Refused — `happy-dom` as the environment.** It is faster, and that is not the question.
 Measured on the whole project on top of the change above: 188s → **158s (-16%)**,
