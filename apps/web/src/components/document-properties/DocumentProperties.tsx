@@ -45,12 +45,6 @@ export interface DocumentPropertiesProps {
    */
   readonly status?: ReactNode
   /**
-   * Canvas display settings control, rendered beside the properties toggle.
-   * Spatial documents pass the settings popover; markdown documents omit it —
-   * edge routing has no meaning for a document with no spatial scene.
-   */
-  readonly settings?: ReactNode
-  /**
    * Right-edge cluster: canvas STATE and whole-document operations (save
    * chip, duplicate, delete). Supplied by the page — this component owns
    * the canvas row's layout, not the operations themselves.
@@ -78,7 +72,6 @@ export function DocumentProperties({
   propertiesOpen = false,
   onToggleProperties,
   status,
-  settings,
   actions,
 }: DocumentPropertiesProps) {
   // Null means "not being edited" — the box then shows the canonical name.
@@ -176,7 +169,6 @@ export function DocumentProperties({
             <TooltipContent>Properties</TooltipContent>
           </Tooltip>
         )}
-        {settings}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}

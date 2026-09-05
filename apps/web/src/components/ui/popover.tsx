@@ -11,6 +11,15 @@ function PopoverTrigger({ ...props }: React.ComponentProps<typeof PopoverPrimiti
   return <PopoverPrimitive.Trigger data-slot="popover-trigger" {...props} />
 }
 
+/**
+ * Where the popover hangs when its opener is not its trigger. The display
+ * panel is opened from a menu row, and the row unmounts with the menu — so
+ * the anchor is the kebab that owns both.
+ */
+function PopoverAnchor({ ...props }: React.ComponentProps<typeof PopoverPrimitive.Anchor>) {
+  return <PopoverPrimitive.Anchor data-slot="popover-anchor" {...props} />
+}
+
 function PopoverContent({
   className,
   align = 'end',
@@ -39,4 +48,4 @@ function PopoverContent({
   )
 }
 
-export { Popover, PopoverContent, PopoverTrigger }
+export { Popover, PopoverAnchor, PopoverContent, PopoverTrigger }

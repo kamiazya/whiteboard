@@ -87,17 +87,24 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
   const toggleInspector = (kind: InspectorKind) =>
     setInspector((open) => (open === kind ? null : kind))
   const setCommentsOpen = useCallback((open: boolean) => setInspector(open ? 'comments' : null), [])
-  // Bumped by ⌘/Ctrl+S to open the column with its naming field ready. The
-  // chord asks for a bookmark now; it does not take one.
+  // Bumped by whoever asks for a bookmark (see requestBookmark below), which
+  // opens the column with its naming field ready. Nothing here takes one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
   // Read-only by construction — see DocumentPreview — so "look, then decide"
   // cannot turn into an edit against a state that is not the document's.
   const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
-  useBookmarkShortcut(versions.enabled, () => {
+  // Asking for a bookmark opens the History column with its naming field
+  // ready — the naming is the whole value, and a row named nothing is
+  // indistinguishable from the automatic checkpoint above it, so it happens
+  // beside the list rather than in the chrome. Two routes reach it: the
+  // ⌘/Ctrl+S chord, which no longer saves anything by itself, and the
+  // document's ⋯ menu, which is what a finger has.
+  const requestBookmark = useCallback(() => {
     setInspector('history')
     setBookmarkArmed((n) => n + 1)
-  })
+  }, [])
+  useBookmarkShortcut(versions.enabled, requestBookmark)
 
   // SCOPE RESET — see scoped-screen-state.test.ts. Everything above but the
   // inspector slot names a document, and none of it may outlive the document
@@ -223,6 +230,15 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
       )}
       <DocumentMenu
         onExport={(format) => void handleExport(format)}
+        // Canvas-level display settings, gated on kind the same way the
+        // facet disclosure is: a markdown document has no canvas to
+        // configure. They live in the menu's leading band rather than as a
+        // gear of their own — the row's only VIEW control, against width
+        // the title wanted.
+        {...(documentKind === 'spatial'
+          ? { display: <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} /> }
+          : {})}
+        {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}
           : { triggerRef: model.slots.menuTriggerRef })}
@@ -342,14 +358,6 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
                           : { facets: model.properties.facets })}
                         propertiesOpen={inspector === 'properties'}
                         onToggleProperties={() => toggleInspector('properties')}
-                        // Canvas-level display settings, gated on kind the
-                        // same way the facet disclosure is: a markdown
-                        // document has no canvas to configure.
-                        settings={
-                          documentKind === 'spatial' ? (
-                            <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} />
-                          ) : undefined
-                        }
                         // No save state in the row: the shell mark answers
                         // for the keeper, and only when there is a condition.
                         {...(model.properties.status === undefined

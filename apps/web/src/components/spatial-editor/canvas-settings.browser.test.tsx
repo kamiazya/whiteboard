@@ -1,7 +1,8 @@
-// The canvas display-settings popover, standalone: the gear opens it, a
-// pick applies the canvas-wide command immediately and keeps it open for
-// the next tweak, consecutive picks chain under a deferred parent, and
-// dismissal returns focus to the gear.
+// The canvas display-settings panel in the vessel that actually opens it:
+// the document's ⋯, whose leading `Display…` row hangs the popover off the
+// kebab. A pick applies the canvas-wide command immediately and keeps the
+// popover open for the next tweak, consecutive picks chain under a deferred
+// parent, and dismissal returns focus to the kebab.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledPlugins, type VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
@@ -9,6 +10,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { z } from 'zod'
+import { DocumentMenu } from '../workspace-top-bar/DocumentMenu.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { CANVAS_SETTINGS_WIDGETS } from './facet-widgets/index.js'
 
@@ -30,26 +32,46 @@ function makeHost() {
   function Host() {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
-    return <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+    return (
+      <DocumentMenu
+        display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
+      />
+    )
   }
   return { Host, latest }
 }
 
-const gear = (c: HTMLElement) =>
-  c.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
+const kebab = (c: HTMLElement) => c.querySelector('[aria-label="More actions"]') as HTMLElement
 const menu = () => document.querySelector('[data-testid="canvas-settings-menu"]')
 const option = (label: string) =>
   [...(menu()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === label) as
     | HTMLButtonElement
     | undefined
 
-it('the gear opens the popover with both option rows', async () => {
+/**
+ * Open the panel the way a person does: the kebab, then its leading row.
+ * Radix's DropdownMenuTrigger opens on pointerDown and its Item selects on
+ * pointerUp, so a plain click on either would be a no-op.
+ */
+async function openPanel(container: HTMLElement) {
+  fireEvent.pointerDown(kebab(container), { button: 0, ctrlKey: false })
+  const row = await vi.waitFor(() => {
+    const found = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === 'Display…',
+    )
+    expect(found).toBeDefined()
+    return found as HTMLElement
+  })
+  fireEvent.pointerUp(row)
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
+}
+
+it('the Display row opens the popover with both option rows', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
   expect(menu()).toBeNull()
-  fireEvent.click(gear(container))
-  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  await openPanel(container)
   expect(menu()?.textContent).toContain('Edge routing')
   expect(menu()?.textContent).toContain('Line jumps')
 })
@@ -58,7 +80,7 @@ it('a pick applies canvas-wide and keeps the popover open; current values are ma
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  fireEvent.click(gear(container))
+  await openPanel(container)
   await vi.waitFor(() => expect(option('Curved')).toBeDefined())
   fireEvent.click(option('Curved') as HTMLElement)
 
@@ -80,19 +102,23 @@ it('consecutive picks both survive a deferred parent', async () => {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
     return (
-      <CanvasDisplaySettings
-        canvas={canvas}
-        onChange={(next) => {
-          setTimeout(() => {
-            latest.canvas = next
-            setCanvas(next)
-          }, 30)
-        }}
+      <DocumentMenu
+        display={
+          <CanvasDisplaySettings
+            canvas={canvas}
+            onChange={(next) => {
+              setTimeout(() => {
+                latest.canvas = next
+                setCanvas(next)
+              }, 30)
+            }}
+          />
+        }
       />
     )
   }
   const { container } = render(<DeferredHost />)
-  fireEvent.click(gear(container))
+  await openPanel(container)
   await vi.waitFor(() => expect(option('Orthogonal')).toBeDefined())
   fireEvent.click(option('Orthogonal') as HTMLElement)
   fireEvent.click(option('On') as HTMLElement)
@@ -105,18 +131,18 @@ it('consecutive picks both survive a deferred parent', async () => {
   })
 })
 
-it('Escape closes and hands focus back to the gear', async () => {
+it('Escape closes and hands focus back to the kebab', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
-  const trigger = gear(container)
-  fireEvent.click(trigger)
-  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  const trigger = kebab(container)
+  await openPanel(container)
 
   fireEvent.keyDown(menu() as HTMLElement, { key: 'Escape' })
   await vi.waitFor(() => expect(menu()).toBeNull())
-  // Radix hands focus back to the trigger, so a keyboard user keeps their
-  // place instead of falling to <body>.
+  // The row that opened this unmounted with the menu, so the popover is
+  // anchored on the kebab and hands focus back there — a keyboard user keeps
+  // their place instead of falling to <body>.
   await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
 })
 
@@ -138,20 +164,23 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
   function Host() {
     const [canvas, setCanvas] = useState(initial)
     return (
-      <CanvasDisplaySettings
-        canvas={canvas}
-        onChange={(next) => setCanvas(next)}
-        facetRegistry={registry}
-        widgets={{
-          ...CANVAS_SETTINGS_WIDGETS,
-          'planning.board/v0': () => <div>Board options</div>,
-        }}
+      <DocumentMenu
+        display={
+          <CanvasDisplaySettings
+            canvas={canvas}
+            onChange={(next) => setCanvas(next)}
+            facetRegistry={registry}
+            widgets={{
+              ...CANVAS_SETTINGS_WIDGETS,
+              'planning.board/v0': () => <div>Board options</div>,
+            }}
+          />
+        }
       />
     )
   }
   const { container } = render(<Host />)
-  fireEvent.click(gear(container))
-  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  await openPanel(container)
 
   const tabs = [...(menu()?.querySelectorAll('[role="tab"]') ?? [])]
   expect(tabs.map((t) => t.textContent)).toEqual(['Planning', 'Visual style'])
@@ -165,7 +194,6 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
   // The bundled registry alone (one namespace) shows no tablist.
   const { Host: BareHost } = makeHost()
   const { container: bare } = render(<BareHost />)
-  fireEvent.click(gear(bare))
-  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  await openPanel(bare)
   expect(menu()?.querySelector('[role="tab"]')).toBeNull()
 })

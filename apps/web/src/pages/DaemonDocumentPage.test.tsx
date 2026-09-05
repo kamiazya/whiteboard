@@ -225,13 +225,14 @@ describe('DaemonDocumentPage', () => {
     expect(createdBackends[0]?.connectCount).toBe(1)
   })
 
-  it('offers the canvas display settings gear, so plugin canvasSettings are reachable here too', async () => {
+  it('offers the canvas display settings row, so plugin canvasSettings are reachable here too', async () => {
     // The source scan in file-seam-conformance.test.ts asserts the PROP is
     // written; this asserts the surface actually appears, which is what a
     // reader of the scan cannot tell. `CanvasDisplaySettings` owns the
     // `canvasSettings` contribution point — `visual.edges/v0` is contributed
     // there today — and only the browser page placed it, so those settings
-    // were unreachable in daemon mode with nothing failing.
+    // were unreachable in daemon mode with nothing failing. Both pages now
+    // reach them through the shared page's ⋯.
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -240,7 +241,10 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(screen.getByTestId('canvas-settings-button')).toBeTruthy()
+    // Reached through the document's ⋯ now, not a gear of its own — the
+    // leading `Display…` row. Radix opens the menu on pointerDown.
+    fireEvent.pointerDown(screen.getByLabelText('More actions'), { button: 0, ctrlKey: false })
+    expect(await screen.findByRole('menuitem', { name: 'Display…' })).toBeTruthy()
   })
 
   it('shows the Connections chip with the backlink count and switches to a source on click', async () => {

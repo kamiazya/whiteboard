@@ -436,8 +436,10 @@ describe('BrowserDocumentPage', () => {
     // No link handout: a document kept in this browser is reachable from no
     // other browser, so a link is a promise this keeper cannot honour.
     expect(screen.queryByText(/copy link/i)).toBeNull()
-    expect(await documentOpsItem(/export as png/i)).toBeTruthy()
-    expect(await documentOpsItem(/export as svg/i)).toBeTruthy()
+    // ONE export row; the formats sit behind it (DocumentMenu's submenu),
+    // so what this page owns is that the row is HERE and nowhere else.
+    expect(await documentOpsItem(/^export…$/i)).toBeTruthy()
+    expect(screen.queryByText(/export as png/i)).toBeNull()
     expect(await documentOpsItem(/duplicate/i)).toBeTruthy()
     expect(await documentOpsItem(/^delete$/i)).toBeTruthy()
   })
@@ -485,8 +487,9 @@ describe('BrowserDocumentPage', () => {
     const fact = screen.getByTestId('persistence-state')
     expect(fact.hidden).toBe(true)
     expect(fact.getAttribute('data-save-state')).toBe('saved')
-    // A spatial canvas offers its display settings from the same row.
-    expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy()
+    // A spatial canvas offers its display settings from the row's ⋯, not
+    // from a gear of its own — see DocumentMenu's leading band.
+    expect(screen.queryByRole('button', { name: 'Display settings' })).toBeNull()
     // The whole cluster lives inside the canvas row (DocumentProperties) —
     // the dot LEFT of the title, the rare operations behind one kebab at
     // the right edge — not in a second header strip of its own.

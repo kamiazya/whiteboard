@@ -41,7 +41,6 @@ const HEADER_SURFACES: Record<string, number> = {
   './components/WorkspaceTopBar.tsx': 2,
   './components/workspace-top-bar/DocumentMenu.tsx': 1,
   './components/document-properties/DocumentProperties.tsx': 1,
-  './components/spatial-editor/CanvasDisplaySettings.tsx': 1,
   './components/annotations/CommentsRailChrome.tsx': 1,
   './components/connections/ConnectionsChip.tsx': 1,
   './components/document-editor/InspectorPanel.tsx': 1,
