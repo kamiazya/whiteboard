@@ -25,7 +25,11 @@
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
 
-import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import {
+  type AliasResolver,
+  parseMarkdownBody,
+  resolveReferences,
+} from '@kamiazya/whiteboard-codec'
 import type {
   AnchorRect,
   CanvasComment,
@@ -235,6 +239,13 @@ export interface SpatialLayoutOptions {
    */
   readonly references?: ReferenceSeams
   /**
+   * What a text node's `[[target]]` resolves to, applied to its parsed body
+   * the way a note's caller applies it before layout. Filled from
+   * `references` when absent; an id names itself, and a target nobody
+   * resolves stays the literal text the author wrote.
+   */
+  readonly resolveAlias?: AliasResolver
+  /**
    * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
    * implementation, for the same reason `parseBody` defaults to codec's
    * parser: every surface that lays a markdown body out wants it, and the one
@@ -284,8 +295,8 @@ export interface SpatialLayoutOptions {
    * ORIGIN-RELATIVE coordinates and placed by `placeInNode`, so a cached
    * value is position-independent by construction: keyed by the node's
    * text and box size only. Everything else that shapes content —
-   * `measure`, the appearance resolver, `geometry`, `parseBody`, the mdast
-   * seams — is deliberately NOT in the key: the CALLER owns the cache's
+   * `measure`, the appearance resolver, `geometry`, `parseBody`, the
+   * reference and mdast seams — is deliberately NOT in the key: the CALLER owns the cache's
    * lifetime and must discard it when any of those change (in practice:
    * one cache per document+theme, dropped on theme/font switches). Cached
    * values are shared between scenes and must be treated as immutable,
@@ -728,7 +739,7 @@ function composeTextNode(
   } else {
     try {
       const laid = layoutMdastBlocks(
-        options.parseBody(node.text),
+        resolveReferences(options.parseBody(node.text), options.resolveAlias),
         mdastOptionsFor(maxWidth, options),
       )
       body = fitTextBody(laid, node, options)
@@ -1381,8 +1392,12 @@ export function naturalNodeContentSize(
 function withSpatialReferenceSeams(options: SpatialLayoutOptions): SpatialLayoutOptions {
   const applied = withReferenceSeams(options)
   const seams = options.references
-  if (seams === undefined || options.resolveReference !== undefined) return applied
-  return { ...applied, resolveReference: seams.resolveReference }
+  if (seams === undefined) return applied
+  return {
+    ...applied,
+    resolveAlias: options.resolveAlias ?? seams.resolveAlias,
+    resolveReference: options.resolveReference ?? seams.resolveReference,
+  }
 }
 
 /** The embed path needs only the scene; the anchor map is per-top-level-canvas. */

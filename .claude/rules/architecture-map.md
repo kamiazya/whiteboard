@@ -186,8 +186,11 @@ seam a root forgot never failed — the web preview drew a canvas behind
 `![[path]]` while `wb_scene_render` refused the document, all green.
 `tools/arch-lint`'s `reference-seams-check.test.ts` fails on a seam defined
 by hand outside that module (passing one along, `overlayReferences`, or
-handing the builder an alias table is fine). The gap that remains, so nobody
-rediscovers it: the editor's canvas text-node bodies take no markdown seams,
-because the layout worker cannot receive a function.
+handing the builder an alias table is fine). The bundle also has a DATA
+form, `ReferenceWire` / `referenceSeamsFromWire`, for the layout worker: a
+function cannot cross `postMessage`, so the graph and the tables it was
+built over cross instead, and both threads build the same seams from the
+same bytes. That closed the last gap — a text node's `![[note]]` drew a
+placeholder in the worker, and for parity on the main thread too.
 
 The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.

@@ -1,4 +1,5 @@
-import type { ReactNode, Ref } from 'react'
+import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
+import { type ReactNode, type Ref, useMemo } from 'react'
 import type { DocumentFileSeams } from '../../hooks/use-document-file-seams.js'
 import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
@@ -97,6 +98,12 @@ export function SpatialEditorPane({
   agentTouchedNodeIds,
   threads,
 }: SpatialEditorPaneProps) {
+  // The overlay's markdown editor reads the seams as functions; it builds
+  // them from the same wire the canvas posts to its worker.
+  const overlaySeams = useMemo(
+    () => referenceSeamsFromWire(fileSeams.references),
+    [fileSeams.references],
+  )
   return (
     <div data-testid="spatial-editor-container" className={className}>
       {children}
@@ -139,7 +146,7 @@ export function SpatialEditorPane({
           title={overlayTitle}
           initialText={nodeInEditor.editing.text}
           theme={theme}
-          references={fileSeams.references}
+          references={overlaySeams}
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}

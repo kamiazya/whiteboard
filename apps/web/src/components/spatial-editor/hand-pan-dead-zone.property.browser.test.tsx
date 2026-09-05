@@ -1,4 +1,4 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 /**
  * Hand tool: every press on the canvas surface pans, wherever it lands and
  * at whatever zoom.
@@ -97,8 +97,8 @@ function Host({ handle }: { handle: React.RefObject<SpatialEditorHandle | null> 
         onChange={(next) => setCanvas(next)}
         theme="light"
         fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-        references={referenceSeams(new Map(), {
-          extra: (ref) => (ref === 'ref-1' ? { canvas: referenced } : undefined),
+        references={referenceWire(new Map(), {
+          extras: new Map([['ref-1', { canvas: referenced }]]),
         })}
       />
     </div>

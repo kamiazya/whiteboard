@@ -24,8 +24,9 @@ export const REFERENCE_BUDGET = 256
  *
  * The ONE definition of "what counts as a reference", so a keeper never
  * decides it alone: a body's `[[target]]` and `![[target]]` (the codec
- * scanner's grammar, the same one the reference index uses) and a canvas's
- * file nodes, minus image assets, which are not documents. Passing what is
+ * scanner's grammar, the same one the reference index uses), a canvas's
+ * file nodes, minus image assets, which are not documents, and whatever
+ * its text nodes' bodies write in that grammar. Passing what is
  * already `loaded` extends the walk one step through each loaded body and
  * canvas — so a prefetch loop calls this until it answers nothing new — but
  * only as far as `DEPTH_CAP`, and never past `REFERENCE_BUDGET` targets in
@@ -49,6 +50,9 @@ export function referenceTargets(seeds: {
   const addCanvas = (canvas: SpatialCanvas, depth: number) => {
     for (const node of canvas.nodes) {
       if (node.type === 'file' && !isImageRef(node.file)) add(node.file, depth)
+      // A text node's body is markdown the composer lays out with the same
+      // seams a note gets, so what it embeds and links has to load too.
+      else if (node.type === 'text') addBody(node.text, depth)
     }
   }
   const addEntry = (entry: LoadedReference, depth: number) => {

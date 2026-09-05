@@ -789,10 +789,9 @@ the table alone.
     Three things the six could not do. A caller has ONE document per
     reference, so six closures over the same lookup meant the same key was
     resolved four times per file node. A record is plain DATA, which a
-    function can never be — the layout worker refuses a canvas whose file
-    seams are wired precisely because a function cannot cross
-    `postMessage`, and `apps/web`'s `composeReferenceSeam` is now the ONE
-    producer both threads build their seam through. And a content kind added
+    function can never be — a function cannot cross `postMessage`, so the
+    layout worker receives the records (decision #14's wire) and both
+    threads build one seam from them. And a content kind added
     later is a field rather than a seventh callback threaded through every
     consumer, of which there are four.
     The price, stated because it is a real behaviour change: one resolver
@@ -952,7 +951,13 @@ the table alone.
     (labels, dangling marks) for the layout worker and the main thread
     alike. Both layouts accept the bundle as `references` and apply it under
     the individual seams (`withReferenceSeams`), which stay for a test
-    probing one alone. The reason is the drift class decision #11 already
+    probing one alone. `ReferenceWire` is the bundle as DATA — the graph
+    plus the alias, title and extras tables evaluated over what it names —
+    and `referenceSeamsFromWire` builds the bundle back on either side of a
+    `postMessage`; `apps/web`'s editor builds its own seams from the wire it
+    posts, so the worker and the main thread cannot disagree. Before it, a
+    text node's `![[note]]` was a placeholder on both, and `referenceTargets`
+    never named it: it scans text-node bodies now. The reason is the drift class decision #11 already
     names: every root wrote these by hand, each answered a different subset,
     and the total layout hid the difference. `tools/arch-lint`'s
     `reference-seams-check.test.ts` refuses a seam defined outside this
