@@ -64,13 +64,31 @@ function readAll(): Record<string, readonly string[]> {
   }
 }
 
+/**
+ * One workspace's list, by OWN key only.
+ *
+ * A handle is text the user chose — `deriveWorkspaceSegment` lowercases a
+ * display name, and `constructor` passes the segment charset — so a plain
+ * object answers some handles with an INHERITED member. That value is
+ * truthy, so `?? []` never fires: the lane was handed `Object.prototype`'s
+ * constructor and threw on `.map`, crashing the whole panel for anyone whose
+ * workspace was named that, with storage empty and no way to clear it.
+ *
+ * Nothing is ever WRITTEN to the prototype — a computed key in an object
+ * literal defines an own property rather than invoking the `__proto__`
+ * setter — so this is a read-side confusion, not pollution.
+ */
+function scopeOf(all: Record<string, readonly string[]>, workspace: string): readonly string[] {
+  return Object.hasOwn(all, workspace) ? (all[workspace] ?? []) : []
+}
+
 export function readRecentIds(workspace: string): readonly string[] {
-  return readAll()[workspace] ?? []
+  return scopeOf(readAll(), workspace)
 }
 
 export function recordRecentDocument(workspace: string, documentId: string): void {
   const all = readAll()
-  const next = { ...all, [workspace]: recordRecentId(all[workspace] ?? [], documentId) }
+  const next = { ...all, [workspace]: recordRecentId(scopeOf(all, workspace), documentId) }
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(next))
   } catch {

@@ -67,6 +67,45 @@ describe('recent documents (per-device, localStorage)', () => {
     expect(() => recordRecentDocument('space', 'one')).not.toThrow()
   })
 
+  // A workspace handle is text the user chose: `deriveWorkspaceSegment`
+  // lowercases a display name, and `constructor` passes the segment charset,
+  // so a workspace named "Constructor" mints exactly that handle. A plain
+  // object answers it with an INHERITED value that is truthy, so `?? []`
+  // never fires and the lane is handed a Function to map over — measured, it
+  // threw on `.map` and took the whole panel down, with storage EMPTY and so
+  // no way for the person to clear it.
+  //
+  // The whole prototype class is covered rather than the one reachable
+  // member, since what the segment charset allows is not this module's to
+  // know and a widened charset must not reopen this.
+  const PROTOTYPE_HANDLES = ['constructor', '__proto__', 'toString', 'valueOf', 'hasOwnProperty']
+
+  for (const handle of PROTOTYPE_HANDLES) {
+    it(`answers empty for the unrecorded prototype-named handle ${handle}`, () => {
+      expect(readRecentIds(handle)).toEqual([])
+    })
+
+    it(`never throws or answers a non-array for the handle ${handle}`, () => {
+      expect(() => recordRecentDocument(handle, 'doc-1')).not.toThrow()
+      expect(Array.isArray(readRecentIds(handle))).toBe(true)
+    })
+  }
+
+  // `__proto__` is deliberately absent: zod's `z.record` rebuilds the parsed
+  // object by ASSIGNMENT, and assigning `__proto__` sets the prototype rather
+  // than defining an own property, so the entry does not survive a round
+  // trip. It degrades to an empty lane, which is the guarantee above, and it
+  // is unreachable anyway — the segment charset has no underscore. Chasing
+  // persistence for it would mean a null-prototype store for a handle nobody
+  // can mint.
+  for (const handle of PROTOTYPE_HANDLES.filter((each) => each !== '__proto__')) {
+    it(`reads back what was recorded under the handle ${handle}`, () => {
+      recordRecentDocument(handle, 'doc-1')
+
+      expect(readRecentIds(handle)).toEqual(['doc-1'])
+    })
+  }
+
   it('leaves another workspace intact when one is recorded', () => {
     recordRecentDocument('alpha', 'a-doc')
     recordRecentDocument('beta', 'b-doc')
