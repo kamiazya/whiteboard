@@ -96,42 +96,6 @@ describe('branches-store', () => {
       ).rejects.toThrow(/no document/i)
     })
 
-    // Branches are keyed on workspaceId directly (dual-plane collapse S3),
-    // so workspace-scoped reads need no join through the documents table.
-    it('records the workspaceId on every branch row', async () => {
-      await saveDocumentBranches('sess-a', 'canvas-x', {
-        head: 'main',
-        branches: [
-          {
-            name: 'main',
-            color: DEFAULT_MAIN_COLOR,
-            tipFrontiers: '',
-            createdAt: '2026-04-23T00:00:00.000Z',
-          },
-          {
-            name: 'feature',
-            color: '#9333ea',
-            tipFrontiers: '',
-            createdAt: '2026-04-23T00:00:00.000Z',
-          },
-        ],
-      })
-      const { getDb } = await import('./db/index.js')
-      const db = await getDb(tempDir)
-      const rows = await db
-        .selectFrom('branches')
-        .select(['name', 'workspaceId'])
-        .orderBy('name')
-        .execute()
-      expect(rows).toEqual([
-        { name: 'feature', workspaceId: 'sess-a' },
-        { name: 'main', workspaceId: 'sess-a' },
-      ])
-    })
-
-    // The branch HEAD is shared CRDT state (dual-plane collapse S4b): the
-    // documents.currentBranch write keeps serving today's reads, and the
-    // workspace record's node meta is what every replica converges on.
     it('mirrors the branch HEAD into the workspace record node meta', async () => {
       const { openWorkspaceDocIfStored } = await import('./document-store.js')
       const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')

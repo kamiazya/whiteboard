@@ -128,7 +128,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // conversion also took the browser page below from 981 to 926.
   'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
   'apps/web/src/lib/document-sync-session.ts': 1366,
-  'packages/mcp-server/src/server/store/document-store.ts': 1131,
+  // Raised from 1131 because compaction's retained-history cut now reads
+  // branch tips from BOTH planes for the length of the migration: the record,
+  // where a document goes the first time its branches are written, and the
+  // rows a document that has not been written since still has. A union rather
+  // than a merge — a document is never in both — and the comment saying so is
+  // most of the 14 lines.
+  'packages/mcp-server/src/server/store/document-store.ts': 1145,
   'apps/web/src/pages/BrowserDocumentPage.tsx': 926,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,

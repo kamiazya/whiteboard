@@ -22,6 +22,7 @@
 import {
   openWorkspaceDocumentPlane,
   readWorkspaceDocumentPlane,
+  readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   updateWorkspaceDocumentMeta,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -72,6 +73,56 @@ export function readBranchesFromRecord(
   const branches = plane === null ? [] : branchesOf(plane)
   if (branches.length === 0) return { branches: [defaultMain(now)], head: 'main' }
   return { branches, head: resolveHead(branches, entry?.currentBranch) }
+}
+
+/** One branch's tip, with the document it belongs to. */
+export interface WorkspaceBranchTip {
+  readonly documentId: string
+  readonly name: string
+  readonly tipFrontiers: string
+}
+
+/**
+ * Every branch tip the whole workspace holds, across every document.
+ *
+ * Compaction needs this and nothing else: a cut that drops history a branch
+ * tip still needs makes that variation uncheckoutable, so the earliest point
+ * anybody can compact to is bounded by the OLDEST tip anywhere in the
+ * workspace. It is a workspace-wide question, which is the one thing a
+ * per-document read cannot answer, so it lives here beside what it reads
+ * rather than as a walk each keeper writes for itself.
+ *
+ * Empty tips are included; a caller that treats "no tip yet" as pinning
+ * nothing says so at its own use, where the reason belongs.
+ */
+export function readWorkspaceBranchTips(doc: LoroDoc): WorkspaceBranchTip[] {
+  const out: WorkspaceBranchTip[] = []
+  for (const entry of readWorkspaceDocuments(doc)) {
+    const plane = readWorkspaceDocumentPlane(doc, entry.documentId, BRANCHES_PLANE_KEY)
+    if (plane === null) continue
+    for (const branch of branchesOf(plane)) {
+      out.push({
+        documentId: entry.documentId,
+        name: branch.name,
+        tipFrontiers: branch.tipFrontiers,
+      })
+    }
+  }
+  return out
+}
+
+/**
+ * Whether this document's branches are on the record YET.
+ *
+ * `readBranchesFromRecord` invents `main` for a document that has none, which
+ * is right for a reader and useless to a keeper migrating off another store:
+ * it cannot tell an empty plane from a plane holding only `main`. This
+ * answers that one question, so a keeper's fallback to its old rows is a
+ * decision about where the data IS rather than a guess from a default.
+ */
+export function hasBranchesOnRecord(doc: LoroDoc, documentId: string): boolean {
+  const plane = readWorkspaceDocumentPlane(doc, documentId, BRANCHES_PLANE_KEY)
+  return plane !== null && branchesOf(plane).length > 0
 }
 
 /**
