@@ -7,6 +7,10 @@ description: How to pick the nearest test layer in the whiteboard repo (mcp-node
 
 Start with the smallest failing test at the **nearest** layer. Do not jump to broad E2E if a smaller failing test can isolate the bug.
 
+This skill answers **where**. How to write the test so it survives the full parallel run, how to
+prove it is stable, and how a property or Stryker survivor is closed are the `testing-techniques`
+skill (`resources/*.md`, one per situation).
+
 | Layer | Use for | Command |
 |---|---|---|
 | `mcp-node` | pure functions, stores, routes, server behavior, persistence logic in `packages/mcp-server` | `pnpm test --project mcp-node` |

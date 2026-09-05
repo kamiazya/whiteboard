@@ -97,7 +97,13 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 88
+//
+// 89 since the skills index gained `testing-techniques` — 22 characters,
+// on a corpus that sat 9 under the boundary. The skill itself and its
+// path-scoped `test-authoring.md` rule cost nothing here: neither is
+// always-on, which is the point of putting the technique catalogue in
+// `resources/*.md` rather than in a rule.
+const ALWAYS_ON_TOTAL_BUDGET = 89
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by

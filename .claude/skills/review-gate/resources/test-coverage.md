@@ -40,3 +40,15 @@ Check:
 - If this diff is a bug fix, does the added test fail against the
   pre-fix code (i.e. it targets the root cause), rather than merely
   asserting the new code's happy path?
+
+### 6. No write-time flake shape in a new or changed test
+
+Check:
+- Does a new or changed test hold an element across an action that can
+  remount it, assert on a global counter or "most recent" handle, wait on a
+  side effect inside `waitFor`, or leave a timer/env/mock un-restored? The
+  lint plugin catches six shapes mechanically; this criterion is for the ones
+  it cannot see (`testing-techniques/resources/*.md` names each with its
+  measured cost).
+- Does a new property or allowlist walk assert the subject is PRESENT (a
+  reachability floor, a count), not merely that what is present passes?

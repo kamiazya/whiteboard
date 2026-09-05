@@ -34,20 +34,23 @@ function lint(file, plugin = 'tools/biome-plugins/test-flake-shapes.grit') {
   }
 }
 
-test('the bad fixture trips ALL FIVE rules', () => {
+test('the bad fixture trips ALL SIX rules', () => {
   const out = lint(join(FIXTURES, 'bad.test.tsx'))
   assert.match(out, /Side effect inside waitFor/)
   assert.match(out, /afterEach wipes document\.body/)
   assert.match(out, /Non-ASCII character in a userEvent/)
   assert.match(out, /vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/)
   assert.match(out, /A focused test drops every other test/)
+  // Both halves of the sixth rule, since each is its own pattern.
+  assert.match(out, /Unawaited async assertion/)
+  assert.match(out, /Unawaited toMatchFileSnapshot/)
 })
 
-test('the good fixture trips none of the four rules', () => {
+test('the good fixture trips none of the six rules', () => {
   const out = lint(join(FIXTURES, 'good.test.tsx'))
   assert.doesNotMatch(
     out,
-    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)|A focused test drops every other test/,
+    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)|A focused test drops every other test|Unawaited/,
   )
 })
 

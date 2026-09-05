@@ -1,9 +1,11 @@
 language js
 
 // Executable half of four flake shapes from .claude/rules/integrator-flow.md,
-// plus one shape that is not a flake but fails the same way: the run reports
-// green while covering less than it appears to.
+// plus two shapes that are not flakes but fail the same way: the run reports
+// green while checking less than it appears to.
 // Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair per rule).
+// Adding a shape is the `executable-rungs` resource of the
+// `testing-techniques` skill.
 any {
   // A retried waitFor callback re-fires any action inside it, so the action
   // double-fires under load and the failure blames the assertion.
@@ -69,6 +71,32 @@ any {
     register_diagnostic(
       span = $runner,
       message = "A focused test drops every other test in this file and still exits 0 — CI goes green having run one case. Remove `.only` before committing.",
+      severity = "error"
+    )
+  },
+  // An async assertion nobody awaits checks nothing: the test ends before
+  // the promise settles, and a rejection lands as an unhandled error (or
+  // nowhere). Vitest 4 awaits these at test end and only warns; Vitest 5
+  // fails the test outright, so this is the same verdict reached at lint
+  // time — including in a file the runtime never reaches. A `return` of the
+  // assertion is fine: the runner awaits a returned promise.
+  // Measured 0 occurrences when this was added.
+  `expect($x).$mode.$m($args)` as $call where {
+    $mode <: or { `resolves`, `rejects` },
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited async assertion: `.resolves`/`.rejects` returns a promise, and without `await` the test finishes before it settles. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
+  `expect($x).toMatchFileSnapshot($args)` as $call where {
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited toMatchFileSnapshot: it reads and writes the snapshot file asynchronously, so an un-awaited call compares nothing. Vitest 5 fails the test for this; `await` it.",
       severity = "error"
     )
   }
