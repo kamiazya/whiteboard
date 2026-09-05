@@ -306,6 +306,10 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
   // over a reply box that writes by thread id — into whichever document
   // actually holds it.
   annotations: 'cleared on switch',
+  // And where their passages sit in THIS document's body. Offsets into a
+  // body that has left the screen, applied to the one that arrived, put
+  // every highlight somewhere the reader never marked.
+  threadMarks: 'cleared on switch',
 
   loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
   scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',

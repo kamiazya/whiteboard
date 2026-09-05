@@ -429,6 +429,7 @@ export function DaemonDocumentPage({
     syncStatus,
     readOutlineSource,
     annotations,
+    threadMarks,
   } = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
@@ -559,6 +560,7 @@ export function DaemonDocumentPage({
     threads: annotations,
     documentKind,
     markdownBody,
+    threadMarks,
     canvas: canvasValue,
     write: {
       createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
@@ -1086,6 +1088,9 @@ export function DaemonDocumentPage({
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
                     threads: annotations,
+                    // Only a markdown document has a body for a mark to live
+                    // in, and this branch is the one that renders one.
+                    threadMarks,
                     selectedThreadId: commentsRail.selectedThreadId,
                     onSelectThread: commentsRail.revealThread,
                     onComposeThread: commentsRail.composeThread,

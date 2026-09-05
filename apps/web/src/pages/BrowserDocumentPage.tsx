@@ -727,6 +727,11 @@ export function BrowserDocumentPage({
    * from here down nothing cares which of the two did the reading.
    */
   const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
+  // Where the CRDT still holds each passage. Only a markdown document has a
+  // body for a mark to live in; the spatial side answers with nothing rather
+  // than with the sync session's map, which is about a body it is not
+  // showing.
+  const threadMarks = documentKind === 'markdown' ? markdownDoc.threadMarks : undefined
 
   /**
    * The rail's write door. A markdown document is given no BrowserBackend
@@ -742,6 +747,7 @@ export function BrowserDocumentPage({
     threads: annotations,
     documentKind,
     markdownBody: documentKind === 'markdown' ? markdownDoc.body : null,
+    threadMarks,
     canvas: documentKind === 'spatial' ? canvas : null,
     write: {
       createThread: (thread) => {
@@ -1181,6 +1187,7 @@ export function BrowserDocumentPage({
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
                           threads: annotations,
+                          threadMarks,
                           selectedThreadId: commentsRail.selectedThreadId,
                           onSelectThread: commentsRail.revealThread,
                           onComposeThread: commentsRail.composeThread,

@@ -3,6 +3,7 @@ import {
   withViewerFontEmbedded,
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type {
   CommentThread,
@@ -77,6 +78,15 @@ export interface UseDocumentSyncResult {
    * `canvas` would never learn of one.
    */
   annotations: readonly CommentThread[]
+  /**
+   * Where each conversation's passage sits in the body right now, as the
+   * CRDT's own rich-text marks report it — the live half of a text anchor,
+   * with the thread's quote as the durable fallback for whatever is absent.
+   *
+   * Published beside `annotations` and updated in the same state commit,
+   * so a consumer cannot pair one with a stale reading of the other.
+   */
+  threadMarks: ReadonlyMap<string, PassageRange>
   markdownBody: string
   /**
    * OKF core facets from the doc's `core` map — `undefined` for a spatial
@@ -105,6 +115,8 @@ export interface UseDocumentSyncResult {
 /** Stable identity so an unlocked canvas never re-renders the editor. */
 const EMPTY_LOCKED_IDS: ReadonlySet<string> = new Set()
 const EMPTY_ANNOTATIONS: readonly CommentThread[] = []
+/** Same purpose as EMPTY_ANNOTATIONS, for the passages beside them. */
+const EMPTY_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
@@ -195,6 +207,7 @@ export function useDocumentSync(
    * and neither re-renders a consumer that memoises on it.
    */
   const [annotations, setAnnotations] = useState<readonly CommentThread[]>(EMPTY_ANNOTATIONS)
+  const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(EMPTY_MARKS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
@@ -226,6 +239,9 @@ export function useDocumentSync(
     // is next, and with no successor session (backend going to null) nothing
     // would ever publish over them.
     setAnnotations(EMPTY_ANNOTATIONS)
+    // And where their passages were, which is about this document's body
+    // and means nothing against the next one's.
+    setThreadMarks(EMPTY_MARKS)
     // The body belongs to the session being torn down, exactly as the locks
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
@@ -284,8 +300,9 @@ export function useDocumentSync(
     // A reply changes no canvas value at all — no node, no edge — so the
     // annotation layer needs its own notification for the same reason locks
     // and the body do.
-    const unsubscribeAnnotations = session.subscribeAnnotations((threads) => {
+    const unsubscribeAnnotations = session.subscribeAnnotations((threads, marks) => {
       setAnnotations(threads)
+      setThreadMarks(marks)
     })
     // The body changes no canvas value either, so it needs its own
     // notification for the same reason locks do.
@@ -300,6 +317,7 @@ export function useDocumentSync(
     setLockedNodeIds(session.getNodeLocks())
     setLockedEdgeIds(session.getEdgeLocks())
     setAnnotations(session.getAnnotations())
+    setThreadMarks(session.getThreadMarks())
     session.connect()
     session.onEditorReady()
 
@@ -466,6 +484,7 @@ export function useDocumentSync(
     lockedNodeIds,
     setNodeLock,
     annotations,
+    threadMarks,
     markdownBody,
     coreFacets,
     setCoreFacets,

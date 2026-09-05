@@ -13,6 +13,7 @@
  * concern, not the door's) and hands the finished value over.
  */
 
+import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   AnnotationAnchor,
   CommentMessage,
@@ -65,11 +66,18 @@ export function useCommentsRail(args: {
   documentKind: DocumentKind | null
   /** The markdown body, for judging text anchors; null off a markdown doc. */
   markdownBody: string | null
+  /**
+   * Where the CRDT still holds each passage, by thread id — the live half of
+   * a text anchor, absent for a keeper with none to give. Only a markdown
+   * document has a body for a mark to live in, so a spatial page passes
+   * nothing and the resolver falls back to the quote for everything.
+   */
+  threadMarks?: ReadonlyMap<string, PassageRange>
   /** The spatial canvas, for judging node anchors; null off a spatial doc. */
   canvas: SpatialCanvas | null
   write: CommentsRailWrite
 }): CommentsRail {
-  const { scopeKey, threads, documentKind, markdownBody, canvas } = args
+  const { scopeKey, threads, documentKind, markdownBody, canvas, threadMarks } = args
   const [open, setOpen] = useState(false)
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
@@ -117,7 +125,7 @@ export function useCommentsRail(args: {
    * as neither placed nor orphaned.
    */
   const resolveAnchor = useMemo(() => {
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody)
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody, threadMarks)
     if (documentKind !== 'spatial' || canvas === null) return undefined
     const nodeIds = new Set(canvas.nodes.map((node) => node.id))
     return (thread: CommentThread): 'placed' | 'orphaned' => {
@@ -125,7 +133,7 @@ export function useCommentsRail(args: {
       if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
-  }, [documentKind, canvas, markdownBody])
+  }, [documentKind, canvas, markdownBody, threadMarks])
 
   /**
    * Opens the conversation the compose box collected, whole. Built HERE

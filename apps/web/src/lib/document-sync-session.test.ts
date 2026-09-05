@@ -476,15 +476,21 @@ describe('createDocumentSyncSession', () => {
     // The PAYLOAD, not merely that a notification happened: a subscriber
     // handed the pre-reply annotations would satisfy `toHaveBeenCalled` and
     // leave every reader looking at the old conversation.
-    expect(listener).toHaveBeenLastCalledWith([
-      expect.objectContaining({
-        id: 't1',
-        messages: [
-          expect.objectContaining({ body: 'the opening question' }),
-          expect.objectContaining({ body: 'and the answer' }),
-        ],
-      }),
-    ])
+    expect(listener).toHaveBeenLastCalledWith(
+      [
+        expect.objectContaining({
+          id: 't1',
+          messages: [
+            expect.objectContaining({ body: 'the opening question' }),
+            expect.objectContaining({ body: 'and the answer' }),
+          ],
+        }),
+      ],
+      // The marks ride in the same call as the threads, so a subscriber can
+      // never pair a mark map from one instant with a thread list from
+      // another.
+      expect.any(Map),
+    )
     unsubscribe()
   })
 
@@ -563,6 +569,123 @@ describe('createDocumentSyncSession', () => {
     // The canvas is untouched, which is what stops the commit path falling
     // back to a whole-canvas resync that would never write the thread.
     expect(session.getCanvas()).toBe(before)
+  })
+
+  it('marks the passage a new conversation is about, so the CRDT carries it', async () => {
+    // The quote is the durable identity and a mark is where the passage IS.
+    // Writing only the thread would leave the live half empty until someone
+    // reopened the document, and every edit in between would be tracked by
+    // an offset search rather than by the structure that moved the text.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 't-marked',
+        anchor: { kind: 'text', quote: { exact: quote }, ...at },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      },
+    }
+    session.onChange(session.getCanvas(), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getThreadMarks().get('t-marked')).toEqual(at)
+  })
+
+  it('the mark it wrote follows an edit above the passage', async () => {
+    // What the stored offsets cannot do, through the session's own write
+    // path rather than the adapter's: a `set-body` that inserts above the
+    // passage moves it, and the mark reports where it went.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    session.onChange(session.getCanvas(), {
+      kind: 'create-thread',
+      thread: {
+        id: 't-marked',
+        anchor: { kind: 'text', quote: { exact: quote }, ...at },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+
+    const prefix = 'URGENT: '
+    session.onChange(session.getCanvas(), { kind: 'set-body', text: `${prefix}${body}` })
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getThreadMarks().get('t-marked')).toEqual({
+      start: at.start + prefix.length,
+      end: at.end + prefix.length,
+    })
+  })
+
+  it('gives a document that arrived without marks one per quote it can still find', async () => {
+    // Marks do not travel through a markdown file, and a thread an MCP peer
+    // wrote never had one. Both are asked of the quote once, when the body
+    // is first known, and the answer is written down so the CRDT can carry
+    // it from then on.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    writeCommentThread(doc, {
+      id: 't-imported',
+      anchor: { kind: 'text', quote: { exact: quote }, ...at },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why Friday?' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getThreadMarks().get('t-imported')).toEqual(at)
+  })
+
+  it('leaves a thread whose passage is gone unmarked rather than guessing', async () => {
+    // ADR-0026 decision 4: deleting the subject must not delete the
+    // conversation — and must not invent a new subject for it either.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'Nothing that sentence said is here any more.')
+    writeCommentThread(doc, {
+      id: 't-orphan',
+      anchor: { kind: 'text', quote: { exact: 'report on Friday' }, start: 9, end: 25 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why Friday?' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getThreadMarks().has('t-orphan')).toBe(false)
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-orphan'])
   })
 
   it('two threads opened inside one debounce window both survive', async () => {
