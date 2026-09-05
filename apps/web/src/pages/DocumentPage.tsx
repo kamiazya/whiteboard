@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import {
   CommentsRailAside,
   CommentsRailToggle,
@@ -24,6 +24,7 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
+import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -51,10 +52,11 @@ const log = getAppLogger('document-page')
 /**
  * The document page, whoever keeps the document (ADR-0004 decision 1).
  *
- * Renders the shell, the history column, the merged header row, the editor
- * surface and the comments rail from a `DocumentPageModel`, and owns the
- * page state that names no keeper: which column is open, which past state
- * is being looked at, the save-a-version flow, the seams the editor reads.
+ * Renders the shell, the merged header row, the editor surface and the
+ * inspector beside it (the history column or the comments rail) from a
+ * `DocumentPageModel`, and owns the page state that names no keeper: which
+ * inspector is open, which past state is being looked at, the
+ * save-a-version flow, the seams the editor reads.
  * A keeper page builds the model — controller, sync backend, body, versions
  * — and renders this; nothing in here asks which keeper it is.
  */
@@ -68,10 +70,16 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
   const [settingsStore] = useState(() => createUserSettingsStore())
   const { resolvedTheme } = useThemeMode()
 
-  // The document's history column. The page switches documents without
-  // remounting, so an open column is cleared by hand with the rest of the
-  // document-scoped state below.
-  const [historyOpen, setHistoryOpen] = useState(false)
+  // The one inspector slot beside the editor: the document's history or its
+  // conversations, never both — two panels beside one editor is what the
+  // header retune set out to end. Which panel is open is how the reader
+  // looks rather than what at, so it survives a document switch: everything
+  // a panel SAYS is document-scoped and reset below or by the hook that owns
+  // it, and both panels refetch on the path.
+  const [inspector, setInspector] = useState<InspectorKind | null>(null)
+  const toggleInspector = (kind: InspectorKind) =>
+    setInspector((open) => (open === kind ? null : kind))
+  const setCommentsOpen = useCallback((open: boolean) => setInspector(open ? 'comments' : null), [])
   // Bumped by ⌘/Ctrl+S to open the column with its naming field ready. The
   // chord asks for a bookmark now; it does not take one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
@@ -80,16 +88,15 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
   // cannot turn into an edit against a state that is not the document's.
   const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   useBookmarkShortcut(versions.enabled, () => {
-    setHistoryOpen(true)
+    setInspector('history')
     setBookmarkArmed((n) => n + 1)
   })
 
-  // SCOPE RESET — see scoped-screen-state.test.ts. Everything above names a
-  // document, and none of it may outlive the document it is about. The
-  // save outcome and the comments rail clear themselves, keyed on the same
-  // scope.
+  // SCOPE RESET — see scoped-screen-state.test.ts. Everything above but the
+  // inspector slot names a document, and none of it may outlive the document
+  // it is about. The save outcome and the comments rail's selection clear
+  // themselves, keyed on the same scope.
   useEffect(() => {
-    setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
   }, [model.scopeKey])
@@ -143,6 +150,8 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
   // document holds the threads, and only the keeper knows which that is.
   const commentsRail = useCommentsRail({
     scopeKey: model.scopeKey,
+    open: inspector === 'comments',
+    onOpenChange: setCommentsOpen,
     threads: threads.annotations,
     documentKind,
     markdownBody,
@@ -227,7 +236,7 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
         ? {}
         : { mainClassName: model.shell.mainClassName })}
       aside={
-        historyOpen && versions.enabled ? (
+        inspector === 'history' && versions.enabled ? (
           <VersionPanel
             workspaceId={versions.workspaceId}
             path={versions.path}
@@ -243,6 +252,21 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
                 onSave={(label) => void saveVersionFromPanel(label)}
               />
             }
+          />
+        ) : inspector === 'comments' ? (
+          /* The annotation layer's document-level surface (ADR-0026
+             decision 5) sits BESIDE the editor rather than inside it,
+             because one panel serves both document kinds and a markdown
+             document has no canvas chrome to host one. Its opener lives in
+             the document actions row, in flow.
+
+             Not writable while a past state is on screen: the editor is
+             replaced by DocumentPreview but this rail is not, and its
+             writes go to the LIVE document. */
+          <CommentsRailAside
+            rail={commentsRail}
+            threads={threads.annotations}
+            writable={preview === null && model.readOnlyPast === null}
           />
         ) : undefined
       }
@@ -322,10 +346,8 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
                 // Whatever the document holds: a keeper writes a history for
                 // every kind, and gating this on the editor is what left a
                 // markdown document's checkpoints unreachable.
-                onToggleHistory={
-                  versions.enabled ? () => setHistoryOpen((open) => !open) : undefined
-                }
-                historyOpen={historyOpen}
+                onToggleHistory={versions.enabled ? () => toggleInspector('history') : undefined}
+                historyOpen={inspector === 'history'}
                 {...(preview === null ? {} : { preview })}
               />
             </Suspense>
@@ -336,100 +358,85 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
     >
       {model.slots.overlay}
       {model.slots.replaceEditor ?? (
-        /* The annotation layer's document-level surface (ADR-0026
-           decision 5) sits BESIDE the editor rather than inside it,
-           because one panel serves both document kinds and a markdown
-           document has no canvas chrome to host one. Its opener lives in
-           the document actions row above, in flow. */
-        <div className="flex h-full min-h-0">
-          <div className="relative min-w-0 flex-1">
-            {preview ? (
-              <DocumentPreview past={preview.past} theme={resolvedTheme} />
-            ) : model.readOnlyPast ? (
-              <DocumentPreview past={model.readOnlyPast} theme={resolvedTheme} />
-            ) : (
-              <DocumentEditorSurface
-                kind={documentKind}
-                documentKey={documentKey}
-                markdown={
-                  model.markdown.hydrating
-                    ? { body: null, setBody: model.markdown.setBody }
-                    : {
-                        body: model.markdown.body,
-                        setBody: model.markdown.setBody,
-                        ...(model.markdown.sourceExtensions === undefined
-                          ? {}
-                          : { sourceExtensions: model.markdown.sourceExtensions }),
-                        ...(model.markdown.autoFocus === undefined
-                          ? {}
-                          : { autoFocus: model.markdown.autoFocus }),
-                        theme: resolvedTheme,
-                        meta: model.markdown.meta,
-                        ...(model.markdown.title === undefined
-                          ? {}
-                          : { title: model.markdown.title }),
-                        references,
-                        linkTargets: files.pickerTargets,
-                        onOpenDocument: model.openDocument,
-                        threads: threads.annotations,
-                        threadMarks: threads.threadMarks,
-                        selectedThreadId: commentsRail.selectedThreadId,
-                        onSelectThread: commentsRail.revealThread,
-                        onComposeThread: commentsRail.composeThread,
-                      }
-                }
-                spatial={() => (
-                  <SpatialEditorPane
-                    className="relative h-full min-h-0"
-                    editorKey={documentKey}
-                    canvasLoaded={sync.loaded}
-                    {...(model.spatial.editorRef === undefined
-                      ? {}
-                      : { editorRef: model.spatial.editorRef })}
-                    {...(model.spatial.agentTouchedNodeIds === undefined
-                      ? {}
-                      : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
-                    canvas={sync.canvas}
-                    onChange={sync.onChange}
-                    externalVersion={sync.externalVersion}
-                    theme={resolvedTheme}
-                    // File-node reference = the target's immutable id; the
-                    // same rows the link picker offers (open document
-                    // excluded), so the two pickers cannot label one
-                    // document two ways.
-                    fileRefOptions={fileRefOptions(files.pickerTargets)}
-                    onOpenDocument={model.openDocument}
-                    missingFileRef={files.missingFileRef}
-                    fileSeams={fileSeams}
-                    lockedNodeIds={sync.lockedNodeIds}
-                    lockedEdgeIds={sync.lockedEdgeIds}
-                    onToggleNodeLock={sync.setNodeLock}
-                    onToggleEdgeLock={sync.setEdgeLock}
-                    nodeInEditor={nodeInEditor}
-                    history={{
-                      onUndo: () => void sync.undo(),
-                      onRedo: () => void sync.redo(),
-                      canUndo: sync.canUndo(),
-                      canRedo: sync.canRedo(),
-                    }}
-                    overlayTitle={model.overlayTitle}
-                    linkTargets={files.pickerTargets}
-                    threads={threads.annotations}
-                  >
-                    {model.spatial.children}
-                  </SpatialEditorPane>
-                )}
-              />
-            )}
-          </div>
-          {/* Not while a past state is on screen: the editor is replaced by
-              DocumentPreview but this rail is not, and its writes go to the
-              LIVE document. */}
-          <CommentsRailAside
-            rail={commentsRail}
-            threads={threads.annotations}
-            writable={preview === null && model.readOnlyPast === null}
-          />
+        <div className="relative h-full min-h-0 min-w-0">
+          {preview ? (
+            <DocumentPreview past={preview.past} theme={resolvedTheme} />
+          ) : model.readOnlyPast ? (
+            <DocumentPreview past={model.readOnlyPast} theme={resolvedTheme} />
+          ) : (
+            <DocumentEditorSurface
+              kind={documentKind}
+              documentKey={documentKey}
+              markdown={
+                model.markdown.hydrating
+                  ? { body: null, setBody: model.markdown.setBody }
+                  : {
+                      body: model.markdown.body,
+                      setBody: model.markdown.setBody,
+                      ...(model.markdown.sourceExtensions === undefined
+                        ? {}
+                        : { sourceExtensions: model.markdown.sourceExtensions }),
+                      ...(model.markdown.autoFocus === undefined
+                        ? {}
+                        : { autoFocus: model.markdown.autoFocus }),
+                      theme: resolvedTheme,
+                      meta: model.markdown.meta,
+                      ...(model.markdown.title === undefined
+                        ? {}
+                        : { title: model.markdown.title }),
+                      references,
+                      linkTargets: files.pickerTargets,
+                      onOpenDocument: model.openDocument,
+                      threads: threads.annotations,
+                      threadMarks: threads.threadMarks,
+                      selectedThreadId: commentsRail.selectedThreadId,
+                      onSelectThread: commentsRail.revealThread,
+                      onComposeThread: commentsRail.composeThread,
+                    }
+              }
+              spatial={() => (
+                <SpatialEditorPane
+                  className="relative h-full min-h-0"
+                  editorKey={documentKey}
+                  canvasLoaded={sync.loaded}
+                  {...(model.spatial.editorRef === undefined
+                    ? {}
+                    : { editorRef: model.spatial.editorRef })}
+                  {...(model.spatial.agentTouchedNodeIds === undefined
+                    ? {}
+                    : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
+                  canvas={sync.canvas}
+                  onChange={sync.onChange}
+                  externalVersion={sync.externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = the target's immutable id; the
+                  // same rows the link picker offers (open document
+                  // excluded), so the two pickers cannot label one
+                  // document two ways.
+                  fileRefOptions={fileRefOptions(files.pickerTargets)}
+                  onOpenDocument={model.openDocument}
+                  missingFileRef={files.missingFileRef}
+                  fileSeams={fileSeams}
+                  lockedNodeIds={sync.lockedNodeIds}
+                  lockedEdgeIds={sync.lockedEdgeIds}
+                  onToggleNodeLock={sync.setNodeLock}
+                  onToggleEdgeLock={sync.setEdgeLock}
+                  nodeInEditor={nodeInEditor}
+                  history={{
+                    onUndo: () => void sync.undo(),
+                    onRedo: () => void sync.redo(),
+                    canUndo: sync.canUndo(),
+                    canRedo: sync.canRedo(),
+                  }}
+                  overlayTitle={model.overlayTitle}
+                  linkTargets={files.pickerTargets}
+                  threads={threads.annotations}
+                >
+                  {model.spatial.children}
+                </SpatialEditorPane>
+              )}
+            />
+          )}
         </div>
       )}
       {model.slots.footer}

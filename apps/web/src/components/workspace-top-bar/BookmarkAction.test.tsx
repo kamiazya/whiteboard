@@ -87,4 +87,19 @@ describe('BookmarkAction', () => {
     )
     expect(screen.getByRole('textbox')).toBeTruthy()
   })
+
+  it('closes the field when the page takes the arm back, rather than reading the reset as a press', () => {
+    // The page zeroes `armed` on a document switch. Only an INCREASE is a
+    // press: a field armed on the departed document and left open would
+    // name the arrived one from that keystroke, so the reset closes it.
+    const { rerender } = renderAction({ armed: 1 })
+    expect(screen.getByRole('textbox', { name: 'Name this point' })).toBeTruthy()
+    rerender(
+      <TooltipProvider>
+        <BookmarkAction saving={false} outcome={null} armed={0} onSave={() => {}} />
+      </TooltipProvider>,
+    )
+    expect(screen.queryByRole('textbox', { name: 'Name this point' })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Bookmark this point' })).toBeTruthy()
+  })
 })

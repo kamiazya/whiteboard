@@ -476,7 +476,12 @@ gutter marker beside its line), and the document-level rail both editors
 share (ADR-0026 decision 5; `useCommentsRail` holds its state,
 `CommentsRailAside` is its vessel — a column where there is width, a bottom
 sheet over the editor under 768px, since a 288px column beside a 412px phone
-screen left the editor a strip a finger could not write in). The rail carries
+screen left the editor a strip a finger could not write in). The rail and the
+history column share the page's ONE inspector slot (`lib/inspector.ts`):
+opening either closes the other, and each opener reads released, because two
+panels beside one editor — measured on a phone as the display popover, the
+comments sheet and the history sheet all open at once — is what the header
+retune set out to end. The rail carries
 the conversation's own verbs beside its reply box — Resolve/Reopen and Edit
 of the opening message — because a NOTE's thread has no card, and the rail
 is the only place it can be closed or corrected; both go through the threads
