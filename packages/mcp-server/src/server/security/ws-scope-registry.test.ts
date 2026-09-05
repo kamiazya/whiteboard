@@ -8,8 +8,8 @@ import {
 } from './ws-scope-registry.js'
 
 // Discriminated-union options expose their literal `type` value as
-// `.shape.type.value` — the same introspection technique the codebase
-// already uses in tool-registry-descriptions.test.ts style guards.
+// `.shape.type.value`, so the guard enumerates message types from the
+// schema itself instead of a hand-kept list that could drift.
 function discriminatedUnionLiterals(schema: typeof clientTextMessageSchema): string[] {
   return schema.options.map((option) => option.shape.type.value)
 }

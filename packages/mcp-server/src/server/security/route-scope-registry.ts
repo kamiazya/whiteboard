@@ -14,7 +14,8 @@
 // `route-scope-registry.test.ts` walks every route actually mounted on the
 // server-mode Hono app (`app.routes`) and asserts each one resolves to a
 // non-null decision here — the same "registry vs what's actually registered"
-// guard shape as `mcp/tool-registry-descriptions.test.ts`.
+// guard shape as the MCP smoke's `tools/list` vs `ALL_REGISTERED_TOOLS`
+// (`mcp/mcp-smoke-coverage.ts`).
 
 import type { AuthScope } from './auth-strategy.js'
 

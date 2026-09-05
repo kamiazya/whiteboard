@@ -1,9 +1,10 @@
 // Registry-wide guard: every /api/* route actually mounted on the server-mode
 // app must resolve to a declared scope decision here (`scoped` or the
 // documented `public` carve-out) — never fall through silently. Mirrors
-// `mcp/tool-registry-descriptions.test.ts`'s "walk what's actually
-// registered, fail if the registry doesn't cover it" shape, applied to HTTP
-// routes instead of MCP tool schemas.
+// the MCP smoke's `tools/list` vs `ALL_REGISTERED_TOOLS`
+// (`mcp/mcp-smoke-coverage.ts`) "walk what's actually registered, fail if
+// the registry doesn't cover it" shape, applied to HTTP routes instead of
+// MCP tools.
 
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
