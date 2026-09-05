@@ -2,11 +2,11 @@ import { createHash, createPublicKey, verify as cryptoVerify } from 'node:crypto
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
 import {
   listGrantsResponseSchema,
   pairingTokenResponseSchema,
-} from '../../shared/api-contracts/pairing.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import { afterEach, describe, expect, it } from 'vitest'
 import { buildSignedPayload, createDaemonIdentity } from '../security/daemon-identity.js'
 import { createPairingGrantStore } from '../security/pairing-grant-store.js'
 import {

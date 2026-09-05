@@ -5,11 +5,15 @@
 // None of these modules call getLogger today, so this test is a tripwire —
 // it fails the moment a future log call captures the token value anywhere
 // in a record's message or structured fields.
+
+import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
+import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
+import {
+  readDaemonTokenOnce,
+  resetTokenStoreForTests,
+} from '@kamiazya/whiteboard-daemon-client/token-store'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
-import { apiFetch } from './api-client.js'
-import { DaemonBackend } from './daemon-backend.js'
-import { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
 const SENTINEL_TOKEN = 'sentinel-do-not-log-9f3c2a'
 

@@ -1,5 +1,18 @@
 import { movesForPathChange } from '@kamiazya/whiteboard-codec'
 import {
+  type CreateDocumentResponse,
+  createDocumentRequestSchema,
+  createWorkspaceRequestSchema,
+  type DeleteDocumentResponse,
+  type ListDocumentsResponse,
+  type ListWorkspacesResponse,
+  type RenameDocumentPathResponse,
+  renameDocumentPathRequestSchema,
+  renameWorkspaceRequestSchema,
+  type WorkspaceSummary,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import {
   deriveWorkspaceSegment,
   generateDocumentId,
   workspaceSegmentSchema,
@@ -23,19 +36,6 @@ import {
 import { Hono } from 'hono'
 import type { z } from 'zod'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
-import {
-  type CreateDocumentResponse,
-  createDocumentRequestSchema,
-  createWorkspaceRequestSchema,
-  type DeleteDocumentResponse,
-  type ListDocumentsResponse,
-  type ListWorkspacesResponse,
-  type RenameDocumentPathResponse,
-  renameDocumentPathRequestSchema,
-  renameWorkspaceRequestSchema,
-  type WorkspaceSummary,
-} from '../../../shared/api-contracts/document.js'
-import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'

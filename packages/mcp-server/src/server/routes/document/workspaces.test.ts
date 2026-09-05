@@ -1,15 +1,15 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { Hono } from 'hono'
-import { LoroDoc, LoroMap } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   deleteDocumentResponseSchema,
   listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
   workspaceSummarySchema,
-} from '../../../shared/api-contracts/document.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { readDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { Hono } from 'hono'
+import { LoroDoc, LoroMap } from 'loro-crdt'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspaces-test-')

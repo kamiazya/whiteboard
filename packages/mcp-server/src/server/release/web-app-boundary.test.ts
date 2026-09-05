@@ -199,8 +199,6 @@ const ALLOWED_SHARED_EXACT = new Set([
   'daemon-backend.js', // WebSocket + apiFetch transport for the canvas editor, no Node APIs
   'external-url-policy.js', // pure URL validation, no Node APIs
   'sse-stream-hub.js', // shared SSE stream + per-document refcounting, no Node APIs
-  'sync-sse-contract.js', // SSE event Zod schemas, no Node APIs
-  'token-store.js', // in-memory daemon-token holder, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
   'ws-protocol.js', // WebSocket protocol helpers
 ])

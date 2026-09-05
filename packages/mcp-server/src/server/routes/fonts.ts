@@ -1,7 +1,10 @@
 import { basename, extname } from 'node:path'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import type {
+  InstallFontResponse,
+  ListFontsResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { Hono } from 'hono'
-import type { ApiErrorBody } from '../../shared/api-contracts/errors.js'
-import type { InstallFontResponse, ListFontsResponse } from '../../shared/api-contracts/fonts.js'
 import { FONT_CATALOGUE } from '../export/font-catalogue.js'
 import { FontInstallError, installFont } from '../export/install-font.js'
 import { installedFontFiles } from '../export/installed-fonts.js'

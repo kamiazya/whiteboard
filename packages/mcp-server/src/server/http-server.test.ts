@@ -1,14 +1,14 @@
 import { createHash } from 'node:crypto'
 import { request } from 'node:http'
 import { createServer } from 'node:net'
-import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { findAvailablePort } from '../cli/daemon-run.js'
-import { decodeBase64UrlText } from '../shared/api-contracts/pairing-link.js'
+import { decodeBase64UrlText } from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
 import {
   buildWhiteboardWsProtocolsWithTicket,
   WHITEBOARD_WS_PROTOCOL,
-} from '../shared/ws-protocol.js'
+} from '@kamiazya/whiteboard-daemon-client/ws-protocol'
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { findAvailablePort } from '../cli/daemon-run.js'
 import { type RunningServer, startHttpServer } from './http-server.js'
 import { captureLogsForTests } from './log.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'

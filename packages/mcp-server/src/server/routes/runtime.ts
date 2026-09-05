@@ -1,10 +1,10 @@
-import { Hono } from 'hono'
-import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import {
   daemonPingResponseSchema,
   runtimeVerifyRequestSchema,
   runtimeVerifyResponseSchema,
-} from '../../shared/api-contracts/runtime.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { Hono } from 'hono'
+import { purgeOldDaemonLogs } from '../../daemon/log-rotation.js'
 import { getDataDir } from '../config.js'
 import type { RuntimeStatus } from '../http-server.js'
 import { isAuthorized } from '../security/bearer-token.js'

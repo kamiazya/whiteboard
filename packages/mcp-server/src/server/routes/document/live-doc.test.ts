@@ -1,9 +1,9 @@
 import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
+import { updateDocumentResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { updateDocumentResponseSchema } from '../../../shared/api-contracts/document.js'
 import { withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-live-doc-test-')

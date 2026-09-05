@@ -1,5 +1,8 @@
+import {
+  TICKET_WS_PROTOCOL_PREFIX,
+  WHITEBOARD_WS_PROTOCOL,
+} from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import { describe, expect, it } from 'vitest'
-import { TICKET_WS_PROTOCOL_PREFIX, WHITEBOARD_WS_PROTOCOL } from '../../shared/ws-protocol.js'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import { createOAuthTransactionStore } from '../security/oauth-authz-transactions.js'
 import { createWsTicketStore } from '../security/ws-ticket-store.js'

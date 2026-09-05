@@ -7,15 +7,16 @@
  * absent cases — unknown workspace and unknown entry are both 404 here, a
  * composition with no trash capability is 501.
  */
+
+import type {
+  ListTrashResponse,
+  RestoreTrashResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
 import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
-import type {
-  ListTrashResponse,
-  RestoreTrashResponse,
-} from '../../../shared/api-contracts/document.js'
-import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'

@@ -1,9 +1,12 @@
 import type { IncomingMessage } from 'node:http'
+import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type {
+  AgentActivityMessage,
+  ServerTextMessage,
+} from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { SpanKind } from '@opentelemetry/api'
 import type { RawData, WebSocket } from 'ws'
-import type { VersionEntry } from '../../shared/api-contracts/document.js'
-import type { AgentActivityMessage, ServerTextMessage } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 import { extractContextFromHeaders, getTracer } from '../observability/tracing.js'
 import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'

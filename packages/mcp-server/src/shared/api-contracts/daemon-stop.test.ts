@@ -1,6 +1,6 @@
+import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { describe, expect, it } from 'vitest'
 import { type DaemonStopResult, daemonStopResultSchema } from './daemon-stop.js'
-import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('daemonStopResultSchema', () => {
   it('round-trips a stopped result', () => {

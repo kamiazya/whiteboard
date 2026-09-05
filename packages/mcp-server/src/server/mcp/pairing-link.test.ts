@@ -2,13 +2,14 @@
 // (the same pattern body-patch-registration.test.ts uses), so the SDK's own
 // argument/output validation is what judges the tool rather than a
 // restatement of it.
-import { Client } from '@modelcontextprotocol/client'
-import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+
 import {
   daemonConnectionPayloadSchema,
   decodeBase64UrlText,
-} from '../../shared/api-contracts/pairing-link.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
+import { Client } from '@modelcontextprotocol/client'
+import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_ALLOWED_WEB_ORIGINS } from '../security/web-origin-allowlist.js'
 import {
   PAIRING_LINK_CREDENTIAL_NOTE,

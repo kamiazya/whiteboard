@@ -1,10 +1,10 @@
-import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
 import {
   documentPathForAction,
   documentPathForFile,
   parseDocumentApiPath,
-} from '../../../shared/api-contracts/document-url.js'
-import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import type { Context, Hono, MiddlewareHandler, Next } from 'hono'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
