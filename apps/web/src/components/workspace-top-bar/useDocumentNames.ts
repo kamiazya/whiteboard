@@ -2,7 +2,7 @@ import {
   documentsApiUrl,
   type WorkspaceNames,
   workspaceNamesSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useState } from 'react'
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }

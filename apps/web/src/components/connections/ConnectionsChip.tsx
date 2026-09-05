@@ -1,4 +1,4 @@
-import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { FileText, LayoutDashboard, Waypoints } from 'lucide-react'
 import { useId, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'

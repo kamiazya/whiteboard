@@ -1,4 +1,4 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { createContext, useContext } from 'react'
 
 /**

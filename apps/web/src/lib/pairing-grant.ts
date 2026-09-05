@@ -17,7 +17,7 @@
  * the caller).
  */
 
-import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
 import { bareOriginSchema } from '../runtime-config.js'
 import {

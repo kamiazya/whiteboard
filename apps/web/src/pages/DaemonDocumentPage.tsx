@@ -1,9 +1,12 @@
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
-import { documentsApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
-import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
+import {
+  documentsApiUrl,
+  saveVersionResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
+import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
+import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'

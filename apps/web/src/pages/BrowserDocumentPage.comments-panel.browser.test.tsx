@@ -9,8 +9,9 @@
  * has to serve a markdown document, and a markdown document has no canvas to
  * hang anything on.
  */
+
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'

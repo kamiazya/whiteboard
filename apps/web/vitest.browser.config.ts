@@ -7,7 +7,6 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
-import { mcpSourceAlias } from './mcp-source-alias.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
@@ -17,7 +16,6 @@ export default defineConfig({
   define: { ...rendererBuildDefine },
   resolve: {
     alias: {
-      ...mcpSourceAlias,
       // Matches vitest.config.ts and tsconfig's '@/*' path — needed once any
       // browser-tested component pulls in a components/ui/* file (they all
       // import '@/lib/utils' for the cn() helper).

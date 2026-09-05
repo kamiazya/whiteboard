@@ -14,17 +14,7 @@
     "skipLibCheck": true,
     "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-svgr/client"],
     "paths": {
-      "@/*": ["./src/*"],
-      // Test-only, and deliberately NOT in mcp-server's published `exports`:
-      // the SseStreamSource contract imports vitest, so it must not appear on
-      // the package's runtime surface. A `paths` entry resolves it for the
-      // type-checker only; vitest.config.ts carries the matching alias.
-      "@kamiazya/whiteboard-mcp/sse-stream-source-contract": [
-        "../../packages/mcp-server/src/shared/test-utils/sse-stream-source-contract.ts"
-      ],
-      "@kamiazya/whiteboard-mcp/document-backend-contract-suite": [
-        "../../packages/mcp-server/src/shared/test-utils/document-backend-contract.ts"
-      ]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"]

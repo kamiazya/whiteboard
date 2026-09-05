@@ -41,7 +41,7 @@ const log = getLogger('file-gc')
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 
 // Single source of truth for the wire shape is purgeResultSchema
-// (shared/api-contracts/document.ts) — both routes/files.ts's response and
+// (daemon-client's api-contracts/document.ts) — both routes/files.ts's response and
 // this internal return type derive from it so they cannot drift apart.
 export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 

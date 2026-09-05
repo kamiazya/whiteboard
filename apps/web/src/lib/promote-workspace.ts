@@ -20,12 +20,16 @@
  * it can be a session's first surface) — the same ordering every other
  * record consumer relies on.
  */
+
+import {
+  apiErrorReason,
+  documentFileApiUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   collectImageRefIds,
   documentContainers,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { apiErrorReason, documentFileApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'

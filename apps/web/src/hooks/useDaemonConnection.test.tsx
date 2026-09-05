@@ -1,4 +1,7 @@
-import { readDaemonTokenOnce, resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
+import {
+  readDaemonTokenOnce,
+  resetTokenStoreForTests,
+} from '@kamiazya/whiteboard-daemon-client/api-client'
 import { cleanup, render, screen } from '@testing-library/react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'

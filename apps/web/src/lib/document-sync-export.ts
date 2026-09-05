@@ -1,4 +1,4 @@
-import type { ExportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { ExportRequestPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 
 // The browser session has no imperative editor handle that could render an
 // export, so an incoming export request can only be QUEUED — the daemon's

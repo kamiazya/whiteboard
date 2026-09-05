@@ -1,10 +1,10 @@
+import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   projectWorkspaceDocument,
   readSpatialCanvas,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'

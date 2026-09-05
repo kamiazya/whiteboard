@@ -10,7 +10,11 @@
  * This file must be a real same-origin module: the app's CSP declares
  * `worker-src 'self'`, which rejects a blob: worker.
  */
-import { fromBase64, SseStreamHub, toBase64 } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
+import {
+  fromBase64,
+  SseStreamHub,
+  toBase64,
+} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
 import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 

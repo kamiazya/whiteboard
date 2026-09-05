@@ -6,8 +6,11 @@
  * and some embedded webviews). The caller then lets SseBackend open its own
  * stream — correct, just without the cross-tab sharing.
  */
-import type { DocListener, SseStreamSource } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
-import { fromBase64, toBase64 } from '@kamiazya/whiteboard-mcp/sse-stream-hub'
+import type {
+  DocListener,
+  SseStreamSource,
+} from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
+import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()

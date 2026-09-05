@@ -224,9 +224,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // architecture-map.md rule 2).
   '@kamiazya/whiteboard-mcp': {
     // daemon-client: the browser-safe client half extracted from this
-    // package's own src/shared; the old paths remain as one-line re-export
-    // shims so the published subpath exports and internal relative imports
-    // hold until the import rewrite lands.
+    // package's own src/shared. The re-export shims and the published client
+    // subpaths are retired; the server imports the package directly and tsup
+    // noExternal inlines it into the published dist.
     allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
     allowedThirdParty: [],
   },
@@ -237,12 +237,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // manifest is direction-checked (see repo-coverage.test.ts's
   // COMPOSITION_ROOTS).
   //
-  // `@kamiazya/whiteboard-mcp` is in that set TRANSITIONALLY. The daemon's
-  // browser-safe client half now lives in `@kamiazya/whiteboard-daemon-client`
-  // (a shared-layer package this tool scans structurally); apps/web still
-  // reaches it through whiteboard-mcp's subpath re-export shims, and moves to
-  // the package directly in the follow-up that retires the shims — at which
-  // point whiteboard-mcp leaves this list.
+  // The daemon's browser-safe client half is `@kamiazya/whiteboard-daemon-client`
+  // (a shared-layer package this tool scans structurally); apps/web reads it
+  // directly, and `@kamiazya/whiteboard-mcp` deliberately left this list when
+  // the subpath re-export shims retired — a composition root depending on the
+  // other composition root is exactly what this entry exists to flag.
   '@kamiazya/whiteboard-web': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
@@ -252,7 +251,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-facet-ui',
       '@kamiazya/whiteboard-plugin-visual',
-      '@kamiazya/whiteboard-mcp',
+      '@kamiazya/whiteboard-daemon-client',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',

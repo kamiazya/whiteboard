@@ -1,4 +1,7 @@
-import type { OperatorInfo, VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type {
+  OperatorInfo,
+  VersionEntry,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { CardContent } from '@/components/ui/card'

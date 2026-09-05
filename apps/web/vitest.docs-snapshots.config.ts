@@ -19,7 +19,6 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
-import { mcpSourceAlias } from './mcp-source-alias.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -44,7 +43,6 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      ...mcpSourceAlias,
       // '@' matches vitest.config.ts / tsconfig's app-source root.
       '@': resolve(__dirname, 'src'),
       // '@docs-assets' is unique to this config: only the snapshot fixtures
