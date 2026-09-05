@@ -81,11 +81,14 @@ export function scrubDevEnv(processEnv) {
  * run on the release path, where the failure surfaces for the first time
  * during a publish.
  *
+ * Not exported: `resolveServerImage` below is the entry point, so a caller
+ * cannot reach the build without also getting the reuse path.
+ *
  * @param {string} repoRoot
  * @param {string} imageTag
  * @returns {string[]} argv for `docker`, starting at `build`
  */
-export function serverImageBuildArgv(repoRoot, imageTag) {
+function serverImageBuildArgv(repoRoot, imageTag) {
   const nodeVersion = readFileSync(join(repoRoot, '.node-version'), 'utf-8').trim()
   return [
     'build',
@@ -97,4 +100,46 @@ export function serverImageBuildArgv(repoRoot, imageTag) {
     imageTag,
     repoRoot,
   ]
+}
+
+/**
+ * The image a Docker smoke should exercise: an already-built one when
+ * WHITEBOARD_SMOKE_IMAGE names it, otherwise a fresh build.
+ *
+ * Building the server image is the single most expensive thing this repo's
+ * verification does, and it was being done up to three times per commit — once
+ * in CI's dry-run, once by each smoke, once more for the published artifact.
+ * The env var lets a caller that has ALREADY built (with a layer cache CI can
+ * keep, which a plain `docker build` in a fresh runner cannot) hand the tag
+ * over instead.
+ *
+ * A named image that is not present is a hard failure, never a quiet rebuild:
+ * a fallback here would turn "one build per commit" back into two while every
+ * log still said it worked.
+ *
+ * @param {object} options
+ * @param {string} options.repoRoot
+ * @param {string} options.defaultTag tag to build into when nothing is reused
+ * @param {(args: string[], opts?: object) => { status: number | null }} options.docker
+ * @param {(message: string) => never} options.fail
+ * @param {string} options.label log prefix, e.g. 'docker-smoke'
+ * @returns {string} the image tag to run
+ */
+export function resolveServerImage({ repoRoot, defaultTag, docker, fail, label }) {
+  const reused = process.env.WHITEBOARD_SMOKE_IMAGE
+  if (reused) {
+    const present = docker(['image', 'inspect', reused], { timeout: 30_000 })
+    if (present.status !== 0) {
+      fail(`WHITEBOARD_SMOKE_IMAGE names "${reused}", which is not present locally`)
+    }
+    console.log(`[${label}] reusing prebuilt image ${reused}; skipping build`)
+    return reused
+  }
+  console.log(`[${label}] Building image (may take several minutes)…`)
+  const built = docker(serverImageBuildArgv(repoRoot, defaultTag), {
+    timeout: 600_000,
+    stdio: 'inherit',
+  })
+  if (built.status !== 0) fail('docker build failed')
+  return defaultTag
 }

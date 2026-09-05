@@ -3,7 +3,7 @@
 // Docker smoke for whiteboard server-mode.
 //
 // Verifies the Dockerfile.server artifact at the container boundary:
-//   1.  docker build succeeds.
+//   1.  Server image available (reused via WHITEBOARD_SMOKE_IMAGE, else built).
 //   2.  Invalid config → container exits non-zero, stderr safe.
 //   3.  Valid config + HTTPS JWKS mock → ready JSON emitted.
 //   4.  /api/runtime/ping → 200, ok:true.
@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, serverImageBuildArgv } from './smoke-helpers.mjs'
+import { assertNoLeak, resolveServerImage } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -185,15 +185,14 @@ const serverBaseUrl = useHostNetwork
 
 // ── Scenario 1: docker build ──────────────────────────────────────────────────
 
-console.log('[docker-smoke] Building image (may take several minutes)…')
-{
-  const r = docker(serverImageBuildArgv(REPO_ROOT, IMAGE_TAG), {
-    timeout: 600_000,
-    stdio: 'inherit',
-  })
-  if (r.status !== 0) fail('scenario 1: docker build failed')
-  console.log('[docker-smoke] scenario 1 PASS: docker build succeeded')
-}
+const SERVER_IMAGE = resolveServerImage({
+  repoRoot: REPO_ROOT,
+  defaultTag: IMAGE_TAG,
+  docker,
+  fail,
+  label: 'docker-smoke',
+})
+console.log('[docker-smoke] scenario 1 PASS: image available')
 
 // ── Scenario 2: invalid config ────────────────────────────────────────────────
 
@@ -216,7 +215,7 @@ console.log('[docker-smoke] Building image (may take several minutes)…')
       'WHITEBOARD_SERVER_JWKS_URI=https://idp.example.com/.well-known/jwks.json',
       '-e',
       'WHITEBOARD_SERVER_ALLOWED_ORIGINS=https://whiteboard.example.com',
-      IMAGE_TAG,
+      SERVER_IMAGE,
     ],
     { timeout: 30_000 },
   )
@@ -301,7 +300,7 @@ try {
         `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
         '-e',
         `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-        IMAGE_TAG,
+        SERVER_IMAGE,
       ],
       { timeout: 15_000 },
     )
@@ -426,7 +425,7 @@ try {
         `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
         '-e',
         `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-        IMAGE_TAG,
+        SERVER_IMAGE,
       ],
       { timeout: 15_000 },
     )
@@ -450,7 +449,9 @@ try {
   await new Promise((resolve) => jwksServer.close(resolve))
   rmSync(certsDir, { recursive: true, force: true })
   rmSync(dataDir, { recursive: true, force: true })
-  docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
+  // Only tear down an image this run built. A reused one belongs to the
+  // caller that built it, and the next smoke in the same job needs it.
+  if (SERVER_IMAGE === IMAGE_TAG) docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
 }
 
 console.log('[docker-smoke] All scenarios PASSED.')

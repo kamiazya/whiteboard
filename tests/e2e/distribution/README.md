@@ -96,12 +96,28 @@ publish. Its two gates are the only Docker-capable gates outside `docker-release
 that is allowed because `publish:dry-run:docker` exits 0 with a skip line when no
 daemon answers, a fail-soft the `ci` and `local-release` aggregates must not have.
 
+### The Docker gates on a pull request
+
+`ci.yml`'s `dry-run-docker` job builds the server image once (buildx with the
+GHA layer cache) and then runs `smoke:docker` and `smoke:docker-backup-restore`
+against that same image, handed over through `WHITEBOARD_SMOKE_IMAGE`. A named
+image that is not present is a hard failure rather than a rebuild — a fallback
+there would turn one build per commit back into two while every log still read
+as success.
+
+Both smokes were `docker-release`-only before, so the container boundary — auth,
+graceful stop, volume remount, log redaction — was first exercised during a
+publish. That is how three of the four image builds came to be missing the
+required `NODE_VERSION` build arg with every pipeline green;
+`docker-contract.test.ts` now classifies every file reaching the image build and
+checks each one actually passes it.
+
 Whether a gate is exercised on a pull request is the separate `prCoverage` axis,
 checked structurally against `ci.yml` by `gate-isomorphism.test.ts`. Its
 `conditional-workflow-step` kind is for a step that runs on SOME pull requests:
 the declared `condition` is compared against the step's real `if:`, so the two
 cannot drift, and `conditionReason` has to argue why the pull requests it skips
-cannot change the gate's answer. `publish:dry-run:docker` is the one gate on it —
+cannot change the gate's answer. `publish:dry-run:docker` and both Docker smokes are on it —
 `tools/checks/src/docker-build-inputs.mjs` decides whether a diff reaches what
 `Dockerfile.server` compiles, deriving that set from the Dockerfile's own
 `pnpm --filter` targets rather than a list.

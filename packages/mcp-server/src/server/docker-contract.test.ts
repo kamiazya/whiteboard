@@ -292,7 +292,7 @@ type DockerfileUse =
   | { builds: 'via-helper' }
   | { builds: false; reason: string }
 
-const BUILD_HELPER = 'serverImageBuildArgv'
+const BUILD_HELPER = 'resolveServerImage'
 
 const DOCKERFILE_USES = {
   'docker-compose.server.yml': { builds: 'direct' },
@@ -328,6 +328,10 @@ const DOCKERFILE_USES = {
   'packages/mcp-server/src/server/release/docker-build-inputs.test.ts': {
     builds: false,
     reason: 'covers the diff-affects-build derivation',
+  },
+  'packages/mcp-server/src/server/release/smoke-image-reuse.test.ts': {
+    builds: false,
+    reason: 'covers the reuse contract with an injected docker, never a real build',
   },
 } satisfies Record<string, DockerfileUse>
 

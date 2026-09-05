@@ -497,6 +497,28 @@ jobs:
         if: steps.detect.outputs.docker == 'true'
         run: pnpm publish:dry-run:docker
 
+      # The build above is the expensive part and it proves one thing: the
+      # Dockerfile still compiles. These two run the image, for no second
+      # build — WHITEBOARD_SMOKE_IMAGE hands each smoke the tag the dry-run
+      # just produced, so the scenarios ride the same buildx layer cache.
+      #
+      # Both were docker-release-only until now, which meant the container
+      # boundary — auth, graceful stop, volume remount, log redaction — was
+      # verified for the first time during a publish. That is how three of
+      # the four image builds came to be missing a required build arg with
+      # every pipeline green.
+      - name: Server-mode docker smoke
+        if: steps.detect.outputs.docker == 'true'
+        env:
+          WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
+        run: pnpm smoke:docker
+
+      - name: Server-mode docker backup/restore smoke
+        if: steps.detect.outputs.docker == 'true'
+        env:
+          WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
+        run: pnpm smoke:docker-backup-restore
+
       - name: Upload docker dry-run metadata
         if: steps.detect.outputs.docker == 'true'
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1

@@ -190,8 +190,12 @@
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
-        "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds. The PR-side docker path is gate publish:dry-run:docker, which BUILDS the image and never runs a container, so none of this gate's runtime scenarios are exercised on a pull request"
+        "kind": "conditional-workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Server-mode docker smoke",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "the scenarios run against the image publish:dry-run:docker just built in the same job (WHITEBOARD_SMOKE_IMAGE), so they are gated by the same derived answer: a pull request that changes nothing the image compiles produces the same container, and there is no image for the scenarios to run against without paying for the build. Pushes to main and merge_group runs are never skipped."
       }
     },
     {
@@ -203,8 +207,12 @@
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
-        "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds. The PR-side docker path is gate publish:dry-run:docker, which BUILDS the image and never runs a container, so the backup/restore round trip is exercised only on the docker-release path"
+        "kind": "conditional-workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Server-mode docker backup/restore smoke",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "same gate and same reused image as smoke:docker \u2014 the backup/restore round trip is a property of the container this job already built, so a diff that cannot change the image cannot change the round trip. Pushes to main and merge_group runs are never skipped."
       }
     },
     {
