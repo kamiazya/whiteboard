@@ -277,7 +277,13 @@ try {
     const r = docker(
       [
         'run',
-        '--rm',
+        // No `--rm` on this one, deliberately. The server is EXPECTED to stay
+        // up here, so the interesting failure is it exiting immediately — and
+        // `--rm` deletes the container the instant it does, leaving
+        // `docker logs` to answer `No such container` and the smoke to report
+        // a readiness timeout for a container that never lived. Measured on
+        // CI: scenario 3 "timed out" 1.4s after scenario 2, with a 60s budget.
+        // The finally block removes it explicitly instead.
         '-d',
         '--name',
         'wb-smoke-valid',
@@ -310,10 +316,14 @@ try {
     const ready = await waitForReadyJson('wb-smoke-valid')
     if (!ready) {
       const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
-      fail('scenario 3: server did not emit ready JSON within timeout', {
-        stderrBytes: logs.stderr.length,
+      const exit = docker(['inspect', '--format={{.State.ExitCode}}', 'wb-smoke-valid'], {
+        timeout: 5_000,
+      })
+      fail('scenario 3: server never became ready', {
+        exitCode: exit.stdout.trim() || 'unknown',
         // Redacted rather than counted: this smoke runs on CI now, where a
         // byte count is the only thing anyone gets and it diagnoses nothing.
+        stdout: redactForDiagnostics(logs.stdout.slice(-2000), [dataDir, certsDir, jwksUri]),
         stderr: redactForDiagnostics(logs.stderr.slice(-2000), [dataDir, certsDir, jwksUri]),
       })
     }
@@ -395,6 +405,14 @@ try {
 
     // Capture docker logs and scan for leaks.
     const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
+    // The subject has to be PRESENT for the scan below to mean anything, and
+    // it was not: with `--rm` (removed above) `docker stop` deletes the
+    // container, so this read answered `No such container` and both
+    // assertions scanned an empty string. A leak check that cannot fail is
+    // the failure.
+    if (logs.stdout.length === 0) {
+      fail('scenario 8: no container logs to scan — the leak check would be vacuous')
+    }
     assertNoLeak('scenario 8 docker logs stdout', logs.stdout)
     assertNoLeak('scenario 8 docker logs stderr', logs.stderr)
     console.log('[docker-smoke] scenario 8 PASS: docker stop → graceful shutdown, logs clean')
@@ -448,7 +466,12 @@ try {
     '[docker-smoke] scenario 10 PASS: no raw JWT/credentials/paths leaked across all scenarios',
   )
 } finally {
-  if (activeContainer) stopContainer(activeContainer)
+  if (activeContainer) {
+    stopContainer(activeContainer)
+    // Explicit, because scenario 3's container is started without `--rm` so a
+    // crash leaves its logs readable.
+    docker(['rm', '-f', activeContainer], { timeout: 20_000 })
+  }
   await new Promise((resolve) => jwksServer.close(resolve))
   rmSync(certsDir, { recursive: true, force: true })
   rmSync(dataDir, { recursive: true, force: true })
