@@ -74,6 +74,12 @@ export {
   referenceSeams,
 } from './references/seams.js'
 export { referenceTargets } from './references/targets.js'
+export {
+  type ReferenceExtra,
+  type ReferenceWire,
+  referenceSeamsFromWire,
+  referenceWire,
+} from './references/wire.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'

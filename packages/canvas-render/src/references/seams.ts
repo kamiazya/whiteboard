@@ -102,7 +102,10 @@ export function referenceSeams(
   const resolveEmbed = (documentId: string): EmbeddedDocument | undefined => {
     const entry = byId.get(documentId)
     if (entry === undefined) return undefined
-    const title = entry.name !== undefined ? { title: entry.name } : {}
+    // The record's own name first; the caller's table (a page's list, the
+    // wire's title table) labels a keeper that loads content without names.
+    const name = entry.name ?? options.resolveTitle?.(documentId)
+    const title = name !== undefined ? { title: name } : {}
     if (entry.body !== undefined) {
       const root = rootOf(entry)
       return root === undefined ? undefined : { ...title, root }

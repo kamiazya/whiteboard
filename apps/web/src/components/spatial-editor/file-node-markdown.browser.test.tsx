@@ -1,4 +1,4 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 /**
  * The verified user flow, locked in: a file node pointing at a markdown
  * document in the same workspace renders that document's prose inside the
@@ -53,9 +53,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceSeams(new Map(), {
-          extra: (ref) => (ref === 'notes' ? { markdown: BODY } : undefined),
-        })}
+        references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: BODY }]]) })}
       />,
     )
 
@@ -69,7 +67,9 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceSeams(new Map(), { extra: () => ({ markdown: BODY, facets: CARD }) })}
+        references={referenceWire(new Map(), {
+          extras: new Map([['notes', { markdown: BODY, facets: CARD }]]),
+        })}
       />,
     )
 
@@ -82,7 +82,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceSeams(new Map(), { extra: () => ({ facets: CARD }) })}
+        references={referenceWire(new Map(), { extras: new Map([['notes', { facets: CARD }]]) })}
       />,
     )
 
@@ -97,7 +97,7 @@ describe('a file node referencing a markdown document', () => {
       <SpatialEditor
         canvas={canvasWithDocumentNode()}
         onChange={() => {}}
-        references={referenceSeams(new Map(), { extra: () => ({ markdown: long }) })}
+        references={referenceWire(new Map(), { extras: new Map([['notes', { markdown: long }]]) })}
       />,
     )
 

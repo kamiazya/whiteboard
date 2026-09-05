@@ -1,4 +1,4 @@
-import { overlayReferences } from '@kamiazya/whiteboard-canvas-render'
+import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 /**
  * Lays a spatial canvas out off the main thread.
  *
@@ -53,16 +53,18 @@ import type { ResolvedTheme } from './theme.js'
 
 const measure = createBrowserMeasureText()
 
-// One content cache per theme, for the worker's whole lifetime. Sound
-// because this worker REFUSES to lay out until its font face is loaded
-// (the FONT_DEGRADED gate below), so `measure` behaves identically for
-// every request it ever serves — theme is the only remaining cache axis.
-const contentCaches = new Map<ResolvedTheme, SpatialContentCache>()
-function contentCacheFor(theme: ResolvedTheme): SpatialContentCache {
+// One content cache per theme, kept while the reference wire is the one
+// it was filled under. Sound because this worker REFUSES to lay out until
+// its font face is loaded (the FONT_DEGRADED gate below), so `measure`
+// behaves identically for every request it ever serves — theme and what a
+// text node's body can embed are the only remaining cache axes, and the
+// second is compared by its bytes: a different wire is a different cache.
+const contentCaches = new Map<ResolvedTheme, { key: string; cache: SpatialContentCache }>()
+function contentCacheFor(theme: ResolvedTheme, wireKey: string): SpatialContentCache {
   const existing = contentCaches.get(theme)
-  if (existing !== undefined) return existing
+  if (existing !== undefined && existing.key === wireKey) return existing.cache
   const cache = createSpatialContentCache()
-  contentCaches.set(theme, cache)
+  contentCaches.set(theme, { key: wireKey, cache })
   return cache
 }
 
@@ -314,11 +316,21 @@ self.onmessage = async (
     // different document.
     const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
     const startedAt = performance.now()
+    // The same bundle the main thread builds, from the same bytes.
+    const references =
+      request.references === undefined ? undefined : referenceSeamsFromWire(request.references)
+    const expanded = new Set(request.expandedFileIds ?? [])
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
-      resolveReference: overlayReferences({ labels, missing: missingRefs }),
-      contentCache: contentCacheFor(request.theme),
+      references,
+      resolveReference: overlayReferences({
+        content: references?.resolveReference,
+        labels,
+        missing: missingRefs,
+      }),
+      expandFileNode: references === undefined ? undefined : (node) => expanded.has(node.id),
+      contentCache: contentCacheFor(request.theme, JSON.stringify(request.references ?? null)),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,
       threads: request.threads,

@@ -18,6 +18,7 @@ import type {
   EdgeAnchorPair,
   KeyedSvgRender,
   MeasureText,
+  ReferenceSeams,
   ResolvedReference,
   Scene,
   SpatialContentCache,
@@ -36,6 +37,8 @@ import { createEditorAppearance } from './editor-appearance.js'
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
   readonly theme?: ResolvedTheme
+  /** The reference bundle, for what text-node bodies embed and link. */
+  readonly references?: ReferenceSeams
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
   /**
@@ -95,6 +98,7 @@ export function renderCanvasToSvgWith(
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
+    references: options.references,
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
     contentCache: options.contentCache,

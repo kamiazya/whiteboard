@@ -13,6 +13,11 @@
  */
 
 import {
+  overlayReferences,
+  referenceSeamsFromWire,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
+import {
   createBrowserMeasureText,
   ensureViewerFontLoaded,
 } from '@kamiazya/whiteboard-canvas-viewer'
@@ -136,6 +141,48 @@ it('carries the file-label seam across the wire', async () => {
   if (fromWorker.type !== 'laid-out') return
   expect(fromWorker.svg).toContain('Readable name')
   expect(fromWorker.svg).toBe(onMain.svg)
+}, 60_000)
+
+it('draws what a text node embeds and what a file node shows from one wire on both threads', async () => {
+  expect(await ensureViewerFontLoaded()).toBe('loaded')
+  const NOTE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const withEmbed: SpatialCanvas = {
+    nodes: [
+      // Its own paragraph: an embed resolves at block level, as in a note.
+      { id: 't', type: 'text', x: 0, y: 0, width: 300, height: 200, text: `See\n\n![[${NOTE}]]` },
+      { id: 'f', type: 'file', x: 400, y: 0, width: 300, height: 200, file: NOTE },
+    ],
+    edges: [],
+  } as SpatialCanvas
+  const wire = referenceWire(
+    new Map([[NOTE, { documentId: NOTE, name: 'Note', body: 'NOTEPROSE' }]]),
+  )
+  // The main thread builds its seams from the wire it posts — the same
+  // bytes the worker rebuilds from — so the two scenes are equal by
+  // construction. This asserts it anyway.
+  const seams = referenceSeamsFromWire(wire)
+  const onMain = renderCanvasToSvg(withEmbed, {
+    measure: createBrowserMeasureText(),
+    theme: 'light',
+    references: seams,
+    resolveReference: overlayReferences({ content: seams.resolveReference }),
+    expandFileNode: () => true,
+  })
+  const fromWorker = await layoutInWorker({
+    type: 'layout',
+    id: 4,
+    canvas: withEmbed,
+    theme: 'light',
+    references: wire,
+    expandedFileIds: ['f'],
+  })
+  expect(fromWorker.type).toBe('laid-out')
+  if (fromWorker.type !== 'laid-out') return
+  // Once for the text node's embed, once for the file node — one word, so
+  // a wrapped line cannot split what is counted.
+  expect(fromWorker.svg.split('NOTEPROSE')).toHaveLength(3)
+  expect(fromWorker.svg).toBe(onMain.svg)
+  expect(fromWorker.scene).toEqual(onMain.scene)
 }, 60_000)
 
 it('parses markdown itself — no pre-parsed bodies cross the wire', async () => {

@@ -119,23 +119,30 @@ export function useFileSeamScene({
   // (LayoutRequest carries plain data only); the worker keeps its own.
   const contentCache = useMemo(
     () => createSpatialContentCache(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- theme and
-    // measure invalidate cached layout; nothing else does.
-    [resolvedMeasure, theme],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- theme, measure
+    // and the references a text node's body can embed invalidate cached
+    // layout; nothing else does.
+    [resolvedMeasure, theme, references],
   )
   const fileSeamOptions = useMemo(
     () => ({
+      references,
       resolveReference: overlayReferences({
         content: resolveReference,
         labels: fileRefLabelMap,
         missing: missingRefSet,
       }),
-      resolveReferenceContent: resolveReference,
       expandFileNode,
       contentCache,
     }),
-    [resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, contentCache],
+    [references, resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, contentCache],
+  )
+  // The gate's decision as data, for the worker: it reads the viewport,
+  // which the worker does not have.
+  const expandedFileIdList = useMemo(
+    () => (expandFileNode === undefined ? undefined : [...expandedFileIds].sort()),
+    [expandFileNode, expandedFileIds],
   )
 
-  return { fileSeamOptions, missingFileRefs }
+  return { fileSeamOptions, missingFileRefs, expandedFileIds: expandedFileIdList }
 }

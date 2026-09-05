@@ -1,3 +1,4 @@
+import { type ReferenceWire, referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 /**
  * The backend-agnostic half of the editor's file seams. This logic used to
  * live inline in BrowserDocumentPage, which is why the daemon page shipped
@@ -10,6 +11,10 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
 import { toFacetCard, useDocumentFileSeams } from './use-document-file-seams.js'
+
+/** The bundle a surface builds from the wire the hook hands the editor. */
+const seamsOf = (result: { current: { references: ReferenceWire } }) =>
+  referenceSeamsFromWire(result.current.references)
 
 const canvasWith = (...files: string[]): SpatialCanvas => ({
   nodes: files.map((file, i) => ({
@@ -53,11 +58,9 @@ describe('useDocumentFileSeams', () => {
 
     // The editor's seam is synchronous, so nothing is available on the first
     // render — the point of the pre-fetch.
-    expect(result.current.references.resolveReference('other')?.canvas).toBeUndefined()
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('other')?.canvas).toEqual(embedded('other'))
+    expect(seamsOf(result).resolveReference('other')?.canvas).toBeUndefined()
+    await waitFor(() => expect(seamsOf(result).resolveReference('other')?.canvas).toBeDefined())
+    expect(seamsOf(result).resolveReference('other')?.canvas).toEqual(embedded('other'))
   })
 
   it('routes image refs to the image loader and canvas refs to the canvas loader', async () => {
@@ -70,10 +73,8 @@ describe('useDocumentFileSeams', () => {
       }),
     )
 
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('asset:pic')?.image).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('asset:pic')?.image).toEqual({
+    await waitFor(() => expect(seamsOf(result).resolveReference('asset:pic')?.image).toBeDefined())
+    expect(seamsOf(result).resolveReference('asset:pic')?.image).toEqual({
       href: 'blob:asset:pic',
     })
     expect(adapter.loadDocument).toHaveBeenCalledWith('sibling')
@@ -89,9 +90,7 @@ describe('useDocumentFileSeams', () => {
         useDocumentFileSeams({ canvas, adapter, stampOf }),
       { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
     )
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
-    )
+    await waitFor(() => expect(seamsOf(result).resolveReference('other')?.canvas).toBeDefined())
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
 
     // Same stamp, new map identity: a re-render must not re-fetch.
@@ -124,9 +123,7 @@ describe('useDocumentFileSeams', () => {
     const { result, unmount } = renderHook(() =>
       useDocumentFileSeams({ canvas: canvasWith('asset:pic'), adapter, stampOf: new Map() }),
     )
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('asset:pic')?.image).toBeDefined(),
-    )
+    await waitFor(() => expect(seamsOf(result).resolveReference('asset:pic')?.image).toBeDefined())
 
     unmount()
 
@@ -156,6 +153,81 @@ describe('useDocumentFileSeams', () => {
 
     expect(result.current.isImageFileRef('asset:pic')).toBe(true)
     expect(result.current.isImageFileRef('sibling')).toBe(false)
+  })
+})
+
+describe('useDocumentFileSeams reaches what a text node embeds', () => {
+  const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const canvasEmbedding = (target: string): SpatialCanvas => ({
+    nodes: [
+      { id: 't', type: 'text', x: 0, y: 0, width: 300, height: 200, text: `see ![[${target}]]` },
+    ],
+    edges: [],
+  })
+
+  it('loads a note a text node embeds, so the composer can draw it', async () => {
+    // No file node at all: the only reference is inside a text node's body,
+    // which the layout lays out with the same seams a note gets.
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async () => ({ body: 'PROSE FROM THE NOTE', name: 'Note' })),
+    })
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({ canvas: canvasEmbedding(NOTE_ID), adapter, stampOf: new Map() }),
+    )
+    await waitFor(() => {
+      expect(seamsOf(result).resolveEmbed(NOTE_ID)?.title).toBe('Note')
+    })
+    expect(adapter.loadDocument).toHaveBeenCalledWith(NOTE_ID)
+  })
+
+  it('resolves a path written in a body through the page table, and the record carries the id', async () => {
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async () => ({ body: 'PROSE FROM THE NOTE' })),
+    })
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: canvasEmbedding('notes/plan'),
+        adapter,
+        resolveAlias: (alias) => (alias === 'notes/plan' ? NOTE_ID : null),
+        resolveTitle: (id) => (id === NOTE_ID ? 'Plan' : undefined),
+        stampOf: new Map(),
+      }),
+    )
+    await waitFor(() => {
+      expect(seamsOf(result).resolveEmbed(NOTE_ID)?.title).toBe('Plan')
+    })
+    // The wire holds the same answers as data: the alias the page resolved
+    // and the title of the id it resolved to, beside the record.
+    const wire = result.current.references
+    expect(wire.aliases).toEqual([['notes/plan', NOTE_ID]])
+    expect(wire.titles).toEqual([[NOTE_ID, 'Plan']])
+    expect(wire.entries).toEqual([
+      ['notes/plan', { documentId: NOTE_ID, body: 'PROSE FROM THE NOTE' }],
+    ])
+    expect(structuredClone(wire)).toEqual(wire)
+  })
+
+  it('puts an image href and a facet card on the wire as extras', async () => {
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async () => ({
+        canvas: embedded('x'),
+        facets: { type: 'note' } as CoreFacets,
+      })),
+    })
+    const { result } = renderHook(() =>
+      useDocumentFileSeams({
+        canvas: canvasWith('asset:pic', 'doc-1'),
+        adapter,
+        stampOf: new Map(),
+      }),
+    )
+    await waitFor(() => {
+      expect(result.current.references.extras).toHaveLength(2)
+    })
+    expect(new Map(result.current.references.extras).get('asset:pic')).toEqual({
+      image: { href: 'blob:asset:pic' },
+    })
+    expect(new Map(result.current.references.extras).get('doc-1')?.facets).toBeDefined()
   })
 })
 
@@ -237,11 +309,9 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    expect(result.current.references.resolveReference('other')?.facets).toBeUndefined()
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('other')?.facets).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('other')?.facets?.title).toBe('Spec')
+    expect(seamsOf(result).resolveReference('other')?.facets).toBeUndefined()
+    await waitFor(() => expect(seamsOf(result).resolveReference('other')?.facets).toBeDefined())
+    expect(seamsOf(result).resolveReference('other')?.facets?.title).toBe('Spec')
   })
 
   it('keeps a facet-only document cached even though it has no canvas', async () => {
@@ -252,10 +322,8 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('doc')?.facets).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('doc')?.canvas).toBeUndefined()
+    await waitFor(() => expect(seamsOf(result).resolveReference('doc')?.facets).toBeDefined())
+    expect(seamsOf(result).resolveReference('doc')?.canvas).toBeUndefined()
   })
 
   it('has no card for a document that loads without facets', async () => {
@@ -266,10 +334,8 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('other')?.facets).toBeUndefined()
+    await waitFor(() => expect(seamsOf(result).resolveReference('other')?.canvas).toBeDefined())
+    expect(seamsOf(result).resolveReference('other')?.facets).toBeUndefined()
   })
 
   it('settles at one load for a reference that has no staleness stamp', async () => {
@@ -321,10 +387,8 @@ describe('useDocumentFileSeams empty documents', () => {
       useDocumentFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() =>
-      expect(result.current.references.resolveReference('note')?.facets).toBeDefined(),
-    )
-    expect(result.current.references.resolveReference('note')?.canvas).toBeUndefined()
+    await waitFor(() => expect(seamsOf(result).resolveReference('note')?.facets).toBeDefined())
+    expect(seamsOf(result).resolveReference('note')?.canvas).toBeUndefined()
   })
 })
 

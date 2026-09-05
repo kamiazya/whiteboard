@@ -14,8 +14,8 @@
  * - Every later scene keeps the previous one on screen until its replacement
  *   arrives. The visible trade: a change appears one worker round-trip later
  *   instead of blocking the thread until it can appear instantly.
- * - Anything the worker cannot serve — a host-supplied function seam, a
- *   missing pre-parsed body, a worker that failed to start or threw — falls
+ * - Anything the worker cannot serve — a worker that failed to start or
+ *   threw, a realm without the vendored face — falls
  *   back to laying the same canvas out synchronously. A degraded worker costs
  *   responsiveness, never content.
  *
@@ -23,11 +23,10 @@
  * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
 
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  canLayoutInWorker,
   type FileRefLabel,
   FONT_DEGRADED,
   type LayoutRequest,
@@ -87,21 +86,25 @@ export function useWorkerScene(
     /** The document's conversations, for passage highlights (plain data, crosses to the worker). */
     readonly threads?: readonly CommentThread[]
   },
-  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
-    /**
-     * The host's CONTENT resolver, uncomposed. `resolveReference` beside it
-     * already has the label/missing chrome folded in, which crosses to the
-     * worker as data — so only this one decides whether the canvas has to
-     * stay on the main thread.
-     */
-    readonly resolveReferenceContent?: unknown
+  fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
+  /**
+   * The plain-data twins of the seams in `fileSeamOptions`: the label
+   * table, the refs the host resolved as dangling in THIS canvas, the
+   * reference graph with its tables, and the ids the LOD gate expanded.
+   * The composed seams serve the synchronous path; only this can cross to
+   * the worker, which rebuilds the same seams from it.
+   */
+  wire?: {
+    readonly fileRefLabels?: readonly FileRefLabel[]
+    readonly missingFileRefs?: readonly string[]
+    readonly references?: ReferenceWire
+    readonly expandedFileIds?: readonly string[]
   },
-  fileRefLabels: readonly FileRefLabel[] | undefined,
-  // The plain-data twin of the seam's `missing` field: the refs the host
-  // resolved as dangling in THIS canvas. The composed seam serves the
-  // synchronous path; only this list can cross to the worker.
-  missingFileRefs?: readonly string[],
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
+  const fileRefLabels = wire?.fileRefLabels
+  const missingFileRefs = wire?.missingFileRefs
+  const references = wire?.references
+  const expandedFileIds = wire?.expandedFileIds
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
     [
@@ -113,7 +116,7 @@ export function useWorkerScene(
       fileSeamOptions,
     ],
   )
-  const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
+  const offloadable = worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
   // the first render, and any render the worker cannot serve.
   const renderNow = () => renderCanvasToSvg(canvas, options)
@@ -145,6 +148,8 @@ export function useWorkerScene(
       theme: options.theme,
       fileRefLabels,
       missingFileRefs,
+      references,
+      expandedFileIds,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
       showResolved: options.showResolved,
       threads: options.threads,
@@ -154,6 +159,8 @@ export function useWorkerScene(
       options.theme,
       fileRefLabels,
       missingFileRefs,
+      references,
+      expandedFileIds,
       options.suppressedBodyNodeIds,
       options.showResolved,
       options.threads,
@@ -222,6 +229,8 @@ export function useWorkerScene(
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
+      references: inputs.references,
+      expandedFileIds: inputs.expandedFileIds,
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
       showResolved: inputs.showResolved,
       threads: inputs.threads,
