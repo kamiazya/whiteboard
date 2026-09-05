@@ -3,12 +3,12 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
 import { deriveDevPort, isMainCheckout, normalizeRepoRootForHash } from './dev-port-lib.mjs'
-// This import existing means the repo base includes PR #243 (with-dev-data-dir-lib.mjs).
-// On a pre-#243 base this module doesn't exist and the whole suite fails to load,
-// turning a silent stale-base bug into a loud one.
+// A checkout without with-dev-data-dir-lib.mjs is a stale base: the module
+// missing makes this whole suite fail to load, turning a silent stale-base
+// bug into a loud one.
 import { resolveDevDataDirEnv } from './with-dev-data-dir-lib.mjs'
 
-describe('pre-flight: base includes PR #243 (dev-data-dir)', () => {
+describe('pre-flight: the dev-data-dir helper the port derivation depends on is present', () => {
   it('resolveDevDataDirEnv is importable', () => {
     expect(typeof resolveDevDataDirEnv).toBe('function')
   })

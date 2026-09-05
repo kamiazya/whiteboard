@@ -18,7 +18,7 @@ describe('editor theme palette contrast (WCAG)', () => {
     expect(contrast(EDITOR_DARK_PALETTE.textFill, SURFACE.dark)).toBeGreaterThanOrEqual(4.5)
   })
 
-  it('non-vacuity: the pre-fix hardcoded #333333 actually fails against the dark surface', () => {
+  it('non-vacuity: the retired hardcoded #333333 fails against the dark surface', () => {
     expect(contrast('#333333', SURFACE.dark)).toBeLessThan(3.0)
   })
 })

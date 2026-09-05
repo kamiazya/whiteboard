@@ -43,7 +43,9 @@ it('opens on the conversations that are still open, and says how many messages e
   expect(page.getByText('this one is done').query()).toBeNull()
   // Two messages is a conversation; saying so is what distinguishes it from
   // a lone remark without opening it.
-  await expect.element(page.getByTestId('thread-message-count-t-open')).toHaveTextContent('2')
+  await expect
+    .element(page.getByTestId('thread-message-count-t-open'))
+    .toHaveTextContent('2 messages')
 })
 
 it('shows the resolved ones when asked, and everything under All', async () => {
@@ -73,11 +75,11 @@ it('says which filter emptied the list, rather than showing one blank state for 
 
   // Open is the default and this document has none — but it DOES have a
   // conversation, so "no comments yet" would be a lie.
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no open/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no open/i)
 
   cleanup()
   render(<CommentsPanel threads={[]} />)
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no comments/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no comments/i)
 })
 
 it('opens a thread onto its whole conversation, not just the line the list shows', async () => {
@@ -177,8 +179,12 @@ it('composes a new conversation about the passage the host handed it', async () 
 
   // The passage is quoted back, because by the time the reader is typing in
   // the rail their selection in the body is no longer the thing they are
-  // looking at.
-  await expect.element(page.getByTestId('comments-panel-compose')).toHaveTextContent('report')
+  // looking at. Scoped to the compose box and asserted on the QUOTE, not on
+  // the box's concatenated text — which also carries the submit button's
+  // label, so the old whole-box assertion only passed on a substring match.
+  await expect
+    .element(page.getByTestId('comments-panel-compose').getByText('report'))
+    .toBeInTheDocument()
   await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), 'is this still true?')
   await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
 

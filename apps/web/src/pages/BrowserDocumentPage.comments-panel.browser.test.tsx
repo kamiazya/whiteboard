@@ -12,7 +12,7 @@
 import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -309,7 +309,10 @@ it('opens a conversation from the markdown body, end to end', async () => {
   const compose = await screen.findByTestId('comments-panel-compose', undefined, {
     timeout: 15_000,
   })
-  expect(compose).toHaveTextContent('Ship')
+  // Asserted on the QUOTE, not on the box's concatenated text — the box also
+  // carries the textarea and the submit button's label, so a whole-box
+  // assertion only ever passed on a substring match.
+  expect(within(compose).getByText('Ship')).toBeInTheDocument()
 
   await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'why Friday?')
   await userEvent.click(screen.getByRole('button', { name: /^comment$/i }))
