@@ -11,16 +11,9 @@ export default defineConfig({
   test: {
     name: 'web-node',
     environment: 'node',
-    include: [
-      'vite-pwa-options.test.ts',
-      'vite-manual-chunks.test.ts',
-      'public-headers.test.ts',
-      'vite-dev-headers.test.ts',
-      'vite-plugin-strip-wasm-sourcemap.test.ts',
-      'index-html.test.ts',
-      'pwa-icons.test.ts',
-      'mcp-source-alias-coverage.test.ts',
-      'scripts/**/*.test.ts',
-    ],
+    // Root-level build/deploy guards by glob, not a hand list: a new root
+    // test file added without editing this line used to run NOWHERE while
+    // CI stayed green (src/** belongs to web-jsdom/web-browser).
+    include: ['*.test.ts', 'scripts/**/*.test.ts'],
   },
 })
