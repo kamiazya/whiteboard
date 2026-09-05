@@ -10,11 +10,13 @@
  * which is the class `file-seam-conformance.test.ts` was written for.
  *
  * A source scan rather than a render, for that file's reason and one more of
- * its own: the blob comes from `exportScene('png')`, which needs a real
- * renderer, so a page-level test would have had to fake the very call it was
- * checking. What is actually this code's — what it hands the keeper, and
- * that it never throws over a bookmark that already landed — is asserted in
- * `lib/version-thumbnail.test.ts`.
+ * its own: the blob comes from a real renderer — a 2D context jsdom does not
+ * have — so a page-level test would have had to fake the very call it was
+ * checking. What is actually this code's is asserted where it lives:
+ * `lib/version-thumbnail.test.ts` for what reaches the keeper and that it
+ * never throws over a bookmark that already landed, `lib/bookmark-picture`'s
+ * two tests for which pipeline draws which kind and that the picture has the
+ * document's own size.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -50,7 +52,7 @@ describe('a saved point carries a picture, whoever keeps it', () => {
     const getBlob = /getBlob:\s*([^,\n]*)/.exec(source)?.[1] ?? ''
     expect(getBlob, `${page} has no getBlob argument to check`).not.toBe('')
     expect(
-      /exportScene|getThumbnailBlob/.test(getBlob),
+      /exportScene|getThumbnailBlob|captureBookmarkPicture/.test(getBlob),
       `${page} renders the picture inside getBlob, so it is taken after the save resolves — capture it before the save and hand the promise over`,
     ).toBe(false)
   })
@@ -71,7 +73,7 @@ describe('a saved point carries a picture, whoever keeps it', () => {
     }
     const capture = at(
       'picture capture',
-      /const picture = (?:exportScene\('png'\)|getThumbnailBlob\(\))/g,
+      /const picture = (?:captureBookmarkPicture\(|getThumbnailBlob\(\))/g,
     )
     const save = at('version save', /versionsBackend\.save\(|documentsApiUrl\([^)]*'versions'\)/g)
     expect(
@@ -80,11 +82,20 @@ describe('a saved point carries a picture, whoever keeps it', () => {
     ).toBeLessThan(save)
   })
 
-  it.each(PAGES)('%s asks its own renderer for the bytes', async (page) => {
-    // PNG explicitly: the daemon's route validates the signature on upload
-    // and rejects anything else, and one keeper rejecting what the other
-    // accepts is the difference this whole seam exists to remove.
+  it.each(
+    PAGES,
+  )('%s picks the picture by the document kind, not by assuming a canvas', async (page) => {
+    // The defect this replaces an older check for: both pages captured
+    // `exportScene('png')` whatever they were editing, and that draws the
+    // SPATIAL canvas. A markdown document publishes none, so the export was
+    // a valid 1x1 PNG — uploaded like any other, and drawn as an empty box
+    // on every markdown version row. Passing the kind is what makes the
+    // choice exist at all; which pipeline each kind gets, and that both
+    // answer PNG, is `lib/bookmark-picture.test.ts`.
     const source = await read(page)
-    expect(source).toMatch(/exportScene\('png'\)/)
+    expect(
+      source,
+      `${page} captures its bookmark picture without saying what kind of document it is — a markdown document would be drawn as an empty canvas`,
+    ).toMatch(/captureBookmarkPicture\(\s*documentKind/)
   })
 })

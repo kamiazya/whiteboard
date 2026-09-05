@@ -52,6 +52,7 @@ import {
   type OutlineRequest,
   type OutlineResponse,
 } from './layout-worker-protocol.js'
+import { readRenderEntry, writeRenderEntry } from './render-store.js'
 
 const measure = createBrowserMeasureText()
 
@@ -104,10 +105,64 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
 
+/**
+ * How long a render has to take before storing it is worth the write.
+ *
+ * Measured in a real browser, medians of 15 interleaved rounds: an OPFS write
+ * costs 2.2-3.1ms whatever the payload, while a render ranges from 2.0ms (a
+ * 12-node spatial canvas) to 67.2ms (a 60-section markdown body). Below this
+ * floor the store makes the FIRST visit slower to save less than a
+ * millisecond on the second; above it the saving is the whole render.
+ *
+ * A floor rather than a per-pipeline rule because the cost is not a property
+ * of the pipeline: a 400-node spatial canvas (19.9ms) clears it and a
+ * four-section markdown body barely does. Timing the work that actually ran
+ * is the only thing that stays true as either pipeline changes.
+ */
+const STORE_FLOOR_MS = 5
+
+/**
+ * Answers from the persistent tier when it holds this key, and says whether
+ * it did.
+ *
+ * The stored value carries no `id` — an id belongs to a request, not to a
+ * picture — so this stamps the ASKING request's own. Without that the pool
+ * would be handed a reply addressed to a request it already settled, and the
+ * caller would wait forever for one that never comes.
+ */
+async function servedFromStore(request: {
+  readonly id: number
+  readonly cacheKey?: string
+}): Promise<boolean> {
+  if (request.cacheKey === undefined) return false
+  const stored = await readRenderEntry(request.cacheKey)
+  if (stored === null || typeof stored !== 'object') return false
+  self.postMessage({ ...(stored as Record<string, unknown>), id: request.id })
+  return true
+}
+
+/** Stores a reply that cost more to produce than storing it will. */
+function remember(
+  cacheKey: string | undefined,
+  elapsedMs: number,
+  reply: { readonly type: string; readonly id: number },
+): void {
+  if (cacheKey === undefined || elapsedMs < STORE_FLOOR_MS) return
+  const { id: _id, ...rest } = reply
+  // Not awaited: the reply is already posted, and a caller must never wait on
+  // a cache. A write that loses its race with page teardown costs one
+  // re-render.
+  void writeRenderEntry(cacheKey, rest)
+}
+
 self.onmessage = async (
   event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest>,
 ) => {
   const request = event.data
+  // Before the font gate and before any work: a stored answer is the answer,
+  // and the gate exists to stop a render being MEASURED with the wrong face
+  // rather than to re-check one already drawn with the right one.
+  if (request.type !== 'markdown-rail' && (await servedFromStore(request))) return
   if (request.type === 'outline') {
     try {
       if (request.body !== undefined) {
@@ -123,10 +178,12 @@ self.onmessage = async (
           self.postMessage(failed)
           return
         }
+        const startedAt = performance.now()
         const { blocks } = layoutMarkdownOutline(request.body, {
           measure,
           maxWidth: request.maxWidth,
         })
+        const elapsed = performance.now() - startedAt
         const done: OutlineResponse = {
           type: 'outlined',
           id: request.id,
@@ -136,6 +193,7 @@ self.onmessage = async (
           rects: blocks.map((block) => ({ ...block, color: resolveRectColor(undefined) })),
         }
         self.postMessage(done)
+        remember(request.cacheKey, elapsed, done)
         return
       }
       // A corrupt snapshot throws here and lands in the catch below as a
@@ -143,12 +201,14 @@ self.onmessage = async (
       // one. It must not take the worker down: every request queued behind it
       // belongs to a different document.
       const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+      const startedAt = performance.now()
       const done: OutlineResponse = {
         type: 'outlined',
         id: request.id,
         rects: outlineFromSpatial(canvas),
       }
       self.postMessage(done)
+      remember(request.cacheKey, performance.now() - startedAt, done)
     } catch (error) {
       const failed: OutlineResponse = {
         type: 'failed',
@@ -173,10 +233,12 @@ self.onmessage = async (
         self.postMessage(failed)
         return
       }
+      const startedAt = performance.now()
       const { keyed, blocks } = renderMarkdownPreview(request.body, {
         measure,
         maxWidth: request.maxWidth,
       })
+      const elapsed = performance.now() - startedAt
       // The preview's SVG carries its own viewBox; the caller needs the
       // extent to scale it, and the blocks already describe it.
       const right = Math.max(0, ...blocks.map((b) => b.x + b.w))
@@ -188,6 +250,7 @@ self.onmessage = async (
         bounds: { x: 0, y: 0, w: right, h: bottom },
       }
       self.postMessage(done)
+      remember(request.cacheKey, elapsed, done)
     } catch (error) {
       const failed: MarkdownRenderResponse = {
         type: 'failed',
@@ -253,6 +316,7 @@ self.onmessage = async (
     // take the worker down: every request queued behind it belongs to a
     // different document.
     const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
+    const startedAt = performance.now()
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
@@ -270,6 +334,12 @@ self.onmessage = async (
       anchors,
     }
     self.postMessage(response)
+    // The whole reply, `scene` and `anchors` included: they are not optional
+    // on `laid-out`, so an entry without them could not be served back as
+    // one. Only the LIST surfaces pass a cache key — the editor renders live
+    // and passes none — so this is disk spent on rows, never on the canvas a
+    // person is editing.
+    remember(request.cacheKey, performance.now() - startedAt, response)
   } catch (error) {
     const response: LayoutResponse = {
       type: 'failed',
