@@ -512,6 +512,8 @@ jobs:
       # Dockerfile still compiles. These two run the image, for no second
       # build — WHITEBOARD_SMOKE_IMAGE hands each smoke the tag the dry-run
       # just produced, so the scenarios ride the same buildx layer cache.
+      # Measured on the first green run: smoke:docker's ten scenarios cost
+      # 6.5s on top of the cached build.
       #
       # Both were docker-release-only until now, which meant the container
       # boundary — auth, graceful stop, volume remount, log redaction — was
@@ -523,6 +525,14 @@ jobs:
         env:
           WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
         run: pnpm smoke:docker
+
+      # This smoke drives the backup CLI from the HOST against the container's
+      # mounted volume, so it needs dist/ — which the image build produces
+      # inside the image and does not leave behind. Only this one needs it;
+      # smoke:docker talks to the container over HTTP and passed without it.
+      - name: Build mcp-server for the host-side backup helpers
+        if: steps.detect.outputs.docker == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-mcp build
 
       - name: Server-mode docker backup/restore smoke
         if: steps.detect.outputs.docker == 'true'
