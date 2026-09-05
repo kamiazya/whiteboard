@@ -22,6 +22,13 @@ export async function runDaemonStatus(
 
   const parsed = await parse(options.dataDir)
 
+  const recordSummary = ({
+    pid,
+    port,
+    version,
+    startedAt,
+  }: NonNullable<DaemonStatusResult['record']>) => ({ pid, port, version, startedAt })
+
   if (parsed.kind === 'missing') {
     return {
       result: daemonStatusResultSchema.parse({
@@ -56,12 +63,7 @@ export async function runDaemonStatus(
         reason: 'record-token-missing',
         recordFound: true,
         recordFresh: false,
-        record: {
-          pid: parsed.record.pid,
-          port: parsed.record.port,
-          version: parsed.record.version,
-          startedAt: parsed.record.startedAt,
-        },
+        record: recordSummary(parsed.record),
       }),
       exitCode: 1,
     }
@@ -78,12 +80,7 @@ export async function runDaemonStatus(
         recordFound: true,
         recordFresh: false,
         pidAlive: false,
-        record: {
-          pid: parsed.record.pid,
-          port: parsed.record.port,
-          version: parsed.record.version,
-          startedAt: parsed.record.startedAt,
-        },
+        record: recordSummary(parsed.record),
       }),
       exitCode: 1,
     }
@@ -97,12 +94,7 @@ export async function runDaemonStatus(
       recordFound: true,
       recordFresh: true,
       pidAlive: true,
-      record: {
-        pid: parsed.record.pid,
-        port: parsed.record.port,
-        version: parsed.record.version,
-        startedAt: parsed.record.startedAt,
-      },
+      record: recordSummary(parsed.record),
     }),
     exitCode: 0,
   }

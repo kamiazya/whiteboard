@@ -5,7 +5,6 @@ import {
 } from '../daemon/daemon-record.js'
 import {
   type DaemonDoctorCheck,
-  type DaemonDoctorOverallStatus,
   type DaemonDoctorResult,
   daemonDoctorResultSchema,
 } from '../shared/api-contracts/daemon-doctor.js'
@@ -23,6 +22,15 @@ export async function runDaemonDoctor(
   const isAlive = options.isPidAlive ?? defaultIsPidAlive
 
   const checks: DaemonDoctorCheck[] = []
+  const errorResult = (): { result: DaemonDoctorResult; exitCode: 1 } => ({
+    result: daemonDoctorResultSchema.parse({
+      schemaVersion: 1,
+      ok: false,
+      status: 'error',
+      checks,
+    }),
+    exitCode: 1,
+  })
   const parsed = await parse(options.dataDir)
 
   if (parsed.kind === 'missing') {
@@ -32,15 +40,7 @@ export async function runDaemonDoctor(
       summary: 'Daemon record not found.',
       remediation: 'Start the daemon with: whiteboard daemon run --json',
     })
-    return {
-      result: daemonDoctorResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        status: 'error',
-        checks,
-      }),
-      exitCode: 1,
-    }
+    return errorResult()
   }
 
   if (parsed.kind === 'malformed') {
@@ -50,15 +50,7 @@ export async function runDaemonDoctor(
       summary: 'Daemon record is malformed.',
       remediation: 'Remove the daemon record and restart: whiteboard daemon run --json',
     })
-    return {
-      result: daemonDoctorResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        status: 'error',
-        checks,
-      }),
-      exitCode: 1,
-    }
+    return errorResult()
   }
 
   if (parsed.kind === 'token-missing') {
@@ -68,15 +60,7 @@ export async function runDaemonDoctor(
       summary: 'Daemon record is present but has no token.',
       remediation: 'Restart the daemon: whiteboard daemon run --json',
     })
-    return {
-      result: daemonDoctorResultSchema.parse({
-        schemaVersion: 1,
-        ok: false,
-        status: 'error',
-        checks,
-      }),
-      exitCode: 1,
-    }
+    return errorResult()
   }
 
   const alive = isAlive(parsed.record.pid)
@@ -94,12 +78,11 @@ export async function runDaemonDoctor(
     remediation: alive ? undefined : 'Start the daemon: whiteboard daemon run --json',
   })
 
-  const overallStatus: DaemonDoctorOverallStatus = alive ? 'ok' : 'error'
   return {
     result: daemonDoctorResultSchema.parse({
       schemaVersion: 1,
       ok: alive,
-      status: overallStatus,
+      status: alive ? 'ok' : 'error',
       checks,
     }),
     exitCode: alive ? 0 : 1,
