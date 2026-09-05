@@ -15,6 +15,7 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -26,24 +27,9 @@ import { inTransaction, request } from './idb-tx.js'
 // `browser-idb-migration.browser.test.tsx`.
 const DB_NAME = 'whiteboard-document-index-conformance'
 
-async function deleteDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    // No `onblocked` resolve. `blocked` fires when a connection is still open,
-    // and the deletion happens only once it closes — so resolving there means
-    // starting the next case against rows the previous one left, which every
-    // conformance case assumes are gone. Waiting is safe here because
-    // `IdbDocumentIndex` closes its connection in a `finally`, so nothing this
-    // suite opens outlives its own call; if that ever stops being true, the
-    // hang names this file rather than corrupting the case after it.
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
 describe('IdbDocumentIndex row hydration', () => {
   it('a malformed stored row fails the read loudly instead of flowing into the UI as a DocumentEntry', async () => {
-    await deleteDb()
+    await clearNamedDb(DB_NAME)
     try {
       const index = new IdbDocumentIndex(DB_NAME)
       await index.createWorkspace({ workspaceId: 'ws' })
@@ -63,18 +49,18 @@ describe('IdbDocumentIndex row hydration', () => {
       // corrupt data wearing the contract's type. The schema names the field.
       await expect(index.listDocuments({ workspaceId: 'ws' })).rejects.toThrow(/path/)
     } finally {
-      await deleteDb()
+      await clearNamedDb(DB_NAME)
     }
   })
 })
 
 describe('IdbDocumentIndex', () => {
   describeDocumentIndexConformance(async () => {
-    await deleteDb()
+    await clearNamedDb(DB_NAME)
     const index = new IdbDocumentIndex(DB_NAME)
     return {
       index,
-      dispose: deleteDb,
+      dispose: () => clearNamedDb(DB_NAME),
       // This index IS its own registry — one IndexedDB store holding the row
       // `createWorkspace` writes — so the seam is that call.
       seedWorkspace: async (entry) => index.createWorkspace(entry),

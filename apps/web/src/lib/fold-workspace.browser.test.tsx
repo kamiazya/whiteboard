@@ -14,6 +14,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -23,15 +24,7 @@ import { LoroStore } from './loro-store.js'
 
 const DB_NAME = claimIsolatedWhiteboardDb('fold-workspace')
 
-function deleteDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
-beforeEach(deleteDb)
+beforeEach(clearWhiteboardDb)
 
 async function seedDocument(path: string, text: string): Promise<string> {
   const index = new IdbDocumentIndex(DB_NAME)
