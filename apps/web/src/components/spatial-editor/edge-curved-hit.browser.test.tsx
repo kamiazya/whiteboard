@@ -5,6 +5,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -19,10 +20,6 @@ const canvas: SpatialCanvas = {
   ],
   edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
   'x-whiteboard': { edgeRouting: { style: 'curved' } },
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 it('selects a curved edge by clicking the drawn curve, and highlights along it', async () => {

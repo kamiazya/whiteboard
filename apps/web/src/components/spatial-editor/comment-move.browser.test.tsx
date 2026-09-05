@@ -8,6 +8,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -56,10 +57,6 @@ function makeHost(initial: SpatialCanvas = start) {
     )
   }
   return { Host, latest }
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function commentOf(canvas: SpatialCanvas, id: string): CanvasComment | undefined {

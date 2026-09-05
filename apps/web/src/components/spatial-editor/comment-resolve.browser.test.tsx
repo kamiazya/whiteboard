@@ -10,6 +10,7 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -58,10 +59,6 @@ function makeHost(initial: SpatialCanvas = start) {
     )
   }
   return { Host, latest }
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function pinOf(container: HTMLElement, id: string): SVGGElement | null {

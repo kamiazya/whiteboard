@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -35,10 +36,6 @@ function Host({ onCommand }: { onCommand?: (kind: string) => void }) {
       />
     </div>
   )
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function rightClick(el: HTMLElement, x: number, y: number) {
