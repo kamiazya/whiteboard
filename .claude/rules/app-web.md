@@ -65,11 +65,23 @@ same shapes will recur, and each was cheaper than it looked:
    `lib/`. A worker importing from `components/` was the clearest sign
    those were never components.
 
-Two traps a mechanical move does not see, each found by a test going red:
-a `vi.mock('./x.js', …)` specifier is a string, not an import, and keeps
-pointing at the old path (the spy then counts zero calls); and
-`purity-guard.test.ts` scans its files by explicit relative path on
-purpose, so a moved file falls out of it loudly rather than silently.
+Three things a mechanical move does not see, and what catches each now:
+
+- A `vi.mock('./x.js', …)` specifier is a string, not an import, so it keeps
+  pointing at the old path and mocks nothing — the test runs against the
+  real module and stays green. Found once by a spy that happened to count
+  its calls; measured afterwards, two more had been dead since the
+  component they mocked was deleted. `mock-specifiers.test.ts` resolves
+  every relative and `@/` mock specifier the way the layer guard resolves
+  imports and fails on one that names no module. Not a GritQL rule: a
+  Biome plugin sees one file's syntax and cannot know whether a path
+  exists.
+- `purity-guard.test.ts` (apps/web) and `file-size-budget.test.ts`
+  (mcp-server) hold files by explicit path on purpose and check the path
+  still exists, so a move fails them loudly — the second in CI, because the
+  local area run for an `apps/web` move had not included `mcp-node`. It
+  does now: a move runs `--project mcp-node file-size-budget` alongside the
+  web guards.
 
 ## What the other guards already cover
 
