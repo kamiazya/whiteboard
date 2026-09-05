@@ -44,6 +44,16 @@ const BACKOFF_MS = process.env.AUDIT_RETRY_BACKOFF_MS
   : [0, 60_000, 120_000]
 
 async function main() {
+  // Offline escape for `pnpm check:local` only — a LOUD skip, never a pass.
+  // CI never sets this; the audit stays fail-closed there. Without it, an
+  // offline run burns ~3 minutes of retries and the `&&` chain then drops
+  // `pnpm typecheck` — the check an offline contributor most wanted.
+  if (process.env.WHITEBOARD_SKIP_AUDIT === '1') {
+    console.error(
+      '[audit-with-retry] WHITEBOARD_SKIP_AUDIT=1 — the prod audit was SKIPPED, not passed; run it (or push and let CI) before relying on this result',
+    )
+    return
+  }
   for (let attempt = 0; attempt < ATTEMPTS; attempt++) {
     if (BACKOFF_MS[attempt] > 0) {
       console.error(
