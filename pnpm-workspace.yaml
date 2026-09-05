@@ -86,6 +86,13 @@ overrides:
   kysely@<0.28.17: ^0.28.17
   "@grpc/grpc-js@<1.14.4": ^1.14.4
   shell-quote@<1.9.0: ^1.9.0
+  # Not a CVE bump like the rest — a DEDUPE. @libsql/kysely-libsql@0.4.1 is the
+  # latest and still asks for @libsql/client@^0.8.0, which drags libsql@0.3.19
+  # and its native bindings alongside the 0.17.3 the manifest declares. The
+  # runtime loaded the OLD one, and its musl prebuild is what failed to load on
+  # Alpine (`fcntl64: symbol not found`). @libsql/client@0.17.3 depends on
+  # libsql@0.5.29 — the version this manifest's devDependency already names.
+  "@libsql/client@<0.17.3": ^0.17.3
   uuid@<11.1.1: ^11.1.1
   # GHSA-x5fp-wj9c-mxmx + GHSA-4mjr-xmp4-gh2g: both cleared at 6.16.0 (reaches
   # the published runtime via express <- @modelcontextprotocol/sdk).
