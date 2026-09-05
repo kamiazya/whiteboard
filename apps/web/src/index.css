@@ -439,6 +439,27 @@
 }
 
 /*
+ * Horizontal padding for chrome that spans the full screen width — the top
+ * bars, the canvas verb bar, the degraded-connection banners.
+ *
+ * `viewport-fit=cover` (index.html) lays the page out UNDER a display
+ * cutout, which is what lets the canvas reach the physical screen edge. In
+ * landscape that puts the camera housing over a bar's first and last
+ * control, so the bar insets its CONTENT to the safe area while its own
+ * border and background still run edge to edge. `max()`, not `+`: the inset
+ * already clears the housing and needs no gutter added on top, and it is
+ * 0 on every device without one, leaving the plain 0.75rem.
+ *
+ * Physical left/right rather than logical inline-start/end, because the
+ * insets themselves are physical — a cutout does not move with text
+ * direction.
+ */
+@utility px-chrome {
+  padding-left: max(0.75rem, env(safe-area-inset-left));
+  padding-right: max(0.75rem, env(safe-area-inset-right));
+}
+
+/*
  * Mobile app-shell hardening (kept un-layered, so it outranks layered
  * styles). A canvas tool on a touch browser must behave like an app, not a
  * document: long-pressing chrome or canvas must not start iOS text
@@ -449,6 +470,7 @@
  * the default highlight. Real text surfaces opt back IN to selection
  * below — an app is selectable where text is the content, nowhere else.
  */
+
 html,
 body {
   overscroll-behavior: none;

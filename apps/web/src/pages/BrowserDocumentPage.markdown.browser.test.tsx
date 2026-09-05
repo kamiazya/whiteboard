@@ -127,6 +127,22 @@ async function expectTitleValue(expected: string): Promise<void> {
   )
 }
 
+/**
+ * The document's ⋯. Radix opens it on pointerDown, so `userEvent.click`
+ * (which sends the whole down-up pair) both opens and immediately dismisses.
+ */
+async function openDocumentMenu(): Promise<void> {
+  const trigger = await screen.findByRole('button', { name: 'More actions' })
+  trigger.dispatchEvent(
+    new PointerEvent('pointerdown', { bubbles: true, cancelable: true, button: 0 }),
+  )
+}
+
+const displayRow = () =>
+  [...document.querySelectorAll('[role="menuitem"]')].find(
+    (item) => item.textContent?.trim() === 'Display…',
+  )
+
 describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -237,14 +253,16 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     )
   })
 
-  it('a markdown canvas has no display-settings gear — edge routing is spatial-only', async () => {
+  it('a markdown canvas has no Display row — edge routing is spatial-only', async () => {
     const spatialStore = new IdbDocumentIndex()
     const spatial = render(<BrowserDocumentPage store={spatialStore} />)
 
-    // A spatial canvas is where the gear is offered.
+    // A spatial canvas is where the row is offered. It lives in the
+    // document's ⋯ now, so reaching it means opening that.
     await screen.findByTestId('mock-spatial-editor')
+    await openDocumentMenu()
     await waitFor(() => {
-      expect(document.querySelector('[data-testid="canvas-settings-button"]')).not.toBeNull()
+      expect(displayRow()).toBeDefined()
     })
     spatial.unmount()
 
@@ -256,8 +274,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     })
 
     // Edge routing has no meaning for a document with no spatial scene —
-    // the gear must not carry over; the rest of the canvas row does.
-    expect(document.querySelector('[data-testid="canvas-settings-button"]')).toBeNull()
+    // the row must not carry over; the rest of the canvas row does.
+    await openDocumentMenu()
+    await waitFor(() => {
+      expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    })
+    expect(displayRow()).toBeUndefined()
     // The rest of the row does carry over: the hidden persistence fact rides
     // the same slot the spatial row uses.
     expect(document.querySelector('[data-testid="persistence-state"]')).toBeTruthy()

@@ -71,7 +71,10 @@ export function MinimapOverlay({
       // z-10 matches the dock. Without a stacking context of its own the
       // scene paints over the overview — it is later in the DOM and its
       // nodes are positioned, so document order wins.
-      className="absolute bottom-4 right-4 z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm"
+      // Safe-area offsets for the same reason the dock carries one: in
+      // fullscreen this corner is the screen corner, under the home
+      // indicator and — rotated — under the display cutout.
+      className="absolute bottom-[calc(1rem+env(safe-area-inset-bottom))] right-[calc(1rem+env(safe-area-inset-right))] z-10 overflow-hidden rounded-md border bg-background/80 shadow-sm"
       onPointerDown={navigateTo}
       onPointerMove={(event) => {
         // Only while the button is held — a pointer merely passing over the

@@ -11,6 +11,7 @@ import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { DocumentMenu } from '../workspace-top-bar/DocumentMenu.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -34,7 +35,9 @@ function makeHost() {
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
-        <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+        <DocumentMenu
+          display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
+        />
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -47,9 +50,21 @@ function makeHost() {
   return { Host, latest }
 }
 
-function openSettings(container: HTMLElement) {
-  const gear = container.querySelector('[data-testid="canvas-settings-button"]') as HTMLElement
-  fireEvent.click(gear)
+// Radix's DropdownMenuTrigger opens on pointerDown and its Item selects on
+// pointerUp, so neither step is a plain click.
+async function openSettings(container: HTMLElement) {
+  fireEvent.pointerDown(container.querySelector('[aria-label="More actions"]') as HTMLElement, {
+    button: 0,
+    ctrlKey: false,
+  })
+  const row = await vi.waitFor(() => {
+    const found = [...document.querySelectorAll('[role="menuitem"]')].find(
+      (item) => item.textContent?.trim() === 'Display…',
+    )
+    expect(found).toBeDefined()
+    return found as HTMLElement
+  })
+  fireEvent.pointerUp(row)
 }
 
 // The popover renders in a portal, so options are queried from the document.
@@ -61,7 +76,7 @@ const optionButton = (_container: HTMLElement, label: string) =>
 it('offers the routing style from the settings popover, not the creation menu', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
-  openSettings(container)
+  await openSettings(container)
 
   await vi.waitFor(() => {
     expect(document.querySelector('[data-testid="canvas-settings-menu"]')).not.toBeNull()
@@ -82,7 +97,7 @@ it('offers the routing style from the settings popover, not the creation menu', 
 it('records the choice on the canvas and bends the edge', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
-  openSettings(container)
+  await openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()
@@ -103,7 +118,7 @@ it('drops the setting again when the style returns to straight', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  openSettings(container)
+  await openSettings(container)
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()
   await vi.waitFor(() => expect(edgesFacetOf(latest.canvas)?.routing).toBe('orthogonal'))
@@ -123,7 +138,7 @@ it('drops the setting again when the style returns to straight', async () => {
 it('draws a curve when the canvas asks for one', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
-  openSettings(container)
+  await openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Curved')).toBeDefined())
   optionButton(container, 'Curved')?.click()
@@ -159,7 +174,9 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
-        <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+        <DocumentMenu
+          display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
+        />
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -170,7 +187,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     )
   }
   const { container } = render(<CrossHost />)
-  openSettings(container)
+  await openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'On')).toBeDefined())
   optionButton(container, 'On')?.click()
@@ -210,13 +227,13 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
     }
     return (
       <div style={{ width: 900, height: 700 }}>
-        <CanvasDisplaySettings canvas={canvas} onChange={deferSet} />
+        <DocumentMenu display={<CanvasDisplaySettings canvas={canvas} onChange={deferSet} />} />
         <SpatialEditor defaultTool="select" canvas={canvas} onChange={deferSet} theme="light" />
       </div>
     )
   }
   const { container } = render(<DeferredHost />)
-  openSettings(container)
+  await openSettings(container)
 
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()

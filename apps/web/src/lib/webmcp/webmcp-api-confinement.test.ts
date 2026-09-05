@@ -16,13 +16,17 @@ const BANNED_PATTERNS = [/\bdocument\.modelContext\b/, /\bnavigator\.modelContex
 const ALLOWED_FILES = new Set([
   'lib/webmcp/use-browser-tool-registry.ts',
   'lib/webmcp/use-browser-tool-registry.test.tsx',
+  // The document-page contract injects a fake `document.modelContext` to
+  // prove the registry is mounted, for BOTH keepers — the same proof the
+  // per-page `.webmcp.test.tsx` files below give, run from one place.
+  'test-utils/document-page.contract.tsx',
   // This guard's own source necessarily spells out the banned strings to
   // scan for them.
   'lib/webmcp/webmcp-api-confinement.test.ts',
 ])
 
-// Page-level wiring regression tests (e.g. BrowserDocumentPage.webmcp.test.tsx,
-// DaemonDocumentPage.webmcp.test.tsx) legitimately inject a fake
+// Page-level wiring regression tests (e.g. DaemonDocumentPage.webmcp.test.tsx)
+// legitimately inject a fake
 // `document.modelContext` to prove the hook is actually mounted — allow
 // that whole naming convention rather than listing every page test file.
 const ALLOWED_SUFFIX = /\.webmcp\.test\.tsx$/

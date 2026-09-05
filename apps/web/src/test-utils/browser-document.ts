@@ -20,11 +20,15 @@ import type { EditorCommand } from '../lib/spatial/commands.js'
 const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
 
 /**
- * Deletes the app's IndexedDB database, and resolves only once it is GONE.
+ * Deletes the app's IndexedDB database, and resolves only once it is gone
+ * and STAYING gone.
  *
  * The single definition on purpose: it is awaited in a `beforeEach` to mean
  * "this file starts from nothing", and every caller depends on that sentence
- * being true when the promise settles.
+ * being true when the promise settles. Two different things break it, and
+ * both were found the same way — as a page two files away reporting that it
+ * could not read its own data. `blocked` is not a settlement (below), and a
+ * deletion that succeeded is not the end either: see `deleteAndKeepDeleted`.
  *
  * **`blocked` is not a settlement.** `deleteDatabase` fires it — and neither
  * `success` nor `error` — while another connection is still open, which in
@@ -56,7 +60,7 @@ const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
  * accident because it would delete `undefined`.
  */
 export async function clearWhiteboardDb(): Promise<void> {
-  return deleteDatabaseAndWait(whiteboardDbName())
+  return deleteAndKeepDeleted(whiteboardDbName())
 }
 
 /**
@@ -69,7 +73,78 @@ export async function clearWhiteboardDb(): Promise<void> {
  * call site, so there is nothing for a hook to fill in.
  */
 export async function clearNamedDb(dbName: string): Promise<void> {
-  return deleteDatabaseAndWait(dbName)
+  return deleteAndKeepDeleted(dbName)
+}
+
+/**
+ * How long the database has to stay gone before the deletion is believed.
+ *
+ * Sized on the measurement below — the tail re-created the database inside
+ * 100ms — plus a margin, and paid only where there is a tail to wait for.
+ * Every call used to pay it: the whole browser project went from 171-177s to
+ * 222s, which is 46 seconds spent watching databases that were never coming
+ * back.
+ */
+const SETTLE_QUIET_MS = 150
+const SETTLE_POLL_MS = 50
+/** A tail that never stops writing becomes a named failure, not a hang. */
+const SETTLE_DEADLINE_MS = 5_000
+
+async function databaseExists(dbName: string): Promise<boolean> {
+  // `databases()` is Chromium and fake-indexeddb; anywhere it is missing the
+  // deletion is believed as before, which is what this helper did until now.
+  if (typeof indexedDB.databases !== 'function') return false
+  return (await indexedDB.databases()).some((one) => one.name === dbName)
+}
+
+/**
+ * Delete, then keep deleting until the database stays gone.
+ *
+ * A deleted database COMES BACK, and that is the second half of the flake
+ * whose first half `deleteDatabaseAndWait` closed. Unmounting a page does not
+ * end its writes: the workspace record's save and the startup fold are async
+ * tails that outlive React's cleanup, and each one opens the database BY NAME
+ * — re-creating it, after the deletion has already succeeded.
+ *
+ * Measured, mounting `BrowserDocumentPage` and then deleting: gone the
+ * instant the deletion resolved, back 100ms later holding
+ * `workspace-tree:<workspaceId>` and its snapshot chunk — and NOTHING in the
+ * document index, because only the record's own save was still in flight.
+ *
+ * That asymmetry is the whole defect. The next test finds an empty index,
+ * creates its own document at `untitled`, and then cannot place it in a
+ * workspace tree where the PREVIOUS test's document already owns that path —
+ * so the page reports the document as unopenable and shows "This canvas could
+ * not be opened just now." over an editor that never loaded. The test that
+ * fails is whichever one ran next; nothing in its message names IndexedDB,
+ * the page that leaked, or the path collision.
+ */
+async function deleteAndKeepDeleted(dbName: string): Promise<void> {
+  // Nothing has been written, so nothing can be mid-write: the wait below
+  // would be watching a database that does not exist and never will. This is
+  // most `beforeEach` calls in the suite, and skipping it is what keeps the
+  // guarantee from costing every file that never opens a page.
+  if (!(await databaseExists(dbName))) return
+  const deadline = Date.now() + SETTLE_DEADLINE_MS
+  for (;;) {
+    await deleteDatabaseAndWait(dbName)
+    let cameBack = false
+    const quietUntil = Date.now() + SETTLE_QUIET_MS
+    while (Date.now() < quietUntil) {
+      await new Promise((resolve) => setTimeout(resolve, SETTLE_POLL_MS))
+      if (await databaseExists(dbName)) {
+        cameBack = true
+        break
+      }
+    }
+    if (!cameBack) return
+    if (Date.now() >= deadline) {
+      throw new Error(
+        `${dbName} kept coming back after deletion: something is still writing to it. ` +
+          'Unmount the page (or await the work) before clearing.',
+      )
+    }
+  }
 }
 
 function deleteDatabaseAndWait(dbName: string): Promise<void> {
