@@ -50,6 +50,7 @@ const sources = import.meta.glob(
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
+    './pages/DaemonDocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
   ],
@@ -84,6 +85,7 @@ const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
+const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // The save-a-version guard extracted to its own hook: part of the same
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
@@ -323,7 +325,34 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
 // The page itself, not a panel inside it. It keeps its own document
 // switching rather than remounting — `App.tsx` says so at the mount site —
 // so everything it holds about a document has to be dropped by hand.
+/**
+ * What the two document pages share, because they mount the same two hooks.
+ *
+ * Spread into both ledgers rather than written twice: these are one
+ * judgement about one piece of code, and two copies of it drift — the whole
+ * failure this file exists to stop, one level up. A hook gaining state now
+ * fails BOTH screens with the same message.
+ */
+const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
+  savingVersion: 'no subject: an in-flight flag for this screen\u2019s own submit',
+  saveVersionOutcome: 'cleared on switch',
+  // Unlike `open`, this one names a THREAD, and a thread id belongs to the
+  // document that holds it: left standing across a switch it would scroll
+  // the arrived body to a passage the departed document quoted, or expand a
+  // conversation that is not on this document at all. Cleared by
+  // useCommentsRail's own scope reset.
+  selectedThreadId: 'cleared on switch',
+  // A passage inside the DEPARTED document's body. Left standing it would
+  // hand the arrived document an anchor quoting text it does not contain —
+  // and a submitted one would open a conversation on the wrong document
+  // about a sentence nobody there wrote. Cleared by useCommentsRail.
+  composeAnchor: 'cleared on switch',
+  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
+  writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
+}
+
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  ...DOCUMENT_PAGE_HOOK_STATE,
   historyOpen: 'cleared on switch',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
@@ -331,8 +360,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',
-  savingVersion: 'no subject: an in-flight flag for this screen’s own submit',
-  saveVersionOutcome: 'cleared on switch',
   versionRefreshSignal:
     'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
@@ -344,19 +371,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
-  // Unlike `open`, this one names a THREAD, and a thread id belongs
-  // to the document that holds it: left standing across a switch it would
-  // scroll the arrived body to a passage the departed document quoted, or
-  // expand a conversation that is not on this document at all. Cleared by
-  // useCommentsRail's own scope reset.
-  selectedThreadId: 'cleared on switch',
-  // A passage inside the DEPARTED document's body. Left standing it would
-  // hand the arrived document an anchor quoting text it does not contain —
-  // and a submitted one would open a conversation on the wrong document
-  // about a sentence nobody there wrote. Cleared by useCommentsRail.
-  composeAnchor: 'cleared on switch',
-  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
-  writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
@@ -375,6 +389,52 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   lastKnownCanvasIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
+}
+
+const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  ...DOCUMENT_PAGE_HOOK_STATE,
+
+  historyOpen: 'cleared on switch',
+  // The past state being looked at, exactly as on the browser page:
+  // restoring one the person opened on the DEPARTED document would apply
+  // that version id to the arrived one.
+  preview: 'cleared on switch',
+  bookmarkArmed: 'cleared on switch',
+  // A read-only view of ONE document's variation tip (ADR-0022). `?v` is
+  // not stripped by a switch — `switchDocument` sets the path and nothing
+  // else — so the effect that owns this re-resolves the same NAME against
+  // the arrived document. Until it answers, the departed document's preview
+  // is on screen under the new one's name.
+  variationPreview: 'cleared on switch',
+  // Worse than the preview, which is why it is called out separately: no
+  // branch of that effect clears the notice, so `Variation «x» was not
+  // found` about one document outlived it onto the next until this reset.
+  variationNotice: 'cleared on switch',
+  // Backlinks OF this document. Its own fetch nulls them, but only once it
+  // knows the arrived document's id — which comes from a list that may
+  // still be refreshing.
+  connections: 'cleared on switch',
+
+  authError:
+    'no subject: whether the DAEMON refused this pairing, which spans every document it serves — a switch does not re-authorise anything, and the session effect below reads it to say `sync-off`',
+  creating: 'no subject: an in-flight flag for this screen’s own create submit',
+  branchRefreshSignal:
+    'no subject: a counter that nudges HeaderBranchChip to refetch on an externally observed HEAD change; the chip is keyed on the document itself and refetches on a switch without this',
+  versionRefreshSignal:
+    'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
+  connectionsRefresh:
+    'no subject: a counter that re-runs the backlinks fetch; that fetch is keyed on the document id and nulls the value first, so the counter decides WHEN to refetch, never WHAT is shown',
+
+  createBackendRef:
+    'no subject: mirrors the `createBackend` prop, reassigned every render — it exists so a parent’s inline arrow cannot make the session’s lifetime depend on the parent’s render',
+  spatialEditorRef:
+    'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
+  canvasesRef:
+    'no subject: mirrors the WORKSPACE’s document list, reassigned every render — a document switch does not change which documents exist',
+  currentDocumentPathRef:
+    'no subject: mirrors the scope itself, written during render — it is what a handler outliving a switch asks to find out what arrived rather than trusting its own closure',
+  canvasValueRef:
+    'no subject: mirrors the current canvas value, reassigned every render — it is how a write sends the CURRENT canvas rather than the one its closure captured',
 }
 
 const CASES = [
@@ -402,6 +462,12 @@ const CASES = [
     files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
+    scanRefs: true,
+  },
+  {
+    files: [DAEMON_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    ledger: DAEMON_DOCUMENT_PAGE_STATE,
+    label: 'DaemonDocumentPage',
     scanRefs: true,
   },
 ] as const

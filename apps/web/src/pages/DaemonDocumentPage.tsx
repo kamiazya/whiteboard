@@ -539,6 +539,20 @@ export function DaemonDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
+    // The variation view and its message are about the DEPARTED document.
+    // `?v` is not stripped by a switch — `switchDocument` sets the path and
+    // nothing else — so the effect below re-resolves the same name against
+    // the ARRIVED document, and until it answers the previous document's
+    // preview is on screen under the new one's name. The notice is worse: no
+    // branch of that effect clears it, so `Variation «x» was not found`
+    // about one document outlives it onto the next.
+    setVariationPreview(null)
+    setVariationNotice(null)
+    // Backlinks OF this document. The fetch below nulls them itself, but only
+    // once it knows the arrived document's id — which comes from a list that
+    // may still be refreshing, so the departed document's connections would
+    // be listed under the arrived one until it does.
+    setConnections(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
