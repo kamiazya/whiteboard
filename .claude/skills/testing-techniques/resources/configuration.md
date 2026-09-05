@@ -58,12 +58,21 @@ referenced file, so neither applies until one becomes inline.
 ### `vitest doctor`
 
 ```bash
-vitest doctor
+vitest doctor --project <name> [--project <name>…]
 ```
 
-Runs the suite under alternative configurations (pools, isolation, environments) and prints
-a recommendation. Run it once at the upgrade and paste the output in the PR; it is the
-measurement the pool choice should rest on.
+Runs the suite under alternative configurations (pool, isolation, `fsModuleCache`) twice
+each and prints a recommendation with the deltas.
+
+**It measures the projects you point it at, and its recommendation is scoped to them.**
+Measured here on `arch-lint-node` + `search-node` + `canvas-render-node`: baseline 26.18s,
+`pool: 'threads'` −3%, `fsModuleCache: true` ±0%, **`isolate: false` −42%** — "Recommendation:
+isolate: false", with the caveat that the suite "passed twice with a shuffled file order
+under shared state, so it is likely - but not guaranteed - that no test depends on
+isolation". Those three are the small, pure, node-only projects. Run against the two that
+actually hold state, the same option produces **464 failures** (see below). Doctor's own
+output says it "overrides options for all projects at once; apply the change per project if
+they need different settings" — take that literally.
 
 ### `fsModuleCache`
 
@@ -230,7 +239,56 @@ error message (use `/^$/` for an empty one), and `vi.useFakeTimers()` fakes `Tem
 ## Coverage
 
 `coverage.autoAttachSubprocess` tracks `node:child_process` / `node:worker_threads` under
-the v8 provider; `coverage.thresholds.perFile` accepts objects and glob thresholds no longer
+the v8 provider (**no effect here** — see the refuted list below); `coverage.thresholds.perFile` accepts objects and glob thresholds no longer
 inherit the top-level `perFile`; include/exclude match relative project paths precisely (a
 bare `'src'` no longer matches unintended paths; `contains` is removed); istanbul moved to
 `@vitest/istanbuljs`. `pnpm test:coverage` is mcp-server's v8 run.
+
+## Measured and refuted
+
+Four options that read as obvious wins and are not, each checked against this repo rather
+than argued about. Re-open one only with a new measurement, not with the release notes.
+
+### `isolate: false` — REFUTED, 464 failures
+
+`vitest doctor` recommends it at −42% on the pure node projects. Run on the two that hold
+state (`web-jsdom` + `mcp-node`, 7997 tests):
+
+| | result | wall |
+|---|---|---|
+| `isolate: true` (default) | 7988 passed, 9 skipped | 355s |
+| `--no-isolate` | **464 failed**, 7524 passed | 269s |
+
+The failures are the shapes `isolation-and-state.md` is about, now arriving in bulk: mock
+implementations bleeding between files (`expected "vi.fn()…"`), counters and ids carried
+across (`expected N to be N`), 54 timeouts, and 102 import-resolution errors from a worker
+reused across module graphs. `useDocumentSync` (36), `use-browser-document-controller` (35),
+`workspace-plane` (33) and `version-store` (30) lead. Reusing a worker across files is
+precisely what the repo's setup-file teardown, its per-file data dir and its `localStorage`
+clear exist to make unnecessary — 24% of wall clock does not buy that back.
+
+### `browser.locators.errorFormat: 'aria'` — nothing to adopt
+
+The default is already `'all'`, which prints the ARIA tree AND the HTML. Measured on a
+forced miss: the error leads with `ARIA tree:` (roles and accessible names, four lines for a
+dialog) and follows with the HTML. Setting `'aria'` only REMOVES the HTML — a choice about
+output volume, not a capability. Leave it at the default; the tree that makes a
+`getByRole` miss readable is there already.
+
+### `coverage.autoAttachSubprocess` — no-op for this repo's coverage lane
+
+`pnpm test:coverage` is `vitest run --coverage --project mcp-node`, and every subprocess call
+site in that project takes an INJECTED spawn (`backup-subprocess.test.ts` hands
+`runBackupInSubprocess` a fake `spawnBackup` that emits on a stub child). No real child
+process runs, so there is nothing to attach to. The project that does spawn real children,
+`mcp-smoke`, is not in the coverage command — putting it there is the change worth arguing
+about, and this option is only useful after it.
+
+### `injectCjsGlobals: false` — already held by a stronger rung
+
+It would make a shared-layer package reading `__dirname` fail at test time. `tools/arch-lint`'s
+scanner already bans `__dirname`, `__filename`, `process`, `Buffer` and `global` as ambient
+identifiers across the shared layer, statically — and measured zero occurrences today, tests
+included. A runtime rung behind a static one that already covers the same identifiers is
+redundancy, not coverage.
+
