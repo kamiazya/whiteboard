@@ -64,7 +64,7 @@ function renderRow() {
     <div style={{ height: '600px', width: '100%', display: 'flex' }}>
       <div className="relative flex min-h-0 min-w-0 flex-1">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col" data-testid="editor-stand-in" />
-        <VersionPanel workspaceId="sess_1" path="canvas-a" />
+        <VersionPanel workspaceId="sess_1" path="canvas-a" onClose={() => {}} />
       </div>
     </div>,
   )

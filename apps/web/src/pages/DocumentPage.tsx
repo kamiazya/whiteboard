@@ -3,12 +3,17 @@ import {
   CommentsRailAside,
   CommentsRailToggle,
 } from '../components/annotations/CommentsRailChrome.js'
+import { ConnectionsChip, ConnectionsPanel } from '../components/connections/ConnectionsChip.js'
 import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { InspectorPanel } from '../components/document-editor/InspectorPanel.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
-import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
+import {
+  DocumentFacetsEditor,
+  DocumentProperties,
+} from '../components/document-properties/DocumentProperties.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -53,7 +58,7 @@ const log = getAppLogger('document-page')
  * The document page, whoever keeps the document (ADR-0004 decision 1).
  *
  * Renders the shell, the merged header row, the editor surface and the
- * inspector beside it (the history column or the comments rail) from a
+ * inspector beside it (properties, comments, connections or history) from a
  * `DocumentPageModel`, and owns the page state that names no keeper: which
  * inspector is open, which past state is being looked at, the
  * save-a-version flow, the seams the editor reads.
@@ -70,12 +75,13 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
   const [settingsStore] = useState(() => createUserSettingsStore())
   const { resolvedTheme } = useThemeMode()
 
-  // The one inspector slot beside the editor: the document's history or its
-  // conversations, never both — two panels beside one editor is what the
-  // header retune set out to end. Which panel is open is how the reader
-  // looks rather than what at, so it survives a document switch: everything
-  // a panel SAYS is document-scoped and reset below or by the hook that owns
-  // it, and both panels refetch on the path.
+  // The one inspector slot beside the editor: the document's properties,
+  // its conversations, the documents linking to it, or its history — never
+  // two at once, which is what the header retune set out to end. Which
+  // panel is open is how the reader looks rather than what at, so it
+  // survives a document switch: everything a panel SAYS is document-scoped
+  // and reset below or by the hook that owns it, and every panel reads the
+  // document on screen.
   const [inspector, setInspector] = useState<InspectorKind | null>(null)
   const toggleInspector = (kind: InspectorKind) =>
     setInspector((open) => (open === kind ? null : kind))
@@ -244,6 +250,7 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
             onRestored={sync.clearLocalUndo}
             onPreview={setPreview}
             refreshSignal={versions.refreshSignal}
+            onClose={() => setInspector(null)}
             headerActions={
               <BookmarkAction
                 saving={savingVersion}
@@ -268,6 +275,35 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
             threads={threads.annotations}
             writable={preview === null && model.readOnlyPast === null}
           />
+        ) : inspector === 'connections' &&
+          model.connections !== undefined &&
+          model.connections.backlinks !== null ? (
+          <InspectorPanel kind="connections" onClose={() => setInspector(null)}>
+            <ConnectionsPanel
+              backlinks={model.connections.backlinks}
+              {...(model.connections.mentions === undefined
+                ? {}
+                : { mentions: model.connections.mentions })}
+              // Following a row leaves for the source document, which is
+              // the panel's job done — so the slot is released with it.
+              onOpen={(entry) => {
+                setInspector(null)
+                model.connections?.onOpen(entry)
+              }}
+              {...(model.connections.onLinkify === undefined
+                ? {}
+                : { onLinkify: model.connections.onLinkify })}
+            />
+          </InspectorPanel>
+        ) : inspector === 'properties' && model.properties.facets !== undefined ? (
+          <InspectorPanel kind="properties" onClose={() => setInspector(null)}>
+            <DocumentFacetsEditor
+              facets={model.properties.facets}
+              {...(model.properties.onFacetsChange === undefined
+                ? {}
+                : { onChange: model.properties.onFacetsChange })}
+            />
+          </InspectorPanel>
         ) : undefined
       }
       header={
@@ -302,9 +338,8 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
                         {...(model.properties.facets === undefined
                           ? {}
                           : { facets: model.properties.facets })}
-                        {...(model.properties.onFacetsChange === undefined
-                          ? {}
-                          : { onFacetsChange: model.properties.onFacetsChange })}
+                        propertiesOpen={inspector === 'properties'}
+                        onToggleProperties={() => toggleInspector('properties')}
                         // Canvas-level display settings, gated on kind the
                         // same way the facet disclosure is: a markdown
                         // document has no canvas to configure.
@@ -321,7 +356,13 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
                         actions={rowActions}
                       />
                     ) : null}
-                    {model.slots.afterTitle}
+                    {model.connections !== undefined && (
+                      <ConnectionsChip
+                        backlinks={model.connections.backlinks}
+                        open={inspector === 'connections'}
+                        onToggle={() => toggleInspector('connections')}
+                      />
+                    )}
                   </>
                 )}
                 workspaceId={topBar.workspaceId}

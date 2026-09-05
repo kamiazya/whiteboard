@@ -13,7 +13,6 @@ import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
-import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
@@ -820,29 +819,31 @@ export function DaemonDocumentPage({
       agentTouchedNodeIds: agentActivity.touchedNodeIds,
       children: <AgentPresenceChip summary={agentActivity.summary} />,
     },
+    ...(canvas
+      ? {
+          connections: {
+            backlinks: connections === null ? null : connections.backlinks,
+            ...(connections === null ? {} : { mentions: connections.unlinkedMentions }),
+            onOpen: (entry) => controller.switchDocument(entry.path),
+            onLinkify: (mention) => {
+              if (controller.workspaceId === null || currentDocumentId === undefined) return
+              void linkifyDocumentMentions(
+                daemonFetch,
+                daemonBaseUrl,
+                controller.workspaceId,
+                mention.documentId,
+                currentDocumentId,
+              )
+                .then(() => setConnectionsRefresh((n) => n + 1))
+                .catch(() => {
+                  // The panel simply keeps showing the mention; the
+                  // next open retries.
+                })
+            },
+          },
+        }
+      : {}),
     slots: {
-      afterTitle: canvas && (
-        <ConnectionsChip
-          backlinks={connections === null ? null : connections.backlinks}
-          mentions={connections?.unlinkedMentions}
-          onOpen={(entry) => controller.switchDocument(entry.path)}
-          onLinkify={(mention) => {
-            if (controller.workspaceId === null || currentDocumentId === undefined) return
-            void linkifyDocumentMentions(
-              daemonFetch,
-              daemonBaseUrl,
-              controller.workspaceId,
-              mention.documentId,
-              currentDocumentId,
-            )
-              .then(() => setConnectionsRefresh((n) => n + 1))
-              .catch(() => {
-                // The panel simply keeps showing the mention; the
-                // next open retries.
-              })
-          }}
-        />
-      ),
       headerExtras: (
         <>
           {capabilities.branches && canvas && variationPreview !== null && (
