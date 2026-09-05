@@ -88,10 +88,11 @@ describe('DaemonIndexPage tree view', () => {
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    await waitFor(() => {
-      expect(screen.getByTestId('workspace-files-panel')).not.toBeNull()
-    })
-    const tree = screen.getByRole('tree')
+    // The tree itself, not the panel around it: the panel now renders while
+    // its list is still loading (it holds the layout instead of collapsing
+    // to a line of text), so its presence no longer means the documents
+    // arrived.
+    const tree = await screen.findByRole('tree')
     // A nested path renders as a branch, not a flat 'notes/design' row.
     expect(within(tree).queryByText('notes/design')).toBeNull()
     expect(within(tree).getByText('notes')).not.toBeNull()

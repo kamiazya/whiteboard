@@ -6,10 +6,14 @@
  * - The connection chip transitions its colors on the token duration.
  * - Entering sync-off pulses a finite attention echo on the chip dot —
  *   finite, so the chip guides attention once instead of pinging forever.
+ * - A document thumbnail's render fades in when it finally lands, measured
+ *   on a real switch at 430ms after its own card, so it develops instead of
+ *   popping.
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import { ConnectionStatus } from './components/connection/ConnectionStatus.js'
+import { DocumentThumbnail } from './components/workspace-files/DocumentThumbnail.js'
 import './index.css'
 import { UpdateToast } from './pwa/UpdateToast.js'
 
@@ -29,6 +33,28 @@ describe('feedback micro-motion', () => {
     render(<UpdateToast onReload={vi.fn()} onDismiss={vi.fn()} />)
     const toast = document.querySelector('[role="status"]') as HTMLElement
     const cs = getComputedStyle(toast)
+    expect(cs.animationName).not.toBe('none')
+    expect(cs.animationDuration).toBe('0.22s')
+  })
+
+  it('a thumbnail fades its render in on the token duration', async () => {
+    // The class has to resolve to a REAL animation, not merely be present:
+    // a mistyped motion token renders a className nobody notices.
+    render(
+      <DocumentThumbnail
+        document={{ documentId: 'd1', path: 'note', kind: 'markdown' }}
+        loadRender={async () => ({
+          svg: '<svg viewBox="0 0 10 10"></svg>',
+          bounds: { x: 0, y: 0, w: 10, h: 10 },
+        })}
+      />,
+    )
+    const drawn = await vi.waitFor(() => {
+      const el = document.querySelector('[data-testid="document-thumbnail"] > span')
+      if (el === null) throw new Error('render not drawn yet')
+      return el as HTMLElement
+    })
+    const cs = getComputedStyle(drawn)
     expect(cs.animationName).not.toBe('none')
     expect(cs.animationDuration).toBe('0.22s')
   })
