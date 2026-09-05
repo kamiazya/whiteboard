@@ -142,3 +142,19 @@ it('starts OUT of fullscreen under jsdom, where fullscreenElement is undefined',
   delete (document as { fullscreenElement?: Element | null }).fullscreenElement
   await renderLoaded()
 })
+
+it('keeps the exit control clear of a display cutout', async () => {
+  // Fullscreen drops the browser chrome, so this button sits at the physical
+  // screen corner — under the front camera on a notched or punch-hole phone
+  // (top edge in portrait, right edge in landscape). Asserted on the class
+  // rather than a computed offset because `env(safe-area-inset-*)` resolves
+  // to 0px on every machine that runs this suite, so the two versions are
+  // numerically identical here and only the declaration tells them apart.
+  await renderLoaded()
+  await act(async () => {
+    setFullscreenElement(screen.getByRole('main'))
+  })
+  const exit = screen.getByRole('button', { name: 'Exit fullscreen' })
+  expect(exit.className).toContain('env(safe-area-inset-top)')
+  expect(exit.className).toContain('env(safe-area-inset-right)')
+})

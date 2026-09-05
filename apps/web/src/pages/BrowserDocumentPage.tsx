@@ -963,7 +963,12 @@ export function BrowserDocumentPage({
           onClick={() =>
             document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
           }
-          className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
+          // Fullscreen removes the browser chrome, so this corner is the
+          // physical screen corner: on a notched or punch-hole phone the
+          // cutout sits exactly here (top edge in portrait, right edge in
+          // landscape). `viewport-fit=cover` is already on the viewport meta,
+          // so env() reports the real inset and is 0 everywhere else.
+          className="absolute top-[calc(0.75rem+env(safe-area-inset-top))] right-[calc(0.75rem+env(safe-area-inset-right))] z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
         >
           <Minimize2 aria-hidden="true" className="size-4" />
         </Button>

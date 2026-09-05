@@ -190,7 +190,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         : workspaceLabel(activeRow)
 
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3 pointer-coarse:h-12">
+    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-chrome pointer-coarse:h-12">
       {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
           Switcher"): it names the workspace in its accessible name, opens the
           popover that lists the others, and carries the session state when a
