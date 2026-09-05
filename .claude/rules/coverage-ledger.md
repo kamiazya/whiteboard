@@ -135,11 +135,14 @@ fetch straight from a component, arrives unclassified and stops the run
 until someone answers "and in the browser?". Its vocabulary is four-valued
 because `gap` is a first-class answer — the point is not that both keepers
 must have everything, it is that a difference is a decision somebody took
-rather than one nobody noticed — and each of the four is itself checked, so
+rather than one nobody noticed — and each of the answers is itself checked, so
 none can be a word in front of an omission: `both-keepers` names a browser
-module that must EXIST, `capability` names a flag the two keepers must
-really differ on, `gap` names a follow-up that must be filable, and
-`daemon-itself` has to say why there is nothing to mirror.
+module that must EXIST, `gap` names a follow-up that must be filable, and
+`daemon-itself` has to say why there is nothing to mirror. A fourth,
+`capability`, named a flag the two keepers must really differ on; it went
+when the capability map did (ADR-0004's 2026-09-05 addendum), because a
+declared difference is what it judged and there were none left. A real one
+brings it back.
 
 Two things it measured, both of which generalise to any such scan:
 

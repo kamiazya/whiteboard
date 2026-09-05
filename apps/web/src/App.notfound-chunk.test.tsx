@@ -14,13 +14,12 @@ vi.mock('./components/status/NotFoundPage.js', () => {
 
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
-import { BROWSER_CAPABILITIES, type ProviderState } from './lib/provider.js'
+import type { ProviderState } from './lib/provider.js'
 
 afterEach(cleanup)
 
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
-  capabilities: BROWSER_CAPABILITIES,
 }
 
 describe('App not-found chunk failure', () => {

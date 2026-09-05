@@ -227,12 +227,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     // record-holding backend for a markdown body or before one loads.
     render(
       <BranchesBackendContext.Provider value={createBrowserBranchesBackend({ backend: null })}>
-        <WorkspaceTopBar
-          workspaceId="ws_1"
-          path="canvas-a"
-          onNavigateBack={() => {}}
-          capabilities={{ merge: true }}
-        />
+        <WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />
       </BranchesBackendContext.Provider>,
       { container: document.body },
     )

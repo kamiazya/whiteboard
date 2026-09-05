@@ -92,9 +92,6 @@ const { App } = await import('./App.js')
 
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
-  capabilities: {
-    merge: false,
-  },
 }
 
 describe('App route sync against an asynchronously-propagating router', () => {

@@ -55,7 +55,6 @@ import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
-import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -90,9 +89,6 @@ export interface BrowserDocumentPageProps {
   // (jsdom does not implement IndexedDB); production callers rely on the
   // controller hook's own default.
   loro?: LoroStoreLike
-  // Defaults to the browser keeper so existing callers/tests keep working
-  // unedited; App.tsx passes the resolved ProviderState's capabilities.
-  capabilities?: WhiteboardCapabilities
   // A document path requested by the URL at mount (e.g. a bookmarked
   // /local/:path deep link), read once — see
   // useBrowserDocumentController's own contract for the same parameter.
@@ -125,7 +121,6 @@ function useBrowserDocument(
     // (entry-graph-loro-free.test.ts).
     store = sharedFoldingBrowserIndex(),
     loro,
-    capabilities = BROWSER_CAPABILITIES,
     initialPath,
     pointer,
     clock,
@@ -746,7 +741,6 @@ function useBrowserDocument(
     documentKey: documentId ?? 'no-canvas',
     documentKind,
     srTitle: renderState.snapshot.name,
-    capabilities,
     sync,
     markdown: {
       body: markdownDoc.body,
@@ -787,7 +781,7 @@ function useBrowserDocument(
     overlayTitle: documentName ?? 'Untitled',
     exportFilenameBase: documentName ?? 'canvas',
     commands: {
-      provider: { kind: 'browser', capabilities },
+      provider: { kind: 'browser' },
       canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
       registryKey: documentId,
     },

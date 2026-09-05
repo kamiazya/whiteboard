@@ -8,9 +8,6 @@ import { cn } from '../lib/utils.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 
-// Gates which pieces of daemon-only chrome render. Omitted entirely (the
-// default), every capability behaves as if it were `true` — this keeps every
-// pre-existing caller (all of which never pass `capabilities`) byte-identical.
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
 export interface DocumentIdentity {
   /** The workspace's display name, falling back to the path when none is stored. */
@@ -34,10 +31,6 @@ export interface TopBarPreview {
   readonly restore: () => void
 }
 
-export interface WorkspaceTopBarCapabilities {
-  merge?: boolean
-}
-
 interface Props {
   workspaceId: string
   path: string
@@ -55,10 +48,6 @@ interface Props {
    * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
    */
   dataMode?: 'daemon' | 'local'
-  // Gates HeaderBranchChip (branches) and its mergeEnabled passthrough
-  // (merge). Undefined means "all capabilities on", matching every existing
-  // caller's behavior.
-  capabilities?: WorkspaceTopBarCapabilities
   // Passed through to HeaderBranchChip: preview a variation without
   // switching. The page owns the address, so it owns the handler.
   onPreviewVariation?: (name: string) => void
@@ -127,7 +116,6 @@ export default function WorkspaceTopBar({
   path,
   onNavigateBack,
   dataMode = 'daemon',
-  capabilities,
   onPreviewVariation,
   onToggleHistory,
   historyOpen = false,
@@ -141,7 +129,6 @@ export default function WorkspaceTopBar({
   // record-holding backend (a markdown body, or one still loading) has none.
   // That is per document, which no provider-level flag can say.
   const branchesEnabled = useBranchesBackend().hasBranches
-  const mergeEnabled = capabilities?.merge ?? true
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -236,7 +223,6 @@ export default function WorkspaceTopBar({
               workspaceId={workspaceId}
               path={path}
               refreshSignal={branchRefreshSignal}
-              mergeEnabled={mergeEnabled}
               onPreviewVariation={onPreviewVariation}
             />
           </>
