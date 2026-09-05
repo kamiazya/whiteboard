@@ -340,6 +340,11 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // scroll the arrived body to a passage the departed document quoted, or
   // expand a conversation that is not on this document at all.
   selectedThreadId: 'cleared on switch',
+  // A passage inside the DEPARTED document's body. Left standing it would
+  // hand the arrived document an anchor quoting text it does not contain —
+  // and a submitted one would open a conversation on the wrong document
+  // about a sentence nobody there wrote.
+  composeAnchor: 'cleared on switch',
   commentsOpen:
     'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   documents:

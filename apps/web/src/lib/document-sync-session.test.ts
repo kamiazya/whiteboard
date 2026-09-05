@@ -14,6 +14,7 @@ import {
   setNodeLock,
   writeCanvasComment,
   writeCommentThread,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -21,7 +22,12 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  CommentThread,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
@@ -515,6 +521,81 @@ describe('createDocumentSyncSession', () => {
       'first reply',
       'second reply',
     ])
+  })
+
+  it('opens a thread on a markdown document, whose canvas has no comment to carry it', async () => {
+    // The create half of the same gap `reply-to-thread` closed. A markdown
+    // document's canvas holds no nodes at all, so there is no
+    // `x-whiteboard.comments` entry a new conversation could ride in on —
+    // the thread has to be written into the threads plane directly, and
+    // whole, because `commentThreadSchema` has no legal empty thread to
+    // create first and fill afterwards.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'the paragraph a reader wants to question')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const before = session.getCanvas()
+    const thread: CommentThread = {
+      id: 't-new',
+      anchor: {
+        kind: 'text',
+        quote: { prefix: 'the paragraph ', exact: 'a reader', suffix: ' wants to questi' },
+        start: 14,
+        end: 22,
+      },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why this one?' }],
+    }
+    const command: EditorCommand = { kind: 'create-thread', thread }
+    session.onChange(applyCommand(before, command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Read back through the session's own annotations rather than the doc:
+    // that is what the rail and the body projection both render, so a write
+    // the read cannot see is the same defect as no write at all.
+    expect(session.getAnnotations()).toEqual([expect.objectContaining({ id: 't-new' })])
+    expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual(['why this one?'])
+    // The canvas is untouched, which is what stops the commit path falling
+    // back to a whole-canvas resync that would never write the thread.
+    expect(session.getCanvas()).toBe(before)
+  })
+
+  it('two threads opened inside one debounce window both survive', async () => {
+    // `create-thread` cannot share `reply-to-thread`'s message key, and a
+    // `thread:` key would be wrong for the same reason: two threads opened
+    // in one window are two conversations, not one target written twice.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'first sentence. second sentence.')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const canvas = session.getCanvas()
+    for (const [id, exact, start] of [
+      ['t-a', 'first', 0],
+      ['t-b', 'second', 16],
+    ] as const) {
+      session.onChange(canvas, {
+        kind: 'create-thread',
+        thread: {
+          id,
+          anchor: { kind: 'text', quote: { exact }, start, end: start + exact.length },
+          status: 'open',
+          messages: [{ id: `${id}-m1`, body: `about ${exact}` }],
+        },
+      })
+    }
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-a', 't-b'])
   })
 
   it('does not republish annotations for a commit that touched no conversation', async () => {
