@@ -270,6 +270,92 @@ describe('createDocumentSyncSession', () => {
     }
   })
 
+  // The debounce holds edits that are already on screen. A tab that goes
+  // away inside that window — closed, switched, backgrounded on a phone —
+  // would lose them, and nothing on screen said they were unsaved. The
+  // hidden/pagehide signals are the last ones a page reliably gets, so the
+  // write goes out on them instead of waiting the window out.
+  describe('flushes the debounced write when the page goes away', () => {
+    function withVisibility(state: DocumentVisibilityState): () => void {
+      const original = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState')
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      return () => {
+        delete (document as { visibilityState?: unknown }).visibilityState
+        if (original) Object.defineProperty(Document.prototype, 'visibilityState', original)
+      }
+    }
+
+    async function editThen(fire: () => void): Promise<number> {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+      const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+      session.onChange(applyCommand(twoNodeCanvas(), move), move)
+      fire()
+      // Microtasks only — the debounce timer must NOT be what lands it.
+      await flushMicrotasks()
+      const pushed = backend._ctrl.pushLocalUpdateCalls.length
+      session.dispose()
+      return pushed
+    }
+
+    it('on visibilitychange to hidden', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('hidden')
+      try {
+        expect(await editThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(1)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+
+    it('on pagehide', async () => {
+      vi.useFakeTimers()
+      try {
+        expect(await editThen(() => window.dispatchEvent(new Event('pagehide')))).toBe(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // The control: becoming VISIBLE is the same event name and must not
+    // flush, or every tab switch back would write mid-gesture.
+    it('not on visibilitychange to visible', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('visible')
+      try {
+        expect(await editThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(0)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+
+    it('stops listening once disposed', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('hidden')
+      try {
+        const backend = makeFakeBackend()
+        const session = createDocumentSyncSession(backend, makeDeps())
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        session.dispose()
+        await flushMicrotasks()
+        const before = backend._ctrl.pushLocalUpdateCalls.length
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        document.dispatchEvent(new Event('visibilitychange'))
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(before)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+  })
+
   // The bytes and the key are read in one synchronous block on purpose, and
   // this pins that they describe the same state. Nothing can change the
   // document between two synchronous reads, so the pairing holds by

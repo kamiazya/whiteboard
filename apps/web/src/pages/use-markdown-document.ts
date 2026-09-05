@@ -447,6 +447,28 @@ export function useMarkdownDocument(
   // has to be able to FLUSH it, and effect cleanups run in reverse order —
   // an effect owning the scheduler could be torn down first.
   const schedulerRef = useRef<{ id: string; scheduler: SaveScheduler } | null>(null)
+
+  // The debounce holds text that is already on screen, and a tab that goes
+  // away inside the window loses it. `pagehide` and `visibilitychange` →
+  // hidden are the last signals a page reliably gets (Page Lifecycle API;
+  // `beforeunload` is not delivered on mobile), so the save goes out on them.
+  // Becoming visible is the same event name and must not flush. The
+  // scheduler is read through its ref at fire time, so this effect never
+  // re-arms on a scheduler change — it only needs the document's scope.
+  useEffect(() => {
+    if (!enabled || documentId === null) return
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    const flush = () => schedulerRef.current?.scheduler.flush()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [documentId, enabled])
   const schedulerFor = useCallback((id: string): SaveScheduler => {
     if (schedulerRef.current?.id !== id) {
       schedulerRef.current = {
