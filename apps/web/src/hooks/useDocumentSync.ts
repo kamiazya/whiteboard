@@ -11,7 +11,6 @@ import type {
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import {
   type BackendErrorReason,
@@ -24,6 +23,7 @@ import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
+import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
 
 export type { UseDocumentSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook

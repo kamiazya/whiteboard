@@ -30,7 +30,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { ResolvedTheme } from '../../lib/theme.js'
+import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasCoreOptions {

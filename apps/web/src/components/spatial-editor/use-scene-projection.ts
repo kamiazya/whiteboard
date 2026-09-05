@@ -15,8 +15,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { type NodeBox, unionBox } from '../../lib/spatial/geometry.js'
 import { buildMinimapNodes } from '../../lib/spatial/minimap.js'
+import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { renderedCanvasKeyed } from './scene-render-core.js'
 
 export interface SceneProjectionInputs {
   readonly scene: Scene

@@ -33,40 +33,43 @@ is a `lib/` module whose contract is defined above it. The guard tags them
 `(type)` so the burn-down can read which is a type move and which a helper
 move.
 
-## The debt, and its burn-down
+## The debt, and how it was paid
 
 Measured when the guard landed: 21 upward edges, 15 of them `import type`,
 every one allowlisted in `UPWARD_EDGES` with the length pinned by equality
 and each entry checked to still be a real edge — an entry cannot outlive
-what it names. Shrink the list by moving the TARGET down, then delete the
-line and lower the ceiling; never add to it for new code.
+what it names. The list is EMPTY now and stays declared, so a new upward
+edge has a place to be refused rather than a place to be written down:
+move what the lower module needs down, never add to the list.
 
-Done so far, in the order that paid best:
+How it was burned down, in the order that paid best — kept because the
+same shapes will recur, and each was cheaper than it looked:
 
-1. **Pure modules out of `components/`** (retired 6): `document-entry`,
-   `files-source`, `rail-geometry` and `link-target` now live flat in
-   `lib/` — none of them knew React, and the two files-source
-   implementations in `lib/` were importing their own contract from above.
-2. **Types into `lib/`** (retired 8, no runtime change): `ThemeMode` /
+1. **Pure modules out of `components/`** (6): `document-entry`,
+   `files-source`, `rail-geometry`, `link-target` → flat in `lib/`. None
+   knew React; the two files-source implementations in `lib/` had been
+   importing their own contract from above.
+2. **Types into `lib/`** (8, no runtime change): `ThemeMode` /
    `ResolvedTheme` → `lib/theme`, `LoadedFileDocument` /
    `DocumentFileAdapter` → `lib/document-file-contract`, `SessionHealth` /
    `ConnectionState` / `isSyncOff` → `lib/connection-state`, `EditorTool` →
    `lib/editor-tool`, `BrowserPersistenceState` →
    `lib/browser-persistence-state`. The hook or component that owned each
    now imports it like everyone else; nothing re-exports the old path.
+3. **The spatial editor's pure core** (4): `viewport`, `geometry`,
+   `minimap`, `commands` → `lib/spatial/`, with `SpatialEditorHandle`
+   beside the `Viewport` it names (`lib/spatial/editor-handle`).
+4. **The render glue the layout worker runs off the main thread** (3):
+   `scene-render`, `scene-render-core` and the `editor-appearance` they
+   thread the theme through → `lib/spatial/`; `render-preview` →
+   `lib/`. A worker importing from `components/` was the clearest sign
+   those were never components.
 
-3. **The spatial editor's pure core** (retired 4): `viewport`, `geometry`,
-   `minimap` and `commands` now live in `lib/spatial/`, with
-   `SpatialEditorHandle` beside the `Viewport` it names
-   (`lib/spatial/editor-handle`) — none of them React; `commands` alone
-   had 12 production importers and 23 test importers, all re-pointed.
-
-Still open (3):
-
-4. **The render glue `lib/layout-worker.ts` runs off the main thread**
-   (3 value edges): `spatial-editor/scene-render`, `scene-render-core`,
-   `markdown-editor/render-preview`. A worker importing from
-   `components/` is the clearest sign those are not components.
+Two traps a mechanical move does not see, each found by a test going red:
+a `vi.mock('./x.js', …)` specifier is a string, not an import, and keeps
+pointing at the old path (the spy then counts zero calls); and
+`purity-guard.test.ts` scans its files by explicit relative path on
+purpose, so a moved file falls out of it loudly rather than silently.
 
 ## What the other guards already cover
 

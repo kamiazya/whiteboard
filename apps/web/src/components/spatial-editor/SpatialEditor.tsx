@@ -87,6 +87,7 @@ import { hapticTick } from '../../lib/haptics.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
+import { createEditorAppearance, editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import {
   distanceToPolyline,
@@ -94,6 +95,8 @@ import {
   hitTest,
   indexNodeBoxes,
 } from '../../lib/spatial/geometry.js'
+import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
+import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import {
   canvasToScreen,
   fitViewportToBoxes,
@@ -114,7 +117,6 @@ import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
-import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
@@ -139,8 +141,6 @@ import {
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
-import { requiredTextNodeHeight } from './scene-render.js'
-import { keyedWithoutPrefix } from './scene-render-core.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
