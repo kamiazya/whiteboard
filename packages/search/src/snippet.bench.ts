@@ -23,8 +23,9 @@ function bodyOf(filler: string, length: number): { text: string; indexes: number
   const chunk = filler.repeat(Math.ceil(length / 3 / filler.length))
   const text = `${chunk} ${NEEDLE} ${chunk} ${NEEDLE} ${chunk} ${NEEDLE} ${chunk}`
   const indexes: number[] = []
-  let at = -1
-  while ((at = text.indexOf(NEEDLE, at + 1)) !== -1) indexes.push(at)
+  for (let at = text.indexOf(NEEDLE); at !== -1; at = text.indexOf(NEEDLE, at + 1)) {
+    indexes.push(at)
+  }
   return { text, indexes: indexes.slice(0, HITS) }
 }
 
