@@ -223,8 +223,8 @@ Before closing a change:
   local step** (user decision, 2026-09-05): CI runs everything on every push
   at ~6min wall, so a local full run is the same work twice — push, then
   watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for a
-  pre-release check-job answer (offline, set `WHITEBOARD_SKIP_AUDIT=1` —
-  the audit needs the registry, and it skips LOUDLY, never silently), and `pnpm test:browser` when the
+  pre-release check-job answer (offline: `WHITEBOARD_SKIP_AUDIT=1` skips
+  the registry-bound audit loudly), and `pnpm test:browser` when the
   change touches real-browser behavior.
 - Resolve any `pnpm knip` finding one of three ways before closing: delete the dead code, drop the unused `export`, or register it in `knip.jsonc` as an intentional public surface with a reason comment.
 - If the change can affect typing or packaging, also run:
