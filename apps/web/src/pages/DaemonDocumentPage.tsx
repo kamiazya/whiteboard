@@ -441,6 +441,7 @@ export function DaemonDocumentPage({
     syncStatus,
     readOutlineSource,
     annotations,
+    threadMarks,
   } = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
@@ -643,7 +644,7 @@ export function DaemonDocumentPage({
   const resolveAnchor = useMemo(() => {
     // Same reader as the browser page, deliberately: whether a passage is
     // still there is a fact about the document, not about who keeps it.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody)
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody, threadMarks)
     if (documentKind !== 'spatial') return undefined
     const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
     return (thread: CommentThread): 'placed' | 'orphaned' => {
@@ -651,7 +652,7 @@ export function DaemonDocumentPage({
       if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
-  }, [documentKind, canvasValue, markdownBody])
+  }, [documentKind, canvasValue, markdownBody, threadMarks])
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -1207,6 +1208,9 @@ export function DaemonDocumentPage({
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
                     threads: annotations,
+                    // Only a markdown document has a body for a mark to live
+                    // in, and this branch is the one that renders one.
+                    threadMarks,
                     selectedThreadId,
                     onSelectThread: revealThread,
                     onComposeThread: composeThread,

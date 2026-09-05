@@ -18,6 +18,7 @@
  * Neither replaces the other.
  */
 import type { LoroDoc } from 'loro-crdt'
+import { readAnnotations } from './annotations.js'
 import type { DocumentContainers } from './containers.js'
 import { MARKDOWN_BODY_KEY } from './loro-bridge.js'
 
@@ -75,15 +76,18 @@ function threadIdFromStyleKey(key: string): string | undefined {
  * `Style configuration missing`. Re-configuring does not disturb marks
  * already written.
  *
- * Only a WRITER needs this. A reader that never calls it still sees every
- * mark in `toDelta()`, which is why `readThreadMarks` asks for nothing.
+ * Module-private, and `markThreadPassages` below is the only caller, because
+ * a rule stated as "supply the complete set every time" is one a call site
+ * can only get wrong — with a throw as the reminder. A READER needs none of
+ * this: a peer that never registered anything still sees every mark in
+ * `toDelta()`, which is why `readThreadMarks` asks for nothing.
  *
  * `expand: 'none'` so that typing at either edge of a passage is outside the
  * comment rather than silently annexed by it. Text typed strictly INSIDE is
  * included whatever this says — that is the range growing, not the boundary
  * moving.
  */
-export function configureThreadStyles(doc: LoroDoc, threadIds: Iterable<string>): void {
+function configureThreadStyles(doc: LoroDoc, threadIds: Iterable<string>): void {
   const styles: Record<string, { expand: 'none' }> = {}
   for (const id of threadIds) styles[threadStyleKey(id)] = { expand: 'none' }
   doc.configTextStyle(styles)
@@ -96,24 +100,42 @@ export interface PassageRange {
 }
 
 /**
- * Marks one thread's passage in the body.
+ * Marks each passage, having registered the styles the write needs first.
  *
- * The caller must have registered this thread through `configureThreadStyles`
- * first; marking with an unregistered key throws (a plain, catchable error,
- * unlike the key hazard above).
+ * The registration rule is Loro's, not this codebase's: `configTextStyle`
+ * REPLACES its configuration and marking with an unregistered key throws, so
+ * every writer has to supply the complete set every time. That is a contract
+ * a call site can only get wrong, and the throw is the reminder — so the set
+ * is derived here instead, from the threads the document already holds
+ * unioned with whatever is being marked now.
  *
- * An empty range is refused rather than written: a mark covering nothing is
- * indistinguishable from no mark on the way back out, so writing one would
- * report success for something no reader can find.
+ * `doc` and `containers` are two arguments rather than one because they are
+ * genuinely different things in workspace mode: styles are configured on the
+ * whole LoroDoc, while the body being marked belongs to one document's tree
+ * node inside it.
+ *
+ * Takes a map so the backfill — every thread on a document that arrived
+ * through a markdown file, re-derived from its quote — is one registration
+ * and one commit rather than one of each per thread.
  */
-export function markThreadPassage(
-  doc: DocumentContainers,
-  threadId: string,
-  range: PassageRange,
+export function markThreadPassages(
+  doc: LoroDoc,
+  containers: DocumentContainers,
+  passages: ReadonlyMap<string, PassageRange>,
 ): void {
-  if (range.end <= range.start) return
-  doc.getText(MARKDOWN_BODY_KEY).mark(range, threadStyleKey(threadId), true)
-  doc.commit()
+  if (passages.size === 0) return
+  const ids = new Set(passages.keys())
+  // The document's own threads too: registering replaces, so naming only
+  // what is being written now would unregister every key already in use and
+  // the NEXT write for one of them would throw.
+  for (const thread of readAnnotations(containers)) ids.add(thread.id)
+  configureThreadStyles(doc, ids)
+  const text = containers.getText(MARKDOWN_BODY_KEY)
+  for (const [threadId, range] of passages) {
+    if (range.end <= range.start) continue
+    text.mark(range, threadStyleKey(threadId), true)
+  }
+  containers.commit()
 }
 
 /**

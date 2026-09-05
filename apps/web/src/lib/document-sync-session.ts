@@ -2,12 +2,15 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
+  markThreadPassages,
+  type PassageRange,
   readAnnotations,
   readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
+  readThreadMarks,
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   withSpatialBatch,
@@ -27,12 +30,18 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 
+/**
+ * One identity for "this document has no marks", so a publish that found
+ * none does not hand every subscriber a fresh map to diff against.
+ */
+const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
+
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import { sameAnnotations } from './annotations-equal.js'
+import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import { contentStateOf } from './document-state.js'
 import {
@@ -46,6 +55,7 @@ import {
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
 import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
+import { missingThreadMarks } from './text-anchor.js'
 
 const log = getAppLogger('document-sync')
 
@@ -287,8 +297,26 @@ export interface DocumentSyncSession {
    * all, would have no channel to hear about anything.
    */
   getAnnotations(): readonly CommentThread[]
-  /** Registers a listener for every published annotation-layer value. */
-  subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void
+  /**
+   * Where each conversation's passage sits in the body right now, by thread
+   * id, as the CRDT's own rich-text marks report it.
+   *
+   * A thread ABSENT from this map is not an error: either its passage was
+   * deleted — the orphan signal a stored offset could never give — or the
+   * document is one no writer has marked. `resolveTextAnchor` falls back to
+   * the quote for both, which is why the quote is still stored.
+   */
+  getThreadMarks(): ReadonlyMap<string, PassageRange>
+  /**
+   * Registers a listener for every published annotation-layer value.
+   *
+   * The marks travel WITH the threads rather than on a channel of their
+   * own, so a subscriber can never apply a mark map taken at one instant to
+   * a thread list taken at another.
+   */
+  subscribeAnnotations(
+    listener: (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void,
+  ): () => void
 }
 
 /**
@@ -301,6 +329,7 @@ export interface DocumentSyncSession {
  * peer edit to a different node survives a merge against this write.
  */
 function writeCommandTarget(
+  host: LoroDoc,
   doc: DocumentContainers,
   next: SpatialCanvas,
   command: EditorCommand,
@@ -353,6 +382,23 @@ function writeCommandTarget(
       // allowed to OPEN a thread container (see `writeCommentThread`), which
       // is exactly why replying is not.
       writeCommentThread(doc, command.thread)
+      // And where the passage IS, so the CRDT carries it from here on. The
+      // thread's quote is what survives the document leaving the CRDT; a
+      // mark is what follows an edit — including a concurrent one merged
+      // from another peer, which the quote and its offsets can only
+      // approximate. Both, because neither replaces the other.
+      if (command.thread.anchor.kind === 'text') {
+        markThreadPassages(
+          host,
+          doc,
+          new Map([
+            [
+              command.thread.id,
+              { start: command.thread.anchor.start, end: command.thread.anchor.end },
+            ],
+          ]),
+        )
+      }
       return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
@@ -481,9 +527,14 @@ function writeSubCommand(
  * so the fallback is also what recovers from a node/edge removed from `next`
  * without a corresponding command.
  */
-function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: EditorCommand): void {
+function commitToDoc(
+  host: LoroDoc,
+  doc: DocumentContainers,
+  next: SpatialCanvas,
+  command: EditorCommand,
+): void {
   try {
-    if (writeCommandTarget(doc, next, command)) return
+    if (writeCommandTarget(host, doc, next, command)) return
     log.warn('editor command target missing from next canvas; falling back to full resync', {
       command,
     })
@@ -522,7 +573,15 @@ export function createDocumentSyncSession(
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
   let currentAnnotations: readonly CommentThread[] = []
-  const annotationListeners = new Set<(threads: readonly CommentThread[]) => void>()
+  let currentThreadMarks: ReadonlyMap<string, PassageRange> = NO_THREAD_MARKS
+  // Which doc the quote has already been asked about. Compared by identity
+  // to the doc itself rather than kept as a boolean: `onSnapshot` mints a
+  // fresh LoroDoc for every reconnect, and a boolean would leave the second
+  // one un-backfilled forever.
+  let backfilledMarksFor: LoroDoc | null = null
+  const annotationListeners = new Set<
+    (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void
+  >()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
@@ -546,6 +605,46 @@ export function createDocumentSyncSession(
    * the node under a NEW TreeID for the same documentId, and a cached handle
    * would keep pointing at the deleted node.
    */
+  /**
+   * Where each conversation's passage is now, and — once per body — the
+   * marks a document arrived without.
+   *
+   * Marks do not travel through a markdown file, and a thread an MCP peer
+   * wrote never had one, so the quote is asked ONCE at the moment the body
+   * is known and its answer written down for the CRDT to carry. Once,
+   * because this runs on every external update: re-asking would pay a body
+   * search per update for every thread whose passage is genuinely gone, and
+   * would keep re-deriving nothing.
+   *
+   * Guarded, and the read is what matters: a body the backfill cannot write
+   * to must still publish the marks it already has, rather than costing the
+   * whole annotation channel its value.
+   */
+  function refreshThreadMarks(
+    targetDoc: LoroDoc,
+    content: DocumentContainers,
+    threads: readonly CommentThread[],
+  ): ReadonlyMap<string, PassageRange> {
+    let marks: ReadonlyMap<string, PassageRange>
+    try {
+      marks = readThreadMarks(content)
+    } catch (err) {
+      log.warn('reading thread marks failed', err)
+      return NO_THREAD_MARKS
+    }
+    if (backfilledMarksFor === targetDoc) return marks
+    backfilledMarksFor = targetDoc
+    try {
+      const missing = missingThreadMarks(readMarkdownBody(content), threads, marks)
+      if (missing.size === 0) return marks
+      markThreadPassages(targetDoc, content, missing)
+      return readThreadMarks(content)
+    } catch (err) {
+      log.warn('backfilling thread marks failed', err)
+      return marks
+    }
+  }
+
   function contentOf(targetDoc: LoroDoc): DocumentContainers {
     return deps.contentDocumentId === undefined
       ? targetDoc
@@ -557,7 +656,7 @@ export function createDocumentSyncSession(
   }
 
   function notifyAnnotations(threads: readonly CommentThread[]): void {
-    for (const listener of annotationListeners) listener(threads)
+    for (const listener of annotationListeners) listener(threads, currentThreadMarks)
   }
 
   function getCanvas(): SpatialCanvas {
@@ -576,7 +675,13 @@ export function createDocumentSyncSession(
     return currentAnnotations
   }
 
-  function subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void {
+  function getThreadMarks(): ReadonlyMap<string, PassageRange> {
+    return currentThreadMarks
+  }
+
+  function subscribeAnnotations(
+    listener: (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void,
+  ): () => void {
     annotationListeners.add(listener)
     return () => {
       annotationListeners.delete(listener)
@@ -611,6 +716,7 @@ export function createDocumentSyncSession(
     // published values are always a pair taken at one instant rather than
     // two reads a remote update could land between.
     currentAnnotations = readAnnotations(content)
+    currentThreadMarks = refreshThreadMarks(targetDoc, content, currentAnnotations)
     notify(canvas, 'external')
     notifyAnnotations(currentAnnotations)
   }
@@ -641,7 +747,14 @@ export function createDocumentSyncSession(
       log.error('reading annotations after a commit failed', err)
       return
     }
-    if (sameAnnotations(currentAnnotations, next)) return
+    // The marks are the second half of the same question: a thread whose
+    // passage merely MOVED leaves the thread list byte-for-byte identical,
+    // so gating on the threads alone would keep drawing the highlight where
+    // the text used to be. Both are compared, and neither alone decides.
+    const marks = refreshThreadMarks(targetDoc, contentOf(targetDoc), next)
+    const movedMarks = !sameThreadMarks(currentThreadMarks, marks)
+    currentThreadMarks = marks
+    if (!movedMarks && sameAnnotations(currentAnnotations, next)) return
     currentAnnotations = next
     notifyAnnotations(next)
   }
@@ -687,7 +800,7 @@ export function createDocumentSyncSession(
           // scheduling and commit throws here, and must fail only this
           // target — guardedCommit's contract is that the chain never
           // rejects.
-          commitToDoc(contentOf(targetDoc), next, command)
+          commitToDoc(targetDoc, contentOf(targetDoc), next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -1100,6 +1213,7 @@ export function createDocumentSyncSession(
     canUndo,
     canRedo,
     getAnnotations,
+    getThreadMarks,
     getCanvas,
     getContentState,
     exportSnapshot,

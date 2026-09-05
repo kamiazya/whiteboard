@@ -3,13 +3,10 @@
 // own notes for the numbers.
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { writeCommentThread } from './comment-threads.js'
 import { writeMarkdownBody } from './loro-bridge.js'
-import {
-  configureThreadStyles,
-  markThreadPassage,
-  readThreadMarks,
-  threadStyleKey,
-} from './thread-marks.js'
+import type { PassageRange } from './thread-marks.js'
+import { markThreadPassages, readThreadMarks, threadStyleKey } from './thread-marks.js'
 
 const BODY = 'Ship the report on Friday. The draft is not written.'
 const PASSAGE = 'report on Friday'
@@ -22,10 +19,13 @@ function marked(doc: LoroDoc, threadId: string): string | undefined {
     : doc.getText('body').toString().slice(range.start, range.end)
 }
 
-function withBody(threadIds: readonly string[] = ['t1']): LoroDoc {
+function markThreadPassage(doc: LoroDoc, threadId: string, range: PassageRange): void {
+  markThreadPassages(doc, doc, new Map([[threadId, range]]))
+}
+
+function withBody(): LoroDoc {
   const doc = new LoroDoc()
   doc.setPeerId(1)
-  configureThreadStyles(doc, threadIds)
   writeMarkdownBody(doc, BODY)
   return doc
 }
@@ -68,7 +68,7 @@ describe('a thread passage marked in the body', () => {
     // The reason a thread gets its own style key. One shared key carrying
     // the thread id as its VALUE loses the overlap to last-writer-wins —
     // measured: the first thread's range was cut short by the second.
-    const doc = withBody(['t1', 't2'])
+    const doc = withBody()
     markThreadPassage(doc, 't1', { start: AT.start, end: AT.start + 6 })
     markThreadPassage(doc, 't2', { start: AT.start + 3, end: AT.start + 12 })
     expect({ t1: marked(doc, 't1'), t2: marked(doc, 't2') }).toMatchObject({
@@ -104,7 +104,7 @@ describe('the style key a thread is marked with', () => {
     const hostile = 'thread:1/2 100%'
     expect(threadStyleKey(hostile)).not.toContain(':')
 
-    const doc = withBody([hostile])
+    const doc = withBody()
     markThreadPassage(doc, hostile, AT)
     expect(marked(doc, hostile)).toBe(PASSAGE)
   })
@@ -117,16 +117,47 @@ describe('the style key a thread is marked with', () => {
 })
 
 describe('registering the styles a document may mark with', () => {
-  it('takes the whole set, because configuring REPLACES rather than adds', () => {
-    // Measured: a second `configTextStyle` naming only the new key made the
-    // first one throw `Style configuration missing`. Passing the full set is
-    // therefore not tidiness, it is the contract — and re-registering leaves
-    // marks already written alone.
-    const doc = withBody(['t1'])
-    markThreadPassage(doc, 't1', AT)
+  it('refuses to write a mark over nothing', () => {
+    // An empty range reads back as no mark at all, so writing one would
+    // report a success the reader cannot see.
+    const doc = withBody()
+    markThreadPassage(doc, 't1', { start: 5, end: 5 })
+    expect(readThreadMarks(doc).has('t1')).toBe(false)
+  })
+})
 
-    configureThreadStyles(doc, ['t1', 't2'])
-    markThreadPassage(doc, 't2', { start: 0, end: 4 })
+describe('marking passages without the caller registering anything', () => {
+  it('marks a thread on a document that registered no styles at all', () => {
+    // The registration rule above is a Loro contract, not a decision this
+    // codebase makes — and one every call site would otherwise have to
+    // remember, with a throw as the reminder. `markThreadPassages` derives
+    // the full set itself, from the threads the document already holds plus
+    // whatever is being marked now.
+    const doc = new LoroDoc()
+    doc.setPeerId(1)
+    writeMarkdownBody(doc, BODY)
+
+    markThreadPassages(doc, doc, new Map([['t1', AT]]))
+
+    expect(marked(doc, 't1')).toBe(PASSAGE)
+  })
+
+  it('marks several passages under one registration', () => {
+    // The backfill shape: a document whose threads arrived through a
+    // markdown file carries no marks at all, and every one of them is
+    // re-derived from its quote in a single pass.
+    const doc = new LoroDoc()
+    doc.setPeerId(1)
+    writeMarkdownBody(doc, BODY)
+
+    markThreadPassages(
+      doc,
+      doc,
+      new Map([
+        ['t1', AT],
+        ['t2', { start: 0, end: 4 }],
+      ]),
+    )
 
     expect({ t1: marked(doc, 't1'), t2: marked(doc, 't2') }).toMatchObject({
       t1: PASSAGE,
@@ -134,11 +165,26 @@ describe('registering the styles a document may mark with', () => {
     })
   })
 
-  it('refuses to write a mark over nothing', () => {
-    // An empty range reads back as no mark at all, so writing one would
-    // report a success the reader cannot see.
-    const doc = withBody()
-    markThreadPassage(doc, 't1', { start: 5, end: 5 })
-    expect(readThreadMarks(doc).has('t1')).toBe(false)
+  it('keeps a mark this document already carries', () => {
+    // Registering REPLACES, so a second write that named only the new
+    // thread would leave the first key unregistered. The threads the
+    // document holds are part of the set for exactly that reason.
+    const doc = new LoroDoc()
+    doc.setPeerId(1)
+    writeMarkdownBody(doc, BODY)
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'text', quote: { exact: PASSAGE }, start: AT.start, end: AT.end },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why Friday?', createdAt: '2026-01-01T00:00:00.000Z' }],
+    })
+    markThreadPassages(doc, doc, new Map([['t1', AT]]))
+
+    markThreadPassages(doc, doc, new Map([['t2', { start: 0, end: 4 }]]))
+
+    expect({ t1: marked(doc, 't1'), t2: marked(doc, 't2') }).toMatchObject({
+      t1: PASSAGE,
+      t2: 'Ship',
+    })
   })
 })

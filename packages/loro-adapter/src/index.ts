@@ -41,8 +41,7 @@ export {
 } from './loro-bridge.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
-  configureThreadStyles,
-  markThreadPassage,
+  markThreadPassages,
   type PassageRange,
   readThreadMarks,
 } from './thread-marks.js'

@@ -752,6 +752,11 @@ export function BrowserDocumentPage({
    * from here down nothing cares which of the two did the reading.
    */
   const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
+  // Where the CRDT still holds each passage. Only a markdown document has a
+  // body for a mark to live in; the spatial side answers with nothing rather
+  // than with the sync session's map, which is about a body it is not
+  // showing.
+  const threadMarks = documentKind === 'markdown' ? markdownDoc.threadMarks : undefined
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
   /**
    * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
@@ -771,7 +776,7 @@ export function BrowserDocumentPage({
     // which the panel correctly read as "this host cannot tell" — true then,
     // and a thread whose sentence had been deleted looked exactly like one
     // whose sentence was still there.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body)
+    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body, threadMarks)
     if (documentKind !== 'spatial') return undefined
     const nodeIds = new Set(canvas.nodes.map((node) => node.id))
     return (thread: CommentThread): 'placed' | 'orphaned' => {
@@ -779,7 +784,7 @@ export function BrowserDocumentPage({
       if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
-  }, [documentKind, canvas, markdownDoc.body])
+  }, [documentKind, canvas, markdownDoc.body, threadMarks])
 
   /**
    * Appends the reader's reply to a conversation.
@@ -1320,6 +1325,7 @@ export function BrowserDocumentPage({
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
                           threads: annotations,
+                          threadMarks,
                           selectedThreadId,
                           onSelectThread: revealThread,
                           onComposeThread: composeThread,

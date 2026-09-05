@@ -172,3 +172,37 @@ export function markdownAnchorResolver(
     return resolveTextAnchor(body, thread.anchor, live).kind === 'placed' ? 'placed' : 'orphaned'
   }
 }
+
+/**
+ * The marks a document ought to carry and does not, derived from the quotes.
+ *
+ * Marks do not travel through a markdown file: a document imported from OKF
+ * arrives with its conversations intact and no live anchor for any of them,
+ * as does every thread written before marks existed. Both would work — the
+ * quote is the fallback and that is what it is for — but only until someone
+ * edits inside a passage or two peers edit either side of one, at which
+ * point the quote is the approximation the mark exists to replace.
+ *
+ * So the quote is asked ONCE, at the moment the body is known, and its
+ * answer is written down as a mark the CRDT can then carry. A thread that
+ * already has a mark is never re-derived: that would replace the truth with
+ * a guess on every load, and would undo wherever a merged edit had carried
+ * the passage. A thread whose quote no longer resolves gets nothing —
+ * marking the nearest thing would make an orphan look placed forever after,
+ * which is what ADR-0026 decision 4 forbids.
+ */
+export function missingThreadMarks(
+  body: string,
+  threads: readonly { readonly id: string; readonly anchor: AnnotationAnchor }[],
+  marks: ReadonlyMap<string, LivePassage>,
+): Map<string, LivePassage> {
+  const derived = new Map<string, LivePassage>()
+  for (const thread of threads) {
+    if (thread.anchor.kind !== 'text') continue
+    if (marks.has(thread.id)) continue
+    const resolved = resolveTextAnchor(body, thread.anchor)
+    if (resolved.kind !== 'placed') continue
+    derived.set(thread.id, { start: resolved.start, end: resolved.end })
+  }
+  return derived
+}

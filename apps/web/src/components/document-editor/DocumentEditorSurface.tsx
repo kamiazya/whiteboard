@@ -41,6 +41,7 @@ export interface MarkdownDocumentSession
     | 'autoFocus'
     | 'title'
     | 'threads'
+    | 'threadMarks'
     | 'selectedThreadId'
     | 'onSelectThread'
     | 'onComposeThread'

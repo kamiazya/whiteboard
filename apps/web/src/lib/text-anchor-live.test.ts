@@ -3,8 +3,14 @@
 // now, because the CRDT carried the range through every edit that moved it.
 //
 // These cases are exactly the ones the quote alone gets wrong.
+import type { AnnotationAnchor } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { markdownAnchorResolver, resolveTextAnchor, type TextAnchor } from './text-anchor.js'
+import {
+  markdownAnchorResolver,
+  missingThreadMarks,
+  resolveTextAnchor,
+  type TextAnchor,
+} from './text-anchor.js'
 
 const BODY = 'Ship the report on Friday. Also ship the report on Friday.'
 const QUOTE = 'report on Friday'
@@ -68,5 +74,40 @@ describe('the rail badge, told which passages are still marked', () => {
   it('says orphaned when neither the mark nor the quote finds it', () => {
     const resolve = markdownAnchorResolver('nothing like it here', new Map())
     expect(resolve?.({ id: 't1', anchor })).toBe('orphaned')
+  })
+})
+
+describe('the marks a document is missing', () => {
+  const thread = (id: string, anchor: AnnotationAnchor) => ({ id, anchor })
+
+  it('re-derives a passage the quote can still find', () => {
+    // The import case. Marks do not travel through a markdown file — the
+    // text arrives and every conversation about it has no live anchor —
+    // but the quote does, and it is enough to put the mark back.
+    expect(missingThreadMarks(BODY, [thread('t1', anchor)], new Map())).toEqual(
+      new Map([['t1', { start: BODY.indexOf(QUOTE), end: BODY.indexOf(QUOTE) + QUOTE.length }]]),
+    )
+  })
+
+  it('leaves a thread that already has one alone', () => {
+    // Re-deriving over a live mark would replace the truth with a guess —
+    // and would do it on every load, undoing wherever a concurrent edit had
+    // carried the passage.
+    const held = new Map([['t1', { start: 42, end: 58 }]])
+    expect(missingThreadMarks(BODY, [thread('t1', anchor)], held).size).toBe(0)
+  })
+
+  it('leaves an orphaned thread unmarked rather than guessing', () => {
+    // The passage is gone. A mark over the nearest thing would be a claim
+    // the reader cannot check, and would make the thread look placed
+    // forever after — which is exactly what ADR-0026 decision 4 forbids.
+    expect(
+      missingThreadMarks('Nothing like it here.', [thread('t1', anchor)], new Map()).size,
+    ).toBe(0)
+  })
+
+  it('ignores an anchor that is not about text', () => {
+    const spatial: AnnotationAnchor = { kind: 'spatial', x: 10, y: 20, nodeId: 'n1' }
+    expect(missingThreadMarks(BODY, [thread('t1', spatial)], new Map()).size).toBe(0)
   })
 })
