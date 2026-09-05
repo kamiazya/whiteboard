@@ -183,8 +183,9 @@ function GeneralSection({
               WebMCP
             </p>
             <p id={webMcpDescId} className="text-xs text-muted-foreground">
-              Lets in-page scripts in supporting browsers read a canvas summary (identifier,
-              selection count, viewport). Never exposes secrets, tokens, or full scene content.
+              Lets in-page scripts in supporting browsers read which keeper is active and which
+              document is open (workspace and path, or document id). Never exposes content,
+              selection, viewport, secrets, or tokens.
             </p>
           </div>
           <button
