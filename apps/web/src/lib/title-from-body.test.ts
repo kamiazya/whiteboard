@@ -15,6 +15,14 @@ describe('titleFromMarkdownBody', () => {
     expect(titleFromMarkdownBody('# Weekly review ###')).toBe('Weekly review')
   })
 
+  it('strips EVERY trailing marker run, so the answer re-reads as itself (CI seed 1650547601)', () => {
+    // `# ! # # ` — CommonMark would call only the last `#` the closing run and
+    // answer `! #`, but that answer re-reads as `!`: not a stable name.
+    expect(titleFromMarkdownBody('# ! # # \nbody')).toBe('!')
+    expect(titleFromMarkdownBody('# foo # bar #\nbody')).toBe('foo # bar')
+    expect(titleFromMarkdownBody('# C#\nbody')).toBe('C#')
+  })
+
   it('refuses a heading marker with no space — `#tag` is body text', () => {
     expect(titleFromMarkdownBody('#tag\n')).toBeUndefined()
   })
