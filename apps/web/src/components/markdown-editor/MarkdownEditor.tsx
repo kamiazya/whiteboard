@@ -11,6 +11,7 @@ import {
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
+import { MessageSquarePlus } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -26,6 +27,8 @@ import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
+import type { TextAnchor } from '../../lib/text-anchor.js'
+import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
@@ -154,6 +157,16 @@ export interface MarkdownEditorProps {
   selectedThreadId?: string | null
   /** A gutter marker was pressed. */
   onSelectThread?: (threadId: string) => void
+  /**
+   * The reader asked to open a conversation about the passage they have
+   * selected. The anchor is handed over; the THREAD is not, because there is
+   * no legal empty one — `commentThreadSchema` requires a first message, so
+   * the conversation is created by whatever surface collects it.
+   *
+   * Absent means this host has no annotation layer, and the catalog then
+   * offers no such row rather than an inert one.
+   */
+  onComposeThread?: (anchor: TextAnchor) => void
 }
 
 /** Stable identity, so the projection effect below does not fire per render. */
@@ -308,6 +321,7 @@ export function MarkdownEditor({
   threads,
   selectedThreadId = null,
   onSelectThread,
+  onComposeThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   // [[ completion reads targets through a ref: the source is installed once
@@ -776,8 +790,29 @@ export function MarkdownEditor({
       if (command === null) continue
       items.push({ label: spec.label, icon, onSelect: run(command) })
     }
+
+    // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
+    // things that write MARKUP into the body: this one writes nothing there
+    // at all, it opens a conversation in the layer beside it. Putting it in
+    // that table would give the keymap a shortcut for it and the verb bar a
+    // button, both of which would then have to resolve a scope the table
+    // cannot describe.
+    const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
+    const anchor =
+      selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
+    if (onComposeThread !== undefined && anchor !== null) {
+      items.push({ kind: 'separator' })
+      items.push({
+        label: 'Comment on this',
+        icon: <MessageSquarePlus aria-hidden />,
+        onSelect: () => {
+          setCatalog(null)
+          onComposeThread(anchor)
+        },
+      })
+    }
     return items
-  }, [catalog, linkTargets])
+  }, [catalog, linkTargets, onComposeThread, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
