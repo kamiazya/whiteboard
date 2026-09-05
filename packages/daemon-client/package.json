@@ -35,5 +35,6 @@
     "loro-crdt": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"
-  }
+  },
+  "sideEffects": false
 }
