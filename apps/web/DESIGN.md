@@ -24,6 +24,15 @@ value.
 | `--destructive` | irreversible actions and error text ONLY |
 | `--border`, `--input`, `--ring` | hairlines, input outlines, focus rings |
 | `--radius` (sm/md/lg/xl derived) | one radius scale — never ad-hoc radii |
+| `--annotation` | the annotation layer, everywhere it is drawn |
+
+`--annotation` is amber, and it is one token rather than two because a
+conversation has to read as the same thing on both surfaces: the canvas draws
+it as a pin and a bubble, a markdown body as an underline under the quoted
+passage plus a dot in the gutter. It is deliberately none of the three above
+it — an annotation is not a selection, not a ruler, and not destruction — and
+deliberately not `--destructive`, which this product reserves for actions that
+cannot be undone.
 
 State colors outside the shadcn set live in ONE component,
 `components/StateDot.tsx`, which every chrome state carrier draws from:

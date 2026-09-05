@@ -70,6 +70,14 @@
   --manipulation: oklch(0.546 0.245 262.88);
   --manipulation-guide: oklch(0.606 0.219 292.72);
   --manipulation-halo: color-mix(in srgb, oklch(0.546 0.245 262.88) 12%, transparent);
+  /*
+   * The annotation layer's one hue — the canvas comment pin and bubble's
+   * amber (#d97706), so a conversation reads as the same thing whether a
+   * reader meets it on a canvas or under a sentence in a markdown body.
+   * Deliberately none of the three above: an annotation is not a selection,
+   * not a ruler, and not destruction.
+   */
+  --annotation: oklch(0.649 0.153 62.5);
 }
 
 .dark {
@@ -94,6 +102,8 @@
   --manipulation: oklch(0.707 0.165 254.62);
   --manipulation-guide: oklch(0.709 0.159 293.54);
   --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
+  /* Amber-500 rather than 600: the darker tone loses against a dark ground. */
+  --annotation: oklch(0.769 0.165 70.08);
 }
 
 /*
@@ -189,6 +199,60 @@
     font-weight: 400;
     font-style: normal;
     color: var(--muted-foreground);
+  }
+
+  /*
+   * The annotation layer's in-place projection on a markdown body
+   * (annotation-decorations.ts). Amber, the same colour the canvas gives a
+   * comment pin and bubble: one hue for "somebody is talking about this",
+   * whichever surface a reader is on.
+   *
+   * A tinted UNDERLINE rather than a filled band, because the passage is
+   * still prose that has to read normally — a highlighter over a sentence
+   * competes with the sentence. The selected conversation is the one case
+   * that gets a wash, since it is the reader's own current subject.
+   */
+  .cm-annotation {
+    border-bottom: 2px solid color-mix(in oklch, var(--annotation) 60%, transparent);
+  }
+  .cm-annotation-resolved {
+    border-bottom-style: dotted;
+    border-bottom-color: color-mix(in oklch, var(--annotation) 30%, transparent);
+  }
+  .cm-annotation-selected {
+    background-color: color-mix(in oklch, var(--annotation) 18%, transparent);
+    border-bottom-color: var(--annotation);
+  }
+  /*
+   * Reserved whether or not this document has any conversations, on purpose:
+   * a thread arriving from an MCP peer would otherwise reflow the body
+   * sideways under whoever is typing in it. 18px is the marker plus its
+   * margins and nothing else.
+   */
+  .cm-annotation-gutter {
+    min-width: 18px;
+  }
+  .cm-annotation-gutter-marker {
+    display: block;
+    width: 12px;
+    height: 12px;
+    margin: 0 3px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: color-mix(in oklch, var(--annotation) 20%, transparent);
+    color: var(--annotation);
+    font-size: 9px;
+    line-height: 8px;
+    text-align: center;
+    cursor: pointer;
+  }
+  .cm-annotation-gutter-marker[data-thread-status='resolved'] {
+    border-style: dotted;
+    background: transparent;
+  }
+  .cm-annotation-gutter-marker[data-selected='true'] {
+    background: var(--annotation);
+    color: var(--background);
   }
 
   /*

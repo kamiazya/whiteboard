@@ -290,6 +290,9 @@ export function DaemonDocumentPage({
    * browser page took.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  // The conversation the reader is currently on, shared by the rail and the
+  // markdown body's own projection so the two always point at the same one.
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
@@ -545,10 +548,16 @@ export function DaemonDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
+    setSelectedThreadId(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
+  /** Opens the rail on one conversation — what a gutter marker press means. */
+  const revealThread = useCallback((threadId: string) => {
+    setCommentsOpen(true)
+    setSelectedThreadId(threadId)
+  }, [])
   /**
    * Appends the reader's reply to a conversation.
    *
@@ -1160,6 +1169,9 @@ export function DaemonDocumentPage({
                     linkTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
+                    threads: annotations,
+                    selectedThreadId,
+                    onSelectThread: revealThread,
                   }}
                   spatial={() => (
                     <SpatialEditorPane
@@ -1215,6 +1227,8 @@ export function DaemonDocumentPage({
                 <CommentsPanel
                   threads={annotations}
                   resolveAnchor={resolveAnchor}
+                  revealThreadId={selectedThreadId}
+                  onSelect={(thread) => setSelectedThreadId(thread.id)}
                   // Not while a past version OR a variation preview is on
                   // screen: the editor is replaced by DocumentPreview but
                   // this rail is not, and a reply is a write to the LIVE
