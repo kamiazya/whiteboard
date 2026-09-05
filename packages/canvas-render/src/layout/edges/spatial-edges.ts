@@ -798,37 +798,26 @@ function sideCandidatesFor(edge: CanvasEdge, byId: ReadonlyMap<string, SpatialNo
  * overlap-free configuration short-circuits without evaluating a single
  * candidate, which keeps the common case at one scoring sweep.
  */
-function optimizeSideChoices(
+/**
+ * The search's incremental configuration score: per-edge routed paths, the
+ * pairwise score matrix, and the aggregate cost, kept patchable because a
+ * trial re-sides ONE edge — only the edges whose anchor entries actually
+ * changed (the trial edge plus members of the anchor groups it left and
+ * joined) re-route and re-score their pairs, which is what keeps a trial
+ * O(affected * E) instead of O(E^2). `optimizeSideChoices` owns WHICH trials
+ * to try and when to stop; this object owns what a configuration costs and
+ * how to carry that cost across an adopted trial.
+ */
+function createConfigScore(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   style: EdgeRoutingStyle,
   initial: ReadonlyMap<string, SidePair>,
-  // Edges whose sides are held fixed: candidates are only tried for the
-  // rest. The live-drag overlay locks resting edges (stability) while the
-  // carried ones still get the same optimization the committed render
-  // applies, so mid-drag and post-drop agree.
-  locked?: ReadonlySet<string>,
-  // Whether trials are scored against ALIGNED anchors — the geometry that
-  // will actually be drawn. The search proper runs unaligned (`false`): the
-  // comment on `computeAnchorsFor`'s own `align` records why, and it still
-  // holds. The cost is that a configuration can score clean in unaligned
-  // trial space and acquire real defects once the final pass aligns it —
-  // measured on a reported canvas, an edge settled on a route scoring
-  // `[0,0,0,0,267,3,5]` after alignment while a candidate already in its
-  // ranked list scored `[0,0,0,0,0,1,3]`, strictly better on every tier and
-  // never adopted, because the search saw neither number. So the settled
-  // configuration is handed back through this same search ONCE with
-  // `align: true`. That is not the rejected mid-search alignment: costs
-  // move only BETWEEN the two runs, never during either, so neither run's
-  // equilibrium can oscillate.
-  align = false,
-  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
-  // Routed paths shared across every search in one `assignEdgeAnchors`; see
-  // the comment on `routeCached` for why one layout may share one cache.
-  // Omitted, this search keeps a cache of its own.
-  routeCache?: Map<string, readonly Point[]>,
-): ReadonlyMap<string, SidePair> {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
+  align: boolean,
+  pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  routeCache: Map<string, readonly Point[]> | undefined,
+  byId: ReadonlyMap<string, SpatialNode>,
+) {
   const othersFor = edges.map((e) =>
     nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
   )
@@ -903,7 +892,6 @@ function optimizeSideChoices(
   // re-derive it. Replaced only when a trial is adopted, so it always
   // describes exactly `current`.
   let placement = buildAnchorGroups(ctx, current)
-  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   let anchors = computeAnchorsFor(ctx, current, align, pins, placement)
   let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundingBoxOf)
@@ -947,12 +935,6 @@ function optimizeSideChoices(
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
-  // The realized-bends tier is deliberately ABSENT from the short-circuit
-  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
-  // crossings is healthy, and reshuffling it purely to shave bends is
-  // churn, not repair.
-  if (!hasRepairableProblem(currentCost)) return current
-
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
     // Which edge `trialSides` re-sided. Every trial here differs from the
@@ -1035,6 +1017,79 @@ function optimizeSideChoices(
       selfUpdates,
     }
   }
+  const contribution = (i: number): ConfigCost => {
+    let cost = selfCosts[i]!
+    for (let j = 0; j < edges.length; j++) {
+      if (j === i) continue
+      const [lo, hi] = i < j ? [i, j] : [j, i]
+      const pair = matrix.get(pairKey(lo, hi))
+      if (pair !== undefined) cost = addCost(cost, pair, 1)
+    }
+    return cost
+  }
+
+  const adopt = (
+    trialSides: Map<string, SidePair>,
+    evaluated: ReturnType<typeof evaluateTrial>,
+  ): void => {
+    current = trialSides
+    currentCost = evaluated.cost
+    anchors = evaluated.anchors
+    placement = evaluated.placement
+    paths = evaluated.paths
+    bounds = evaluated.bounds
+    for (const [key, score] of evaluated.updates) matrix.set(key, score)
+    for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
+  }
+
+  return {
+    sides: () => current as ReadonlyMap<string, SidePair>,
+    sideOf: (id: string) => current.get(id),
+    cost: () => currentCost,
+    contribution,
+    evaluateTrial,
+    adopt,
+  }
+}
+
+function optimizeSideChoices(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle,
+  initial: ReadonlyMap<string, SidePair>,
+  // Edges whose sides are held fixed: candidates are only tried for the
+  // rest. The live-drag overlay locks resting edges (stability) while the
+  // carried ones still get the same optimization the committed render
+  // applies, so mid-drag and post-drop agree.
+  locked?: ReadonlySet<string>,
+  // Whether trials are scored against ALIGNED anchors — the geometry that
+  // will actually be drawn. The search proper runs unaligned (`false`): the
+  // comment on `computeAnchorsFor`'s own `align` records why, and it still
+  // holds. The cost is that a configuration can score clean in unaligned
+  // trial space and acquire real defects once the final pass aligns it —
+  // measured on a reported canvas, an edge settled on a route scoring
+  // `[0,0,0,0,267,3,5]` after alignment while a candidate already in its
+  // ranked list scored `[0,0,0,0,0,1,3]`, strictly better on every tier and
+  // never adopted, because the search saw neither number. So the settled
+  // configuration is handed back through this same search ONCE with
+  // `align: true`. That is not the rejected mid-search alignment: costs
+  // move only BETWEEN the two runs, never during either, so neither run's
+  // equilibrium can oscillate.
+  align = false,
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+  // Routed paths shared across every search in one `assignEdgeAnchors`; see
+  // the comment on `routeCached` for why one layout may share one cache.
+  // Omitted, this search keeps a cache of its own.
+  routeCache?: Map<string, readonly Point[]>,
+): ReadonlyMap<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const score = createConfigScore(nodes, edges, style, initial, align, pins, routeCache, byId)
+  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
+  // The realized-bends tier is deliberately ABSENT from the short-circuit
+  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
+  // crossings is healthy, and reshuffling it purely to shave bends is
+  // churn, not repair.
+  if (!hasRepairableProblem(score.cost())) return score.sides()
 
   // Above the full-optimization size, each pass tries candidates only for
   // the WORST OFFENDERS — the edges contributing the most cost right now —
@@ -1048,18 +1103,8 @@ function optimizeSideChoices(
     // pass to fix, and trying candidates for it is the whole of the pass's
     // cost with none of its benefit.
     if (!align && edges.length <= FULL_OPT_MAX_EDGES) return edges
-    const contribution = (i: number): ConfigCost => {
-      let cost = selfCosts[i]!
-      for (let j = 0; j < edges.length; j++) {
-        if (j === i) continue
-        const [lo, hi] = i < j ? [i, j] : [j, i]
-        const pair = matrix.get(pairKey(lo, hi))
-        if (pair !== undefined) cost = addCost(cost, pair, 1)
-      }
-      return cost
-    }
     const ranked = edges
-      .map((edge, i) => ({ edge, i, cost: contribution(i) }))
+      .map((edge, i) => ({ edge, i, cost: score.contribution(i) }))
       // An edge with no overlap, no illegibility, and no crossings has
       // nothing to repair — reshuffling it to shave bends is churn, the
       // same judgement the whole-config short-circuit makes
@@ -1076,33 +1121,26 @@ function optimizeSideChoices(
     let improved = false
     for (const edge of trialEdgesForPass()) {
       if (locked?.has(edge.id)) continue
-      const chosen = current.get(edge.id)
+      const chosen = score.sideOf(edge.id)
       if (chosen === undefined) continue
       for (const candidate of sideCandidatesFor(edge, byId)) {
         if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
-        const trial = new Map(current)
+        const trial = new Map(score.sides())
         trial.set(edge.id, candidate)
-        const evaluated = evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
+        const evaluated = score.evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
         // incumbent-wins-ties: adopt only on a strict decrease (edge-rules.ts),
         // so a tie never triggers churn and the lexicographic loop cannot oscillate.
-        if (shouldAdoptCandidate(evaluated.cost, currentCost, lessCost)) {
-          current = trial
-          currentCost = evaluated.cost
-          anchors = evaluated.anchors
-          placement = evaluated.placement
-          paths = evaluated.paths
-          bounds = evaluated.bounds
-          for (const [key, score] of evaluated.updates) matrix.set(key, score)
-          for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
+        if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
+          score.adopt(trial, evaluated)
           improved = true
           break
         }
       }
-      if (!hasRepairableProblem(currentCost)) return current
+      if (!hasRepairableProblem(score.cost())) return score.sides()
     }
     if (!improved) break
   }
-  return current
+  return score.sides()
 }
 
 /**
