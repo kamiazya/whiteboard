@@ -95,7 +95,8 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/server/store/backup-in-progress.test.ts': 1,
   'packages/mcp-server/src/server/store/backup-scheduler.test.ts': 2,
   'packages/mcp-server/src/server/store/branches-store.test.ts': 4,
-  'packages/mcp-server/src/server/store/document-store.test.ts': 6,
+  // The sleeps ride with the auto-compact describes, split out of document-store.test.ts.
+  'packages/mcp-server/src/server/store/document-store.compact.test.ts': 6,
   'packages/mcp-server/src/server/store/document-write-lock.test.ts': 1,
   'packages/mcp-server/src/server/store/lease.test.ts': 1,
   'packages/mcp-server/src/server/store/workspace-lock.test.ts': 2,
