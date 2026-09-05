@@ -49,8 +49,9 @@ export const renderKeySchema = z.object({
   documentId: z.string().min(1),
   kind: documentKindSchema,
   /**
-   * What the document was when it was drawn, or null from a keeper that
-   * stamps no time.
+   * What the document's content WAS when it was drawn — a list row's content
+   * digest, the open document's committed frontier — or null from a keeper
+   * that cannot say.
    *
    * Null is not a version that happens to be missing — it is the absence of
    * any way to notice a change, so a key carrying it is NOT memoisable (see
@@ -81,7 +82,18 @@ export type RenderKey = z.infer<typeof renderKeySchema>
 export interface RenderKeySubject {
   readonly documentId: string
   readonly kind: DocumentKind
-  readonly updatedAt?: string
+  /**
+   * The identity of the document's content at the moment it is drawn — a
+   * list row's `contentDigest`, the open document's committed frontier.
+   * Opaque, equality only. Absent when the keeper cannot say, and then
+   * nothing may be memoised (`isMemoisableKey`).
+   *
+   * Not a timestamp, and it was one: `updatedAt` is a register one replica
+   * wrote, and a merge does not consult it. Measured, a replica's content
+   * took on a state nobody had written while its stamp stayed put — so the
+   * memo kept answering the old picture under an unchanged key.
+   */
+  readonly state?: string
 }
 
 /** The key for the SVG a surface draws at size — the expensive family. */
@@ -91,7 +103,7 @@ export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): Re
     pipeline: 'svg',
     documentId: subject.documentId,
     kind: subject.kind,
-    version: subject.updatedAt ?? null,
+    version: subject.state ?? null,
     // Baked into a spatial SVG's own bytes; a markdown one takes its ink
     // from page CSS, so one entry serves both themes.
     theme: subject.kind === 'spatial' ? theme : null,
@@ -114,7 +126,7 @@ export function outlineKeyOf(subject: RenderKeySubject): RenderKey {
     pipeline: 'outline',
     documentId: subject.documentId,
     kind: subject.kind,
-    version: subject.updatedAt ?? null,
+    version: subject.state ?? null,
     theme: null,
   }
 }

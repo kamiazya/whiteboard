@@ -31,6 +31,17 @@ export interface WorkspaceDocumentEntry {
   /** Absent for a daemon that does not record it; the card then carries no age. */
   readonly updatedAt?: string
   /**
+   * The identity of the document's CONTENT as of this listing, from the
+   * keeper's index. What a cached picture of the row is a picture OF — and
+   * the only thing a render may be keyed by. `updatedAt` is not: it is a
+   * register one replica wrote, and a merge does not consult it. Measured,
+   * a replica's content became a state nobody had written while its stamp
+   * stayed put, so a memo keyed on the stamp kept the old picture under an
+   * unchanged key. Absent when the keeper cannot derive it; nothing is
+   * memoised for such a row.
+   */
+  readonly contentDigest?: string
+  /**
    * OKF core-facet tags, for search and filter chips. Absent when the
    * document carries none (spatial documents always: core facets are a
    * markdown concern) — absence and emptiness render identically, so only

@@ -27,6 +27,7 @@ import type { LoroTreeNode, TreeID } from 'loro-crdt'
 import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
+import { contentDigestOf } from './content-digest.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 
 /** The one root container a workspace document has. */
@@ -88,6 +89,14 @@ export interface WorkspaceDocumentEntry extends WorkspaceNodeMeta {
   /** Derived from ancestry on every read; never stored. */
   path: string
   /**
+   * The identity of this document's CONTENT as of this read — what a cached
+   * picture of it is a picture of. Derived from the merged content, never
+   * stored, because a stored register cannot follow a merge: measured, a
+   * replica's `updatedAt` stayed put while its content took on a state
+   * neither replica had written. See `content-digest.ts`.
+   */
+  contentDigest: string
+  /**
    * True when an earlier sibling already owns this path. Only reachable
    * through concurrent creation, and shown rather than hidden — the data has
    * converged, and a listing that dropped half of it would look like loss.
@@ -124,13 +133,28 @@ function attachContentContainers(node: LoroTreeNode): void {
 }
 
 type Read =
-  | { readonly type: 'document'; readonly meta: WorkspaceNodeMeta }
+  | {
+      readonly type: 'document'
+      readonly meta: WorkspaceNodeMeta
+      /**
+       * The content containers as `toJSON` handed them over, kept for the
+       * listing to digest. Picked here, from the one `toJSON` every walk
+       * already pays for; HASHED only by `readWorkspaceDocuments`, because
+       * every write path walks the tree to find its node and must not pay
+       * for a digest nobody reads.
+       */
+      readonly content: Record<string, unknown>
+    }
   | { readonly type: 'folder'; readonly segment: string }
 
 function readMeta(node: LoroTreeNode): Read | null {
-  const raw = node.data.toJSON()
+  const raw = node.data.toJSON() as Record<string, unknown>
   const asDocument = workspaceNodeMetaSchema.safeParse(raw)
-  if (asDocument.success) return { type: 'document', meta: asDocument.data }
+  if (asDocument.success) {
+    const content: Record<string, unknown> = {}
+    for (const { key } of CONTENT_CONTAINER_KEYS) if (key in raw) content[key] = raw[key]
+    return { type: 'document', meta: asDocument.data, content }
+  }
   const asFolder = workspaceFolderMetaSchema.safeParse(raw)
   if (asFolder.success) return { type: 'folder', segment: asFolder.data.segment }
   return null
@@ -277,6 +301,33 @@ export function readWorkspaceNodes(doc: LoroDoc): WorkspaceNode[] {
  * sibling owns this path" is a statement about the order every peer already
  * agrees on. The composition root that implements the port sorts.
  */
+/**
+ * The one place an entry is assembled from a read node, so every path that
+ * answers one — the listing, the two resolvers, the creators — names the
+ * content the same way. A second spelling would be a second key.
+ */
+function entryOf(
+  read: Extract<Read, { type: 'document' }>,
+  path: string,
+  shadowed = false,
+): WorkspaceDocumentEntry {
+  return {
+    ...read.meta,
+    path,
+    contentDigest: contentDigestOf(read.content),
+    ...(shadowed ? { shadowed: true as const } : {}),
+  }
+}
+
+/** The entry for a node this call just wrote; it must read, or the write did not land. */
+function entryOfNode(node: LoroTreeNode, path: string): WorkspaceDocumentEntry {
+  const read = readMeta(node)
+  if (read === null || read.type !== 'document') {
+    throw new Error('a document node written here does not read back as one')
+  }
+  return entryOf(read, path)
+}
+
 export function readWorkspaceDocuments(doc: LoroDoc): WorkspaceDocumentEntry[] {
   const seen = new Set<string>()
   const out: WorkspaceDocumentEntry[] = []
@@ -287,7 +338,7 @@ export function readWorkspaceDocuments(doc: LoroDoc): WorkspaceDocumentEntry[] {
     if (read.type !== 'document') continue
     const shadowed = seen.has(path)
     seen.add(path)
-    out.push({ ...read.meta, path, ...(shadowed ? { shadowed: true as const } : {}) })
+    out.push(entryOf(read, path, shadowed))
   }
   return out
 }
@@ -302,7 +353,7 @@ export function resolveWorkspaceDocument(
 ): WorkspaceDocumentEntry | null {
   for (const entry of walk(doc)) {
     if (entry.path === path && entry.read.type === 'document') {
-      return { ...entry.read.meta, path: entry.path }
+      return entryOf(entry.read, entry.path)
     }
   }
   return null
@@ -314,7 +365,7 @@ export function resolveWorkspaceDocumentById(
 ): WorkspaceDocumentEntry | null {
   for (const entry of walk(doc)) {
     if (entry.read.type === 'document' && entry.read.meta.documentId === documentId) {
-      return { ...entry.read.meta, path: entry.path }
+      return entryOf(entry.read, entry.path)
     }
   }
   return null
@@ -348,7 +399,7 @@ export function createWorkspaceDocument(
   node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
   doc.commit()
-  return { ...meta, path: resolveWorkspaceDocumentById(doc, meta.documentId)?.path ?? meta.segment }
+  return entryOfNode(node, resolveWorkspaceDocumentById(doc, meta.documentId)?.path ?? meta.segment)
 }
 
 /**
@@ -488,7 +539,7 @@ export function createWorkspaceDocumentAtPath(
   node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
   doc.commit()
-  return { ...meta, path: input.path }
+  return entryOfNode(node, input.path)
 }
 
 /**

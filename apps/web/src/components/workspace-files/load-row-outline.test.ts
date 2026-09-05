@@ -133,7 +133,7 @@ describe('createRowOutlineLoader', () => {
   // would be, sharing the one broker a page holds.
   it('outlines one document once, however many mounts ask', async () => {
     const broker = createInTabRenderBroker()
-    const stamped = { ...markdown, updatedAt: '2026-09-04T00:00:00Z' }
+    const stamped = { ...markdown, contentDigest: 'c0ffee0000000005' }
     const first = deps({ broker, source: fakeFilesSource({ loadMarkdown: async () => '# Hi' }) })
     const second = deps({ broker, source: fakeFilesSource({ loadMarkdown: async () => '# Hi' }) })
 

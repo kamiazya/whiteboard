@@ -54,6 +54,7 @@ export function createDaemonFilesSource(
           ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
           kind: entry.kind,
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+          ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
           ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
           ...(tagsById.has(entry.id) ? { tags: tagsById.get(entry.id) as readonly string[] } : {}),
           ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),

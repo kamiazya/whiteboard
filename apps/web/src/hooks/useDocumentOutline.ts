@@ -111,7 +111,7 @@ export function useDocumentOutline({
         setRects(NO_RECTS)
         return
       }
-      const key = outlineKeyOf({ documentId, kind, updatedAt: source.frontier })
+      const key = outlineKeyOf({ documentId, kind, state: source.frontier })
       broker
         .render(key, () => outline(source, cacheKeyFor(key)))
         .then((next) => {
