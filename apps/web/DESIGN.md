@@ -592,6 +592,40 @@ the pin still comes from the flat projection the optimistic state holds),
 the export through the same layout, and the MCP Apps widget from the
 `threads` `canvas_view` hands it.
 
+The source pane's gutter reserves its width whether or not the document has
+any conversations, so a thread arriving from a peer cannot reflow the body
+sideways under whoever is typing in it — and it PAINTS nothing, so that
+reserve reads as the body's own margin until a marker appears in it. The
+rule lives in the editor's own `EditorView.theme` and not in `index.css`,
+which is the whole reason it was missing: CodeMirror injects its base theme
+unlayered, and this app's stylesheet is inside a Tailwind `@layer`, which
+loses to unlayered rules whatever its specificity. Unoverridden, that base
+theme's light grey fill and light right border painted a near-white band
+down the left of every note on the dark theme, on a document with no
+comments at all.
+
+**Opening one takes a caret, not a selection.** The scope is the reader's
+selection when there is one and otherwise the BLOCK their caret is in
+(`lib/block-range-at`), which is a different claim from the one every
+formatting verb makes about the word under a caret: a word is a guess at
+what someone meant, and a paragraph is a unit they have already pointed at.
+Requiring the selection is what made the layer unreachable on the surface
+that needs it most — selecting a passage on a phone is a drag between two
+handles, and a phone has no right-click. On a blank line the nearest block
+is taken rather than none, because a control's enabled state has to derive
+from something that re-renders it and a caret does not; the one remaining
+null, a body with no prose, is derivable from the value and is the only
+case the entry is inert for.
+
+**Where that entry lives on a phone is the toolbar the docked bar makes
+redundant.** With the caret in the body a phone shows two bars, and five of
+their verbs were the same five — Heading, Bold, Italic, Bullet list, Task.
+So while `touchFormattingBarShown()` is true, the toolbar under the header
+swaps its formatting cluster for what the docked bar does not carry: the
+annotation entry. The verbs return the moment that bar goes (a desktop, or
+a caret outside the editor), so the swap costs nothing and the duplicate
+row is spent on the one affordance that had no button anywhere.
+
 ## A toggle looks toggled, and says so once
 
 A control that switches something on — a rail, a popover, a tool, a filter —

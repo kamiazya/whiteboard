@@ -23,6 +23,7 @@ import {
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
+import { blockRangeNear } from '../../lib/block-range-at.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
@@ -787,6 +788,34 @@ export function MarkdownEditor({
     return () => host.removeEventListener('contextmenu', onContextMenu)
   }, [openCatalogAt])
 
+  /**
+   * What a conversation opened from this body would be about: the reader's
+   * SELECTION when there is one, and otherwise the block their caret is in.
+   *
+   * The fallback is what makes the annotation entry pressable at all on a
+   * phone. Selecting a passage there is a drag between two handles, the most
+   * awkward gesture the platform has, and a reader who wants to say
+   * something about a paragraph has already put the caret in it. On a blank
+   * line there is no block and this answers null, which is what keeps the
+   * callers' "nothing to comment on" branches honest — an inert row rather
+   * than a stored quote of nothing.
+   *
+   * Read from the live view at press time rather than held in state: a
+   * caret MOVE does not re-render this component at all (a tap changes no
+   * value), so anything derived from it and held would be stale exactly
+   * when a reader had just moved. That is also why `blockRangeNear` and not
+   * `blockRangeAt`: the caret-on-a-blank-line case is removed here rather
+   * than raced in a control's enabled state.
+   */
+  const annotationAnchor = useCallback((): TextAnchor | null => {
+    if (onComposeThread === undefined) return null
+    const api = sourceApiRef.current
+    if (api == null) return null
+    const range = api.selectedRange() ?? blockRangeNear(value, api.caretOffset())
+    if (range === null) return null
+    return textAnchorForSelection(value, range.from, range.to)
+  }, [onComposeThread, value])
+
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
     // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
     // things that write MARKUP into the body: Comment writes nothing there
@@ -794,9 +823,7 @@ export function MarkdownEditor({
     // that table would give the keymap a shortcut for it and the verb bar a
     // button, both of which would then have to resolve a scope the table
     // cannot describe.
-    const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
-    const anchor =
-      selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
+    const anchor = annotationAnchor()
     return verbCatalogItems({
       headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
       run: (command) => sourceApiRef.current?.run(command),
@@ -833,6 +860,18 @@ export function MarkdownEditor({
         wordCount={wordCount}
         onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
         catalogAvailable={effectiveMode !== 'read'}
+        {...(onComposeThread === undefined
+          ? {}
+          : {
+              onComment: () => {
+                const anchor = annotationAnchor()
+                if (anchor !== null) onComposeThread(anchor)
+              },
+              // Derived from the VALUE, which does re-render this component:
+              // a body with no prose has nothing to be about, and that is
+              // the only case the resolver above can still answer null for.
+              commentAvailable: value.trim() !== '',
+            })}
         runVerb={(command) => {
           sourceApiRef.current?.run(command)
         }}
