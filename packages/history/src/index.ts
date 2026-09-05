@@ -13,7 +13,10 @@ export {
 } from './branches/ops.js'
 export {
   BRANCHES_PLANE_KEY,
+  hasBranchesOnRecord,
   readBranchesFromRecord,
+  readWorkspaceBranchTips,
+  type WorkspaceBranchTip,
   writeBranchesToRecord,
 } from './branches/record-store.js'
 export {
