@@ -6,7 +6,6 @@ export * from './document-index.js'
 export * from './document-path-tree.js'
 export * from './document-store.js'
 export * from './frontier.js'
-export * from './presence.js'
 export * from './snapshot.js'
 export * from './snapshot-helpers.js'
 export * from './snapshot-reassembly-error.js'
@@ -15,5 +14,4 @@ export {
   type StoredDocumentUnreadableCode,
   StoredDocumentUnreadableError,
 } from './stored-document-unreadable-error.js'
-export * from './sync-protocol.js'
 export * from './tokens.js'
