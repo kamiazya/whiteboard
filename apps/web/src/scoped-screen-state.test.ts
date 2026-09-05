@@ -51,7 +51,7 @@ const sources = import.meta.glob(
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/use-version-save-flow.ts',
-    './pages/use-comments-rail.ts',
+    './hooks/use-comments-rail.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -89,7 +89,7 @@ const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 // moved there, not away.
 const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
 // The comments rail's screen state, extracted the same way — same rule.
-const COMMENTS_RAIL_HOOK = './pages/use-comments-rail.ts'
+const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',

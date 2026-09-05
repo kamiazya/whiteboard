@@ -89,7 +89,7 @@ import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
-import { useCommentsRail } from './use-comments-rail.js'
+import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 

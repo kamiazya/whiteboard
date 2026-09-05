@@ -10,7 +10,7 @@ import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import type { JSX } from 'react'
 import { Button } from '@/components/ui/button'
-import type { CommentsRail } from '../../pages/use-comments-rail.js'
+import type { CommentsRail } from '../../hooks/use-comments-rail.js'
 import { TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
 import { CommentsPanel } from './CommentsPanel.js'
 
