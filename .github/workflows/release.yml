@@ -232,12 +232,24 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Dockerfile.server's ARG NODE_VERSION has no default, so a build that
+      # omits it resolves `FROM node:${NODE_VERSION}-slim` to `node:-slim`
+      # and fails. Read from .node-version, with the same inline fallback and
+      # for the same reason as the setup-pnpm pin above: this job checks out a
+      # release tag, and an old enough tag predates that file. A build-arg the
+      # Dockerfile at such a tag does not declare is a warning, not a failure.
+      - name: Resolve NODE_VERSION build arg
+        id: node-version
+        run: echo "value=$(cat .node-version 2>/dev/null || echo 24)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push Docker image
         id: push
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
           file: Dockerfile.server
+          build-args: |
+            NODE_VERSION=${{ steps.node-version.outputs.value }}
           push: true
           tags: ghcr.io/${{ github.repository }}:latest,ghcr.io/${{ github.repository }}:${{ inputs.force_publish_tag || needs.release-please.outputs.mcp_tag_name }}
           sbom: true

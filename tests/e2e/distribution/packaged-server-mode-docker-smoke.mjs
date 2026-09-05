@@ -3,7 +3,7 @@
 // Docker smoke for whiteboard server-mode.
 //
 // Verifies the Dockerfile.server artifact at the container boundary:
-//   1.  docker build succeeds.
+//   1.  Server image available (reused via WHITEBOARD_SMOKE_IMAGE, else built).
 //   2.  Invalid config → container exits non-zero, stderr safe.
 //   3.  Valid config + HTTPS JWKS mock → ready JSON emitted.
 //   4.  /api/runtime/ping → 200, ok:true.
@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, redactForDiagnostics, resolveServerImage } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -185,15 +185,14 @@ const serverBaseUrl = useHostNetwork
 
 // ── Scenario 1: docker build ──────────────────────────────────────────────────
 
-console.log('[docker-smoke] Building image (may take several minutes)…')
-{
-  const r = docker(
-    ['build', '-f', resolve(REPO_ROOT, 'Dockerfile.server'), '-t', IMAGE_TAG, REPO_ROOT],
-    { timeout: 600_000, stdio: 'inherit' },
-  )
-  if (r.status !== 0) fail('scenario 1: docker build failed')
-  console.log('[docker-smoke] scenario 1 PASS: docker build succeeded')
-}
+const SERVER_IMAGE = resolveServerImage({
+  repoRoot: REPO_ROOT,
+  defaultTag: IMAGE_TAG,
+  docker,
+  fail,
+  label: 'docker-smoke',
+})
+console.log('[docker-smoke] scenario 1 PASS: image available')
 
 // ── Scenario 2: invalid config ────────────────────────────────────────────────
 
@@ -216,7 +215,7 @@ console.log('[docker-smoke] Building image (may take several minutes)…')
       'WHITEBOARD_SERVER_JWKS_URI=https://idp.example.com/.well-known/jwks.json',
       '-e',
       'WHITEBOARD_SERVER_ALLOWED_ORIGINS=https://whiteboard.example.com',
-      IMAGE_TAG,
+      SERVER_IMAGE,
     ],
     { timeout: 30_000 },
   )
@@ -278,7 +277,13 @@ try {
     const r = docker(
       [
         'run',
-        '--rm',
+        // No `--rm` on this one, deliberately. The server is EXPECTED to stay
+        // up here, so the interesting failure is it exiting immediately — and
+        // `--rm` deletes the container the instant it does, leaving
+        // `docker logs` to answer `No such container` and the smoke to report
+        // a readiness timeout for a container that never lived. Measured on
+        // CI: scenario 3 "timed out" 1.4s after scenario 2, with a 60s budget.
+        // The finally block removes it explicitly instead.
         '-d',
         '--name',
         'wb-smoke-valid',
@@ -301,7 +306,7 @@ try {
         `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
         '-e',
         `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-        IMAGE_TAG,
+        SERVER_IMAGE,
       ],
       { timeout: 15_000 },
     )
@@ -311,8 +316,15 @@ try {
     const ready = await waitForReadyJson('wb-smoke-valid')
     if (!ready) {
       const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
-      fail('scenario 3: server did not emit ready JSON within timeout', {
-        stderrBytes: logs.stderr.length,
+      const exit = docker(['inspect', '--format={{.State.ExitCode}}', 'wb-smoke-valid'], {
+        timeout: 5_000,
+      })
+      fail('scenario 3: server never became ready', {
+        exitCode: exit.stdout.trim() || 'unknown',
+        // Redacted rather than counted: this smoke runs on CI now, where a
+        // byte count is the only thing anyone gets and it diagnoses nothing.
+        stdout: redactForDiagnostics(logs.stdout.slice(-2000), [dataDir, certsDir, jwksUri]),
+        stderr: redactForDiagnostics(logs.stderr.slice(-2000), [dataDir, certsDir, jwksUri]),
       })
     }
     assertNoLeak('scenario 3 ready JSON', JSON.stringify(ready))
@@ -324,8 +336,23 @@ try {
     const resp = await fetch(`${serverBaseUrl}/api/runtime/ping`)
     if (resp.status !== 200) fail(`scenario 4: ping expected 200, got ${resp.status}`)
     const body = await resp.json()
+    // The contract is daemonPingResponseSchema (daemon-client/api-contracts/
+    // runtime.ts): { ok: true, instanceId: string, identity?: {alg, publicKey} }.
+    // This asserted `typeof body.pid === 'number'` — a field the response has
+    // not carried since instanceId replaced it, and the route parses through
+    // the schema, so a raw pid could not reach the wire even if the handler
+    // built one. Nothing caught the drift because this smoke ran only on the
+    // release path. The startup line on stdout is a DIFFERENT payload and does
+    // still carry pid; that is what waitForReadyJson reads.
     if (body.ok !== true) fail('scenario 4: ping.ok must be true')
-    if (typeof body.pid !== 'number') fail('scenario 4: ping.pid must be a number')
+    if (typeof body.instanceId !== 'string' || body.instanceId.length === 0) {
+      fail('scenario 4: ping.instanceId must be a non-empty string')
+    }
+    if (body.identity !== undefined) {
+      if (typeof body.identity.alg !== 'string' || typeof body.identity.publicKey !== 'string') {
+        fail('scenario 4: ping.identity must carry alg and publicKey')
+      }
+    }
     assertNoLeak('scenario 4 ping response', JSON.stringify(body))
     console.log('[docker-smoke] scenario 4 PASS: /api/runtime/ping → 200, ok:true')
   }
@@ -393,6 +420,14 @@ try {
 
     // Capture docker logs and scan for leaks.
     const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
+    // The subject has to be PRESENT for the scan below to mean anything, and
+    // it was not: with `--rm` (removed above) `docker stop` deletes the
+    // container, so this read answered `No such container` and both
+    // assertions scanned an empty string. A leak check that cannot fail is
+    // the failure.
+    if (logs.stdout.length === 0) {
+      fail('scenario 8: no container logs to scan — the leak check would be vacuous')
+    }
     assertNoLeak('scenario 8 docker logs stdout', logs.stdout)
     assertNoLeak('scenario 8 docker logs stderr', logs.stderr)
     console.log('[docker-smoke] scenario 8 PASS: docker stop → graceful shutdown, logs clean')
@@ -426,7 +461,7 @@ try {
         `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
         '-e',
         `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-        IMAGE_TAG,
+        SERVER_IMAGE,
       ],
       { timeout: 15_000 },
     )
@@ -446,11 +481,18 @@ try {
     '[docker-smoke] scenario 10 PASS: no raw JWT/credentials/paths leaked across all scenarios',
   )
 } finally {
-  if (activeContainer) stopContainer(activeContainer)
+  if (activeContainer) {
+    stopContainer(activeContainer)
+    // Explicit, because scenario 3's container is started without `--rm` so a
+    // crash leaves its logs readable.
+    docker(['rm', '-f', activeContainer], { timeout: 20_000 })
+  }
   await new Promise((resolve) => jwksServer.close(resolve))
   rmSync(certsDir, { recursive: true, force: true })
   rmSync(dataDir, { recursive: true, force: true })
-  docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
+  // Only tear down an image this run built. A reused one belongs to the
+  // caller that built it, and the next smoke in the same job needs it.
+  if (SERVER_IMAGE === IMAGE_TAG) docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
 }
 
 console.log('[docker-smoke] All scenarios PASSED.')

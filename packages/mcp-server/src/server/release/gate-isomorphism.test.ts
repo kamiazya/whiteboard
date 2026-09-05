@@ -1,6 +1,7 @@
-// Gate isomorphism: every release-only gate (requiredFor includes 'publish' or
-// 'docker-release') must have a declared, structurally-verified prCoverage so
-// it is also exercised on pull requests. This is the pillar-A guard against
+// Gate isomorphism: every gate on a prCoverage-required tier (see
+// PR_COVERAGE_REQUIRED_TIERS below) must have a declared,
+// structurally-verified prCoverage tying it to a real, PR-reachable ci.yml
+// job or step. This is the pillar-A guard against
 // the failure mode that caused the v0.0.7-v0.0.18 outage: a step that only
 // ran on the release tag drifted out of sync with the rest of the pipeline
 // for weeks before its first (and only) execution finally caught it.
@@ -31,11 +32,13 @@ function readText(relPath: string): string {
 }
 
 interface PrCoverage {
-  kind: 'workflow-step' | 'aggregate' | 'exception'
+  kind: 'workflow-step' | 'conditional-workflow-step' | 'aggregate' | 'exception'
   workflow?: string
   jobId?: string
   stepName?: string
   reason?: string
+  condition?: string
+  conditionReason?: string
   expectedCommandSubstrings?: string[]
 }
 
@@ -84,7 +87,15 @@ const ciYaml = readText('.github/workflows/ci.yml')
 
 // Deliberate, reviewed allowlist. Growing this set is a real test edit, not a
 // silent config change — that friction is the point.
-const EXCEPTION_ALLOWLIST = new Set(['smoke:docker', 'smoke:docker-backup-restore'])
+//
+// It holds ONE gate. Its sibling smoke:docker left the list: it now runs in
+// ci.yml's dry-run-docker job against the image that job already built, and
+// its ten scenarios pass. smoke:docker-backup-restore stays, but with a reason
+// that is now a measurement instead of prose — running it is what showed it
+// asserts against a route the server no longer has. The old reason for both
+// ("the release-candidate docker path exercised by the dry-run-docker job")
+// was never true: that job builds an image and never runs a container.
+const EXCEPTION_ALLOWLIST = new Set<string>(['smoke:docker-backup-restore'])
 
 function isJobPrReachable(job: WorkflowJob): boolean {
   return job.if === null || ALWAYS_TRUE_ON_PR_IF.has(job.if)
@@ -94,10 +105,19 @@ function isStepPrReachable(step: WorkflowStep): boolean {
   return step.if === null || ALWAYS_TRUE_ON_PR_IF.has(step.if)
 }
 
-function releaseOnlyGates(gates: ReleaseGate[]): ReleaseGate[] {
-  return gates.filter(
-    (g) => g.requiredFor.includes('publish') || g.requiredFor.includes('docker-release'),
-  )
+// Two opposite reasons a tier lands here, both needing the same guard.
+//  - 'publish' / 'docker-release': the gate runs on a release tag, so its
+//    prCoverage is the claim that a pull request exercises it TOO — the
+//    pillar-A property this file was written for.
+//  - 'publish-dry-run': the gate runs on a pull request and NOWHERE else, so
+//    its prCoverage is not a second copy but the only record of where it
+//    runs. Undeclared, the ci.yml step could be renamed or dropped and no
+//    policy file would notice; that is the state both `publish:dry-run:*`
+//    jobs were actually in.
+const PR_COVERAGE_REQUIRED_TIERS = ['publish', 'docker-release', 'publish-dry-run']
+
+function prCoverageRequiredGates(gates: ReleaseGate[]): ReleaseGate[] {
+  return gates.filter((g) => g.requiredFor.some((t) => PR_COVERAGE_REQUIRED_TIERS.includes(t)))
 }
 
 // The only workflow file this test loads and resolves jobs/steps against.
@@ -124,9 +144,9 @@ describe('release-gate-matrix.json is a valid matrix (schema authority)', () => 
   })
 })
 
-describe('every release-only gate declares prCoverage', () => {
-  it('has no publish/docker-release gate missing a prCoverage declaration', () => {
-    const missing = releaseOnlyGates(matrix.gates)
+describe('every gate on a prCoverage-required tier declares prCoverage', () => {
+  it('has no gate on a prCoverage-required tier missing its declaration', () => {
+    const missing = prCoverageRequiredGates(matrix.gates)
       .filter((g) => !g.prCoverage)
       .map((g) => g.id)
     expect(missing).toEqual([])
@@ -137,7 +157,7 @@ describe('gate isomorphism: workflow-step coverage resolves structurally', () =>
   it('every workflow-step prCoverage points at an existing, PR-reachable ci.yml step', async () => {
     const { extractWorkflowJobs } = await loadExtractor()
     const jobs = extractWorkflowJobs(ciYaml)
-    for (const gate of releaseOnlyGates(matrix.gates)) {
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'workflow-step') continue
       expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
@@ -164,11 +184,48 @@ describe('gate isomorphism: workflow-step coverage resolves structurally', () =>
   })
 })
 
+// A conditional step is the one shape 'workflow-step' cannot express without
+// lying: its `if:` is by definition NOT in the always-true-on-PR allowlist, so
+// declaring it as a plain workflow-step would either fail that check or force
+// the allowlist open — and an allowlist widened to admit a real condition
+// stops meaning anything. The declared `condition` is checked against the
+// step's actual `if:` instead, so the two cannot drift.
+describe('gate isomorphism: conditional coverage matches the step condition it declares', () => {
+  it('every conditional-workflow-step prCoverage resolves and its condition equals the step if:', async () => {
+    const { extractWorkflowJobs } = await loadExtractor()
+    const jobs = extractWorkflowJobs(ciYaml)
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
+      const coverage = gate.prCoverage
+      if (coverage?.kind !== 'conditional-workflow-step') continue
+      expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
+      const job = jobs.find((j) => j.id === coverage.jobId)
+      expect(job, `gate "${gate.id}": job "${coverage.jobId}" not found in ci.yml`).toBeDefined()
+      expect(
+        isJobPrReachable(job!),
+        `gate "${gate.id}": job "${coverage.jobId}" has a non-pinned if: "${job!.if}" — a conditional gate is gated at the STEP, so the job itself must still report on every pull request`,
+      ).toBe(true)
+      const step = job!.steps.find((s) => s.name === coverage.stepName)
+      expect(
+        step,
+        `gate "${gate.id}": step "${coverage.stepName}" not found in job "${coverage.jobId}"`,
+      ).toBeDefined()
+      expect(
+        step!.run,
+        `gate "${gate.id}": step "${coverage.stepName}" must run the gate's exact command`,
+      ).toBe(gate.command)
+      expect(
+        step!.if,
+        `gate "${gate.id}": declared condition does not match step "${coverage.stepName}"'s actual if:`,
+      ).toBe(coverage.condition)
+    }
+  })
+})
+
 describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', () => {
   it('every aggregate prCoverage points at an existing, PR-reachable ci.yml job', async () => {
     const { extractWorkflowJobs } = await loadExtractor()
     const jobs = extractWorkflowJobs(ciYaml)
-    for (const gate of releaseOnlyGates(matrix.gates)) {
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'aggregate') continue
       expectCoverageWorkflowMatchesLoadedFile(gate, coverage)
@@ -194,7 +251,7 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
   it('every aggregate prCoverage with expectedCommandSubstrings finds each substring in a job step run command', async () => {
     const { extractWorkflowJobs } = await loadExtractor()
     const jobs = extractWorkflowJobs(ciYaml)
-    for (const gate of releaseOnlyGates(matrix.gates)) {
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'aggregate') continue
       if (!coverage.expectedCommandSubstrings || coverage.expectedCommandSubstrings.length === 0)
@@ -215,7 +272,7 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
   })
 
   it('every aggregate gate declares expectedCommandSubstrings', () => {
-    for (const gate of releaseOnlyGates(matrix.gates)) {
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
       const coverage = gate.prCoverage
       if (coverage?.kind !== 'aggregate') continue
       expect(
@@ -232,14 +289,14 @@ describe('gate isomorphism: aggregate coverage resolves to a PR-reachable job', 
 
 describe('gate isomorphism: exceptions are explicit and pinned', () => {
   it('every exception has a non-empty reason', () => {
-    for (const gate of releaseOnlyGates(matrix.gates)) {
+    for (const gate of prCoverageRequiredGates(matrix.gates)) {
       if (gate.prCoverage?.kind !== 'exception') continue
       expect(gate.prCoverage.reason?.trim().length ?? 0, `gate "${gate.id}"`).toBeGreaterThan(0)
     }
   })
 
   it('the set of exception gate ids exactly matches the pinned allowlist', () => {
-    const exceptionIds = releaseOnlyGates(matrix.gates)
+    const exceptionIds = prCoverageRequiredGates(matrix.gates)
       .filter((g) => g.prCoverage?.kind === 'exception')
       .map((g) => g.id)
       .sort()

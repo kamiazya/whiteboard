@@ -7,7 +7,7 @@
 // volume, verify all seeded data survives the round-trip through the HTTP API.
 //
 //   1.  Docker available check → skip if not.
-//   2.  docker build (reuse or rebuild IMAGE_TAG).
+//   2.  Server image available (reused via WHITEBOARD_SMOKE_IMAGE, else built).
 //   3.  Start container A with a fresh source data volume.
 //   4.  Seed via valid JWT:
 //         - workspace + canvas (Loro snapshot via canvas POST)
@@ -39,7 +39,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak } from './smoke-helpers.mjs'
+import { assertNoLeak, resolveServerImage } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -257,15 +257,14 @@ const serverBaseUrl = useHostNetwork
 
 // ── Scenario 1: docker build ──────────────────────────────────────────────────
 
-console.log('[docker-br-smoke] Building image (may take several minutes)…')
-{
-  const r = docker(
-    ['build', '-f', resolve(REPO_ROOT, 'Dockerfile.server'), '-t', IMAGE_TAG, REPO_ROOT],
-    { timeout: 600_000, stdio: 'inherit' },
-  )
-  if (r.status !== 0) fail('scenario 1: docker build failed')
-  console.log('[docker-br-smoke] scenario 1 PASS: docker build')
-}
+const SERVER_IMAGE = resolveServerImage({
+  repoRoot: REPO_ROOT,
+  defaultTag: IMAGE_TAG,
+  docker,
+  fail,
+  label: 'docker-br-smoke',
+})
+console.log('[docker-br-smoke] scenario 1 PASS: image available')
 
 // ── Shared credentials + JWKS mock ───────────────────────────────────────────
 
@@ -348,7 +347,7 @@ try {
       `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
       '-e',
       `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-      IMAGE_TAG,
+      SERVER_IMAGE,
     ]
     const r = docker(args, { timeout: 15_000 })
     if (r.status !== 0)
@@ -532,7 +531,7 @@ try {
       `WHITEBOARD_SERVER_JWKS_URI=${jwksUri}`,
       '-e',
       `WHITEBOARD_SERVER_ALLOWED_ORIGINS=${SMOKE_AUDIENCE}`,
-      IMAGE_TAG,
+      SERVER_IMAGE,
     ]
     const r = docker(args, { timeout: 15_000 })
     if (r.status !== 0)
@@ -717,5 +716,7 @@ try {
   rmSync(srcDataDir, { recursive: true, force: true })
   rmSync(backupDir, { recursive: true, force: true })
   rmSync(restoredDataDir, { recursive: true, force: true })
-  docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
+  // Only tear down an image this run built. A reused one belongs to the
+  // caller that built it, and the next smoke in the same job needs it.
+  if (SERVER_IMAGE === IMAGE_TAG) docker(['rmi', IMAGE_TAG], { timeout: 30_000 })
 }

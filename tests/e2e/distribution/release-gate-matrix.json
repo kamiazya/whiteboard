@@ -190,8 +190,12 @@
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
-        "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+        "kind": "conditional-workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Server-mode docker smoke",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "the scenarios run against the image publish:dry-run:docker just built in the same job (WHITEBOARD_SMOKE_IMAGE), so they are gated by the same derived answer: a pull request that changes nothing the image compiles produces the same container, and there is no image for the scenarios to run against without paying for the build. Pushes to main and merge_group runs are never skipped."
       }
     },
     {
@@ -204,7 +208,7 @@
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
         "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+        "reason": "the smoke cannot pass as written, found by running it: scenario 3 saves a workspace palette via PUT /api/workspaces/:ws/palette, and no route registers /palette anywhere in the server \u2014 the endpoint is gone. Its remaining scenarios are unverified against the current API for the same reason, since running only on the release path meant none of them had ever executed. A separate defect it also surfaced IS fixed here: dist/server/server-mode-backup-restore.js was not a tsup entry, so no build produced the module the smoke imports. Restoring PR coverage needs the smoke rewritten against the current API, which is its own change; smoke:docker (ten scenarios) does run on every affecting pull request"
       }
     },
     {
@@ -233,6 +237,38 @@
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "publish:dry-run:npm",
+      "command": "pnpm publish:dry-run:npm",
+      "category": "publish",
+      "requiredFor": ["publish-dry-run"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-npm",
+        "stepName": "npm publish dry-run"
+      }
+    },
+    {
+      "id": "publish:dry-run:docker",
+      "command": "pnpm publish:dry-run:docker",
+      "category": "docker",
+      "requiredFor": ["publish-dry-run"],
+      "requiresDocker": true,
+      "requiresNetwork": true,
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "conditional-workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Docker build dry-run",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "the step answers only whether Dockerfile.server still builds, so a pull request that changes nothing the image compiles cannot change its answer. The affecting set is derived, not listed: tools/checks/src/docker-build-inputs.mjs walks the workspace closure of the pnpm --filter targets read out of Dockerfile.server, and adds every manifest, patches/ and all root-level files. It fails open on any error resolving the diff, and pushes to main and merge_group runs pass 'always' so the last commit before a release tag is never skipped."
+      }
     }
   ]
 }

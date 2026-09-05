@@ -76,3 +76,57 @@ Each `.mjs` script in this directory targets a specific packaged deployment scen
 The gates in `release-gate-matrix.json` reference commands from the root `package.json`.
 Two gates — `smoke:tarball` and `smoke:packaged` — are covered transitively through
 `test:e2e:distribution` rather than appearing directly in `check:release-candidate`.
+
+A gate's `requiredFor` tiers name the aggregate **script** that must invoke it, not
+where it happens to run. Each tier has exactly one runner:
+
+| tier | runner |
+|---|---|
+| `ci` | `pnpm check:release-candidate` |
+| `local-release` | `pnpm check:release-candidate:local` |
+| `docker-release` | `pnpm check:release-candidate:docker` |
+| `publish` | `pnpm publish-gate` (`tools/checks/src/publish-gate.mjs`) |
+| `pages-release` | `pnpm check:pages-release` (`tools/checks/src/pages-release.mjs`) |
+| `publish-dry-run` | `pnpm publish:dry-run` |
+
+`publish-dry-run` is disjoint from every other tier by design. Rehearsing a publish
+does not belong in a release-candidate check, and `publish-gate.mjs` executes every
+`publish` gate — so tagging a rehearsal `publish` would re-run it during the real
+publish. Its two gates are the only Docker-capable gates outside `docker-release`;
+that is allowed because `publish:dry-run:docker` exits 0 with a skip line when no
+daemon answers, a fail-soft the `ci` and `local-release` aggregates must not have.
+
+### The Docker gates on a pull request
+
+`ci.yml`'s `dry-run-docker` job builds the server image once (buildx with the
+GHA layer cache) and then runs `smoke:docker` and `smoke:docker-backup-restore`
+against that same image, handed over through `WHITEBOARD_SMOKE_IMAGE`. A named
+image that is not present is a hard failure rather than a rebuild — a fallback
+there would turn one build per commit back into two while every log still read
+as success.
+
+`smoke:docker`'s ten scenarios run there; `smoke:docker-backup-restore` does not,
+and its matrix exception records why — running it showed it saves a workspace
+palette through a route the server no longer has.
+
+Both were `docker-release`-only before, so the container boundary — auth,
+graceful stop, volume remount, log redaction — was first exercised during a
+publish. Promoting them found six defects that a build-only dry-run cannot see:
+three of the four image builds omitted the required `NODE_VERSION` build arg (the
+image could not build), the musl libsql prebuild could not load on Alpine (it
+could not start), scenario 8's leak check was scanning an empty string, scenario
+4 asserted a `pid` the ping contract had dropped, `dist/server/server-mode-backup-restore.js`
+was not a tsup entry so no build produced it, and the palette route above.
+`docker-contract.test.ts` classifies every file reaching the image build and
+checks each passes the arg; `smoke-dist-entries.test.ts` checks every dist path a
+smoke imports is a tsup entry.
+
+Whether a gate is exercised on a pull request is the separate `prCoverage` axis,
+checked structurally against `ci.yml` by `gate-isomorphism.test.ts`. Its
+`conditional-workflow-step` kind is for a step that runs on SOME pull requests:
+the declared `condition` is compared against the step's real `if:`, so the two
+cannot drift, and `conditionReason` has to argue why the pull requests it skips
+cannot change the gate's answer. `publish:dry-run:docker` and both Docker smokes are on it —
+`tools/checks/src/docker-build-inputs.mjs` decides whether a diff reaches what
+`Dockerfile.server` compiles, deriving that set from the Dockerfile's own
+`pnpm --filter` targets rather than a list.
