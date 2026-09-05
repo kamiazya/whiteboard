@@ -506,7 +506,10 @@ export function DaemonIndexPage({
   )
 
   const [pendingDelete, setPendingDelete] = useState<{
-    path: string
+    // A LIST, so one confirmation and one handler serve both the single
+    // delete and the selection's bulk delete. A single delete is a list of
+    // one, and keeps naming its document.
+    paths: readonly string[]
     displayName: string
     kind?: DocumentKind
   } | null>(null)
@@ -533,7 +536,32 @@ export function DaemonIndexPage({
     setDeleting(true)
     setDeleteError(null)
     try {
-      await deleteDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, pendingDelete.path)
+      // Sequential, and each failure recorded rather than thrown: one path
+      // the daemon refuses must not abandon the rest, and the person has to
+      // be told how many did not go.
+      const failed: string[] = []
+      let lastError: unknown = null
+      for (const path of pendingDelete.paths) {
+        try {
+          await deleteDocument(daemonFetch, daemonBaseUrl, workspaceAtStart, path)
+        } catch (err) {
+          failed.push(path)
+          lastError = err
+        }
+      }
+      if (failed.length > 0) {
+        // Not closed: the list behind the dialog has already changed, and
+        // closing silently would read as "all deleted". The panel's own
+        // pruning leaves exactly the failures selected.
+        setDeleteError(
+          failed.length === pendingDelete.paths.length
+            ? lastError instanceof Error
+              ? lastError.message
+              : 'Failed to delete document.'
+            : `${failed.length} of ${pendingDelete.paths.length} could not be deleted.`,
+        )
+        return
+      }
       closeDeleteDialog()
     } catch (err) {
       // daemon-api-client errors are already sanitized (problem-details
@@ -683,7 +711,10 @@ export function DaemonIndexPage({
               onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
               onDuplicateDocument={(path) => void handleDuplicate(path)}
               onRequestDelete={(path, displayName, kind) =>
-                setPendingDelete({ path, displayName, kind })
+                setPendingDelete({ paths: [path], displayName, kind })
+              }
+              onRequestDeleteMany={(paths) =>
+                setPendingDelete({ paths, displayName: `${paths.length} documents` })
               }
               // A new array on every successful read, which is exactly the
               // signal the panel needs: the page reloads this list after a
@@ -696,10 +727,22 @@ export function DaemonIndexPage({
           <p className="text-sm text-muted-foreground">No workspace selected.</p>
         )}
         <DeleteDocumentDialog
-          pending={pendingDelete}
+          pending={
+            pendingDelete === null
+              ? null
+              : {
+                  displayName: pendingDelete.displayName,
+                  ...(pendingDelete.kind === undefined ? {} : { kind: pendingDelete.kind }),
+                  ...(pendingDelete.paths.length > 1 ? { count: pendingDelete.paths.length } : {}),
+                }
+          }
           busy={deleting}
           error={deleteError}
-          action="delete-document-daemon"
+          action={
+            pendingDelete !== null && pendingDelete.paths.length > 1
+              ? 'delete-documents-daemon'
+              : 'delete-document-daemon'
+          }
           onCancel={closeDeleteDialog}
           onConfirm={() => void handleConfirmDelete()}
         />

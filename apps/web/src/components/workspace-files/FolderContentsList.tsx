@@ -1,4 +1,4 @@
-import { ChevronRight, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
+import { CheckCircle2, ChevronRight, Circle, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
@@ -31,6 +31,14 @@ export interface FolderContentsListProps {
   onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
+  /**
+   * The paths a live selection holds, or absent when there is no selection.
+   *
+   * Absent and empty are different: absent means the list is in its ordinary
+   * mode and a card carries no `aria-pressed` at all, while empty would
+   * announce every card as an unpressed toggle.
+   */
+  selection?: ReadonlySet<string>
   /**
    * A card's picture. This component neither fetches nor renders, so a
    * caller with no daemon to read from still gets a working list — with the
@@ -66,6 +74,7 @@ export function FolderContentsList({
   onActivateDocument,
   onDocumentContextMenu,
   selectedPath,
+  selection,
   renderThumbnail,
   className,
 }: FolderContentsListProps) {
@@ -125,6 +134,7 @@ export function FolderContentsList({
             type="button"
             data-doc-path={entry.path}
             aria-current={entry.path === selectedPath ? 'true' : undefined}
+            aria-pressed={selection === undefined ? undefined : selection.has(entry.path)}
             onClick={() => onOpen({ kind: 'document', document: entry })}
             onDoubleClick={
               onActivateDocument === undefined ? undefined : () => onActivateDocument(entry)
@@ -149,9 +159,14 @@ export function FolderContentsList({
                     onDocumentContextMenu(entry, event.clientX, event.clientY)
                   }
             }
-            className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
+            // `group` + `aria-pressed:` so the SELECTED look is derived from
+            // the attribute a screen reader reads, rather than written a
+            // second time from `selection.has(...)`. toggle-state-surface
+            // enforces that, and caught this card doing exactly the doubled
+            // thing it forbids.
+            className="group hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 aria-pressed:border-primary aria-pressed:bg-accent/30 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
           >
-            <span className="bg-muted/40 flex aspect-video w-full items-center justify-center overflow-hidden">
+            <span className="bg-muted/40 relative flex aspect-video w-full items-center justify-center overflow-hidden">
               {renderThumbnail?.(entry) ?? (
                 <span
                   data-kind={entry.kind ?? 'markdown'}
@@ -159,6 +174,23 @@ export function FolderContentsList({
                 >
                   {entry.kind ?? 'markdown'}
                 </span>
+              )}
+              {/* Both drawn while a selection is live, and CSS picks between
+                  them from the button's own `aria-pressed` — so the picture
+                  cannot disagree with what is announced. Presence is gated on
+                  the MODE, which is a different question from the state.
+                  `aria-hidden` because the button already says it. */}
+              {selection !== undefined && (
+                <>
+                  <Circle
+                    aria-hidden="true"
+                    className="text-muted-foreground/70 absolute top-1 left-1 size-5 group-aria-pressed:hidden"
+                  />
+                  <CheckCircle2
+                    aria-hidden="true"
+                    className="fill-primary text-primary-foreground absolute top-1 left-1 hidden size-5 group-aria-pressed:block"
+                  />
+                </>
               )}
             </span>
             <span className="flex min-w-0 flex-col px-2 py-1.5">
