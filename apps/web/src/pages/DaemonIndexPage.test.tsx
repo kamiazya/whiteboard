@@ -11,7 +11,7 @@ import {
 import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { DESTRUCTIVE_COPY } from '@/lib/destructive-copy'
+import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 

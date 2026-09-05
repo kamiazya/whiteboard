@@ -2,7 +2,7 @@ import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contract
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import type { UseBranchesResult } from '@/hooks/useBranches'
+import type { UseBranchesResult } from '../hooks/useBranches.js'
 
 // Real pointer/keyboard interaction with the Radix dropdown/dialog/alert-dialog
 // stack, which the jsdom-based HeaderBranchChip.test.tsx deliberately skips.
@@ -29,8 +29,9 @@ function makeState(): UseBranchesResult {
 
 const stateHolder: { current: UseBranchesResult } = { current: makeState() }
 
-vi.mock('@/hooks/useBranches', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/useBranches')>('@/hooks/useBranches')
+vi.mock('../hooks/useBranches.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('../hooks/useBranches.js')>('../hooks/useBranches.js')
   return {
     ...actual,
     useBranches: () => stateHolder.current,

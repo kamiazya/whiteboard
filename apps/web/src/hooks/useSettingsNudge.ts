@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from 'react'
-import { getInstallState, subscribeInstallState } from '@/lib/install-prompt-store'
-import { queryPersistentStorage } from '@/lib/persistent-storage'
+import { getInstallState, subscribeInstallState } from '../lib/install-prompt-store.js'
+import { queryPersistentStorage } from '../lib/persistent-storage.js'
 import { getSwStatus, subscribeSwStatus } from '../pwa/sw-status-store.js'
 
 /**

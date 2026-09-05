@@ -25,9 +25,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
-import { fc } from '@/test-utils/fast-check'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import type { Viewport } from '../../lib/spatial/viewport.js'
+import { fc } from '../../test-utils/fast-check.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)

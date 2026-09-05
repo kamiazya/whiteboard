@@ -28,28 +28,28 @@ export type {
 // ── shadcn ui primitives ──────────────────────────────────────────────────────
 // Re-exporting the value imports both proves they resolve and satisfies
 // noUnusedLocals without a parallel declare/export block.
-export { AlertDialog, AlertDialogContent } from '@/components/ui/alert-dialog'
-export { Button } from '@/components/ui/button'
+export { AlertDialog, AlertDialogContent } from './components/ui/alert-dialog.js'
+export { Button } from './components/ui/button.js'
 export {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from './components/ui/dialog.js'
 export {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-} from '@/components/ui/dropdown-menu'
-export { Input } from '@/components/ui/input'
-export { ScrollArea } from '@/components/ui/scroll-area'
-export { Separator } from '@/components/ui/separator'
+} from './components/ui/dropdown-menu.js'
+export { Input } from './components/ui/input.js'
+export { ScrollArea } from './components/ui/scroll-area.js'
+export { Separator } from './components/ui/separator.js'
 export {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
-} from '@/components/ui/tooltip'
-export { cn } from '@/lib/utils'
+} from './components/ui/tooltip.js'
+export { cn } from './lib/utils.js'
 
 import type {
   DocumentBackend,

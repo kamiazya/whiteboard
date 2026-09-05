@@ -4,8 +4,8 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { z } from 'zod'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
-import { fingerprintPublicKey } from '@/lib/daemon-identity-pin'
+import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import { fingerprintPublicKey } from '../lib/daemon-identity-pin.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
 
 type PairedGrant = z.infer<typeof listGrantsResponseSchema>['grants'][number]

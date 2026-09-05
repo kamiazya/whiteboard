@@ -1,11 +1,11 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
   dispatchMergeCommitted,
   MERGE_COMMITTED_EVENT,
   type MergeCommittedDetail,
-} from '@/lib/merge-committed-event'
+} from '../lib/merge-committed-event.js'
 import { MergeToast } from './MergeToast.js'
 
 const baseDetail: MergeCommittedDetail = {

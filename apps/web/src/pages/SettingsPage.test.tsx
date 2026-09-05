@@ -2,9 +2,12 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testi
 import { useState } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { celebrate } from '@/lib/celebrate'
-import { initInstallPromptCapture, resetInstallPromptForTests } from '@/lib/install-prompt-store'
-import { createUserSettingsStore, STORAGE_KEY } from '@/lib/user-settings-store'
+import { celebrate } from '../lib/celebrate.js'
+import {
+  initInstallPromptCapture,
+  resetInstallPromptForTests,
+} from '../lib/install-prompt-store.js'
+import { createUserSettingsStore, STORAGE_KEY } from '../lib/user-settings-store.js'
 import {
   bindApplyUpdate,
   bindCheckForUpdates,
@@ -12,7 +15,7 @@ import {
 } from '../pwa/sw-status-store.js'
 import { SettingsPage } from './SettingsPage.js'
 
-vi.mock('@/lib/celebrate', () => ({ celebrate: vi.fn().mockResolvedValue(undefined) }))
+vi.mock('../lib/celebrate.js', () => ({ celebrate: vi.fn().mockResolvedValue(undefined) }))
 
 beforeEach(() => {
   localStorage.clear()

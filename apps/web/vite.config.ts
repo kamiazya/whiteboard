@@ -1,5 +1,3 @@
-import { dirname, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
@@ -14,8 +12,6 @@ import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
 import { pwaOptions } from './vite-pwa-options.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
-const __dirname = dirname(fileURLToPath(import.meta.url))
-
 export default defineConfig({
   define: { ...rendererBuildDefine },
   // Both workers are constructed with `type: 'module'`, but Vite's default
@@ -27,8 +23,6 @@ export default defineConfig({
   worker: { format: 'es' },
   resolve: {
     alias: {
-      // Standard shadcn alias rooted at apps/web/src.
-      '@': resolve(__dirname, 'src'),
       // loro-crdt's export map resolves the production browser build to its
       // `browser/` entry, which loads the WASM via a SYNCHRONOUS XHR. Sync
       // XHR bypasses the service worker, so the precached WASM is never

@@ -1,9 +1,9 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { TooltipProvider } from '@/components/ui/tooltip'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import type { UseBranchesResult } from '@/hooks/useBranches'
+import { TooltipProvider } from '../components/ui/tooltip.js'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import type { UseBranchesResult } from '../hooks/useBranches.js'
 
 // Keep this test shallow.
 // Radix dropdown content depends on portals and pointer interactions that are unstable in jsdom.
@@ -36,8 +36,9 @@ const state: { current: UseBranchesResult } = {
 
 const { useBranchesMock } = vi.hoisted(() => ({ useBranchesMock: vi.fn() }))
 
-vi.mock('@/hooks/useBranches', async () => {
-  const actual = await vi.importActual<typeof import('@/hooks/useBranches')>('@/hooks/useBranches')
+vi.mock('../hooks/useBranches.js', async () => {
+  const actual =
+    await vi.importActual<typeof import('../hooks/useBranches.js')>('../hooks/useBranches.js')
   return {
     ...actual,
     useBranches: useBranchesMock,

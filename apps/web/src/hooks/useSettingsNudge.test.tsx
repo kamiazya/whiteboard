@@ -1,6 +1,9 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { initInstallPromptCapture, resetInstallPromptForTests } from '@/lib/install-prompt-store'
+import {
+  initInstallPromptCapture,
+  resetInstallPromptForTests,
+} from '../lib/install-prompt-store.js'
 import { bindApplyUpdate, resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { useSettingsNudge } from './useSettingsNudge.js'
 

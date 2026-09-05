@@ -1,10 +1,10 @@
 import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { settingsPath } from '@/lib/app-routes'
-import { formatBytes } from '@/lib/format-bytes'
-import type { InstallState } from '@/lib/install-prompt-store'
-import type { BrowserStorageEstimate } from '@/lib/persistent-storage'
+import { settingsPath } from '../../lib/app-routes.js'
+import { formatBytes } from '../../lib/format-bytes.js'
+import type { InstallState } from '../../lib/install-prompt-store.js'
+import type { BrowserStorageEstimate } from '../../lib/persistent-storage.js'
 
 export type PersistStepState = 'unknown' | 'granted' | 'browser-managed' | 'todo'
 

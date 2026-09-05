@@ -23,13 +23,13 @@
  * separates "not keeping" from "not yet".
  */
 import { useEffect, useRef, useState } from 'react'
-import { cn } from '@/lib/utils'
 import {
   type ConnectionState,
   isNotKeeping,
   type SessionHealth,
 } from '../../lib/connection-state.js'
 import type { StorageHealth } from '../../lib/storage-health.js'
+import { cn } from '../../lib/utils.js'
 
 /** The signature path, shared verbatim with `home-mark.svg` and `loader-mark.svg`. */
 const SIGNATURE = 'M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25'

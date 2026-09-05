@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo } from 'react'
-import { type BranchesBackend, createDaemonBranchesBackend } from '@/lib/branches-backend'
+import { type BranchesBackend, createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import { useDaemonApi } from './DaemonApiContext'
 
 /**

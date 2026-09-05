@@ -12,10 +12,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true,
-    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-svgr/client"],
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+    "types": ["vite/client", "vite-plugin-pwa/client", "vite-plugin-svgr/client"]
   },
   "include": ["src", "vite.config.ts", "vitest.config.ts"]
 }
