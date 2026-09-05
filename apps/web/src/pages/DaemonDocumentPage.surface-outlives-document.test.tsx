@@ -22,7 +22,14 @@ import type {
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -89,13 +96,32 @@ describe('the body surface does not outlive its document (daemon)', () => {
     window.localStorage.clear()
     vi.stubGlobal(
       'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
+      vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input.toString()
         if (url.includes('/names')) {
           return new Response(
             JSON.stringify({ documents: { 'doc-a': 'Doc A', 'doc-b': 'Doc B' }, pinned: [] }),
             { status: 200 },
           )
+        }
+        if (url.endsWith('/versions') && init?.method === 'POST') {
+          return new Response(
+            JSON.stringify({
+              version: {
+                id: 'v1',
+                path: 'doc-a',
+                createdAt: '2026-01-01T00:00:00Z',
+                elementCount: 0,
+                auto: false,
+                hasThumbnail: false,
+                branchName: 'main',
+              },
+            }),
+            { status: 200 },
+          )
+        }
+        if (url.endsWith('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), { status: 200 })
         }
         return new Response('{}', { status: 404 })
       }),
@@ -155,6 +181,47 @@ describe('the body surface does not outlive its document (daemon)', () => {
     expect(
       screen.queryByTestId('node-text-overlay'),
       'the body surface is still open after this page switched document under it — scoped to the props, which a controller-driven switch never moves',
+    ).toBeNull()
+  })
+
+  it('a saved-bookmark badge does not outlive its document', async () => {
+    await act(async () => {
+      render(
+        <DaemonDocumentPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="doc-a"
+          createBackend={() => new FakeBackend()}
+        />,
+      )
+    })
+    await waitFor(() => expect(openFileRef).not.toBeNull())
+
+    // ⌘S opens the history panel with the naming field armed; naming + Enter
+    // performs the save this badge reports.
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 's', ctrlKey: true })
+    })
+    const field = await screen.findByLabelText('Name this point')
+    fireEvent.change(field, { target: { value: 'Milestone' } })
+    await act(async () => {
+      fireEvent.keyDown(field, { key: 'Enter' })
+    })
+    await waitFor(() => expect(screen.getByText('Bookmark saved')).toBeTruthy())
+
+    // The switch this page makes by itself; the history panel closes with it.
+    await act(async () => {
+      openFileRef?.('id-b')
+    })
+    await waitFor(() => expect(screen.queryByTestId('bookmark-action')).toBeNull())
+
+    // Reopen history on the ARRIVED document via the toolbar (not ⌘S, which
+    // would arm the naming field and hide the badge either way).
+    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+    await screen.findByTestId('bookmark-action')
+    expect(
+      screen.queryByText('Bookmark saved'),
+      "a 'saved' badge earned on the departed document is still lit under the arrived one",
     ).toBeNull()
   })
 })

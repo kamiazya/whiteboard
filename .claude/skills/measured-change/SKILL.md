@@ -141,17 +141,34 @@ expectation edited, has demonstrated it changed nothing but speed.
 
 ## Performance: `pnpm bench`
 
-`vitest bench` (`packages/canvas-render/src/layout/edges/spatial-edges.bench.ts`),
+The bench API — a `bench` test-context fixture inside `test()` with `bench.compare`,
+`toBeFasterThan`, `writeResult` and `bench.from()` baselines, `{ timeout: 0 }` on every
+bench test, and why the project is filtered as `"canvas-render-node (bench)"` — is
+`testing-techniques/resources/configuration.md` › Benchmarks.
+
+`pnpm bench` (`packages/canvas-render/src/layout/edges/spatial-edges.bench.ts`),
 never a hand-rolled `performance.now()` loop — you need the variance and the
 sample count to know whether you measured anything.
 
 ### Interleave, or you are measuring the machine
 
 Between-run drift on a loaded dev machine routinely exceeds the effect. Run
-the versions alternately and compare paired rounds:
+the versions alternately and compare paired rounds. Read the number from the
+JSON reporter, not from the table: the table appends `fastest`/`slowest` to
+some rows, so a column counted from the right lands on a different field per
+row (the old `awk '{print $(NF-8)}'` recipe did exactly that).
 
 ```bash
-run() { pnpm bench 2>&1 | grep -aE "<the bench name>" | awk '{printf "%s ", $(NF-8)}'; }  # min
+# min latency (ms) of one bench, from .vitest/json/output.json
+run() {
+  pnpm bench --reporter=default --reporter=json <bench file> >/dev/null 2>&1
+  node -e '
+    const r = require("./.vitest/json/output.json")
+    for (const f of r.testResults) for (const t of f.assertionResults)
+      for (const b of t.benchmarks ?? []) for (const task of b.tasks)
+        if (task.name === process.argv[1]) process.stdout.write(task.latency.min.toFixed(3) + " ")
+  ' "<the bench name>"
+}
 for i in 1 2 3; do
   echo -n "AFTER  r$i: "; run; echo
   git stash push -q <changed file>
@@ -159,6 +176,11 @@ for i in 1 2 3; do
   git stash pop -q
 done
 ```
+
+`task.latency` carries `min`, `mean`, `p50`…`p999`, `rme`, `samplesCount`. The same
+before/after can be done by the runner inside ONE table — `writeResult` on the current
+registration, `bench.from('before', <path>)` beside it — which is still a same-machine,
+same-sitting comparison and nothing more.
 
 Report "faster in every paired round, median X → Y". A single before/after
 pair is not evidence.

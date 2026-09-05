@@ -1,6 +1,5 @@
 import { cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
-import { afterEach, vi } from 'vitest'
+import { afterEach, expect, vi } from 'vitest'
 
 afterEach(() => {
   cleanup()
@@ -14,9 +13,6 @@ export async function good() {
   })
 }
 
-export async function goodKeystrokes() {
-  await userEvent.keyboard('hello world')
-}
 
 export function goodTimers() {
   vi.useFakeTimers()
@@ -26,4 +22,17 @@ import { it } from "vitest"
 
 export const goodFocus = () => {
   it('plain, so every sibling still runs', () => {})
+}
+
+export async function goodAwaited() {
+  await expect(Promise.resolve(1)).resolves.toBe(1)
+  await expect('snapshot').toMatchFileSnapshot('./out.txt')
+}
+
+export function goodReturned() {
+  return expect(Promise.resolve(1)).resolves.toBe(1)
+}
+
+export const goodTitle = () => {
+  it('rejects a malformed prefix and keeps the issue count at zero', () => {})
 }

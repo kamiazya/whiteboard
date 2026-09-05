@@ -64,14 +64,30 @@ describe('browser-contract subpath export', () => {
     expect(existsSync(dtsPath), `missing: ${dtsPath}`).toBe(true)
   })
 
-  it('built JS module exports Zod schemas (Zod SoT intact)', () => {
+  it('the subpath still reaches the Zod schemas through the daemon-client shim', () => {
     expect(existsSync(jsPath), `artifact missing: ${jsPath}`).toBe(true)
 
-    // String-presence scan on the emitted source confirms the schema names
-    // survive the tsc emit without executing the module through Vite's pipeline.
-    const src = readFileSync(jsPath, 'utf8')
-    expect(src).toContain('versionCreatedMessageSchema')
-    expect(src).toContain('serverTextMessageSchema')
-    expect(src).toContain('clientTextMessageSchema')
+    // The source moved to @kamiazya/whiteboard-daemon-client; this subpath
+    // is a re-export shim. The guarantee is a chain, each link asserted on
+    // text (no runtime import through Vite's pipeline, as before):
+    //   1. the emitted shim re-exports from the daemon-client subpath,
+    //   2. that module really holds the schema names,
+    //   3. tsup inlines the package at publish (noExternal), so the npm
+    //      consumer's artifact carries the schemas rather than a bare
+    //      specifier for an unpublished workspace package.
+    const shim = readFileSync(jsPath, 'utf8')
+    expect(shim).toContain("'@kamiazya/whiteboard-daemon-client/document-backend-contract'")
+    const moved = readFileSync(
+      resolve(packageRoot, '../daemon-client/src/document-backend-contract.ts'),
+      'utf8',
+    )
+    expect(moved).toContain('versionCreatedMessageSchema')
+    expect(moved).toContain('serverTextMessageSchema')
+    expect(moved).toContain('clientTextMessageSchema')
+    const tsup = readFileSync(resolve(packageRoot, 'tsup.config.ts'), 'utf8')
+    expect(
+      tsup,
+      'the published bundle must inline the workspace package or npx 404s on it',
+    ).toContain("'@kamiazya/whiteboard-daemon-client'")
   })
 })

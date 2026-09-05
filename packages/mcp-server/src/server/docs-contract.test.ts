@@ -68,6 +68,7 @@ describe('docs/ contract', () => {
       'packages/server-core': 'server-core',
       'packages/workspace-index': 'workspace-index',
       'packages/canvas-viewer': 'canvas-viewer',
+      'packages/daemon-client': 'daemon-client',
       'apps/web': 'web',
     }
     const docsDescribingFullTestSuite = [
@@ -119,6 +120,68 @@ describe('docs/ contract', () => {
     }
   })
 
+  // The quick-start playwright command must work FROM REPO ROOT. The bare
+  // `pnpm exec playwright install` form fails there (playwright is a
+  // devDependency of apps/web and canvas-viewer only), which a clean-clone
+  // contributor hits at step 4 — and CI never notices, because it sets
+  // WHITEBOARD_CHROME_PATH and skips playwright install entirely.
+  it('gives contributors the filtered playwright install command, never the bare root form', () => {
+    const filtered =
+      'pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium'
+    const contributing = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8')
+    const development = readFileSync(join(DOCS_ROOT, 'contributing/development.md'), 'utf8')
+    for (const [name, content] of [
+      ['CONTRIBUTING.md', contributing],
+      ['development.md', development],
+    ] as const) {
+      expect(content, `${name} must carry the filtered command`).toContain(filtered)
+      expect(
+        /^pnpm exec playwright install/m.test(content),
+        `${name} still carries the bare root-level form, which fails from repo root`,
+      ).toBe(false)
+    }
+    // The parenthetical names every real-browser project, derived from the
+    // configs so a new browser project cannot leave it stale again.
+    for (const projectName of readBrowserProjectNames(REPO_ROOT)) {
+      expect(contributing, `CONTRIBUTING.md's playwright line must name ${projectName}`).toContain(
+        projectName,
+      )
+    }
+  })
+
+  // The single pre-PR gate the repo actually maintains (derived from ci.yml
+  // by local-gate-command.test.ts) must be the one the human checklist names —
+  // its absence taught contributors five missing gates via a red CI job.
+  it('puts pnpm check:local in the PR checklist, cross-referenced from the docs index', () => {
+    const contributing = readFileSync(join(REPO_ROOT, 'CONTRIBUTING.md'), 'utf8')
+    const checklist = contributing.split('## Pull request checklist')[1]?.split('\n## ')[0] ?? ''
+    expect(checklist).toContain('pnpm check:local')
+    const docsIndex = readFileSync(join(DOCS_ROOT, 'contributing/README.md'), 'utf8')
+    expect(docsIndex).toContain('check:local')
+  })
+
+  // packageManager pins the exact pnpm; a contributor on an older global pnpm
+  // silently rewrites the lockfile on first install and fails CI's
+  // --frozen-lockfile. Deriving the version here means a future pnpm bump
+  // that forgets the docs fails this test instead of leaving a stale number.
+  it('states the pinned pnpm version and corepack enable in both prerequisite blocks', () => {
+    const pkg = JSON.parse(readFileSync(join(REPO_ROOT, 'package.json'), 'utf8')) as {
+      packageManager?: string
+    }
+    const pinned = pkg.packageManager
+    expect(pinned).toMatch(/^pnpm@/)
+    for (const path of [
+      join(REPO_ROOT, 'CONTRIBUTING.md'),
+      join(DOCS_ROOT, 'contributing/development.md'),
+    ]) {
+      const content = readFileSync(path, 'utf8')
+      expect(content, `${path} must state the pinned ${pinned}`).toContain(pinned as string)
+      expect(content, `${path} must tell contributors to run corepack enable`).toContain(
+        'corepack enable',
+      )
+    }
+  })
+
   // The repo-local dev-override table names the exact config key a
   // contributor is told to edit. Both rows had drifted to a key that does not
   // exist: `.claude/settings.json` has no `mcpServers` field in its schema (a
@@ -153,21 +216,45 @@ describe('docs/ contract', () => {
     // The mechanism that does work, documented earlier in the same file.
     expect(content).toContain('claude mcp add --scope local')
 
-    // Every `[mcp_servers.X]` the doc presents as the Codex dev override must
-    // be an entry that carries a `url` (the hot-reload HTTP endpoint) rather
-    // than the disabled published `command`/`args` mirror.
-    const codexUrlEntries = [
-      ...codexConfig.matchAll(/\[mcp_servers\.([\w-]+)\]\n(?:(?!\[)[\s\S])*?^url = /gm),
-    ].map((match) => match[1])
-    expect(codexUrlEntries.length).toBeGreaterThan(0)
-    for (const line of content.split('\n')) {
-      const named = line.match(/\[mcp_servers\.([\w-]+)\]/)
-      if (!named || !/dev override/i.test(line)) continue
-      expect(
-        codexUrlEntries,
-        `development.md calls [mcp_servers.${named[1]}] the Codex dev override, but .codex/config.toml gives no url to that entry`,
-      ).toContain(named[1])
-    }
+    // The Codex dev override goes through the stdio proxy, which derives the
+    // per-worktree port from its own on-disk location — a hardcoded URL here
+    // silently pointed every linked worktree's Codex session at the MAIN
+    // checkout's daemon, code, and data. The whole file is held to it: no
+    // port literal and no loopback-URL literal may survive anywhere,
+    // including the header prose, so the comments cannot drift back to
+    // describing the retired HTTP-URL transport.
+    const devEntry = codexConfig.split('[mcp_servers.whiteboard_dev]')[1] ?? ''
+    expect(devEntry, 'whiteboard_dev must exist').not.toBe('')
+    expect(devEntry).toContain('mcp-http-stdio-proxy.mjs')
+    expect(/^url\s*=/m.test(devEntry), 'whiteboard_dev must not carry a url key').toBe(false)
+    expect(codexConfig, 'no hardcoded port may survive anywhere in the file').not.toContain('3099')
+    expect(codexConfig).not.toContain('http://127.0.0.1')
+    // The published mirror stays disabled — the separate _dev name is what
+    // keeps Codex from merging the override into the stdio entry.
+    const publishedEntry = codexConfig
+      .split('[mcp_servers.whiteboard]')[1]
+      ?.split('[mcp_servers.')[0]
+    expect(publishedEntry).toContain('enabled = false')
+    // development.md's table row for the dev override must use the transport
+    // word that is now true: the stdio proxy.
+    const devRow = content
+      .split('\n')
+      .find((line) => line.startsWith('|') && line.includes('whiteboard_dev'))
+    expect(devRow, 'development.md must table the whiteboard_dev override').toBeTruthy()
+    expect(devRow).toContain('stdio proxy')
+  })
+
+  // The operator guide reads as complete (Dockerfile, compose, TLS, backup)
+  // but server mode serves only a static placeholder page — apps/web has no
+  // server-mode-aware auth flow yet (see SERVER_MODE_PLACEHOLDER_HTML's
+  // rationale in app-helpers.ts). An operator who follows Quick start and
+  // opens the root URL must learn that from the guide, not from a dead page.
+  it('tells self-hosting operators that server mode serves no browser UI', () => {
+    const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
+    expect(guide).toContain('no browser UI')
+    // The two surfaces this deployment actually serves.
+    expect(guide).toContain('/api')
+    expect(guide).toContain('/mcp')
   })
 
   // A count spelled out in prose is the kind of claim nobody re-reads: it read
@@ -188,6 +275,7 @@ describe('docs/ contract', () => {
       'twenty',
       'twenty-one',
       'twenty-two',
+      'twenty-three',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

@@ -4,7 +4,9 @@
 // document-sized and the hits are interior — the shape the function meets in
 // production, not a short string with the needle at the front.
 //
-// Run with `pnpm vitest bench --project search-node --run`.
+// Run with `pnpm vitest bench --project "search-node (bench)"` — bench mode
+// runs each project's benchmark files under a sibling project carrying that
+// suffix, and the bare name matches nothing.
 //
 // **The pair is the measurement, not either row.** `ascii` cannot hold a
 // grapheme cluster at all, so it is the floor of what the function costs
@@ -12,7 +14,7 @@
 // grapheme-aware cut has work to do. The DIFFERENCE is that work's price.
 // A single row drifts 2-3x with machine load; compare before/after on the
 // same machine, interleaved, in one sitting.
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import { snippetAround } from './snippet.js'
 
 const NEEDLE = 'needle'
@@ -39,14 +41,22 @@ function excerpts(body: { text: string; indexes: number[] }): number {
   return total
 }
 
-describe('snippetAround, three excerpts of a document-sized body', () => {
-  bench('ascii body', () => {
-    excerpts(ASCII)
-  })
-  bench('emoji-bearing body', () => {
-    excerpts(EMOJI)
-  })
-  bench('cjk body', () => {
-    excerpts(CJK)
-  })
+// One `bench.compare` so the three rows land in ONE table: the pair is the
+// measurement (see the header), and a table is what shows a pair. `timeout: 0`
+// because a benchmark's duration IS its output, and the project's test ceiling
+// would otherwise clip it.
+test('snippetAround, three excerpts of a document-sized body', { timeout: 0 }, async ({
+  bench,
+}) => {
+  await bench.compare(
+    bench('ascii body', () => {
+      excerpts(ASCII)
+    }),
+    bench('emoji-bearing body', () => {
+      excerpts(EMOJI)
+    }),
+    bench('cjk body', () => {
+      excerpts(CJK)
+    }),
+  )
 })

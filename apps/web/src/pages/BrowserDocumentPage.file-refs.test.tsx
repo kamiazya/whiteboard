@@ -144,6 +144,21 @@ describe('BrowserDocumentPage file references', () => {
     })
   })
 
+  it('marks refs matching neither a live id nor a live path as missing, sparing image refs', async () => {
+    // Same rule as the daemon page, deliberately: a legacy PATH ref (a
+    // document imported from elsewhere, or written before id refs existed)
+    // names a live document and must not render as a dangling
+    // "Missing reference" in browser mode alone.
+    const store = await seededStore()
+    await mountPage(store)
+    const missing = capturedEditorProps?.missingFileRef
+    expect(missing).toBeDefined()
+    expect(missing?.(TARGET_ID)).toBe(false)
+    expect(missing?.('archive/target')).toBe(false)
+    expect(missing?.('deleted-canvas-id')).toBe(true)
+    expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
+  })
+
   it('leaves the address bar alone for a reference the list does not carry', async () => {
     const router = await mountPage(await seededStore())
     const before = router.state.location.key

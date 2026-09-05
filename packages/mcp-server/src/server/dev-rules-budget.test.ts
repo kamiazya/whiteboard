@@ -36,6 +36,34 @@ const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
  */
 const bucket = (chars: number): number => Math.floor(chars / 1000)
 
+/**
+ * The TOTAL is bucketed four times coarser than a single file, because it is
+ * the one reading two independent diffs share.
+ *
+ * A per-file pin is crossed by the PR that edits that file, and its CI sees
+ * the crossing — measured across both recorded failures of this suite, no
+ * per-file pin was ever wrong. The total is different: it moves when ANY
+ * always-on file grows, so two PRs that are each green on their own base can
+ * cross it together, on a main neither one's CI ever ran against. This repo
+ * has no merge queue (user-owned; the prep in ci.yml is dormant), so nothing
+ * re-runs either PR against the other's result — the crossing is arithmetic
+ * nobody decided, and it fails on main, asking whoever pushes next to make a
+ * "decision" after the fact. That inverts what these pins are for.
+ *
+ * Both occurrences fired ONLY this assertion: run 33414443314 (2026-08-31,
+ * 91723 chars, 90 -> 91) and run 33879487386 (2026-09-04, 88144 chars,
+ * 87 -> 88). Both were cleared by bumping the number.
+ *
+ * A coarser grain does not close the class — every threshold has a boundary
+ * — it makes the boundary rare enough that crossing one is usually a real
+ * budget decision. At the 1000 grain the corpus sat NINE characters under
+ * the next boundary when this was written, so the next concurrent pair of
+ * prose PRs would have tipped it again. Equality is kept, so a cut is still
+ * exactly as loud as a regression; only the resolution changed.
+ */
+const TOTAL_GRAIN = 4000
+const totalBucket = (chars: number): number => Math.floor(chars / TOTAL_GRAIN)
+
 function read(relativePath: string): string {
   return readFileSync(join(REPO_ROOT, relativePath), 'utf8')
 }
@@ -82,22 +110,18 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
 }
 
 /**
- * Floored bucket of the SUM, which is not the sum of the buckets.
+ * Floored bucket of the SUM at `TOTAL_GRAIN`, which is not the sum of the
+ * per-file buckets.
  *
- * 88 since two merges that were each green on their own base landed
- * together. `integrator-flow.md` grew past its own boundary (13 -> 14) in
- * one; `vocabulary.md` gained 204 characters in the other, which did not
- * move ITS bucket (16 either way) and moved the total, 87940 -> 88144. So
- * both per-file pins were correct and only this one was crossed, on a main
- * neither PR's CI ever saw — the second PR was branched before the first
- * landed, which is the one thing a per-PR check cannot cover.
+ * 22 = 88991 characters at a 4000-char grain. Was 88 at the 1000-char grain,
+ * reached by two rounds of the cross-PR crossing described on `totalBucket`.
  *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 88
+const ALWAYS_ON_TOTAL_BUDGET = 22
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -131,7 +155,10 @@ describe('always-on rule context budget', () => {
 
   it('holds the always-on total at its pinned size', () => {
     const chars = alwaysOnFiles().reduce((sum, path) => sum + read(path).length, 0)
-    expect(bucket(chars), `always-on corpus is ${chars} chars`).toBe(ALWAYS_ON_TOTAL_BUDGET)
+    expect(
+      totalBucket(chars),
+      `always-on corpus is ${chars} chars = bucket ${totalBucket(chars)} at a ${TOTAL_GRAIN}-char grain`,
+    ).toBe(ALWAYS_ON_TOTAL_BUDGET)
   })
 
   it('holds package-canvas-render.md at its pinned size', () => {

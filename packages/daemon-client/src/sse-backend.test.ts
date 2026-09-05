@@ -101,14 +101,14 @@ describe('SseBackend', () => {
     // Reading the body is a second await, so a disconnect can land between the
     // response arriving and its bytes being decoded. Seeding a document the
     // caller has already torn down would resurrect state it deliberately left.
-    let releaseBody: (() => void) | null = null
+    const releaseBody: { current: (() => void) | null } = { current: null }
     const fetch = vi.fn(async (input: string | URL | Request) => {
       if (String(input).includes('/snapshot')) {
         return {
           ok: true,
           arrayBuffer: () =>
             new Promise<ArrayBuffer>((resolve) => {
-              releaseBody = () => resolve(new Uint8Array([1]).buffer)
+              releaseBody.current = () => resolve(new Uint8Array([1]).buffer)
             }),
         } as unknown as Response
       }
@@ -120,9 +120,9 @@ describe('SseBackend', () => {
     })
 
     backend.connect(handlers)
-    await vi.waitFor(() => expect(releaseBody).not.toBeNull())
+    await vi.waitFor(() => expect(releaseBody.current).not.toBeNull())
     backend.disconnect()
-    releaseBody?.()
+    releaseBody.current?.()
     await flush()
 
     expect(snapshots).toEqual([])
@@ -281,7 +281,11 @@ describe('SseBackend', () => {
     const sent: { doc: string; message: unknown }[] = []
     const source = {
       subscribe: () => () => {},
-      sendMessage: (doc: string, message: unknown) => sent.push({ doc, message }),
+      sendMessage: (doc: string, message: unknown) => {
+        sent.push({ doc, message })
+      },
+      push: () => {},
+      snapshot: () => Promise.resolve(null),
     }
     const backend = new SseBackend(
       'ws-1',

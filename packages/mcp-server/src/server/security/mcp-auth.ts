@@ -117,17 +117,6 @@ export function buildMcpProtectedResourceMetadata(
   }
 }
 
-function _createNoAuthMcpHttpAuthStrategy(
-  metadata?: McpProtectedResourceMetadataConfig,
-): McpHttpAuthStrategy {
-  return {
-    protectedResourceMetadata: metadata,
-    authorize() {
-      return { ok: true }
-    },
-  }
-}
-
 export function createLocalTokenMcpHttpAuthStrategy(options: {
   token?: string
   protectedResourceMetadata?: McpProtectedResourceMetadataConfig

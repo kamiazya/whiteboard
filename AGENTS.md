@@ -82,7 +82,7 @@ pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM sna
 - **Keep a browser test's `describe` + `it` titles under 155 characters
   combined** (characters, not UTF-8 bytes: vitest replaces every
   non-alphanumeric character with one ASCII `-` before the name reaches the
-  filesystem, so `導線` costs two, not six). vitest copies the trace into `.vitest-attachments/` under a name
+  filesystem, so `導線` costs two, not six). vitest copies the trace into `.vitest/attachments/` under a name
   flattened from its path, and past the filesystem's 255-byte limit that copy
   throws `ENAMETOOLONG` during teardown — so vitest abandons the REST OF THE
   FILE. Measured: one forced failure with a 194-char title reported

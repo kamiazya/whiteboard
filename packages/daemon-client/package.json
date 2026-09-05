@@ -1,0 +1,40 @@
+{
+  "name": "@kamiazya/whiteboard-daemon-client",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "The daemon's browser-safe client half: the /api contracts the web app parses (Zod, single source of truth), the fetch/WS/SSE document backends, the api-client wrapper, and the shared backend contract test suites. Runs unchanged in the browser; no node:*, no server internals.",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./*": {
+      "types": "./src/*.ts",
+      "import": "./src/*.ts"
+    }
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.node.config.ts"
+  },
+  "dependencies": {
+    "@kamiazya/whiteboard-model": "workspace:*",
+    "@kamiazya/whiteboard-server-core": "workspace:*",
+    "@opentelemetry/api": "^1.9.1",
+    "@opentelemetry/context-zone": "^2.10.0",
+    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
+    "@opentelemetry/instrumentation": "^0.221.0",
+    "@opentelemetry/instrumentation-fetch": "^0.221.0",
+    "@opentelemetry/resources": "^2.10.0",
+    "@opentelemetry/sdk-trace-web": "^2.10.0",
+    "@opentelemetry/semantic-conventions": "^1.43.0",
+    "zod": "catalog:"
+  },
+  "devDependencies": {
+    "@fast-check/vitest": "^0.4.1",
+    "fast-check": "^4.7.0",
+    "loro-crdt": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "sideEffects": false
+}

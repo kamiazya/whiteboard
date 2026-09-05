@@ -7,6 +7,7 @@ export default defineConfig({
       'packages/mcp-server/vitest.smoke.config.ts',
       'packages/model/vitest.node.config.ts',
       'packages/ports/vitest.node.config.ts',
+      'packages/daemon-client/vitest.node.config.ts',
       'packages/facet-engine/vitest.node.config.ts',
       'packages/facet-ui/vitest.jsdom.config.ts',
       'packages/plugin-visual/vitest.node.config.ts',

@@ -15,7 +15,13 @@ import { describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname -> packages/mcp-server/src/server/release
-const BARREL_PATH = resolve(__dirname, '../../shared/api-contracts/index.ts')
+// The barrel's SOURCE moved to the daemon-client package; the old path is a
+// one-line re-export shim that keeps the published subpath alive. The scope
+// guard follows the source (that is where a widening would be written), and
+// a second assertion pins the shim so the published path cannot silently
+// point elsewhere.
+const BARREL_PATH = resolve(__dirname, '../../../../daemon-client/src/api-contracts/index.ts')
+const SHIM_PATH = resolve(__dirname, '../../shared/api-contracts/index.ts')
 
 function reExportSpecifiers(source: string): string[] {
   const re = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g
@@ -23,6 +29,11 @@ function reExportSpecifiers(source: string): string[] {
 }
 
 describe('api-contracts barrel scope', () => {
+  it('the published subpath shim points at the daemon-client barrel and nothing else', () => {
+    const shim = reExportSpecifiers(readFileSync(SHIM_PATH, 'utf-8'))
+    expect(shim).toEqual(['@kamiazya/whiteboard-daemon-client/api-contracts/index'])
+  })
+
   it('re-exports exactly the declared public surface — no other api-contracts modules', () => {
     const source = readFileSync(BARREL_PATH, 'utf-8')
     const specifiers = reExportSpecifiers(source)

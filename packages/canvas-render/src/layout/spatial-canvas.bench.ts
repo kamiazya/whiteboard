@@ -29,7 +29,7 @@
 // worth arguing about has to move the RATIO by more than that. Anything
 // smaller than ~10% is noise here, not a result.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
@@ -123,34 +123,39 @@ const asciiLabelled480 = labelledCanvasOf(
   'Design review of the Q3 migration schedule and rollout plan done',
 )
 
-describe('layoutSpatialCanvas, per-node path', () => {
-  bench('120 nodes, plain', () => {
-    layoutSpatialCanvas(plain120, OPTIONS)
-  })
+// One `bench.compare` per test so the rows land in ONE table: the pair is the
+// measurement (see the header), and a table is what shows a pair.
+// `timeout: 0` on every bench test: a benchmark's duration IS its output, so
+// the project's test ceiling must not clip it.
+test('layoutSpatialCanvas, per-node path', { timeout: 0 }, async ({ bench }) => {
+  await bench.compare(
+    bench('120 nodes, plain', () => {
+      layoutSpatialCanvas(plain120, OPTIONS)
+    }),
+    bench('120 nodes, three facets each', () => {
+      layoutSpatialCanvas(styled120, OPTIONS)
+    }),
+    bench('480 nodes, plain', () => {
+      layoutSpatialCanvas(plain480, OPTIONS)
+    }),
+    bench('480 nodes, three facets each', () => {
+      layoutSpatialCanvas(styled480, OPTIONS)
+    }),
+  )
+})
 
-  bench('120 nodes, three facets each', () => {
-    layoutSpatialCanvas(styled120, OPTIONS)
-  })
-
-  bench('480 nodes, plain', () => {
-    layoutSpatialCanvas(plain480, OPTIONS)
-  })
-
-  bench('480 nodes, three facets each', () => {
-    layoutSpatialCanvas(styled480, OPTIONS)
-  })
-
-  // The one case that enters `fitToWidth`'s cut loop. Its own number is the
-  // point: the four above cannot move when the cut rule changes, so a
-  // before/after on them alone reads as "free".
-  bench('480 nodes, labels that overflow', () => {
-    layoutSpatialCanvas(labelled480, OPTIONS)
-  })
-
-  // The same case with an ASCII-only label. Paired with the row above because
-  // the cost of a cut rule can depend on the SCRIPT, and one row cannot show
-  // that.
-  bench('480 nodes, ascii labels that overflow', () => {
-    layoutSpatialCanvas(asciiLabelled480, OPTIONS)
-  })
+// The one case that enters `fitToWidth`'s cut loop. Its own number is the
+// point: the four above cannot move when the cut rule changes, so a
+// before/after on them alone reads as "free". Paired with an ASCII-only label
+// because the cost of a cut rule can depend on the SCRIPT, and one row cannot
+// show that.
+test('layoutSpatialCanvas, labels that overflow', { timeout: 0 }, async ({ bench }) => {
+  await bench.compare(
+    bench('480 nodes, labels that overflow', () => {
+      layoutSpatialCanvas(labelled480, OPTIONS)
+    }),
+    bench('480 nodes, ascii labels that overflow', () => {
+      layoutSpatialCanvas(asciiLabelled480, OPTIONS)
+    }),
+  )
 })

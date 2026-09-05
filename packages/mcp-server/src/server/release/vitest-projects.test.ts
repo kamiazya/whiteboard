@@ -10,6 +10,7 @@
 // checkout — mutating the checkout to force those same paths red is done
 // separately, by hand, as this task's required mutation checks.
 
+import { readdirSync, readFileSync } from 'node:fs'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
@@ -350,5 +351,142 @@ describe('sharedBrowserTestConfig trace budget', () => {
   it('records them when the trace script asks for them', () => {
     process.env[VAR] = '1'
     expect(sharedBrowserTestConfig().trace.snapshots).toBe(true)
+  })
+})
+
+// ── Test-file coverage: every test file belongs to a project ──
+//
+// vitest only errors when a --project FILTER matches nothing; a test FILE
+// matched by no project's include (or swallowed by an exclude with no other
+// project picking it up) is silently never run, forever, while CI stays
+// green. Three real glob holes had that shape (a `.browser.test.ts` under
+// apps/web, the same under canvas-viewer landing in the NODE project, and
+// apps/web's hand-listed root files). This guard walks the real tree and
+// asserts the invariant that outlives them.
+describe('every test file belongs to a vitest project', () => {
+  interface ProjectGlobs {
+    configPath: string
+    dir: string
+    name: string | undefined
+    isBrowser: boolean
+    include: string[]
+    exclude: string[]
+  }
+  let projects: ProjectGlobs[]
+  let matches: (pattern: string, relPath: string) => boolean
+  beforeEach(async () => {
+    const mod = (await import(pathToFileURL(VITEST_PROJECTS_MODULE_PATH).href)) as {
+      readProjectTestGlobs: (repoRoot: string) => ProjectGlobs[]
+      testGlobMatches: (pattern: string, relPath: string) => boolean
+    }
+    projects = mod.readProjectTestGlobs(ROOT)
+    matches = mod.testGlobMatches
+  })
+
+  function matchedProjects(repoRelPath: string): ProjectGlobs[] {
+    return projects.filter((project) => {
+      if (!repoRelPath.startsWith(`${project.dir}/`)) return false
+      const rel = repoRelPath.slice(project.dir.length + 1)
+      return (
+        project.include.some((pattern) => matches(pattern, rel)) &&
+        !project.exclude.some((pattern) => matches(pattern, rel))
+      )
+    })
+  }
+
+  it('the matcher handles exactly the grammar the configs use', () => {
+    expect(matches('src/**/*.test.ts', 'src/a/b/c.test.ts')).toBe(true)
+    expect(matches('src/**/*.test.ts', 'src/c.test.ts')).toBe(true)
+    expect(matches('src/**/*.test.ts', 'src/c.test.tsx')).toBe(false)
+    expect(matches('*.test.ts', 'root.test.ts')).toBe(true)
+    expect(matches('*.test.ts', 'src/root.test.ts')).toBe(false)
+    expect(matches('scripts/**/*.test.ts', 'scripts/a/b.test.ts')).toBe(true)
+    expect(matches('src/**/*.browser.test.tsx', 'src/x.browser.test.tsx')).toBe(true)
+    expect(matches('src/**/*.browser.test.tsx', 'src/x.test.tsx')).toBe(false)
+  })
+
+  // The three holes, as virtual probes — each was real when this guard was
+  // written, and the probe form keeps them checkable without committing a
+  // file that exists only to be found.
+  it('a .browser.test.ts under apps/web/src runs in the web-browser project', () => {
+    const hit = matchedProjects('apps/web/src/probe.browser.test.ts')
+    expect(hit.map((p) => p.name)).toContain('web-browser')
+    expect(hit.every((p) => p.isBrowser)).toBe(true)
+  })
+
+  it('a .browser.test.ts under canvas-viewer/src runs only in browser projects', () => {
+    const hit = matchedProjects('packages/canvas-viewer/src/probe.browser.test.ts')
+    expect(hit.length).toBeGreaterThan(0)
+    expect(
+      hit.map((p) => p.name),
+      'a browser test file must never land in a node/jsdom project',
+    ).toEqual(hit.filter((p) => p.isBrowser).map((p) => p.name))
+  })
+
+  it('a new root-level apps/web test file runs in web-node without editing a hand list', () => {
+    expect(matchedProjects('apps/web/probe-added-later.test.ts').map((p) => p.name)).toContain(
+      'web-node',
+    )
+  })
+
+  // Families deliberately outside the root project list, each pinned to the
+  // config that runs it — an entry here whose config vanishes fails, so the
+  // allowlist cannot outlive its reason.
+  const OUT_OF_ROOT: Array<{ suffixPattern: RegExp; config: string; mustInclude: string }> = [
+    {
+      suffixPattern: /\.docs-snapshot\.test\.tsx$/,
+      config: 'apps/web/vitest.docs-snapshots.config.ts',
+      mustInclude: 'docs-snapshot',
+    },
+    {
+      suffixPattern: /\.distribution\.test\.ts$/,
+      config: 'packages/mcp-server/vitest.distribution.config.ts',
+      mustInclude: 'distribution',
+    },
+  ]
+
+  it('walking the real tree finds no test file that no project runs', () => {
+    const orphans: string[] = []
+    const wrongProject: string[] = []
+    const roots = [...new Set(projects.map((p) => p.dir))]
+    const skipDirs = new Set(['node_modules', 'dist', 'tmp', '.vitest-attachments', 'coverage'])
+    const walk = (dir: string): string[] =>
+      readdirSync(join(ROOT, dir), { withFileTypes: true }).flatMap((entry) => {
+        if (entry.isDirectory()) {
+          return skipDirs.has(entry.name) ? [] : walk(`${dir}/${entry.name}`)
+        }
+        return /\.test\.tsx?$/.test(entry.name) ? [`${dir}/${entry.name}`] : []
+      })
+    for (const root of roots) {
+      for (const file of walk(root)) {
+        const out = OUT_OF_ROOT.find((o) => o.suffixPattern.test(file))
+        if (out) {
+          const config = readFileSync(join(ROOT, out.config), 'utf8')
+          expect(config, `${out.config} must still run ${file}`).toContain(out.mustInclude)
+          continue
+        }
+        const hit = matchedProjects(file)
+        if (hit.length === 0) orphans.push(file)
+        if (/\.browser\.test\.tsx?$/.test(file) && hit.some((p) => !p.isBrowser)) {
+          wrongProject.push(file)
+        }
+      }
+    }
+    expect(
+      orphans,
+      'these test files are matched by NO vitest project and silently never run',
+    ).toEqual([])
+    expect(wrongProject, 'these browser test files are matched by a non-browser project').toEqual(
+      [],
+    )
+  })
+
+  it('the sweep itself sees a plausible number of files, so a broken walk cannot pass vacuously', () => {
+    const roots = [...new Set(projects.map((p) => p.dir))]
+    expect(roots.length).toBeGreaterThan(10)
+    // Spot-anchor: the busiest project dir must resolve many files through
+    // matchedProjects, or the include parsing has silently gone empty.
+    const anyMcp = matchedProjects('packages/mcp-server/src/server/app.test.ts')
+    expect(anyMcp.map((p) => p.name)).toContain('mcp-node')
   })
 })

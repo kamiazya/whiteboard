@@ -20,18 +20,18 @@
  */
 
 import type { RefObject } from 'react'
-import { useCallback, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import type { SaveVersionOutcome } from '../components/workspace-top-bar/BookmarkAction.js'
 
 export interface VersionSaveFlow {
   readonly saving: boolean
   readonly outcome: SaveVersionOutcome
   readonly run: (label: string) => Promise<void>
-  readonly clearOutcome: () => void
 }
 
 export function useVersionSaveFlow<Scope>(
   scopeRef: RefObject<Scope>,
+  scopeKey: unknown,
   save: (label: string) => Promise<() => void>,
 ): VersionSaveFlow {
   // Names kept as `savingVersion`/`saveVersionOutcome` (not the shorter
@@ -66,11 +66,14 @@ export function useVersionSaveFlow<Scope>(
     [savingVersion, save, scopeRef],
   )
 
-  // SCOPE RESET — the page's own scope-reset effect calls this; the marker
-  // lets scoped-screen-state.test.ts verify the setter from here.
-  const clearOutcome = useCallback(() => {
+  // SCOPE RESET — owned HERE, keyed on the page's document identity, not
+  // delegated to each page's hand-written reset effect. The daemon page
+  // shipped without the clear, and a 'saved' badge earned on one document
+  // stayed lit under the next — a hook that owns its own reset makes that
+  // omission impossible for the next page too.
+  useEffect(() => {
     setSaveVersionOutcome(null)
-  }, [])
+  }, [scopeKey])
 
-  return { saving: savingVersion, outcome: saveVersionOutcome, run, clearOutcome }
+  return { saving: savingVersion, outcome: saveVersionOutcome, run }
 }

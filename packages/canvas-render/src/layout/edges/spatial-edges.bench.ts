@@ -10,7 +10,7 @@
 // Numbers are machine-specific — compare a before/after on the SAME machine
 // in one sitting, never a committed figure against a fresh run.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import { clusteredLayout } from '../../test-utils/routing-corpus.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
@@ -52,39 +52,41 @@ const clustered = clusteredLayout({ clusters: 12, nodesPerCluster: 12, edgesPerC
 // and the number to watch when raising that gate.
 const clusteredLarge = clusteredLayout({ clusters: 24, nodesPerCluster: 12, edgesPerCluster: 16 })
 
-describe('side-choice search', () => {
-  bench('assignEdgeAnchors 40 nodes / 40 edges', () => {
-    assignEdgeAnchors(sparse.nodes, sparse.edges, 'orthogonal')
-  })
-
-  bench('assignEdgeAnchors 60 nodes / 200 edges', () => {
-    assignEdgeAnchors(dense.nodes, dense.edges, 'orthogonal')
-  })
-
-  bench('assignEdgeAnchors clustered 144 nodes / 165 edges', () => {
-    assignEdgeAnchors(clustered.nodes, clustered.edges, 'orthogonal')
-  })
-
-  bench('assignEdgeAnchors clustered 288 nodes / 345 edges (over the opt gate)', () => {
-    assignEdgeAnchors(clusteredLarge.nodes, clusteredLarge.edges, 'orthogonal')
-  })
+// `timeout: 0`: a benchmark's duration IS its output, and the project's
+// 20s test ceiling would clip the dense case (measured 101s for the four rows).
+test('side-choice search', { timeout: 0 }, async ({ bench }) => {
+  await bench.compare(
+    bench('assignEdgeAnchors 40 nodes / 40 edges', () => {
+      assignEdgeAnchors(sparse.nodes, sparse.edges, 'orthogonal')
+    }),
+    bench('assignEdgeAnchors 60 nodes / 200 edges', () => {
+      assignEdgeAnchors(dense.nodes, dense.edges, 'orthogonal')
+    }),
+    bench('assignEdgeAnchors clustered 144 nodes / 165 edges', () => {
+      assignEdgeAnchors(clustered.nodes, clustered.edges, 'orthogonal')
+    }),
+    bench('assignEdgeAnchors clustered 288 nodes / 345 edges (over the opt gate)', () => {
+      assignEdgeAnchors(clusteredLarge.nodes, clusteredLarge.edges, 'orthogonal')
+    }),
+  )
 })
 
 // The primitives the search calls, so a regression can be attributed rather
 // than guessed at: if the search slows down but these did not, the cost is in
 // how many times it calls them.
-describe('routing primitives', () => {
+test('routing primitives', { timeout: 0 }, async ({ bench }) => {
   const denseAnchors = assignEdgeAnchors(dense.nodes, dense.edges, 'orthogonal')
 
-  bench('routeEdge over 200 edges, orthogonal', () => {
-    for (const edge of dense.edges) {
-      routeEdge(dense.nodes, edge, 'orthogonal', denseAnchors.get(edge.id))
-    }
-  })
-
-  bench('routeEdge over 200 edges, straight', () => {
-    for (const edge of dense.edges) {
-      routeEdge(dense.nodes, edge, 'straight', denseAnchors.get(edge.id))
-    }
-  })
+  await bench.compare(
+    bench('routeEdge over 200 edges, orthogonal', () => {
+      for (const edge of dense.edges) {
+        routeEdge(dense.nodes, edge, 'orthogonal', denseAnchors.get(edge.id))
+      }
+    }),
+    bench('routeEdge over 200 edges, straight', () => {
+      for (const edge of dense.edges) {
+        routeEdge(dense.nodes, edge, 'straight', denseAnchors.get(edge.id))
+      }
+    }),
+  )
 })

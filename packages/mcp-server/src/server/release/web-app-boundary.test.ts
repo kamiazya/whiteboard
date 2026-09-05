@@ -201,10 +201,8 @@ const ALLOWED_SHARED_EXACT = new Set([
   'sse-stream-hub.js', // shared SSE stream + per-document refcounting, no Node APIs
   'sync-sse-contract.js', // SSE event Zod schemas, no Node APIs
   'token-store.js', // in-memory daemon-token holder, no Node APIs
-  'upload-files.js', // file upload transport, no Node APIs
   'ws-messages.js', // WebSocket protocol types/constants
   'ws-protocol.js', // WebSocket protocol helpers
-  'ws-text-message.js', // WebSocket text-message parsing, no Node APIs
 ])
 
 // test-utils/* is intentionally excluded here — it is handled separately below
@@ -332,8 +330,6 @@ describe('src/shared allowlist', () => {
   it('relocated daemon-backend transport modules are allowed', () => {
     expect(check('../../shared/daemon-backend.js')).toBeNull()
     expect(check('../../shared/api-client.js')).toBeNull()
-    expect(check('../../shared/upload-files.js')).toBeNull()
-    expect(check('../../shared/ws-text-message.js')).toBeNull()
     expect(check('../../shared/browser-tracing.js')).toBeNull()
   })
 
@@ -551,20 +547,20 @@ describe('collectTransitiveViolations', () => {
     expect(violations).toEqual([])
   })
 
-  it('resolves a .tsx source file (second extension candidate)', () => {
+  it('resolves a .tsx source file', () => {
     writeFileSync(join(dir, 'entry.ts'), "export * from './Component.js'\n")
     writeFileSync(join(dir, 'Component.tsx'), 'export const x = 1\n')
     expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
   })
 
-  it('resolves a directory-style import via its index.ts (third candidate)', () => {
+  it('resolves a directory-style import via its index.ts', () => {
     mkdirSync(join(dir, 'feature'))
     writeFileSync(join(dir, 'entry.ts'), "export * from './feature.js'\n")
     writeFileSync(join(dir, 'feature/index.ts'), 'export const x = 1\n')
     expect(collectTransitiveViolations(join(dir, 'entry.ts'), dir)).toEqual([])
   })
 
-  it('resolves a directory-style import via its index.tsx (fourth candidate)', () => {
+  it('resolves a directory-style import via its index.tsx', () => {
     mkdirSync(join(dir, 'widget'))
     writeFileSync(join(dir, 'entry.ts'), "export * from './widget.js'\n")
     writeFileSync(join(dir, 'widget/index.tsx'), 'export const x = 1\n')

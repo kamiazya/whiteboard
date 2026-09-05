@@ -43,6 +43,5 @@ describe('ports package smoke', () => {
     expect(docRef.kind).toBe('document')
 
     expect(pkg.TOKENS.DocumentStore).toBe(Symbol.for('whiteboard.ports.DocumentStore'))
-    expect(pkg.negotiateProtocolVersion([1, 2], [2, 3])).toBe(2)
   }, 30_000)
 })
