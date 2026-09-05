@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  lazy,
+  type ReactNode,
+  Suspense,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from 'react'
 import {
   CommentsRailAside,
   CommentsRailToggle,
@@ -36,6 +45,7 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
+import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
@@ -58,15 +68,55 @@ const log = getAppLogger('document-page')
 /**
  * The document page, whoever keeps the document (ADR-0004 decision 1).
  *
- * Renders the shell, the merged header row, the editor surface and the
- * inspector beside it (properties, comments, connections or history) from a
- * `DocumentPageModel`, and owns the page state that names no keeper: which
- * inspector is open, which past state is being looked at, the
+ * `App` hands it a keeper and that keeper's props; the keeper's hook runs
+ * the controller, the sync backend, the body and the versions, and answers
+ * either a model or a terminal screen of its own. Everything this component
+ * owns names no keeper: the history column's refresh signal here, and in the
+ * body below, which inspector is open beside the editor (properties,
+ * comments, connections or history), which past state is being looked at, the
  * save-a-version flow, the seams the editor reads.
- * A keeper page builds the model — controller, sync backend, body, versions
- * — and renders this; nothing in here asks which keeper it is.
+ *
+ * Two components rather than one so the body's hooks run only while there is
+ * a model to run them on — a keeper answering `terminal` renders its screen
+ * and mounts nothing of the page, exactly as the keeper pages did before the
+ * page was shared.
  */
-export function DocumentPage({ model }: { model: DocumentPageModel }) {
+export function DocumentPage<Props>({
+  keeper,
+  props,
+}: {
+  keeper: DocumentKeeper<Props>
+  props: Props
+}) {
+  // Bumped on any version created — this page's own save, a peer's, an
+  // agent's — so an open history column re-reads without waiting for its
+  // poll. Owned here rather than by the keeper because the column is the
+  // page's; the keeper only says WHEN.
+  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  const events = useMemo<DocumentKeeperEvents>(
+    () => ({ onVersionCreated: () => setVersionRefreshSignal((n) => n + 1) }),
+    [],
+  )
+  const answer = keeper.useDocument(props, events)
+  if (answer.kind === 'terminal') return answer.node
+  const page: ReactNode = (
+    <DocumentPageBody model={answer.model} versionRefreshSignal={versionRefreshSignal} />
+  )
+  return answer.wrap === undefined ? page : answer.wrap(page)
+}
+
+/**
+ * Renders the shell, the history column, the merged header row, the editor
+ * surface and the comments rail from a `DocumentPageModel`. Nothing in here
+ * asks which keeper built the model.
+ */
+function DocumentPageBody({
+  model,
+  versionRefreshSignal,
+}: {
+  model: DocumentPageModel
+  versionRefreshSignal: number
+}) {
   const { sync, documentKind, documentKey, versions, files, threads } = model
 
   // Stable across re-renders so the settings payload isn't re-read from
@@ -252,7 +302,7 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
             capabilities={versions.historyCapabilities}
             onRestored={sync.clearLocalUndo}
             onPreview={setPreview}
-            refreshSignal={versions.refreshSignal}
+            refreshSignal={versionRefreshSignal}
             onClose={() => setInspector(null)}
             headerActions={
               <BookmarkAction

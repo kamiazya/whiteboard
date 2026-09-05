@@ -109,8 +109,11 @@ export interface DocumentPageModel {
     readonly save: (
       label: string,
     ) => Promise<{ workspaceId: string; path: string; versionId: string }>
-    /** A change re-reads the history column. */
-    readonly refreshSignal: number
+    /**
+     * The beat after a save that re-reads the history column. A keeper that
+     * announces on the window fires the event the page already listens to;
+     * one that has no such bus raises the page's `onVersionCreated` directly.
+     */
     readonly announceRefresh: () => void
     readonly announceOnce?: () => void
   }

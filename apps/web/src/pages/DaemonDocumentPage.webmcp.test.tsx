@@ -1,26 +1,24 @@
+/**
+ * The daemon keeper's own WebMCP case. The shared scenarios (every tool
+ * registers once a document is on screen, none when the setting is off) run
+ * against both keepers in `document-page.contract.tsx`; this one has no
+ * browser twin, because the browser keeper always has a document to open
+ * and the daemon can resolve a workspace to none.
+ */
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
-import {
-  act,
-  cleanup,
-  type RenderOptions,
-  render as rtlRender,
-  waitFor,
-} from '@testing-library/react'
+import { act, cleanup, type RenderOptions, render as rtlRender } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
-import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
-// The page now reads useNavigate (Settings navigation), so every render
-// needs a Router ancestor — wrapping once here keeps the existing
-// `render(<DaemonDocumentPage .../>)` call sites throughout this file unchanged.
+// The page reads useNavigate (Settings navigation), so every render needs a
+// Router ancestor.
 function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
 }
@@ -84,9 +82,6 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 describe('DaemonDocumentPage WebMCP wiring', () => {
   beforeEach(() => {
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
-    mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
-    })
   })
 
   afterEach(() => {
@@ -94,27 +89,6 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
     vi.clearAllMocks()
     localStorage.clear()
     delete (document as { modelContext?: unknown }).modelContext
-  })
-
-  it('registers every read-only tool, keyed on workspaceId/path, once a daemon canvas loads', async () => {
-    const fake = createFakeModelContext()
-    document.modelContext = fake
-
-    await act(async () => {
-      render(
-        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() =>
-      expect(document.querySelector('[data-testid="spatial-editor-container"]')).toBeTruthy(),
-    )
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(fake.liveNames().sort()).toEqual(webMcpTools.map((tool) => tool.name).sort())
   })
 
   it('attempts no registration while the workspace resolves to zero documents (canvas === null)', async () => {
@@ -128,34 +102,6 @@ describe('DaemonDocumentPage WebMCP wiring', () => {
         { container: document.body },
       )
     })
-    await act(async () => {
-      await Promise.resolve()
-      await Promise.resolve()
-    })
-
-    expect(fake.liveNames()).toEqual([])
-  })
-
-  it('registers no tools when capabilities.webMcpEnabled is persisted as false', async () => {
-    localStorage.setItem(
-      STORAGE_KEY,
-      JSON.stringify({
-        ...defaultUserSettings(),
-        capabilities: { webMcpEnabled: false },
-      }),
-    )
-    const fake = createFakeModelContext()
-    document.modelContext = fake
-
-    await act(async () => {
-      render(
-        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() =>
-      expect(document.querySelector('[data-testid="spatial-editor-container"]')).toBeTruthy(),
-    )
     await act(async () => {
       await Promise.resolve()
       await Promise.resolve()
