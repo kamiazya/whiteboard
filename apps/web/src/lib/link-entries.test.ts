@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { linkEntries, linkTargets, linkTitles } from './link-entries.js'
+import { fileRefOptions, linkEntries, linkTargets, linkTitles } from './link-entries.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const OTHER = '01ARZ3NDEKTSV4RRFFQ69G5FAW'
@@ -66,6 +66,23 @@ describe('linkTargets', () => {
     expect(targets.map((t) => t.id)).toEqual(['id-other'])
     // Without the exclusion everything stays listed (existing callers).
     expect(linkTargets(documents).map((t) => t.id)).toEqual(['id-self', 'id-other'])
+  })
+})
+
+describe('fileRefOptions', () => {
+  // The file-node picker is the third list built from the same rows; its
+  // rows are the link targets under different field names, so it derives
+  // from them rather than being built inline a third time per page.
+  it('projects link targets onto the picker rows, label included', () => {
+    expect(
+      fileRefOptions([
+        { id: ID, path: 'untitled-2', name: '週次レビュー', kind: 'markdown' },
+        { id: OTHER, path: 'notes', name: 'notes', kind: 'spatial' },
+      ]),
+    ).toEqual([
+      { file: ID, label: '週次レビュー', kind: 'markdown' },
+      { file: OTHER, label: 'notes', kind: 'spatial' },
+    ])
   })
 })
 

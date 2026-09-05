@@ -77,7 +77,7 @@ import {
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -1210,16 +1210,11 @@ export function BrowserDocumentPage({
                         onChange={onChange}
                         externalVersion={externalVersion}
                         theme={resolvedTheme}
-                        // File-node reference = canvas id minted in the browser; the
-                        // current canvas is excluded (a self-reference card is pure
-                        // noise).
-                        fileRefOptions={documents
-                          .filter((entry) => entry.documentId !== documentId)
-                          .map((entry) => ({
-                            file: entry.documentId,
-                            label: entry.name,
-                            kind: entry.kind,
-                          }))}
+                        // File-node reference = canvas id minted in the browser;
+                        // the same rows the link picker offers (open document
+                        // excluded, live-snapshot overlay), under the picker's
+                        // field names.
+                        fileRefOptions={fileRefOptions(pickerTargets)}
                         onOpenDocument={navigateToDocument}
                         missingFileRef={missingFileRef}
                         fileSeams={fileSeams}

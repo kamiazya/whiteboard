@@ -1,10 +1,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject, RefObject } from 'react'
+import type { FileRefOption } from '../../lib/link-entries.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import { indexNodeBoxes } from '../../lib/spatial/geometry.js'
 import type { ContainerSize, Point, Viewport } from '../../lib/spatial/viewport.js'
 import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
-import type { FileRefOption } from './DocumentPickerDialog.js'
 import type { GestureResult } from './gestures.js'
 import { NEW_NODE_WIDTH } from './gestures.js'
 import {
