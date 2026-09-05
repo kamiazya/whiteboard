@@ -188,9 +188,11 @@ seam a root forgot never failed — the web preview drew a canvas behind
 by hand outside that module (passing one along, `overlayReferences`, or
 handing the builder an alias table is fine). The bundle also has a DATA
 form, `ReferenceWire` / `referenceSeamsFromWire`, for the layout worker: a
-function cannot cross `postMessage`, so the graph and the tables it was
-built over cross instead, and both threads build the same seams from the
-same bytes. That closed the last gap — a text node's `![[note]]` drew a
-placeholder in the worker, and for parity on the main thread too.
+function cannot cross `postMessage`, so the graph and its tables cross,
+and both threads build the same seams from the same bytes. A keeper's wire
+can outgrow one canvas — the editor grows it for a body being drafted, so
+the overlay's preview resolves a link before the commit — and
+`referenceWireFor` cuts it to what a canvas can read before anything keys
+on it.
 
 The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.

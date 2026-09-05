@@ -150,6 +150,7 @@ export function SpatialEditorPane({
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}
+          onDraft={nodeInEditor.draft}
           onOpenDocument={onOpenDocument}
         />
       )}

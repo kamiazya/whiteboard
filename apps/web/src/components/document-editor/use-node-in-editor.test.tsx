@@ -85,4 +85,30 @@ describe('useNodeInEditor', () => {
       'a re-render that did not change the document must not close the surface under the caret',
     ).toEqual({ id: 'n1', text: 'before' })
   })
+
+  // The overlay's preview resolves a link the moment it is typed, which
+  // needs the link's target loaded before the commit. The page re-renders
+  // for every published draft, so a draft is published only when the set of
+  // references it names changes — not per keystroke.
+  it('publishes the draft as a body to load only when the references it names change', () => {
+    const { result } = renderHook(() => useNodeInEditor(canvas, vi.fn(), 'doc-a'))
+    act(() => result.current.open('n1', 'before'))
+    expect(result.current.draftBodies).toEqual([])
+
+    act(() => result.current.draft('before [[notes/pl'))
+    expect(result.current.draftBodies).toEqual([])
+
+    act(() => result.current.draft('before [[notes/plan]]'))
+    expect(result.current.draftBodies).toEqual(['before [[notes/plan]]'])
+    const published = result.current.draftBodies
+
+    act(() => result.current.draft('before [[notes/plan]] and more'))
+    expect(result.current.draftBodies).toBe(published)
+
+    act(() => result.current.draft('before ![[notes/plan]]'))
+    expect(result.current.draftBodies).toBe(published)
+
+    act(() => result.current.close())
+    expect(result.current.draftBodies).toEqual([])
+  })
 })

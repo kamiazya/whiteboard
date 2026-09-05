@@ -44,7 +44,7 @@ function makeAdapter(overrides: Partial<DocumentFileAdapter> = {}) {
 }
 
 function mount(canvas: SpatialCanvas, adapter: DocumentFileAdapter) {
-  return renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map() }))
+  return renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map(), bodies: [] }))
 }
 
 describe("a resolved reference's markdown body", () => {

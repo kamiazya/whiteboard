@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
 import { REFERENCE_BUDGET, referenceTargets } from './targets.js'
-import { referenceSeamsFromWire, referenceWire } from './wire.js'
+import { referenceSeamsFromWire, referenceWire, referenceWireFor } from './wire.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -216,5 +216,79 @@ describe('overlayReferences', () => {
     expect(seam?.('a')).toEqual({ canvas: board, label: 'Alpha' })
     expect(seam?.('gone')).toEqual({ missing: true })
     expect(seam?.('other')).toBeUndefined()
+  })
+})
+
+describe('referenceWireFor', () => {
+  it('keeps the rows laying out these canvases can read — what they name, transitively — and drops the rest', () => {
+    // The hook that feeds the editor grows its wire for a body being DRAFTED
+    // beside the canvas, so the overlay's preview resolves it before the
+    // commit. The canvas's own layout cannot read those rows, and it must not
+    // re-lay out or drop its content cache for them.
+    const OTHER_ID = '01CX5ZZKBKACTAV9WEVGEMMVRZ'
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 't', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'see [[notes/plan]]' },
+        { id: 'f', type: 'file', x: 0, y: 0, width: 10, height: 10, file: 'asset:pic' },
+      ],
+      edges: [],
+    }
+    const wire = referenceWire(
+      graphOf({
+        'notes/plan': { documentId: NOTE_ID, body: '![[boards/roadmap]]' },
+        'boards/roadmap': { documentId: BOARD_ID, canvas: board },
+        'notes/drafted': { documentId: OTHER_ID, body: 'typed, not committed' },
+        'notes/gone': null,
+      }),
+      {
+        resolveAlias: (alias) => (alias === 'notes/drafted' ? OTHER_ID : null),
+        resolveTitle: (id) =>
+          id === NOTE_ID
+            ? 'Plan'
+            : id === BOARD_ID
+              ? 'Roadmap'
+              : id === OTHER_ID
+                ? 'Drafted'
+                : undefined,
+        extras: new Map([
+          ['asset:pic', { image: { href: 'blob:pic' } }],
+          ['notes/drafted', { label: 'Drafted card' }],
+        ]),
+      },
+    )
+
+    const own = referenceWireFor(wire, { canvases: [canvas] })
+    expect(own.entries.map(([key]) => key).sort()).toEqual(['boards/roadmap', 'notes/plan'])
+    expect(own.aliases).toEqual([])
+    expect(own.titles.map(([id]) => id).sort()).toEqual([BOARD_ID, NOTE_ID].sort())
+    expect(own.extras).toEqual([['asset:pic', { image: { href: 'blob:pic' } }]])
+    // A wire the canvas cannot read more of is the same wire, byte for byte.
+    expect(JSON.stringify(referenceWireFor(own, { canvases: [canvas] }))).toBe(JSON.stringify(own))
+    expect(structuredClone(own)).toEqual(own)
+  })
+
+  it('keeps a row the canvas names even when nothing loaded for it, and an alias a body wrote', () => {
+    const canvas: SpatialCanvas = {
+      nodes: [
+        {
+          id: 't',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+          text: '[[notes/gone]] [[notes/plan]]',
+        },
+      ],
+      edges: [],
+    }
+    const wire = referenceWire(graphOf({ 'notes/gone': null, 'notes/plan': { body: 'x' } }), {
+      resolveAlias: (alias) => (alias === 'notes/plan' ? NOTE_ID : null),
+      resolveTitle: (id) => (id === NOTE_ID ? 'Plan' : undefined),
+    })
+    const own = referenceWireFor(wire, { canvases: [canvas] })
+    expect(own.entries).toEqual(expect.arrayContaining([['notes/gone', null]]))
+    expect(own.aliases).toEqual([['notes/plan', NOTE_ID]])
+    expect(own.titles).toEqual([[NOTE_ID, 'Plan']])
   })
 })
