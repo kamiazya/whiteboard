@@ -2,7 +2,7 @@ import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { useCanvasWire } from './use-canvas-wire.js'
+import { useCanvasReferences } from './use-canvas-references.js'
 
 const canvas: SpatialCanvas = {
   nodes: [
@@ -12,7 +12,7 @@ const canvas: SpatialCanvas = {
 }
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-describe('useCanvasWire', () => {
+describe('useCanvasReferences', () => {
   it('hands back the same wire while what the canvas can read is unchanged, and a new one when it changes', () => {
     // The keeper's wire grows for a body drafted beside the canvas; the
     // canvas's layout, its worker request and its content cache all key on
@@ -23,11 +23,14 @@ describe('useCanvasWire', () => {
         resolveTitle: (id) => (id === NOTE_ID ? 'Plan' : undefined),
       },
     )
-    const { result, rerender } = renderHook(({ references }) => useCanvasWire(canvas, references), {
-      initialProps: { references: base },
-    })
+    const { result, rerender } = renderHook(
+      ({ references }) => useCanvasReferences(canvas, references),
+      {
+        initialProps: { references: base },
+      },
+    )
     const first = result.current
-    expect(first?.entries.map(([key]) => key)).toEqual(['notes/plan'])
+    expect(first.wire?.entries.map(([key]) => key)).toEqual(['notes/plan'])
 
     const grown = referenceWire(
       new Map([
@@ -47,11 +50,12 @@ describe('useCanvasWire', () => {
     )
     rerender({ references: edited })
     expect(result.current).not.toBe(first)
-    expect(result.current?.entries[0]?.[1]?.body).toBe('the plan, revised')
+    expect(result.current.wire?.entries[0]?.[1]?.body).toBe('the plan, revised')
   })
 
   it('is absent when the host resolves nothing', () => {
-    const { result } = renderHook(() => useCanvasWire(canvas, undefined))
-    expect(result.current).toBeUndefined()
+    const { result } = renderHook(() => useCanvasReferences(canvas, undefined))
+    expect(result.current.wire).toBeUndefined()
+    expect(result.current.seams).toBeUndefined()
   })
 })

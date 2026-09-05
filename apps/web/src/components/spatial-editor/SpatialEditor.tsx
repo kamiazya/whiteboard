@@ -59,7 +59,6 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -140,8 +139,8 @@ import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
+import { useCanvasReferences } from './use-canvas-references.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
-import { useCanvasWire } from './use-canvas-wire.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
@@ -472,14 +471,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       viewportCenterScreen,
       containerSizeOf,
     })
-    // What THIS canvas can read of the host's wire, by identity — the host's
-    // is wider (it carries a draft's references for the overlay's preview),
-    // and rows the canvas cannot read must not re-lay it out.
-    const canvasWire = useCanvasWire(canvas, references)
-    const seams = useMemo(
-      () => (canvasWire === undefined ? undefined : referenceSeamsFromWire(canvasWire)),
-      [canvasWire],
-    )
+    // What THIS canvas can read of the host's wider wire, by identity.
+    const { wire: canvasWire, seams } = useCanvasReferences(canvas, references)
     // The file-reference seam — the LOD gate, label/missing resolution and
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
