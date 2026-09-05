@@ -24,15 +24,28 @@ value.
 | `--destructive` | irreversible actions and error text ONLY |
 | `--border`, `--input`, `--ring` | hairlines, input outlines, focus rings |
 | `--radius` (sm/md/lg/xl derived) | one radius scale — never ad-hoc radii |
+| `--annotation` | the annotation layer, everywhere it is drawn |
 
-State colors outside the shadcn set live in ONE component,
-`components/StateDot.tsx`, which every chrome state carrier draws from:
-`emerald-500` = safe (saved, synced), `amber-500` = needs attention,
-`muted-foreground` = neutral/local. These are the ONLY approved uses of raw
-Tailwind palette colors in chrome, and a carrier picks a MEANING (`tone`)
-rather than a color. It also picks a SHAPE, which is what separates two
-carriers that share a tone: `filled` is a state the document is IN, `ring`
-one it is not in yet, `spinner` that same ring while the doing is in flight.
+`--annotation` is amber, and it is one token rather than two because a
+conversation has to read as the same thing on both surfaces: the canvas draws
+it as a pin and a bubble, a markdown body as an underline under the quoted
+passage plus a dot in the gutter. It is deliberately none of the three above
+it — an annotation is not a selection, not a ruler, and not destruction — and
+deliberately not `--destructive`, which this product reserves for actions that
+cannot be undone.
+
+State colour outside the shadcn set is ONE colour, `amber-500`, and it is
+drawn in one place, `components/shell/ShellMark.tsx`. It means "a condition
+that asks something of you" and nothing else. There is no colour for "safe":
+a document whose writes land and whose session is up draws NO state at all,
+because the routine state asks nothing and a mark lit for it would be lit
+always — which is what made the header restless while someone typed, and
+what the closed set below used to spend `emerald-500` on. What separates two
+conditions that share the one colour is SHAPE and MOTION: a filled cap is
+"not yet" (a write that is stuck, a session that is reconnecting — the latter
+also travels), a hollow cap on a broken stroke is "not keeping" (a refused
+write), a filled cap on a broken stroke is the daemon's "not keeping"
+(sync-off). The word for each lives in the accessible name and the popover.
 
 ## Rules
 
@@ -65,28 +78,35 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
     dimmed. The word moves to the accessible name and the popover's header,
     where assistive tech reads it either way.
 
-    Two gestures, both finite, one per direction. `sync-off` arriving keeps
-    the chip's attention echo verbatim. `reconnecting`/`sync-off` → `synced`
-    plays a recovery draw — the RARE moment, not the routine one. There is
-    deliberately no "a write landed" celebration: the daemon keeper has no
-    write-landed signal to hang one on (its `session` is derived from
-    transport liveness, not from an ack), so shipping it would light up for
-    browser-kept workspaces only and read as "the daemon is not saving" —
-    which is exactly what "never offer what the keeper cannot honour" below
-    forbids.
-  - **save-state chip** (`SaveStatusChip`) — did the last write to this
-    browser's storage land? Filled dot. Browser keeper only; on a daemon the
-    shell mark is what answers "is my work safe", and a second dot saying so
-    would be the same fact twice.
-  - **version dot** (`HeaderVersionDot`) — are there edits no named version
-    holds yet? RING, not filled, precisely because it shares the amber tone
-    with the save-state chip while asking something else. It carried the
-    filled amber and the name "save dot" until 2026-08-22, which made one
-    shape mean two things depending on the mode.
+    Two gestures, both finite, one per direction. A keeper giving up
+    (`sync-off`, a refused browser write) arrives with an attention echo.
+    `reconnecting`/`sync-off` → `synced` plays a recovery draw — the RARE
+    moment, not the routine one. There is deliberately no "a write landed"
+    celebration: the daemon keeper has no write-landed signal to hang one on
+    (its `session` is derived from transport liveness, not from an ack), so
+    shipping it would light up for browser-kept workspaces only and read as
+    "the daemon is not saving" — which is exactly what "never offer what the
+    keeper cannot honour" below forbids.
+
+    The mark answers for BOTH keepers now, each with the health it can
+    vouch for: the daemon's is its session; the browser's is its storage
+    (`StorageHealth` — whether the writes behind the open document are
+    landing, judged from the facts the sync session, the markdown save and
+    the controller report). A browser-kept document used to carry a second
+    carrier, a save-state chip beside its title, that went amber on every
+    keystroke and emerald half a second later. It was removed (2026-09-05)
+    rather than quietened: the unsaved few hundred milliseconds while
+    someone types are the ordinary state, ask nothing, and are not shown.
+    What is shown is a CONDITION — an edit unsaved past `STUCK_AFTER_MS`, or
+    a write the store refused — and "is it saved" is answered on asking, in
+    the mark's popover, with the time the last write landed.
+  - **version dot** — retired. `HeaderVersionDot` ("are there edits no named
+    version holds yet?") was removed with the version history rework
+    (#1245); the History panel is where a named version is taken and seen.
   - **AppShell gear's attention dot** — brand blue, actionable-todo only.
 
-  Anything else stateful in chrome needs this list amended first, and takes
-  its paint from `StateDot` rather than a fresh literal.
+  Anything else stateful in chrome needs this list amended first, takes
+  amber or nothing, and puts its word in the accessible name.
 - **The AppShell owns brand, connection and settings.** Every page mounts
   `AppShell` (the signature mark, the ALPHA honesty chip, the settings gear +
   attention dot) and never renders its own brand, connection or settings
@@ -413,7 +433,7 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   `--motion-ease-out` (soft ease-out — never bouncy in chrome).
   Entrances are fade + small rise/scale (0.98→1); no entrance animation
   without an explicit reason. **Stateful colour is the one paint-property
-  exception**: where the colour IS the state (`StateDot`'s tone, a hover
+  exception**: where the colour IS the state (the shell mark's cap, a hover
   affordance), it crosses with `transition-colors` on the normal token
   rather than cutting. There is no transform/opacity encoding of "which
   colour" that also works — stacking tones and fading between them breaks
@@ -450,21 +470,14 @@ never to a single vessel.
 ## Comment surfaces: two hosts, one set of parts
 
 A conversation is read and answered in three places — the card the canvas
-opens on a bubble, the markdown editor's in-place projection (a highlight
-over the passage and a gutter marker in the source, a marker beside the
-block in the preview; `markdown-editor/comment-anchors.ts`), and the
-document-level panel both editors share (ADR-0026 decision 5), riding in
-`CommentsRail`: a column where there is width, a sheet over the editor
-under 768px, the same two shapes the history panel takes. The parts are
-shared, not the pattern:
+opens on a bubble, the markdown editor's in-place projection
+(`markdown-editor/annotation-decorations.ts`: a mark over the passage and a
+gutter marker beside its line), and the document-level rail both editors
+share (ADR-0026 decision 5; `useCommentsRail` holds its state,
+`CommentsRailAside` is its vessel). The card composes shared parts:
 `annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
 Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
-`ThreadReplies` (the replies under the subject line). A host composes
-them and decides only what a reply is TO and how its surface is sized. This
-exists because the two hosts each carried a copy of the reply form and had
-already drifted — the card answered Cmd/Ctrl+Enter and the panel swallowed
-it. A rule one host gains, the other must not be able to lack, so the rule
-lives in a part rather than in both hosts.
+`ThreadReplies` (the replies under the subject line).
 
 Three things every such surface needs are INTRINSIC to the canvas root, so a
 new one gets them without being wired — each was forgotten once, on the
@@ -492,19 +505,27 @@ comment card, and shipped that way to a phone:
 
 The card itself is a non-modal dialog: it slides inside the root's edge like
 the context menu, a press on the canvas dismisses it like a menu, and Escape
-does too.
+does too. A press on comment chrome opens it under EITHER tool — the hand
+tool takes every plain press as a pan, but a comment is chrome, not content,
+and the release decides: a press that never travelled past the slop opens
+the card, one that travelled was the pan (hand) or the pin drag (select) it
+became on its first move. The press arms nothing visible until then, on
+purpose: arming the pin drag at the press took the committed copy out of the
+surface under a touch pointer implicitly captured on it, and its release
+then died on a detached node — every later tap replayed the stale press.
 
 **Where a conversation can be opened, and how.** Every place a reader can
 point at has one entry, and the entry belongs to the surface the place is
-on — a menu row where the place is an object, a verb where it is text:
+on — a menu row where the place is an object, a catalog row where it is
+text:
 
 | place | entry | anchor |
 |---|---|---|
 | a spot on the canvas | canvas menu, "Comment here" | `spatial` point |
 | a node | node menu, "Comment on this" | `spatial` + `nodeId` |
 | an edge | edge menu, "Comment on this" | `spatial` + `edgeId` |
-| a passage of a text node | the `comment` verb while editing the node (verb bar, touch bar, right-click catalog) | `text` + `nodeId` |
-| a passage of a note | the `comment` verb (toolbar, ⋯ catalog, touch bar) | `text` |
+| a passage of a text node | the editing catalog's "Comment on this" (right-click inside the node's editor, with a selection) | `text` + `nodeId` |
+| a passage of a note | the editing catalog's "Comment on this" (⋯ and right-click, with a selection) | `text` |
 | several nodes at once | node menu on a multi-selection, "Comment on selection" | `spatial` + `nodeIds` + the box they occupy |
 | a region of empty canvas | no entry yet in the editor — an agent names the rect through `wb_thread_edit` | `spatial` + `width`/`height` |
 | the document as a whole | the comments rail, "Comment on the document" — a note and a canvas alike | `document` |
@@ -516,36 +537,29 @@ the rail labels it "N nodes". A document-level thread is drawn nowhere —
 the container is on no surface — so the rail is both where it starts and
 where it is read, labelled "whole document".
 
-The `comment` verb is ONE entry in `MARKDOWN_EDITOR_VERBS`, so every bar
-that reads the table offers it; it is `interactive` with no wrap to degrade
-to, and a bar leaves it off on a host that offers no seam
-(`ActiveMarkdownEditor.openCommentComposer`) rather than showing it inert.
-The canvas answers the verb with its compose bubble at the node's corner;
-a note answers with a draft composer at the top of the rail, labelled with
-the quoted passage. Both write the same thread shape. The right-click
-catalog is ONE builder (`verb-catalog.tsx`) for the note editor's ⋯ and
-right-click and for a right-click inside a node's editor, so the two
-editors cannot offer different verbs for the same text. The menu takes
-focus for its rows, and the node editor — which commits on blur — reads a
+Comment is deliberately OUTSIDE `MARKDOWN_EDITOR_VERBS`: it writes nothing
+into the body, it opens a conversation beside it, and the table's keymap and
+verb bar cannot resolve a scope for it. The editing catalog is ONE builder
+(`verb-catalog.tsx`) for the note editor's ⋯ and right-click and for a
+right-click inside a node's editor, so the two editors cannot offer
+different verbs for the same text; the Comment row rides in as the host's
+seam, present only with a selection. The canvas answers it with its compose
+bubble at the node's corner; a note answers with the rail's compose box,
+quoting the passage. Both write the same thread shape. The menu takes focus
+for its rows, and the node editor — which commits on blur — reads a
 departure INTO a menu as the catalog's, not the user's; the menu hands the
-caret back on close, so the edit outlives the menu and still commits on
-the next real exit.
+caret back on close (`ActiveMarkdownEditor.focus`), so the edit outlives the
+menu and still commits on the next real exit.
 
 A passage is drawn where its words are, on every surface that has them:
-the note's source pane and the node's editor as CodeMirror decorations,
-the static canvas as highlight shapes canvas-render composes behind the
-runs (from the `threads` it is handed; the pin still comes from the flat
-projection the optimistic state holds), and the export through the same
-layout. The MCP Apps widget receives no threads yet, so it shows the pin
-without the highlight.
-
-**Which conversation is open is the PAGE's answer, held once.** The rail
-and the in-place projection both read it and both may change it: a press on
-a gutter or preview marker opens the rail on that thread, a press on a rail
-row reveals its passage (centred, unless already on screen). Two surfaces
-each keeping their own "open" is how a marker would open one thread while
-the rail showed another. The canvas card still keeps its own open comment;
-folding it into the same state is the next increment.
+the note's source pane and the node's editor as CodeMirror decorations (the
+node's editor takes the marks without the gutter, `annotationMarks`, since
+a gutter in the node's own box would shift the words away from where the
+committed render draws them), the static canvas as highlight shapes
+canvas-render composes behind the runs (from the `threads` it is handed;
+the pin still comes from the flat projection the optimistic state holds),
+the export through the same layout, and the MCP Apps widget from the
+`threads` `canvas_view` hands it.
 
 ## A toggle looks toggled, and says so once
 

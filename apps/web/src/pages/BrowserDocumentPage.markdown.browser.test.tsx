@@ -70,7 +70,8 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 /**
  * Waits until a debounced save has actually LANDED for this document.
  *
- * Not `getByRole('button', { name: 'Saved' })`. A document that has never
+ * From the hidden persistence fact the page publishes for tests — the row
+ * itself draws no save state any more. A document that has never
  * been written is already `Saved` — correct for a reader, and useless as
  * proof that a write completed. That wait matched the state the page was
  * already in, so these tests navigated away with the write still pending and
@@ -84,7 +85,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 async function waitForSaved(): Promise<void> {
   await waitFor(
     () => {
-      const chip = document.querySelector('[data-testid="save-status-chip"]')
+      const chip = document.querySelector('[data-testid="persistence-state"]')
       expect(chip?.getAttribute('data-save-state')).toBe('saved')
       expect(chip?.getAttribute('data-last-saved-at')).toBeTruthy()
     },
@@ -257,7 +258,9 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // Edge routing has no meaning for a document with no spatial scene —
     // the gear must not carry over; the rest of the canvas row does.
     expect(document.querySelector('[data-testid="canvas-settings-button"]')).toBeNull()
-    expect(document.querySelector('[data-testid="save-status-chip"]')).toBeTruthy()
+    // The rest of the row does carry over: the hidden persistence fact rides
+    // the same slot the spatial row uses.
+    expect(document.querySelector('[data-testid="persistence-state"]')).toBeTruthy()
   })
 
   it("the title survives a remount and is the document's one name", async () => {
@@ -271,8 +274,8 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(title.closest('header')).toBeTruthy()
     await userEvent.click(title)
     // Non-ASCII goes through fill, not per-key synthesis: characters with no
-    // keycode are synthesized out of band and drop under load (see
-    // browser-test-keyboard-ascii.test.ts).
+    // keycode are synthesized out of band and drop under load (the rule in
+    // tools/biome-plugins/browser-test-shapes.grit).
     await userEvent.fill(title, 'リリース計画')
     await expectTitleValue('リリース計画')
 
@@ -634,6 +637,110 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       () => {
         const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
         expect(preview?.textContent).toContain('unmistakable embedded body text')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it('a block ![[embed]] of a canvas draws that canvas inline in the preview', async () => {
+    const store = new IdbDocumentIndex()
+    const BOARD_ID = await seedIdbDocument(store, {
+      path: 'embed-board',
+      name: 'Embed board',
+      kind: 'spatial',
+    })
+    await seedIdbDocument(store, {
+      path: 'embed-source',
+      name: 'Embed source',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    const boardDoc = new Loro()
+    writeSpatialCanvas(boardDoc, {
+      nodes: [
+        {
+          id: 'b1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 120,
+          text: 'unmistakable canvas node text',
+        },
+      ],
+      edges: [],
+    })
+    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    render(<BrowserDocumentPage store={store} />)
+
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+    await userEvent.keyboard(`![[[[${BOARD_ID}]]{Enter}{Enter}and more typing`)
+
+    // The preview loads the board asynchronously and lays it out as a
+    // miniature under its name: both the canvas's own text and the
+    // workspace's display name for it reach the SVG.
+    await waitFor(
+      () => {
+        const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+        expect(preview?.textContent).toContain('unmistakable canvas node text')
+        expect(preview?.textContent).toContain('Embed board')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it('a ![[canvas#Group]] embed draws that group only, under a breadcrumb', async () => {
+    const store = new IdbDocumentIndex()
+    const BOARD_ID = await seedIdbDocument(store, {
+      path: 'embed-board',
+      name: 'Embed board',
+      kind: 'spatial',
+    })
+    await seedIdbDocument(store, {
+      path: 'embed-source',
+      name: 'Embed source',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    const boardDoc = new Loro()
+    writeSpatialCanvas(boardDoc, {
+      nodes: [
+        { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 200, label: 'Launch' },
+        {
+          id: 'in',
+          type: 'text',
+          x: 10,
+          y: 10,
+          width: 300,
+          height: 100,
+          text: 'launch group text',
+        },
+        {
+          id: 'out',
+          type: 'text',
+          x: 900,
+          y: 900,
+          width: 300,
+          height: 100,
+          text: 'elsewhere text',
+        },
+      ],
+      edges: [],
+    })
+    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    render(<BrowserDocumentPage store={store} />)
+
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+    // The completion closes at `#`, so the Enter after the fragment ends the
+    // line rather than accepting a candidate.
+    await userEvent.keyboard(`![[[[${BOARD_ID}#Launch]]{Enter}{Enter}and more typing`)
+
+    await waitFor(
+      () => {
+        const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+        expect(preview?.textContent).toContain('launch group text')
+        expect(preview?.textContent).toContain('Embed board › Launch')
+        expect(preview?.textContent).not.toContain('elsewhere text')
       },
       { timeout: 10_000 },
     )

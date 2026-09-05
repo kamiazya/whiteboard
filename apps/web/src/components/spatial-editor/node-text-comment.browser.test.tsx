@@ -1,15 +1,15 @@
 // The annotation layer reaches a passage INSIDE a text node: while the node
-// is edited, the verb bar's Comment opens the compose bubble for the caret's
-// scope, the thread it commits carries the text arm with the node's id and
-// the quoted passage, and the next edit of that node draws the passage
-// highlighted — the same projection the note's source pane draws.
+// is edited, the right-click catalog's Comment opens the compose bubble for
+// the selection, the thread it commits carries the text arm with the node's
+// id and the quoted passage, and the next edit of that node draws the
+// passage highlighted — the same projection the note's source pane draws.
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import { CanvasVerbBar } from '../document-editor/CanvasVerbBar.js'
-import type { EditorCommand } from './commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { nodeEditorText } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -36,8 +36,6 @@ function makeHost(threads?: readonly CommentThread[], initial: SpatialCanvas = s
     latest.canvas = canvas
     return (
       <div style={{ width: 800, height: 600, position: 'relative' }}>
-        {/* The page mounts the bar beside the editor (SpatialEditorPane); so does this. */}
-        <CanvasVerbBar />
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -55,53 +53,6 @@ function makeHost(threads?: readonly CommentThread[], initial: SpatialCanvas = s
   return { Host, latest }
 }
 
-const rootOf = (container: HTMLElement) =>
-  container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
-const bar = () => document.querySelector('[data-testid="canvas-verb-bar"]')
-
-it('Comment on the verb bar opens a thread on the caret’s word, anchored inside the node', async () => {
-  const { Host, latest } = makeHost()
-  const { container } = render(<Host />)
-  const root = rootOf(container)
-  await userEvent.dblClick(root, { position: { x: 200, y: 340 } })
-  await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
-  await vi.waitFor(() => expect(bar()).not.toBeNull())
-  // The caret's word: "plan".
-  await userEvent.keyboard(
-    '{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}',
-  )
-  await userEvent.click(bar()?.querySelector('button[aria-label="Comment"]') as HTMLElement)
-
-  const compose = page.getByTestId('comment-compose')
-  await expect.element(compose).toBeInTheDocument()
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
-  await userEvent.keyboard('is it really the plan?')
-  await userEvent.keyboard('{Control>}{Enter}{/Control}')
-
-  await vi.waitFor(() => expect(latest.commands.some((c) => c.kind === 'create-thread')).toBe(true))
-  const created = latest.commands.find((c) => c.kind === 'create-thread') as {
-    thread: CommentThread
-  }
-  expect(created.thread.anchor).toEqual({
-    kind: 'text',
-    nodeId: 'n1',
-    quote: { prefix: 'ship the ', exact: 'plan', suffix: ' by friday' },
-    start: 9,
-    end: 13,
-  })
-  expect(created.thread.messages[0]?.body).toBe('is it really the plan?')
-  // On the canvas: the thread's projection is a comment ON the node, so the
-  // layer pins it at the node's corner without waiting for the channel.
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.comments?.[0]).toMatchObject({
-      id: 't-passage',
-      targetNodeId: 'n1',
-      x: NODE.x + NODE.width,
-      y: NODE.y,
-    }),
-  )
-})
-
 it('editing a node draws its commented passage highlighted, with no gutter shifting the text', async () => {
   const thread: CommentThread = {
     id: 't1',
@@ -115,10 +66,10 @@ it('editing a node draws its commented passage highlighted, with no gutter shift
   await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
   await vi.waitFor(() =>
     expect(
-      Array.from(container.querySelectorAll('.cm-comment-anchor')).map((el) => el.textContent),
+      Array.from(container.querySelectorAll('.cm-annotation')).map((el) => el.textContent),
     ).toEqual(['friday']),
   )
-  expect(container.querySelector('.cm-comment-gutter')).toBeNull()
+  expect(container.querySelector('.cm-annotation-gutter')).toBeNull()
 })
 
 it('the quoted words are highlighted on the canvas itself, and a press on them opens the conversation', async () => {
@@ -173,13 +124,15 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
   const root = rootOf(container)
   await userEvent.dblClick(root, { position: { x: 200, y: 340 } })
   await vi.waitFor(() => expect(nodeEditorText(container)).toBe(NODE.text))
-  await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}')
+  // "ship", selected: the catalog offers Comment only about a selection.
+  await userEvent.keyboard('{Home}')
+  for (let i = 0; i < 4; i++) await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}')
   const content = container.querySelector('.cm-content') as HTMLElement
   const r = content.getBoundingClientRect()
   fireEvent.contextMenu(content, { clientX: r.left + 20, clientY: r.top + 10, button: 2 })
 
   await expect.element(page.getByRole('menuitem', { name: 'Bold' })).toBeInTheDocument()
-  await userEvent.click(page.getByRole('menuitem', { name: 'Comment', exact: true }))
+  await userEvent.click(page.getByRole('menuitem', { name: 'Comment on this' }))
 
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
   await userEvent.keyboard('shipping?')
@@ -188,11 +141,24 @@ it('a right-click inside the node editor opens the editing catalog, Comment incl
   const created = latest.commands.find((c) => c.kind === 'create-thread') as {
     thread: CommentThread
   }
-  expect(created.thread.anchor).toMatchObject({
+  expect(created.thread.anchor).toEqual({
     kind: 'text',
     nodeId: 'n1',
-    quote: { exact: 'ship' },
+    quote: { exact: 'ship', suffix: ' the plan by fri' },
+    start: 0,
+    end: 4,
   })
+  expect(created.thread.messages[0]?.body).toBe('shipping?')
+  // On the canvas: the thread's projection is a comment ON the node, so the
+  // layer pins it at the node's corner without waiting for the channel.
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.comments?.[0]).toMatchObject({
+      id: 't-passage',
+      targetNodeId: 'n1',
+      x: NODE.x + NODE.width,
+      y: NODE.y,
+    }),
+  )
 })
 
 it('dismissing the catalog hands the caret back: the edit stays open and commits on exit', async () => {

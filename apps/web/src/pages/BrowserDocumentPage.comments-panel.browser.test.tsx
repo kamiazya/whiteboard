@@ -9,16 +9,18 @@
  * has to serve a markdown document, and a markdown document has no canvas to
  * hang anything on.
  */
-import { writeCommentThread } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
+
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { focusEditable } from '../test-utils/focus-editable.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 
@@ -260,6 +262,136 @@ it('replies on a markdown document, where a reply has no session to travel throu
   })
 })
 
+/** A markdown document with a body and no conversations on it yet. */
+function noteHoldingABody(): Uint8Array {
+  const doc = new LoroDoc()
+  writeMarkdownBody(doc, 'Ship the report on Friday.')
+  return doc.export({ mode: 'snapshot' })
+}
+
+it('opens a conversation from the markdown body, end to end', async () => {
+  // Every layer below has its own test; what only this one can say is that
+  // they are CONNECTED — a selection in CodeMirror reaches an anchor, the
+  // anchor reaches the rail, and the rail's first message reaches the
+  // threads plane the list is read back from. A note has no session, so the
+  // create has to take the same separate route its reply does.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingABody())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  // Through the resolver-taking helper rather than a held element: the
+  // contentDOM lands late here (the page hydrates the document first) and a
+  // node grabbed once is a snapshot of a mount that may be replaced.
+  await focusEditable(
+    () =>
+      document
+        .querySelector('[data-testid="markdown-source-pane"]')
+        ?.querySelector('[contenteditable="true"]') ?? null,
+  )
+  await userEvent.keyboard('{Control>}{Home}{/Control}')
+  for (let i = 0; i < 4; i++) await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}')
+
+  await userEvent.click(await screen.findByRole('button', { name: 'Editing actions' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Comment on this' }))
+
+  // The rail OPENS on the gesture. Leaving it shut would hide the only place
+  // the reader can now say anything, and the passage would be waiting in a
+  // panel nobody was shown.
+  const compose = await screen.findByTestId('comments-panel-compose', undefined, {
+    timeout: 15_000,
+  })
+  // Asserted on the QUOTE, not on the box's concatenated text — the box also
+  // carries the textarea and the submit button's label, so a whole-box
+  // assertion only ever passed on a substring match.
+  expect(within(compose).getByText('Ship')).toBeInTheDocument()
+
+  await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'why Friday?')
+  await userEvent.click(screen.getByRole('button', { name: /^comment$/i }))
+
+  await waitFor(() => expect(screen.getByText('why Friday?')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+  // Read back from the layer, not from the draft that was typed: the count
+  // comes off the same annotations list the document publishes.
+  await waitFor(() => expect(screen.getByRole('button', { name: /comments, 1 open/i })), {
+    timeout: 15_000,
+  })
+})
+
+/**
+ * A note whose one conversation is about a passage of its body, with no mark
+ * on it — which is every document that arrived through a markdown file, and
+ * every thread written before marks existed.
+ */
+function noteHoldingAMarkedPassage(): Uint8Array {
+  const doc = new LoroDoc()
+  writeMarkdownBody(doc, 'Ship the report on Friday.')
+  writeCommentThread(doc, {
+    id: 't-note',
+    anchor: { kind: 'text', quote: { exact: 'report on Friday' }, start: 9, end: 25 },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'why Friday?' }],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+it('keeps the body highlight through an edit inside its own passage', async () => {
+  // The case the quote alone gets WRONG, driven through the real editor.
+  // Typing inside a passage makes the stored quote stale — no occurrence of
+  // it is left in the body — so a search-based resolver answers `orphaned`
+  // and the highlight disappears out from under a reader mid-sentence. The
+  // Loro mark belongs to the characters, so it simply grows by one.
+  //
+  // Two layers only this test connects: the backfill that gave an imported
+  // thread its mark at load, and the projection that draws from the mark
+  // rather than from the quote.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingAMarkedPassage())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  const highlight = () => document.querySelector('.cm-annotation[data-thread-id="t-note"]')
+  await waitFor(() => expect(highlight()).not.toBeNull(), { timeout: 15_000 })
+
+  await focusEditable(
+    () =>
+      document
+        .querySelector('[data-testid="markdown-source-pane"]')
+        ?.querySelector('[contenteditable="true"]') ?? null,
+  )
+  // Into the middle of `report`, so what is typed lands strictly INSIDE the
+  // passage — at either edge `expand: 'none'` would put it outside, which is
+  // a different question and a deliberate one.
+  await userEvent.keyboard('{Control>}{Home}{/Control}')
+  for (let i = 0; i < 12; i++) await userEvent.keyboard('{ArrowRight}')
+  await userEvent.keyboard('X')
+
+  // Queried fresh, never held: the pane re-renders around this and a node
+  // grabbed before the edit reports what it said when it was detached.
+  await waitFor(() => expect(highlight()?.textContent).toBe('repXort on Friday'), {
+    timeout: 15_000,
+  })
+})
+
 it('offers the same opener on a markdown document, which has no canvas chrome to carry one', async () => {
   const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(note.documentId)
@@ -353,6 +485,66 @@ it('replies from the rail, and the reply joins the conversation it was typed int
   })
 })
 
+/** The same note, but with a body the stored quote can actually be found in. */
+function noteHoldingAPlacedThread(): Uint8Array {
+  const doc = new LoroDoc()
+  doc.getText('body').insert(0, 'A first line.\nThen the second paragraph, which is disputed.')
+  writeCommentThread(doc, {
+    id: 't-placed',
+    anchor: { kind: 'text', quote: { exact: 'the second paragraph' }, start: 19, end: 39 },
+    status: 'open',
+    // Two, so the assertion below can tell an OPENED conversation from a
+    // list that merely shows its first line as an excerpt.
+    messages: [
+      { id: 'm1', body: 'disputed by whom?' },
+      { id: 'm2', body: 'by the reviewer' },
+    ],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+it('reaches a note thread from the body: its gutter marker opens the rail on that conversation', async () => {
+  // The round trip the rail alone could not close. A conversation about a
+  // PASSAGE was reachable only by scanning a list that says nothing about
+  // where in the document it points.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingAPlacedThread())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  const marker = await waitFor(
+    () => {
+      const found = document.querySelector<HTMLElement>(
+        '.cm-annotation-gutter-marker[data-thread-id="t-placed"]',
+      )
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    },
+    { timeout: 15_000 },
+  )
+  // The passage itself is marked in the text, not only named in the margin.
+  expect(document.querySelector('[data-thread-id="t-placed"].cm-annotation')?.textContent).toBe(
+    'the second paragraph',
+  )
+
+  // The rail is shut until now: this press is what opens it.
+  expect(screen.queryByTestId('comments-panel')).toBeNull()
+  marker.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+
+  await waitFor(() => expect(screen.getByText('by the reviewer')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+})
+
 it('starts a conversation about the whole document from the rail, on a note', async () => {
   // The one anchor with no place on any surface: nothing in the editor can
   // open it, so the rail carries the opener, and the thread it writes is
@@ -372,10 +564,12 @@ it('starts a conversation about the whole document from the rail, on a note', as
   )
   await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
   await userEvent.click(await screen.findByTestId('comment-on-document'))
-  expect(screen.getByTestId('comment-draft-about')).toHaveTextContent('the whole document')
+  expect(screen.getByTestId('comments-panel-compose-about')).toHaveTextContent(
+    'About the whole document',
+  )
 
-  await userEvent.fill(await screen.findByRole('textbox', { name: /reply/i }), 'retire this note?')
-  await userEvent.click(screen.getByRole('button', { name: /^reply$/i }))
+  await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'retire this note?')
+  await userEvent.click(screen.getByRole('button', { name: /^comment$/i }))
 
   await waitFor(() => expect(screen.getByText('retire this note?')).toBeInTheDocument(), {
     timeout: 15_000,

@@ -10,7 +10,9 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { FileRefOption } from '../../lib/link-entries.js'
+import type { Point } from '../../lib/spatial/viewport.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import type { ActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import { verbCatalogItems } from '../markdown-editor/verb-catalog.js'
 import type { BoxMove } from './align.js'
@@ -20,9 +22,7 @@ import { canvasMenuItems } from './context-menu-items/canvas-menu-items.js'
 import { commentMenuItems } from './context-menu-items/comment-menu-items.js'
 import { edgeMenuItems } from './context-menu-items/edge-menu-items.js'
 import { nodeMenuItems } from './context-menu-items/node-menu-items.js'
-import type { FileRefOption } from './DocumentPickerDialog.js'
 import type { GestureResult, GestureState } from './gestures.js'
-import type { Point } from './viewport.js'
 
 /** Open right-click menu: screen position (root-relative) + hit target. */
 export interface ContextMenuTarget {
@@ -241,9 +241,9 @@ export function CanvasContextMenu({
           headingLevel: activeEditor.headingLevel(),
           run: activeEditor.run,
           close,
-          ...(activeEditor.openCommentComposer === undefined
-            ? {}
-            : { openCommentComposer: activeEditor.openCommentComposer }),
+          ...(activeEditor.composeThread !== undefined && activeEditor.selectedRange() !== null
+            ? { composeThread: () => activeEditor.composeThread?.() }
+            : {}),
         })
       : comment !== undefined
         ? commentMenuItems({ comment, canvasRef, edgePathOf, setCommentCompose, applyResult })

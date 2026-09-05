@@ -1,5 +1,5 @@
 import { fc, test as fcTest } from '@fast-check/vitest'
-import { daemonConnectionPayloadSchema as sharedDaemonConnectionPayloadSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { daemonConnectionPayloadSchema as sharedDaemonConnectionPayloadSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   consumeDaemonConnectionFragment,
@@ -9,7 +9,7 @@ import {
 } from './daemon-connection-payload.js'
 
 describe('daemonConnectionPayloadSchema', () => {
-  it('is the exact schema object re-exported from @kamiazya/whiteboard-mcp/api-contracts, not a mirror', () => {
+  it('is the exact schema object re-exported from @kamiazya/whiteboard-daemon-client/api-contracts/index, not a mirror', () => {
     expect(daemonConnectionPayloadSchema).toBe(sharedDaemonConnectionPayloadSchema)
   })
 

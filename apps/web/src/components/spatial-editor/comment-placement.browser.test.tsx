@@ -9,6 +9,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -38,10 +39,6 @@ function Host({ canvas: initial }: { canvas: SpatialCanvas }) {
       <SpatialEditor defaultTool="select" canvas={canvas} onChange={setCanvas} theme="light" />
     </div>
   )
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 async function waitForContent(container: HTMLElement, text: string) {

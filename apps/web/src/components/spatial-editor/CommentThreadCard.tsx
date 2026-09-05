@@ -21,10 +21,10 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import type { Box } from '../../lib/spatial/geometry.js'
 import { MessageBy } from '../annotations/message-meta.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
 import { ThreadReplies } from '../annotations/ThreadReplies.js'
-import type { Box } from './geometry.js'
 
 /** Screen px kept between the card and the root's edge once slid inside. */
 const CARD_EDGE_MARGIN_PX = 8

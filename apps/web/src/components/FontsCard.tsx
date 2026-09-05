@@ -1,4 +1,4 @@
-import type { FontCatalogueItem } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { FontCatalogueItem } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { Check, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'

@@ -14,12 +14,10 @@
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { MessageSquarePlus } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
 import { MessageBy } from './message-meta.js'
-import { ReplyComposer } from './ReplyComposer.js'
-import { ThreadReplies } from './ThreadReplies.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -46,41 +44,50 @@ export interface CommentsPanelProps {
   /** Reveal the thread in the host's own surface. */
   readonly onSelect?: (thread: CommentThread) => void
   /**
-   * Which conversation is open, when the HOST owns it — so the editor's
-   * in-place projection and this list agree on the answer, and a press on
-   * a gutter marker opens the same thread here. Absent, the panel keeps
-   * its own.
-   */
-  readonly openThreadId?: string | null
-  readonly onOpenThreadChange?: (threadId: string | null) => void
-  /**
-   * A conversation about to be opened — the host has an anchor (a passage
-   * the reader selected) and needs the opening message. Shown above the
-   * list as a composer labelled with what it is about; the host writes the
-   * thread on submit and clears this on submit or cancel.
-   */
-  readonly draft?: {
-    /**
-     * What the conversation is about, as the reader would recognise it (the
-     * quoted passage). Absent, the draft is about the document itself.
-     */
-    readonly about?: string
-    readonly onSubmit: (body: string) => void
-    readonly onCancel: () => void
-  }
-  /**
-   * Opens a draft about the document as a whole — the one anchor with no
-   * place on any surface, so this list is where it is started as well as
-   * read. Absent on a host with no write path, like `onReply`.
-   */
-  readonly onDraftDocument?: () => void
-  /**
    * Appends a message to a conversation. Absent hides the reply box entirely
    * rather than showing a control that silently does nothing — a host with no
    * write path (a read-only view, or one with no session yet) has no reply to
    * offer, and saying so by omission is the honest form.
    */
   readonly onReply?: (threadId: string, body: string) => void
+  /**
+   * A conversation the HOST wants shown — the other end of `onSelect`, for
+   * when the reader reached a thread through the surface instead of through
+   * this list (pressing its gutter marker in a markdown body).
+   *
+   * It expands the thread and, when the current filter would have hidden it,
+   * widens the filter: a resolved conversation the reader explicitly asked
+   * for must not open into an empty list, which reads as the press doing
+   * nothing.
+   */
+  readonly revealThreadId?: string | null
+  /**
+   * A passage the reader asked to comment on, waiting for its first message.
+   *
+   * The ANCHOR and not a thread, because `commentThreadSchema` has no legal
+   * empty thread: a conversation with nothing said in it cannot be written,
+   * so the passage stays UI state here until there is a message to create it
+   * with. That is also why this surface owns the draft — an unsubmitted one
+   * must not reach the document.
+   *
+   * Typed as the whole anchor union rather than the text arm: what a passage
+   * IS belongs to the host, and this panel only quotes it back and hands it
+   * over.
+   */
+  readonly composeAnchor?: AnnotationAnchor | null
+  /**
+   * Opens a conversation about `composeAnchor`. Absent hides the compose box
+   * for the same reason `onReply`'s absence hides the reply box.
+   */
+  readonly onCreateThread?: (anchor: AnnotationAnchor, body: string) => void
+  /** Abandons the passage without writing anything. */
+  readonly onCancelCompose?: () => void
+  /**
+   * Opens a compose box about the document as a whole — the one anchor with
+   * no place on any surface, so this list is where it is started as well as
+   * read. Absent on a host with no write path, like `onCreateThread`.
+   */
+  readonly onComposeDocument?: () => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -113,86 +120,76 @@ export function CommentsPanel({
   resolveAnchor,
   onSelect,
   onReply,
-  openThreadId: controlledOpenThreadId,
-  onOpenThreadChange,
-  draft,
-  onDraftDocument,
+  revealThreadId = null,
+  composeAnchor = null,
+  onCreateThread,
+  onCancelCompose,
+  onComposeDocument,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
-  const [ownOpenThreadId, setOwnOpenThreadId] = useState<string | null>(null)
-  const openThreadId =
-    controlledOpenThreadId === undefined ? ownOpenThreadId : controlledOpenThreadId
-  const sectionRef = useRef<HTMLElement | null>(null)
-  // A conversation opened from OUTSIDE (a gutter marker, a bubble) may sit
-  // under the filter that hides it or below the fold; it is shown under All
-  // and scrolled to, since a press that opens nothing visible reads as dead.
-  useEffect(() => {
-    if (openThreadId === null) return
-    const thread = threads.find((entry) => entry.id === openThreadId)
-    if (thread === undefined) return
-    setFilter((current) => (matches(thread, current) ? current : 'all'))
-    const row = Array.from(sectionRef.current?.querySelectorAll('[aria-controls]') ?? []).find(
-      (el) => el.getAttribute('aria-controls') === `thread-${openThreadId}`,
-    )
-    // Optional: jsdom has no layout to scroll.
-    row?.scrollIntoView?.({ block: 'nearest' })
-  }, [openThreadId, threads])
+  const [openThreadId, setOpenThreadId] = useState<string | null>(null)
+  const [draft, setDraft] = useState('')
+
+  // Adjusting state during render on a changed prop, rather than in an
+  // effect: an effect would paint the list once without the thread the
+  // reader just asked for.
+  //
+  // Seeded `null`, never `revealThreadId`. The rail is MOUNTED by the same
+  // press that names the thread — the host opens the panel and selects in
+  // one go — so seeding it with the incoming id makes the first render
+  // "already seen", and the panel arrives with the conversation collapsed.
+  // Measured: the rail opened and stopped exactly there.
+  const [lastRevealed, setLastRevealed] = useState<string | null>(null)
+  if (revealThreadId !== lastRevealed) {
+    setLastRevealed(revealThreadId)
+    if (revealThreadId !== null) {
+      setOpenThreadId(revealThreadId)
+      setDraft('')
+      const revealed = threads.find((t) => t.id === revealThreadId)
+      if (revealed !== undefined && !matches(revealed, filter)) setFilter('all')
+    }
+  }
+
+  // Same render-time adjustment as the reveal above, and the same reason:
+  // the passage arrives with the press that opens this panel, so an effect
+  // would paint the rail once without the box the reader just asked for.
+  const [composeDraft, setComposeDraft] = useState('')
+  const [lastCompose, setLastCompose] = useState<AnnotationAnchor | null>(null)
+  if (composeAnchor !== lastCompose) {
+    setLastCompose(composeAnchor)
+    if (composeAnchor !== null) {
+      setComposeDraft('')
+      // One thing at a time: an expanded conversation beside a new draft box
+      // is two reply fields on screen, and the reader has to work out which
+      // one they are typing into.
+      setOpenThreadId(null)
+      // A new conversation is `open`, so Resolved is the one filter that
+      // would hide it — and a create whose result never appears reads as a
+      // create that failed.
+      if (filter === 'resolved') setFilter('open')
+    }
+  }
+
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
 
   function toggle(thread: CommentThread): void {
-    const next = openThreadId === thread.id ? null : thread.id
-    setOwnOpenThreadId(next)
-    onOpenThreadChange?.(next)
+    setOpenThreadId((current) => (current === thread.id ? null : thread.id))
+    // The draft belongs to the conversation it was typed into, so moving to
+    // another one starts empty rather than carrying half a sentence across.
+    setDraft('')
     onSelect?.(thread)
   }
 
   return (
-    <section
-      ref={sectionRef}
-      aria-label="Comments"
-      data-testid="comments-panel"
-      className="flex flex-col gap-2"
-    >
-      {draft !== undefined ? (
-        <div
-          data-testid="comment-draft"
-          className="flex flex-col gap-1 rounded border border-(--comment-accent) p-2"
-        >
-          <p className="text-xs text-muted-foreground">
-            {draft.about === undefined ? (
-              <>
-                Comment on{' '}
-                <span className="text-foreground" data-testid="comment-draft-about">
-                  the whole document
-                </span>
-              </>
-            ) : (
-              <>
-                Comment on{' '}
-                <q className="text-foreground" data-testid="comment-draft-about">
-                  {draft.about}
-                </q>
-              </>
-            )}
-          </p>
-          <ReplyComposer compact onReply={draft.onSubmit} autoFocus />
-          <button
-            type="button"
-            onClick={draft.onCancel}
-            className="self-end text-xs text-muted-foreground hover:text-foreground"
-          >
-            Cancel
-          </button>
-        </div>
-      ) : null}
-      {draft === undefined && onDraftDocument !== undefined ? (
+    <section aria-label="Comments" data-testid="comments-panel" className="flex flex-col gap-2">
+      {composeAnchor === null && onComposeDocument !== undefined ? (
         <button
           type="button"
           data-testid="comment-on-document"
-          onClick={onDraftDocument}
+          onClick={onComposeDocument}
           className="flex items-center gap-1 self-start rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
         >
           <MessageSquarePlus aria-hidden="true" className="size-3.5" />
@@ -218,6 +215,57 @@ export function CommentsPanel({
           </button>
         ))}
       </fieldset>
+
+      {composeAnchor !== null && onCreateThread !== undefined ? (
+        <form
+          data-testid="comments-panel-compose"
+          className="flex flex-col gap-1 rounded border p-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const body = composeDraft.trim()
+            // Same rule as the reply box, in the same place: guarded on
+            // submit rather than by disabling the button, so pressing Enter
+            // in the field is covered by it too.
+            if (body === '') return
+            onCreateThread(composeAnchor, body)
+            setComposeDraft('')
+          }}
+        >
+          {composeAnchor.kind === 'text' ? (
+            // Quoted back because by the time the reader is typing here,
+            // their selection in the body is no longer what they are looking
+            // at — and a comment about the wrong passage is worse than none.
+            <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
+              {composeAnchor.quote.exact}
+            </p>
+          ) : anchorLabel(composeAnchor) === undefined ? null : (
+            <p data-testid="comments-panel-compose-about" className="text-xs text-neutral-500">
+              About the {anchorLabel(composeAnchor)}
+            </p>
+          )}
+          <textarea
+            aria-label="Comment"
+            value={composeDraft}
+            onChange={(event) => setComposeDraft(event.target.value)}
+            rows={2}
+            className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+          />
+          <div className="flex justify-end gap-1">
+            {onCancelCompose === undefined ? null : (
+              <button
+                type="button"
+                onClick={onCancelCompose}
+                className="rounded border px-2 py-1 text-xs hover:bg-accent"
+              >
+                Cancel
+              </button>
+            )}
+            <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-accent">
+              Comment
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {shown.length === 0 ? (
         <p data-testid="comments-panel-empty" className="px-2 py-4 text-xs text-neutral-500">
@@ -274,15 +322,53 @@ export function CommentsPanel({
 
                 {expanded ? (
                   <div id={`thread-${thread.id}`} className="mt-1 flex flex-col gap-2 pl-2">
-                    <ThreadReplies thread={thread} compact />
-                    {/* Absent hides the box entirely rather than showing a
-                        control that silently does nothing — a host with no
-                        write path (a read-only view, or one with no session
-                        yet) has no reply to offer. Keyed by thread through
-                        the row, so a draft never follows the reader to the
-                        next conversation. */}
+                    {/* The REPLIES, not the whole conversation over again:
+                        the row above already carries the opening message,
+                        which is the conversation's subject. Repeating it here
+                        was the first shape and it read as the same sentence
+                        twice. Replies indent under their subject instead. */}
+                    {thread.messages.length > 1 ? (
+                      <ol className="flex flex-col gap-2 border-l pl-2">
+                        {thread.messages.slice(1).map((message) => (
+                          <li key={message.id} className="flex flex-col gap-0.5">
+                            <MessageBy message={message} />
+                            <p className="whitespace-pre-wrap text-xs text-neutral-800 dark:text-neutral-200">
+                              {message.body}
+                            </p>
+                          </li>
+                        ))}
+                      </ol>
+                    ) : null}
+
                     {onReply === undefined ? null : (
-                      <ReplyComposer compact onReply={(body) => onReply(thread.id, body)} />
+                      <form
+                        className="flex flex-col gap-1"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          const body = draft.trim()
+                          // An empty reply is not a message. Guarded here
+                          // rather than by disabling the button, so the
+                          // keyboard path (Enter in the field) is covered by
+                          // the same rule as the pointer one.
+                          if (body === '') return
+                          onReply(thread.id, body)
+                          setDraft('')
+                        }}
+                      >
+                        <textarea
+                          aria-label="Reply"
+                          value={draft}
+                          onChange={(event) => setDraft(event.target.value)}
+                          rows={2}
+                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+                        />
+                        <button
+                          type="submit"
+                          className="self-end rounded border px-2 py-1 text-xs hover:bg-accent"
+                        >
+                          Reply
+                        </button>
+                      </form>
                     )}
                   </div>
                 ) : null}

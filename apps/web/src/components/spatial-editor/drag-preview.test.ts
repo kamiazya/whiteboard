@@ -1,7 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag, computeDragPreview, isInFlightGesture } from './drag-preview.js'
-import type { NodeBox } from './geometry.js'
 import type { GestureState } from './gestures.js'
 
 const idle: GestureState = { kind: 'idle' }

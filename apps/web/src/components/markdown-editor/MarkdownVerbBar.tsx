@@ -7,7 +7,6 @@ import {
   cycleHeadingLevel,
   inVerbTableOrder,
   type MarkdownVerbId,
-  openInteractive,
   selfContainedCommand,
   VERB_BAR_ORDER,
   verb,
@@ -55,7 +54,6 @@ export interface MarkdownVerbBarProps {
    * to pick from, so the verb falls back to its plain bracket wrap.
    */
   readonly openLinkPicker?: () => boolean
-  readonly openCommentComposer?: () => boolean
   /** Doorway for what the width could not hold. Absent -> no "…" is drawn. */
   readonly onOpenOverflow?: (anchor: { x: number; y: number }) => void
   readonly className?: string
@@ -82,7 +80,6 @@ export interface MarkdownVerbBarProps {
 export function MarkdownVerbBar({
   run,
   openLinkPicker,
-  openCommentComposer,
   onOpenOverflow,
   className,
 }: MarkdownVerbBarProps) {
@@ -90,19 +87,7 @@ export function MarkdownVerbBar({
   // Before the first measurement, showing nothing beats showing a bar that
   // reflows on the next frame.
   const layout = layoutVerbBar(width, BAR_ITEMS, DESKTOP_BAR_METRICS)
-  // A verb that can only ask the host, on a host with nothing to answer —
-  // no comment seam, no wrap to degrade to — is a button that does nothing;
-  // it is left off rather than shown inert.
-  const hooks = { link: openLinkPicker, comment: openCommentComposer }
-  const offerable = (id: MarkdownVerbId) => {
-    const action = verb(id).action
-    return (
-      action.kind !== 'interactive' ||
-      action.fallback !== undefined ||
-      hooks[action.hook] !== undefined
-    )
-  }
-  const visible = width === 0 ? [] : inVerbTableOrder(layout.visible).filter(offerable)
+  const visible = width === 0 ? [] : inVerbTableOrder(layout.visible)
 
   // Keep the caret where it is: the verbs resolve their scope from the
   // editor's selection, and a focused button would take it away first.
@@ -114,7 +99,7 @@ export function MarkdownVerbBar({
       run(cycleHeadingLevel)
       return
     }
-    if (openInteractive(spec, hooks)) return
+    if (spec.action.kind === 'interactive' && openLinkPicker?.() === true) return
     const command = selfContainedCommand(spec)
     if (command !== null) run(command)
   }

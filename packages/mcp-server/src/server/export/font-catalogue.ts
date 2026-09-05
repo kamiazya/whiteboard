@@ -1,5 +1,5 @@
+import { fontCatalogueItemSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { z } from 'zod'
-import { fontCatalogueItemSchema } from '../../shared/api-contracts/fonts.js'
 
 /**
  * The one host the font installer will ever talk to.

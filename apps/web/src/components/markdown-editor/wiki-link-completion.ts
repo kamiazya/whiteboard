@@ -6,7 +6,7 @@ import {
   setSelectedCompletion,
 } from '@codemirror/autocomplete'
 import { EditorView, ViewPlugin } from '@codemirror/view'
-import { type LinkTarget, linkMarkupFor, rankLinkTargets } from './link-target.js'
+import { type LinkTarget, linkMarkupFor, rankLinkTargets } from '../../lib/link-target.js'
 
 /**
  * The popup in the app's popover clothes. An EditorView.theme rather than
@@ -120,8 +120,11 @@ export function wikiLinkCompletionSource(getTargets: () => readonly LinkTarget[]
   return (context: CompletionContext): CompletionResult | null => {
     // The open [[ with whatever partial query follows it. `matchBefore` only
     // looks at the current line, so a reference cannot span a line break —
-    // the same rule the codec scanner enforces on read.
-    const match = context.matchBefore(/\[\[[^\][|]*$/)
+    // the same rule the codec scanner enforces on read. A `#` ends the
+    // document half of the address: what follows names a heading or a group
+    // inside it, which this list does not know, and a popup that stayed open
+    // would swallow the Enter meant to finish the line.
+    const match = context.matchBefore(/\[\[[^\][|#]*$/)
     if (match === null) return null
     const targets = getTargets()
     if (targets.length === 0) return null

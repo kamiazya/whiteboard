@@ -93,3 +93,89 @@ describe('snippetAround', () => {
     expect(snippetAround('a  \n\t b', 0, 1)).toBe('a b')
   })
 })
+
+/**
+ * The cut falls between GRAPHEMES, not code points.
+ *
+ * Code-point snapping (above) stops a lone surrogate; it does not stop a
+ * flag, a ZWJ family or a combining mark being cut in half. The flag case is
+ * the one with teeth: a cut inside a run of regional indicators leaves an
+ * odd half at the edge, and the segmenter on the OUTPUT then pairs every
+ * following flag one half off — the excerpt shows flags the document does
+ * not hold. That is an excerpt that lies, not one that looks rough.
+ */
+describe('snippetAround cuts between characters a reader sees as one', () => {
+  const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+  const split = (value: string): string[] => [...GRAPHEMES.segment(value)].map((g) => g.segment)
+  const boundaries = (value: string): Set<number> => {
+    const at = new Set<number>()
+    for (const g of GRAPHEMES.segment(value)) at.add(g.index)
+    at.add(value.length)
+    return at
+  }
+
+  const CLASSES = ['👨‍👩‍👧‍👦', '🇯🇵', '👍🏽', '1️⃣', 'e\u0301', 'ｶﾞ'] as const
+  /** Longer than the radius in code units for every class, so the cut stays in the run. */
+  const RUN = CONTEXT_RADIUS
+
+  /**
+   * Runs whose start boundary landed STRICTLY INSIDE a cluster. Counted, and
+   * floored, for the same reason as `enteredDefectZone`: the assertion below
+   * is vacuous over a sweep that only ever cuts on a boundary.
+   */
+  let cutInsideACluster = 0
+
+  afterAll(() => {
+    expect(
+      cutInsideACluster,
+      'the sweep never cut inside a cluster — the grapheme property proved nothing',
+    ).toBeGreaterThan(20)
+  })
+
+  fcTest.prop([fc.integer({ min: 0, max: 11 }), fc.constantFrom(...CLASSES)], withDefaults())(
+    'every grapheme of the excerpt is a grapheme of the source',
+    (k, cluster) => {
+      // `k` filler units BETWEEN the run and the needle walk the cut through
+      // every interior offset of the cluster; the run's own start is fixed.
+      const body = `${cluster.repeat(RUN)}${'y'.repeat(k)}${NEEDLE}${cluster.repeat(RUN)}`
+      const index = body.indexOf(NEEDLE)
+      if (!boundaries(body).has(index - CONTEXT_RADIUS)) cutInsideACluster += 1
+
+      const out = snippetAround(body, index, NEEDLE.length)
+      const source = new Set(split(body))
+      const foreign = split(out).filter((g) => g !== '…' && g !== ' ' && !source.has(g))
+      expect(foreign).toEqual([])
+    },
+  )
+
+  it('honours a Prepend: the character after one is never the first thing shown', () => {
+    // Every code point in the first two planes, each put right before the
+    // start cut with an ASCII letter ON the cut — the one shape the cheap
+    // boundary test would wave through. The runtime's segmenter is the
+    // oracle, so a Unicode update that moves the Prepend set fails here
+    // rather than in someone's Arabic search results.
+    const tail = `${'b'.repeat(CONTEXT_RADIUS - 1)}${NEEDLE}`
+    const misses: string[] = []
+    let prepends = 0
+    for (let cp = 0; cp < 0x20000; cp += 1) {
+      if (cp >= 0xd800 && cp <= 0xdfff) continue
+      const head = String.fromCodePoint(cp)
+      const body = `${head}a${tail}`
+      const joined = split(`${head}a`).length === 1
+      if (joined) prepends += 1
+      const out = snippetAround(body, body.indexOf(NEEDLE), NEEDLE.length)
+      const expected = joined ? `…${tail}` : `…a${tail}`
+      if (out !== expected) misses.push(`U+${cp.toString(16)}: ${JSON.stringify(out)}`)
+    }
+    expect(misses).toEqual([])
+    expect(prepends, 'no Prepend found — the sweep tested nothing').toBeGreaterThan(20)
+  })
+
+  it('never shows a flag the document does not hold', () => {
+    // k=2 puts the cut between the two regional indicators of one flag.
+    const body = `${'🇯🇵'.repeat(RUN)}yy${NEEDLE}${'🇯🇵'.repeat(RUN)}`
+    const out = snippetAround(body, body.indexOf(NEEDLE), NEEDLE.length)
+    const first = split(out).find((g) => g !== '…')
+    expect(first).toBe('🇯🇵')
+  })
+})

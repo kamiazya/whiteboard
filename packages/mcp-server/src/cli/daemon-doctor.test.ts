@@ -1,4 +1,6 @@
+import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { describe, expect, it } from 'vitest'
+import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 
 // All tests inject parseRecord and isPidAlive — no filesystem or process access.
@@ -115,5 +117,13 @@ describe('runDaemonDoctor: valid record, process dead', () => {
     const { result } = await runDoctor(parseValid, () => false)
     const recordCheck = result.checks.find((c) => c.id === 'daemon.record')
     expect(recordCheck?.status).toBe('ok')
+  })
+})
+
+describe('runDaemonDoctor: wire drift', () => {
+  it('round-trips the missing-record result through daemonDoctorResultSchema', async () => {
+    const parseMissing: ParseRecord = async () => ({ kind: 'missing' })
+    const { result } = await runDoctor(parseMissing, () => false)
+    expect(roundtrip(daemonDoctorResultSchema, result)).toEqual(result)
   })
 })

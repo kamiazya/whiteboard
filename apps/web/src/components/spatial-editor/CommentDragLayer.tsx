@@ -23,9 +23,9 @@
 import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { renderCanvasToSvg } from './scene-render.js'
-import type { Point } from './viewport.js'
+import { renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
+import type { Point } from '../../lib/spatial/viewport.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 
 export interface CommentDragLayerProps {
   /** The comment as it was when the drag started (its stored anchor). */
@@ -59,22 +59,20 @@ export function CommentDragLayer({
     [comment, measure, theme, obstacles],
   )
   return (
-    <>
-      <div
-        data-testid="comment-drag-preview"
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          left: fragment.bounds.x + delta.x,
-          top: fragment.bounds.y + delta.y,
-          pointerEvents: 'none',
-          opacity: 0.85,
-        }}
-        // Same trusted producer as the committed scene: canvas-render's
-        // escaping serializer is the sole source of this string.
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
-        dangerouslySetInnerHTML={{ __html: fragment.svg }}
-      />
-    </>
+    <div
+      data-testid="comment-drag-preview"
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        left: fragment.bounds.x + delta.x,
+        top: fragment.bounds.y + delta.y,
+        pointerEvents: 'none',
+        opacity: 0.85,
+      }}
+      // Same trusted producer as the committed scene: canvas-render's
+      // escaping serializer is the sole source of this string.
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
+      dangerouslySetInnerHTML={{ __html: fragment.svg }}
+    />
   )
 }

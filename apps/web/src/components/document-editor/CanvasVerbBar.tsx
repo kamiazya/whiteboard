@@ -36,7 +36,6 @@ export function CanvasVerbBar() {
       <MarkdownVerbBar
         run={(command) => editor.run(command)}
         openLinkPicker={editor.openLinkPicker}
-        openCommentComposer={editor.openCommentComposer}
       />
     </div>
   )

@@ -11,7 +11,12 @@
  * port methods — a second copy against libSQL would have differed in the
  * constructor argument and nothing else.
  */
-import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
+import type {
+  DeltaSeq,
+  DocRef,
+  DocumentStore,
+  SnapshotGeneration,
+} from '@kamiazya/whiteboard-ports'
 import {
   chunkSnapshot,
   reassembleSnapshot,
@@ -22,6 +27,8 @@ import { LoroDoc, VersionVector } from 'loro-crdt'
 import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
 const MAX_CHUNK_BYTES = 1_000_000
+/** How many times `readRecord` will re-read past a fold that landed mid-read. */
+const READ_ATTEMPTS = 3
 
 function refOf(workspaceId: string): DocRef {
   return { kind: 'workspace-tree', workspaceId }
@@ -58,14 +65,55 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
   constructor(private readonly store: DocumentStore) {}
 
   async open(workspaceId: string): Promise<LoroDoc | null> {
-    const docRef = refOf(workspaceId)
-    const stored = await this.store.loadSnapshot({ docRef })
-    if (stored === null) return null
+    const record = await this.readRecord(refOf(workspaceId))
+    if (record === null) return null
     const doc = new LoroDoc()
-    importStored(doc, reassembleSnapshot(stored.manifest, stored.chunks), workspaceId)
-    const { updates } = await this.store.loadDeltas({ docRef, afterSeq: null })
-    for (const update of updates) importStored(doc, update, workspaceId)
+    importStored(doc, record.snapshot, workspaceId)
+    for (const update of record.updates) importStored(doc, update, workspaceId)
     return doc
+  }
+
+  /**
+   * The record as ONE consistent read: a snapshot and the log that belongs
+   * to it, or `null` when there is no snapshot.
+   *
+   * The store answers the two in separate calls, and a fold committed between
+   * them hands back the OLD snapshot with the NEW log — entries that depend on
+   * ops only the new snapshot holds. Loro does not refuse those; it parks them
+   * pending, and the document opens without whatever the fold absorbed.
+   * Measured against the store double: an edit on disk before the read began,
+   * absent from what the read returned, and nothing red anywhere.
+   *
+   * The manifest's generation is read FIRST and compared with the one the log
+   * reports, so the snapshot read sits inside a span whose two ends agree —
+   * and generations only increase, so agreeing ends mean no fold landed
+   * between them. A mismatch retries the whole read.
+   *
+   * ponytail: bounded at three attempts, after which the last read is answered
+   * as-is. A fold happens once per COMPACT_DELTA_BYTES written, so one inside
+   * the span is rare and two are not a case a fourth read would settle.
+   */
+  private async readRecord(docRef: ReturnType<typeof refOf>): Promise<{
+    snapshot: Uint8Array
+    updates: Uint8Array[]
+    generation: SnapshotGeneration | null
+    lastSeq: DeltaSeq | null
+  } | null> {
+    for (let attempt = 1; ; attempt += 1) {
+      const header = await this.store.readSnapshotManifest({ docRef })
+      if (header === null) return null
+      const stored = await this.store.loadSnapshot({ docRef })
+      if (stored === null) return null
+      const tail = await this.store.loadDeltas({ docRef, afterSeq: null })
+      if (tail.generation === header.generation || attempt === READ_ATTEMPTS) {
+        return {
+          snapshot: reassembleSnapshot(stored.manifest, stored.chunks),
+          updates: tail.updates,
+          generation: tail.generation,
+          lastSeq: tail.lastSeq,
+        }
+      }
+    }
   }
 
   async create(workspaceId: string): Promise<LoroDoc> {
@@ -231,21 +279,21 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     // snapshot AND could mistake reused seqs for ones already seen, so the
     // snapshot is re-read. Importing it is a MERGE, which is why `doc`'s own
     // unsaved edits survive.
-    const base = await this.store.loadSnapshot({ docRef })
-    const carried: Uint8Array[] = []
-    if (base !== null) {
-      const snapshot = reassembleSnapshot(base.manifest, base.chunks)
-      doc.import(snapshot)
-      carried.push(snapshot)
+    // One consistent read of snapshot and log, rather than one call each: the
+    // fold this branch exists to follow can land AGAIN between those two
+    // calls, and this branch used to cover only the one that landed before
+    // it. `readRecord` is what closes that.
+    const record = await this.readRecord(docRef)
+    if (record === null) {
+      // The record is gone (deleted while catching up): nothing to carry, and
+      // the cursor says what a log with no snapshot reports.
+      return { cursor: { generation: null, afterSeq: null }, updates: [] }
     }
-    // Re-read rather than reusing `tail`: the snapshot above was read after
-    // it, so a fold landing in between would leave the log half-applied.
-    const settled = await this.store.loadDeltas({ docRef, afterSeq: null })
-    for (const update of settled.updates) doc.import(update)
-    carried.push(...settled.updates)
+    doc.import(record.snapshot)
+    for (const update of record.updates) doc.import(update)
     return {
-      cursor: { generation: settled.generation, afterSeq: settled.lastSeq },
-      updates: carried,
+      cursor: { generation: record.generation, afterSeq: record.lastSeq },
+      updates: [record.snapshot, ...record.updates],
     }
   }
 }

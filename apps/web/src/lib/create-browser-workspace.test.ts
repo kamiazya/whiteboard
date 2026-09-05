@@ -4,26 +4,19 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { setWhiteboardDbNameForTests } from './browser-idb.js'
 import { createBrowserWorkspace } from './create-browser-workspace.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 
 const DB_NAME = 'whiteboard-create-workspace-test'
 
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
-
 describe('createBrowserWorkspace', () => {
   beforeEach(async () => {
     setWhiteboardDbNameForTests(DB_NAME)
-    await clearDb()
+    await clearNamedDb(DB_NAME)
   })
-  afterEach(clearDb)
+  afterEach(() => clearNamedDb(DB_NAME))
 
   it('mints a canonical id here, because the browser is its own keeper', async () => {
     // The daemon's create surface mints server-side (the MintBoundary). The

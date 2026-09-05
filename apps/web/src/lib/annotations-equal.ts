@@ -33,3 +33,23 @@ export function sameAnnotations(a: readonly CommentThread[], b: readonly Comment
     })
   })
 }
+
+/**
+ * Whether two reads say each conversation's passage is in the same place.
+ *
+ * The companion of `sameAnnotations` and needed beside it, not instead of
+ * it: a passage that MOVED leaves the thread list byte-for-byte identical —
+ * same ids, same messages, same stored anchor — so a republish gated on the
+ * threads alone would go on drawing a highlight where the text used to be.
+ */
+export function sameThreadMarks(
+  a: ReadonlyMap<string, { readonly start: number; readonly end: number }>,
+  b: ReadonlyMap<string, { readonly start: number; readonly end: number }>,
+): boolean {
+  if (a.size !== b.size) return false
+  for (const [id, range] of a) {
+    const other = b.get(id)
+    if (other === undefined || other.start !== range.start || other.end !== range.end) return false
+  }
+  return true
+}

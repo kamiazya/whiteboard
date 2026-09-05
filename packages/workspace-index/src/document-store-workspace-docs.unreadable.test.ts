@@ -44,19 +44,21 @@ import { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
  */
 function storeHolding(bytes: Uint8Array<ArrayBuffer>): DocumentStore {
   const chunks: SaveSnapshotInput['chunks'] = [{ index: 0, of: 1, bytes }]
+  const manifest = { chunkCount: 1, totalBytes: bytes.byteLength, maxChunkBytes: bytes.byteLength }
   return {
     async loadSnapshot(_input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-      return {
-        manifest: { chunkCount: 1, totalBytes: bytes.byteLength, maxChunkBytes: bytes.byteLength },
-        chunks,
-        frontier: new Uint8Array(),
-      }
+      return { manifest, chunks, frontier: new Uint8Array() }
     },
     async loadDeltas(_input: LoadDeltasInput): Promise<LoadDeltasResult> {
       return { updates: [], lastSeq: null, generation: 1, frontier: new Uint8Array() }
     },
+    // The same manifest the snapshot read answers, at the generation the log
+    // reports: `open()` reads this FIRST, as its fence against a fold landing
+    // between its two reads, and a store that holds a snapshot never answers
+    // its manifest with null. Doing so here made open() return null before
+    // the bytes it exists to refuse were ever imported.
     async readSnapshotManifest(_i: ReadSnapshotManifestInput): Promise<ReadSnapshotManifestResult> {
-      return null
+      return { manifest, generation: 1 }
     },
     async readFrontier(_input: ReadFrontierInput): Promise<ReadFrontierResult> {
       return null

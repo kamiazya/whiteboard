@@ -8,6 +8,11 @@
  * Real geometry (the opener's position relative to the editor surface) is a
  * `web-browser` concern — see DaemonDocumentPage.comments-panel.browser.test.tsx.
  */
+
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   readCommentThreads,
   writeCommentThread,
@@ -16,10 +21,6 @@ import {
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import {
   act,
   cleanup,

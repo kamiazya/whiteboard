@@ -2,7 +2,7 @@ import type {
   BranchStatsResponse,
   CreateBranchRequest,
   SetHeadResponse,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useBranchesBackend } from '@/contexts/BranchesBackendContext'
 import type {

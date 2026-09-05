@@ -10,7 +10,7 @@
  */
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { SearchResults } from './SearchResults.js'
 
 afterEach(cleanup)

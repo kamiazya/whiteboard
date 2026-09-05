@@ -23,7 +23,7 @@
  * navigation: a canvas is usually reached by clicking through the index, and
  * a parameter would be gone by the time it mattered.
  */
-import type { DocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
+import type { DocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 
 export const DEV_TRANSPORT_OVERRIDE_KEY = 'whiteboard:dev-transport'
 

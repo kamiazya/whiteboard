@@ -37,7 +37,9 @@ import { EditorView, keymap } from '@codemirror/view'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { GFM } from '@lezer/markdown'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react'
+import type { Box } from '../../lib/spatial/geometry.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
+import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import {
   type ActiveMarkdownEditor,
@@ -45,15 +47,13 @@ import {
   setActiveMarkdownEditor,
 } from '../markdown-editor/active-markdown-editor.js'
 import {
-  commentAnchors,
-  requestCommentOnScope,
-  setCommentThreads,
-} from '../markdown-editor/comment-anchors.js'
+  annotationMarks,
+  setAnnotationProjection,
+} from '../markdown-editor/annotation-decorations.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
-import type { Box } from './geometry.js'
 
 const isMenuTarget = (target: EventTarget | null): boolean =>
   target instanceof Element && target.closest('[role="menu"]') !== null
@@ -88,9 +88,9 @@ export interface MarkdownNodeEditorProps {
   readonly onCancel: () => void
   readonly onChange?: (text: string) => void
   /**
-   * The comment verb's host seam: the caret's scope as a text anchor over
-   * this editor's document, for the host to attach to its node and open a
-   * composer for. See SourcePane's prop of the same name.
+   * The catalog's Comment seam: the selection as a text anchor over this
+   * editor's document, for the host to attach to its node and open a
+   * composer for — the note editor's `onComposeThread`, for a node.
    */
   readonly onRequestComment?: (anchor: TextAnchor) => boolean
   /**
@@ -177,7 +177,7 @@ export function MarkdownNodeEditor({
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
-        commentAnchors({ gutter: false }),
+        annotationMarks(),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
@@ -229,9 +229,21 @@ export function MarkdownNodeEditor({
       },
       headingLevel: () => headingLevelAt(view.state),
       focus: () => view.focus(),
+      selectedRange: () => {
+        const { from, to } = view.state.selection.main
+        return from === to ? null : { from, to }
+      },
       ...(onRequestCommentRef.current === undefined
         ? {}
-        : { openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current) }),
+        : {
+            composeThread: () => {
+              const { from, to } = view.state.selection.main
+              if (from === to) return false
+              const anchor = textAnchorForSelection(view.state.doc.toString(), from, to)
+              if (anchor === null) return false
+              return onRequestCommentRef.current?.(anchor) ?? false
+            },
+          }),
     }
     view.focus()
     // Continue typing where the text ends — programmatic focus leaves the
@@ -250,7 +262,9 @@ export function MarkdownNodeEditor({
     // must not reset the document under the caret.
   }, [])
   useEffect(() => {
-    viewRef.current?.dispatch({ effects: setCommentThreads.of(threads ?? []) })
+    viewRef.current?.dispatch({
+      effects: setAnnotationProjection.of({ threads: threads ?? [], selectedThreadId: null }),
+    })
   }, [threads])
 
   return (

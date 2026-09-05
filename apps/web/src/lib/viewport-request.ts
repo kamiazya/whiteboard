@@ -1,6 +1,5 @@
-import type { ViewportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
-
+import type { ViewportRequestPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import type { SpatialEditorHandle } from './spatial/editor-handle.js'
 /**
  * Maps a daemon-driven `viewport_request` onto a mounted `SpatialEditor`'s
  * imperative handle. `mode` is optional on the wire

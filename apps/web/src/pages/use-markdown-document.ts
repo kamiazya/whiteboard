@@ -28,9 +28,12 @@ import {
   type DocumentContainers,
   documentContainers,
   MARKDOWN_BODY_KEY,
+  markThreadPassages,
+  type PassageRange,
   readAnnotations,
   readCoreFacets,
   readMarkdownBody,
+  readThreadMarks,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
   writeCommentThread,
@@ -42,15 +45,17 @@ import type { CommentMessage, CommentThread, StoredCoreFacets } from '@kamiazya/
 import { Loro, type LoroText } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
-import { sameAnnotations } from '../lib/annotations-equal.js'
+import { sameAnnotations, sameThreadMarks } from '../lib/annotations-equal.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
+import { missingThreadMarks } from '../lib/text-anchor.js'
 import { titleFromMarkdownBody } from '../lib/title-from-body.js'
 import { createSaveScheduler, type SaveScheduler } from './save-scheduler.js'
-import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
 
@@ -174,6 +179,20 @@ export interface MarkdownDocumentState {
    */
   readonly annotations: readonly CommentThread[]
   /**
+   * Where each conversation's passage sits in the body right now, as the
+   * CRDT's own rich-text marks report it.
+   *
+   * The live half of a text anchor: a mark belongs to the CHARACTERS it
+   * covers, so it followed every edit that moved them and vanished with the
+   * passage if someone deleted it. A thread ABSENT here is not an error —
+   * either its passage is gone, or nothing has marked it — and the thread's
+   * quote answers for both, which is why the quote is still stored.
+   *
+   * Republished in the same commit as `annotations`, so a consumer cannot
+   * pair one with a stale reading of the other.
+   */
+  readonly threadMarks: ReadonlyMap<string, PassageRange>
+  /**
    * Appends one message to a conversation on this document.
    *
    * A no-op for a thread this document does not hold, and for a document
@@ -188,11 +207,16 @@ export interface MarkdownDocumentState {
    */
   readonly replyToThread: (threadId: string, message: CommentMessage) => void
   /**
-   * Opens a conversation on this document — the one write that MAY create
-   * a thread container, which is why it is a separate door from
-   * `replyToThread`. A no-op for a document still loading.
+   * Opens a conversation on this document, whole.
+   *
+   * The counterpart of `replyToThread` and the one write allowed to CREATE a
+   * thread container — which is why the two are separate calls rather than
+   * one upsert: a reply that opened a container would let two replicas mint
+   * the same thread and lose one side's messages on merge.
+   *
+   * A no-op while the document is still loading, like every other write here.
    */
-  readonly addThread: (thread: CommentThread) => void
+  readonly createThread: (thread: CommentThread) => void
 }
 
 /**
@@ -201,6 +225,9 @@ export interface MarkdownDocumentState {
  * of the rail on every switch for no change.
  */
 const NO_ANNOTATIONS: readonly CommentThread[] = []
+
+/** Same purpose as NO_ANNOTATIONS, for the passages beside them. */
+const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 
 /**
  * Names a document after the title its body announces, while nobody has
@@ -250,6 +277,41 @@ function seedNameFromTitle(workspace: Loro, documentId: string): void {
   const ours = entry.name === undefined || title.startsWith(entry.name)
   if (!ours) return
   setWorkspaceDocumentName(workspace, { documentId, name: title })
+}
+
+/**
+ * Gives every conversation the document arrived without a mark, from the
+ * quote that is still stored beside it.
+ *
+ * A thread already marked is never re-derived — that would replace the truth
+ * with a guess, and would undo wherever a merged edit had carried the
+ * passage. A thread whose quote no longer resolves gets nothing: marking the
+ * nearest thing would make an orphan look placed forever after, which is
+ * what ADR-0026 decision 4 forbids.
+ *
+ * Guarded like every other read here: a document whose annotation layer
+ * cannot be read must still open and still save.
+ */
+function backfillThreadMarks(host: ContentHost): void {
+  try {
+    const { containers } = host
+    // The TEXT CONTAINER rather than `readMarkdownBody`, because that is
+    // what a mark's offsets are against — the two agree by the time this
+    // runs, and asking the wrong one would go wrong silently if they
+    // ever stopped agreeing.
+    const body = containers.getText(MARKDOWN_BODY_KEY).toString()
+    const missing = missingThreadMarks(
+      body,
+      readAnnotations(containers),
+      readThreadMarks(containers),
+    )
+    // A no-op for a document that needs nothing: `markThreadPassages`
+    // returns without committing on an empty map, so an ordinary load does
+    // not schedule a save of itself.
+    markThreadPassages(host.doc, containers, missing)
+  } catch (err) {
+    log.warn('backfilling thread marks failed', err)
+  }
 }
 
 async function openWorkspaceHost(documentId: string): Promise<ContentHost | null> {
@@ -316,6 +378,7 @@ export function useMarkdownDocument(
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const [annotations, setAnnotations] = useState<readonly CommentThread[]>(NO_ANNOTATIONS)
+  const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(NO_THREAD_MARKS)
   const hostRef = useRef<ContentHost | null>(null)
   const loroRef = useRef(loro)
   loroRef.current = loro
@@ -350,6 +413,9 @@ export function useMarkdownDocument(
     // this one's body — with a reply box that would write into whichever
     // document holds the thread it names.
     setAnnotations(NO_ANNOTATIONS)
+    // And where their passages were, which is about this document's body and
+    // would place the next document's highlights at this one's offsets.
+    setThreadMarks(NO_THREAD_MARKS)
     // The indicator too. It reads `saved at 10:00` about the document that
     // left, and left standing that becomes a claim about this one, which was
     // never saved at all. Back to the initial value — no unsaved edits, no
@@ -374,8 +440,12 @@ export function useMarkdownDocument(
         // annotation layer cannot be read must still open and still save.
         const publishAnnotations = (): void => {
           let next: readonly CommentThread[]
+          let marks: ReadonlyMap<string, PassageRange>
           try {
             next = readAnnotations(containers)
+            // From the same read as the threads, so the two published
+            // values are always a pair taken at one instant.
+            marks = readThreadMarks(containers)
           } catch (err) {
             log.warn('reading annotations failed', err)
             return
@@ -383,6 +453,11 @@ export function useMarkdownDocument(
           // The subscription fires on every keystroke in the body, so
           // without this the rail is handed a fresh array per character.
           setAnnotations((current) => (sameAnnotations(current, next) ? current : next))
+          // Not gated the same way: a passage that MOVED leaves the thread
+          // list byte-for-byte identical, and every keystroke above a
+          // passage moves it — which is exactly the case this map exists
+          // to report.
+          setThreadMarks((current) => (sameThreadMarks(current, marks) ? current : marks))
         }
         // Subscribed AFTER the initial import, so loading never schedules a
         // save of what was just loaded. This is how commits made OUTSIDE
@@ -412,6 +487,13 @@ export function useMarkdownDocument(
         if (stored.length > 0 && containers.getText(MARKDOWN_BODY_KEY).length === 0) {
           writeMarkdownBody(containers, stored)
         }
+        // Once, here, and never in the subscription: marks do not travel
+        // through a markdown file and a thread an MCP peer wrote never had
+        // one, so the quote is asked at the moment the body is known and
+        // its answer written down for the CRDT to carry from then on.
+        // Re-asking on every commit would pay a body search per keystroke
+        // for every thread whose passage is genuinely gone.
+        backfillThreadMarks(host)
         setBodyState(readMarkdownBody(containers))
         setCoreMetaState(readCoreFacets(containers) ?? DEFAULT_MARKDOWN_CORE_FACETS)
         publishAnnotations()
@@ -441,6 +523,36 @@ export function useMarkdownDocument(
   // has to be able to FLUSH it, and effect cleanups run in reverse order —
   // an effect owning the scheduler could be torn down first.
   const schedulerRef = useRef<{ id: string; scheduler: SaveScheduler } | null>(null)
+
+  // The debounce holds text that is already on screen, and a tab that goes
+  // away inside the window loses it. `pagehide` and `visibilitychange` →
+  // hidden are the last signals a page reliably gets (Page Lifecycle API;
+  // `beforeunload` is not delivered on mobile), so the save goes out on them.
+  // Becoming visible is the same event name and must not flush. The
+  // scheduler is read through its ref at fire time, so this effect never
+  // re-arms on a scheduler change — it only needs the document's scope.
+  //
+  // Covers a tab that is HIDDEN and keeps running (measured in Chromium:
+  // the write reaches IndexedDB within 50ms of the signal, with the tab's
+  // scripts frozen so the debounce could not be what landed it). A tab
+  // closed or reloaded inside the window is torn down before the flush's
+  // asynchronous chain reaches the store and still loses the edit; closing
+  // that gap means writing at once rather than a better signal — see the
+  // same note in document-sync-session.ts.
+  useEffect(() => {
+    if (!enabled || documentId === null) return
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    const flush = () => schedulerRef.current?.scheduler.flush()
+    const onVisibilityChange = () => {
+      if (document.visibilityState === 'hidden') flush()
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', flush)
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange)
+      window.removeEventListener('pagehide', flush)
+    }
+  }, [documentId, enabled])
   const schedulerFor = useCallback((id: string): SaveScheduler => {
     if (schedulerRef.current?.id !== id) {
       schedulerRef.current = {
@@ -518,10 +630,21 @@ export function useMarkdownDocument(
     writeThreadMessage(host.containers, threadId, message)
   }, [])
 
-  const addThread = useCallback((thread: CommentThread) => {
+  const createThread = useCallback((thread: CommentThread) => {
     const host = hostRef.current
     if (host === null) return
     writeCommentThread(host.containers, thread)
+    // And where the passage IS, so the CRDT carries it from here on. The
+    // quote is what survives this document leaving the CRDT; a mark is what
+    // follows an edit, including a concurrent one merged from another peer.
+    // Both, because neither replaces the other.
+    if (thread.anchor.kind === 'text') {
+      markThreadPassages(
+        host.doc,
+        host.containers,
+        new Map([[thread.id, { start: thread.anchor.start, end: thread.anchor.end }]]),
+      )
+    }
   }, [])
 
   const bodyTextOf = useCallback(
@@ -544,7 +667,8 @@ export function useMarkdownDocument(
     doc,
     bodyTextOf,
     annotations,
+    threadMarks,
     replyToThread,
-    addThread,
+    createThread,
   }
 }

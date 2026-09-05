@@ -1,4 +1,4 @@
-import { bench, describe } from 'vitest'
+import { test } from 'vitest'
 import {
   CORPUS_WIDTHS_PX,
   createCorpusMeasure,
@@ -12,14 +12,14 @@ import { layoutMdastBlocks } from './mdast-blocks.js'
  * by measuring far more often has to show what that costs in time, not only
  * in the scoreboard's `measure` count.
  */
-describe('layoutMdastBlocks', () => {
+test('layoutMdastBlocks', { timeout: 0 }, async ({ bench }) => {
   const measure = createCorpusMeasure().measure
 
-  bench('corpus x widths', () => {
+  await bench('corpus x widths', () => {
     for (const entry of TEXT_WRAPPING_CORPUS) {
       for (const maxWidth of CORPUS_WIDTHS_PX) {
         layoutMdastBlocks(entry.root, { measure, maxWidth, fontFamily: 'Roboto' })
       }
     }
-  })
+  }).run()
 })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState } from './browser-page-state.js'
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
 
 const snapshot: DocumentSnapshot = {
   documentId: '0ADGKPSWZ258BEHMQTX0369CFJ',

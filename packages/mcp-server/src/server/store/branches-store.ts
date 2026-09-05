@@ -1,3 +1,7 @@
+import type {
+  BranchMeta,
+  DocumentBranchesState,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
 import {
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -20,19 +24,12 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // across the path → documentId migration. Internally the path is resolved to
 // the stable canvas id before any branches/documents write.
 
-export interface BranchMeta {
-  name: string
-  tipFrontiers: string
-  baseBranch?: string
-  baseVersionId?: string
-  color: string
-  createdAt: string
-}
+export type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
 
-export interface DocumentBranches {
-  branches: BranchMeta[]
-  head: string
-}
+// Internal alias: this store's DocumentBranches predates the shared contract
+// and its callers already spell that name — kept to avoid a same-package
+// drive-by rename beyond this increment's scope.
+export type DocumentBranches = DocumentBranchesState
 
 export const DEFAULT_MAIN_COLOR = '#1971c2'
 

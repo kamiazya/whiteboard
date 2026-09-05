@@ -6,6 +6,10 @@
  * document-shaped surface this session now owns.
  */
 
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -14,19 +18,21 @@ import {
   setNodeLock,
   writeCanvasComment,
   writeCommentThread,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+  CanvasComment,
+  CommentThread,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { applyCommand } from '../components/spatial-editor/commands.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import type { EditorCommand } from './spatial/commands.js'
+import { applyCommand } from './spatial/commands.js'
 
 // Spies on the module's logger so a fallback-to-full-resync (which always
 // logs a warning first, see commitToDoc's doc comment) is directly
@@ -77,14 +83,25 @@ type FakeBackendControl = {
   /** Models a transport that is down: pushes are accepted and discarded,
    *  which is what DaemonBackend does when its socket is not OPEN. */
   transportDown: boolean
+  /** When set, every push parks until `releasePushes()` — a slow store. */
+  holdPushes: boolean
+  releasePushes: () => void
+  /** When set, every push rejects — a store that refuses the write. */
+  rejectPushes: boolean
 }
 
 function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
+  const held: Array<() => void> = []
   const ctrl: FakeBackendControl = {
     handlers: null,
     disconnectCalled: false,
     pushLocalUpdateCalls: [],
     transportDown: false,
+    holdPushes: false,
+    releasePushes: () => {
+      for (const release of held.splice(0)) release()
+    },
+    rejectPushes: false,
   }
   return {
     _ctrl: ctrl,
@@ -99,6 +116,12 @@ function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
     pushLocalUpdate(bytes) {
       if (ctrl.transportDown) return Promise.resolve()
       ctrl.pushLocalUpdateCalls.push(bytes)
+      if (ctrl.rejectPushes) return Promise.reject(new Error('store refused the write'))
+      if (ctrl.holdPushes) {
+        return new Promise<void>((resolve) => {
+          held.push(resolve)
+        })
+      }
       return Promise.resolve()
     },
     getFile: async () => null,
@@ -204,35 +227,26 @@ describe('createDocumentSyncSession', () => {
     expect(nodes).toHaveLength(twoNodeCanvas().nodes.length)
   })
 
-  // The version key every derived picture of this document is memoised under
-  // (ADR-0027). Its whole job is to move when the document does and to stay
-  // put when it does not — a key that misses a change serves the previous
-  // picture, which is the worst failure a cache can have: wrong rather than
-  // missing.
-  //
-  // It names the COMMITTED state, which is not the same instant as the
-  // published canvas value: `onChange` publishes immediately and commits on
-  // a debounce, so between those two the doc has not moved yet. Measured
-  // rather than assumed — reading it straight after `onChange` returns the
-  // pre-edit value, canvas text 'hello' -> 'edited' with the frontier
-  // unchanged. That is why the surface driven by this key is driven by the
-  // doc's own change notification (which fires after the commit) and not by
-  // the React state the editor renders from.
-  it('answers no frontier before a snapshot, and one that moves when the doc does', () => {
+  // The key every rendition of the open document is memoised under is the
+  // digest of the document's content — the same function the workspace
+  // listing uses for a row, so a row and the document it lists name one state
+  // one way (`content-digest.hosts.test.ts` in loro-adapter holds the three
+  // hosts to that).
+  it('answers no state before a snapshot, and one that moves when the document does', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
 
-    // Nothing hydrated: the ABSENCE of a version, so nothing is remembered
+    // Nothing hydrated: the ABSENCE of a state, so nothing is remembered
     // under it rather than everything sharing one key.
-    expect(session.getFrontier()).toBeNull()
+    expect(session.getContentState()).toBeNull()
 
     const canvas = twoNodeCanvas()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
-    const hydrated = session.getFrontier()
+    const hydrated = session.getContentState()
     expect(hydrated).not.toBeNull()
 
-    // A remote update imports synchronously, so this is a committed change.
+    // A remote update imports synchronously, so the document has moved.
     const doc = new LoroDoc()
     doc.import(makeSnapshot(canvas))
     writeSpatialCanvas(doc, {
@@ -241,16 +255,295 @@ describe('createDocumentSyncSession', () => {
     })
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
-    expect(session.getFrontier()).not.toBe(hydrated)
+    expect(session.getContentState()).not.toBe(hydrated)
   })
 
-  // The bytes and the frontier are read in one synchronous block on purpose,
-  // and this pins that they describe the same state. Nothing can commit
-  // between two synchronous reads, so the pairing holds by construction —
-  // but a later refactor that made either read async would break it
-  // silently, and a picture memoised under the wrong version is the failure
-  // this whole key exists to avoid.
-  it('exports bytes that decode to the state its frontier names', () => {
+  // The key names the DOCUMENT, and `onChange` does not write the document:
+  // it publishes the canvas at once and writes on a debounce. So straight
+  // after `onChange` the published canvas shows the edit and the key does
+  // not — measured here rather than assumed, because this is exactly why the
+  // surfaces keyed on it listen to the document's post-write notification
+  // rather than to the React state the editor renders from. Once the write
+  // lands, the key moves.
+  it('does not move on a published edit until the debounced write lands', async () => {
+    vi.useFakeTimers()
+    try {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+      const hydrated = session.getContentState()
+
+      const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+      session.onChange(applyCommand(twoNodeCanvas(), move), move)
+
+      expect(session.getCanvas().nodes.find((n) => n.id === 'n-a')?.x).toBe(10)
+      expect(session.getContentState()).toBe(hydrated)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(session.getContentState()).not.toBe(hydrated)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The debounce holds edits that are already on screen. A tab that goes
+  // away inside that window — closed, switched, backgrounded on a phone —
+  // would lose them, and nothing on screen said they were unsaved. The
+  // hidden/pagehide signals are the last ones a page reliably gets, so the
+  // write goes out on them instead of waiting the window out.
+  describe('flushes the debounced write when the page goes away', () => {
+    function withVisibility(state: DocumentVisibilityState): () => void {
+      const original = Object.getOwnPropertyDescriptor(Document.prototype, 'visibilityState')
+      Object.defineProperty(document, 'visibilityState', { configurable: true, get: () => state })
+      return () => {
+        delete (document as { visibilityState?: unknown }).visibilityState
+        if (original) Object.defineProperty(Document.prototype, 'visibilityState', original)
+      }
+    }
+
+    async function editThen(fire: () => void): Promise<number> {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+      const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+      session.onChange(applyCommand(twoNodeCanvas(), move), move)
+      fire()
+      // Microtasks only — the debounce timer must NOT be what lands it.
+      await flushMicrotasks()
+      const pushed = backend._ctrl.pushLocalUpdateCalls.length
+      session.dispose()
+      return pushed
+    }
+
+    it('on visibilitychange to hidden', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('hidden')
+      try {
+        expect(await editThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(1)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+
+    it('on pagehide', async () => {
+      vi.useFakeTimers()
+      try {
+        expect(await editThen(() => window.dispatchEvent(new Event('pagehide')))).toBe(1)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // The control: becoming VISIBLE is the same event name and must not
+    // flush, or every tab switch back would write mid-gesture.
+    it('not on visibilitychange to visible', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('visible')
+      try {
+        expect(await editThen(() => document.dispatchEvent(new Event('visibilitychange')))).toBe(0)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+
+    it('stops listening once disposed', async () => {
+      vi.useFakeTimers()
+      const restore = withVisibility('hidden')
+      try {
+        const backend = makeFakeBackend()
+        const session = createDocumentSyncSession(backend, makeDeps())
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        session.dispose()
+        await flushMicrotasks()
+        const before = backend._ctrl.pushLocalUpdateCalls.length
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        document.dispatchEvent(new Event('visibilitychange'))
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(before)
+      } finally {
+        restore()
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  // What the session KNOWS about its own writes, reported as facts for a
+  // page to judge: an edit is unsaved from the instant it is published, and
+  // saved only once every write behind it has landed — not when the debounce
+  // fired, not when the commit ran, but when the store's promise resolved.
+  // This is the one place the spatial write path can say so; the store
+  // itself never learns which edit a write carried.
+  describe('reports persistence facts', () => {
+    function kinds(spy: ReturnType<typeof vi.fn>): string[] {
+      return spy.mock.calls.map((call) => (call[0] as { kind: string }).kind)
+    }
+
+    it('pending on publish, saved once the push has landed', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        expect(kinds(onPersistenceChange)).toEqual([])
+
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+        // The debounce firing and the commit running are not landing.
+        await vi.advanceTimersByTimeAsync(299)
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+
+        await vi.advanceTimersByTimeAsync(1)
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved'])
+        const saved = onPersistenceChange.mock.calls[1][0] as { lastSavedAt: string | null }
+        expect(saved.lastSavedAt).not.toBeNull()
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // Two edits, the second published while the first's write is still in
+    // flight: the first landing does not make the document saved, because
+    // the second edit is not in it. Only the last write landing does.
+    it('stays pending while any write behind an edit is still in flight', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        backend._ctrl.holdPushes = true
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(2)
+
+        // Both pushes land now. Nothing between the two edits reported saved.
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('degraded when the store refuses the write', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        backend._ctrl.rejectPushes = true
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // The browser backend never rejects a push: its write runs on a queue it
+    // owns, and a store that throws is reported through `onError`
+    // ('storage-failure') while the push's own promise resolves. That report
+    // is the same fact as a rejection and has to reach the same place, or a
+    // browser whose IndexedDB refused the write reads as saved.
+    it('degraded when the backend reports a storage failure, saved again once a later write lands', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        backend._ctrl.holdPushes = true
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+        // The order the browser backend produces: the push is in flight, its
+        // write throws and is REPORTED, then the push's own promise resolves
+        // as if nothing happened. That resolution must not read as saved.
+        backend._ctrl.handlers!.onError?.('storage-failure')
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded'])
+
+        // A LATER write that completes with no failure reported against it is
+        // what clears the condition.
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded', 'saved'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // A settled edit that is edited again is pending again — the fact is
+    // about the document as it stands, not about the first write.
+    it('goes pending again on the next edit after saving', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved', 'pending'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  // The bytes and the key are read in one synchronous block on purpose, and
+  // this pins that they describe the same state. Nothing can change the
+  // document between two synchronous reads, so the pairing holds by
+  // construction — but a later refactor that made either read async would
+  // break it silently, and a picture memoised under the wrong state is the
+  // failure this whole key exists to avoid.
+  it('exports bytes that decode to the state its key names', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
@@ -274,20 +567,20 @@ describe('createDocumentSyncSession', () => {
     expect(readSpatialCanvas(after)).toEqual(changed)
   })
 
-  it('exports nothing before a snapshot, like the frontier beside it', () => {
+  it('exports nothing before a snapshot, like the key beside it', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     expect(session.exportSnapshot()).toBeNull()
   })
 
-  it('answers the same frontier when nothing has changed', () => {
+  it('answers the same state when nothing has changed', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    expect(session.getFrontier()).toBe(session.getFrontier())
+    expect(session.getContentState()).toBe(session.getContentState())
   })
 
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
@@ -491,15 +784,21 @@ describe('createDocumentSyncSession', () => {
     // The PAYLOAD, not merely that a notification happened: a subscriber
     // handed the pre-reply annotations would satisfy `toHaveBeenCalled` and
     // leave every reader looking at the old conversation.
-    expect(listener).toHaveBeenLastCalledWith([
-      expect.objectContaining({
-        id: 't1',
-        messages: [
-          expect.objectContaining({ body: 'the opening question' }),
-          expect.objectContaining({ body: 'and the answer' }),
-        ],
-      }),
-    ])
+    expect(listener).toHaveBeenLastCalledWith(
+      [
+        expect.objectContaining({
+          id: 't1',
+          messages: [
+            expect.objectContaining({ body: 'the opening question' }),
+            expect.objectContaining({ body: 'and the answer' }),
+          ],
+        }),
+      ],
+      // The marks ride in the same call as the threads, so a subscriber can
+      // never pair a mark map from one instant with a thread list from
+      // another.
+      expect.any(Map),
+    )
     unsubscribe()
   })
 
@@ -536,6 +835,198 @@ describe('createDocumentSyncSession', () => {
       'first reply',
       'second reply',
     ])
+  })
+
+  it('opens a thread on a markdown document, whose canvas has no comment to carry it', async () => {
+    // The create half of the same gap `reply-to-thread` closed. A markdown
+    // document's canvas holds no nodes at all, so there is no
+    // `x-whiteboard.comments` entry a new conversation could ride in on —
+    // the thread has to be written into the threads plane directly, and
+    // whole, because `commentThreadSchema` has no legal empty thread to
+    // create first and fill afterwards.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'the paragraph a reader wants to question')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const before = session.getCanvas()
+    const thread: CommentThread = {
+      id: 't-new',
+      anchor: {
+        kind: 'text',
+        quote: { prefix: 'the paragraph ', exact: 'a reader', suffix: ' wants to questi' },
+        start: 14,
+        end: 22,
+      },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why this one?' }],
+    }
+    const command: EditorCommand = { kind: 'create-thread', thread }
+    session.onChange(applyCommand(before, command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Read back through the session's own annotations rather than the doc:
+    // that is what the rail and the body projection both render, so a write
+    // the read cannot see is the same defect as no write at all.
+    expect(session.getAnnotations()).toEqual([expect.objectContaining({ id: 't-new' })])
+    expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual(['why this one?'])
+    // The canvas is untouched, which is what stops the commit path falling
+    // back to a whole-canvas resync that would never write the thread.
+    expect(session.getCanvas()).toBe(before)
+  })
+
+  it('marks the passage a new conversation is about, so the CRDT carries it', async () => {
+    // The quote is the durable identity and a mark is where the passage IS.
+    // Writing only the thread would leave the live half empty until someone
+    // reopened the document, and every edit in between would be tracked by
+    // an offset search rather than by the structure that moved the text.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 't-marked',
+        anchor: { kind: 'text', quote: { exact: quote }, ...at },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      },
+    }
+    session.onChange(session.getCanvas(), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getThreadMarks().get('t-marked')).toEqual(at)
+  })
+
+  it('the mark it wrote follows an edit above the passage', async () => {
+    // What the stored offsets cannot do, through the session's own write
+    // path rather than the adapter's: a `set-body` that inserts above the
+    // passage moves it, and the mark reports where it went.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    session.onChange(session.getCanvas(), {
+      kind: 'create-thread',
+      thread: {
+        id: 't-marked',
+        anchor: { kind: 'text', quote: { exact: quote }, ...at },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      },
+    })
+    await vi.advanceTimersByTimeAsync(300)
+
+    const prefix = 'URGENT: '
+    session.onChange(session.getCanvas(), { kind: 'set-body', text: `${prefix}${body}` })
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getThreadMarks().get('t-marked')).toEqual({
+      start: at.start + prefix.length,
+      end: at.end + prefix.length,
+    })
+  })
+
+  it('gives a document that arrived without marks one per quote it can still find', async () => {
+    // Marks do not travel through a markdown file, and a thread an MCP peer
+    // wrote never had one. Both are asked of the quote once, when the body
+    // is first known, and the answer is written down so the CRDT can carry
+    // it from then on.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const body = 'Ship the report on Friday. The draft is not written.'
+    const quote = 'report on Friday'
+    const at = { start: body.indexOf(quote), end: body.indexOf(quote) + quote.length }
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, body)
+    writeCommentThread(doc, {
+      id: 't-imported',
+      anchor: { kind: 'text', quote: { exact: quote }, ...at },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why Friday?' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getThreadMarks().get('t-imported')).toEqual(at)
+  })
+
+  it('leaves a thread whose passage is gone unmarked rather than guessing', async () => {
+    // ADR-0026 decision 4: deleting the subject must not delete the
+    // conversation — and must not invent a new subject for it either.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'Nothing that sentence said is here any more.')
+    writeCommentThread(doc, {
+      id: 't-orphan',
+      anchor: { kind: 'text', quote: { exact: 'report on Friday' }, start: 9, end: 25 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why Friday?' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getThreadMarks().has('t-orphan')).toBe(false)
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-orphan'])
+  })
+
+  it('two threads opened inside one debounce window both survive', async () => {
+    // `create-thread` cannot share `reply-to-thread`'s message key, and a
+    // `thread:` key would be wrong for the same reason: two threads opened
+    // in one window are two conversations, not one target written twice.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'first sentence. second sentence.')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const canvas = session.getCanvas()
+    for (const [id, exact, start] of [
+      ['t-a', 'first', 0],
+      ['t-b', 'second', 16],
+    ] as const) {
+      session.onChange(canvas, {
+        kind: 'create-thread',
+        thread: {
+          id,
+          anchor: { kind: 'text', quote: { exact }, start, end: start + exact.length },
+          status: 'open',
+          messages: [{ id: `${id}-m1`, body: `about ${exact}` }],
+        },
+      })
+    }
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-a', 't-b'])
   })
 
   it('does not republish annotations for a commit that touched no conversation', async () => {

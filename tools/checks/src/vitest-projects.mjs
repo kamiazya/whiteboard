@@ -168,3 +168,63 @@ export function deriveSharedLayerProjectNames(repoRoot) {
 export function buildVitestArgv(names) {
   return ['exec', 'vitest', 'run', ...names.map((name) => `--project=${name}`)]
 }
+
+/**
+ * @typedef {{ configPath: string, dir: string, name: string | undefined, isBrowser: boolean, include: string[], exclude: string[] }} VitestProjectGlobs
+ */
+
+// Per-project include/exclude patterns, for the coverage guard that asserts
+// every test file in the tree belongs to at least one root project. The
+// arrays are read textually (this package stays dependency-free), keeping
+// only entries that look like test-path globs so an optimizeDeps.include or
+// setupFiles list in the same config cannot pollute the result.
+/**
+ * @param {string} repoRoot
+ * @returns {VitestProjectGlobs[]}
+ */
+export function readProjectTestGlobs(repoRoot) {
+  const rootVitestConfig = readFileSync(join(repoRoot, 'vitest.config.ts'), 'utf8')
+  const configPaths = [...rootVitestConfig.matchAll(/'([^']+\.config\.ts)'/g)].map(
+    (match) => match[1],
+  )
+  return configPaths.map((configPath) => {
+    const content = readFileSync(join(repoRoot, configPath), 'utf8')
+    const arrays = (key) =>
+      [...content.matchAll(new RegExp(`${key}:\\s*\\[([^\\]]*)\\]`, 'g'))]
+        // Strip line comments BEFORE scanning quotes: an apostrophe in a
+        // comment ("this project's own...") otherwise pairs with a real
+        // entry's opening quote and silently swallows it.
+        .map((match) => match[1].replace(/\/\/[^\n]*/g, ''))
+        .flatMap((body) => [...body.matchAll(/'([^']+)'/g)].map((entry) => entry[1]))
+        .filter((pattern) => pattern.includes('.test.') || pattern.includes('.bench.'))
+    return {
+      configPath,
+      dir: configPath.slice(0, configPath.lastIndexOf('/')),
+      name: content.match(/name:\s*'([^']+)'/)?.[1],
+      isBrowser:
+        /browser:\s*\{\s*\n?\s*enabled:\s*true/.test(content) ||
+        /browser:\s*sharedBrowserTestConfig\(/.test(content),
+      include: arrays('include'),
+      exclude: arrays('exclude'),
+    }
+  })
+}
+
+// The one glob grammar the configs above actually use: literal path
+// segments, `*` within a segment, and `**/` for zero or more directories.
+// Deliberately NOT a general glob engine — the coverage guard's own unit
+// tests pin each form, and an unsupported form fails visibly there rather
+// than silently matching nothing.
+/**
+ * @param {string} pattern
+ * @param {string} relPath path relative to the config's directory, '/'-separated
+ * @returns {boolean}
+ */
+export function testGlobMatches(pattern, relPath) {
+  const escapeRegExp = (s) => s.replace(/[.+^${}()|[\]\\]/g, '\\$&')
+  const regex = pattern
+    .split('**/')
+    .map((part) => escapeRegExp(part).replace(/\*/g, '[^/]*'))
+    .join('(?:[^/]+/)*')
+  return new RegExp(`^${regex}$`).test(relPath)
+}

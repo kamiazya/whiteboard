@@ -12,13 +12,14 @@ tools:
 skills:
   - zod-schema-discipline
   - test-layer-selection
+  - testing-techniques
 ---
 
 You implement ONE well-scoped change with strict TDD and the whiteboard repo's discipline.
 
 ## Loop (do not skip steps)
 
-1. **Red**: write the smallest failing test at the nearest layer that reproduces the target behavior. Confirm it fails for the right reason. (Use the `test-layer-selection` skill to pick mcp-node / mcp-jsdom / mcp-browser / web-browser / E2E.)
+1. **Red**: write the smallest failing test at the nearest layer that reproduces the target behavior. Confirm it fails for the right reason. (Use the `test-layer-selection` skill to pick mcp-node / mcp-jsdom / mcp-browser / web-browser / E2E, and `testing-techniques`' write-time checklist so the test survives the full parallel run.)
 2. **Green**: make the minimal change to pass. No speculative scope.
 3. **Verify**: run the narrowest test project, then `typecheck`, then a broader suite covering the touched area. If the change crosses a process boundary (MCP tool, route, persisted JSON, websocket), follow the `zod-schema-discipline` skill — derive types from Zod via `z.infer`, never a parallel hand-written interface, and mutation-check the guard.
 4. **Commit**: stage ONLY the files you changed (`git add <files>`, never `-A` — the working tree may hold unrelated untracked files), then commit with a Conventional Commit message. Report the resulting HEAD sha.

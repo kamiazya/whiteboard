@@ -21,6 +21,7 @@
 // invariants grep-friendly and lets the helper be tested in isolation
 // (no React renderer required).
 
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import {
   type DocumentReadFailure,
   documentReadFailureMessage,
@@ -32,8 +33,6 @@ import type {
   LoadDegradedState,
   LoadingState,
 } from './document-page-state.js'
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
-
 export interface BrowserPageStateInput {
   snapshot: DocumentSnapshot | null
   persistence: BrowserPersistenceState

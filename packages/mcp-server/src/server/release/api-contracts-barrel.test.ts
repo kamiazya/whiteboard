@@ -1,12 +1,10 @@
-// Guard against scope creep on the `./api-contracts` public npm subpath.
+// Guard against scope creep on the daemon-client api-contracts barrel.
 //
-// The barrel at src/shared/api-contracts/index.ts is deliberately narrow.
-// web-app-boundary.test.ts scans every file under src/shared/api-contracts/
-// for browser-safety, but it does not — and structurally cannot — assert
-// what the barrel itself re-exports. Without this test, someone could add
-// `export * from './document-runtime.js'` (or daemon-doctor / export /
-// libraries) to the barrel and widen the public semver surface without any
-// test noticing.
+// The barrel is deliberately narrow: it is the whole contract surface
+// apps/web reads, and arch-lint's structural scan checks browser-safety but
+// does not — and structurally cannot — assert what the barrel re-exports.
+// Without this test, someone could add another module to the barrel and
+// widen the client contract surface without any test noticing.
 
 import { readFileSync } from 'node:fs'
 import { dirname, resolve } from 'node:path'
@@ -15,7 +13,7 @@ import { describe, expect, it } from 'vitest'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 // __dirname -> packages/mcp-server/src/server/release
-const BARREL_PATH = resolve(__dirname, '../../shared/api-contracts/index.ts')
+const BARREL_PATH = resolve(__dirname, '../../../../daemon-client/src/api-contracts/index.ts')
 
 function reExportSpecifiers(source: string): string[] {
   const re = /export\s+(?:\*|\{[^}]*\})\s+from\s+['"]([^'"]+)['"]/g

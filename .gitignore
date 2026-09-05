@@ -161,6 +161,10 @@ packages/mcp-server/_artifacts/
 .playwright-mcp/
 
 # Vitest browser test attachments / traces
+.vitest/
+# Where vitest actually copies a failing browser test's trace. The heading
+# above claimed to cover it and the pattern did not, so a `git add -A` swept
+# 11 of them (1.9MB of zips) into #1363.
 .vitest-attachments/
 
 # Claude Code AI-dev-flow tooling. The shared tooling — .claude/workflows, agents,

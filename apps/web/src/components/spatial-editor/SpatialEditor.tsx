@@ -89,29 +89,48 @@ import {
   useRef,
 } from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
+import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { applyCommand } from '../../lib/spatial/commands.js'
+import { createEditorAppearance, editorTextFill } from '../../lib/spatial/editor-appearance.js'
+import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import {
+  distanceToPolyline,
+  findFreeSpot,
+  hitTest,
+  indexNodeBoxes,
+} from '../../lib/spatial/geometry.js'
+import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
+import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
+import {
+  canvasToScreen,
+  fitViewportToBoxes,
+  type Point,
+  panBy,
+  screenToCanvas,
+  viewportTransformCss,
+  zoomAt,
+} from '../../lib/spatial/viewport.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import type { BoxMove } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
-import type { EditorCommand } from './commands.js'
-import { applyCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
-import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
+import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
-import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import { distanceToPolyline, findFreeSpot, hitTest, indexNodeBoxes } from './geometry.js'
 import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
@@ -133,17 +152,10 @@ import {
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
-import { requiredTextNodeHeight } from './scene-render.js'
-import { keyedWithoutPrefix } from './scene-render-core.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import {
-  type DraggableCreation,
-  draggedCreation,
-  type EditorTool,
-  ToolPalette,
-} from './ToolPalette.js'
+import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentState } from './use-comment-state.js'
@@ -162,16 +174,6 @@ import { useSceneProjection } from './use-scene-projection.js'
 import { useToolState } from './use-tool-state.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
-import {
-  canvasToScreen,
-  fitViewportToBoxes,
-  type Point,
-  panBy,
-  screenToCanvas,
-  type Viewport,
-  viewportTransformCss,
-  zoomAt,
-} from './viewport.js'
 
 /**
  * Machine-checkable out-of-scope list this slice deliberately does not
@@ -336,15 +338,6 @@ export interface SpatialEditorProps {
    * navigating to an asset reference is a dead end.
    */
   readonly isImageFileRef?: (file: string) => boolean
-}
-
-/** Imperative surface for a page that needs to drive the viewport from
- * outside (e.g. a daemon's `viewport_request`) without owning viewport as
- * its own state. */
-export interface SpatialEditorHandle {
-  setViewport(viewport: Viewport): void
-  /** Fits the viewport to the given node ids, or to every node when omitted. */
-  fitToContent(nodeIds?: readonly string[]): void
 }
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160

@@ -9,6 +9,7 @@
  */
 import { describeBlobStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 
 // Its OWN database, not the app's — browser tests share an origin, so
@@ -16,24 +17,12 @@ import { IdbBlobStore } from './idb-blob-store.js'
 // other file is mid-fixture, and the failure would land there.
 const DB_NAME = 'whiteboard-blob-store-conformance'
 
-async function deleteDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    // No `onblocked` resolve: `blocked` means the delete has NOT happened
-    // yet, so resolving there starts the next case against the previous
-    // one's rows. `IdbBlobStore` closes its connection in a `finally`, so
-    // nothing this suite opens outlives its own call.
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
 describe('IdbBlobStore', () => {
   describeBlobStoreConformance(async () => {
-    await deleteDb()
+    await clearNamedDb(DB_NAME)
     return {
       store: new IdbBlobStore(DB_NAME),
-      dispose: deleteDb,
+      dispose: () => clearNamedDb(DB_NAME),
     }
   })
 })

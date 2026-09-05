@@ -1,4 +1,7 @@
-import type { DocumentSummary, WorkspaceSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type {
+  DocumentSummary,
+  WorkspaceSummary,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   createDocument as createCanvasApi,

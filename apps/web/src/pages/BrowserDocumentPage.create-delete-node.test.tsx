@@ -27,8 +27,8 @@ import {
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
   createNodeCommand,

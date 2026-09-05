@@ -13,10 +13,10 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { type NodeBox, unionBox } from './geometry.js'
-import { buildMinimapNodes } from './minimap.js'
-import { renderedCanvasKeyed } from './scene-render-core.js'
+import { type NodeBox, unionBox } from '../../lib/spatial/geometry.js'
+import { buildMinimapNodes } from '../../lib/spatial/minimap.js'
+import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 
 export interface SceneProjectionInputs {
   readonly scene: Scene

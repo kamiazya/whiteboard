@@ -268,9 +268,11 @@ describe('AppShell — the mark as the connection carrier', () => {
     //
     // Counted rather than named: asserting the OLD test id is absent would
     // pass just as well if a replacement chip were added under a new one, and
-    // a guard that cannot see its subject is no guard.
+    // a guard that cannot see its subject is no guard. Published with a
+    // CONDITION (reconnecting), because a healthy keeper draws no carrier at
+    // all — a count of zero there would be right, and would see nothing.
     setShellConnection({
-      state: { keeper: 'daemon', session: 'synced' },
+      state: { keeper: 'daemon', session: 'reconnecting' },
       daemonBaseUrl: 'http://127.0.0.1:3099',
     })
     renderShell(true)
@@ -283,7 +285,7 @@ describe('AppShell — the mark as the connection carrier', () => {
   })
 
   it.each([
-    ['browser-kept', { keeper: 'browser' }, /browser/i],
+    ['browser-kept', { keeper: 'browser', storage: 'ok' }, /browser/i],
     ['synced', { keeper: 'daemon', session: 'synced' }, /synced/i],
     ['reconnecting', { keeper: 'daemon', session: 'reconnecting' }, /reconnecting/i],
     ['sync-off', { keeper: 'daemon', session: 'sync-off' }, /sync off/i],
@@ -331,7 +333,7 @@ describe('AppShell — the mark as the connection carrier', () => {
   })
 
   it('carries the capability CTA inside the Local popover, not in page chrome', async () => {
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     renderShell(false)
     expect(screen.queryByText(CTA)).toBeNull()
 
@@ -368,7 +370,7 @@ describe('AppShell — the mark as the connection carrier', () => {
         },
       },
     }))
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     renderShell(false)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     const notice = await screen.findByTestId('promoted-elsewhere-notice')
@@ -436,7 +438,7 @@ describe('AppShell — the mark as the connection carrier', () => {
         },
       },
     }))
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     renderShell(false)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await screen.findByText(CTA)
@@ -466,7 +468,7 @@ describe('AppShell — the mark as the connection carrier', () => {
         },
       },
     }))
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     renderShell(false)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await screen.findByText(CTA)
@@ -493,7 +495,7 @@ describe('AppShell — the mark as the connection carrier', () => {
         },
       },
     }))
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     renderShell(false)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await screen.findByText(CTA)

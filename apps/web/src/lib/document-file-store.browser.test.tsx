@@ -4,35 +4,18 @@
  * Real browser context required for IndexedDB.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BLOBS_STORE, openWhiteboardDb } from './browser-idb.js'
 import { DocumentFileStore, documentFileRecordSchema } from './document-file-store.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('document-file-store')
-
-// Rejects on failure: silently keeping stale fixed-key records would let
-// these persistence tests pass without exercising the current write.
-// 'blocked' is NOT a failure — store operations close their connections in
-// tx.oncomplete, which can land after the op's promise resolves, so the
-// deletion is briefly blocked and then proceeds (onsuccess still fires).
-// Waiting keeps that benign race quiet; a genuinely stuck connection still
-// surfaces as a loud test timeout.
-async function clearDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
-    req.onblocked = () => {
-      console.warn(
-        'clearDb: whiteboard database deletion blocked — waiting for open connections to close',
-      )
-    }
-  })
-}
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('document-file-store')
 
 describe('DocumentFileStore', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(clearWhiteboardDb)
+  afterEach(clearWhiteboardDb)
 
   it('put then get round-trips a Blob with identical bytes and mimeType', async () => {
     const store = new DocumentFileStore()
@@ -81,8 +64,8 @@ describe('DocumentFileStore', () => {
 })
 
 describe('DocumentFileStore over the blob store', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(clearWhiteboardDb)
+  afterEach(clearWhiteboardDb)
 
   async function blobCount(): Promise<number> {
     const db = await openWhiteboardDb()

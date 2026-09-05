@@ -252,13 +252,6 @@ jumps to the anchor. Each editor keeps its own in-place projection — the canva
 its pins and bubbles, markdown an inline highlight plus a gutter marker — and
 the panel is the document-level control the user asked for.
 
-*Status (2026-09-05):* the markdown projection shipped as
-`apps/web/src/components/markdown-editor/comment-anchors.ts` (source: highlight +
-gutter marker, positions mapped through edits; preview: a marker beside the
-block the passage starts in, since the exact words would need canvas-render to
-know about threads). The panel rides in `CommentsRail`, a column or a sheet by
-width, and the page holds the one open-thread answer both surfaces share.
-
 The filter stays **per-user view state, never written to the shared document**
 (ADR-0025 decision 2's other half, which survives intact): one person's filter
 must not change what another sees.
@@ -326,6 +319,88 @@ on step 1 and are moved onto the new shape before they land.
   it.** The seven PRs are green and stay open; step 1 below lands underneath
   them, then they are moved onto the new shape and land after. This trades a
   few days of the stack sitting for the smallest migration.
+
+## Supplement (2026-09-05): the spike decision 3 asked for, answered
+
+Decision 3 left the first selector to a measurement rather than an argument.
+It has been taken, and the answer is **a Loro rich-text mark on the body**,
+not the cursor the ADR guessed at.
+
+### What was measured, on loro-crdt 1.13.6
+
+`LoroText.mark(range, key, value)` writes a range that belongs to the
+CHARACTERS it covers. Over a body of 20,800 characters carrying 40 marks it:
+
+- follows an insert above the passage, and an insert merged from another
+  peer — the case a quote cannot reproduce, because the text no longer says
+  where the passage went;
+- grows when text is typed strictly inside it, and shrinks to whatever
+  survived a partial deletion;
+- survives a snapshot and a shallow snapshot, and is visible to a reader
+  that never registered any style;
+- **disappears when its passage is deleted** — the orphan signal decision 4
+  wants and a stored offset can never give;
+- reads back in 0.39ms for the whole document, which is why the projection
+  reads it rather than caching it.
+
+`getCursor`/`getCursorPos` — the API the ADR had in mind — was measured
+first and rejected: a cursor is a POINT, so a range needs two of them, and
+each collapses silently when the text around it is deleted. That is exactly
+the "always resolves and is sometimes wrong" failure decision 3 rules out.
+
+### The decision, and its cost
+
+**The mark is the live anchor; the quote stays the durable identity.**
+Neither replaces the other, and the resolution order is: the mark if the
+document has one, then the stored offsets, then the quote's unique
+occurrence, then the quote scored against `prefix`/`suffix`, then orphaned.
+
+The cost is a real tension with decision 1, and it is stated rather than
+hidden: **decision 1 puts the annotation layer BESIDE content, and a mark
+lives INSIDE the body container.** A comment now leaves a trace in the thing
+it is about. It is accepted because the trace is one Loro style key on a
+range, not content — it serialises to no markdown, so decision 1b's "an
+exported file carries content, not the conversation" is unaffected, and a
+peer that has never heard of comments reads exactly the body it always did.
+The layer is still the source of truth: a mark carries no message, no
+status, no id beyond the key, and deleting every mark loses nothing but
+precision.
+
+### Three traps, each measured rather than reasoned
+
+1. **A style key containing `:` ABORTS THE WASM** with
+   `RuntimeError: unreachable` — not a catchable throw. `annotationIdSchema`
+   is `z.string().min(1)`, so an id an MCP peer supplies could otherwise hand
+   that peer a remote crash. Keys are percent-encoded (`threadStyleKey`).
+2. **`configTextStyle` REPLACES its configuration rather than adding to it.**
+   A second call naming only a new key makes marking with the first one throw
+   `Style configuration missing`. Every writer must therefore supply the
+   complete set every time — a rule a call site can only get wrong — so
+   `markThreadPassages` derives it and the raw configurer is module-private.
+3. **One shared key carrying the thread id as its VALUE loses an overlap** to
+   last-writer-wins: measured, the first thread's range was cut short by the
+   second. Each thread gets its own key.
+
+A fourth, which reordered the work: **a wholesale `writeMarkdownBody` deletes
+every mark on the document**, because it deleted and re-inserted the whole
+text. That is why the minimal-diff splice landed first, as its own increment,
+before any of this.
+
+### What does not travel, and what is done about it
+
+Marks do not survive a document leaving the CRDT — a markdown export and
+re-import arrives with the conversations intact and no live anchor for any of
+them, as does every thread an MCP peer wrote. Both are handled the same way:
+**the quote is asked once, at the moment the body is known, and its answer is
+written down as a mark.** A thread that already has one is never re-derived
+(that would replace the truth with a guess, and undo wherever a merged edit
+had carried the passage), and a thread whose quote no longer resolves gets
+nothing — marking the nearest thing would make an orphan look placed forever
+after, which is what decision 4 forbids.
+
+`unmark` is deliberately not wired. Resolving a thread keeps its anchor, and
+this product has no delete for a conversation (ADR-0025 decision: Resolve is
+the only way to close one), so there is no caller.
 
 ## Alternatives considered
 

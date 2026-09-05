@@ -14,7 +14,11 @@
  * threads plane is a peer of `body`, not something inside a canvas envelope,
  * which is exactly what `readAnnotations` was extracted to say.
  */
-import { writeCommentThread, writeThreadMessage } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  writeCommentThread,
+  writeMarkdownBody,
+  writeThreadMessage,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { type Loro, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
@@ -143,5 +147,98 @@ describe('useMarkdownDocument annotations', () => {
 
     await waitFor(() => expect(result.current.doc).not.toBeNull())
     expect(result.current.annotations).toEqual([])
+  })
+})
+
+describe('useMarkdownDocument thread marks', () => {
+  const BODY = 'Ship the report on Friday. The draft is not written.'
+  const QUOTE = 'report on Friday'
+  const AT = { start: BODY.indexOf(QUOTE), end: BODY.indexOf(QUOTE) + QUOTE.length }
+
+  it('marks the passage a new conversation is about', async () => {
+    // Writing only the thread leaves the live half empty: every edit from
+    // there on is tracked by an offset search rather than by the structure
+    // that actually moved the text.
+    const store = storeHolding((doc) => {
+      writeMarkdownBody(doc, BODY)
+    })
+    const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+    await waitFor(() => expect(result.current.doc).not.toBeNull())
+
+    act(() => {
+      result.current.createThread({
+        id: 't-new',
+        anchor: { kind: 'text', quote: { exact: QUOTE }, ...AT },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      })
+    })
+
+    await waitFor(() => expect(result.current.threadMarks.get('t-new')).toEqual(AT))
+  })
+
+  it('the mark it wrote follows an edit above the passage', async () => {
+    const store = storeHolding((doc) => {
+      writeMarkdownBody(doc, BODY)
+    })
+    const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+    await waitFor(() => expect(result.current.doc).not.toBeNull())
+    act(() => {
+      result.current.createThread({
+        id: 't-new',
+        anchor: { kind: 'text', quote: { exact: QUOTE }, ...AT },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      })
+    })
+    await waitFor(() => expect(result.current.threadMarks.get('t-new')).toEqual(AT))
+
+    const prefix = 'URGENT: '
+    act(() => {
+      result.current.setBody(`${prefix}${BODY}`)
+    })
+
+    await waitFor(() =>
+      expect(result.current.threadMarks.get('t-new')).toEqual({
+        start: AT.start + prefix.length,
+        end: AT.end + prefix.length,
+      }),
+    )
+  })
+
+  it('gives a document that arrived without marks one per quote it can still find', async () => {
+    // The import case: marks do not travel through a markdown file, and a
+    // thread an MCP peer wrote never had one. The quote is asked once, when
+    // the body is first known, and the answer written down.
+    const store = storeHolding((doc) => {
+      writeMarkdownBody(doc, BODY)
+      writeCommentThread(doc, {
+        id: 't-imported',
+        anchor: { kind: 'text', quote: { exact: QUOTE }, ...AT },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      })
+    })
+
+    const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+
+    await waitFor(() => expect(result.current.threadMarks.get('t-imported')).toEqual(AT))
+  })
+
+  it('leaves a thread whose passage is gone unmarked rather than guessing', async () => {
+    const store = storeHolding((doc) => {
+      writeMarkdownBody(doc, 'Nothing that sentence said is here any more.')
+      writeCommentThread(doc, {
+        id: 't-orphan',
+        anchor: { kind: 'text', quote: { exact: QUOTE }, ...AT },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'why Friday?' }],
+      })
+    })
+
+    const { result } = renderHook(() => useMarkdownDocument(store, 'c1', true))
+
+    await waitFor(() => expect(result.current.annotations.map((t) => t.id)).toEqual(['t-orphan']))
+    expect(result.current.threadMarks.has('t-orphan')).toBe(false)
   })
 })

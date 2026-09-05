@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
 import {
   setNameRequestSchema,
   setPinnedRequestSchema,
-} from '../../../shared/api-contracts/document.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { Hono } from 'hono'
 import {
   loadWorkspaceNames,
   setDocumentDisplayName,

@@ -7,13 +7,14 @@
  * gets a not-found state instead of a connection — the per-document lazy
  * empty doc it used to fall back to is retired.
  */
+
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'
@@ -59,7 +60,7 @@ const constructed: {
   path: string
 }[] = []
 
-vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
+vi.mock('@kamiazya/whiteboard-daemon-client/daemon-backend', () => ({
   DaemonBackend: class {
     constructor(workspaceId: string, path: string, _locationHref: string, _apiTransport?: unknown) {
       constructed.push({ workspaceId, path })
@@ -88,7 +89,7 @@ const sseConstructed: {
   path: string
 }[] = []
 
-vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
   SseBackend: class {
     constructor(
       workspaceId: string,

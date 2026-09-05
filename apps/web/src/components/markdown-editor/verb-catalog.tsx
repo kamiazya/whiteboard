@@ -6,12 +6,14 @@
  * reaches every catalog without a second edit, and so the two editors
  * cannot offer different verbs for the same text.
  *
- * Interactive verbs take the host's seams: a link picker that may be
- * absent (no targets to pick from → the verb's bracket wrap), and a comment
- * composer that may be absent (→ the verb is left off; there is no wrap to
- * degrade to).
+ * The interactive verb takes the host's seam: a link picker that may be
+ * absent (no targets to pick from → the verb's bracket wrap). Comment is
+ * deliberately OUTSIDE the verb table (it writes nothing into the body; it
+ * opens a conversation beside it) and rides in as its own seam, present
+ * only when the host has a selection to be about.
  */
 import type { StateCommand } from '@codemirror/state'
+import { MessageSquarePlus } from 'lucide-react'
 import type { ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import {
   levelCommand,
@@ -28,8 +30,8 @@ export interface VerbCatalogHost {
   readonly run: (command: StateCommand) => void
   /** Opens the host's link picker; absent when there is nothing to pick from. */
   readonly openLinkPicker?: () => void
-  /** Opens the host's comment composer on the caret's scope; absent on a host without one. */
-  readonly openCommentComposer?: () => void
+  /** Opens a conversation about the selection; absent with no selection or no layer. */
+  readonly composeThread?: () => void
   /** Called before any row's action, so the vessel can close. */
   readonly close: () => void
 }
@@ -58,28 +60,43 @@ export function verbCatalogItems(host: VerbCatalogHost): readonly ContextMenuIte
       continue
     }
 
+    // The one verb that asks before it writes. With nothing to pick from
+    // there is nothing to ask, and it falls through to the wrap the table
+    // declares for exactly that case.
     const icon = VERB_ICONS[spec.id]
-    if (spec.action.kind === 'interactive') {
-      const open = spec.action.hook === 'link' ? host.openLinkPicker : host.openCommentComposer
-      if (open !== undefined) {
-        items.push({
-          label: spec.label,
-          icon,
-          onSelect: () => {
-            host.close()
-            open()
-          },
-        })
-        continue
-      }
+    if (spec.action.kind === 'interactive' && host.openLinkPicker !== undefined) {
+      const open = host.openLinkPicker
+      items.push({
+        label: spec.label,
+        icon,
+        onSelect: () => {
+          host.close()
+          open()
+        },
+      })
+      continue
     }
 
     const command = selfContainedCommand(spec)
-    // A verb with neither a surface nor a self-contained command has no
-    // plain row to render: `levels` returned above, and an interactive verb
-    // with no seam and no wrap is left off rather than drawn dead.
+    // A verb with neither a dialog nor a self-contained command has no
+    // plain row to render. Only `levels` is that today, and it returned
+    // above; this is what keeps a future action kind from rendering a
+    // dead menu item.
     if (command === null) continue
     items.push({ label: spec.label, icon, onSelect: run(command) })
+  }
+
+  if (host.composeThread !== undefined) {
+    const compose = host.composeThread
+    items.push({ kind: 'separator' })
+    items.push({
+      label: 'Comment on this',
+      icon: <MessageSquarePlus aria-hidden />,
+      onSelect: () => {
+        host.close()
+        compose()
+      },
+    })
   }
   return items
 }

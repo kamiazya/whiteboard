@@ -19,14 +19,14 @@
 // cannot be forgotten per editor.
 
 import { useEffect, useRef } from 'react'
+import type { ContainerSize, Viewport } from '../../lib/spatial/viewport.js'
+import { panToShowTarget, screenToCanvas } from '../../lib/spatial/viewport.js'
 import {
   canvasVerbBarShown,
   DESKTOP_BAR_HEIGHT_PX,
   TOUCH_BAR_HEIGHT_PX,
   touchFormattingBarShown,
 } from '../markdown-editor/verb-bar-layout.js'
-import type { ContainerSize, Viewport } from './viewport.js'
-import { panToShowTarget, screenToCanvas } from './viewport.js'
 
 /**
  * Screen px kept visible below the subject's box while an exit strip is

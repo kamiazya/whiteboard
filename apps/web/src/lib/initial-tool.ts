@@ -1,4 +1,4 @@
-import type { EditorTool } from '@/components/spatial-editor/ToolPalette'
+import type { EditorTool } from './editor-tool.js'
 
 const KEY = 'wb.lastTool'
 

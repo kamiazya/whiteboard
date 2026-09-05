@@ -7,13 +7,14 @@
  * calls, end to end through the real container deps and the real delete
  * route.
  */
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc } from 'loro-crdt'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+
 import {
   listTrashResponseSchema,
   restoreTrashResponseSchema,
-} from '../../../shared/api-contracts/document.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc } from 'loro-crdt'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-trash-test-')

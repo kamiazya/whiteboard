@@ -1,4 +1,4 @@
-import { daemonPingResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useEffect, useMemo, useState } from 'react'
 import { useLocation } from 'react-router-dom'
 import { createPairingGrant } from '../lib/daemon-api-client.js'

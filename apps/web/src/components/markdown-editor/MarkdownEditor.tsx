@@ -11,7 +11,6 @@ import {
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { MessageSquare } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -24,16 +23,23 @@ import {
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { resolveTextAnchor, type TextAnchor } from '../../lib/text-anchor.js'
+import type { LinkTarget } from '../../lib/link-target.js'
+import type { RailBlock } from '../../lib/rail-geometry.js'
+import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
+import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
+import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
-import { commentAnchors, setCommentThreads, setSelectedCommentThread } from './comment-anchors.js'
+import {
+  annotationDecorations,
+  placeThreads,
+  setAnnotationProjection,
+} from './annotation-decorations.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
-import type { LinkTarget } from './link-target.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
 import {
@@ -43,8 +49,6 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
-import type { RailBlock } from './rail-geometry.js'
-import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { verbCatalogItems } from './verb-catalog.js'
@@ -114,9 +118,9 @@ export interface MarkdownEditorProps {
    */
   onOpenDocument?: (documentId: string) => void
   /**
-   * Resolves `![[embed]]` targets' parsed bodies so block embeds render
-   * inline (canvas-render's layout seam; the host pre-fetches, see
-   * useMarkdownEmbedContent).
+   * Resolves `![[embed]]` targets — a note's parsed body, or a canvas — so
+   * block embeds render inline (canvas-render's layout seam; the host
+   * pre-fetches, see useMarkdownEmbedContent).
    */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
@@ -133,27 +137,46 @@ export interface MarkdownEditorProps {
    */
   sourceExtensions?: readonly Extension[]
   /**
-   * The document's conversations, for the in-place projection (ADR-0026
-   * decision 5): each text-anchored thread's passage is highlighted in the
-   * source and marked in the gutter. The document-level panel beside the
-   * editor lists them; this is where a reader finds one while reading.
+   * The annotation layer's conversations, projected onto the body: the
+   * passage each one quotes is marked in the text and named by a gutter
+   * marker beside it (ADR-0026 step 3).
+   *
+   * Threads whose passage is gone are simply not drawn — there is nowhere
+   * left to draw them — and stay reachable through the document-level rail,
+   * which is what that surface is for.
    */
   threads?: readonly CommentThread[]
   /**
-   * The conversation the reader has open, drawn stronger and brought on
-   * screen when it changes. Owned by the host, so the panel and this
-   * projection agree on which one that is.
+   * Where the CRDT still holds each passage, by thread id.
+   *
+   * The live half of a text anchor: a mark belongs to the characters it
+   * covers, so it followed every edit that moved them — including one merged
+   * from another peer, which the quote and its stored offsets can only
+   * approximate. Absent for a host with none to give (a document read out of
+   * a markdown file, one written before marks existed), which the projection
+   * reads as "ask the quote".
    */
+  threadMarks?: ReadonlyMap<string, LivePassage>
+  /** The conversation the host currently has open; scrolled to and lit up. */
   selectedThreadId?: string | null
-  /** A press on a gutter marker: the host opens that conversation. */
+  /** A gutter marker was pressed. */
   onSelectThread?: (threadId: string) => void
   /**
-   * The comment verb: called with the anchor for the selected passage, the
-   * host opens its composer and answers true. Absent, the verb shows on no
-   * bar and in no catalog here — a control that could not open anything.
+   * The reader asked to open a conversation about the passage they have
+   * selected. The anchor is handed over; the THREAD is not, because there is
+   * no legal empty one — `commentThreadSchema` requires a first message, so
+   * the conversation is created by whatever surface collects it.
+   *
+   * Absent means this host has no annotation layer, and the catalog then
+   * offers no such row rather than an inert one.
    */
-  onRequestComment?: (anchor: TextAnchor) => boolean
+  onComposeThread?: (anchor: TextAnchor) => void
 }
+
+/** Stable identity, so the projection effect below does not fire per render. */
+const NO_THREADS: readonly CommentThread[] = []
+/** Same purpose as NO_THREADS, for the passages beside them. */
+const NO_MARKS: ReadonlyMap<string, LivePassage> = new Map()
 
 const DEFAULT_MAX_WIDTH = 720
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
@@ -302,9 +325,10 @@ export function MarkdownEditor({
   fragmentLoaders,
   sourceExtensions,
   threads,
+  threadMarks,
   selectedThreadId = null,
   onSelectThread,
-  onRequestComment,
+  onComposeThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   // [[ completion reads targets through a ref: the source is installed once
@@ -344,26 +368,19 @@ export function MarkdownEditor({
     ],
     [],
   )
-  // The marker's callback goes through a ref for the same reason the link
-  // targets do: the extension is installed once at view creation.
+  // Read through a ref for the same reason the completion source is: the
+  // extension is installed once at view creation, while the handler the host
+  // passes is a fresh closure on every render.
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
   const annotationExtension = useMemo(
-    () => commentAnchors({ onSelect: (threadId) => onSelectThreadRef.current?.(threadId) }),
+    () => annotationDecorations({ onSelectThread: (id) => onSelectThreadRef.current?.(id) }),
     [],
   )
   const paneExtensions = useMemo(
     () => [completionExtension, annotationExtension, ...(sourceExtensions ?? [])],
-    [completionExtension, annotationExtension, sourceExtensions],
+    [annotationExtension, completionExtension, sourceExtensions],
   )
-  // Threads and the open conversation are pushed into the view as state,
-  // not read by it: the pane is created once, the layer keeps changing.
-  useEffect(() => {
-    sourceApiRef.current?.dispatch({ effects: setCommentThreads.of(threads ?? []) })
-  }, [threads])
-  useEffect(() => {
-    sourceApiRef.current?.dispatch({ effects: setSelectedCommentThread.of(selectedThreadId) })
-  }, [selectedThreadId])
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
   // preview would draw them, and rendering per raw keystroke would race
@@ -414,6 +431,40 @@ export function MarkdownEditor({
   // The range itself lives in the editor state (see SourcePane's pinnedRange),
   // which maps it through any edit made while the dialog is open.
   const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
+
+  // The projection travels in as a STATE EFFECT rather than as an extension:
+  // the view is created once per mount (see SourcePane), so an extension
+  // array that changed with the thread list would never reach it.
+  const projectedThreads = threads ?? NO_THREADS
+  const projectedMarks = threadMarks ?? NO_MARKS
+  useEffect(() => {
+    sourceApiRef.current?.applyEffects([
+      setAnnotationProjection.of({
+        threads: projectedThreads,
+        selectedThreadId,
+        marks: projectedMarks,
+      }),
+    ])
+  }, [projectedThreads, projectedMarks, selectedThreadId])
+
+  // Scroll to the passage when the SELECTION changes, and only then. `value`
+  // is a dependency because the passage's offset is derived from it, but a
+  // keystroke must not re-scroll the reader back to a conversation they
+  // selected a minute ago — which is what the remembered id guards.
+  const revealedThreadRef = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = revealedThreadRef.current
+    revealedThreadRef.current = selectedThreadId
+    if (selectedThreadId === null || selectedThreadId === previous) return
+    const placed = placeThreads(value, projectedThreads, projectedMarks).find(
+      (one) => one.threadId === selectedThreadId,
+    )
+    // Nothing to scroll to: the passage is gone. The rail still opens the
+    // conversation, which is the whole reason an orphan has a home there.
+    if (placed === undefined) return
+    const line = value.slice(0, placed.from).split('\n').length
+    sourceApiRef.current?.revealLine(line)
+  }, [selectedThreadId, projectedThreads, projectedMarks, value])
   const [catalog, setCatalog] = useState<{
     x: number
     y: number
@@ -430,18 +481,6 @@ export function MarkdownEditor({
   // Whether the pane the rail maps has anything to scroll. Read from the same
   // element on the same tick as the viewport above, for the same reason.
   const [railHasScroll, setRailHasScroll] = useState(false)
-  /**
-   * The annotation layer's projection onto the PREVIEW: one marker beside
-   * the laid-out block a thread's passage starts in, at the y the rail's
-   * own line-to-document mapping gives that line. A highlight over the
-   * exact words would need canvas-render to know about threads; the block
-   * marker is what the layout already answers, and it is enough to find a
-   * conversation while reading.
-   */
-  const [previewMarkers, setPreviewMarkers] = useState<
-    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
-  >([])
-  const previewInnerRef = useRef<HTMLDivElement | null>(null)
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -670,39 +709,6 @@ export function MarkdownEditor({
     // previous width produced.
   }, [effectiveMode, debouncedValue, previewWidth])
 
-  // Keyed on railBlocks because that is the state the preview's render
-  // updates: the anchors it maps through arrive in the same ref write.
-  useEffect(() => {
-    if (effectiveMode === 'write' || threads === undefined || threads.length === 0) {
-      setPreviewMarkers([])
-      return
-    }
-    const inner = previewInnerRef.current
-    const svg = inner?.querySelector('svg')
-    if (inner === null || inner === undefined || !(svg instanceof SVGElement)) {
-      setPreviewMarkers([])
-      return
-    }
-    const svgTop = svg.getBoundingClientRect().top - inner.getBoundingClientRect().top
-    const tail = {
-      totalLines: totalSourceLines(debouncedValue),
-      contentHeight: railContentHeight(blocksRef.current),
-    }
-    const next: { threadId: string; top: number; selected: boolean }[] = []
-    for (const thread of threads) {
-      if (thread.anchor.kind !== 'text') continue
-      const resolved = resolveTextAnchor(debouncedValue, thread.anchor)
-      if (resolved.kind !== 'placed') continue
-      const line = debouncedValue.slice(0, resolved.start).split('\n').length
-      next.push({
-        threadId: thread.id,
-        top: svgTop + documentYForLine(anchorsRef.current, line, tail),
-        selected: thread.id === selectedThreadId,
-      })
-    }
-    setPreviewMarkers(next)
-  }, [effectiveMode, railBlocks, threads, debouncedValue, selectedThreadId])
-
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {
       const rect = rootRef.current?.getBoundingClientRect()
@@ -737,31 +743,36 @@ export function MarkdownEditor({
     return () => host.removeEventListener('contextmenu', onContextMenu)
   }, [openCatalogAt])
 
-  const catalogItems = useMemo(
-    (): readonly ContextMenuItem[] =>
-      verbCatalogItems({
-        headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
-        run: (command) => sourceApiRef.current?.run(command),
-        close: () => setCatalog(null),
-        // With nothing to pick from there is nothing to ask, and the link
-        // verb falls through to the wrap the table declares for that case.
-        ...(linkTargets !== undefined && linkTargets.length > 0
-          ? {
-              openLinkPicker: () => {
-                const scope = sourceApiRef.current?.pinScope()
-                if (scope === undefined) return
-                setLinkPicker({ query: scope.text, text: scope.text })
-              },
-            }
-          : {}),
-        ...(onRequestComment === undefined
-          ? {}
-          : { openCommentComposer: () => sourceApiRef.current?.openCommentComposer() }),
-      }),
-    // `catalog` is a dependency on purpose: the heading level is read when
-    // the catalog OPENS, from the caret's line at that moment.
-    [catalog, linkTargets, onRequestComment],
-  )
+  const catalogItems = useMemo((): readonly ContextMenuItem[] => {
+    // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
+    // things that write MARKUP into the body: Comment writes nothing there
+    // at all, it opens a conversation in the layer beside it. Putting it in
+    // that table would give the keymap a shortcut for it and the verb bar a
+    // button, both of which would then have to resolve a scope the table
+    // cannot describe.
+    const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
+    const anchor =
+      selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
+    return verbCatalogItems({
+      headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
+      run: (command) => sourceApiRef.current?.run(command),
+      close: () => setCatalog(null),
+      ...(linkTargets !== undefined && linkTargets.length > 0
+        ? {
+            openLinkPicker: () => {
+              const scope = sourceApiRef.current?.pinScope()
+              if (scope === undefined) return
+              setLinkPicker({ query: scope.text, text: scope.text })
+            },
+          }
+        : {}),
+      ...(onComposeThread !== undefined && anchor !== null
+        ? { composeThread: () => onComposeThread(anchor) }
+        : {}),
+    })
+    // `catalog` is read so the rows are rebuilt on each opening: the
+    // selection they describe is the one at THAT moment.
+  }, [catalog, linkTargets, onComposeThread, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''
@@ -781,11 +792,6 @@ export function MarkdownEditor({
         runVerb={(command) => {
           sourceApiRef.current?.run(command)
         }}
-        openCommentComposer={
-          onRequestComment === undefined
-            ? undefined
-            : () => sourceApiRef.current?.openCommentComposer() ?? false
-        }
         openLinkPicker={() => {
           if (linkTargets === undefined || linkTargets.length === 0) return false
           const scope = sourceApiRef.current?.pinScope()
@@ -831,7 +837,6 @@ export function MarkdownEditor({
                   }
                 : undefined
             }
-            onRequestComment={onRequestComment}
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"
@@ -869,33 +874,9 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div
-              ref={previewInnerRef}
-              className="relative mx-auto px-6 py-8"
+              className="mx-auto px-6 py-8"
               style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
             >
-              {previewMarkers.map((marker) => (
-                <button
-                  key={marker.threadId}
-                  type="button"
-                  data-testid="comment-preview-marker"
-                  data-thread-id={marker.threadId}
-                  aria-label="Open comment"
-                  onClick={() => onSelectThread?.(marker.threadId)}
-                  // In the column's own left padding, on the block's top edge.
-                  style={{ top: marker.top }}
-                  className={cn(
-                    'absolute left-0 flex size-6 items-center justify-center rounded text-(--comment-accent) hover:bg-accent',
-                    marker.selected && 'bg-accent',
-                  )}
-                >
-                  <MessageSquare
-                    aria-hidden="true"
-                    className="size-3.5"
-                    fill={marker.selected ? 'currentColor' : 'none'}
-                    fillOpacity={0.35}
-                  />
-                </button>
-              ))}
               {effectiveMode === 'read' && meta !== undefined && (
                 <DocumentHeader title={title} meta={meta} />
               )}

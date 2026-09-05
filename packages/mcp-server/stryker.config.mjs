@@ -11,7 +11,11 @@ export default {
     'src/server/store/path-guard.ts',
     'src/server/output-path.ts',
     'src/shared/api-contracts/daemon-doctor.ts',
-    'src/shared/api-contracts/runtime.ts',
+    // api-contracts/runtime.ts moved to @kamiazya/whiteboard-daemon-client with
+    // its property tests; a mutate entry here reaches only files inside this
+    // package, so the slot moves with the file (daemon-client has no stryker
+    // lane yet). NOTE: the guard test scans every quoted string in this array
+    // block, comments included — no apostrophes here.
     'src/server/security/server-mode-env-config.ts',
     'src/server/security/server-mode-auth-plan.ts',
     'src/server/security/server-mode-exposure.ts',

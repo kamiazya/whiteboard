@@ -20,12 +20,9 @@ import {
   searchableTexts,
 } from '@kamiazya/whiteboard-search'
 import { Loro } from 'loro-crdt'
-import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
-import {
-  type WorkspaceFilesSource,
-  WorkspaceMissingError,
-} from '../components/workspace-files/files-source.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import {
   type ContentClock,
@@ -194,6 +191,7 @@ export function createLocalFilesSource(
         ...(stamps.has(entry.documentId)
           ? { updatedAt: stamps.get(entry.documentId) as string }
           : {}),
+        ...(entry.contentDigest === undefined ? {} : { contentDigest: entry.contentDigest }),
       }))
     },
 

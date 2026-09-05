@@ -23,14 +23,14 @@
  * the SVG family's answer for the same document.
  */
 
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { FaviconRect } from '../../lib/favicon.js'
+import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { OutlineResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, outlineKeyOf } from '../../lib/render-key.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
-import type { WorkspaceFilesSource } from './files-source.js'
 
 /**
  * Width a row's markdown is laid out at. Fixed rather than measured: an icon
@@ -131,7 +131,7 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
       const key = outlineKeyOf({
         documentId: document.documentId,
         kind: outlinedKind(document),
-        ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
+        ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
       })
       return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
     } catch {

@@ -63,6 +63,20 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
 // tsup.config.ts). Without these two assertions the only thing that catches
 // the mistake is the packed-tarball smoke, which needs a full build plus a
 // real install — these fail in milliseconds instead.
+describe('daemon-client bundling shape', () => {
+  it('declares sideEffects: false, so consumers can tree-shake its barrels', () => {
+    // Measured when it was missing: apps/web's critical-path JS went from
+    // 138.7 KB to 301.3 KB gzip — rollup treats an undeclared package as
+    // side-effectful, keeps every module an `export *` barrel touches, and
+    // that chain reaches server-core and loro's wasm. The bundle-size smoke
+    // catches the blast at verify time; this catches the cause at test time.
+    const pkg = JSON.parse(
+      readFileSync(resolve(PACKAGE_ROOT, '../daemon-client/package.json'), 'utf8'),
+    ) as { sideEffects?: unknown }
+    expect(pkg.sideEffects).toBe(false)
+  })
+})
+
 describe('private workspace packages are bundled, never published as deps', () => {
   const workspaceDeps = (record: Record<string, string> | undefined): string[] =>
     Object.keys(record ?? {}).filter((name) => name.startsWith(WORKSPACE_SCOPE))

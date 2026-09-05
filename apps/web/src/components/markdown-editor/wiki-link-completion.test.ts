@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
-import type { LinkTarget } from './link-target.js'
+import type { LinkTarget } from '../../lib/link-target.js'
 import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -95,6 +95,11 @@ describe('wikiLinkCompletionSource', () => {
     option.apply(view, option, mappedFrom, mappedTo)
     expect(view.state.doc.toString()).toBe(`${PREFIX}詳細は [[release-plan]]`)
     view.destroy()
+  })
+
+  it('closes once a # starts the fragment, so Enter finishes the line instead', () => {
+    expect(complete('[[release-plan#', 15)).toBeNull()
+    expect(complete('![[release-plan#Lau', 19)).toBeNull()
   })
 
   it('stays silent outside a [[ context and across a line break', () => {

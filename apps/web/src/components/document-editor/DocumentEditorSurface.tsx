@@ -41,9 +41,10 @@ export interface MarkdownDocumentSession
     | 'autoFocus'
     | 'title'
     | 'threads'
+    | 'threadMarks'
     | 'selectedThreadId'
     | 'onSelectThread'
-    | 'onRequestComment'
+    | 'onComposeThread'
   > {
   /** Null until the document has hydrated — nothing editable renders before. */
   readonly body: string | null

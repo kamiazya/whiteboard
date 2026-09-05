@@ -189,6 +189,33 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: ['@modelcontextprotocol/ext-apps', 'react', 'react-dom', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global', 'node-ambient-global'],
   },
+  // The daemon's browser-safe client half (extracted from mcp-server's
+  // src/shared, where it was held browser-safe only by a convention scan):
+  // the /api Zod contracts the web app parses, the fetch/WS/SSE document
+  // backends, the api-client wrapper, and the shared backend contract test
+  // suites. Being in THIS table is the point of the extraction — the
+  // browser-safety property is now structural (no node:*, scanned like any
+  // shared package) instead of positional. DOM globals are its normal job
+  // (WebSocket/EventSource/fetch), the same exemption canvas-viewer holds.
+  // server-core: the version-entry and operator contracts the /api routes
+  // publish are defined beside the routes' own logic and re-exported here.
+  '@kamiazya/whiteboard-daemon-client': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-server-core'],
+    // OpenTelemetry: browser tracing is lazily imported by browser-tracing.ts
+    // and inert unless enabled; every listed package is pure browser/web SDK.
+    allowedThirdParty: [
+      'zod',
+      '@opentelemetry/api',
+      '@opentelemetry/context-zone',
+      '@opentelemetry/exporter-trace-otlp-http',
+      '@opentelemetry/instrumentation',
+      '@opentelemetry/instrumentation-fetch',
+      '@opentelemetry/resources',
+      '@opentelemetry/sdk-trace-web',
+      '@opentelemetry/semantic-conventions',
+    ],
+    exemptBoundaryViolationKinds: ['dom-global'],
+  },
   // Composition root (Node CLI/daemon), never a runtime dependency of any
   // shared-layer package. Registered here with an empty allowedInternalDeps
   // so direction-check.ts flags the reverse import if a shared package ever
@@ -196,7 +223,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // repo-coverage.test.ts (it is allowed node:*/inversify — see
   // architecture-map.md rule 2).
   '@kamiazya/whiteboard-mcp': {
-    allowedInternalDeps: [],
+    // daemon-client: the browser-safe client half extracted from this
+    // package's own src/shared. The re-export shims and the published client
+    // subpaths are retired; the server imports the package directly and tsup
+    // noExternal inlines it into the published dist.
+    allowedInternalDeps: ['@kamiazya/whiteboard-daemon-client'],
     allowedThirdParty: [],
   },
   // The OTHER composition root (browser). Registered for the same reason
@@ -206,12 +237,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // manifest is direction-checked (see repo-coverage.test.ts's
   // COMPOSITION_ROOTS).
   //
-  // `@kamiazya/whiteboard-mcp` is in that set deliberately. Rule 2 forbids a
-  // SHARED package importing a composition root; one composition root
-  // consuming the other's browser-safe client subpaths (`/api-client`,
-  // `/api-contracts`, `/browser-contract`) is a different thing, and the
-  // right place for the daemon's client contract is beside the daemon. Its
-  // Node entrypoints are not reachable from here.
+  // The daemon's browser-safe client half is `@kamiazya/whiteboard-daemon-client`
+  // (a shared-layer package this tool scans structurally); apps/web reads it
+  // directly, and `@kamiazya/whiteboard-mcp` deliberately left this list when
+  // the subpath re-export shims retired — a composition root depending on the
+  // other composition root is exactly what this entry exists to flag.
   '@kamiazya/whiteboard-web': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
@@ -221,7 +251,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-facet-ui',
       '@kamiazya/whiteboard-plugin-visual',
-      '@kamiazya/whiteboard-mcp',
+      '@kamiazya/whiteboard-daemon-client',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',

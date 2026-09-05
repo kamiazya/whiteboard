@@ -58,8 +58,6 @@
   --border: oklch(0.922 0 0);
   --input: oklch(0.922 0 0);
   --ring: oklch(0.708 0 0);
-  /* The annotation layer's amber, canvas-render's comment pin fill (spatial-palette.ts). */
-  --comment-accent: #d97706;
   /*
    * The manipulation layer's own vocabulary — selection, handles, connect,
    * marquee (--manipulation) and snap guides (--manipulation-guide). The
@@ -72,6 +70,14 @@
   --manipulation: oklch(0.546 0.245 262.88);
   --manipulation-guide: oklch(0.606 0.219 292.72);
   --manipulation-halo: color-mix(in srgb, oklch(0.546 0.245 262.88) 12%, transparent);
+  /*
+   * The annotation layer's one hue — the canvas comment pin and bubble's
+   * amber (#d97706), so a conversation reads as the same thing whether a
+   * reader meets it on a canvas or under a sentence in a markdown body.
+   * Deliberately none of the three above: an annotation is not a selection,
+   * not a ruler, and not destruction.
+   */
+  --annotation: oklch(0.649 0.153 62.5);
 }
 
 .dark {
@@ -93,10 +99,11 @@
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
-  --comment-accent: #fbbf24;
   --manipulation: oklch(0.707 0.165 254.62);
   --manipulation-guide: oklch(0.709 0.159 293.54);
   --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
+  /* Amber-500 rather than 600: the darker tone loses against a dark ground. */
+  --annotation: oklch(0.769 0.165 70.08);
 }
 
 /*
@@ -195,42 +202,57 @@
   }
 
   /*
-   * The annotation layer's in-place projection in the source pane
-   * (markdown-editor/comment-anchors.ts): a passage a conversation is about,
-   * and the gutter marker on its line. The same comment hue the canvas
-   * draws its bubbles in, at a wash — the passage stays readable, and the
-   * open one reads stronger than the rest.
+   * The annotation layer's in-place projection on a markdown body
+   * (annotation-decorations.ts). Amber, the same colour the canvas gives a
+   * comment pin and bubble: one hue for "somebody is talking about this",
+   * whichever surface a reader is on.
+   *
+   * A tinted UNDERLINE rather than a filled band, because the passage is
+   * still prose that has to read normally — a highlighter over a sentence
+   * competes with the sentence. The selected conversation is the one case
+   * that gets a wash, since it is the reader's own current subject.
    */
-  .cm-comment-anchor {
-    background: color-mix(in oklch, var(--comment-accent) 22%, transparent);
-    border-bottom: 1px solid color-mix(in oklch, var(--comment-accent) 60%, transparent);
+  .cm-annotation {
+    border-bottom: 2px solid color-mix(in oklch, var(--annotation) 60%, transparent);
   }
-
-  .cm-comment-anchor-resolved {
-    background: color-mix(in oklch, var(--muted-foreground) 14%, transparent);
-    border-bottom-color: color-mix(in oklch, var(--muted-foreground) 40%, transparent);
+  .cm-annotation-resolved {
+    border-bottom-style: dotted;
+    border-bottom-color: color-mix(in oklch, var(--annotation) 30%, transparent);
   }
-
-  .cm-comment-anchor-selected {
-    background: color-mix(in oklch, var(--comment-accent) 40%, transparent);
-    border-bottom-width: 2px;
+  .cm-annotation-selected {
+    background-color: color-mix(in oklch, var(--annotation) 18%, transparent);
+    border-bottom-color: var(--annotation);
   }
-
-  .cm-comment-marker {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 22px;
-    height: 1.7em;
-    padding: 0;
-    border: 0;
-    background: transparent;
-    color: var(--comment-accent);
+  /*
+   * Reserved whether or not this document has any conversations, on purpose:
+   * a thread arriving from an MCP peer would otherwise reflow the body
+   * sideways under whoever is typing in it. 18px is the marker plus its
+   * margins and nothing else.
+   */
+  .cm-annotation-gutter {
+    min-width: 18px;
+  }
+  .cm-annotation-gutter-marker {
+    display: block;
+    width: 12px;
+    height: 12px;
+    margin: 0 3px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: color-mix(in oklch, var(--annotation) 20%, transparent);
+    color: var(--annotation);
+    font-size: 9px;
+    line-height: 8px;
+    text-align: center;
     cursor: pointer;
   }
-
-  .cm-comment-marker-selected svg {
-    fill: color-mix(in oklch, var(--comment-accent) 35%, transparent);
+  .cm-annotation-gutter-marker[data-thread-status='resolved'] {
+    border-style: dotted;
+    background: transparent;
+  }
+  .cm-annotation-gutter-marker[data-selected='true'] {
+    background: var(--annotation);
+    color: var(--background);
   }
 
   /*
@@ -323,10 +345,11 @@
    *
    * What lives here is the rest of the vocabulary:
    *
-   * `wb-mark-broken` is sync-off. It shares reconnecting's amber tone (both
-   * are `attention` in StateDot's closed set), so the STROKE is what tells
-   * them apart: one travels, this one sits in pieces and dimmed. Colour
-   * cannot carry that distinction on a mark that has no label.
+   * `wb-mark-broken` is the keeper NOT keeping — the daemon's sync-off, the
+   * browser's refused write. Amber is the only state colour left in chrome
+   * (DESIGN.md), so the STROKE is what tells these apart from reconnecting:
+   * one travels, this one sits in pieces and dimmed. Colour cannot carry that
+   * distinction on a mark that has no label.
    *
    * `wb-mark-recovered` is the one celebration in the shell, and it is
    * deliberately the rare one: reconnecting/sync-off -> synced. The routine

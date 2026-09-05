@@ -1,9 +1,9 @@
 // The document-level surface for the annotation layer (ADR-0026 decision 5).
 // A real browser because the filter is a click and the list is what it
 // changes — jsdom alone is disallowed for interaction by AGENTS.md.
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -43,7 +43,9 @@ it('opens on the conversations that are still open, and says how many messages e
   expect(page.getByText('this one is done').query()).toBeNull()
   // Two messages is a conversation; saying so is what distinguishes it from
   // a lone remark without opening it.
-  await expect.element(page.getByTestId('thread-message-count-t-open')).toHaveTextContent('2')
+  await expect
+    .element(page.getByTestId('thread-message-count-t-open'))
+    .toHaveTextContent('2 messages')
 })
 
 it('shows the resolved ones when asked, and everything under All', async () => {
@@ -73,11 +75,11 @@ it('says which filter emptied the list, rather than showing one blank state for 
 
   // Open is the default and this document has none — but it DOES have a
   // conversation, so "no comments yet" would be a lie.
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no open/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no open/i)
 
   cleanup()
   render(<CommentsPanel threads={[]} />)
-  await expect.element(page.getByTestId('comments-panel-empty')).toHaveTextContent(/no comments/i)
+  await expect.element(page.getByTestId('comments-panel-empty')).toMatchTextContent(/no comments/i)
 })
 
 it('opens a thread onto its whole conversation, not just the line the list shows', async () => {
@@ -129,52 +131,122 @@ it('offers no reply box when the host wired no reply handler', async () => {
   expect(page.getByRole('textbox', { name: /reply/i }).query()).toBeNull()
 })
 
-it('sends on Cmd/Ctrl+Enter here too — the chord the canvas card already answered', async () => {
-  // The two hosts share one composer, so a rule one of them gains the
-  // other cannot lack; this is the one they had already drifted on.
-  const replies: { threadId: string; body: string }[] = []
+it('opens the conversation the host asks for, widening a filter that would have hidden it', async () => {
+  // The other end of onSelect: the reader reached this thread through the
+  // BODY (its gutter marker), so the rail has to arrive on it already open.
+  // A resolved one is the case that would otherwise open into an empty list
+  // under the default Open filter, which reads as the press doing nothing.
+  // Two messages, because the first one is the list EXCERPT and shows as soon
+  // as the filter widens — asserting on it alone would pass with the thread
+  // still collapsed. Only the second proves it was opened.
+  const twoMessages: CommentThread = {
+    ...RESOLVED,
+    messages: [
+      ...RESOLVED.messages,
+      { id: 'm3b', body: 'and here is why', createdAt: '2026-09-03T00:40:00.000Z' },
+    ],
+  }
+  const utils = render(<CommentsPanel threads={[OPEN, twoMessages]} />)
+  expect(page.getByText('this one is done').query()).toBeNull()
+
+  utils.rerender(<CommentsPanel threads={[OPEN, twoMessages]} revealThreadId="t-resolved" />)
+
+  await expect.element(page.getByText('and here is why')).toBeInTheDocument()
+  await expect
+    .element(page.getByRole('button', { name: 'All' }))
+    .toHaveAttribute('aria-pressed', 'true')
+})
+
+const PASSAGE: AnnotationAnchor = {
+  kind: 'text',
+  quote: { prefix: 'Ship the ', exact: 'report', suffix: ' on Friday.' },
+  start: 9,
+  end: 15,
+}
+
+it('composes a new conversation about the passage the host handed it', async () => {
+  // The rail is where a thread is OPENED, not only where existing ones are
+  // read: `commentThreadSchema` has no legal empty thread, so the anchor
+  // waits here as UI state until there is a first message to create it with.
+  const created: { anchor: AnnotationAnchor; body: string }[] = []
   render(
     <CommentsPanel
       threads={[OPEN]}
-      onReply={(threadId, body) => replies.push({ threadId, body })}
+      composeAnchor={PASSAGE}
+      onCreateThread={(anchor, body) => created.push({ anchor, body })}
     />,
   )
-  await userEvent.click(page.getByText('tighten the copy here'))
-  await userEvent.click(page.getByRole('textbox', { name: /reply/i }))
-  await userEvent.keyboard('on it')
-  await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
-  expect(replies).toEqual([{ threadId: 't-open', body: 'on it' }])
-  expect(
-    (page.getByRole('textbox', { name: /reply/i }).element() as HTMLTextAreaElement).value,
-  ).toBe('')
+  // The passage is quoted back, because by the time the reader is typing in
+  // the rail their selection in the body is no longer the thing they are
+  // looking at. Scoped to the compose box and asserted on the QUOTE, not on
+  // the box's concatenated text — which also carries the submit button's
+  // label, so the old whole-box assertion only passed on a substring match.
+  await expect
+    .element(page.getByTestId('comments-panel-compose').getByText('report'))
+    .toBeInTheDocument()
+  await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), 'is this still true?')
+  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+
+  expect(created).toEqual([{ anchor: PASSAGE, body: 'is this still true?' }])
 })
 
-it('a conversation opened by the host is shown expanded, even under a filter that hid it', async () => {
-  // The gutter marker on a resolved passage opens THAT thread; a rail still
-  // filtered to Open would then show nothing opened, which reads as dead.
-  const onOpenThreadChange = vi.fn()
+it('does not create a conversation out of an empty draft', async () => {
+  const created: string[] = []
   render(
     <CommentsPanel
-      threads={[OPEN, RESOLVED]}
-      openThreadId={RESOLVED.id}
-      onOpenThreadChange={onOpenThreadChange}
+      threads={[OPEN]}
+      composeAnchor={PASSAGE}
+      onCreateThread={(_anchor, body) => created.push(body)}
     />,
   )
-  await expect.element(page.getByText('this one is done')).toBeInTheDocument()
-  expect(
-    page
-      .getByRole('button', { name: /this one is done/ })
-      .element()
-      .getAttribute('aria-expanded'),
-  ).toBe('true')
-  expect(page.getByRole('button', { name: 'All' }).element().getAttribute('aria-pressed')).toBe(
-    'true',
+
+  await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), '   ')
+  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+
+  expect(created).toEqual([])
+})
+
+it('leaves the Resolved filter, which would hide the conversation being written', async () => {
+  // The same defect the reveal case has: the thread is created, the list
+  // does not show it, and that reads as the create having failed.
+  const utils = render(<CommentsPanel threads={[OPEN, RESOLVED]} onCreateThread={() => {}} />)
+  await userEvent.click(page.getByRole('button', { name: 'Resolved' }))
+
+  utils.rerender(
+    <CommentsPanel threads={[OPEN, RESOLVED]} composeAnchor={PASSAGE} onCreateThread={() => {}} />,
   )
 
-  // The host owns the answer: a press reports the change rather than making it.
-  await userEvent.click(page.getByText('tighten the copy here'))
-  expect(onOpenThreadChange).toHaveBeenCalledWith('t-open')
+  await expect
+    .element(page.getByRole('button', { name: 'Open' }))
+    .toHaveAttribute('aria-pressed', 'true')
+})
+
+it('offers no compose box with no passage waiting', async () => {
+  render(<CommentsPanel threads={[OPEN]} onCreateThread={() => {}} />)
+
+  expect(page.getByTestId('comments-panel-compose').query()).toBeNull()
+})
+
+it('abandons the passage when the reader cancels', async () => {
+  // Without this the compose box has no exit that is not "write something":
+  // a reader who selected the wrong sentence would have to create a comment
+  // to get rid of the box asking for one.
+  let cancels = 0
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={PASSAGE}
+      onCreateThread={() => {}}
+      onCancelCompose={() => {
+        cancels += 1
+      }}
+    />,
+  )
+
+  await userEvent.click(page.getByRole('button', { name: 'Cancel' }))
+
+  expect(cancels).toBe(1)
 })
 
 it('says what a thread is about when nothing on a surface can: the document, a node set', async () => {
@@ -194,26 +266,35 @@ it('says what a thread is about when nothing on a surface can: the document, a n
   await expect.element(page.getByTestId('thread-about-t-doc')).toHaveTextContent('whole document')
   await expect.element(page.getByTestId('thread-about-t-set')).toHaveTextContent('3 nodes')
   // A pin says where a spot comment is; the list adds nothing.
-  expect(document.querySelector('[data-testid="thread-about-t-open"]')).toBeNull()
+  expect(page.getByTestId('thread-about-t-open').query()).toBeNull()
 })
 
-it('offers to start a conversation about the whole document, when the host can write one', async () => {
-  const onDraftDocument = vi.fn()
-  render(<CommentsPanel threads={[OPEN]} onDraftDocument={onDraftDocument} />)
-  await userEvent.click(page.getByTestId('comment-on-document'))
-  expect(onDraftDocument).toHaveBeenCalledTimes(1)
-})
-
-it('labels a draft about the document as such, and hides the opener while a draft is up', async () => {
-  render(
+it('offers to start a conversation about the whole document, and says so on the compose box', async () => {
+  // The one anchor with no place on any surface: nothing in an editor can
+  // open it, so the list carries the opener — hidden once a box is up.
+  let composes = 0
+  const utils = render(
     <CommentsPanel
-      threads={[]}
-      onDraftDocument={() => {}}
-      draft={{ onSubmit: () => {}, onCancel: () => {} }}
+      threads={[OPEN]}
+      onCreateThread={() => {}}
+      onComposeDocument={() => {
+        composes += 1
+      }}
+    />,
+  )
+  await userEvent.click(page.getByTestId('comment-on-document'))
+  expect(composes).toBe(1)
+
+  utils.rerender(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={{ kind: 'document' }}
+      onCreateThread={() => {}}
+      onComposeDocument={() => {}}
     />,
   )
   await expect
-    .element(page.getByTestId('comment-draft-about'))
-    .toHaveTextContent('the whole document')
-  expect(document.querySelector('[data-testid="comment-on-document"]')).toBeNull()
+    .element(page.getByTestId('comments-panel-compose-about'))
+    .toHaveTextContent('About the whole document')
+  expect(page.getByTestId('comment-on-document').query()).toBeNull()
 })

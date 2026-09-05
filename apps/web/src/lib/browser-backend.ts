@@ -1,14 +1,14 @@
+import type {
+  BinaryFileDataLike,
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  BinaryFileDataLike,
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -346,22 +346,43 @@ export class BrowserBackend implements DocumentBackend {
       if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
       return false
     }
+    let placed: ReturnType<typeof createWorkspaceDocumentAtPath>
     if (legacy.kind === 'ok') {
       const source = new Loro()
       source.import(legacy.snapshot)
       for (const delta of legacy.deltas ?? []) source.import(delta)
-      adoptWorkspaceDocument(
+      placed = adoptWorkspaceDocument(
         workspaceDoc,
         { path, documentId, kind, ...(name === undefined ? {} : { name }) },
         source,
       )
     } else {
-      createWorkspaceDocumentAtPath(workspaceDoc, {
+      placed = createWorkspaceDocumentAtPath(workspaceDoc, {
         path,
         documentId,
         kind,
         ...(name === undefined ? {} : { name }),
       })
+    }
+    if (placed === null) {
+      // Neither helper placed the target: a DIFFERENT document already owns
+      // `path` (the id itself is absent, or this method was not reached).
+      // Delivering anyway hands the session bytes with no node for this
+      // document, which it reports as `corrupt-snapshot` — and the page
+      // answers that with an offer to delete the record. Nothing is corrupt;
+      // the tree has a document standing where this one wanted to.
+      //
+      // ponytail: `read-unavailable` is the nearest non-destructive reason —
+      // it keeps the editor closed and claims nothing about the bytes — but
+      // its copy implies a retry will help, and here it will not. The upgrade
+      // is a reason of its own once a collision has a product answer (open
+      // the document that IS there, or number this one around it).
+      getAppLogger('browser-backend').warn('another document owns the target path; not placing', {
+        documentId,
+        path,
+      })
+      if (!this.isStale(handlers)) handlers.onError?.('read-unavailable')
+      return false
     }
     await this.docs.save(getBrowserWorkspaceId(), workspaceDoc)
     return true

@@ -8,6 +8,7 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
@@ -18,16 +19,9 @@ import { inTransaction, request } from './idb-tx.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent, seedWorkspaceDocumentContent } from './workspace-content.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('folding-browser-index')
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-    req.onblocked = () => resolve()
-  })
-}
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('folding-browser-index')
 
 /** Rewrites a stored index row to the pre-kind shape (no `kind` recorded). */
 async function stripKindInPlace(documentId: string): Promise<void> {
@@ -51,7 +45,7 @@ function canvasWith(text: string) {
 
 describe('FoldingBrowserIndex (tree-backed composition)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   it('lists a legacy per-document record after its startup fold, content included', async () => {

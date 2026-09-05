@@ -76,85 +76,22 @@ describe('publish contract', () => {
     })
     expect(mcpPackage.main).toBe('./dist/server/mcp/index.js')
     expect(mcpPackage.types).toBe('./dist/server/mcp/index.d.ts')
-    // Workspace exports: browser-contract types point to source so typecheck works
-    // before the build step (CI runs typecheck before build).
+    // The browser-safe client half lives in @kamiazya/whiteboard-daemon-client
+    // now; the published surface is the MCP server alone. A client subpath
+    // reappearing here means someone re-published the client through the
+    // server package — that split is deliberate (0.0.x, no consumers to keep).
     expect(mcpPackage.exports).toEqual({
       '.': {
         types: './dist/server/mcp/index.d.ts',
         import: './dist/server/mcp/index.js',
       },
-      './browser-contract': {
-        types: './src/shared/document-backend-contract.ts',
-        import: './dist/shared/document-backend-contract.js',
-      },
-      './browser-shared': {
-        types: './src/shared/browser-shared-index.ts',
-        import: './dist/shared/browser-shared-index.js',
-      },
-      './daemon-backend': {
-        types: './src/shared/daemon-backend.ts',
-        import: './dist/shared/daemon-backend.js',
-      },
-      './sse-backend': {
-        types: './src/shared/sse-backend.ts',
-        import: './dist/shared/sse-backend.js',
-      },
-      './sse-stream-hub': {
-        types: './src/shared/sse-stream-hub.ts',
-        import: './dist/shared/sse-stream-hub.js',
-      },
-      './select-document-transport': {
-        types: './src/shared/select-document-transport.ts',
-        import: './dist/shared/select-document-transport.js',
-      },
-      './api-client': {
-        types: './src/shared/api-client.ts',
-        import: './dist/shared/api-client.js',
-      },
-      './api-contracts': {
-        types: './src/shared/api-contracts/index.ts',
-        import: './dist/shared/api-contracts/index.js',
-      },
       './package.json': './package.json',
     })
-    // publishConfig.exports is the shape pnpm substitutes on npm publish, so
-    // npm consumers get the compiled .d.ts declarations.
+    // publishConfig.exports is the shape pnpm substitutes on npm publish.
     expect(mcpPackage.publishConfig.exports).toEqual({
       '.': {
         types: './dist/server/mcp/index.d.ts',
         import: './dist/server/mcp/index.js',
-      },
-      './browser-contract': {
-        types: './dist/shared/document-backend-contract.d.ts',
-        import: './dist/shared/document-backend-contract.js',
-      },
-      './browser-shared': {
-        types: './dist/shared/browser-shared-index.d.ts',
-        import: './dist/shared/browser-shared-index.js',
-      },
-      './daemon-backend': {
-        types: './dist/shared/daemon-backend.d.ts',
-        import: './dist/shared/daemon-backend.js',
-      },
-      './sse-backend': {
-        types: './dist/shared/sse-backend.d.ts',
-        import: './dist/shared/sse-backend.js',
-      },
-      './sse-stream-hub': {
-        types: './dist/shared/sse-stream-hub.d.ts',
-        import: './dist/shared/sse-stream-hub.js',
-      },
-      './select-document-transport': {
-        types: './dist/shared/select-document-transport.d.ts',
-        import: './dist/shared/select-document-transport.js',
-      },
-      './api-client': {
-        types: './dist/shared/api-client.d.ts',
-        import: './dist/shared/api-client.js',
-      },
-      './api-contracts': {
-        types: './dist/shared/api-contracts/index.d.ts',
-        import: './dist/shared/api-contracts/index.js',
       },
       './package.json': './package.json',
     })

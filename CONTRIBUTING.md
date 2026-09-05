@@ -7,11 +7,13 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
+                   # pnpm is pinned by package.json's packageManager (pnpm@11.12.0) — run `corepack enable` first,
+                   # or an older global pnpm silently rewrites the lockfile and fails CI's --frozen-lockfile
                    # ImageMagick (convert/identify) is also required — pnpm test:scripts and pnpm check:local call it;
                    # full prerequisites: docs/contributing/development.md
 pnpm install
-pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
-pnpm test         # all 22 vitest projects (listed under Workflow below)
+pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser)
+pnpm test         # all 23 vitest projects (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -28,11 +30,11 @@ See [README.md](README.md) for the full setup including Claude Code / Codex auto
 
 This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer to choose for which kind of change.
 
-`pnpm test` runs 22 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
+`pnpm test` runs 23 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
 
 | runtime | projects |
 |---|---|
-| node | `mcp-node`, `mcp-smoke`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `server-core-node`, `workspace-index-node`, `canvas-render-node`, `canvas-viewer-node`, `web-node` |
+| node | `mcp-node`, `mcp-smoke`, `daemon-client-node`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `server-core-node`, `workspace-index-node`, `canvas-render-node`, `canvas-viewer-node`, `web-node` |
 | jsdom | `facet-ui-jsdom`, `plugin-visual-jsdom`, `canvas-viewer-jsdom`, `web-jsdom` |
 | real browser | `canvas-render-browser`, `canvas-viewer-browser`, `web-browser` |
 
@@ -83,6 +85,7 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 
 ## Pull request checklist
 
+- `pnpm check:local` is green — the local mirror of CI's `check` job (needs ImageMagick)
 - `pnpm test` is green
 - `pnpm typecheck` is green
 - New behavior has at least one nearest-layer automated test

@@ -30,7 +30,7 @@ describe('createRowRenderLoader', () => {
       documentId: 'd1',
       path: 'a',
       kind: 'markdown' as const,
-      updatedAt: '2026-09-03T00:00:00Z',
+      contentDigest: 'c0ffee0000000001',
     }
 
     const [row, preview] = await Promise.all([load(entry), load(entry)])
@@ -47,9 +47,9 @@ describe('createRowRenderLoader', () => {
   // a picture that is wrong rather than missing.
   it('keys a kind-less row the way it actually renders it — spatially, with the theme', async () => {
     const broker = createInTabRenderBroker()
-    // Stamped, so the two renders below are separated by the THEME axis
-    // rather than by a version-less key refusing to be remembered at all.
-    const entry = { documentId: 'k1', path: 'k', updatedAt: '2026-09-03T00:00:00Z' }
+    // Carries a content digest, so the two renders below are separated by the
+    // THEME axis rather than by a state-less key refusing to be remembered.
+    const entry = { documentId: 'k1', path: 'k', contentDigest: 'c0ffee0000000002' }
 
     const light = deps({ broker, theme: 'light' })
     await createRowRenderLoader(light)(entry)
@@ -65,9 +65,9 @@ describe('createRowRenderLoader', () => {
   // input) but must not rebuild a markdown picture, whose ink comes from CSS.
   it('keeps a markdown render across a theme change, and redraws a spatial one', async () => {
     const broker = createInTabRenderBroker()
-    // Both carry a version: without one nothing is remembered at all (see
-    // isMemoisableKey), and the axis under test here is the THEME.
-    const stamped = { updatedAt: '2026-09-03T00:00:00Z' }
+    // Both carry a content digest: without one nothing is remembered at all
+    // (see isMemoisableKey), and the axis under test here is the THEME.
+    const stamped = { contentDigest: 'c0ffee0000000003' }
     const note = { documentId: 'n1', path: 'n', kind: 'markdown' as const, ...stamped }
     const board = { documentId: 'b1', path: 'b', kind: 'spatial' as const, ...stamped }
 
@@ -178,18 +178,18 @@ describe('createRowRenderLoader', () => {
     await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
     expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light', undefined)
   })
-  // The persistent tier's gate, at the only place that decides it. A row the
-  // keeper stamped can be remembered on disk; one it did not must not be,
+  // The persistent tier's gate, at the only place that decides it. A row whose
+  // keeper reports its content can be remembered on disk; one without must not,
   // because a re-read produces the identical key and the entry would answer
   // for a document that has since changed — for as long as the file lives,
   // which unlike the in-memory map is past the end of the tab.
-  it('passes a cache key only for a row its keeper stamped', async () => {
+  it('passes a cache key only for a row whose keeper reports its content', async () => {
     const stamped = deps()
     await createRowRenderLoader(stamped)({
       documentId: 'd3',
       path: 'a',
       kind: 'markdown',
-      updatedAt: '2026-09-03T00:00:00Z',
+      contentDigest: 'c0ffee0000000004',
     })
     const key = vi.mocked(stamped.renderMarkdown)?.mock.calls[0]?.[2]
     expect(typeof key).toBe('string')
@@ -201,5 +201,28 @@ describe('createRowRenderLoader', () => {
     const unstamped = deps()
     await createRowRenderLoader(unstamped)({ documentId: 'd4', path: 'b', kind: 'markdown' })
     expect(vi.mocked(unstamped.renderMarkdown)?.mock.calls[0]?.[2]).toBeUndefined()
+  })
+  // The identity a row is keyed by is its CONTENT, not the last write's
+  // clock. Measured in loro-adapter: after a merge a replica's content took
+  // on a state nobody wrote while its `updatedAt` stayed put — so two rows
+  // with one stamp can be two different pictures, and two stamps can be one.
+  it('keys a row by its content digest, and not by its timestamp', async () => {
+    const d = deps()
+    const load = createRowRenderLoader(d)
+    const at = { path: 'a', kind: 'markdown' as const, updatedAt: '2026-09-03T00:00:00Z' }
+
+    // Same stamp, different content: two pictures, two renders.
+    await load({ documentId: 'd1', ...at, contentDigest: 'aaaaaaaaaaaaaaaa' })
+    await load({ documentId: 'd1', ...at, contentDigest: 'bbbbbbbbbbbbbbbb' })
+    expect(d.renderMarkdown).toHaveBeenCalledTimes(2)
+
+    // Same content, a later stamp: one picture, answered from the memo.
+    await load({
+      documentId: 'd1',
+      ...at,
+      updatedAt: '2026-09-04T00:00:00Z',
+      contentDigest: 'bbbbbbbbbbbbbbbb',
+    })
+    expect(d.renderMarkdown).toHaveBeenCalledTimes(2)
   })
 })

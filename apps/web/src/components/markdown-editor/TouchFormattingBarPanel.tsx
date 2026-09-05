@@ -15,7 +15,6 @@ import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 import {
   cycleHeadingLevel,
   type MarkdownVerbId,
-  openInteractive,
   selfContainedCommand,
   VERB_BAR_ORDER,
   verb,
@@ -88,13 +87,8 @@ export default function TouchFormattingBarPanel() {
     const spec = verb(id)
     if (spec.action.kind === 'levels') {
       editor.run(cycleHeadingLevel)
-    } else if (
-      openInteractive(spec, {
-        link: editor.openLinkPicker,
-        comment: editor.openCommentComposer,
-      })
-    ) {
-      // The host opened its surface; the wrap fallback is not wanted.
+    } else if (spec.action.kind === 'interactive' && editor.openLinkPicker?.() === true) {
+      // The host opened its picker; the wrap fallback is not wanted.
     } else {
       const command = selfContainedCommand(spec)
       if (command !== null) editor.run(command)
@@ -102,16 +96,6 @@ export default function TouchFormattingBarPanel() {
     setSheetOpen(false)
   }
   const layout = layoutVerbBar(width, BAR_ITEMS, TOUCH_BAR_METRICS)
-  // Same rule as the desktop bar: an interactive verb with neither a host
-  // surface nor a wrap to degrade to is left off, not shown inert.
-  const offerable = (id: MarkdownVerbId) => {
-    const action = verb(id).action
-    if (action.kind !== 'interactive' || action.fallback !== undefined) return true
-    return (
-      (action.hook === 'link' ? editor.openLinkPicker : editor.openCommentComposer) !== undefined
-    )
-  }
-  const visible = layout.visible.filter(offerable)
 
   return createPortal(
     <div
@@ -123,9 +107,9 @@ export default function TouchFormattingBarPanel() {
       style={{ height: TOUCH_BAR_HEIGHT_PX }}
       onPointerDown={keepEditorFocus}
     >
-      {visible.map((id, index) => {
+      {layout.visible.map((id, index) => {
         const spec = verb(id)
-        const previous = index > 0 ? verb(visible[index - 1]) : undefined
+        const previous = index > 0 ? verb(layout.visible[index - 1]) : undefined
         return (
           <div key={id} className="flex items-center">
             {previous !== undefined && previous.band !== spec.band && (
@@ -145,7 +129,7 @@ export default function TouchFormattingBarPanel() {
       })}
       {layout.overflow.length > 0 && (
         <>
-          {visible.length > 0 && (
+          {layout.visible.length > 0 && (
             <span aria-hidden="true" className="bg-border mx-[3px] h-5 w-px" />
           )}
           <button

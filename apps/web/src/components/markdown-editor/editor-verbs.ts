@@ -20,9 +20,7 @@ function inlineDelimiters(): readonly (readonly [open: string, close: string])[]
   return MARKDOWN_EDITOR_VERBS.flatMap((spec): (readonly [string, string])[] => {
     const action = spec.action
     if (action.kind === 'wrap') return [[action.open, action.close ?? action.open]]
-    if (action.kind === 'interactive' && action.fallback !== undefined) {
-      return [[action.fallback.open, action.fallback.close]]
-    }
+    if (action.kind === 'interactive') return [[action.fallback.open, action.fallback.close]]
     return []
   }).sort((a, b) => b[0].length - a[0].length)
 }
@@ -177,38 +175,13 @@ export type MarkdownVerbAction =
     }
   /**
    * Asks the user something before it writes, so the editor — not this
-   * table — owns the surface. `hook` names which of the host's surfaces
-   * it opens (see `MarkdownVerbHooks`). It may declare the wrap it
-   * DEGRADES to when there is nothing to ask about, which is the half a
-   * test can reach; a verb with no honest degradation (a comment is not a
-   * mark) declares none and does nothing on a host without the surface.
+   * table — owns the surface. It declares the wrap it DEGRADES to when
+   * there is nothing to ask about, which is the half a test can reach.
    */
   | {
       readonly kind: 'interactive'
-      readonly hook: MarkdownVerbHook
-      readonly fallback?: { readonly open: string; readonly close: string }
+      readonly fallback: { readonly open: string; readonly close: string }
     }
-
-/** The surfaces an interactive verb can ask a host for. */
-export type MarkdownVerbHook = 'link' | 'comment'
-
-/**
- * What a host offers the interactive verbs — each answers true when it
- * opened its surface, false when it had nothing to open (no link targets,
- * no selection to comment on), so the caller falls back to the verb's
- * declared wrap, if any. Every bar and catalog dispatches through
- * `openInteractive`, so a new hook is added here and nowhere else.
- */
-export interface MarkdownVerbHooks {
-  readonly link?: () => boolean
-  readonly comment?: () => boolean
-}
-
-/** Runs the host's surface for an interactive verb; false when none opened. */
-export function openInteractive(spec: MarkdownVerbSpec, hooks: MarkdownVerbHooks): boolean {
-  if (spec.action.kind !== 'interactive') return false
-  return hooks[spec.action.hook]?.() === true
-}
 
 export type MarkdownVerbId =
   | 'heading'
@@ -221,7 +194,6 @@ export type MarkdownVerbId =
   | 'strikethrough'
   | 'code'
   | 'link'
-  | 'comment'
   | 'math'
   | 'bullet-list'
   | 'ordered-list'
@@ -314,17 +286,7 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     id: 'link',
     label: 'Link',
     band: 'inline',
-    action: { kind: 'interactive', hook: 'link', fallback: { open: '[[', close: ']]' } },
-  },
-  {
-    // Opens a conversation about the selected passage (ADR-0026): the
-    // annotation layer's one entry from inside the text, on every host that
-    // draws it — the note's source pane and a text node's editor alike.
-    // No wrap to degrade to: a comment is not a mark in the document.
-    id: 'comment',
-    label: 'Comment',
-    band: 'inline',
-    action: { kind: 'interactive', hook: 'comment' },
+    action: { kind: 'interactive', fallback: { open: '[[', close: ']]' } },
   },
   { id: 'math', label: 'Math', band: 'inline', action: { kind: 'wrap', open: '$' } },
   {
@@ -414,7 +376,6 @@ export const VERB_BAR_ORDER: readonly MarkdownVerbId[] = [
   'indent',
   'code',
   'link',
-  'comment',
   'ordered-list',
   'quote',
   'code-block',
@@ -449,9 +410,7 @@ export function selfContainedCommand(spec: MarkdownVerbSpec): StateCommand | nul
     case 'command':
       return action.command
     case 'interactive':
-      return action.fallback === undefined
-        ? null
-        : wrapSelectionWith(action.fallback.open, action.fallback.close)
+      return wrapSelectionWith(action.fallback.open, action.fallback.close)
     case 'levels':
       return null
   }

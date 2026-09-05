@@ -15,11 +15,11 @@ import {
   Tag,
   Trash2,
 } from 'lucide-react'
-import type { ResolvedTheme } from '../../../hooks/useThemeMode.js'
+import type { EditorCommand } from '../../../lib/spatial/commands.js'
+import type { Point } from '../../../lib/spatial/viewport.js'
+import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
-import type { EditorCommand } from '../commands.js'
-import type { Point } from '../viewport.js'
 import { colorRow } from './color-row.js'
 
 export interface EdgeMenuItemsInput {

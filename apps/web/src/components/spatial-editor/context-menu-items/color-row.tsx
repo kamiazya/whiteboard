@@ -3,7 +3,7 @@ import type { SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor } from '@kamiazya/whiteboard-model'
 import { SquareDashed } from 'lucide-react'
-import type { ResolvedTheme } from '../../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { ContextMenuOptionsItem } from '../ContextMenu.js'
 
 export const presetEntries: readonly {

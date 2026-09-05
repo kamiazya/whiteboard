@@ -16,6 +16,7 @@ import {
 } from './lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import { loadWorkspaceDocumentProjection } from './lib/workspace-content.js'
+import { clearNamedDb } from './test-utils/browser-document.js'
 
 const REAL_DB_NAME = 'whiteboard-boot-test'
 
@@ -25,14 +26,6 @@ const REAL_DB_NAME = 'whiteboard-boot-test'
 // without the address ever being read. The first draft used a 2017 ULID and
 // did exactly that.
 const ADDRESSED_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(REAL_DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
 
 function rootEl(): HTMLElement {
   const el = document.createElement('div')
@@ -58,11 +51,11 @@ async function openStubbornAtOldVersion(dbName: string): Promise<IDBDatabase> {
 describe('startBootSequence — resolver rejection does not block render', () => {
   beforeEach(async () => {
     resetBrowserWorkspaceIdForTests()
-    await clearDb()
+    await clearNamedDb(REAL_DB_NAME)
   })
   afterEach(async () => {
     resetBrowserWorkspaceIdForTests()
-    await clearDb()
+    await clearNamedDb(REAL_DB_NAME)
   })
 
   it('settles, renders, and records the cause without an unhandled rejection, then recovers on retry', async () => {
@@ -197,12 +190,12 @@ describe('startBootSequence — the address chooses which workspace boots', () =
   beforeEach(async () => {
     resetBrowserWorkspaceIdForTests()
     setWhiteboardDbNameForTests(REAL_DB_NAME)
-    await clearDb()
+    await clearNamedDb(REAL_DB_NAME)
   })
   afterEach(async () => {
     resetBrowserWorkspaceIdForTests()
     window.history.replaceState(null, '', '/')
-    await clearDb()
+    await clearNamedDb(REAL_DB_NAME)
   })
 
   it('boots the workspace the address names, through the DEFAULT resolver', async () => {

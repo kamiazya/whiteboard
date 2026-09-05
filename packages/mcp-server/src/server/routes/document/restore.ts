@@ -1,3 +1,4 @@
+import { restoreVersionRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   type RestoreProgress,
   restoreVersion,
@@ -6,7 +7,6 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
-import { restoreVersionRequestSchema } from '../../../shared/api-contracts/document.js'
 import { validateDocumentPath, validateVersionId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'

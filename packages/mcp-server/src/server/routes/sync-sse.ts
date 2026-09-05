@@ -11,16 +11,17 @@
 // connections per origin at six, and a stream per open canvas tab would starve
 // the daemon's own API; the client keeps a single stream (shared across tabs)
 // and adjusts its subscriptions over POST, because SSE itself is one-way.
-import { Hono } from 'hono'
-import { streamSSE } from 'hono/streaming'
-import { z } from 'zod'
-import { workspaceDocKey } from '../../shared/sse-stream-hub.js'
+
+import { workspaceDocKey } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import type {
   SyncMessageEvent,
   SyncReadyEvent,
   SyncUpdateEvent,
-} from '../../shared/sync-sse-contract.js'
-import { clientTextMessageSchema } from '../../shared/ws-messages.js'
+} from '@kamiazya/whiteboard-daemon-client/sync-sse-contract'
+import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
+import { Hono } from 'hono'
+import { streamSSE } from 'hono/streaming'
+import { z } from 'zod'
 import { getLogger } from '../log.js'
 
 const log = getLogger('sync-sse')

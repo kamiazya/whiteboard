@@ -1,10 +1,10 @@
 import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
 import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
-import type { FileRefOption } from './DocumentPickerDialog.js'
+import type { FileRefOption } from '../../lib/link-entries.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 
 /**
  * The LOD gate (embed spec v2, user decision 2026-08-08): a file node

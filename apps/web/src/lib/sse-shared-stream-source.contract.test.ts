@@ -8,8 +8,8 @@
  * test drove the hub, and the gap was invisible from inside that suite.
  */
 import '@vitest/web-worker'
-import type { SseStreamSourceHarness } from '@kamiazya/whiteboard-mcp/sse-stream-source-contract'
-import { sseStreamSourceContract } from '@kamiazya/whiteboard-mcp/sse-stream-source-contract'
+import type { SseStreamSourceHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/sse-stream-source-contract'
+import { sseStreamSourceContract } from '@kamiazya/whiteboard-daemon-client/test-utils/sse-stream-source-contract'
 import { HttpResponse, http } from 'msw'
 import { setupServer } from 'msw/node'
 import { afterAll, beforeAll, describe, vi } from 'vitest'

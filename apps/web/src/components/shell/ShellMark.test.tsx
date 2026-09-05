@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ConnectionState } from '../connection/ConnectionStatus.js'
+import type { ConnectionState } from '../../lib/connection-state.js'
 import { ShellMark } from './ShellMark.js'
 
 afterEach(cleanup)
@@ -8,6 +8,10 @@ afterEach(cleanup)
 const DAEMON = (session: 'synced' | 'reconnecting' | 'sync-off'): ConnectionState => ({
   keeper: 'daemon',
   session,
+})
+const BROWSER = (storage: 'ok' | 'stuck' | 'failed'): ConnectionState => ({
+  keeper: 'browser',
+  storage,
 })
 
 describe('ShellMark', () => {
@@ -21,14 +25,46 @@ describe('ShellMark', () => {
     expect(mark.querySelector('[data-testid="shell-mark-cap"]')).toBeNull()
   })
 
+  // A healthy keeper draws NOTHING: no dot for a browser that is keeping,
+  // none for a daemon that is synced. The mark speaks only for a condition
+  // that asks something of the person — a write that is not landing, a
+  // write the store refused, a session that dropped or was rejected.
   it.each([
-    ['browser', { keeper: 'browser' } as ConnectionState, 'neutral'],
-    ['synced', DAEMON('synced'), 'safe'],
-    ['reconnecting', DAEMON('reconnecting'), 'attention'],
-    ['sync-off', DAEMON('sync-off'), 'attention'],
-  ])('paints the %s state with the %s tone', (_name, state, tone) => {
+    ['browser, ok', BROWSER('ok')],
+    ['daemon, synced', DAEMON('synced')],
+  ])('draws no cap for %s', (_name, state) => {
     render(<ShellMark state={state} />)
-    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-tone')).toBe(tone)
+    expect(screen.queryByTestId('shell-mark-cap')).toBeNull()
+    expect(screen.getByTestId('shell-mark-stroke').getAttribute('class') ?? '').not.toMatch(
+      /wb-mark-broken/,
+    )
+  })
+
+  it.each([
+    ['browser, stuck', BROWSER('stuck')],
+    ['daemon, reconnecting', DAEMON('reconnecting')],
+    ['daemon, sync-off', DAEMON('sync-off')],
+  ])('paints %s with the attention cap', (_name, state) => {
+    render(<ShellMark state={state} />)
+    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-tone')).toBe('attention')
+  })
+
+  // The browser's store refusing a write is the browser not keeping — the
+  // same shape sync-off has for the daemon (broken, dimmed), with the cap
+  // hollow so the two conditions still read apart when both carry amber.
+  it('paints a failed browser write as a broken stroke with a hollow cap', () => {
+    render(<ShellMark state={BROWSER('failed')} />)
+    expect(screen.getByTestId('shell-mark-stroke').getAttribute('class')).toMatch(/wb-mark-broken/)
+    const cap = screen.getByTestId('shell-mark-cap')
+    expect(cap.getAttribute('data-tone')).toBe('attention')
+    expect(cap.getAttribute('data-shape')).toBe('ring')
+    expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('failed')
+  })
+
+  it('publishes the storage health as data for the page tests to read', () => {
+    render(<ShellMark state={BROWSER('stuck')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-storage')).toBe('stuck')
+    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-shape')).toBe('filled')
   })
 
   it('separates the two amber states by motion, since they share a tone', () => {
@@ -111,7 +147,7 @@ describe('ShellMark', () => {
     rerender(<ShellMark state={DAEMON('synced')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
 
-    rerender(<ShellMark state={{ keeper: 'browser' }} />)
+    rerender(<ShellMark state={{ keeper: 'browser', storage: 'ok' }} />)
     rerender(<ShellMark state={DAEMON('synced')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
   })
@@ -120,7 +156,7 @@ describe('ShellMark', () => {
     // Browser -> daemon is a MOVE, narrated by its own flow. Borrowing the
     // recovery gesture for it would say "the session came back" about a
     // session that never dropped.
-    const { rerender } = render(<ShellMark state={{ keeper: 'browser' }} />)
+    const { rerender } = render(<ShellMark state={BROWSER('ok')} />)
     rerender(<ShellMark state={DAEMON('synced')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
   })

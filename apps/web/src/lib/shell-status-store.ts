@@ -1,5 +1,4 @@
-import type { ConnectionState } from '../components/connection/ConnectionStatus.js'
-
+import type { ConnectionState } from './connection-state.js'
 /**
  * What the page holding a live document session knows about its connection.
  *
@@ -11,6 +10,12 @@ export interface ShellConnection {
   readonly state: ConnectionState
   /** Named in the synced popover, and the target of repair/disconnect. */
   readonly daemonBaseUrl?: string
+  /**
+   * browser keeper: when the open document's writes last landed, ISO-8601.
+   * The popover's answer to "is it saved" — the mark itself draws nothing
+   * for a write that landed.
+   */
+  readonly lastWrittenAt?: string | null
 }
 
 /**

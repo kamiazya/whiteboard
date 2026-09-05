@@ -1,7 +1,7 @@
 import {
   daemonPingResponseSchema,
   listGrantsResponseSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { z } from 'zod'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'

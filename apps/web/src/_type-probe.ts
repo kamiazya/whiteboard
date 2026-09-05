@@ -8,12 +8,14 @@
  * - Copied shadcn ui primitives (Button, Dialog, etc.) resolve under @/components/ui
  * - cn from @/lib/utils resolves
  * - DocumentBackend, DocumentBackendHandlers, and ws-message payload types
- *   resolve from @kamiazya/whiteboard-mcp/browser-contract and compile
+ *   resolve from @kamiazya/whiteboard-daemon-client/document-backend-contract and compile
  *   against the z.infer-derived payload types.
  * - DaemonBackend resolves from the ./daemon-backend subpath and its
  *   relocated source compiles under this DOM-enabled tsconfig too.
  */
 
+// ── daemon-backend from its own subpath ───────────────────────────────────────
+export type { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 // ── browser-contract types from the package subpath ──────────────────────────
 // Re-exporting the types proves they resolve; the declared consumers below
 // force tsc to compile against the z.infer-derived payload shapes.
@@ -21,10 +23,7 @@ export type {
   DocumentBackend,
   DocumentBackendHandlers,
   VersionCreatedPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
-
-// ── daemon-backend from its own subpath ───────────────────────────────────────
-export type { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 
 // ── shadcn ui primitives ──────────────────────────────────────────────────────
 // Re-exporting the value imports both proves they resolve and satisfies
@@ -56,16 +55,16 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
   VersionCreatedPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 
 export declare function _useBackend(b: DocumentBackend): void
 export declare function _useHandlers(h: DocumentBackendHandlers): void
 export declare function _usePayload(p: VersionCreatedPayload): void
 
 // ── api-client from its own subpath ───────────────────────────────────────────
-import type { RuntimeConfig } from '@kamiazya/whiteboard-mcp/api-client'
+import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-client'
 
-export { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+export { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 export declare function _useRuntimeConfig(c: RuntimeConfig): void
 
 // ── api-contracts barrel: proves the branches + canvas Zod schemas resolve
@@ -73,12 +72,12 @@ export declare function _useRuntimeConfig(c: RuntimeConfig): void
 export {
   branchMetaSchema,
   createDocumentRequestSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 
 import type {
   branchMetaSchema,
   createDocumentRequestSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { z } from 'zod'
 export declare function _useBranchMeta(b: z.infer<typeof branchMetaSchema>): void
 export declare function _useCreateDocumentRequest(

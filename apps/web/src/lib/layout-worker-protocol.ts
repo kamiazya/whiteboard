@@ -31,8 +31,8 @@ import type {
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 import type { FaviconRect } from './favicon.js'
+import type { ResolvedTheme } from './theme.js'
 
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
 export type FileRefLabel = { readonly file: string; readonly label: string }

@@ -173,16 +173,24 @@ There are three real-browser Vitest projects:
 
 ```bash
 pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser
-pnpm run test:browser:trace   # same, plus a trace for EVERY test and its DOM snapshots
+pnpm run test:browser:replay  # same, plus a step-by-step DOM replay of EVERY test in .vitest/index.html
+pnpm run test:browser:trace   # same, plus a Playwright trace for EVERY test and its DOM snapshots
 ```
 
-The default run retains a trace only for a FAILING test, and that trace has
-no DOM view — action log, stacks and screenshots, but no time-travel through
-the page. Recording the DOM means recording every resource vite served, which
-measured 302MB against 7.5MB on `apps/web`'s 16 page files and 22GB over a
-whole `web-browser` run. When you need the DOM, re-run the one failing file
-under `test:browser:trace`; it traces every test including passing ones, so
-it is a per-file tool rather than a suite-wide one.
+The default run retains a Playwright trace only for a FAILING test, and that
+trace has no DOM view — action log, stacks and screenshots, but no time-travel
+through the page. Two ways to get one:
+
+- `test:browser:replay` turns on vitest's `browser.traceView` and the HTML
+  reporter: a DOM snapshot at every interaction and assertion, replayed in
+  `.vitest/index.html` (open it in a browser) with the failed step in red.
+  It records DOM snapshots rather than served resources, so it is cheap
+  enough to cover every test: measured on `apps/web`'s 20 page files, the
+  report data was 774KB gzipped with replays against 177KB without.
+- `test:browser:trace` records Playwright's own DOM snapshots, which means
+  every resource vite served — 302MB against 7.5MB on 16 page files and 22GB
+  over a whole `web-browser` run. Use it for ONE failing file when the
+  network log or the provider's screenshots are what you need.
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
@@ -343,7 +351,7 @@ Common commands are also summarized in [CONTRIBUTING.md](../../CONTRIBUTING.md#p
 ```bash
 pnpm lint           # Biome — must be green before review
 pnpm typecheck      # TypeScript — must be green before review
-pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
 pnpm test:browser   # canvas-viewer-browser + web-browser + canvas-render-browser (the real-browser projects)
 pnpm smoke:e2e      # stdio MCP smoke (also covered by pnpm test via mcp-smoke)
 ```

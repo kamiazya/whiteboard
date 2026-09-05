@@ -8,8 +8,8 @@
  */
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import type { TrashRow } from '../../lib/files-source.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
-import type { TrashRow } from './files-source.js'
 import { TrashSection } from './TrashSection.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 

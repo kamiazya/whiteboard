@@ -16,6 +16,7 @@
  * additionally take `withDocumentWriteLock` — see their comments.
  */
 import { unlink } from 'node:fs/promises'
+import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -51,7 +52,6 @@ import {
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
-import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -1109,7 +1109,9 @@ export async function renameDocumentPath(
 // ── list documents from the workspace record ──
 export async function listDocuments(
   workspaceId: string,
-): Promise<Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind'>[]> {
+): Promise<
+  Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind' | 'contentDigest'>[]
+> {
   validateWorkspaceId(workspaceId)
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
   if (workspaceDoc === null) return []
@@ -1124,5 +1126,6 @@ export async function listDocuments(
     // and the epoch is the honest "unknown" for our own pre-release data.
     updatedAt: new Date(entry.updatedAt ?? entry.createdAt ?? 0).toISOString(),
     kind: entry.kind,
+    contentDigest: entry.contentDigest,
   }))
 }

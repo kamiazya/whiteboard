@@ -10,11 +10,12 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { PAN_MARGIN_PX } from '../../lib/spatial/viewport.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { DESKTOP_BAR_HEIGHT_PX, TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/verb-bar-layout.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 import { EXIT_HINT_ALLOWANCE_PX } from './use-keyboard-avoidance.js'
-import { PAN_MARGIN_PX } from './viewport.js'
 
 afterEach(() => {
   cleanup()
@@ -62,10 +63,6 @@ function Host({
       />
     </div>
   )
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function transformOf(container: HTMLElement): string {

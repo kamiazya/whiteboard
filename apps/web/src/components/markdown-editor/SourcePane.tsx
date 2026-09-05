@@ -8,23 +8,20 @@ import {
   type StateCommand,
   StateEffect,
   StateField,
-  type TransactionSpec,
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
-import type { TextAnchor } from '../../lib/text-anchor.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
   setActiveMarkdownEditor,
 } from './active-markdown-editor.js'
-import { requestCommentOnScope } from './comment-anchors.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
-import { minimalChange } from './minimal-change.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -116,6 +113,24 @@ export interface SourcePaneApi {
   replacePinned: (markup: string) => void
   /** Drops the pin without writing anything. */
   clearPin: () => void
+  /**
+   * The range the reader has actually selected, or null when the selection
+   * is empty.
+   *
+   * Deliberately NOT `rangeToActOn`: every formatting verb resolves its own
+   * scope from the caret's word, which is right for a wrap the reader can
+   * see and undo, and wrong for an anchor that gets STORED — the word under
+   * a caret is a guess about what they meant, kept forever as though they
+   * had said it.
+   */
+  selectedRange: () => { from: number; to: number } | null
+  /**
+   * Dispatches state effects into the live view, WITHOUT claiming focus —
+   * the seam for a host extension whose data changes while the view lives.
+   * `run` cannot serve that: it focuses the editor afterwards, which is
+   * right for a toolbar press and wrong for data arriving on its own.
+   */
+  applyEffects: (effects: readonly StateEffect<unknown>[]) => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -132,15 +147,6 @@ export interface SourcePaneApi {
   bottomVisibleLine: () => number
   /** Scrolls so `line` sits in the middle of the viewport. */
   revealLine: (line: number) => void
-  /**
-   * Applies a transaction WITHOUT taking focus — `run` focuses, which is
-   * right for a verb the user invoked and wrong for state the host pushes
-   * in (the annotation layer's threads arriving over the network must not
-   * pull the caret out of whatever the reader is doing).
-   */
-  dispatch: (spec: TransactionSpec) => void
-  /** The comment verb on the caret's scope; false when there is nothing to comment on. */
-  openCommentComposer: () => boolean
 }
 
 export interface SourcePaneProps {
@@ -174,13 +180,6 @@ export interface SourcePaneProps {
    * the bar wraps instead.
    */
   onRequestLinkPicker?: () => boolean
-  /**
-   * The comment verb's host seam, like `onRequestLinkPicker`: called with
-   * the anchor for the caret's scope (the selection, else the word), it
-   * opens the host's composer and answers true. False, or absent, leaves
-   * the verb inert — a comment has no wrap to degrade to.
-   */
-  onRequestComment?: (anchor: TextAnchor) => boolean
 }
 
 /**
@@ -199,7 +198,6 @@ export function SourcePane({
   extensions,
   reconcileExternalValue = true,
   onRequestLinkPicker,
-  onRequestComment,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -209,8 +207,6 @@ export function SourcePane({
   onChangeRef.current = onChange
   const onRequestLinkPickerRef = useRef(onRequestLinkPicker)
   onRequestLinkPickerRef.current = onRequestLinkPicker
-  const onRequestCommentRef = useRef(onRequestComment)
-  onRequestCommentRef.current = onRequestComment
   // Filled once the view exists; the focus/blur handlers below read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
 
@@ -310,11 +306,11 @@ export function SourcePane({
       },
       headingLevel: () => headingLevelAt(view.state),
       focus: () => view.focus(),
+      selectedRange: () => {
+        const { from, to } = view.state.selection.main
+        return from === to ? null : { from, to }
+      },
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
-      // Only with a seam: a bar reads the absence as "leave the verb off".
-      ...(onRequestCommentRef.current === undefined
-        ? {}
-        : { openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current) }),
     }
     if (apiRef) {
       apiRef.current = {
@@ -343,6 +339,13 @@ export function SourcePane({
         clearPin: () => {
           view.dispatch({ effects: setPinnedRange.of(null) })
         },
+        selectedRange: () => {
+          const { from, to } = view.state.selection.main
+          return from === to ? null : { from, to }
+        },
+        applyEffects: (effects) => {
+          if (effects.length > 0) view.dispatch({ effects: [...effects] })
+        },
         focus: () => view.focus(),
         topVisibleLine: () => {
           const scrollTop = view.scrollDOM.scrollTop
@@ -361,8 +364,6 @@ export function SourcePane({
           const fraction = block.height > 0 ? (bottom - block.top) / block.height : 0
           return line + Math.max(0, Math.min(1, fraction))
         },
-        dispatch: (spec) => view.dispatch(spec),
-        openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current),
         revealLine: (line: number) => {
           const clamped = Math.max(1, Math.min(view.state.doc.lines, Math.round(line)))
           const pos = view.state.doc.line(clamped).from

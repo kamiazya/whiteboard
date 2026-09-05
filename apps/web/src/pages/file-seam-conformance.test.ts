@@ -26,6 +26,11 @@ const paneSource = import.meta.glob('../components/document-editor/SpatialEditor
   import: 'default',
 })
 
+const railChromeSource = import.meta.glob('../components/annotations/CommentsRailChrome.tsx', {
+  query: '?raw',
+  import: 'default',
+})
+
 async function readPane(): Promise<string> {
   const loader = paneSource['../components/document-editor/SpatialEditorPane.tsx']
   expect(loader, 'no source loader for SpatialEditorPane').toBeDefined()
@@ -71,22 +76,13 @@ const SHARED_CANVAS_CHROME = [
  * by design, not drift.
  *
  * Listed rather than left implicit so the scan above stays a statement about
- * what SHOULD agree. Save state is the interesting entry: the daemon page does
- * show it, through `WorkspaceTopBar`'s dirty dot rather than a
- * `SaveStatusChip` in the properties row, so the two presentations differ
- * while the capability does not.
+ * what SHOULD agree. Save state is deliberately NOT an entry any more: neither
+ * page draws one in its chrome. Both publish their keeper's health to the
+ * shell mark (`setShellConnection`), which draws only a condition — a
+ * browser write that is stuck or refused, a daemon session that dropped or
+ * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  // Not a substitute for a save indicator the other mode lacks: BOTH pages
-  // render WorkspaceTopBar, whose dot comes from its own `useDirtyState` and
-  // means "no manual version named yet" rather than "unsaved". The browser
-  // page adds this finer chip because its markdown path has two writers — the
-  // controller and the body's debounced save — and one dot reported `Saved`
-  // over unwritten text.
-  SaveStatusChip: {
-    page: './BrowserDocumentPage.tsx',
-    why: 'a second, finer indicator its markdown path needs',
-  },
   HeaderBranchBanner: {
     page: './DaemonDocumentPage.tsx',
     why: 'branches are a daemon concept (ADR-0004)',
@@ -227,8 +223,7 @@ describe('the spatial-editor-container hook means one thing', () => {
 
 /**
  * Chrome that belongs to the DOCUMENT, not to the canvas — ADR-0026
- * decision 5. `CommentsRail` (the vessel the comments panel rides in, a
- * column or a sheet by width) serves a markdown document exactly as it
+ * decision 5. `CommentsPanel` serves a markdown document exactly as it
  * serves a spatial one (a note has no canvas to hang a per-node toggle on),
  * so it deliberately does NOT join `SHARED_CANVAS_CHROME`: that group's own
  * docblock is about chrome the PAGE positions around the editor, and this
@@ -236,7 +231,7 @@ describe('the spatial-editor-container hook means one thing', () => {
  * Kept as its own group so a reader does not have to infer the distinction
  * from where an entry happens to sit.
  */
-const SHARED_DOCUMENT_CHROME = ['CommentsRail'] as const
+const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
@@ -301,6 +296,16 @@ describe('document page document-level chrome', () => {
         'conversations at all.',
     ).toEqual([])
   })
+
+  // The aside moved into shared chrome (CommentsRailChrome), so the pages
+  // render the RAIL and the rail renders the panel — this keeps the
+  // guarantee transitive rather than trusting the indirection.
+  it('the shared rail chrome itself renders CommentsPanel', async () => {
+    const loader = railChromeSource['../components/annotations/CommentsRailChrome.tsx']
+    expect(loader, 'no source loader for CommentsRailChrome').toBeDefined()
+    const source = (await loader?.()) as string
+    expect(renders(source, 'CommentsPanel')).toBe(true)
+  })
 })
 
 /**
@@ -308,7 +313,7 @@ describe('document page document-level chrome', () => {
  * inside their own spatial slot — the same reaches-subject discipline the
  * "spatial editor pane is built once" scan above applies to the pane itself.
  *
- * `threads=` also appears more per page — on `<CommentsRail`, which sits
+ * `threads=` also appears once more per page, on `<CommentsPanel`, which sits
  * OUTSIDE the spatial slot by design (it is document-level chrome, not
  * canvas-level — see `SHARED_DOCUMENT_CHROME` above). So this checks that
  * SOME occurrence lands inside the slot, not that every occurrence does; an

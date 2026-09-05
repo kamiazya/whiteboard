@@ -1,4 +1,4 @@
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 
 /**
  * One indicator over the two writers a markdown document has.

@@ -5,7 +5,6 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
-import { mcpSourceAlias } from './mcp-source-alias.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -15,19 +14,7 @@ export default defineConfig({
   plugins: [react(), svgr(), wasm(), topLevelAwait()],
   resolve: {
     alias: {
-      ...mcpSourceAlias,
       '@': resolve(__dirname, 'src'),
-      // Also test-only: the SseStreamSource behavioural contract, declared once
-      // in the package that owns the port and run here against the
-      // SharedWorker-backed implementation this app ships.
-      '@kamiazya/whiteboard-mcp/sse-stream-source-contract': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/test-utils/sse-stream-source-contract.ts',
-      ),
-      '@kamiazya/whiteboard-mcp/document-backend-contract-suite': resolve(
-        __dirname,
-        '../../packages/mcp-server/src/shared/test-utils/document-backend-contract.ts',
-      ),
       // Subpath aliases must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(

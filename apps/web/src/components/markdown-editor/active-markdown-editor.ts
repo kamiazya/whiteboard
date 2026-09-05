@@ -16,18 +16,19 @@ export interface ActiveMarkdownEditor {
    * for its own keyboard handling and hands it back through this on close.
    */
   readonly focus: () => void
+  /** The reader's selection, or null with none — what a comment would be about. */
+  readonly selectedRange: () => { readonly from: number; readonly to: number } | null
+  /**
+   * Opens the host's comment composer on the selection and answers true;
+   * false with nothing selected or on a host that draws no annotation layer.
+   */
+  readonly composeThread?: () => boolean
   /**
    * Opens the host's link picker and answers true; false when it has nothing
    * to pick from, so the caller falls back to the verb's plain wrap. Absent
    * on hosts without a picker.
    */
   readonly openLinkPicker?: () => boolean
-  /**
-   * Opens the host's comment composer on the caret's scope and answers
-   * true; false when there is nothing to comment on. Absent on a host
-   * that draws no annotation layer.
-   */
-  readonly openCommentComposer?: () => boolean
 }
 
 let current: ActiveMarkdownEditor | null = null

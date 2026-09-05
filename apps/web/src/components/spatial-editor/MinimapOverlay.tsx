@@ -12,7 +12,12 @@
  * and `querySelectorAll('svg rect')`. A second SVG here would silently join
  * those queries and answer for the scene. Rectangles need no SVG anyway.
  */
-import { fitMinimap, type MinimapBox, projectBox, unprojectPoint } from './minimap.js'
+import {
+  fitMinimap,
+  type MinimapBox,
+  projectBox,
+  unprojectPoint,
+} from '../../lib/spatial/minimap.js'
 
 const PADDING_PX = 6
 

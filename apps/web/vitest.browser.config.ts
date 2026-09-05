@@ -7,7 +7,6 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
-import { mcpSourceAlias } from './mcp-source-alias.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
@@ -17,7 +16,6 @@ export default defineConfig({
   define: { ...rendererBuildDefine },
   resolve: {
     alias: {
-      ...mcpSourceAlias,
       // Matches vitest.config.ts and tsconfig's '@/*' path — needed once any
       // browser-tested component pulls in a components/ui/* file (they all
       // import '@/lib/utils' for the cn() helper).
@@ -69,7 +67,9 @@ export default defineConfig({
   },
   test: {
     name: 'web-browser',
-    include: ['src/**/*.browser.test.tsx'],
+    // BOTH extensions: a `.browser.test.ts` (no x) matched by neither this
+    // include nor web-jsdom (which excludes it) would silently never run.
+    include: ['src/**/*.browser.test.tsx', 'src/**/*.browser.test.ts'],
     // Browser mode's 15s default is a real ceiling here, not a safety net: a
     // test that mounts a page, drives Radix through a portal and waits on
     // IndexedDB spends most of its budget on machine time, and vitest runs

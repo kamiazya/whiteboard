@@ -36,7 +36,7 @@ describe('layoutVerbBar', () => {
 })
 
 describe('touchFormattingBarShown', () => {
-  const host = { run: () => {}, headingLevel: () => 0, focus: () => {} }
+  const host = { run: () => {}, headingLevel: () => 0, focus: () => {}, selectedRange: () => null }
   const realMatchMedia = window.matchMedia
   const setPointer = (coarse: boolean) => {
     window.matchMedia = (query: string) =>

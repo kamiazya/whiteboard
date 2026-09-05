@@ -7,8 +7,8 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentPathField } from './DocumentPathField.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
  * The one place a document's two addresses are edited together, each field

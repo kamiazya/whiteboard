@@ -10,11 +10,13 @@
  * which is the class `file-seam-conformance.test.ts` was written for.
  *
  * A source scan rather than a render, for that file's reason and one more of
- * its own: the blob comes from `exportScene('png')`, which needs a real
- * renderer, so a page-level test would have had to fake the very call it was
- * checking. What is actually this code's — what it hands the keeper, and
- * that it never throws over a bookmark that already landed — is asserted in
- * `lib/version-thumbnail.test.ts`.
+ * its own: the blob comes from a real renderer — a 2D context jsdom does not
+ * have — so a page-level test would have had to fake the very call it was
+ * checking. What is actually this code's is asserted where it lives:
+ * `lib/version-thumbnail.test.ts` for what reaches the keeper and that it
+ * never throws over a bookmark that already landed, `lib/bookmark-picture`'s
+ * two tests for which pipeline draws which kind and that the picture has the
+ * document's own size.
  */
 import { describe, expect, it } from 'vitest'
 
@@ -32,59 +34,34 @@ async function read(page: string): Promise<string> {
 }
 
 describe('a saved point carries a picture, whoever keeps it', () => {
-  it.each(PAGES)('%s attaches one after its save', async (page) => {
+  it.each(PAGES)('%s routes its save through the shared body', async (page) => {
+    // buildVersionSaveBody is where the beats live now — attach through the
+    // seam, capture started BEFORE the save (mutation-checked in
+    // lib/version-save-body.test.ts), the unawaited thumbnail ride-along,
+    // the re-announce once the picture lands. A page that hand-rolls its
+    // save again loses every one of those silently, which is exactly the
+    // per-page blindness this file exists for.
     const source = await read(page)
     expect(
-      source.includes('attachVersionThumbnail('),
-      `${page} saves a version and never attaches a picture to it — its keeper's rows would be the ones that silently have none`,
+      source.includes('buildVersionSaveBody('),
+      `${page} saves a version without the shared body — its keeper's rows would be the ones that silently lose the pinned save beats`,
     ).toBe(true)
   })
 
-  it.each(PAGES)('%s captures the picture before the save, not inside the attach', async (page) => {
-    // The bytes handed to the attach must be something captured EARLIER.
-    // `exportScene` reads the live scene at call time, so a `getBlob` that
-    // calls it runs after the save has resolved — and draws an edit made
-    // during the save onto the older point, a picture of content that
-    // version does not contain.
+  it.each(
+    PAGES,
+  )('%s picks the picture by the document kind, not by assuming a canvas', async (page) => {
+    // The defect this replaces an older check for: both pages captured
+    // `exportScene('png')` whatever they were editing, and that draws the
+    // SPATIAL canvas. A markdown document publishes none, so the export was
+    // a valid 1x1 PNG — uploaded like any other, and drawn as an empty box
+    // on every markdown version row. Passing the kind is what makes the
+    // choice exist at all; which pipeline each kind gets, and that both
+    // answer PNG, is `lib/bookmark-picture.test.ts`.
     const source = await read(page)
-    const getBlob = /getBlob:\s*([^,\n]*)/.exec(source)?.[1] ?? ''
-    expect(getBlob, `${page} has no getBlob argument to check`).not.toBe('')
     expect(
-      /exportScene|getThumbnailBlob/.test(getBlob),
-      `${page} renders the picture inside getBlob, so it is taken after the save resolves — capture it before the save and hand the promise over`,
-    ).toBe(false)
-  })
-
-  it.each(PAGES)('%s starts the capture before it asks for the save', async (page) => {
-    // The check above is satisfied by a page that renders AFTER its save
-    // resolves and only then assigns the variable — the very ordering the
-    // change was about. So compare where each happens: the capture has to
-    // come first in the source, which for two straight-line functions is
-    // the order they run in.
-    const source = await read(page)
-    const at = (label: string, pattern: RegExp): number => {
-      const found = [...source.matchAll(pattern)]
-      // Exactly one, or "the first occurrence" would be a different
-      // statement from the one that matters and the order would say nothing.
-      expect(found.length, `${page}: expected one ${label}, found ${found.length}`).toBe(1)
-      return found[0]?.index ?? -1
-    }
-    const capture = at(
-      'picture capture',
-      /const picture = (?:exportScene\('png'\)|getThumbnailBlob\(\))/g,
-    )
-    const save = at('version save', /versionsBackend\.save\(|documentsApiUrl\([^)]*'versions'\)/g)
-    expect(
-      capture,
-      `${page} asks for the picture at ${capture} and saves at ${save} — capture it first, or the picture can hold an edit made during the save`,
-    ).toBeLessThan(save)
-  })
-
-  it.each(PAGES)('%s asks its own renderer for the bytes', async (page) => {
-    // PNG explicitly: the daemon's route validates the signature on upload
-    // and rejects anything else, and one keeper rejecting what the other
-    // accepts is the difference this whole seam exists to remove.
-    const source = await read(page)
-    expect(source).toMatch(/exportScene\('png'\)/)
+      source,
+      `${page} captures its bookmark picture without saying what kind of document it is — a markdown document would be drawn as an empty canvas`,
+    ).toMatch(/captureBookmarkPicture\(\s*documentKind/)
   })
 })

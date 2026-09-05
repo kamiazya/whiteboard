@@ -1,8 +1,13 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { MARKDOWN_THEME_NODE } from '../../theme/markdown-theme.js'
-import { layoutMdastBlocks } from './mdast-blocks.js'
+import {
+  type EmbeddedCanvasBox,
+  type EmbeddedCanvasMiniature,
+  layoutMdastBlocks,
+} from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
 const options = { measure, maxWidth: 600, fontFamily: 'sans-serif' }
@@ -927,6 +932,224 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     const paragraph = scene.nodes[0]
     if (paragraph.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Target note'])
+  })
+})
+
+describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
+  const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
+  const embedPara = (documentId: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'embed', documentId }],
+  })
+  const para = (text: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'text', value: text }],
+  })
+  const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
+  const canvas: SpatialCanvas = {
+    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'node' }],
+    edges: [],
+  }
+  const resolveEmbed = (id: string) => (id === A ? { title: 'Board', canvas } : undefined)
+  /** A seam that answers a one-run miniature filling the box it was given. */
+  const layoutEmbeddedCanvas = (
+    _canvas: SpatialCanvas,
+    box: EmbeddedCanvasBox,
+  ): EmbeddedCanvasMiniature => ({
+    nodes: [
+      {
+        kind: 'textRun',
+        bbox: { x: box.x, y: box.y, w: box.maxWidth, h: 20 },
+        baseline: 16,
+        text: 'MINIATURE',
+        appearance: { fontFamily: 'sans-serif', fontSize: 16 },
+      },
+    ],
+    w: box.maxWidth,
+    h: 20,
+  })
+
+  it('lays the target out as a framed miniature under a linked title, advancing the cursor', () => {
+    const boxes: EmbeddedCanvasBox[] = []
+    const scene = layoutMdastBlocks(rootOf([para('before'), embedPara(A), para('after')]), {
+      ...options,
+      resolveEmbed,
+      layoutEmbeddedCanvas: (c, box) => {
+        boxes.push(box)
+        return layoutEmbeddedCanvas(c, box)
+      },
+    })
+    expect(scene.nodes.map((n) => n.kind)).toEqual(['paragraph', 'embedResolved', 'paragraph'])
+    const embed = scene.nodes[1]
+    if (embed.kind !== 'embedResolved') throw new Error('unreachable')
+    expect(embed.documentId).toBe(A)
+    // A frame first (painted under everything), then the title run linked
+    // to the document, then whatever the composer drew.
+    const [frame, title, ...rest] = embed.children
+    if (frame?.kind !== 'shape' || title?.kind !== 'textRun') throw new Error('unexpected shape')
+    expect(frame.bbox).toEqual(embed.bbox)
+    expect(frame.bbox.w).toBe(options.maxWidth)
+    expect(title.text).toBe('Board')
+    expect(title.link).toEqual({ kind: 'embed', documentId: A })
+    expect(rest.map((n) => n.kind === 'textRun' && n.text)).toEqual(['MINIATURE'])
+    // The composer was handed the column minus the frame padding, under the
+    // title, with this document on the recursion path.
+    const pad = MARKDOWN_THEME_NODE.codeBlockPaddingPx
+    expect(boxes).toHaveLength(1)
+    expect(boxes[0]?.maxWidth).toBe(options.maxWidth - 2 * pad)
+    expect(boxes[0]?.x).toBe(pad)
+    expect(boxes[0]?.y).toBeGreaterThanOrEqual(title.bbox.y + title.bbox.h)
+    expect(boxes[0]?.embedPath).toEqual([A])
+    // The miniature sits inside the frame, and the next block starts below it.
+    const miniature = rest[0]
+    if (miniature?.kind !== 'textRun') throw new Error('unreachable')
+    expect(miniature.bbox.y + miniature.bbox.h).toBeLessThanOrEqual(frame.bbox.y + frame.bbox.h)
+    const after = scene.nodes[2]
+    if (after.kind !== 'paragraph') throw new Error('unreachable')
+    expect(after.bbox.y).toBeGreaterThanOrEqual(frame.bbox.y + frame.bbox.h)
+  })
+
+  it('without a canvas composer the block degrades to an unresolvable placeholder', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), { ...options, resolveEmbed })
+    const node = scene.nodes[0]
+    if (node.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+    expect(node.reason).toBe('unresolvable')
+    expect(node.title).toBe('Board')
+  })
+
+  it('a throwing composer keeps the framed title and drops only the miniature', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed,
+      layoutEmbeddedCanvas: () => {
+        throw new Error('boom')
+      },
+    })
+    const embed = scene.nodes[0]
+    if (embed.kind !== 'embedResolved') throw new Error('expected embedResolved')
+    expect(embed.children.map((n) => n.kind)).toEqual(['shape', 'textRun'])
+  })
+
+  it('the caller-supplied embed path seeds cycle detection', () => {
+    // A canvas text node whose body embeds the canvas it is drawn in: the
+    // composer lays the body out with itself already on the path.
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed,
+      layoutEmbeddedCanvas,
+      embedPath: [A],
+    })
+    const node = scene.nodes[0]
+    if (node.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+    expect(node.reason).toBe('cycle')
+  })
+
+  it('the caller-supplied embed path counts toward the depth cap', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A)]), {
+      ...options,
+      resolveEmbed,
+      layoutEmbeddedCanvas,
+      embedPath: ['x', 'y', 'z'],
+    })
+    const node = scene.nodes[0]
+    if (node.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+    expect(node.reason).toBe('depthCap')
+  })
+})
+
+describe('layoutMdastBlocks — a #fragment narrows an embed to the part it names', () => {
+  const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
+  const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
+  const embedPara = (documentId: string, fragment?: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'embed', documentId, ...(fragment === undefined ? {} : { fragment }) }],
+  })
+  const canvas: SpatialCanvas = {
+    nodes: [
+      { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200, label: 'Launch' },
+      { id: 'in', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'inside' },
+      { id: 'out', type: 'text', x: 900, y: 900, width: 100, height: 50, text: 'outside' },
+    ],
+    edges: [],
+  }
+  const note: MdastRoot = rootOf([
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Plan' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'plan body' }] },
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Launch' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'launch body' }] },
+  ])
+  const textsOf = (nodes: readonly unknown[]): string[] => {
+    const out: string[] = []
+    const visit = (node: unknown) => {
+      const entry = node as { kind?: string; text?: string; runs?: unknown[]; children?: unknown[] }
+      if (entry.kind === 'textRun' && entry.text !== undefined) out.push(entry.text)
+      for (const run of entry.runs ?? []) visit(run)
+      for (const child of entry.children ?? []) visit(child)
+    }
+    for (const node of nodes) visit(node)
+    return out
+  }
+
+  it('a group label hands the composer only that group and its members, under a breadcrumb title', () => {
+    const seen: SpatialCanvas[] = []
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Launch')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
+      layoutEmbeddedCanvas: (c, box) => {
+        seen.push(c)
+        return { nodes: [], w: box.maxWidth, h: 0 }
+      },
+    })
+    expect(seen.map((c) => c.nodes.map((n) => n.id))).toEqual([['g', 'in']])
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected embedResolved')
+    const title = embed.children[1]
+    if (title?.kind !== 'textRun') throw new Error('expected the title run')
+    expect(title.text).toBe('Board › Launch')
+    expect(title.link).toEqual({ kind: 'embed', documentId: A, fragment: 'Launch' })
+  })
+
+  it('a fragment the canvas does not hold is an unresolvable placeholder that still names it', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Nope')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
+      layoutEmbeddedCanvas: (_c, box) => ({ nodes: [], w: box.maxWidth, h: 0 }),
+    })
+    const node = scene.nodes[0]
+    if (node?.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+    expect(node.reason).toBe('unresolvable')
+    expect(node.title).toBe('Board › Nope')
+  })
+
+  it('a heading lays out that section of a note and nothing after it', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Plan')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Note', root: note } : undefined),
+    })
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected embedResolved')
+    expect(textsOf(embed.children)).toEqual(['Plan', 'plan body'])
+  })
+
+  it('an inline reference with a fragment reads as a breadcrumb and carries it on the link', () => {
+    const scene = layoutMdastBlocks(
+      rootOf([
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'see ' },
+            { type: 'wikiLink', documentId: A, fragment: 'Launch' },
+          ],
+        },
+      ]),
+      { ...options, resolveTitle: (id) => (id === A ? 'Board' : undefined) },
+    )
+    const paragraph = scene.nodes[0]
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Board › Launch'])
+    expect(paragraph.runs[1]?.link).toEqual({ kind: 'wikiLink', documentId: A, fragment: 'Launch' })
   })
 })
 

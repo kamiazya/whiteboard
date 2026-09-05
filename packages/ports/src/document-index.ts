@@ -43,6 +43,23 @@ export const documentEntrySchema = z
      * to show".
      */
     updatedAt: z.string().optional(),
+    /**
+     * The identity of the document's CONTENT as of this listing — what a
+     * cached picture of it is a picture OF. Opaque; compare for equality
+     * only.
+     *
+     * Not `updatedAt`, and the difference is not resolution. That field is
+     * a register one replica wrote, and a merge does not consult it:
+     * measured, a replica's content took on a state neither side had written
+     * while its `updatedAt` stayed exactly where it was. A key built on the
+     * stamp keeps answering the old picture under an unchanged key. This is
+     * derived from the merged content at read time, so it cannot.
+     *
+     * OPTIONAL for the same reason `updatedAt` is: an index that does not
+     * hold the content cannot derive it, and an invented value is worse than
+     * an absent one. A consumer that finds it absent must not memoise.
+     */
+    contentDigest: z.string().min(1).optional(),
   })
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>

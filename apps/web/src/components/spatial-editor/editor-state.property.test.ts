@@ -61,15 +61,16 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
-import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
-import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
   applyCommand,
   buildFragmentInsertCommand,
   DUPLICATE_OFFSET_PX,
   type EditorCommand,
-} from './commands.js'
-import type { Box, ResizeHandleKind } from './geometry.js'
+} from '../../lib/spatial/commands.js'
+import type { Box, ResizeHandleKind } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
+import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { carriedByGesture } from './gesture-view.js'
 import {
   createIdleState,
@@ -86,7 +87,6 @@ import {
   selectionMembers,
 } from './selection.js'
 import type { ShortcutId } from './shortcuts.js'
-import type { Point } from './viewport.js'
 
 /**
  * The initial document is GENERATED, not fixed, and the geometry is drawn
@@ -317,7 +317,7 @@ const COMMAND_COVERAGE = {
   'set-comment-text':
     'not modelled: written by the edit bubble (comment-edit.browser.test.tsx), outside the gesture machine; single-field write',
   'create-thread':
-    'not modelled: appends the thread’s canvas projection (a node comment) — a single append written by the comment verb on a node’s text selection (node-text-comment.browser.test.tsx); the thread itself is written by document-sync-session.test.ts',
+    'not modelled: appends the thread’s canvas projection (a comment at its node or its set’s corner; nothing for a document or a note passage) — a single append written by the catalog’s Comment on a node’s text selection (node-text-comment.browser.test.tsx) and by Comment on selection (multi-select.browser.test.tsx); the thread itself is written by document-sync-session.test.ts',
   'reply-to-thread':
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>

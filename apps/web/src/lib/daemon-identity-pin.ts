@@ -6,7 +6,7 @@
  * verification and is refused (fail closed; the pin is kept so the
  * key-changed warning has its evidence, per the approved design).
  */
-import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
 
 const PINS_KEY = 'whiteboard:daemon-identity-pins'

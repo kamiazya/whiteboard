@@ -9,11 +9,16 @@
  * treated on the way in.
  */
 
+import type {
+  BinaryFileDataLike,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import {
+  createWorkspaceDocumentAtPath,
   documentContainers,
   projectWorkspaceDocument,
   readSpatialCanvas,
@@ -21,10 +26,6 @@ import {
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  BinaryFileDataLike,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -35,6 +36,7 @@ import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb } from './browser-idb.js'
 /** A canonical id no fixture mints, so a save under it can only be the bug. */
 const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 
@@ -56,14 +58,6 @@ function target(documentId: string, path = 'design'): BrowserBackendTarget {
 // handler call (instead of wall-clock time) keeps the test both fast on a
 // healthy machine and stable under CI load.
 const WAIT_TIMEOUT = 10_000
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
 
 function makeHandlers(overrides: Partial<DocumentBackendHandlers> = {}): DocumentBackendHandlers {
   return {
@@ -121,10 +115,10 @@ function editAsSession(snapshotBytes: Uint8Array, documentId: string, nodeId: st
 
 describe('BrowserBackend', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
   afterEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   it('connect() on an empty store delivers a workspace snapshot already holding the target document', async () => {
@@ -183,6 +177,40 @@ describe('BrowserBackend', () => {
     expect(projected === null ? [] : readSpatialCanvas(projected).nodes.map((n) => n.id)).toEqual([
       'n-old',
     ])
+    backend.disconnect()
+  })
+
+  it('refuses to deliver when another document already owns the target path, without calling it corruption', async () => {
+    // The tree already has a DIFFERENT document standing where this one
+    // wants to be placed. `createWorkspaceDocumentAtPath` answers null for
+    // that, and the backend used to ignore the answer: it saved and delivered
+    // bytes holding no node for the target, and the session then reported
+    // `corrupt-snapshot` — the screen whose one action deletes the record.
+    // Nothing is corrupt. The bytes are intact and say exactly what is there.
+    const workspaceId = getBrowserWorkspaceId()
+    const docs = new BrowserWorkspaceDocs()
+    const seeded = await docs.create(workspaceId)
+    expect(
+      createWorkspaceDocumentAtPath(seeded, { path: 'design', documentId: ID_B, kind: 'spatial' }),
+    ).not.toBeNull()
+    await docs.save(workspaceId, seeded)
+
+    const handlers = makeHandlers()
+    const backend = new BrowserBackend(target(ID_A, 'design'))
+    backend.connect(handlers)
+    await vi.waitFor(
+      () => {
+        expect(handlers.onError).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+
+    // Non-destructive: a reason the page answers with "try again", never
+    // with an offer to start fresh over the document that IS there.
+    expect(handlers.onError).toHaveBeenCalledWith('read-unavailable')
+    // And no snapshot — an editor over bytes that lack this document is how
+    // the next save shadows the one at that path.
+    expect(handlers.onSnapshot).not.toHaveBeenCalled()
     backend.disconnect()
   })
 

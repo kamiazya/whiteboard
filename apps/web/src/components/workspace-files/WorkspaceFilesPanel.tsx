@@ -14,16 +14,16 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
-import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
@@ -128,6 +128,18 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
+  /**
+   * How many cards the last successful listing drew, kept so a RE-READ can
+   * hold the layout it is about to replace.
+   *
+   * A workspace switch nulls `documents`, and the panel used to answer that
+   * with one line of text — measured on a real switch, the panel's box went
+   * 552px -> 0 -> 552 for 47ms, which is the jolt everything below it
+   * inherits. The skeleton below reserves the same room instead, and
+   * `.skeleton-appear`'s 300ms delay means a fast re-read never shows it at
+   * all: quiet background, unchanged geometry.
+   */
+  const lastCardCount = useRef(0)
   // '' is the workspace root, which is where a freshly loaded tree starts —
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
@@ -301,7 +313,9 @@ export function WorkspaceFilesPanel({
     }
     readList()
       .then((entries) => {
-        if (!cancelled) setDocuments(entries)
+        if (cancelled) return
+        lastCardCount.current = entries.length
+        setDocuments(entries)
       })
       .catch((err) => {
         if (cancelled) return
@@ -602,10 +616,6 @@ export function WorkspaceFilesPanel({
   if (listStatus === 'not-found') {
     return <p className="text-muted-foreground text-sm">This workspace has no document tree yet.</p>
   }
-  if (documents === null) {
-    return <p className="text-muted-foreground text-sm">Loading files…</p>
-  }
-
   // Plain function, deliberately not a hook: this sits below the early
   // returns, where a hook would change the count between renders.
   // ContextMenu's x/y contract is ROOT-local (its absolute box resolves
@@ -802,7 +812,29 @@ export function WorkspaceFilesPanel({
         </fieldset>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
-        {query.trim() !== '' ? (
+        {documents === null ? (
+          // A re-read (a workspace switch, most of all) keeps the toolbar
+          // above and the room below: measured on a real switch, replacing
+          // the whole section with one line of text moved the card area up
+          // 38px and back within 54ms, which is the jolt everything inherits.
+          // `.skeleton-appear` holds it invisible for 300ms, so a fast
+          // re-read shows quiet background rather than a flash of
+          // placeholders.
+          <div
+            role="status"
+            aria-label="Loading documents"
+            className="skeleton-appear grid min-w-0 flex-1 grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] content-start gap-2 p-0.5 md:grid-cols-[repeat(auto-fill,minmax(13rem,1fr))]"
+          >
+            {Array.from({ length: Math.max(lastCardCount.current, 1) }, (_, i) => (
+              <div key={i} className="overflow-hidden rounded-md border">
+                <div className="bg-muted/40 aspect-video w-full animate-pulse" />
+                <div className="px-2 py-1.5">
+                  <div className="bg-muted h-4 w-2/3 animate-pulse rounded" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : query.trim() !== '' ? (
           // Results come from everywhere, so neither the folder tree nor the
           // folder's own contents describes them. One flat list, in both
           // column modes — a search that behaved differently per mode would
@@ -950,19 +982,26 @@ export function WorkspaceFilesPanel({
           </div>
         )}
       </div>
-      {source.listTrash !== undefined && source.restoreFromTrash !== undefined && (
-        <TrashSection
-          listTrash={source.listTrash.bind(source)}
-          restoreFromTrash={source.restoreFromTrash.bind(source)}
-          revision={revision}
-          onRestored={() => {
-            // A restore that landed but whose refresh failed leaves the list
-            // stale, not the restore undone — same rule as every other write
-            // here, so the trash section never invents its own error shape.
-            void readList().then(setDocuments, () => undefined)
-          }}
-        />
-      )}
+      {/* Not while the list is loading. The trash is a SECOND list of the
+          departed workspace's documents and reads on its own, so left
+          mounted it keeps showing that workspace's rows under the new
+          address until its own read answers — measured with a trash read
+          that never answers, which is the window this closes. */}
+      {documents !== null &&
+        source.listTrash !== undefined &&
+        source.restoreFromTrash !== undefined && (
+          <TrashSection
+            listTrash={source.listTrash.bind(source)}
+            restoreFromTrash={source.restoreFromTrash.bind(source)}
+            revision={revision}
+            onRestored={() => {
+              // A restore that landed but whose refresh failed leaves the list
+              // stale, not the restore undone — same rule as every other write
+              // here, so the trash section never invents its own error shape.
+              void readList().then(setDocuments, () => undefined)
+            }}
+          />
+        )}
       <PeekDialog
         document={peek}
         loadRender={loadRender}

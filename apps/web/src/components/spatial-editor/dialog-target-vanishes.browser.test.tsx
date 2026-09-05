@@ -17,6 +17,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -67,10 +68,6 @@ function makeHost() {
     )
   }
   return { Host, latest }
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function rightClick(root: HTMLElement, x: number, y: number) {

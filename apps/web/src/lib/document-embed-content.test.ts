@@ -6,6 +6,8 @@
  * by a second read path of its own.
  */
 import 'fake-indexeddb/auto'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -53,7 +55,27 @@ describe('loadMarkdownEmbedSource', () => {
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const source = await loadMarkdownEmbedSource(entry.documentId)
-    expect(source?.body).toBe('legacy body')
-    expect(source?.title).toBe('Old Note')
+    expect(source).toEqual({ body: 'legacy body', title: 'Old Note' })
+  })
+
+  it('answers a spatial document with its canvas rather than an empty body', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'boards/plan',
+      kind: 'spatial',
+      name: 'The Plan',
+    })
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'plan node' }],
+      edges: [],
+    }
+    const doc = new Loro()
+    writeSpatialCanvas(doc, canvas)
+    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+
+    const source = await loadMarkdownEmbedSource(entry.documentId)
+    expect(source).toEqual({ title: 'The Plan', canvas })
   })
 })

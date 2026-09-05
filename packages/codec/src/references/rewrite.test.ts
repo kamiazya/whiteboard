@@ -23,6 +23,12 @@ describe('rewriteReferenceTargets', () => {
     )
   })
 
+  it('moves the document half and keeps a #fragment where it was', () => {
+    expect(
+      rewriteReferenceTargets('![[design/login#Sign in]] [[design/login#Sign in|x]]', map),
+    ).toBe('![[archive/login#Sign in]] [[archive/login#Sign in|x]]')
+  })
+
   it('leaves every other target byte-identical', () => {
     const body = '[[design/logout]] and [[Login flow]] and plain [[design/login-notes]]'
     expect(rewriteReferenceTargets(body, map)).toBe(body)

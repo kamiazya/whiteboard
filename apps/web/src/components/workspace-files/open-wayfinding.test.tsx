@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 // The open wayfinding contract (2026-09-05 redesign decision):
