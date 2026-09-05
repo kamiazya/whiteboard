@@ -3,18 +3,10 @@ import {
   isPidAlive as defaultIsPidAlive,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
-
-export interface DaemonStatusResult {
-  schemaVersion: 1
-  ok: boolean
-  reason: string | null
-  recordFound: boolean
-  recordFresh: boolean
-  pidAlive?: boolean
-  pingOk?: boolean
-  statusOk?: boolean
-  record?: { pid: number; port: number; version: string; startedAt: string }
-}
+import {
+  type DaemonStatusResult,
+  daemonStatusResultSchema,
+} from '../shared/api-contracts/daemon-status.js'
 
 export interface DaemonStatusOptions {
   dataDir: string
@@ -32,33 +24,33 @@ export async function runDaemonStatus(
 
   if (parsed.kind === 'missing') {
     return {
-      result: {
+      result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         reason: 'record-not-found',
         recordFound: false,
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
 
   if (parsed.kind === 'malformed') {
     return {
-      result: {
+      result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         reason: 'record-malformed',
         recordFound: true,
         recordFresh: false,
-      },
+      }),
       exitCode: 1,
     }
   }
 
   if (parsed.kind === 'token-missing') {
     return {
-      result: {
+      result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         reason: 'record-token-missing',
@@ -70,7 +62,7 @@ export async function runDaemonStatus(
           version: parsed.record.version,
           startedAt: parsed.record.startedAt,
         },
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -79,7 +71,7 @@ export async function runDaemonStatus(
 
   if (!alive) {
     return {
-      result: {
+      result: daemonStatusResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         reason: 'process-not-running',
@@ -92,13 +84,13 @@ export async function runDaemonStatus(
           version: parsed.record.version,
           startedAt: parsed.record.startedAt,
         },
-      },
+      }),
       exitCode: 1,
     }
   }
 
   return {
-    result: {
+    result: daemonStatusResultSchema.parse({
       schemaVersion: 1,
       ok: true,
       reason: null,
@@ -111,7 +103,7 @@ export async function runDaemonStatus(
         version: parsed.record.version,
         startedAt: parsed.record.startedAt,
       },
-    },
+    }),
     exitCode: 0,
   }
 }

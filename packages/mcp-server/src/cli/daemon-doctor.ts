@@ -3,23 +3,12 @@ import {
   isPidAlive as defaultIsPidAlive,
   parseDaemonRecord,
 } from '../daemon/daemon-record.js'
-
-type DoctorCheckStatus = 'ok' | 'warning' | 'error' | 'skipped'
-
-interface DaemonDoctorCheck {
-  id: string
-  status: DoctorCheckStatus
-  summary: string
-  detail?: string
-  remediation?: string
-}
-
-export interface DaemonDoctorResult {
-  schemaVersion: 1
-  ok: boolean
-  status: DoctorCheckStatus
-  checks: DaemonDoctorCheck[]
-}
+import {
+  type DaemonDoctorCheck,
+  type DaemonDoctorOverallStatus,
+  type DaemonDoctorResult,
+  daemonDoctorResultSchema,
+} from '../shared/api-contracts/daemon-doctor.js'
 
 export interface DaemonDoctorOptions {
   dataDir: string
@@ -44,7 +33,12 @@ export async function runDaemonDoctor(
       remediation: 'Start the daemon with: whiteboard daemon run --json',
     })
     return {
-      result: { schemaVersion: 1, ok: false, status: 'error', checks },
+      result: daemonDoctorResultSchema.parse({
+        schemaVersion: 1,
+        ok: false,
+        status: 'error',
+        checks,
+      }),
       exitCode: 1,
     }
   }
@@ -57,7 +51,12 @@ export async function runDaemonDoctor(
       remediation: 'Remove the daemon record and restart: whiteboard daemon run --json',
     })
     return {
-      result: { schemaVersion: 1, ok: false, status: 'error', checks },
+      result: daemonDoctorResultSchema.parse({
+        schemaVersion: 1,
+        ok: false,
+        status: 'error',
+        checks,
+      }),
       exitCode: 1,
     }
   }
@@ -70,7 +69,12 @@ export async function runDaemonDoctor(
       remediation: 'Restart the daemon: whiteboard daemon run --json',
     })
     return {
-      result: { schemaVersion: 1, ok: false, status: 'error', checks },
+      result: daemonDoctorResultSchema.parse({
+        schemaVersion: 1,
+        ok: false,
+        status: 'error',
+        checks,
+      }),
       exitCode: 1,
     }
   }
@@ -90,14 +94,14 @@ export async function runDaemonDoctor(
     remediation: alive ? undefined : 'Start the daemon: whiteboard daemon run --json',
   })
 
-  const overallStatus: DoctorCheckStatus = alive ? 'ok' : 'error'
+  const overallStatus: DaemonDoctorOverallStatus = alive ? 'ok' : 'error'
   return {
-    result: {
+    result: daemonDoctorResultSchema.parse({
       schemaVersion: 1,
       ok: alive,
       status: overallStatus,
       checks,
-    },
+    }),
     exitCode: alive ? 0 : 1,
   }
 }
