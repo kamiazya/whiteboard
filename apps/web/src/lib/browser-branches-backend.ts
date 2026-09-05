@@ -36,9 +36,9 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
+import { getAppLogger } from './app-logger.js'
 import type { BranchesBackend } from './branches-backend.js'
 import { BranchesUnsupportedError } from './branches-backend.js'
-import { getAppLogger } from './app-logger.js'
 import type { BrowserBackend } from './browser-backend.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 
