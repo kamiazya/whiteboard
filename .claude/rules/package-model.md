@@ -47,8 +47,14 @@ paths:
   is a CLOSED discriminated union so every renderer's switch over it stays
   exhaustive. Every arm has the same shape — an optional object reference plus
   a positional fallback — because the reference is what survives the object
-  moving and the position is what survives it being deleted. Supporting a new
-  document format means adding an arm here, never widening an existing one.
+  moving and the position is what survives it being deleted. The arm is the
+  SURFACE and the reference names an object on it: the spatial arm names a
+  node or an edge, the text arm names the node whose text holds the passage
+  (absent, a note's own body). Supporting a new document format means adding
+  an arm here; a new object on an existing surface is a new reference on
+  that surface's arm, never a new arm. `ANNOTATION_ANCHOR_KINDS` is read off
+  the schema, and `annotation.test.ts` checks the generator draws every arm
+  and every reference, so neither can be added without the other.
 - A key joins `RESERVED_ROOT_KEYS` the moment something INTERPRETS it, and not before. Until then
   `facetsRaw` is the right home: preserved verbatim, never half-understood.
 

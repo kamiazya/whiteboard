@@ -8,7 +8,7 @@ import type {
 } from '@kamiazya/whiteboard-model/mdast'
 import { LineBreaker } from 'css-line-break'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
-import type { MeasureText } from '../../measure.js'
+import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import type {
   Appearance,
@@ -81,6 +81,19 @@ function panelPaint(theme: MarkdownTheme, opacity: number): Appearance {
  */
 function baselineIn(lineHeightPx: number, fontSizePx: number, ascent: number): number {
   return (lineHeightPx - fontSizePx) / 2 + ascent
+}
+
+/**
+ * The font a laid-out run was measured with, rebuilt from what the run
+ * declares: every run is stamped with the family and size it was measured
+ * at (see `pushRun`), and its weight and slant are its own flags. Undefined
+ * for a run that declares neither, which nothing in this file emits.
+ */
+export function runFontOf(run: TextRunNode): FontDescriptor | undefined {
+  const family = run.appearance?.fontFamily
+  const sizePx = run.appearance?.fontSize
+  if (family === undefined || sizePx === undefined) return undefined
+  return bodyFont(family, sizePx, { emphasis: run.emphasis, strong: run.strong })
 }
 
 function bodyFont(

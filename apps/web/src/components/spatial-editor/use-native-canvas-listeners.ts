@@ -1,4 +1,5 @@
 import { type MutableRefObject, type RefObject, useEffect, useRef } from 'react'
+import { isEditorOverlayTarget } from './editor-overlay.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 
 /**
@@ -51,12 +52,7 @@ export function useNativeCanvasListeners<T extends { timer: ReturnType<typeof se
     const root = rootRef.current
     if (root === null) return
     const refuseNativeTouch = (event: TouchEvent) => {
-      if (
-        event.target instanceof Element &&
-        event.target.closest('[data-editor-overlay]') !== null
-      ) {
-        return
-      }
+      if (isEditorOverlayTarget(event.target)) return
       event.preventDefault()
     }
     root.addEventListener('touchstart', refuseNativeTouch, { passive: false })

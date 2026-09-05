@@ -116,8 +116,10 @@ it('the drag preview starts exactly on the drawn chrome, so pressing a pin does 
     clientY: r.top + 300,
   })
   await new Promise((resolve) => requestAnimationFrame(resolve))
-  // A first move with no travel: the preview is up at delta zero.
-  fireEvent.pointerMove(root, { pointerId: 2, clientX: r.left + 300, clientY: r.top + 300 })
+  // The press alone arms nothing (the surface stays as drawn under the
+  // pointer); the first move past the slop puts the preview up, carried by
+  // exactly that move — so it sits on the drawn chrome plus the travel.
+  fireEvent.pointerMove(root, { pointerId: 2, clientX: r.left + 306, clientY: r.top + 300 })
   await vi.waitFor(() =>
     expect(container.querySelector('[data-testid="comment-drag-preview"]')).not.toBeNull(),
   )
@@ -127,7 +129,7 @@ it('the drag preview starts exactly on the drawn chrome, so pressing a pin does 
       '[data-testid="comment-drag-preview"] rect[rx="8"]',
     ) as SVGRectElement
   ).getBoundingClientRect()
-  expect(Math.abs(preview.left - drawn.left)).toBeLessThan(1)
+  expect(Math.abs(preview.left - (drawn.left + 6))).toBeLessThan(1)
   expect(Math.abs(preview.top - drawn.top)).toBeLessThan(1)
   fireEvent.pointerCancel(root, { pointerId: 2 })
 })

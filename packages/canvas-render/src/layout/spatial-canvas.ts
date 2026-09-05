@@ -27,12 +27,15 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type {
+  AnchorRect,
   CanvasComment,
   CanvasEdge,
+  CommentThread,
   EdgeRoutingStyle,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
@@ -50,7 +53,12 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
+import {
+  commentLeaderEnd,
+  nearestPointOnPolyline,
+  placeCommentBubble,
+} from './comment-placement.js'
+import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
 import {
@@ -76,6 +84,12 @@ import {
 } from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { fitToWidth } from './nodes/truncate.js'
+import {
+  collectTextRuns,
+  composePassageHighlights,
+  type NodePassage,
+  nodePassagesOf,
+} from './passage-highlight.js'
 import { scaleScene } from './scale-scene.js'
 import { translateScene } from './translate-scene.js'
 
@@ -315,6 +329,17 @@ export interface SpatialLayoutOptions {
    * unmigrated caller byte-identical, and it goes once none is left.
    */
   readonly comments?: readonly CanvasComment[]
+  /**
+   * The document's conversations, for what the flat `comments` cannot
+   * carry: a thread about a PASSAGE of a text node's text (the text arm
+   * naming a node, ADR-0026 §3) is drawn as a highlight behind the words it
+   * quotes, re-found in the node's laid-out runs by its quote. Pins and
+   * bubbles still come from `comments` / the envelope — the projection a
+   * caller's optimistic state already holds — so a caller passes both.
+   * Absent, no passage is highlighted; the pin at the node's corner still
+   * says the conversation exists.
+   */
+  readonly threads?: readonly CommentThread[]
 }
 
 /**
@@ -375,6 +400,14 @@ export interface ResolvedReference {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /** `threads`'s node passages, grouped by the node they are about. */
+  readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
+  /**
+   * `threads`'s node sets and regions, by thread id: the box each stands
+   * for on THIS canvas (live node bounds, else the stored rect), which is
+   * where its outline is drawn and where its pin stands.
+   */
+  readonly regionsByThread: ReadonlyMap<string, RegionChrome>
   /** The contribution set actually in force, defaulted once at the entry
    *  point so no inner function repeats the `?? [visual]`. */
   readonly contributions: readonly RenderContribution[]
@@ -696,7 +729,35 @@ function composeTextNode(
       body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
     }
   }
-  return [chromeWithFit(node, options, body), ...placeInNode(node, { nodes: body.nodes }, options)]
+  // Behind the runs, in the same origin-relative space, so `placeInNode`
+  // carries them into the node together. A resolved passage is drawn only
+  // with the resolved comments, muted like its pin.
+  const passages = (options.passagesByNode.get(node.id) ?? []).filter(
+    (passage) => !passage.resolved || options.showResolved === true,
+  )
+  const highlights =
+    passages.length === 0
+      ? []
+      : composePassageHighlights(passages, collectTextRuns(body.nodes), options.measure, {
+          open: options.appearance.resolveComment?.()?.passage,
+          resolved: options.appearance.resolveComment?.()?.resolvedOverlay.passage,
+        })
+  return [
+    chromeWithFit(node, options, body),
+    ...placeInNode(node, { nodes: [...highlights, ...body.nodes] }, options),
+  ]
+}
+
+function groupPassages(
+  passages: readonly NodePassage[],
+): ReadonlyMap<string, readonly NodePassage[]> {
+  const byNode = new Map<string, NodePassage[]>()
+  for (const passage of passages) {
+    const list = byNode.get(passage.nodeId) ?? []
+    list.push(passage)
+    byNode.set(passage.nodeId, list)
+  }
+  return byNode
 }
 
 /**
@@ -1247,6 +1308,8 @@ export function layoutSpatialCanvasWithAnchors(
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
     ...resolved,
+    passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
+    regionsByThread: regionsOf(options.threads ?? [], canvas),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1280,6 +1343,10 @@ export function naturalNodeContentSize(
   const content = composeNode(node, {
     ...options,
     ...resolveContributions(options),
+    // A natural size asks how big the box must be; a highlight adds no
+    // extent beyond the words it sits under, so none is composed here.
+    passagesByNode: new Map(),
+    regionsByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1392,9 +1459,22 @@ function layoutSpatialCanvasInternal(
   ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
   // Comments LAST: the annotation layer paints above every node and edge,
-  // which a flat document-order paint list can only express by position.
-  const commentContent = composeComments(canvas, resolved)
-  return { scene: { nodes: [...nodeContent, ...content, ...commentContent] }, anchors }
+  // which a flat document-order paint list can only express by position —
+  // and after the edges are ROUTED, since a comment about an edge is pinned
+  // on the path the edge was actually drawn along.
+  const edgePaths = new Map<string, readonly { x: number; y: number }[]>()
+  for (const node of content) {
+    if (node.kind === 'edge' && node.id !== undefined) {
+      edgePaths.set(node.id, flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true))
+    }
+  }
+  // Region outlines go under the pins, over everything they enclose.
+  const regionContent = composeRegionOutlines(resolved)
+  const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
+  return {
+    scene: { nodes: [...nodeContent, ...content, ...regionContent, ...commentContent] },
+    anchors,
+  }
 }
 
 /** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
@@ -1408,25 +1488,86 @@ const COMMENT_TEXT_MAX_WIDTH_PX = 200
 export const COMMENT_BUBBLE_PADDING_PX = 8
 export const COMMENT_BUBBLE_RADIUS_PX = 8
 
+/** The routed path of an edge, by id, as the layout drew it — absent when the edge is gone. */
+export type EdgePathLookup = (edgeId: string) => readonly { x: number; y: number }[] | undefined
+
 /**
  * Where a comment points: the target node's top-right corner while the node
- * exists (the pin FOLLOWS the node), the stored anchor otherwise. The
- * fallback is what makes a dangling `targetNodeId` harmless, per the model's
- * contract that a comment may outlive its subject.
+ * exists (the pin FOLLOWS the node); the point of the target edge's routed
+ * path nearest the stored anchor while the edge exists (the pin RIDES the
+ * edge through a reroute); the stored anchor otherwise. The fallback is what
+ * makes a dangling target harmless, per the model's contract that a comment
+ * may outlive its subject.
  *
  * Exported because the editor places its compose bubble and its edit bubble
  * at the same anchor this layer draws from — one producer for the geometry,
- * so the draft cannot open one place and settle another.
+ * so the draft cannot open one place and settle another. The editor passes
+ * the paths it already flattened for hit-testing as `edgePathOf`; without
+ * one, an edge comment stands at its stored point.
  */
 export function commentAnchor(
   comment: CanvasComment,
   canvas: SpatialCanvas,
+  edgePathOf?: EdgePathLookup,
 ): { readonly x: number; readonly y: number } {
   if (comment.targetNodeId !== undefined) {
     const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
     if (target !== undefined) return { x: target.x + target.width, y: target.y }
   }
+  if (comment.targetEdgeId !== undefined) {
+    const path = edgePathOf?.(comment.targetEdgeId)
+    if (path !== undefined && path.length > 0) {
+      return nearestPointOnPolyline({ x: comment.x, y: comment.y }, path)
+    }
+  }
   return { x: comment.x, y: comment.y }
+}
+
+/** A node set or region thread, with the box it stands for on this canvas. */
+interface RegionChrome {
+  readonly rect: AnchorRect
+  readonly resolved: boolean
+}
+
+function regionsOf(
+  threads: readonly CommentThread[],
+  canvas: SpatialCanvas,
+): ReadonlyMap<string, RegionChrome> {
+  const nodeById = (id: string) => canvas.nodes.find((node) => node.id === id)
+  const out = new Map<string, RegionChrome>()
+  for (const thread of threads) {
+    if (thread.anchor.kind !== 'spatial') continue
+    const rect = spatialAnchorRect(thread.anchor, nodeById)
+    if (rect !== undefined) out.set(thread.id, { rect, resolved: thread.status === 'resolved' })
+  }
+  return out
+}
+
+/** Outline radius (px): the pin's, so the chrome reads as one family. */
+const REGION_OUTLINE_RADIUS_PX = 6
+
+/**
+ * One dashed outline per node set or region: the box the conversation is
+ * about, drawn so its pin has something to point at. Ids `${threadId}/region`
+ * and `commentChrome: true`, like the pin. Resolved ones follow the pin's
+ * rule — drawn muted under `showResolved`, otherwise not at all.
+ */
+function composeRegionOutlines(options: ResolvedLayoutOptions): readonly SceneNode[] {
+  const chrome = options.appearance.resolveComment?.()
+  const out: SceneNode[] = []
+  for (const [threadId, { rect, resolved }] of options.regionsByThread) {
+    if (resolved && options.showResolved !== true) continue
+    const appearance = resolved ? chrome?.resolvedOverlay.region : chrome?.region
+    out.push({
+      kind: 'shape',
+      id: `${threadId}/region`,
+      commentChrome: true,
+      bbox: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
+      radius: REGION_OUTLINE_RADIUS_PX,
+      ...(appearance !== undefined ? { appearance } : {}),
+    })
+  }
+  return out
 }
 
 /**
@@ -1456,6 +1597,7 @@ export function commentAnchor(
 function composeComments(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,
+  edgePathOf: EdgePathLookup,
 ): readonly SceneNode[] {
   const comments = options.comments ?? canvas['x-whiteboard']?.comments
   if (comments === undefined || comments.length === 0) return []
@@ -1475,7 +1617,14 @@ function composeComments(
     // bare resolver (no `resolveComment`) still composes full geometry with
     // no appearance at all, resolved or not.
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    const anchor = commentAnchor(comment, canvas)
+    // A node set's pin stands at the corner of the box its LIVE nodes
+    // occupy, read from the thread: the flat projection's point is where
+    // that box was when it was last projected, and the nodes move.
+    const region = options.regionsByThread.get(comment.id)
+    const anchor =
+      region !== undefined
+        ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+        : commentAnchor(comment, canvas, edgePathOf)
 
     // The text goes through the same mdast pipeline as a text node's body,
     // so wrapping (CJK included) and theming have one producer. A parse
@@ -1615,6 +1764,8 @@ export function layoutSpatialEdges(
   return composeEdgesAndLabels(canvas, {
     ...options,
     ...resolveContributions(options),
+    passagesByNode: new Map(),
+    regionsByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,

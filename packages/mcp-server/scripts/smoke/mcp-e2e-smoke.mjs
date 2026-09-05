@@ -778,6 +778,94 @@ async function main() {
   }
   console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
 
+  // The two references a spatial anchor may carry beyond a node, and the
+  // text arm naming a node: an EDGE comment, and a comment on a passage of
+  // a node's text. Both reach canvas_view through the projection — the edge
+  // one carrying its edge, the passage one standing at its node — which is
+  // what the widget draws pins from, and what no unit test of the tool sees.
+  const anchoredOnCanvas = await callTool('wb_thread_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [
+      {
+        op: 'thread.add',
+        threadId: 'smoke-edge-thread',
+        anchor: { kind: 'spatial', edgeId: 'link', x: 100, y: 50 },
+        body: 'about this connection',
+        author: 'agent:smoke',
+      },
+      {
+        op: 'thread.add',
+        threadId: 'smoke-passage-thread',
+        anchor: { kind: 'text', nodeId: 'lockable', quote: { exact: 'lock' }, start: 0, end: 4 },
+        body: 'about this word',
+        author: 'agent:smoke',
+      },
+      // The three anchors with no single object: a node set, a bare
+      // region, and the document itself.
+      {
+        op: 'thread.add',
+        threadId: 'smoke-set-thread',
+        anchor: {
+          kind: 'spatial',
+          nodeIds: ['lockable', 'target'],
+          x: 0,
+          y: 0,
+          width: 1,
+          height: 1,
+        },
+        body: 'about these two',
+        author: 'agent:smoke',
+      },
+      {
+        op: 'thread.add',
+        threadId: 'smoke-region-thread',
+        anchor: { kind: 'spatial', x: 600, y: 600, width: 200, height: 100 },
+        body: 'about this empty corner',
+        author: 'agent:smoke',
+      },
+      {
+        op: 'thread.add',
+        threadId: 'smoke-document-thread',
+        anchor: { kind: 'document' },
+        body: 'about the whole canvas',
+        author: 'agent:smoke',
+      },
+    ],
+  })
+  if (anchoredOnCanvas.threads?.length < 6) {
+    throw new Error(`thread.add on the canvas did not report: ${JSON.stringify(anchoredOnCanvas)}`)
+  }
+  const afterAnchors = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const projected = afterAnchors.scene['x-whiteboard']?.comments ?? []
+  const edgeProjected = projected.find((c) => c.id === 'smoke-edge-thread')
+  const passageProjected = projected.find((c) => c.id === 'smoke-passage-thread')
+  if (edgeProjected?.targetEdgeId !== 'link') {
+    throw new Error(`an edge thread did not project with its edge: ${JSON.stringify(projected)}`)
+  }
+  if (passageProjected?.targetNodeId !== 'lockable') {
+    throw new Error(`a node passage did not project onto its node: ${JSON.stringify(projected)}`)
+  }
+  // A region projects to its top-right corner; the document arm projects to
+  // nothing (the panel is its only surface) — and every thread reaches the
+  // widget whole through `threads`, which is what draws the outline.
+  const regionProjected = projected.find((c) => c.id === 'smoke-region-thread')
+  if (regionProjected?.x !== 800 || regionProjected?.y !== 600) {
+    throw new Error(`a region did not project to its corner: ${JSON.stringify(regionProjected)}`)
+  }
+  if (projected.some((c) => c.id === 'smoke-document-thread')) {
+    throw new Error('a document-level thread projected onto the canvas')
+  }
+  const widgetThreadIds = (afterAnchors.threads ?? []).map((t) => t.id)
+  for (const id of ['smoke-set-thread', 'smoke-region-thread', 'smoke-document-thread']) {
+    if (!widgetThreadIds.includes(id)) {
+      throw new Error(`canvas_view did not carry thread ${id}: ${JSON.stringify(widgetThreadIds)}`)
+    }
+  }
+  console.log(
+    '[e2e] wb_thread_edit → edge, node-passage, node-set, region and document threads reach canvas_view',
+  )
+
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read
   // below cannot cover it. It is also the only tool result still built

@@ -10,7 +10,7 @@ import {
   layoutSpatialCanvas,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
@@ -42,6 +42,8 @@ function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
  */
 export interface ComposeCanvasSceneOptions {
   readonly references?: ReadonlyMap<string, ResolvedReference>
+  /** The document's conversations, for passage highlights inside text nodes. */
+  readonly threads?: readonly CommentThread[]
   /**
    * What a `![[embed]]` inside a laid-out body resolves to, and what labels
    * a bare `[[link]]` — the markdown seams, forwarded to every body the
@@ -78,6 +80,8 @@ export function composeCanvasScene(
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
+    ...(references === undefined ? {} : { resolveReference: (ref: string) => references.get(ref) }),
+    ...(options?.threads === undefined ? {} : { threads: options.threads }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's
     // words: a node's intrinsic size, not its zoom.

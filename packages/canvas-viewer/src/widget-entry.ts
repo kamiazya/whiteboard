@@ -4,6 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
+import { type CommentThread, commentThreadSchema } from '@kamiazya/whiteboard-model'
 import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { App } from '@modelcontextprotocol/ext-apps'
 import { z } from 'zod'
@@ -109,6 +110,22 @@ const referenceSchema = z.object({
   body: mdastRootSchema.optional(),
 })
 
+/**
+ * Keeps the threads that parse, drops the ones that do not — per thread, like
+ * the references, so one malformed conversation costs the highlight of that
+ * conversation and never the scene.
+ */
+function parseThreads(raw: readonly unknown[] | undefined) {
+  if (raw === undefined) return undefined
+  const kept: CommentThread[] = []
+  for (const value of raw) {
+    const parsed = commentThreadSchema.safeParse(value)
+    if (parsed.success) kept.push(parsed.data)
+    else console.error('[whiteboard-widget] dropping unparseable thread:', parsed.error)
+  }
+  return kept.length > 0 ? kept : undefined
+}
+
 /** Keeps the references that parse, drops the ones that do not. */
 function parseReferences(raw: Record<string, unknown> | undefined) {
   if (raw === undefined) return undefined
@@ -133,6 +150,7 @@ const toolResultEnvelopeSchema = z.object({
       // the widget would go blank because a document it merely POINTS AT
       // was malformed.
       references: z.record(z.string(), z.unknown()).optional(),
+      threads: z.array(z.unknown()).optional(),
     })
     .catchall(z.unknown())
     .optional(),
@@ -143,6 +161,7 @@ function extractCanvasIdAndScene(payload: unknown): {
   documentId?: string
   scene?: unknown
   references?: MountCanvasViewerOptions['references']
+  threads?: MountCanvasViewerOptions['threads']
 } {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
@@ -152,6 +171,7 @@ function extractCanvasIdAndScene(payload: unknown): {
     documentId: structuredContent?.documentId,
     scene: structuredContent?.scene,
     references: parseReferences(structuredContent?.references),
+    threads: parseThreads(structuredContent?.threads),
   }
 }
 
@@ -188,7 +208,7 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { workspaceId, documentId, scene, references } = extractCanvasIdAndScene(payload)
+  const { workspaceId, documentId, scene, references, threads } = extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -204,6 +224,7 @@ function applyToolResult(
     mountCanvasViewer(container, {
       scene,
       ...(references === undefined ? {} : { references }),
+      ...(threads === undefined ? {} : { threads }),
     }),
   )
   onValidResult(workspaceId, documentId, result.value)

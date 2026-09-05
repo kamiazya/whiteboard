@@ -12,7 +12,7 @@ import {
 } from './active-markdown-editor.js'
 
 function fakeEditor(): ActiveMarkdownEditor {
-  return { run: vi.fn(), headingLevel: () => 0 }
+  return { run: vi.fn(), headingLevel: () => 0, focus: vi.fn(), selectedRange: () => null }
 }
 
 describe('active markdown editor registry', () => {

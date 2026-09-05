@@ -7,7 +7,7 @@
 // its whole hit-testing input.
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
-import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
+import { commentAnchor, type EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -15,6 +15,8 @@ import type { CommentComposeState } from './CanvasContextMenu.js'
 
 export interface CommentStateInputs {
   readonly canvasRef: MutableRefObject<SpatialCanvas>
+  /** The routed edge paths, for a comment about an edge to open its editor on the path. */
+  readonly edgePathOf: EdgePathLookup
   readonly commentChromeBoxes: readonly {
     readonly commentId: string
     readonly part: string
@@ -22,7 +24,7 @@ export interface CommentStateInputs {
   }[]
 }
 
-export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateInputs) {
+export function useCommentState({ canvasRef, edgePathOf, commentChromeBoxes }: CommentStateInputs) {
   /**
    * What a comment's bubble is placed around — the same obstacle set
    * canvas-render's placer sees for it: every node that is not a group
@@ -71,7 +73,7 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
   /** Opens the compose bubble over an existing comment, pre-filled, to rewrite its text. */
   const openCommentEditor = (comment: CanvasComment) => {
     setCommentCompose({
-      point: commentAnchor(comment, canvasRef.current),
+      point: commentAnchor(comment, canvasRef.current, edgePathOf),
       editing: { id: comment.id, initialText: comment.text },
     })
   }
@@ -84,10 +86,24 @@ export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateI
   const [openCommentId, setOpenCommentId] = useState<string | null>(null)
   /**
    * The comment a press landed on, read back at the release. A press that
-   * never travelled opens the card; one that travelled was a pin drag and
-   * the drag branch owns it.
+   * never travelled opens the card; one that travelled became a pin drag at
+   * its first move and the drag branch owns it.
+   *
+   * The press arms NOTHING visible. Arming the drag here — which takes the
+   * committed copy out of the surface for the preview — removed the very
+   * element a finger's pointer is implicitly captured on, so the release
+   * was delivered to a detached node and never reached the root. The
+   * stale press and drag then replayed on every later tap: a tap on the
+   * canvas re-opened the card the tap had just shut, and a tap on the
+   * card's reply box moved the comment instead of focusing the box. A
+   * mouse never showed it, since an uncaptured release is hit-tested at
+   * the release. So the surface is left alone until the pointer travels.
    */
-  const pressedCommentRef = useRef<string | null>(null)
+  const pressedCommentRef = useRef<{
+    readonly comment: CanvasComment
+    readonly startScreen: Point
+    readonly startPoint: Point
+  } | null>(null)
   /**
    * A point-anchored comment's pin being dragged: the comment as it was
    * at the press (its stored anchor), the press point, and the live

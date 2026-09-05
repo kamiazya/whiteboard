@@ -305,6 +305,11 @@ export function SourcePane({
         view.focus()
       },
       headingLevel: () => headingLevelAt(view.state),
+      focus: () => view.focus(),
+      selectedRange: () => {
+        const { from, to } = view.state.selection.main
+        return from === to ? null : { from, to }
+      },
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
     }
     if (apiRef) {

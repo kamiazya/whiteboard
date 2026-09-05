@@ -188,6 +188,12 @@ export const canvasCommentSchema = z.object({
   author: okfActorSchema.optional(),
   createdAt: okfTimestampSchema.optional(),
   targetNodeId: nodeIdSchema.optional(),
+  /**
+   * The edge the comment is about, the way `targetNodeId` names a node: a
+   * renderer keeps the pin on the edge's routed path and falls back to the
+   * anchor point when the edge is gone. Never both.
+   */
+  targetEdgeId: nodeIdSchema.optional(),
   resolved: z.boolean().optional(),
 })
 
