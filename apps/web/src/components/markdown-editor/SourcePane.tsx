@@ -125,6 +125,14 @@ export interface SourcePaneApi {
    */
   selectedRange: () => { from: number; to: number } | null
   /**
+   * Where the caret is, whether or not anything is selected — the fallback
+   * scope for an annotation, which quotes the BLOCK around it when the
+   * reader has selected nothing. Separate from `selectedRange` because the
+   * two answer different questions and a caller wants both: a selection is
+   * what the reader said, and this is where they are.
+   */
+  caretOffset: () => number
+  /**
    * Dispatches state effects into the live view, WITHOUT claiming focus —
    * the seam for a host extension whose data changes while the view lives.
    * `run` cannot serve that: it focuses the editor afterwards, which is
@@ -271,6 +279,23 @@ export function SourcePane({
             caretColor: 'var(--foreground)',
           },
           '.cm-line': { padding: '0 24px' },
+          // CodeMirror's base theme fills the gutters light grey and rules a
+          // light line down their right edge. Unoverridden, that painted a
+          // near-white band down the left of the body on the dark theme —
+          // and since the annotation gutter reserves its width whether or
+          // not the document has conversations, the band was there on a
+          // document with none. Unpainted, the reserve reads as the body's
+          // own margin until a marker appears in it.
+          //
+          // Here rather than in index.css: CodeMirror injects its base theme
+          // UNLAYERED, and this app's stylesheet is inside a Tailwind
+          // `@layer`, which loses to unlayered rules whatever their
+          // specificity. The editor's own theme is the one place that wins.
+          //
+          // Transparent rather than a colour, so the gutter takes whatever
+          // ground the pane is on. Safe because lines wrap here: there is no
+          // horizontal scroll for the sticky gutter to have to cover.
+          '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
           // Out of the line's flow: upstream renders the placeholder as an
           // inline-block INSIDE the first line, and Android places the
           // native caret (and its selection handle) after that span — the
@@ -343,6 +368,7 @@ export function SourcePane({
           const { from, to } = view.state.selection.main
           return from === to ? null : { from, to }
         },
+        caretOffset: () => view.state.selection.main.head,
         applyEffects: (effects) => {
           if (effects.length > 0) view.dispatch({ effects: [...effects] })
         },
