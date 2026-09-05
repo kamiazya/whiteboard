@@ -318,6 +318,8 @@ const COMMAND_COVERAGE = {
     'not modelled: written by the edit bubble (comment-edit.browser.test.tsx), outside the gesture machine; single-field write',
   'reply-to-thread':
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
+  'create-thread':
+    "not modelled: identity on the canvas for reply-to-thread's reason, and its gesture is a markdown selection this canvas model has no body to make. Its write path is document-sync-session.test.ts and its gesture is markdown-thread-create.browser.test.tsx",
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
 
 /** Every event the gesture state machine accepts. All of them are driven. */
