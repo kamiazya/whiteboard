@@ -105,3 +105,54 @@ it('a tap on the canvas surface itself is still refused, so a pan is never a pag
   const content = container.querySelector('[data-testid="canvas-content"]') as Element
   expect(touchStartOn(content)).toBe(true)
 })
+
+/**
+ * A finger's tap on the bubble as a touch browser delivers it: the release
+ * goes to the element the press implicitly captured — the bubble's own text
+ * — EVEN IF that element has since left the document (iOS keeps delivering
+ * to the original target). A press that pulled the bubble out of the surface
+ * to arm its drag therefore never saw its release, and the stale press and
+ * drag replayed on every later tap.
+ */
+function fingerTapAt(root: HTMLElement, x: number, y: number, pointerId: number) {
+  const r = root.getBoundingClientRect()
+  const clientX = r.left + x
+  const clientY = r.top + y
+  const target = document.elementFromPoint(clientX, clientY) ?? root
+  const at = { pointerId, pointerType: 'touch', isPrimary: true, clientX, clientY }
+  fireEvent.pointerDown(target, { button: 0, ...at })
+  // The same node, whether or not it is still attached.
+  fireEvent.pointerUp(target, at)
+  return target
+}
+
+it('a finger opens the card on its FIRST tap, the release landing on the node it pressed', async () => {
+  const { container } = render(<Host />)
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+      'free note',
+    ),
+  )
+  const root = rootOf(container)
+  const pressed = fingerTapAt(root, 625, 470, 21)
+  // The press left the bubble in the document, so the release reached the root.
+  expect(pressed.isConnected).toBe(true)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+
+  // A tap on empty canvas shuts it, and nothing stale re-opens it at the release.
+  fingerTapAt(root, 60, 560, 22)
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
+  await new Promise((resolve) => setTimeout(resolve, 100))
+  expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
+
+  // Re-opened, a tap on the reply box focuses it rather than moving the comment.
+  fingerTapAt(root, 625, 470, 23)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  const box = page.getByLabelText('Reply').element() as HTMLElement
+  const b = box.getBoundingClientRect()
+  const rr = root.getBoundingClientRect()
+  fingerTapAt(root, b.left - rr.left + b.width / 2, b.top - rr.top + b.height / 2, 24)
+  box.focus()
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  expect(document.activeElement).toBe(box)
+})

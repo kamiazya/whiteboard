@@ -86,10 +86,24 @@ export function useCommentState({ canvasRef, edgePathOf, commentChromeBoxes }: C
   const [openCommentId, setOpenCommentId] = useState<string | null>(null)
   /**
    * The comment a press landed on, read back at the release. A press that
-   * never travelled opens the card; one that travelled was a pin drag and
-   * the drag branch owns it.
+   * never travelled opens the card; one that travelled became a pin drag at
+   * its first move and the drag branch owns it.
+   *
+   * The press arms NOTHING visible. Arming the drag here — which takes the
+   * committed copy out of the surface for the preview — removed the very
+   * element a finger's pointer is implicitly captured on, so the release
+   * was delivered to a detached node and never reached the root. The
+   * stale press and drag then replayed on every later tap: a tap on the
+   * canvas re-opened the card the tap had just shut, and a tap on the
+   * card's reply box moved the comment instead of focusing the box. A
+   * mouse never showed it, since an uncaptured release is hit-tested at
+   * the release. So the surface is left alone until the pointer travels.
    */
-  const pressedCommentRef = useRef<string | null>(null)
+  const pressedCommentRef = useRef<{
+    readonly comment: CanvasComment
+    readonly startScreen: Point
+    readonly startPoint: Point
+  } | null>(null)
   /**
    * A point-anchored comment's pin being dragged: the comment as it was
    * at the press (its stored anchor), the press point, and the live

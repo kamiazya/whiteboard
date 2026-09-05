@@ -441,6 +441,13 @@ function navigationPointerKind(pointerType: string): PointerKind {
 const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 
+/**
+ * Screen px a press on a comment may wander before it is a pin drag rather
+ * than a tap. A finger's tap is never perfectly still, and below this the
+ * release opens the card instead of moving the comment by nothing.
+ */
+const COMMENT_PRESS_SLOP_PX = 4
+
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const ZOOM_WHEEL_FACTOR = 1.1
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
@@ -1043,16 +1050,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (hitCommentId !== undefined) {
         const comment = commentById(hitCommentId)
         if (comment === undefined) return
-        pressedCommentRef.current = comment.id
-        if (comment.targetNodeId === undefined) {
-          setCommentDrag({
-            comment,
-            startPoint: point,
-            live: null,
-            obstacles: commentPlacementObstacles(comment.id),
-            dropped: null,
-          })
-        }
+        pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
         return
       }
       // Deliberately NO pointer capture here. Capturing on the press
@@ -1265,6 +1263,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         e.timeStamp,
       )
       if (!navigation.fallThrough) return
+      const pressedComment = pressedCommentRef.current
+      if (pressedComment !== null && commentDrag === null) {
+        // A press that travels past the slop becomes a pin drag — of a
+        // point-anchored comment only; a node-anchored comment's anchor is
+        // its node's corner, and moving the node is how it moves. Capture
+        // FIRST: the drag takes the committed copy out of the surface, and
+        // a touch pointer's implicit capture sits on that copy.
+        if (
+          Math.hypot(
+            screenPoint.x - pressedComment.startScreen.x,
+            screenPoint.y - pressedComment.startScreen.y,
+          ) < COMMENT_PRESS_SLOP_PX
+        )
+          return
+        if (pressedComment.comment.targetNodeId !== undefined) return
+        capturePointer(root, e.pointerId)
+        setCommentDrag({
+          comment: pressedComment.comment,
+          startPoint: pressedComment.startPoint,
+          live: screenToCanvas(screenPoint, viewport),
+          obstacles: commentPlacementObstacles(pressedComment.comment.id),
+          dropped: null,
+        })
+        return
+      }
       if (commentDrag !== null) {
         if (commentDrag.dropped !== null) return
         setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
@@ -1353,8 +1376,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         return
       }
       if (pressedComment !== null) {
-        // A node-anchored comment arms no drag, so its release arrives here.
-        toggleCommentCard(pressedComment)
+        // A press that never travelled past the slop, on any comment.
+        toggleCommentCard(pressedComment.comment.id)
         return
       }
       const armed = doublePressRef.current
