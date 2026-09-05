@@ -3,8 +3,8 @@ import {
   withViewerFontEmbedded,
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type {
   CommentThread,
   DocumentKind,

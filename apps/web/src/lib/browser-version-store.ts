@@ -1,9 +1,9 @@
-import { projectWorkspaceDocument, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import {
   operatorInfoSchema,
   type VersionEntry,
   versionEntrySchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { projectWorkspaceDocument, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'

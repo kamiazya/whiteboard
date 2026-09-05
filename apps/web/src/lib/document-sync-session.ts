@@ -1,3 +1,7 @@
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   type DocumentContainers,
   deleteSpatialNode,
@@ -25,10 +29,6 @@ import {
   writeSpatialNode,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 
 /**
  * One identity for "this document has no marks", so a publish that found

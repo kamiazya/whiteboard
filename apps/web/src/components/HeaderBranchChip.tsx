@@ -1,4 +1,4 @@
-import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   ChevronDown,
   Eye,

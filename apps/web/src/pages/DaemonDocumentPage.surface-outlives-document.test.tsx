@@ -16,11 +16,11 @@
  * `onOpenFileRef` is how following a file-node reference switches document.
  */
 
-import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,

@@ -1,4 +1,4 @@
-import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { UseBranchesResult } from '@/hooks/useBranches'

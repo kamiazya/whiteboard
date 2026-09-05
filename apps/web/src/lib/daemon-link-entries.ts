@@ -1,5 +1,5 @@
 import type { UniqueNameEntry } from '@kamiazya/whiteboard-codec'
-import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { LinkTarget } from './link-target.js'
 
 /**

@@ -1,4 +1,4 @@
-import { storageCategorySchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { storageCategorySchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'

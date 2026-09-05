@@ -3,7 +3,7 @@ import type {
   HeadChangedPayload,
   VersionCreatedPayload,
   ViewportRequestPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 
 // Shared contract types/helpers for the canvas sync stack. These are plain,
 // non-React values that both `hooks/useDocumentSync.ts` and

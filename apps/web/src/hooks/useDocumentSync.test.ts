@@ -10,13 +10,12 @@
  * derivation.
  */
 
-import { writeCommentThread, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
   VersionCreatedPayload,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeCommentThread, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'

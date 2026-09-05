@@ -1,4 +1,4 @@
-import { resetTokenStoreForTests } from '@kamiazya/whiteboard-mcp/api-client'
+import { resetTokenStoreForTests } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'

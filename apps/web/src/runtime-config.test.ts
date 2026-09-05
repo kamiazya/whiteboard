@@ -1,4 +1,4 @@
-import { runtimeConfigSchema as sharedRuntimeConfigSchema } from '@kamiazya/whiteboard-mcp/api-client'
+import { runtimeConfigSchema as sharedRuntimeConfigSchema } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { describe, expect, it } from 'vitest'
 import { isProductionPagesOrigin } from './lib/pages-origin-policy.js'
 import {
@@ -14,7 +14,7 @@ describe('single-owner schema (Zod discipline)', () => {
   // runtime-config.ts (instead of re-exporting the shared schema) must make
   // this fail — a structurally-equal-but-distinct schema is exactly the
   // silent-drift shape this pin exists to catch.
-  it('re-exports the same schema instance as @kamiazya/whiteboard-mcp/api-client', () => {
+  it('re-exports the same schema instance as @kamiazya/whiteboard-daemon-client/api-client', () => {
     expect(runtimeConfigSchema).toBe(sharedRuntimeConfigSchema)
   })
 })

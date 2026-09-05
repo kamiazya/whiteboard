@@ -10,7 +10,7 @@
  * open the workspace record took that branch, so a second tab at an older
  * version was enough to be offered the delete.
  */
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'

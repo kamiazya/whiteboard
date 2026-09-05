@@ -2,7 +2,7 @@ import type {
   BranchMeta,
   MergeResponse,
   VersionEntry,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'

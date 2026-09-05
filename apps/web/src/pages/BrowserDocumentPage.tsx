@@ -98,7 +98,7 @@ import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
-// @kamiazya/whiteboard-mcp/api-contracts client. None of that daemon-mode
+// @kamiazya/whiteboard-daemon-client/api-contracts/index client. None of that daemon-mode
 // weight is needed for the entry chunk of a page whose local mode never
 // exercises those affordances (see App.tsx's equivalent rationale for
 // lazy-loading DaemonDocumentPage).

@@ -5,7 +5,7 @@ import {
   type MergeRequest,
   type MergeResponse,
   type VersionEntry,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   AlertTriangle,
   ArrowDown,

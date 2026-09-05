@@ -1,4 +1,4 @@
-import type { WorkspaceSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { WorkspaceSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'

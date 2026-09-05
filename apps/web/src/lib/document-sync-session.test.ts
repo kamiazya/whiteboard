@@ -6,6 +6,10 @@
  * document-shaped surface this session now owns.
  */
 
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -18,10 +22,6 @@ import {
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import type {
   CanvasComment,
   CommentThread,

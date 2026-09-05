@@ -1,4 +1,4 @@
-import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { TooltipProvider } from '@/components/ui/tooltip'

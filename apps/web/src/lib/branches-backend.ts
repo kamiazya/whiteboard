@@ -1,4 +1,4 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import {
   type BranchMeta,
   type BranchStatsResponse,
@@ -18,7 +18,7 @@ import {
   setHeadResponseSchema,
   type VersionDocumentResponse,
   versionDocumentResponseSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { ZodError } from 'zod'
 
 export type { BranchMeta }

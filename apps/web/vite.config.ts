@@ -7,7 +7,6 @@ import { VitePWA } from 'vite-plugin-pwa'
 import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
-import { mcpSourceAlias } from './mcp-source-alias.js'
 import { rendererBuildDefine } from './renderer-build-id.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { manualChunks } from './vite-manual-chunks.js'
@@ -28,7 +27,6 @@ export default defineConfig({
   worker: { format: 'es' },
   resolve: {
     alias: {
-      ...mcpSourceAlias,
       // Standard shadcn alias rooted at apps/web/src.
       '@': resolve(__dirname, 'src'),
       // loro-crdt's export map resolves the production browser build to its

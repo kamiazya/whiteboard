@@ -26,7 +26,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
 
 // Captures constructor options without opening a real socket.
 const constructed: { workspaceId: string; path: string; wsToken: string | undefined }[] = []
-vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
+vi.mock('@kamiazya/whiteboard-daemon-client/daemon-backend', () => ({
   DaemonBackend: class {
     constructor(
       workspaceId: string,
