@@ -12,7 +12,7 @@
  * existing at all — a behaviour one keeper gets wrong is otherwise caught only
  * if somebody thought to write that case in that keeper's own file.
  */
-import { describe } from 'vitest'
+import { describe, expect, vi } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import {
@@ -55,7 +55,10 @@ async function browserHarness(): Promise<BranchesBackendHarness> {
     onViewportRequest: () => {},
     onExportRequest: () => {},
   })
-  await new Promise((r) => setTimeout(r, 50))
+  // Wait for the CONDITION the harness actually needs — the record delivered
+  // — rather than for a duration. `readRecord` answers null until then, so
+  // this is the same question the backend asks itself.
+  await vi.waitFor(() => expect(backend.readRecord(() => true)).toBe(true))
 
   return {
     backend: createBrowserBranchesBackend({ backend }),
