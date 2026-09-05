@@ -4,21 +4,10 @@ import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import {
-  CommentsRailAside,
-  CommentsRailToggle,
-} from '../components/annotations/CommentsRailChrome.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
-import { DocumentPreview } from '../components/DocumentPreview.js'
-import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
-import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
-import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
-import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
-import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -31,26 +20,14 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import {
-  BROWSER_HISTORY_CAPABILITIES,
-  type VersionPreviewSession,
-} from '../components/VersionTimeline'
-import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
-import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
-import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
-import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
-import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
+import { BROWSER_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
-import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
-import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
-import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useStorageHealth } from '../hooks/useStorageHealth.js'
-import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
   documentPath as documentRoutePath,
@@ -58,14 +35,12 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
-import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { createBrowserBranchesBackend } from '../lib/branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
@@ -77,42 +52,23 @@ import {
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { cn } from '../lib/utils.js'
-import { buildVersionSaveBody } from '../lib/version-save-body.js'
-import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
+import { DocumentPage } from './DocumentPage.js'
+import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
-import { useVersionSaveFlow } from './use-version-save-flow.js'
-
-// WorkspaceTopBar statically imports Radix, lucide,
-// VersionTimeline, HeaderBranchChip, and the Zod-validated
-// @kamiazya/whiteboard-daemon-client/api-contracts/index client. None of that daemon-mode
-// weight is needed for the entry chunk of a page whose local mode never
-// exercises those affordances (see App.tsx's equivalent rationale for
-// lazy-loading DaemonDocumentPage).
-// Kick the fetch at page-module evaluation (this module is itself a lazy
-// route chunk, so this is a parallel prefetch, not an entry-chunk cost):
-// the merged row now carries the title field and canvas operations, which
-// used to render eagerly and must not wait for a render-time chunk fetch.
-const workspaceTopBarImport = import('../components/WorkspaceTopBar.js')
-const WorkspaceTopBar = lazy(() => workspaceTopBarImport)
-
-// Fixed height so the lazy WorkspaceTopBar chunk resolving after first paint
-// causes no layout shift.
-const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
 
 const log = getAppLogger('browser-document-page')
 
@@ -139,9 +95,6 @@ interface BrowserDocumentPageProps {
   initialPath?: string
 }
 
-// Map the persistence state machine to user-facing copy. `degraded` carries its
-// own message; the other states are not shown as raw enum tokens.
-
 /**
  * The canvas name as a TITLE.
  *
@@ -154,6 +107,13 @@ function titleOf(name: string | null, path: string | null): string {
   return name === null || name === path ? '' : name
 }
 
+/**
+ * The browser keeper's document page: the controller over IndexedDB, the
+ * spatial sync session over `BrowserBackend`, the markdown body over its
+ * own Loro binding, and the browser's version rows — supplied to the shared
+ * `DocumentPage` as one model (ADR-0004 decision 2: the controller layer
+ * stays capability-selected, the page does not).
+ */
 export function BrowserDocumentPage({
   // Stable across renders (the shared accessor memoizes). Living here rather
   // than in App keeps loro-crdt off the entry chunk
@@ -219,11 +179,6 @@ export function BrowserDocumentPage({
     }
   }
 
-  // Owned locally rather than threaded down from App.tsx: useThemeMode already
-  // persists to localStorage and applies the <html class="dark"> toggle
-  // itself, so there is no App-level state this page needs to share.
-  const { resolvedTheme } = useThemeMode()
-
   // Fullscreen can also be left with Escape or the browser's own chrome, so
   // the button's label follows the DOCUMENT rather than our own click.
   const [isFullscreen, setIsFullscreen] = useState(false)
@@ -285,7 +240,7 @@ export function BrowserDocumentPage({
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
-  // (editor + chrome), not just the Excalidraw canvas.
+  // (editor + chrome), not just the canvas.
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
@@ -305,18 +260,13 @@ export function BrowserDocumentPage({
   // holds. Nothing binds them, so a dialog opened on one document and
   // confirmed after a switch deletes the OTHER — measured, the document that
   // arrived while the dialog stood was the one that went to the Trash.
-  // SCOPE RESET — see scoped-screen-state.test.ts
+  // SCOPE RESET — see scoped-screen-state.test.ts. The history column, the
+  // save outcome and the comments rail clear themselves inside DocumentPage,
+  // keyed on the same documentId this effect watches.
   useEffect(() => {
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    // saveVersionOutcome clears itself: useVersionSaveFlow owns that reset,
-    // keyed on the same documentId this effect watches.
-    setHistoryOpen(false)
-    setBookmarkArmed(0)
-    setPreview(null)
-    // The comments rail's thread/compose state clears itself:
-    // useCommentsRail owns that reset, keyed on the same documentId.
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -416,14 +366,6 @@ export function BrowserDocumentPage({
       ),
     [switcherOptions, documentId],
   )
-  // Every document the body points at, pre-fetched so the layout's sync
-  // seams have content; the list-based alias table and names answer ahead
-  // of any load.
-  const references = useReferenceSeams({
-    body: documentKind === 'markdown' ? (markdownDoc.body ?? '') : '',
-    resolveAlias,
-    resolveTitle,
-  })
 
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
@@ -456,7 +398,7 @@ export function BrowserDocumentPage({
   // moves location.pathname without any switcher click firing, so this is the
   // only thing that keeps the loaded canvas in sync with the address bar for
   // that direction. Runs in an effect (never during render) so it can't race
-  // Excalidraw's own render cycle; switchDocument's generation guard (see the
+  // the editor's own render cycle; switchDocument's generation guard (see the
   // controller hook) protects against a rapid back-back-back burst landing a
   // stale canvas.
   //
@@ -563,36 +505,25 @@ export function BrowserDocumentPage({
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
-  const {
-    canvas,
-    annotations: spatialAnnotations,
-    loaded: canvasLoaded,
-    onChange,
-    externalVersion,
-    exportScene,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    lockedNodeIds,
-    setNodeLock,
-    lockedEdgeIds,
-    setEdgeLock,
-    backendError,
-    clearLocalUndo,
-    readOutlineSource,
-    persistence: syncPersistence,
-  } = useDocumentSync(backend, {
+  const sync = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
   })
+  const {
+    canvas,
+    annotations: spatialAnnotations,
+    onChange,
+    backendError,
+    readOutlineSource,
+    persistence: syncPersistence,
+  } = sync
 
   // The browser's version history for this document: rows in IndexedDB,
   // restores through the backend holding the live record. Null while there
   // is no spatial backend (a markdown document, or nothing loaded yet), in
-  // which case the save control is hidden below rather than left to fall
-  // back onto the daemon's routes.
+  // which case the save control is hidden rather than left to fall back onto
+  // the daemon's routes.
   const versionsBackend = useMemo(
     () =>
       backend === null
@@ -611,83 +542,16 @@ export function BrowserDocumentPage({
   // falling through to the context's daemon fallback and issuing a request
   // to a daemon that is not there.
   const branchesBackend = useMemo(() => createBrowserBranchesBackend(), [])
-  // The panel refetches on a CHANGE of this signal. A manual save announces
-  // itself on the window (the page dispatches it after the keeper
+  // The History column refetches on a CHANGE of this signal. A manual save
+  // announces itself on the window (the page dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
-  // The document's history column. This page keeps its own document
-  // switching rather than remounting, so an open panel is cleared by hand
-  // with the rest of the document-scoped state.
-  const [historyOpen, setHistoryOpen] = useState(false)
-  // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready. The
-  // chord asks for a bookmark now; it does not take one.
-  const [bookmarkArmed, setBookmarkArmed] = useState(0)
-  // The past state the person is LOOKING at, drawn in place of the editor.
-  // Read-only by construction — see DocumentPreview — so "look, then decide"
-  // cannot turn into an edit against a state that is not the document's.
-  const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
-  // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
-  useBookmarkShortcut(versionsEnabled, () => {
-    setHistoryOpen(true)
-    setBookmarkArmed((n) => n + 1)
-  })
-
   // Scoped to THIS document's identity — an unchecked listener refreshed on
   // any document's announcement, where the daemon page has always routed
   // the same signal through identity-checked dispatch.
   useIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, 'local', documentPath, () =>
     setVersionRefreshSignal((n) => n + 1),
   )
-  // A save the History panel itself offers. The top bar's dot and ⌘/Ctrl+S
-  // are the other two routes; on a phone the shortcut is nothing and the
-  // dot is small, so the panel a finger opens has to carry one too — the
-  // daemon page's panel does. Announced on the window like every other
-  // save, which is what clears the dot and refreshes the list.
-  const {
-    saving: savingVersion,
-    outcome: saveVersionOutcome,
-    run: runVersionSave,
-  } = useVersionSaveFlow(currentDocumentIdRef, documentId, async (label) => {
-    // Narrowed by the precondition in `saveVersionFromPanel` below, which
-    // never calls `run` (so never reaches this body) while either is null.
-    if (versionsBackend === null || documentPath === null) {
-      throw new Error('saveVersionFromPanel: no versions backend or document path')
-    }
-    // The shared body pins the beats: capture BEFORE the save, announce,
-    // thumbnail riding along unawaited, re-announce once the picture lands
-    // (see buildVersionSaveBody).
-    return buildVersionSaveBody({
-      capture: () =>
-        captureBookmarkPicture(documentKind, {
-          exportScene,
-          body: markdownDoc.body,
-        }),
-      save: async (saveLabel) => {
-        try {
-          const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, {
-            label: saveLabel,
-          })
-          return { workspaceId: getBrowserWorkspaceId(), path: documentPath, versionId: saved.id }
-        } catch (err) {
-          log.warn('save version from the History panel failed', err)
-          throw err
-        }
-      },
-      backend: versionsBackend,
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      announceRefresh: () =>
-        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-          workspaceId: 'local',
-          path: documentPath,
-        }),
-      onThumbnailFailed: () => log.warn('bookmark thumbnail failed'),
-    })(label)
-  })
-  const saveVersionFromPanel = async (label: string): Promise<void> => {
-    if (versionsBackend === null || documentPath === null) return
-    await runVersionSave(label)
-  }
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only
@@ -722,66 +586,31 @@ export function BrowserDocumentPage({
    * duplicate: they lead to different documents, and the second exists
    * precisely because the first is closed on a note.
    */
-  const commentsRail = useCommentsRail({
-    scopeKey: documentId,
-    threads: annotations,
-    documentKind,
-    markdownBody: documentKind === 'markdown' ? markdownDoc.body : null,
-    threadMarks,
-    canvas: documentKind === 'spatial' ? canvas : null,
-    write: {
-      createThread: (thread) => {
-        if (documentKind === 'markdown') markdownDoc.createThread(thread)
-        else onChange(canvas, { kind: 'create-thread', thread })
-      },
-      replyToThread: (threadId, message) => {
-        if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
-        else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
-      },
-      setThreadStatus: (threadId, status) => {
-        if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
-        else onChange(canvas, { kind: 'set-thread-status', threadId, status })
-      },
-      editMessage: (threadId, message, opening) => {
-        if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
-        else onChange(canvas, { kind: 'edit-thread-message', threadId, message, opening })
-      },
+  const threadWrite: CommentsRailWrite = {
+    createThread: (thread) => {
+      if (documentKind === 'markdown') markdownDoc.createThread(thread)
+      else onChange(canvas, { kind: 'create-thread', thread })
     },
-  })
+    replyToThread: (threadId, message) => {
+      if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
+      else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
+    },
+    setThreadStatus: (threadId, status) => {
+      if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
+      else onChange(canvas, { kind: 'set-thread-status', threadId, status })
+    },
+    editMessage: (threadId, message, opening) => {
+      if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
+      else onChange(canvas, { kind: 'edit-thread-message', threadId, message, opening })
+    },
+  }
 
-  const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
-
-  const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
-  const { exportError, handleExport } = useSceneExport({
-    onExport: exportScene,
-    filenameBase: documentOpsFilenameBase,
-    log,
-  })
-
-  // The seams themselves are backend-agnostic (see use-document-file-seams.ts);
-  // this page only supplies the browser binding and the staleness
-  // stamps that make an edit made elsewhere show up on the next refresh.
-  const fileSeams = useDocumentFileSeams({
-    canvas,
-    adapter: BROWSER_FILE_ADAPTER,
-    resolveAlias,
-    resolveTitle,
-    stampOf: useMemo(
-      () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
-      [documents],
-    ),
-  })
-
-  const commands = useWhiteboardCommands({
-    provider: { kind: 'browser', capabilities },
-    canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
-  })
-
-  // Read once at mount: the routed /settings page is the only place this
-  // toggles, and navigating there and back remounts this page (a route
-  // change), which re-reads the store fresh — no in-mount reactivity needed.
-  const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
-  useBrowserToolRegistry(commands, documentId, webMcpEnabled)
+  // Staleness stamps for the file seams: an edit made elsewhere shows up on
+  // the next refresh because the referenced document's updatedAt moved.
+  const stampOf = useMemo(
+    () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
+    [documents],
+  )
 
   // Canvas data lives in IndexedDB; without an explicit persistence grant
   // the browser may evict it under storage pressure. Fire-and-forget — the
@@ -866,17 +695,6 @@ export function BrowserDocumentPage({
     />
   )
 
-  // The option list refreshes asynchronously (see the effect above) while the
-  // selected id changes synchronously on switch/create. Synthesize a
-  // fallback option for the gap between those two so the controlled
-  // <select>'s value always matches one of its own options.
-  //
-  // The open canvas's own row is always taken from the loaded snapshot rather
-  // than from the list: the list read races the save that a rename queues, and
-  // a read that resolves first pins the pre-rename name with nothing left to
-  // schedule another refresh. The snapshot is this canvas's live truth; the
-  // list is only the copy the switcher reads for the OTHER documents.
-
   if (renderState.kind === 'load-degraded') {
     return (
       <LoadDegradedView message={renderState.message}>
@@ -930,338 +748,233 @@ export function BrowserDocumentPage({
     return <DocumentPageSkeleton label="Loading canvas" />
   }
 
-  // Whole-document operations live behind a kebab: duplicate and delete
-  // are rare actions, and rare + destructive earns a menu (with words)
-  // over two always-visible icon buttons. One JSX value shared by both
-  // canvas-kind branches so the two rows cannot drift apart.
-  // The opener belongs in the document's own actions row, not floated over the
-  // editor: measured, a control absolutely positioned in the surface's
-  // top-right corner sat on top of the markdown editor's catalog trigger and
-  // intercepted every click meant for it. Both editor kinds put chrome in
-  // their corners, and the annotation layer is a document-level concern, so
-  // the row that already carries document-level verbs is where it goes.
-  const commentsToggle = <CommentsRailToggle rail={commentsRail} />
-
-  const canvasRowActions = (
-    <>
-      {commentsToggle}
-      {cleanupError && (
-        <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-          {cleanupError}
-        </div>
-      )}
-      {duplicateError && (
-        <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-          {duplicateError}
-        </div>
-      )}
-      {exportError && (
-        <div role="alert" aria-live="assertive" className="text-destructive text-xs">
-          {exportError}
-        </div>
-      )}
-      <DocumentMenu
-        onExport={(format) => void handleExport(format)}
-        triggerRef={canvasOpsButtonRef}
-      >
-        <DropdownMenuItem
-          onSelect={() => {
-            // Text on the clipboard survives any chat/paste channel intact,
-            // which a binary download cannot — the phone-friendly way to
-            // hand the exact canvas (coordinates included) to a debugger.
-            void navigator.clipboard
-              ?.writeText(serializeSpatial(canvas, 'extended'))
-              .catch(() => {})
-          }}
-        >
-          <Braces aria-hidden="true" className="size-3.5" />
-          Copy as JSON Canvas
-        </DropdownMenuItem>
-        <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-          <Copy aria-hidden="true" className="size-3.5" />
-          Duplicate
-        </DropdownMenuItem>
-        <DropdownMenuItem
-          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-          onSelect={() => setConfirmDelete(true)}
-        >
-          <Trash2 aria-hidden="true" className="size-3.5" />
-          Delete
-        </DropdownMenuItem>
-      </DocumentMenu>
-      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
-        <AlertDialogContent
-          // The menu item that opened this dialog unmounted with the menu;
-          // default close-focus would fall to <body>, so hand it to the kebab.
-          onCloseAutoFocus={(event) => {
-            event.preventDefault()
-            canvasOpsButtonRef.current?.focus()
-          }}
-        >
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {DESTRUCTIVE_COPY['delete-document-browser'](kindNoun(documentKind))}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              onClick={() => void triggerCleanup()}
-              className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
-            >
-              Delete
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-    </>
-  )
+  const loadedPath = renderState.snapshot.path
+  const workspaceId = getBrowserWorkspaceId()
 
   // The name goes to the workspace and NOWHERE else: it is a property of the
   // document's place, not of its content (ADR-0009 decision 2), so the
   // snapshot row is the one copy and the OKF `title` is projected from it on
-  // export. Both kinds share this — the same callback for both mount sites
-  // below is the point, not a coincidence.
+  // export.
   const onTitleChange = (next: string) => {
     void renameDocument(next).catch(() => {
       // Surfaced through persistence state: a refused write reaches the
       // shell mark as `failed`, and the page's degraded screen.
     })
   }
+  const title = titleOf(documentName, documentPath)
 
-  // The merged header row's flexible middle: canvas identity (title, core
-  // facets, display settings) lives in the SAME row as workspace context —
-  // the second chrome strip is gone. Kind decides the exact segment.
-  const documentTitleSlot =
-    documentKind === 'markdown' ? (
-      markdownDoc.body !== null && markdownDoc.coreFacets !== null ? (
-        <DocumentProperties
-          inline
-          key={documentId ?? 'no-canvas'}
-          // No save state in the row: the shell mark answers for the keeper,
-          // and only when there is a condition. The hidden fact is for tests.
-          status={persistenceFact}
-          actions={canvasRowActions}
-          title={titleOf(documentName, documentPath)}
-          onTitleChange={onTitleChange}
-          facets={markdownDoc.coreFacets}
-          onFacetsChange={markdownDoc.setCoreFacets}
-        />
-      ) : null
-    ) : (
-      // No facets at all: this branch is the SPATIAL canvas, and a facet is
-      // OKF frontmatter that JSON Canvas has nowhere to put (ADR-0009
-      // decision 3). It used to pass `showFacets={false}` and keep WRITING
-      // them, which is the shape the ADR calls out — the editor hid what the
-      // document went on storing.
-      <DocumentProperties
-        inline
-        key={documentId ?? 'no-canvas'}
-        status={persistenceFact}
-        settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
-        actions={canvasRowActions}
-        title={titleOf(documentName, documentPath)}
-        onTitleChange={onTitleChange}
-      />
-    )
-
-  return (
-    // Two-row grid shell (h-dvh makes the page own its viewport height):
-    // every header-shaped row stacks inside the auto row, and the editor
-    // owns minmax(0,1fr) — however many rows appear or however tall they
-    // wrap, the editor row is always exactly the remaining viewport height.
+  const model: DocumentPageModel = {
+    scopeKey: documentId,
+    documentKey: documentId ?? 'no-canvas',
+    documentKind,
+    srTitle: renderState.snapshot.name,
+    capabilities,
     // `bg-background` on the FULLSCREEN TARGET, not just on `body`: going
     // fullscreen promotes this element to the top layer, where the body's
     // background no longer shows. Anything this element does not paint itself
     // falls through to the browser's default black backdrop — which turned
     // the canvas area black under a light theme.
+    shell: { mainRef, mainClassName: 'bg-background' },
+    sync,
+    markdown: {
+      body: markdownDoc.body,
+      setBody: markdownDoc.setBody,
+      sourceExtensions: markdownBinding,
+      autoFocus: true,
+      // No facets at all for a SPATIAL canvas: a facet is OKF frontmatter
+      // that JSON Canvas has nowhere to put (ADR-0009 decision 3).
+      meta: markdownDoc.coreFacets ?? { type: documentKind },
+      title,
+      hydrating: markdownDoc.coreFacets === null,
+    },
+    title: { value: title, onChange: onTitleChange },
+    properties: {
+      ready:
+        documentKind !== 'markdown' ||
+        (markdownDoc.body !== null && markdownDoc.coreFacets !== null),
+      ...(documentKind === 'markdown' && markdownDoc.coreFacets !== null
+        ? { facets: markdownDoc.coreFacets, onFacetsChange: markdownDoc.setCoreFacets }
+        : {}),
+      status: persistenceFact,
+    },
+    threads: {
+      annotations,
+      threadMarks,
+      write: threadWrite,
+      railCanvas: documentKind === 'spatial' ? canvas : null,
+    },
+    files: {
+      adapter: BROWSER_FILE_ADAPTER,
+      stampOf,
+      resolveAlias,
+      resolveTitle,
+      missingFileRef,
+      pickerTargets,
+    },
+    openDocument: navigateToDocument,
+    overlayTitle: documentName ?? 'Untitled',
+    exportFilenameBase: documentName ?? 'canvas',
+    commands: {
+      provider: { kind: 'browser', capabilities },
+      canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
+      registryKey: documentId,
+    },
+    versions: {
+      enabled: versionsEnabled,
+      workspaceId,
+      path: loadedPath,
+      historyCapabilities: BROWSER_HISTORY_CAPABILITIES,
+      backend: versionsBackend,
+      save: async (label) => {
+        if (versionsBackend === null) {
+          throw new Error('saveVersionFromPanel: no versions backend')
+        }
+        try {
+          const saved = await versionsBackend.save(workspaceId, loadedPath, { label })
+          return { workspaceId, path: loadedPath, versionId: saved.id }
+        } catch (err) {
+          log.warn('save version from the History panel failed', err)
+          throw err
+        }
+      },
+      refreshSignal: versionRefreshSignal,
+      // The top bar addresses this document as `local`/path (its
+      // `dataMode="local"` placeholder), so the dot listens under that id.
+      announceRefresh: () =>
+        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+          workspaceId: 'local',
+          path: loadedPath,
+        }),
+    },
+    topBar: {
+      // Local mode names documents through its own store, not through the
+      // daemon's `/names`, so the identity the bar offers is unused here and
+      // `title`/`onTitleChange` stay the source.
+      workspaceId: 'local',
+      path: loadedPath,
+      dataMode: 'local',
+      // The way out of the editor. This page had none until now — the
+      // app-shell brand mark was the only exit, and it says nothing about
+      // where it goes.
+      onNavigateBack: () => {
+        const handle = browserWorkspaceHandleOrNull()
+        navigate(handle === null ? indexPath() : workspacePath(handle))
+      },
+      isFullscreen,
+      onToggleFullscreen: () => {
+        // Entering hides this whole bar; the floating exit control and
+        // native Escape are the ways back out. requestFullscreen can
+        // REJECT (Permissions-Policy, an iframe without
+        // allow="fullscreen", no user activation) — a swallowed
+        // rejection is unhandled-rejection noise, so both directions log.
+        if (document.fullscreenElement)
+          document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+        else
+          mainRef.current
+            ?.requestFullscreen()
+            .catch((err) => log.warn('requestFullscreen rejected', err))
+      },
+      // Fullscreen means the CANVAS, maximised: the whole top-bar row —
+      // switcher, rename, menus — steps aside. The floating control below
+      // replaces its exit path, Escape still works natively, and the dock
+      // stays because editing is what the extra space is FOR.
+      hidden: isFullscreen,
+    },
+    readOnlyPast: null,
+    spatial: {},
+    slots: {
+      rowAlerts: (
+        <>
+          {cleanupError && (
+            <div role="alert" aria-live="assertive" className="text-destructive text-xs">
+              {cleanupError}
+            </div>
+          )}
+          {duplicateError && (
+            <div role="alert" aria-live="assertive" className="text-destructive text-xs">
+              {duplicateError}
+            </div>
+          )}
+        </>
+      ),
+      menuTriggerRef: canvasOpsButtonRef,
+      menuItems: (
+        <>
+          <DropdownMenuItem
+            onSelect={() => {
+              // Text on the clipboard survives any chat/paste channel intact,
+              // which a binary download cannot — the phone-friendly way to
+              // hand the exact canvas (coordinates included) to a debugger.
+              void navigator.clipboard
+                ?.writeText(serializeSpatial(canvas, 'extended'))
+                .catch(() => {})
+            }}
+          >
+            <Braces aria-hidden="true" className="size-3.5" />
+            Copy as JSON Canvas
+          </DropdownMenuItem>
+          <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
+            <Copy aria-hidden="true" className="size-3.5" />
+            Duplicate
+          </DropdownMenuItem>
+          <DropdownMenuItem
+            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+            onSelect={() => setConfirmDelete(true)}
+          >
+            <Trash2 aria-hidden="true" className="size-3.5" />
+            Delete
+          </DropdownMenuItem>
+        </>
+      ),
+      afterMenu: (
+        <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+          <AlertDialogContent
+            // The menu item that opened this dialog unmounted with the menu;
+            // default close-focus would fall to <body>, so hand it to the kebab.
+            onCloseAutoFocus={(event) => {
+              event.preventDefault()
+              canvasOpsButtonRef.current?.focus()
+            }}
+          >
+            <AlertDialogHeader>
+              <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
+              <AlertDialogDescription>
+                {DESTRUCTIVE_COPY['delete-document-browser'](kindNoun(documentKind))}
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel>Cancel</AlertDialogCancel>
+              <AlertDialogAction
+                onClick={() => void triggerCleanup()}
+                className="bg-destructive text-destructive-foreground shadow-sm hover:bg-destructive/90"
+              >
+                Delete
+              </AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+      ),
+      overlay: isFullscreen && (
+        <Button
+          ref={exitFullscreenRef}
+          variant="outline"
+          size="icon"
+          aria-label="Exit fullscreen"
+          onClick={() =>
+            document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+          }
+          className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
+        >
+          <Minimize2 aria-hidden="true" className="size-4" />
+        </Button>
+      ),
+    },
+  }
+
+  return (
     <VersionsBackendContext.Provider value={versionsBackend}>
       <BranchesBackendContext.Provider value={branchesBackend}>
-        <DocumentPageShell
-          srTitle={renderState.snapshot.name}
-          mainRef={mainRef}
-          mainClassName="bg-background"
-          aside={
-            historyOpen && versionsEnabled ? (
-              <VersionPanel
-                workspaceId={getBrowserWorkspaceId()}
-                path={renderState.snapshot.path}
-                capabilities={BROWSER_HISTORY_CAPABILITIES}
-                onRestored={clearLocalUndo}
-                onPreview={setPreview}
-                refreshSignal={versionRefreshSignal}
-                headerActions={
-                  <BookmarkAction
-                    saving={savingVersion}
-                    outcome={saveVersionOutcome}
-                    armed={bookmarkArmed}
-                    onSave={(label) => void saveVersionFromPanel(label)}
-                  />
-                }
-              />
-            ) : undefined
-          }
-          header={
-            <>
-              {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
-            switcher, rename, menus — steps aside. The floating control below
-            replaces its exit path, Escape still works natively, and the dock
-            stays because editing is what the extra space is FOR. */}
-              {!isFullscreen && (
-                <Suspense
-                  fallback={
-                    <div
-                      className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')}
-                    />
-                  }
-                >
-                  <WorkspaceTopBar
-                    // Local mode names documents through its own store, not through
-                    // the daemon's `/names`, so the identity the bar offers is unused
-                    // here and `documentName`/`onTitleChange` stay the source.
-                    titleSlot={() => documentTitleSlot}
-                    dataMode="local"
-                    workspaceId="local"
-                    path={renderState.snapshot.path}
-                    // The way out of the editor. This page had none until now —
-                    // the app-shell brand mark was the only exit, and it says
-                    // nothing about where it goes.
-                    onNavigateBack={() => {
-                      const handle = browserWorkspaceHandleOrNull()
-                      navigate(handle === null ? indexPath() : workspacePath(handle))
-                    }}
-                    isFullscreen={isFullscreen}
-                    onToggleFullscreen={() => {
-                      // Entering hides this whole bar; the floating exit control and
-                      // native Escape are the ways back out. requestFullscreen can
-                      // REJECT (Permissions-Policy, an iframe without
-                      // allow="fullscreen", no user activation) — a swallowed
-                      // rejection is unhandled-rejection noise, so both directions log.
-                      if (document.fullscreenElement)
-                        document
-                          .exitFullscreen()
-                          .catch((err) => log.warn('exitFullscreen failed', err))
-                      else
-                        mainRef.current
-                          ?.requestFullscreen()
-                          .catch((err) => log.warn('requestFullscreen rejected', err))
-                    }}
-                    capabilities={capabilities}
-                    onToggleHistory={
-                      versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
-                    }
-                    historyOpen={historyOpen}
-                    {...(preview === null ? {} : { preview })}
-                  />
-                </Suspense>
-              )}
-            </>
-          }
-        >
-          {/* The snapshot's kind picks the editor: markdown documents open the
-          markdown editor (body and OKF core facets persisted as containers
-          of one Loro document — see use-markdown-document.ts), everything
-          else the spatial editor. */}
-          {isFullscreen && (
-            <Button
-              ref={exitFullscreenRef}
-              variant="outline"
-              size="icon"
-              aria-label="Exit fullscreen"
-              onClick={() =>
-                document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-              }
-              className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
-            >
-              <Minimize2 aria-hidden="true" className="size-4" />
-            </Button>
-          )}
-          {/* The annotation layer's document-level surface (ADR-0026
-            decision 5) sits BESIDE the editor rather than inside it,
-            because one panel serves both document kinds and a markdown
-            document has no canvas chrome to host one. Its opener lives in
-            the document actions row above, in flow — see commentsToggle. */}
-          <div className="flex h-full min-h-0">
-            <div className="relative min-w-0 flex-1">
-              {preview ? (
-                <DocumentPreview past={preview.past} theme={resolvedTheme} />
-              ) : (
-                <DocumentEditorSurface
-                  kind={documentKind}
-                  documentKey={documentId ?? 'no-canvas'}
-                  markdown={
-                    markdownDoc.coreFacets === null
-                      ? { body: null, setBody: markdownDoc.setBody }
-                      : {
-                          body: markdownDoc.body,
-                          setBody: markdownDoc.setBody,
-                          sourceExtensions: markdownBinding,
-                          autoFocus: true,
-                          theme: resolvedTheme,
-                          meta: markdownDoc.coreFacets,
-                          title: titleOf(documentName, documentPath),
-                          references,
-                          linkTargets: pickerTargets,
-                          onOpenDocument: (id) => navigateToDocument(id),
-                          threads: annotations,
-                          threadMarks,
-                          selectedThreadId: commentsRail.selectedThreadId,
-                          onSelectThread: commentsRail.revealThread,
-                          onComposeThread: commentsRail.composeThread,
-                        }
-                  }
-                  spatial={() => (
-                    <div className="flex h-full min-h-0 flex-col">
-                      <SpatialEditorPane
-                        className="relative min-h-0 flex-1"
-                        editorKey={documentId ?? 'no-canvas'}
-                        canvasLoaded={canvasLoaded}
-                        canvas={canvas}
-                        onChange={onChange}
-                        externalVersion={externalVersion}
-                        theme={resolvedTheme}
-                        // File-node reference = canvas id minted in the browser;
-                        // the same rows the link picker offers (open document
-                        // excluded, live-snapshot overlay), under the picker's
-                        // field names.
-                        fileRefOptions={fileRefOptions(pickerTargets)}
-                        onOpenDocument={navigateToDocument}
-                        missingFileRef={missingFileRef}
-                        fileSeams={fileSeams}
-                        lockedNodeIds={lockedNodeIds}
-                        lockedEdgeIds={lockedEdgeIds}
-                        onToggleNodeLock={setNodeLock}
-                        onToggleEdgeLock={setEdgeLock}
-                        nodeInEditor={nodeInEditor}
-                        history={{
-                          onUndo: () => void undo(),
-                          onRedo: () => void redo(),
-                          canUndo: canUndo(),
-                          canRedo: canRedo(),
-                        }}
-                        overlayTitle={documentName ?? 'Untitled'}
-                        linkTargets={pickerTargets}
-                        threads={annotations}
-                      />
-                    </div>
-                  )}
-                />
-              )}
-              {/* Markdown documents keep CodeMirror's own history (its keymap
-            already handles undo); the history group rides the spatial
-            editor's dock via paletteLeading above. */}
-            </div>
-            {/* Not while a past version is on screen: the editor is replaced
-                by DocumentPreview but this rail is not, and its writes go to
-                the LIVE document. */}
-            <CommentsRailAside
-              rail={commentsRail}
-              threads={annotations}
-              writable={preview === null}
-            />
-          </div>
-        </DocumentPageShell>
+        <DocumentPage model={model} />
       </BranchesBackendContext.Provider>
     </VersionsBackendContext.Provider>
   )

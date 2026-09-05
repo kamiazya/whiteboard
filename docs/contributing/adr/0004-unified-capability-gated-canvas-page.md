@@ -142,3 +142,36 @@ connection status (`sync-off`) rather than as a page-level overlay state.
 `page-state-conformance.test.ts` pins both pages' use of the shared
 machine, and the shared `load-degraded` state renders through one
 `LoadDegradedView` in both modes.
+
+## Addendum (2026-09-05): the page body is shared code now
+
+Decision 1's "one page" is implemented one step further than the 2026-09-01
+addendum recorded. `apps/web/src/pages/DocumentPage.tsx` renders the shell,
+the history column, the merged header row, the editor surface and the
+comments rail ONCE, from a `DocumentPageModel`
+(`pages/document-page-model.ts`); `BrowserDocumentPage` and
+`DaemonDocumentPage` remain as the keeper pages that build that model —
+controller, sync backend, markdown body, versions, and the chrome only their
+keeper has, handed over through named slots — and render the shared page.
+
+Decision 2 is unchanged: the controller layer stays capability-selected, and
+the model is not a generic controller. It carries only the facts the shared
+page actually branches on, and the keeper-specific supply behind each fact
+(IndexedDB rows versus daemon routes, a Loro-bound CodeMirror versus the sync
+session's `set-body`) stays inside the keeper page.
+
+What this closes is the alternative this ADR rejected — "a feature ported to
+the daemon path while the browser-local path is forgotten" — for everything
+in the shared body: a prop reaches both keepers or it does not compile. The
+conformance scans that pinned the two pages equal (`file-seam-conformance`,
+`save-conformance`) now pin ownership instead: shared chrome stays in the
+shared page, keeper-only chrome is rendered by its keeper page and no other.
+The `spatial-pane-conformance` scan is deleted — with one render site there
+is no second prop set to drift.
+
+Named follow-up: the keeper pages themselves become two implementations of
+one `DocumentKeeper` contract behind a single `DocumentPage` entry, with one
+contract suite run against both, so App selects a keeper rather than a page.
+The markdown body's two write paths (the browser hook's own scheduler versus
+the sync session) are a separate increment: unifying them changes when a
+save lands, and that is judged by measurement, not by refactor.

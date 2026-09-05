@@ -1,23 +1,32 @@
 // @vitest-environment node
 /**
- * Both document pages must offer the same document-level chrome.
+ * The document page's chrome is assembled ONCE, and each keeper page only
+ * adds what its keeper alone has.
  *
- * This exists because they did not: the seams were written inline in
- * BrowserDocumentPage, so DaemonDocumentPage shipped passing none of them and
- * canvas embeds (J5a) and image nodes (J5b) silently did nothing in daemon
- * mode. Nothing failed — each page's own tests only ever exercised its own
- * mode, which is exactly why a per-page test cannot catch this class.
+ * This exists because the chrome used to be assembled twice: the seams were
+ * written inline in BrowserDocumentPage, so DaemonDocumentPage shipped
+ * passing none of them and canvas embeds (J5a) and image nodes (J5b)
+ * silently did nothing in daemon mode. Nothing failed — each page's own
+ * tests only ever exercised its own mode, which is exactly why a per-page
+ * test cannot catch this class. The shared `DocumentPage` closes it
+ * structurally: a prop reaches both keepers or it does not compile. What a
+ * scan still holds is the OWNERSHIP — that the shared chrome stays in the
+ * shared page rather than growing back into a keeper page, and that the
+ * chrome one keeper has is rendered by that keeper's page and no other.
  *
- * A source scan rather than a render: the defect is a missing prop at a call
- * site, and asserting on the call site is what makes "the two pages agree"
- * checkable at all. Tier-2 conformance, same shape as canvas-viewer's
- * geometry conformance test.
+ * A source scan rather than a render: the property is WHERE a component is
+ * rendered, and a render can only see one keeper at a time. Tier-2
+ * conformance, same shape as canvas-viewer's geometry conformance test.
  */
 import { describe, expect, it } from 'vitest'
 
-const PAGES = ['./BrowserDocumentPage.tsx', './DaemonDocumentPage.tsx'] as const
+/** The shared page: every keeper renders through it. */
+const SHARED_PAGE = './DocumentPage.tsx'
+/** The keeper pages: each builds a model and renders the shared page. */
+const KEEPER_PAGES = ['./BrowserDocumentPage.tsx', './DaemonDocumentPage.tsx'] as const
+const ALL_PAGES = [SHARED_PAGE, ...KEEPER_PAGES] as const
 
-const sources = import.meta.glob('./{BrowserDocumentPage,DaemonDocumentPage}.tsx', {
+const sources = import.meta.glob('./{DocumentPage,BrowserDocumentPage,DaemonDocumentPage}.tsx', {
   query: '?raw',
   import: 'default',
 })
@@ -45,8 +54,8 @@ async function read(page: string): Promise<string> {
 }
 
 /**
- * Canvas-level chrome each page must place, and why a page cannot be trusted
- * to remember it.
+ * Canvas-level chrome the shared page must place, and why a keeper page
+ * cannot be trusted to remember it.
  *
  * These are surfaces the PAGE positions rather than the editor — the same
  * arrangement that produced the file-seam defect above. `CanvasDisplaySettings`
@@ -73,12 +82,13 @@ const SHARED_CANVAS_CHROME = [
 ] as const
 
 /**
- * Chrome one mode has and the other cannot, per ADR-0004 — capability-gated
- * by design, not drift.
+ * Chrome one keeper has and the other cannot, per ADR-0004 — capability-gated
+ * by design, not drift. A keeper page hands it to the shared page through a
+ * named slot, so the render site is the keeper page's own source.
  *
  * Listed rather than left implicit so the scan above stays a statement about
- * what SHOULD agree. Save state is deliberately NOT an entry any more: neither
- * page draws one in its chrome. Both publish their keeper's health to the
+ * what SHOULD be shared. Save state is deliberately NOT an entry any more:
+ * no page draws one in its chrome. Both keepers publish their health to the
  * shell mark (`setShellConnection`), which draws only a condition — a
  * browser write that is stuck or refused, a daemon session that dropped or
  * was rejected — and nothing while the keeper is keeping.
@@ -98,7 +108,7 @@ const MODE_SPECIFIC_CHROME = {
     why: 'backlinks come from the daemon index',
   },
   CapabilityTeaser: { page: './DaemonDocumentPage.tsx', why: 'it teases daemon capabilities' },
-} satisfies Record<string, { page: (typeof PAGES)[number]; why: string }>
+} satisfies Record<string, { page: (typeof KEEPER_PAGES)[number]; why: string }>
 
 /**
  * Does this page render that component?
@@ -114,7 +124,7 @@ function renders(source: string, chrome: string): boolean {
 }
 
 /**
- * `spatial-editor-container` must sit INSIDE each page's spatial slot.
+ * `spatial-editor-container` must sit INSIDE the spatial slot.
  *
  * It is the hook most page tests reach for, and it meant two different things:
  * the daemon page placed it inside the slot, so it answered "a spatial editor
@@ -126,10 +136,6 @@ function renders(source: string, chrome: string): boolean {
  * One identifier answering two questions makes a test written against one page
  * silently wrong against the other, which is the same defect as chrome one page
  * renders and the other does not, one layer down.
- *
- * A scan rather than a render, for the reason the file-seam scan gives: the
- * property is WHERE the attribute sits in the source, and a render can only see
- * one kind at a time.
  */
 const HOOK = 'data-testid="spatial-editor-container"'
 const SLOT = 'spatial={() => ('
@@ -163,31 +169,32 @@ function hookOffsets(source: string): number[] {
 }
 
 /**
- * The spatial editor pane is assembled ONCE, in `SpatialEditorPane`.
+ * The spatial editor pane is assembled ONCE, in `SpatialEditorPane`, and
+ * rendered once, in the shared page's spatial slot.
  *
  * The editor takes ~23 props and the two pages used to spell them out
  * independently — 19 shared, 14 byte-identical — which is the arrangement
- * that shipped the file-seam defect: a prop added to one call site and not
- * the other diverges silently, because each page's tests only exercise its
- * own mode. With one component owning the assembly, a new prop is added in
- * one place or it does not compile.
+ * that shipped the file-seam defect. With one component owning the assembly
+ * and one page rendering it, a new prop is added in one place or it does
+ * not compile.
  *
- * So a page may not render `<SpatialEditor` directly, and the pane it
- * renders instead must sit inside the `spatial` slot — outside it, the pane
- * (which carries the `spatial-editor-container` hook) would mount for a
- * markdown document too.
+ * So no page may render `<SpatialEditor` directly, and the pane must sit
+ * inside the `spatial` slot — outside it, the pane (which carries the
+ * `spatial-editor-container` hook) would mount for a markdown document too.
  */
 describe('the spatial editor pane is built once', () => {
-  it.each(PAGES)('%s renders SpatialEditorPane, never SpatialEditor directly', async (page) => {
-    const source = await read(page)
+  it.each(ALL_PAGES)('%s never renders SpatialEditor directly', async (page) => {
     expect(
-      /<SpatialEditor[\s/>]/.test(source),
+      /<SpatialEditor[\s/>]/.test(await read(page)),
       'a direct <SpatialEditor> render reintroduces the second copy of its ' +
         'prop assembly — add props through SpatialEditorPane instead.',
     ).toBe(false)
+  })
 
+  it('the shared page renders SpatialEditorPane inside its spatial slot', async () => {
+    const source = await read(SHARED_PAGE)
     const [start, end] = spatialSlotRange(source)
-    expect(start, `${page} has no spatial slot`).toBeGreaterThan(-1)
+    expect(start, `${SHARED_PAGE} has no spatial slot`).toBeGreaterThan(-1)
     const offsets: number[] = []
     for (
       let i = source.indexOf('<SpatialEditorPane');
@@ -196,24 +203,31 @@ describe('the spatial editor pane is built once', () => {
     ) {
       offsets.push(i)
     }
-    expect(offsets.length, `${page} renders no SpatialEditorPane`).toBeGreaterThan(0)
+    expect(offsets.length, `${SHARED_PAGE} renders no SpatialEditorPane`).toBeGreaterThan(0)
     expect(
       offsets.filter((at) => at < start || at > end),
       'a pane outside the spatial slot mounts for a markdown document too.',
     ).toEqual([])
   })
+
+  it.each(KEEPER_PAGES)('%s renders no pane of its own', async (page) => {
+    expect(
+      renders(await read(page), 'SpatialEditorPane'),
+      'a keeper page rendering the pane is the second call site growing back.',
+    ).toBe(false)
+  })
 })
 
 describe('the spatial-editor-container hook means one thing', () => {
   // The pane owns the hook, and the "built once" scan above holds the pane
-  // inside each page's spatial slot — together they keep the old guarantee
-  // (the hook only ever means "a spatial editor is mounted") with the
-  // ownership the extraction moved.
+  // inside the shared page's spatial slot — together they keep the old
+  // guarantee (the hook only ever means "a spatial editor is mounted") with
+  // the ownership the extraction moved.
   it('the pane carries it exactly once', async () => {
     expect(hookOffsets(await readPane())).toHaveLength(1)
   })
 
-  it.each(PAGES)('%s does not spell it a second time', async (page) => {
+  it.each(ALL_PAGES)('%s does not spell it a second time', async (page) => {
     expect(
       hookOffsets(await read(page)),
       'a page-level hook is one the pane does not position — for a markdown ' +
@@ -235,71 +249,70 @@ describe('the spatial-editor-container hook means one thing', () => {
 const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
 
 describe('document page canvas chrome', () => {
-  it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
-    const missing: string[] = []
-    for (const page of PAGES) {
-      const source = await read(page)
-      if (!renders(source, chrome)) missing.push(page)
-    }
-
+  it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
-      missing,
+      renders(await read(SHARED_PAGE), chrome),
       `${chrome} is placed by the PAGE, so a page that omits it drops the ` +
-        'surface in that mode entirely. This is the shape that shipped canvas ' +
-        'embeds and image nodes doing nothing in daemon mode; a per-page test ' +
-        'cannot catch it, because each page only ever exercises its own mode.',
+        'surface for every keeper. This is the shape that shipped canvas ' +
+        'embeds and image nodes doing nothing in daemon mode.',
+    ).toBe(true)
+  })
+
+  it.each(SHARED_CANVAS_CHROME)('no keeper page renders %s of its own', async (chrome) => {
+    const renderedBy: string[] = []
+    for (const page of KEEPER_PAGES) {
+      if (renders(await read(page), chrome)) renderedBy.push(page)
+    }
+    expect(
+      renderedBy,
+      `${chrome} rendered by a keeper page is the per-keeper copy growing back — ` +
+        'the other keeper then drifts without any test noticing.',
     ).toEqual([])
   })
 
   // The exemption list is a claim about the code, so it is checked against it —
   // and against the exact page, not merely against "not shared". Naming only
-  // the sharing case leaves three ways to be wrong silently: chrome NEITHER
-  // page renders any more (a stale entry excusing nothing), chrome whose
+  // the sharing case leaves three ways to be wrong silently: chrome NO page
+  // renders any more (a stale entry excusing nothing), chrome whose
   // ownership has flipped, and chrome that quietly became shared. Asserting
   // the owner covers all three with one comparison.
   it.each(
     Object.entries(MODE_SPECIFIC_CHROME),
   )('%s is rendered by its documented page and no other', async (chrome, { page: owner }) => {
     const renderedBy: string[] = []
-    for (const page of PAGES) {
+    for (const page of ALL_PAGES) {
       if (renders(await read(page), chrome)) renderedBy.push(page)
     }
 
     expect(
       renderedBy,
       `${chrome} is exempt as ${owner}-only (${MODE_SPECIFIC_CHROME[chrome as keyof typeof MODE_SPECIFIC_CHROME].why}). ` +
-        'Rendered by both means it is shared now — move it to SHARED_CANVAS_CHROME. ' +
-        'Rendered by neither means the entry outlived its subject. Rendered by ' +
-        'the other page means the exemption is describing the wrong one.',
+        'Rendered by the shared page means it is shared now — move it to SHARED_CANVAS_CHROME. ' +
+        'Rendered by no page means the entry outlived its subject. Rendered by ' +
+        'the other keeper page means the exemption is describing the wrong one.',
     ).toEqual([owner])
   })
 
   // Neither assertion above means anything if the sources did not load.
-  it('reads both page sources', async () => {
-    for (const page of PAGES) {
+  it('reads every page source', async () => {
+    for (const page of ALL_PAGES) {
       expect((await read(page)).length, `${page} is empty`).toBeGreaterThan(10_000)
     }
   })
 })
 
 describe('document page document-level chrome', () => {
-  it.each(SHARED_DOCUMENT_CHROME)('both pages render %s', async (chrome) => {
-    const missing: string[] = []
-    for (const page of PAGES) {
-      const source = await read(page)
-      if (!renders(source, chrome)) missing.push(page)
-    }
-
+  it.each(SHARED_DOCUMENT_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
-      missing,
+      renders(await read(SHARED_PAGE), chrome),
       `${chrome} is document-level chrome (ADR-0026 decision 5): a page that ` +
         'omits it leaves that document kind with no way to reach its ' +
         'conversations at all.',
-    ).toEqual([])
+    ).toBe(true)
   })
 
-  // The aside moved into shared chrome (CommentsRailChrome), so the pages
-  // render the RAIL and the rail renders the panel — this keeps the
+  // The aside moved into shared chrome (CommentsRailChrome), so the page
+  // renders the RAIL and the rail renders the panel — this keeps the
   // guarantee transitive rather than trusting the indirection.
   it('the shared rail chrome itself renders CommentsPanel', async () => {
     const loader = railChromeSource['../components/annotations/CommentsRailChrome.tsx']
@@ -310,38 +323,36 @@ describe('document page document-level chrome', () => {
 })
 
 /**
- * `threads=` must reach the spatial pane on BOTH pages, and specifically
- * inside their own spatial slot — the same reaches-subject discipline the
- * "spatial editor pane is built once" scan above applies to the pane itself.
+ * `threads=` must reach the spatial pane, and specifically inside the
+ * spatial slot — the same reaches-subject discipline the "spatial editor
+ * pane is built once" scan above applies to the pane itself.
  *
- * `threads=` also appears once more per page, on `<CommentsPanel`, which sits
+ * `threads=` also appears once more, on `<CommentsRailAside`, which sits
  * OUTSIDE the spatial slot by design (it is document-level chrome, not
  * canvas-level — see `SHARED_DOCUMENT_CHROME` above). So this checks that
- * SOME occurrence lands inside the slot, not that every occurrence does; an
- * entry for a `threads=` that stopped reaching the pane at all fails the same
- * as the pane never having been found in the "built once" scan above.
+ * SOME occurrence lands inside the slot, not that every occurrence does.
  */
 describe('document page threads reach the spatial pane', () => {
-  it.each(PAGES)('%s passes threads= inside its spatial slot', async (page) => {
-    const source = await read(page)
+  it('the shared page passes threads= inside its spatial slot', async () => {
+    const source = await read(SHARED_PAGE)
     const [start, end] = spatialSlotRange(source)
-    expect(start, `${page} has no spatial slot`).toBeGreaterThan(-1)
+    expect(start, `${SHARED_PAGE} has no spatial slot`).toBeGreaterThan(-1)
 
     const offsets: number[] = []
     for (let i = source.indexOf('threads='); i !== -1; i = source.indexOf('threads=', i + 1)) {
       offsets.push(i)
     }
-    expect(offsets.length, `${page} never passes threads= to anything`).toBeGreaterThan(0)
+    expect(offsets.length, `${SHARED_PAGE} never passes threads= to anything`).toBeGreaterThan(0)
     expect(
       offsets.some((at) => at >= start && at <= end),
-      `${page} never passes threads= inside its spatial slot`,
+      `${SHARED_PAGE} never passes threads= inside its spatial slot`,
     ).toBe(true)
   })
 })
 
 describe('canvas page file seams', () => {
-  it.each(PAGES)('%s hands the shared seams to the pane', async (page) => {
-    const source = await read(page)
+  it('the shared page hands the shared seams to the pane', async () => {
+    const source = await read(SHARED_PAGE)
 
     // The page builds its seams from the shared hook and hands the OBJECT
     // over; the single spread lives in the pane. Enumerating the four props
@@ -356,7 +367,7 @@ describe('canvas page file seams', () => {
   })
 
   it.each([
-    ...PAGES,
+    ...ALL_PAGES,
     'pane',
   ])('%s builds its seams from an adapter, not inline loading', async (page) => {
     const source = page === 'pane' ? await readPane() : await read(page)
