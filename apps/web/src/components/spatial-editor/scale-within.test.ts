@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '@/test-utils/fast-check'
 import { type Box, scaleBoxWithin, unionBox } from '../../lib/spatial/geometry.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 
 const box = (x: number, y: number, width: number, height: number): Box => ({ x, y, width, height })
 

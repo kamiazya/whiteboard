@@ -1,14 +1,14 @@
 import { Download, EllipsisVertical } from 'lucide-react'
 import type { ReactNode, RefObject } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '../../components/ui/button.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { SceneExportFormat } from '@/hooks/useDocumentSync'
+} from '../../components/ui/dropdown-menu.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import type { SceneExportFormat } from '../../hooks/useDocumentSync.js'
 
 interface DocumentMenuProps {
   /**

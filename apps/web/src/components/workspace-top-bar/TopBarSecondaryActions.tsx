@@ -1,14 +1,14 @@
 import { EllipsisVertical, Maximize2, Minimize2 } from 'lucide-react'
 import { useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '../../components/ui/button.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { isFullscreenSupported } from '@/lib/fullscreen-support'
+} from '../../components/ui/dropdown-menu.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import { isFullscreenSupported } from '../../lib/fullscreen-support.js'
 
 interface TopBarSecondaryActionsProps {
   /**

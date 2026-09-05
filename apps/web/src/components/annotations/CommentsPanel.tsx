@@ -14,8 +14,8 @@
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { useMemo, useState } from 'react'
-import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
-import { cn } from '@/lib/utils'
+import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
+import { cn } from '../../lib/utils.js'
 import { MessageBy } from './message-meta.js'
 
 /**

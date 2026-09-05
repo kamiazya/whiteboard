@@ -1,7 +1,7 @@
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import { type JSX, useMemo } from 'react'
-import type { PastDocument } from '@/lib/versions-backend'
 import type { ResolvedTheme } from '../lib/theme.js'
+import type { PastDocument } from '../lib/versions-backend.js'
 import { PreviewPane } from './markdown-editor/PreviewPane.js'
 
 /**

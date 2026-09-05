@@ -29,7 +29,7 @@
  */
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
-import { settingsPath } from '@/lib/app-routes'
+import { settingsPath } from '../../lib/app-routes.js'
 import {
   type ConnectionState,
   isNotKeeping,

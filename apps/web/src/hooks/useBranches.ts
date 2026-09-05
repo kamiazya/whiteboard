@@ -4,14 +4,14 @@ import type {
   SetHeadResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useBranchesBackend } from '@/contexts/BranchesBackendContext'
+import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import type {
   BranchApiError,
   BranchesBackend,
   BranchesState,
   BranchMeta,
   MergeResult,
-} from '@/lib/branches-backend'
+} from '../lib/branches-backend.js'
 
 // The React half. The transport half — URL building, response parsing, the
 // structured error — moved to `lib/branches-backend.ts` when the seam landed,

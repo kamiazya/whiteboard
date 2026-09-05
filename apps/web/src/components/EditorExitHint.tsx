@@ -1,7 +1,7 @@
 import { Check, X } from 'lucide-react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
-import { cn } from '@/lib/utils'
 import { hasCoarsePointer, isMacPlatform } from '../lib/platform.js'
+import { cn } from '../lib/utils.js'
 
 const KBD =
   'rounded border border-border bg-background px-1 py-px font-sans text-[10px] text-muted-foreground'

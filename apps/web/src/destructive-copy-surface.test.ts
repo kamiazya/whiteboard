@@ -35,7 +35,7 @@ import {
   type DestructiveActionId,
   type DestructiveDescription,
   destructiveCopyFragments,
-} from '@/lib/destructive-copy'
+} from './lib/destructive-copy.js'
 
 const sources = import.meta.glob('./**/*.{ts,tsx}', {
   query: '?raw',

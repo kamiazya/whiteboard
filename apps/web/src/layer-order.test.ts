@@ -85,9 +85,7 @@ function staticImports(source: string): { specifier: string; typeOnly: boolean }
 /** Resolves a specifier from a glob key to another glob key, or null for externals and assets. */
 function resolveLocal(fromKey: string, specifier: string): string | null {
   let path: string
-  if (specifier.startsWith('@/')) {
-    path = `./${specifier.slice(2)}`
-  } else if (specifier.startsWith('.')) {
+  if (specifier.startsWith('.')) {
     const dir = fromKey.split('/').slice(0, -1)
     for (const segment of specifier.split('/')) {
       if (segment === '.') continue

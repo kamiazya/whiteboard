@@ -6,7 +6,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import '../index.css'
-import { MERGE_COMMITTED_EVENT } from '@/lib/merge-committed-event'
+import { MERGE_COMMITTED_EVENT } from '../lib/merge-committed-event.js'
 import { MergeDialog } from './MergeDialog.js'
 import { MergeToast } from './MergeToast.js'
 

@@ -1,7 +1,7 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import { createDaemonFetch } from '@/lib/daemon-api-client'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
 const mockLog = vi.hoisted(() => ({
@@ -11,7 +11,7 @@ const mockLog = vi.hoisted(() => ({
   debug: vi.fn(),
 }))
 
-vi.mock('@/lib/app-logger', () => ({
+vi.mock('../lib/app-logger.js', () => ({
   getAppLogger: () => mockLog,
 }))
 

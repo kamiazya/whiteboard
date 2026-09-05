@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
-import { findVisibleJourneyBadge } from '@/components/settings/SetupJourney'
+import { findVisibleJourneyBadge } from '../components/settings/SetupJourney.js'
 import { SettingsPage } from './SettingsPage.js'
 
 // Real browser: the settings page renders the journey twice (hidden mobile +

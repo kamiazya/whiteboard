@@ -38,8 +38,8 @@ import {
   StickyNote,
 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { CREATION_LABELS } from './creation-labels.js'
 

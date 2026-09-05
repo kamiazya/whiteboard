@@ -31,7 +31,7 @@ import {
 } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
-import { type LivePassage, resolveTextAnchor } from '@/lib/text-anchor'
+import { type LivePassage, resolveTextAnchor } from '../../lib/text-anchor.js'
 
 /** Where one conversation sits in the body as it stands right now. */
 export interface PlacedThread {

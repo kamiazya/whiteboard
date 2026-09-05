@@ -6,7 +6,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { gestureTrace, type TraceEntry } from '@/components/spatial-editor/gesture-trace'
+import { gestureTrace, type TraceEntry } from '../../components/spatial-editor/gesture-trace.js'
 import { GestureTraceRow } from './GestureTraceRow'
 
 afterEach(() => {
