@@ -87,16 +87,6 @@ export function BrowserIndexPage({
   // and a handler-side `if (creating) return` reads a stale closure in
   // exactly the same-tick case it would have to catch.
   const [creating, setCreating] = useState(false)
-  // The panel reads through the SAME stores this page was given — never a
-  // second instance that merely happens to open the same database.
-  const filesSource = useMemo(
-    () => createLocalFilesSource({ index, loro, clock }),
-    [index, loro, clock],
-  )
-  // Deletions happen in this page's dialog, behind the panel's back — the
-  // panel re-reads whenever this identity changes, exactly as on the daemon
-  // page.
-  const [filesRevision, setFilesRevision] = useState(0)
   // The workspace this page is listing. Subscribed, not read: ADR-0019's
   // switch is an in-SPA route change, so this page stays mounted across one,
   // and the load effect below keyed on the index and the clock — neither of
@@ -107,7 +97,29 @@ export function BrowserIndexPage({
     subscribeBrowserWorkspaceIdentity,
     browserWorkspaceIdentitySnapshot,
   )
-
+  // The panel reads through the SAME stores this page was given — never a
+  // second instance that merely happens to open the same database.
+  //
+  // Keyed on the ACTIVE WORKSPACE as well, because the panel detects a switch
+  // by this identity changing — the same contract the daemon page's source
+  // memo keeps with `selectedWorkspace`. Without it the panel never learned a
+  // switch had happened: its cards, selection, open folder and search results
+  // all still belonged to the workspace the person had left, while the page's
+  // own heading and onboarding decision had already followed. Worse than
+  // stale: paths collide across workspaces (`untitled` most of all) and the
+  // card menu's Delete carries a PATH, which this page then resolves against
+  // whichever workspace is active NOW.
+  const filesSource = useMemo(
+    () => createLocalFilesSource({ index, loro, clock }),
+    // `activeWorkspace` is not read by the factory — the source reads the
+    // accessor at call time. It is here as the switch SIGNAL the panel keys
+    // on, which is the whole point of the memo.
+    [index, loro, clock, activeWorkspace],
+  )
+  // Deletions happen in this page's dialog, behind the panel's back — the
+  // panel re-reads whenever this identity changes, exactly as on the daemon
+  // page.
+  const [filesRevision, setFilesRevision] = useState(0)
   // What this page calls itself. The identity the accessor publishes carries
   // no display name (it is the ADDRESSING half), so the row has to be read —
   // in the same effect, which already re-runs on a switch.
