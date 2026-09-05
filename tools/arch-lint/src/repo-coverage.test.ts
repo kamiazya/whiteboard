@@ -20,6 +20,7 @@ const SHARED_LAYER_PACKAGES = [
   'packages/search',
   'packages/server-core',
   'packages/workspace-index',
+  'packages/history',
   // Browser-runtime UI package, not a "shared" model/codec/... layer package
   // in the architecture-map.md sense, but scanned the same way — see its
   // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
