@@ -81,8 +81,10 @@ export interface LayoutWorkerPool {
  *   size 6  warm 127-165ms   cold 2.0-2.3s
  *
  * Three things the numbers say. A list is RENDER-bound, so fill time tracks
- * the slots it may use — and `background` gets `size - 1` of them, which is
- * why sizes 1 and 2 are the same speed (one slot each). Past the core count
+ * the slots it may use — and `background` gets `deferrableSlotCap(size)` of
+ * them: `size - 1`, except that a fleet of one keeps its single slot rather
+ * than none. That exception is why sizes 1 and 2 are the same speed — one
+ * slot each, by two different rules. Past the core count
  * the curve is flat inside its own noise, so on a four-core machine nothing
  * above 4 is measurable HERE; whether an eight-core machine would use a
  * fifth worker is unmeasured, and this cap is what leaves that question
