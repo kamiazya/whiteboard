@@ -47,6 +47,7 @@ import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
+import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -69,6 +70,10 @@ import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
+import {
+  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
+  dispatchIdentityEvent,
+} from '../lib/document-sync-types.js'
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
@@ -276,14 +281,15 @@ export function BrowserDocumentPage({
   // clobber a newer refresh triggered by a fast switch.
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
   const listGenerationRef = useRef(0)
-  // A ref that matches no live canvas id points at a deleted canvas: the
-  // editor renders a quiet "Missing reference" and hides the follow
-  // affordances instead of navigating to a dead route. Image refs live in
-  // the file store, not this list; undefined while the list has not loaded
-  // keeps everything ordinary.
+  // A ref that matches NEITHER a live id nor a live path points at a
+  // deleted canvas: the editor renders a quiet "Missing reference" and hides
+  // the follow affordances instead of navigating to a dead route. Paths are
+  // known too — a legacy path ref names a live document, same rule as the
+  // daemon page. Image refs live in the file store, not this list; undefined
+  // while the list has not loaded keeps everything ordinary.
   const missingFileRef = useMemo(() => {
     if (documents.length === 0) return undefined
-    const known = new Set(documents.map((entry) => entry.documentId))
+    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
@@ -625,11 +631,12 @@ export function BrowserDocumentPage({
     setBookmarkArmed((n) => n + 1)
   })
 
-  useEffect(() => {
-    const onSaved = () => setVersionRefreshSignal((n) => n + 1)
-    window.addEventListener('whiteboard:wb_version_saved', onSaved)
-    return () => window.removeEventListener('whiteboard:wb_version_saved', onSaved)
-  }, [])
+  // Scoped to THIS document's identity — an unchecked listener refreshed on
+  // any document's announcement, where the daemon page has always routed
+  // the same signal through identity-checked dispatch.
+  useIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, 'local', documentPath, () =>
+    setVersionRefreshSignal((n) => n + 1),
+  )
   // A save the History panel itself offers. The top bar's dot and ⌘/Ctrl+S
   // are the other two routes; on a phone the shortcut is nothing and the
   // dot is small, so the panel a finger opens has to carry one too — the
@@ -684,19 +691,17 @@ export function BrowserDocumentPage({
         // the list this save already refreshed holds a row that says it has
         // none — and without this the picture appears only when something
         // else happens to refetch, which for a person means reloading.
-        window.dispatchEvent(
-          new CustomEvent('whiteboard:wb_version_saved', {
-            detail: { workspaceId: 'local', path: documentPath },
-          }),
-        )
+        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+          workspaceId: 'local',
+          path: documentPath,
+        })
       })
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
-      window.dispatchEvent(
-        new CustomEvent('whiteboard:wb_version_saved', {
-          detail: { workspaceId: 'local', path: documentPath },
-        }),
-      )
+      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+        workspaceId: 'local',
+        path: documentPath,
+      })
     }
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
