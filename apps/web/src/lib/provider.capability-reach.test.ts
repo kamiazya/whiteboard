@@ -1,3 +1,4 @@
+// @vitest-environment node
 // A capability flag that nothing reads is a wiring gap that every other gate
 // passes: the const map compiles, both provider kinds set it, and the unit
 // tests assert its value — so it looks covered while gating nothing. Three

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { panBy, zoomAt } from '../../lib/spatial/viewport.js'
 import { computePinchUpdate } from './touch-pinch.js'

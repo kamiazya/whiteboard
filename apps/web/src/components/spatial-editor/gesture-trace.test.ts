@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The gesture flight recorder's own behaviour: a bounded ring, coalesced
  * moves, and a serialized form that replays through the navigation reducer

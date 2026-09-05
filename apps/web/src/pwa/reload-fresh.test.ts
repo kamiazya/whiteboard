@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The app's own Reload has to do more than the browser's.
  *

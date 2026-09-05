@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { BROWSER_CAPABILITIES } from '../provider.js'
 import { createWhiteboardCommands } from './create-commands.js'

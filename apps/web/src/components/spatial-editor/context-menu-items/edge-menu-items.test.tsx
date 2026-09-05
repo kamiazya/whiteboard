@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The edge branch's composition rules, pinned as plain function calls: items
 // are data, so presence/order/label assertions and handler-spy assertions
 // need no DOM.

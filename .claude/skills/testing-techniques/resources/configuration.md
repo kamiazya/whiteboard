@@ -58,12 +58,21 @@ referenced file, so neither applies until one becomes inline.
 ### `vitest doctor`
 
 ```bash
-vitest doctor
+vitest doctor --project <name> [--project <name>…]
 ```
 
-Runs the suite under alternative configurations (pools, isolation, environments) and prints
-a recommendation. Run it once at the upgrade and paste the output in the PR; it is the
-measurement the pool choice should rest on.
+Runs the suite under alternative configurations (pool, isolation, `fsModuleCache`) twice
+each and prints a recommendation with the deltas.
+
+**It measures the projects you point it at, and its recommendation is scoped to them.**
+Measured here on `arch-lint-node` + `search-node` + `canvas-render-node`: baseline 26.18s,
+`pool: 'threads'` −3%, `fsModuleCache: true` ±0%, **`isolate: false` −42%** — "Recommendation:
+isolate: false", with the caveat that the suite "passed twice with a shuffled file order
+under shared state, so it is likely - but not guaranteed - that no test depends on
+isolation". Those three are the small, pure, node-only projects. Run against the two that
+actually hold state, the same option produces **464 failures** (see below). Doctor's own
+output says it "overrides options for all projects at once; apply the change per project if
+they need different settings" — take that literally.
 
 ### `fsModuleCache`
 
@@ -230,7 +239,198 @@ error message (use `/^$/` for an empty one), and `vi.useFakeTimers()` fakes `Tem
 ## Coverage
 
 `coverage.autoAttachSubprocess` tracks `node:child_process` / `node:worker_threads` under
-the v8 provider; `coverage.thresholds.perFile` accepts objects and glob thresholds no longer
+the v8 provider (**no effect here** — see the refuted list below); `coverage.thresholds.perFile` accepts objects and glob thresholds no longer
 inherit the top-level `perFile`; include/exclude match relative project paths precisely (a
 bare `'src'` no longer matches unintended paths; `contains` is removed); istanbul moved to
 `@vitest/istanbuljs`. `pnpm test:coverage` is mcp-server's v8 run.
+
+## Measured and refuted
+
+Four options that read as obvious wins and are not, each checked against this repo rather
+than argued about. Re-open one only with a new measurement, not with the release notes.
+
+### `isolate: false` — REFUTED, 464 failures
+
+`vitest doctor` recommends it at −42% on the pure node projects. Run on the two that hold
+state (`web-jsdom` + `mcp-node`, 7997 tests):
+
+| | result | wall |
+|---|---|---|
+| `isolate: true` (default) | 7988 passed, 9 skipped | 355s |
+| `--no-isolate` | **464 failed**, 7524 passed | 269s |
+
+The failures are the shapes `isolation-and-state.md` is about, now arriving in bulk: mock
+implementations bleeding between files (`expected "vi.fn()…"`), counters and ids carried
+across (`expected N to be N`), 54 timeouts, and 102 import-resolution errors from a worker
+reused across module graphs. `useDocumentSync` (36), `use-browser-document-controller` (35),
+`workspace-plane` (33) and `version-store` (30) lead. Reusing a worker across files is
+precisely what the repo's setup-file teardown, its per-file data dir and its `localStorage`
+clear exist to make unnecessary — 24% of wall clock does not buy that back.
+
+### `browser.locators.errorFormat: 'aria'` — nothing to adopt
+
+The default is already `'all'`, which prints the ARIA tree AND the HTML. Measured on a
+forced miss: the error leads with `ARIA tree:` (roles and accessible names, four lines for a
+dialog) and follows with the HTML. Setting `'aria'` only REMOVES the HTML — a choice about
+output volume, not a capability. Leave it at the default; the tree that makes a
+`getByRole` miss readable is there already.
+
+### `coverage.autoAttachSubprocess` — no-op for this repo's coverage lane
+
+`pnpm test:coverage` is `vitest run --coverage --project mcp-node`, and every subprocess call
+site in that project takes an INJECTED spawn (`backup-subprocess.test.ts` hands
+`runBackupInSubprocess` a fake `spawnBackup` that emits on a stub child). No real child
+process runs, so there is nothing to attach to. The project that does spawn real children,
+`mcp-smoke`, is not in the coverage command — putting it there is the change worth arguing
+about, and this option is only useful after it.
+
+### `detectAsyncLeaks` — a real detector, currently reporting one upstream artefact 25 times
+
+```bash
+vitest run --detect-async-leaks --project <name>    # node projects only; ignored in browser mode
+```
+
+Reports async resources still open when a test file finishes, with the import that created
+them. It is diagnostic, not a gate — the run stays green.
+
+On this tree it reports **25 PIPEWRAP leaks, and every one is the same upstream artefact**.
+Bisected to a minimal reproducer: `import { unified } from 'unified'` — no plugin, no
+`.parse()`, nothing else in the file. Every leaking file's import graph reaches `unified`
+(most through `@kamiazya/whiteboard-codec`'s markdown pipeline); no non-leaker's does. Not
+`process.stdout` (a probe touching `isTTY` reports nothing), not the remark plugins
+(`remark-gfm`, `remark-math`, `remark-stringify` and `yaml` each import clean), not the
+cross-package alias (`@kamiazya/whiteboard-model` imports clean), and not project-specific
+(it reproduces inside `codec-node` on codec's own index).
+
+So: do not wire it into CI. Twenty-five copies of one artefact would bury the first real
+leak. Reach for it when hunting a specific leaked timer or handle, and discount any report
+whose pointer lands on a `unified` import. Re-measure if the codec's markdown stack changes —
+if the count moves away from 25, something new is leaking.
+
+### `expect.schemaMatching` — not better at the sites this repo has
+
+`expect(value).toEqual(expect.schemaMatching(zodSchema))` validates against any Standard
+Schema v1 object. The repo's five candidate sites are all
+`expect(() => schema.parse(x)).not.toThrow()`, and measured side by side on the same failure
+both messages carry the same Zod issues — `not.toThrow` prints them as a plain list,
+`schemaMatching` as a `SchemaMatching{…}` deep-equal diff. Neither is clearly better, so the
+existing sites stay as they are.
+
+Where it earns its place is the shape `not.toThrow` cannot express at all — one field of a
+larger object, checked against a schema inside a single equality:
+
+```ts
+expect(response).toEqual({
+  id: expect.any(String),
+  config: expect.schemaMatching(runtimeConfigSchema),
+})
+```
+
+Reach for it there; do not churn a passing `not.toThrow` into it.
+
+### The past releases' features, checked the same way
+
+Read after the 5.0 upgrade, because features shipped in 3.x/4.x had never been checked here
+at all. `vi.defineHelper` was the one worth adopting (`executable-rungs.md`). The rest:
+
+- **Test `{ signal }` (3.2)** cannot address the shape it looks made for. The signal is
+  aborted on timeout, but `userEvent` accepts no signal anywhere — `keyboard` is
+  `(text: string) => Promise<void>`, and the whole `UserEvent` interface declares none — so
+  the overrun that keeps typing into the next test has nothing to hand it to
+  (`browser-mode.md`). It is usable where the TEST awaits cancellable work of its own; the
+  repo's 18 in-test `fetch` calls are the only candidates and none is long enough to matter.
+- **`locators.extend` (3.2)** would rewrite `focusEditable`'s 43 call sites from DOM-query
+  closures to locators, to gain retry `vi.waitFor` already provides and lose the diagnostics
+  the helper exists for — its message distinguishes three causes that reached the same line
+  in CI and were otherwise indistinguishable.
+- **`page.frameLocator()` (4.0)** has no site: the iframe tests assert the ELEMENT (sandbox
+  attributes, the cap of three live frames) and never its content, which is sandboxed without
+  `allow-same-origin` by design.
+- **`toBeInViewport` (4.0)** has no site either. The repo's `getBoundingClientRect` reads are
+  pointer coordinates for a synthetic touch and box dimensions for a diagnostic string —
+  neither asks whether an element is in the viewport.
+- **The `agent` reporter (4.1)** produces the same content as the default here: 14 non-noise
+  lines each on a green `web-jsdom` run. It suppresses passing-test output, and this repo's
+  default output has almost none — 94 of 108 lines are jsdom's `Not implemented:
+  HTMLCanvasElement getContext` warnings, which no reporter controls. `AI_AGENT` is not set
+  in Claude Code, so it does not auto-enable either.
+- **`sequence.groupOrder` (3.2)** solves a conflict this repo does not have: `mcp-smoke`
+  serialises with `maxWorkers: 1` for daemon ports WITHIN its project, and nothing binds a
+  fixed port across projects.
+- **Test tags (4.1)** as a quarantine mechanism improve nothing today — there are zero
+  `QUARANTINE(` markers in the tree, and the marker carries a date, an issue and a reason
+  that a tag cannot.
+
+### Environment cost: a per-file `node` environment, and why NOT happy-dom
+
+Vitest 5's environment line reports what no earlier version did, and it named the largest
+single cost in the repo's largest project — larger than running the tests:
+
+```
+Environment  |web-jsdom| jsdom was created 353 times · 234.29s total, 38% of tracked time
+```
+
+Two levers, both measured end to end. **One adopted, one refused.**
+
+**Adopted — `// @vitest-environment node` on the files that never touch a DOM.** 145 of
+web-jsdom's 353 files. The docblock keeps the file in its project, with its setup file and
+its CI job; it simply stops paying for a DOM it does not use.
+
+| | wall | environment share |
+|---|---|---|
+| the 149-file subset under jsdom | 82s | 46% (100.9s) |
+| the same subset under `node` | **47s** | **1%** |
+| whole project before | 219s | 38% (234.3s) |
+| whole project after | **188s** | **26%** (135.5s) |
+
+**The set is what the RUN says, not what a grep says** — and not what ONE run says either.
+
+A "no testing-library, no `document`/`window`/`localStorage`/`indexedDB`" scan proposed 149.
+Four failed immediately with `ReferenceError: document is not defined`, the dependency being
+indirect (CodeMirror's completion source, three lib modules). The remaining 145 passed a full
+`web-jsdom` run — and **two of them still failed in CI**, under
+`stress-changed-tests`'s five fresh processes and `--repeats=3`:
+
+- `sse-shared-stream-source.test.ts` installs its own `FakeSharedWorker` over
+  `globalThis.SharedWorker`, so it reads as DOM-free and passes alone; its eviction path
+  does not survive repetition without jsdom (`expected [] to have a length of 1`).
+- `save-scheduler.property.test.ts` timed out at 5000ms with a seed in its name — the
+  budget shape, not a counterexample (`async-and-timers.md`), and only under load.
+
+Both went back to jsdom; 141 remain. **Certify an environment swap under the stress shape,
+never under one pass**: three fresh runs plus `--repeats=3` over the whole annotated set is
+what the CI step does and what this now clears. The direction is still the safe one — a file
+that needs a DOM and does not get one fails, loudly or under repetition, where a file that
+stops needing one merely keeps paying.
+
+**Refused — `happy-dom` as the environment.** It is faster, and that is not the question.
+Measured on the whole project on top of the change above: 188s → **158s (-16%)**,
+environment 26% → 16%, with 3 failures out of 3682. Two of the three are the reason:
+
+- `HeaderBranchChip` reads `getAttribute('style')` and expects `rgb(147, 51, 234)`. jsdom
+  serialises a hex colour to `rgb()` the way Chrome does; happy-dom keeps `#9333ea`. The
+  test's own comment already said which browser behaviour it was pinning.
+- `initial-tool` simulates private mode with `vi.spyOn(Storage.prototype, 'setItem')`. Under
+  jsdom `sessionStorage` routes through the prototype and the spy fires, so the test
+  exercises the `catch` branch it exists for. Under happy-dom it does not fire, the write
+  succeeds, and the assertion reads `'select'` where it expects `null`.
+
+That second one is the argument, and it is this repo's own recorded hazard: **a guard that
+never reaches its subject passes, and reads exactly like a guard that checked.** The failure
+was visible only because the assertion was strong. A test whose only claim was
+`expect(() => writeLastTool('select')).not.toThrow()` would have gone green under happy-dom
+while never entering the branch — silently, across a 353-file suite, wherever prototype-level
+interception is how a browser condition gets simulated. 16% does not buy that.
+
+(The third failure is happy-dom being MORE correct — `navigator.clipboard` is getter-only, as
+in a real browser, so the test's `Object.assign(navigator, …)` throws. That one is the test's
+sloppiness and would be worth fixing either way.)
+
+### `injectCjsGlobals: false` — already held by a stronger rung
+
+It would make a shared-layer package reading `__dirname` fail at test time. `tools/arch-lint`'s
+scanner already bans `__dirname`, `__filename`, `process`, `Buffer` and `global` as ambient
+identifiers across the shared layer, statically — and measured zero occurrences today, tests
+included. A runtime rung behind a static one that already covers the same identifiers is
+redundancy, not coverage.
+

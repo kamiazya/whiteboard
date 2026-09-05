@@ -42,7 +42,7 @@ in a file named after a version, which only a reader who already knows the featu
 | a property test, a Stryker survivor, a generator that reaches nothing, a coverage ledger | `resources/property-and-mutation.md` |
 | "is this test stable?" — repeats, stress, isolation vs full run, quarantine, flake-watch | `resources/stability-checks.md` |
 | adding a GritQL shape, a setup-file guard, or a source-scan test | `resources/executable-rungs.md` |
-| projects and filters, pools and caches, `.vitest/` artifacts and reporters, benchmarks, custom matchers, coverage | `resources/configuration.md` |
+| projects and filters, pools and caches, `.vitest/` artifacts and reporters, benchmarks, custom matchers, coverage — and the four tempting options measured and REFUTED here | `resources/configuration.md` |
 | moving to a new vitest major: breaking changes measured against this tree, and the order to land them | `resources/vitest-upgrade.md` |
 
 ## Write-time checklist (the shapes that cost the most, in one screen)
@@ -69,6 +69,19 @@ in a file named after a version, which only a reader who already knows the featu
     — isolation proves nothing about the run that flakes.
 
 ## Commands
+
+**A release note is a claim about someone else's repo.** Thirteen features from the 3.x, 4.x
+and 5.0 announcements were checked against this tree and **three** were worth adopting —
+`fsModuleCache`, in the one job a measurement said it pays; `vi.defineHelper`, on the four
+helpers that assert; and a per-file `node` environment for the 145 jsdom files that never
+touch a DOM (219s → 188s, and `happy-dom` refused at a further −16% because it breaks
+prototype-level spying — `resources/configuration.md`). The other eleven were wrong for this repo: `isolate: false` (464
+failures), `errorFormat: 'aria'` (already the default), `detectAsyncLeaks` (25 reports, all
+one upstream artefact), the test `{ signal }` (nothing in `userEvent` accepts one),
+`locators.extend`, `frameLocator`, `toBeInViewport`, the `agent` reporter, `schemaMatching`,
+`sequence.groupOrder`, tags-as-quarantine, `coverage.autoAttachSubprocess` and
+`injectCjsGlobals: false`. Measure on the projects that hold state, not the small pure ones;
+`resources/configuration.md` carries each number.
 
 ```bash
 pnpm test --project <name>              # nearest layer (names: test-layer-selection)

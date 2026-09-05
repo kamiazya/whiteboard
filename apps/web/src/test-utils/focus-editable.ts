@@ -49,7 +49,9 @@ import { expect, vi } from 'vitest'
  *   about why. Seeding the shared view-mode preference to 'read' reproduces a
  *   whole file of those verbatim — see `initialViewMode` on MarkdownEditor.
  */
-export async function focusEditable(resolveEditable: () => Element | null): Promise<void> {
+export const focusEditable = vi.defineHelper(async function focusEditable(
+  resolveEditable: () => Element | null,
+): Promise<void> {
   await vi.waitFor(() => {
     const element = resolveEditable()
     expect(
@@ -84,4 +86,4 @@ export async function focusEditable(resolveEditable: () => Element | null): Prom
         }>`,
     ).toBe(element)
   })
-}
+})

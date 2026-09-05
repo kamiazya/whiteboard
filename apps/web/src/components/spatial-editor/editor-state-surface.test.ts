@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Every piece of React state `SpatialEditor` holds, classified against
  * what `editor-state.property.test.ts` actually models.

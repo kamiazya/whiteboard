@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The picker WRITES markup that the codec READS back. Asserting the string
 // only pins one half of that, and the half that matters is whether the
 // reference survives the reader — a single `]` in an alias produced a string

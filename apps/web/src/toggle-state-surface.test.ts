@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A control that TOGGLES something must express its state from its ARIA
  * attribute, not from a parallel boolean.

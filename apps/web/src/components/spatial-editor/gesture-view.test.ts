@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The shared gesture-view derivations: what a gesture carries, how the
 // canvas looks at the live preview geometry, and which edge sides stay
 // frozen — ONE producer for the editor's static-base/ghost/live-edge

@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Model-based property over the selection state machine: random event
 // sequences, invariants checked after EVERY step. This is the executable
 // form of "selection = {primary} ∪ extras, coherent by construction" — the

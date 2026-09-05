@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {

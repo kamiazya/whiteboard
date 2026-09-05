@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expectTypeOf, it } from 'vitest'
 import type { CommandErrorCode } from './types.js'
 

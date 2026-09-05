@@ -1,3 +1,4 @@
+// @vitest-environment node
 // One switcher, two keepers — and the switcher decides what to OFFER by
 // asking whether its source carries the method. That is the mechanism behind
 // DESIGN.md's "never offer what the keeper cannot honour", and it is invisible

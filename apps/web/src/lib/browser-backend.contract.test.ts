@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The browser implementation against the shared DocumentBackend contract.
  * Its transport siblings run the same cases from mcp-server, where they live.

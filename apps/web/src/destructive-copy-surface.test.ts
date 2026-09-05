@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The sentences in `lib/destructive-copy.ts` must exist in exactly one
  * place. This scans every source file under `apps/web/src` and fails when

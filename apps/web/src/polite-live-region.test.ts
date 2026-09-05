@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * A polite live region must be in the DOM BEFORE the text it announces.
  *
