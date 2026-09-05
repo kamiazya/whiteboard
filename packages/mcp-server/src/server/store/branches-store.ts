@@ -3,6 +3,7 @@ import {
   resolveWorkspaceDocumentById,
   updateWorkspaceDocumentMeta,
 } from '@kamiazya/whiteboard-loro-adapter'
+import type { BranchMeta, DocumentBranchesState } from '../../shared/api-contracts/branches.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
@@ -20,19 +21,12 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // across the path → documentId migration. Internally the path is resolved to
 // the stable canvas id before any branches/documents write.
 
-export interface BranchMeta {
-  name: string
-  tipFrontiers: string
-  baseBranch?: string
-  baseVersionId?: string
-  color: string
-  createdAt: string
-}
+export type { BranchMeta } from '../../shared/api-contracts/branches.js'
 
-export interface DocumentBranches {
-  branches: BranchMeta[]
-  head: string
-}
+// Internal alias: this store's DocumentBranches predates the shared contract
+// and its callers already spell that name — kept to avoid a same-package
+// drive-by rename beyond this increment's scope.
+export type DocumentBranches = DocumentBranchesState
 
 export const DEFAULT_MAIN_COLOR = '#1971c2'
 

@@ -1,4 +1,8 @@
 import { Hono } from 'hono'
+import type {
+  OptimizeAllDocumentsResponse,
+  PruneSandwichedVersionsResponse,
+} from '../../../shared/api-contracts/document.js'
 import { evictDoc } from '../../store/doc-cache.js'
 import { compactDocument, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
@@ -56,7 +60,11 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
         results.push({ path, deletedCount: r.deletedCount })
         totalDeleted += r.deletedCount
       }
-      return c.json({ results, totalDeleted })
+      // Bound to the contract the Storage tab hard-parses; `results` rides
+      // along deliberately unvalidated (see the schema's comment).
+      return c.json({ results, totalDeleted } satisfies PruneSandwichedVersionsResponse & {
+        results: unknown
+      })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
@@ -97,7 +105,11 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
         totalBeforeBytes += result.beforeBytes
         totalAfterBytes += result.afterBytes
       }
-      return c.json({ results, totalBeforeBytes, totalAfterBytes })
+      return c.json({
+        results,
+        totalBeforeBytes,
+        totalAfterBytes,
+      } satisfies OptimizeAllDocumentsResponse & { results: unknown })
     } catch (err) {
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)

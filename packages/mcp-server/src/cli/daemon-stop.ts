@@ -3,14 +3,10 @@ import {
   deleteDaemonRecord,
   loadDaemonRecord,
 } from '../daemon/daemon-registry.js'
-
-export interface DaemonStopResult {
-  schemaVersion: 1
-  ok: boolean
-  action: 'stopped' | 'not-running' | 'refused'
-  reason: string | null
-  pid: number | null
-}
+import {
+  type DaemonStopResult,
+  daemonStopResultSchema,
+} from '../shared/api-contracts/daemon-stop.js'
 
 export interface DaemonStopOptions {
   dataDir: string
@@ -42,13 +38,13 @@ export async function runDaemonStop(
 
   if (record === null) {
     return {
-      result: {
+      result: daemonStopResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         action: 'not-running',
         reason: 'record-not-found',
         pid: null,
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -58,13 +54,13 @@ export async function runDaemonStop(
   if (!isAlive(pid)) {
     await removeRecord(options.dataDir)
     return {
-      result: {
+      result: daemonStopResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         action: 'not-running',
         reason: 'process-not-running',
         pid,
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -73,13 +69,13 @@ export async function runDaemonStop(
     killFn(pid, 'SIGTERM')
   } catch {
     return {
-      result: {
+      result: daemonStopResultSchema.parse({
         schemaVersion: 1,
         ok: false,
         action: 'refused',
         reason: 'kill-failed',
         pid,
-      },
+      }),
       exitCode: 1,
     }
   }
@@ -103,13 +99,13 @@ export async function runDaemonStop(
   await removeRecord(options.dataDir)
 
   return {
-    result: {
+    result: daemonStopResultSchema.parse({
       schemaVersion: 1,
       ok: true,
       action: 'stopped',
       reason: null,
       pid,
-    },
+    }),
     exitCode: 0,
   }
 }
