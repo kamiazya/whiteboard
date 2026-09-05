@@ -89,13 +89,16 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
     input: ReadSnapshotManifestInput,
   ): Promise<ReadSnapshotManifestResult> {
     if (input.docRef.kind === 'document') {
-      // Derived from the same projection loadSnapshot serves, so the two
-      // answers can never disagree about whether a base exists.
-      const loaded = await this.loadSnapshot({ docRef: input.docRef })
-      // A projection has no stored row to fence, so it reports the generation
-      // a never-folded record would: nothing can have replaced it. Compaction
-      // of a tree-served document is refused below in any case.
-      return loaded === null ? null : { manifest: loaded.manifest, generation: 0 }
+      const entry = await this.#treeEntry(input.docRef)
+      if (entry !== null) {
+        // Derived from the same projection loadSnapshot serves, so the two
+        // answers can never disagree about whether a base exists.
+        const loaded = await this.loadSnapshot({ docRef: input.docRef })
+        // A projection has no stored row to fence, so it reports the generation
+        // a never-folded record would: nothing can have replaced it. Compaction
+        // of a tree-served document is refused below in any case.
+        return loaded === null ? null : { manifest: loaded.manifest, generation: 0 }
+      }
     }
     return this.inner.readSnapshotManifest(input)
   }

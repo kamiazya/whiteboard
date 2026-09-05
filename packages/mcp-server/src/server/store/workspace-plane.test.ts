@@ -15,9 +15,10 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -292,4 +293,32 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   saveSpy.mockRestore()
 
   expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+})
+
+describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {
+  // `conformance-ws` is tree-backed (createWorkspace + one seed document at a
+  // path the suite never names), but the suite's own DOC/OTHER ids are never
+  // placed on that tree. A store's byte-level contract is about opaque
+  // records; the tree-served path is a CRDT projection that would import the
+  // suite's non-Loro bytes as a document and fail on unrelated grounds. So
+  // every ref the suite exercises falls through #treeEntry to the inner
+  // store — exactly the path the production dual-plane wiring depends on for
+  // any document the tree does not (yet) hold.
+  describeDocumentStoreConformance(async () => {
+    const db = await getDb(tempDir)
+    const inner = new LibsqlDocumentStore(db)
+    const index = new LoroWorkspaceDocumentIndex(
+      cacheBackedWorkspaceDocs(),
+      new FsBlobStore(joinPath(tempDir, 'blobs')),
+    )
+    await index.createWorkspace({ workspaceId: 'conformance-ws' })
+    await index.createDocument({ workspaceId: 'conformance-ws', path: 'seed', kind: 'spatial' })
+    return {
+      store: new WorkspaceRoutedDocumentStore(inner),
+      writeUnreadableRecord: (docRef) => inner.writeUnreadableRecord(docRef),
+      // The file-level beforeEach/afterEach own tempDir + the db handle
+      // (fresh per case), so there is nothing extra to tear down here.
+      dispose: async () => {},
+    }
+  })
 })
