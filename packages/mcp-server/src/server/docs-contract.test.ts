@@ -243,6 +243,19 @@ describe('docs/ contract', () => {
     expect(devRow).toContain('stdio proxy')
   })
 
+  // The operator guide reads as complete (Dockerfile, compose, TLS, backup)
+  // but server mode serves only a static placeholder page — apps/web has no
+  // server-mode-aware auth flow yet (see SERVER_MODE_PLACEHOLDER_HTML's
+  // rationale in app-helpers.ts). An operator who follows Quick start and
+  // opens the root URL must learn that from the guide, not from a dead page.
+  it('tells self-hosting operators that server mode serves no browser UI', () => {
+    const guide = readFileSync(join(DOCS_ROOT, 'how-to/self-host-with-docker.md'), 'utf8')
+    expect(guide).toContain('no browser UI')
+    // The two surfaces this deployment actually serves.
+    expect(guide).toContain('/api')
+    expect(guide).toContain('/mcp')
+  })
+
   // A count spelled out in prose is the kind of claim nobody re-reads: it read
   // "seventeen" for at least two added projects, next to an enumeration that
   // still named a `workspace node` project the repo no longer has.
