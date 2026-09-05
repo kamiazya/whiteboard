@@ -108,6 +108,11 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // workspace on screen. Its own effect, since the handle can arrive after
   // the source.
   recentIds: 'cleared on switch',
+  // Paths, and paths collide across workspaces — `untitled` is the first
+  // document in most. A selection carried across a switch would address the
+  // departed workspace's names into the store now on screen, in a BULK
+  // delete, which is the worst place for that class of mistake.
+  selection: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
