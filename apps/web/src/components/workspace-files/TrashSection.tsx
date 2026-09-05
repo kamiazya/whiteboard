@@ -7,7 +7,7 @@
  * list up. Collapsed by default for the same reason.
  */
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { TrashRow } from './files-source.js'
+import type { TrashRow } from '../../lib/files-source.js'
 import { formatRelative } from './format-relative.js'
 
 export interface TrashSectionProps {

@@ -1,14 +1,14 @@
 import { FileSymlink, SquareArrowOutUpRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
-import { cn } from '../../lib/utils.js'
 import {
   externalLinkMarkup,
   type LinkTarget,
   linkMarkupFor,
   rankLinkTargets,
   urlFromQuery,
-} from './link-target.js'
+} from '../../lib/link-target.js'
+import { cn } from '../../lib/utils.js'
 
 export interface LinkPickerDialogProps {
   readonly targets: readonly LinkTarget[]

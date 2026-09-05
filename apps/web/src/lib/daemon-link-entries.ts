@@ -1,6 +1,6 @@
 import type { UniqueNameEntry } from '@kamiazya/whiteboard-codec'
 import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { LinkTarget } from '../components/markdown-editor/link-target.js'
+import type { LinkTarget } from './link-target.js'
 
 /**
  * A daemon document has two names and they are not interchangeable. The

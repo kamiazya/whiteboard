@@ -9,8 +9,8 @@ import { MinimapRail } from './MinimapRail.js'
 
 const railGeometrySpy = vi.fn()
 
-vi.mock('./rail-geometry.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./rail-geometry.js')>()
+vi.mock('../../lib/rail-geometry.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../lib/rail-geometry.js')>()
   return {
     ...actual,
     railGeometry: (...args: Parameters<typeof actual.railGeometry>) => {

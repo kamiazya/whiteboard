@@ -7,7 +7,8 @@
  * lib importing a component means the type or helper lib wanted was filed
  * under the screen that first needed it and never moved.
  *
- * Measured before writing this: 21 upward edges, 15 of them `import type`.
+ * Measured before writing this: 21 upward edges, 15 of them `import type`;
+ * the first burn-down moved four pure modules into `lib/` and retired six.
  * They are allowlisted below rather than fixed here, because each is a
  * relocation with its own importers to carry, and the point of the guard is
  * that the count only ever goes down. The list is guarded from both sides —
@@ -131,11 +132,7 @@ const UPWARD_EDGES: readonly string[] = [
   'components/SaveStatusChip.tsx -> pages/use-browser-document-controller.ts (type)',
   'hooks/useDocumentSync.ts -> components/spatial-editor/commands.ts (type)',
   'hooks/useDocumentSync.ts -> components/spatial-editor/scene-render.ts',
-  'hooks/useMarkdownOutline.ts -> components/markdown-editor/rail-geometry.ts (type)',
   'lib/daemon-file-adapter.ts -> hooks/use-document-file-seams.ts (type)',
-  'lib/daemon-files-source.ts -> components/workspace-files/document-entry.ts (type)',
-  'lib/daemon-files-source.ts -> components/workspace-files/files-source.ts',
-  'lib/daemon-link-entries.ts -> components/markdown-editor/link-target.ts (type)',
   'lib/document-embed-content.ts -> hooks/use-document-file-seams.ts (type)',
   'lib/document-sync-session.ts -> components/spatial-editor/commands.ts (type)',
   'lib/favicon.ts -> components/spatial-editor/minimap.ts',
@@ -144,14 +141,12 @@ const UPWARD_EDGES: readonly string[] = [
   'lib/layout-worker.ts -> components/markdown-editor/render-preview.ts',
   'lib/layout-worker.ts -> components/spatial-editor/scene-render-core.ts',
   'lib/layout-worker.ts -> hooks/useThemeMode.ts (type)',
-  'lib/local-files-source.ts -> components/workspace-files/document-entry.ts (type)',
-  'lib/local-files-source.ts -> components/workspace-files/files-source.ts',
   'lib/render-key.ts -> hooks/useThemeMode.ts (type)',
   'lib/shell-status-store.ts -> components/connection/ConnectionStatus.tsx (type)',
   'lib/viewport-request.ts -> components/spatial-editor/index.ts (type)',
 ]
 
-const UPWARD_EDGES_CEILING = 21
+const UPWARD_EDGES_CEILING = 15
 
 describe('apps/web layer order', () => {
   const actual = upwardEdges()

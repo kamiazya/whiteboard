@@ -41,22 +41,31 @@ and each entry checked to still be a real edge — an entry cannot outlive
 what it names. Shrink the list by moving the TARGET down, then delete the
 line and lower the ceiling; never add to it for new code.
 
-In the order that pays best:
+Done so far, in the order that paid best:
 
-1. **Types into `lib/`** (15 edges, no runtime change): `ResolvedTheme` out
-   of `hooks/useThemeMode` (3 importers in `lib/`), `DocumentFileAdapter` /
-   `LoadedFileDocument` out of `hooks/use-document-file-seams` (2),
-   `EditorCommand` / `EditorLeafCommand` out of `spatial-editor/commands`
-   (2), `WorkspaceDocumentEntry` out of `workspace-files/document-entry`
-   (2), and one each of `RailBlock`, `LinkTarget`, `ConnectionState`,
-   `SpatialEditorHandle`, `EditorTool`, `BrowserPersistenceState`.
-2. **Pure helpers out of `components/`** (6 value edges): `minimap.ts`
-   (`favicon.ts` draws the favicon with it), `workspace-files/files-source`
-   (both files-source implementations live in `lib/` and import their own
-   contract from above), and the render glue `layout-worker.ts` runs off
-   the main thread — `scene-render`, `scene-render-core`, `render-preview`.
-   A worker importing from `components/` is the clearest sign those are
-   not components.
+1. **Pure modules out of `components/`** (retired 6): `document-entry`,
+   `files-source`, `rail-geometry` and `link-target` now live flat in
+   `lib/` — none of them knew React, and the two files-source
+   implementations in `lib/` were importing their own contract from above.
+
+Still open (15):
+
+2. **Types into `lib/`** (13 edges, no runtime change): `ResolvedTheme` out
+   of `hooks/useThemeMode` (3 importers in `lib/`, 21 overall),
+   `DocumentFileAdapter` / `LoadedFileDocument` out of
+   `hooks/use-document-file-seams` (2), `EditorCommand` /
+   `EditorLeafCommand` out of `spatial-editor/commands` (2), and one each
+   of `ConnectionState`, `SpatialEditorHandle`, `EditorTool`,
+   `BrowserPersistenceState`.
+3. **The render glue `lib/layout-worker.ts` runs off the main thread**
+   (3 value edges): `spatial-editor/scene-render`, `scene-render-core`,
+   `markdown-editor/render-preview`. A worker importing from
+   `components/` is the clearest sign those are not components.
+4. **`spatial-editor/minimap`** (1 value edge, `favicon.ts` draws the
+   favicon with it): pure, but it reads `NodeBox` from
+   `spatial-editor/geometry`, which reads `Point` from `viewport` — so it
+   moves with that pair or not at all; 21 importers of `geometry` say
+   this is its own increment.
 
 ## What the other guards already cover
 

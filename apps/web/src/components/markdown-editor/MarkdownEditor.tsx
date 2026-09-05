@@ -24,6 +24,8 @@ import {
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { LinkTarget } from '../../lib/link-target.js'
+import type { RailBlock } from '../../lib/rail-geometry.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
@@ -41,7 +43,6 @@ import {
   selfContainedCommand,
 } from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
-import type { LinkTarget } from './link-target.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
 import {
@@ -51,7 +52,6 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
-import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
