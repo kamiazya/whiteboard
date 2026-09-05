@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 // What a re-read must not do is throw the layout away and put it back.
