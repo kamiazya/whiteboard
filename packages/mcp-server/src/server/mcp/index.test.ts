@@ -17,7 +17,6 @@ vi.mock('./standalone-help.js', () => ({
   buildDrawDiagramPrompt: vi.fn(() => ''),
   getStandaloneHelpText: vi.fn(() => ''),
   WHITEBOARD_DRAW_PROMPT: 'draw-diagram',
-  WHITEBOARD_HELP_URI: 'whiteboard://help',
 }))
 vi.mock('../config.js', () => ({
   getDataDir: vi.fn(() => '/tmp/whiteboard-index-test'),

@@ -77,7 +77,7 @@
     "smoke:docker-backup-restore": "node ../../tests/e2e/distribution/packaged-server-mode-backup-restore-smoke.mjs",
     "mutation:contracts": "stryker run",
     "mcp": "node --import tsx/esm src/server/mcp/index.ts",
-    "mcp:http": "node dist/server/index.js --daemon --port=3099 --token=whiteboard-dev",
+    "mcp:http": "node scripts/dev/run-built-daemon.mjs",
     "mcp:http:dev": "node scripts/dev/with-dev-data-dir.mjs --daemon --token=whiteboard-dev --idle-timeout-ms=0",
     "mcp:inspect": "npx @modelcontextprotocol/inspector",
     "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/index.ts",

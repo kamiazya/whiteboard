@@ -14,14 +14,12 @@ when you're ready. Pick where you are:
 
 | I want to… | Start with |
 |---|---|
-| **Just try it in my browser** — no install, no account; my data stays in my browser | [Open a browser canvas →](tutorials/) <sub>(zero-install · kept in your browser)</sub> |
-| **Draw with my AI agent** (Claude Code, Codex, Gemini) | [Connect an AI agent →](tutorials/) <sub>(Local daemon + MCP)</sub> |
-| **Self-host for my team** | [Self-host with Docker →](how-to/) <sub>(Server mode)</sub> |
+| **Just try it in my browser** — no install, no account; my data stays in my browser | [Getting started →](tutorials/getting-started.md) <sub>(run from a checkout · kept in your browser)</sub> |
+| **Draw with my AI agent** (Claude Code, Codex, Gemini) | [Connect to the local daemon →](how-to/connect-to-local-daemon.md) <sub>(Local daemon + MCP)</sub> |
+| **Self-host for my team** | [Self-host with Docker →](how-to/self-host-with-docker.md) <sub>(Server mode)</sub> |
 
-<sub>During the docs migration these doors land on the section index; the specific pages
-(`first-browser-canvas`, `connect-an-ai-agent`, `self-host-with-docker`) arrive in later
-slices. The "try it in your browser" destination is a placeholder until a canonical hosted URL
-is chosen — live preview origins are intentionally blocked.</sub>
+<sub>The browser door runs from a checkout for now: a canonical hosted URL is still to be
+chosen, and live preview origins are intentionally blocked.</sub>
 
 ## The four kinds of docs (Diátaxis)
 
