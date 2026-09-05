@@ -1,3 +1,4 @@
+// @vitest-environment node
 // apps/web's jsdom vitest project previously ran unnamed (inheriting the
 // package name @kamiazya/whiteboard-web), so `--project web-jsdom` matched
 // nothing while a sibling `--project web-browser` in the same command still

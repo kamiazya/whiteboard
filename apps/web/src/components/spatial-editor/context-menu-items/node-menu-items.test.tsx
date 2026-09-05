@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The node branch's composition rules, pinned as plain function calls: items
 // are data, so presence/order/label assertions and handler-spy assertions
 // need no DOM. The one genuinely untested slice (per the design) is the last

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { RENDER_SURFACES, type RenderSurfaceId } from './render-surfaces.js'

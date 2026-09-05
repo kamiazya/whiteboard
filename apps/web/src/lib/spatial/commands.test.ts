@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { CanvasComment, ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 
 const modules = import.meta.glob('./**/*.{ts,tsx}', { query: '?raw', import: 'default' })

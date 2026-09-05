@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * What a `[[reference]]` survives AT THE RESOLVER, measured rather than
  * assumed. Since display names were retired from resolution (owner

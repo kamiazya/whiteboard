@@ -1,3 +1,4 @@
+// @vitest-environment node
 // `userEvent.click` waits for its target to be "visible, enabled and stable".
 // A CodeMirror editor in this app sits beside a preview pane that re-renders
 // through real Canvas 2D text measurement, so under a saturated run the layout

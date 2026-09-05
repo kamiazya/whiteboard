@@ -1,3 +1,4 @@
+// @vitest-environment node
 // What the node context menu contributes, now that facets have an inspector:
 // a doorway, and only when there is something behind it.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'

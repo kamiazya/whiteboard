@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SW_IDLE_SETTLE_MS, startSwIdleAutoApply } from './sw-idle-apply.js'
 

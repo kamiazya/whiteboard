@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Metamorphic property for buildFragmentInsertCommand: relative geometry and
 // node count survive the remint+offset pipeline regardless of which offset
 // mode fires. Mutation-checked by temporarily breaking the offset/remint

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_EDITOR_UNSUPPORTED } from './SpatialEditor.js'
 

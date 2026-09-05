@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { describe, expect, it } from 'vitest'
 import { latestThumbnailVersion } from './MergeDialog.js'

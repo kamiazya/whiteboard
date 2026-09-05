@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * `apps/web/src` has layers, and until this test it had them only by
  * convention: `lib/` (browser-only mechanics, no React), `contexts/` and

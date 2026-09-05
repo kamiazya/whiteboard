@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it, vi } from 'vitest'
 import { commentMenuItems } from './comment-menu-items.js'

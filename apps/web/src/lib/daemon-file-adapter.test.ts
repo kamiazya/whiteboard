@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The daemon binding of the editor's file seams. Until this existed, the
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes

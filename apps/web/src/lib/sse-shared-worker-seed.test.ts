@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The worker replica must know a document's PRE-EXISTING state, not only what
  * arrived while the worker happened to be alive.

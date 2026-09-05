@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The save scheduler, under every interleaving of typing, timers, leaving,
  * and writes landing.

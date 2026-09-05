@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Real-engine smoke for the MathJax half of the fragment renderers: the
  * dynamic-import wiring is exactly the class of failure a mocked test

@@ -1,3 +1,4 @@
+// @vitest-environment node
 import type { ViewportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorHandle } from './spatial/editor-handle.js'

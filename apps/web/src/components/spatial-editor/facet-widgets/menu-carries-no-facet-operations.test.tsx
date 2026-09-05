@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The node context menu is an ACTION surface: entries run once and close it.
 // A facet is state, not an action, so the menu carries a doorway to the
 // inspector and nothing else — no band, no picker, no per-domain row.

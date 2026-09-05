@@ -1,3 +1,4 @@
+// @vitest-environment node
 // The occlusion arithmetic behind keyboard avoidance: client rects are
 // layout-viewport coordinates and the visual viewport's offsetTop + height
 // is its bottom edge in the same space, so the covered strip is whatever of

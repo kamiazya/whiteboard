@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * Both document pages must attach the picture a bookmark carries.
  *

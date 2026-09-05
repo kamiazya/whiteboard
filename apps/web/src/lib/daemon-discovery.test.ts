@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
 import { candidateBaseUrls, discoverDaemons, rememberKnownDaemon } from './daemon-discovery.js'
 import type { DaemonProbeResult, ProbeDaemonOptions } from './daemon-probe.js'

@@ -1,3 +1,4 @@
+// @vitest-environment node
 /**
  * The keeper-capability ledger: a feature that reaches the daemon is either
  * answered by the browser keeper too, declared as a difference, or written

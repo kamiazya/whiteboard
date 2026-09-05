@@ -1,3 +1,4 @@
+// @vitest-environment node
 // Tier-2 conformance test for this surface (package-canvas-render.md
 // decision #8 / the theme-layer slice): the editor must not diverge from
 // canvas-render's own default geometry in EITHER theme mode. Asserts light
