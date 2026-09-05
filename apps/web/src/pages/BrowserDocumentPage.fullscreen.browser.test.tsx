@@ -14,6 +14,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { AppShell } from '../components/AppShell.js'
 import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
@@ -35,10 +36,15 @@ afterEach(async () => {
   cleanup()
 })
 
+// The shell above the page, the way App composes them: the toggle is the
+// shell's, and what fullscreen hides is both rows.
 function render(ui: ReactElement) {
   return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell daemon={false} />
+        <div style={{ minHeight: 0, flex: 1 }}>{ui}</div>
+      </MemoryRouter>
     </div>,
   )
 }
@@ -69,10 +75,11 @@ it('really enters fullscreen on click, focuses the exit control, and restores fo
   await userEvent.click(screen.getByRole('button', { name: 'Fullscreen' }))
   await waitFor(() => expect(document.fullscreenElement).not.toBeNull(), { timeout: 10_000 })
 
-  // The chrome steps aside; the one way back out holds focus.
+  // Both chrome rows step aside; the one way back out holds focus.
   await waitFor(() =>
     expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull(),
   )
+  expect(screen.queryByTestId('shell-settings')).toBeNull()
   const exit = await screen.findByRole('button', { name: 'Exit fullscreen' })
   await waitFor(() => expect(document.activeElement).toBe(exit))
 

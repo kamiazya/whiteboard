@@ -273,10 +273,11 @@ describe('a panel whose behaviour differs by keeper is told which keeper it is',
     )
 
   it('finds every production mount of the history panel', () => {
-    // Two pages decide, and VersionPanel forwards to VersionTimeline. A
-    // regex that stopped matching would report zero mounts and pass every
-    // case below vacuously.
-    expect(mounts.length).toBeGreaterThanOrEqual(3)
+    // The shared DocumentPage decides once (both keepers render through
+    // it), and VersionPanel forwards to VersionTimeline. A regex that
+    // stopped matching would report zero mounts and pass every case below
+    // vacuously.
+    expect(mounts.length).toBeGreaterThanOrEqual(2)
   })
 
   it.each(

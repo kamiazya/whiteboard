@@ -45,6 +45,16 @@ export interface UseDocumentFileSeamsOptions {
    * on the next refresh; an absent one simply never invalidates.
    */
   readonly stampOf: ReadonlyMap<string, string>
+  /**
+   * Bodies laid out BESIDE the canvas — a node's text as it is being drafted
+   * in the editor overlay (`useNodeInEditor`'s `draftBodies`) — whose
+   * references load like the canvas's own, so the overlay's preview resolves
+   * a link before the commit puts it on the canvas. REQUIRED rather than
+   * optional for the reason `useNodeInEditor` gives for its document key: a
+   * page that forgot it would compile clean and silently lose the preview.
+   * Referentially stable: it is a load-effect dependency.
+   */
+  readonly bodies: readonly string[]
 }
 
 export interface DocumentFileSeams {
@@ -69,6 +79,7 @@ export function useDocumentFileSeams({
   resolveAlias,
   resolveTitle,
   stampOf,
+  bodies,
 }: UseDocumentFileSeamsOptions): DocumentFileSeams {
   // `null` = the adapter answered "there is nothing here". It has to OCCUPY
   // the slot rather than leave it absent: absent means "not fetched yet", so
@@ -127,9 +138,10 @@ export function useDocumentFileSeams({
 
   useEffect(() => {
     // Everything the canvas points at — its file nodes AND what its text
-    // nodes embed or link, transitively through what has loaded — minus
-    // image assets, which are not documents.
-    const refs = referenceTargets({ canvases: [canvas], loaded: graph }).filter(
+    // nodes embed or link, transitively through what has loaded — plus what
+    // a body drafted beside it names, minus image assets, which are not
+    // documents.
+    const refs = referenceTargets({ canvases: [canvas], bodies, loaded: graph }).filter(
       (ref) => !adapterRef.current.isImageRef(ref),
     )
     if (refs.length === 0) return
@@ -162,7 +174,7 @@ export function useDocumentFileSeams({
     return () => {
       cancelled = true
     }
-  }, [canvas, embedContent, graph, stampOf])
+  }, [bodies, canvas, embedContent, graph, stampOf])
 
   useEffect(() => {
     const refs = collectFileRefs(canvas).filter(

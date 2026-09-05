@@ -13,8 +13,16 @@ import { DESTRUCTIVE_COPY, type DestructiveActionId } from '../../lib/destructiv
 import { kindNoun } from '../../lib/kind-noun.js'
 
 export interface DeleteDocumentDialogProps {
-  // The document pending deletion, or null when the dialog is closed.
-  pending: { displayName: string; kind?: DocumentKind } | null
+  /**
+   * The document pending deletion, or null when the dialog is closed.
+   *
+   * `count` makes the subject a NUMBER rather than a name, for a bulk
+   * delete. Its absence is the singular case, so no existing caller changes
+   * and there is one rule rather than two competing subjects. A count of one
+   * never arrives: the panel routes a single selection to the singular
+   * confirmation, which can say which document it means.
+   */
+  pending: { displayName: string; kind?: DocumentKind; count?: number } | null
   busy: boolean
   error: string | null
   /**
@@ -51,10 +59,18 @@ export function DeleteDocumentDialog({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>
-            {pending ? `Delete "${pending.displayName}"?` : 'Delete canvas?'}
+            {pending === null
+              ? 'Delete canvas?'
+              : pending.count === undefined
+                ? `Delete "${pending.displayName}"?`
+                : `Delete ${pending.count} documents?`}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {DESTRUCTIVE_COPY[action](kindNoun(pending?.kind))}
+            {/* A bulk delete spans kinds, so the noun cannot come from one
+                document's kind the way the singular subject's does. */}
+            {DESTRUCTIVE_COPY[action](
+              pending?.count === undefined ? kindNoun(pending?.kind) : 'documents',
+            )}
             {error && <span className="mt-2 block text-destructive">{error}</span>}
           </AlertDialogDescription>
         </AlertDialogHeader>

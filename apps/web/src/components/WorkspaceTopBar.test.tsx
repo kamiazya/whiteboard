@@ -30,7 +30,6 @@ function renderBar(overrides?: { onNavigateBack?: () => void }) {
     <WorkspaceTopBar
       workspaceId="ws_1"
       path="canvas-a"
-      onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
     />,
     { container: document.body },
@@ -80,7 +79,6 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     const baseProps = {
       path: 'shared-path',
-      onToggleFullscreen: () => {},
       onNavigateBack: () => {},
       // The resolved display name is what this race decides, and the title
       // segment is where it surfaces now that the switcher's list is gone.
@@ -135,12 +133,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <WorkspaceTopBar
-          workspaceId="ws_1"
-          path="canvas-a"
-          onToggleFullscreen={() => {}}
-          onNavigateBack={() => {}}
-        />
+        <WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />
       </DaemonApiContext.Provider>,
       { container: document.body },
     )
@@ -172,7 +165,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
           titleSlot={overrides?.titleSlot}
         />
@@ -206,18 +198,17 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   })
 })
 
-describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
-  it('marks the exposed right-side action group and the More-actions kebab trigger with responsive collapse classes', () => {
+describe('WorkspaceTopBar — one row, one height', () => {
+  it('keeps the 48px row and offers no second kebab: fullscreen and its collapse went to the shell', () => {
     renderBar()
 
     const header = screen.getByRole('banner')
     expect(header.className).toContain('h-12')
-
-    const exposedGroup = screen.getByTestId('topbar-right-actions-exposed')
-    expect(exposedGroup.className).toContain('max-[400px]:hidden')
-
-    const kebabTrigger = screen.getByRole('button', { name: 'View options' })
-    expect(kebabTrigger.className).toContain('min-[400px]:hidden')
+    // The "View options" kebab existed only to collapse the fullscreen
+    // button under 400px. Fullscreen is the AppShell row's now, so this row
+    // has one ⋯ — the document's own actions menu — and no exposed group.
+    expect(screen.queryByRole('button', { name: 'View options' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull()
   })
 })
 
@@ -227,20 +218,12 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
 
-  it('hides the fullscreen button when onToggleFullscreen is omitted', () => {
-    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
-      container: document.body,
-    })
-    expect(screen.queryByLabelText('Fullscreen')).toBeNull()
-  })
-
   it('hides HeaderBranchChip when capabilities.branches is false', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
         onNavigateBack={() => {}}
-        onToggleFullscreen={() => {}}
         capabilities={{ branches: false, merge: true }}
       />,
       { container: document.body },
@@ -255,15 +238,9 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
 
 describe('WorkspaceTopBar — workspaceId URL encoding', () => {
   it('percent-encodes a workspaceId with reserved characters in the names fetch', async () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws 1#x"
-        path="canvas-a"
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-      />,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws 1#x" path="canvas-a" onNavigateBack={() => {}} />, {
+      container: document.body,
+    })
     await waitFor(() => {
       const namesCall = vi
         .mocked(apiFetch)
@@ -282,7 +259,6 @@ describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
@@ -303,7 +279,6 @@ describe('WorkspaceTopBar — one rename surface', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
@@ -318,7 +293,6 @@ describe('WorkspaceTopBar — one rename surface', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
@@ -341,15 +315,9 @@ describe('WorkspaceTopBar — one rename surface', () => {
 // rather than kept alive as that menu's side effect.
 describe('WorkspaceTopBar — navigation left the document row', () => {
   it('renders no workspace-named switcher menu', () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-      />,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
+      container: document.body,
+    })
 
     expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull()
   })
@@ -357,15 +325,9 @@ describe('WorkspaceTopBar — navigation left the document row', () => {
   // Navigation controls carry no visible text (user decision 2026-08-22);
   // their name lives in aria-label and the tooltip.
   it('names the back control without giving it visible text', () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-      />,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
+      container: document.body,
+    })
 
     expect(screen.getByRole('button', { name: 'Back to documents' }).textContent).toBe('')
   })

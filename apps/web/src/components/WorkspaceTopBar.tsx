@@ -1,11 +1,10 @@
 import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
+import { HEADER_BUTTON_CLASS, HEADER_TOGGLE_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { cn } from '../lib/utils.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
-import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
@@ -56,9 +55,6 @@ interface Props {
    * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
    */
   dataMode?: 'daemon' | 'local'
-  // Omitted when the host page has no fullscreen affordance of its own.
-  onToggleFullscreen?: () => void
-  isFullscreen?: boolean
   // Gates HeaderBranchChip (branches) and its mergeEnabled passthrough
   // (merge). Undefined means "all capabilities on", matching every existing
   // caller's behavior.
@@ -114,12 +110,13 @@ interface Props {
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
-// - Only a 48px top bar; Excalidraw keeps the full width
+// - Only a 48px top bar; the editor keeps the full width
 // - Left: back to the document browser, then the page's own title segment.
 //   Naming and every per-document verb belong to that segment (the document
 //   is one object, so it gets one action menu — ADR-0006), not to this bar.
-// - Right: version history and fullscreen. Below 400px these secondary
-//   actions collapse into a "View options" kebab so the header never wraps.
+// - Fullscreen is NOT here: it is the shell row's (AppShell), because its
+//   subject is the app rather than the document. The "View options" kebab
+//   that carried it below 400px went with it — one ⋯ per row.
 //
 // This bar answers "which document am I in, and what can I do to it". It
 // deliberately cannot answer "which document do I want" — choosing one is
@@ -128,8 +125,6 @@ interface Props {
 export default function WorkspaceTopBar({
   workspaceId,
   path,
-  onToggleFullscreen,
-  isFullscreen,
   onNavigateBack,
   dataMode = 'daemon',
   capabilities,
@@ -212,7 +207,7 @@ export default function WorkspaceTopBar({
                 type="button"
                 onClick={onNavigateBack}
                 aria-label="Back to documents"
-                className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                className={HEADER_BUTTON_CLASS}
               >
                 <ChevronLeft className="size-4" />
               </button>
@@ -252,10 +247,7 @@ export default function WorkspaceTopBar({
                 aria-label="History"
                 aria-expanded={historyOpen}
                 onClick={onToggleHistory}
-                className={cn(
-                  'shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
-                  TOGGLE_STATE_CLASS,
-                )}
+                className={HEADER_TOGGLE_CLASS}
               >
                 <History aria-hidden="true" className="size-4" />
               </button>
@@ -264,8 +256,6 @@ export default function WorkspaceTopBar({
           </Tooltip>
         )}
       </div>
-
-      <TopBarSecondaryActions onToggleFullscreen={onToggleFullscreen} isFullscreen={isFullscreen} />
     </header>
   )
 }

@@ -45,12 +45,14 @@ const sources = import.meta.glob(
     './components/workspace-files/WorkspaceFilesPanel.tsx',
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
+    './components/workspace-files/use-device-memory.ts',
     './pages/DaemonIndexPage.tsx',
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/DaemonDocumentPage.tsx',
+    './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
   ],
@@ -80,12 +82,20 @@ const PANEL = './components/workspace-files/WorkspaceFilesPanel.tsx'
 // there, not away, so the scan surface is the concatenation of all three.
 const PANEL_COLUMNS_HOOK = './components/workspace-files/use-browser-columns.ts'
 const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-search.ts'
+// What this device remembers about the workspace — the recently-opened
+// lane and the changed-dot baselines. Extracted from the panel when its
+// file-size budget said so; same SCREEN by the same rule as the two above.
+const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
+// The shared page both keepers render through (ADR-0004 decision 1). The
+// history column, the armed bookmark and the version being looked at moved
+// HERE from both keeper pages, not away; the two hooks below moved with them.
+const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
 // The save-a-version guard extracted to its own hook: part of the same
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
@@ -98,6 +108,22 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
   peek: 'cleared on switch',
+  // Reloaded from storage on every `workspace` change rather than emptied,
+  // which is the same guarantee: what is on screen always belongs to the
+  // workspace on screen. Its own effect, since the handle can arrive after
+  // the source.
+  recentIds: 'cleared on switch',
+  // A COUNTER, not a subject: it names no document and no path, and its
+  // only job is to tell the derived `changed` memo that this panel wrote a
+  // baseline. Surviving a switch is harmless — the memo also keys on
+  // `documents` and `workspace`, both of which change with the scope.
+  seenRevision:
+    'no subject: a bump counter for the changed-dot memo, naming nothing that belongs to a workspace',
+  // Paths, and paths collide across workspaces — `untitled` is the first
+  // document in most. A selection carried across a switch would address the
+  // departed workspace's names into the store now on screen, in a BULK
+  // delete, which is the worst place for that class of mistake.
+  selection: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
@@ -114,6 +140,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   rootRef: 'no subject: the panel’s own DOM node',
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
   onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
+  workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
   moveDocumentRef: 'no subject: mirrors the current handler, reassigned every render',
   lastReadListRef:
     'no subject: holds the PREVIOUS source’s identity so the reset block can tell a real switch from a StrictMode replay — clearing it would make every replay read as a switch, which is the trap the effect’s own note describes',
@@ -347,21 +374,33 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   // and a submitted one would open a conversation on the wrong document
   // about a sentence nobody there wrote. Cleared by useCommentsRail.
   composeAnchor: 'cleared on switch',
-  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   threadsRef:
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
 }
 
-const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
-  historyOpen: 'cleared on switch',
+  // Which panel the one inspector slot shows — properties, comments,
+  // connections or history. How the reader looks rather than what at:
+  // everything a panel SAYS is document-scoped and cleared on its own
+  // (`preview` and `bookmarkArmed` below, `selectedThreadId` and
+  // `composeAnchor` above, the facets and backlinks the keeper republishes
+  // per document), so a panel left open across a switch shows the arrived
+  // document — as the rail always did.
+  inspector:
+    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries or republished per document by the keeper',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
   preview: 'cleared on switch',
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',
+  currentScopeRef:
+    'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
+}
+
+const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   versionRefreshSignal:
     'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
@@ -371,15 +410,9 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   duplicateError: 'cleared on switch',
   isDuplicating: 'cleared on switch',
 
-  isFullscreen:
-    'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
-  exitFullscreenRef: 'no subject: a DOM node',
-  mainRef: 'no subject: a DOM node',
-  wasFullscreenRef:
-    'no subject: the previous fullscreen state, for handing focus over — about the viewport, not a document',
   listGenerationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:
@@ -394,14 +427,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
-  ...DOCUMENT_PAGE_HOOK_STATE,
-
-  historyOpen: 'cleared on switch',
-  // The past state being looked at, exactly as on the browser page:
-  // restoring one the person opened on the DEPARTED document would apply
-  // that version id to the arrived one.
-  preview: 'cleared on switch',
-  bookmarkArmed: 'cleared on switch',
   // A read-only view of ONE document's variation tip (ADR-0022). `?v` is
   // not stripped by a switch — `switchDocument` sets the path and nothing
   // else — so the effect that owns this re-resolves the same NAME against
@@ -433,15 +458,13 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
   canvasesRef:
     'no subject: mirrors the WORKSPACE’s document list, reassigned every render — a document switch does not change which documents exist',
-  currentDocumentPathRef:
-    'no subject: mirrors the scope itself, written during render — it is what a handler outliving a switch asks to find out what arrived rather than trusting its own closure',
   canvasValueRef:
     'no subject: mirrors the current canvas value, reassigned every render — it is how a write sends the CURRENT canvas rather than the one its closure captured',
 }
 
 const CASES = [
   {
-    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK],
+    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK, PANEL_DEVICE_MEMORY_HOOK],
     ledger: PANEL_STATE,
     label: 'WorkspaceFilesPanel',
     scanRefs: true,
@@ -461,13 +484,19 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    ledger: DOCUMENT_PAGE_STATE,
+    label: 'DocumentPage',
+    scanRefs: true,
+  },
+  {
+    files: [BROWSER_DOCUMENT_PAGE],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
   },
   {
-    files: [DAEMON_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DAEMON_DOCUMENT_PAGE],
     ledger: DAEMON_DOCUMENT_PAGE_STATE,
     label: 'DaemonDocumentPage',
     scanRefs: true,

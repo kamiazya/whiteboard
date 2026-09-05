@@ -1,7 +1,10 @@
-import { Settings } from 'lucide-react'
-import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
+import { Maximize2, Minimize2, Settings } from 'lucide-react'
+import { lazy, Suspense, useEffect, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
+import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../components/ui/popover.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useSettingsNudge } from '../hooks/useSettingsNudge.js'
 import { parseWorkspaceRoute, settingsPath } from '../lib/app-routes.js'
 import { browserWorkspaceIdOrNull } from '../lib/browser-workspace-id.js'
@@ -9,6 +12,7 @@ import { isSyncOff } from '../lib/connection-state.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { getShellConnection, subscribeShellStatus } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { cn } from '../lib/utils.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import { ConnectionStatus, connectionLabel } from './connection/ConnectionStatus.js'
 import {
@@ -126,11 +130,17 @@ export interface AppShellWorkspaces {
 
 /**
  * The app-level chrome, deliberately minimal: the signature mark and the
- * alpha honesty chip on the left, the settings gear (+ attention dot) on the
- * right. Nothing else ever moves in here — context and tools stay in the
- * page's own surface, always visible (see DESIGN.md's shell rule). Pages
- * mount this shared component instead of owning any brand, connection or
- * settings chrome themselves.
+ * alpha honesty chip on the left, fullscreen and the settings gear (+
+ * attention dot) on the right. Nothing else ever moves in here — context
+ * and tools stay in the page's own surface, always visible (see DESIGN.md's
+ * shell rule). Pages mount this shared component instead of owning any
+ * brand, connection, fullscreen or settings chrome themselves.
+ *
+ * Fullscreen is the shell's because its subject is the APP — how much of
+ * the screen it gets — which is the one thing that does not change when a
+ * document opens. In fullscreen this row steps aside (the document's top
+ * bar does too, reading the same state), leaving one floating way back out
+ * beside Escape.
  *
  * The mark is the row's SUBJECT and its one state carrier. Left of the
  * spacer is "what you are working in"; right of it is the app and its own
@@ -187,8 +197,47 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         ? workspaceHandleInAddress
         : workspaceLabel(activeRow)
 
+  const fullscreen = useFullscreen()
+  const fullscreenToggleRef = useRef<HTMLButtonElement | null>(null)
+  const exitFullscreenRef = useRef<HTMLButtonElement | null>(null)
+  const wasFullscreenRef = useRef(false)
+  // The toggle unmounts the element that was just activated (entering
+  // removes this row, exiting removes the floating control), and a removed
+  // focused element drops focus to <body> — a keyboard user would have to
+  // tab back from nothing. Hand focus to whichever control replaced it.
+  useEffect(() => {
+    if (fullscreen.isFullscreen) {
+      wasFullscreenRef.current = true
+      exitFullscreenRef.current?.focus()
+      return
+    }
+    if (!wasFullscreenRef.current) return
+    wasFullscreenRef.current = false
+    fullscreenToggleRef.current?.focus()
+  }, [fullscreen.isFullscreen])
+
+  if (fullscreen.isFullscreen) {
+    // Both chrome rows are gone — the extra space is what fullscreen is
+    // FOR — so the way back has to float. Escape still works natively.
+    return (
+      <button
+        ref={exitFullscreenRef}
+        type="button"
+        aria-label="Exit fullscreen"
+        data-testid="shell-exit-fullscreen"
+        onClick={fullscreen.toggle}
+        className={cn(
+          HEADER_BUTTON_CLASS,
+          'fixed top-3 right-3 z-50 border bg-background/80 shadow-sm backdrop-blur',
+        )}
+      >
+        <Minimize2 aria-hidden="true" className="size-4" />
+      </button>
+    )
+  }
+
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
+    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3 pointer-coarse:h-12">
       {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
           Switcher"): it names the workspace in its accessible name, opens the
           popover that lists the others, and carries the session state when a
@@ -309,6 +358,27 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         </PopoverContent>
       </Popover>
       <span className="min-w-0 flex-1" />
+      {/* Hidden rather than disabled where the browser has no element
+          fullscreen (iPhone Safari — video-only): a disabled control still
+          claims row space and invites a tap that can never work, and there
+          is nothing the user could change to enable it. */}
+      {fullscreen.supported && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              ref={fullscreenToggleRef}
+              type="button"
+              aria-label="Fullscreen"
+              data-testid="shell-fullscreen"
+              onClick={fullscreen.toggle}
+              className={HEADER_BUTTON_CLASS}
+            >
+              <Maximize2 aria-hidden="true" className="size-4" />
+            </button>
+          </TooltipTrigger>
+          <TooltipContent>Fullscreen</TooltipContent>
+        </Tooltip>
+      )}
       <button
         type="button"
         // The dot is the only thing on the shell that can read as an alarm.
@@ -322,7 +392,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
             state: { from: `${location.pathname}${location.search}` },
           })
         }
-        className="relative shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+        className={cn(HEADER_BUTTON_CLASS, 'relative')}
       >
         {nudge && (
           <span

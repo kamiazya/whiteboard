@@ -53,10 +53,16 @@ export function BookmarkAction({
   // very press that brought the panel up.
   const lastArmRef = useRef(0)
 
+  // Only an INCREASE is a press. The page zeroes the counter on a document
+  // switch, and a field armed on the departed document would otherwise
+  // re-open — or stay open — to name the arrived one from that keystroke;
+  // the reset closes it and drops the draft instead.
   useEffect(() => {
     if (armed === lastArmRef.current) return
+    const pressed = armed > lastArmRef.current
     lastArmRef.current = armed
-    setNaming(true)
+    setNaming(pressed)
+    if (!pressed) setDraft('')
   }, [armed])
 
   useEffect(() => {

@@ -201,19 +201,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // publish are defined beside the routes' own logic and re-exported here.
   '@kamiazya/whiteboard-daemon-client': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-server-core'],
-    // OpenTelemetry: browser tracing is lazily imported by browser-tracing.ts
-    // and inert unless enabled; every listed package is pure browser/web SDK.
-    allowedThirdParty: [
-      'zod',
-      '@opentelemetry/api',
-      '@opentelemetry/context-zone',
-      '@opentelemetry/exporter-trace-otlp-http',
-      '@opentelemetry/instrumentation',
-      '@opentelemetry/instrumentation-fetch',
-      '@opentelemetry/resources',
-      '@opentelemetry/sdk-trace-web',
-      '@opentelemetry/semantic-conventions',
-    ],
+    // @opentelemetry/api alone: the no-op propagation surface api-client
+    // injects trace headers through when the embedding page registers a real
+    // SDK. The SDK packages themselves were deleted with the dead
+    // enableBrowserTracing half (zero production callers).
+    allowedThirdParty: ['zod', '@opentelemetry/api'],
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   // Composition root (Node CLI/daemon), never a runtime dependency of any

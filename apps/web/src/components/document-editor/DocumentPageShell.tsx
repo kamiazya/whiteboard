@@ -1,5 +1,4 @@
-import type { ReactNode, Ref } from 'react'
-import { cn } from '../../lib/utils.js'
+import type { ReactNode } from 'react'
 
 /**
  * The two-row grid shell both document pages stand in.
@@ -11,28 +10,28 @@ import { cn } from '../../lib/utils.js'
  * `<h1>` landmark by hand; owning them here means a layout or a11y drift
  * between the two modes cannot happen quietly.
  *
- * `aside` is the document's history. It rides in the editor row rather than
- * beside the whole page, so the top bar keeps the full width and the aside is
- * exactly as tall as the editor it belongs to. The row is only wrapped when
- * there IS an aside — without one the editor stays a direct grid child, which
- * is what every page had before this slot existed. The wrapper is
- * `relative` because the aside is a column only where there is width for one:
- * under 768px it is a bottom sheet, positioned against this row so it covers
- * the editor and not the top bar above it.
+ * `aside` is the document's inspector — its history column or its comments
+ * rail, whichever the page's one inspector slot holds. It rides in the editor
+ * row rather than beside the whole page, so the top bar keeps the full width
+ * and the aside is exactly as tall as the editor it belongs to. The row is
+ * wrapped whether or not there is an aside: wrapping it only when one arrived
+ * re-parented the editor, and React remounts what changes parent — so opening
+ * the history column threw away the editor's own state (its viewport, its
+ * selection) for a layout that had not changed. The wrapper is `relative`
+ * because the aside is a column only where there is width for one: under
+ * 768px it is a bottom sheet, positioned against this row so it covers the
+ * editor and not the top bar above it.
  *
- * `mainRef` and `mainClassName` exist for one caller and one reason that
- * travel together: the browser page fullscreens this element, and a
- * fullscreened element without its own background is composited over black —
- * so it passes the ref it fullscreens and `bg-background` to stand behind
- * it. The daemon page has no fullscreen affordance and passes neither.
+ * Nothing here goes fullscreen: the shell fullscreens the whole document
+ * (`hooks/use-fullscreen.ts`), so this element needs no ref to be promoted
+ * through and no ground of its own — a `<main>` promoted to the top layer
+ * alone used to composite over black, and carried `bg-background` for it.
  */
 export function DocumentPageShell({
   srTitle,
   header,
   children,
   aside,
-  mainRef,
-  mainClassName,
 }: {
   /** The page's visually-hidden `<h1>` landmark text. */
   srTitle: string
@@ -40,28 +39,19 @@ export function DocumentPageShell({
   header: ReactNode
   /** The editor row, and any banner rows the page stacks above it. */
   children: ReactNode
-  /** The document's history, beside the editor row (a sheet over it when narrow). */
+  /** The document's inspector, beside the editor row (a sheet over it when narrow). */
   aside?: ReactNode
-  mainRef?: Ref<HTMLElement>
-  mainClassName?: string
 }) {
   return (
-    <main
-      ref={mainRef}
-      className={cn('relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]', mainClassName)}
-    >
+    <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
         <h1 className="sr-only">{srTitle}</h1>
         {header}
       </div>
-      {aside === undefined ? (
-        children
-      ) : (
-        <div className="relative flex min-h-0 min-w-0">
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-          {aside}
-        </div>
-      )}
+      <div className="relative flex min-h-0 min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+        {aside}
+      </div>
     </main>
   )
 }

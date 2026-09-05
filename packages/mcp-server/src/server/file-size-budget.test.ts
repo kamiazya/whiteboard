@@ -78,7 +78,12 @@ function relativeToRepo(absolutePath: string): string {
 }
 
 /**
- * Files over the 800-line budget at the time each was grandfathered in.
+ * Files over the 800-line budget, each entry a CEILING the file must stay
+ * at or under — not merely a membership list. The first version recorded a
+ * count nothing compared against, and 11 of 17 files grew by up to 262
+ * lines under a green build; the ratchet assertion below is what makes
+ * "shrink-only" a property instead of a hope. Growing a listed file means
+ * raising its ceiling here, on the record, in the same diff.
  *
  * Both-sides guarded below: an over-budget file missing from this list fails
  * the build, and an entry that no longer names an over-budget file fails it
@@ -88,23 +93,23 @@ function relativeToRepo(absolutePath: string): string {
  * it is not.
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/lib/spatial/commands.ts': 872,
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 887,
-  'packages/loro-adapter/src/loro-bridge.ts': 887,
+  'apps/web/src/lib/spatial/commands.ts': 926,
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1015,
+  'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,
-  'apps/web/src/App.tsx': 966,
-  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 974,
-  'packages/loro-adapter/src/workspace-tree.ts': 980,
+  'apps/web/src/App.tsx': 973,
+  'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
+  'packages/loro-adapter/src/workspace-tree.ts': 1032,
   'packages/canvas-render/src/svg/backend.ts': 991,
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 1084,
-  'apps/web/src/lib/document-sync-session.ts': 1104,
-  'packages/mcp-server/src/server/store/document-store.ts': 1128,
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1296,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1495,
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1604,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2017,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2691,
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 921,
+  'apps/web/src/lib/document-sync-session.ts': 1366,
+  'packages/mcp-server/src/server/store/document-store.ts': 1131,
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 981,
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2592,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
@@ -123,6 +128,19 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
       .map(({ path, lines }) => `${path}: ${lines} lines`)
 
     expect(unlisted).toEqual([])
+  })
+
+  it('holds every grandfathered file at or under its recorded ceiling', () => {
+    const grown = Object.entries(FILE_SIZE_GRANDFATHER)
+      .filter(([path]) => existsSync(join(REPO_ROOT, path)))
+      .map(([path, ceiling]) => ({ path, ceiling, lines: lineCount(join(REPO_ROOT, path)) }))
+      .filter(({ lines, ceiling }) => lines > ceiling)
+      .map(
+        ({ path, lines, ceiling }) =>
+          `${path}: ${lines} lines, over its recorded ceiling of ${ceiling} — shrink it back, or raise the ceiling here deliberately`,
+      )
+
+    expect(grown).toEqual([])
   })
 
   it('holds no grandfather entry that has shrunk to budget — delete it instead', () => {

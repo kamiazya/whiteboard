@@ -17,6 +17,11 @@ export interface NodeTextEditorOverlayProps
   readonly initialText: string
   /** Called with the edited body — only when it actually differs. */
   readonly onCommit: (text: string) => void
+  /**
+   * The body as it is being typed, so the host can load what a new link
+   * names and the preview resolves it before the commit.
+   */
+  readonly onDraft?: (text: string) => void
   readonly onClose: () => void
 }
 
@@ -38,6 +43,7 @@ export function NodeTextEditorOverlay({
   initialText,
   onCommit,
   onClose,
+  onDraft,
   theme,
   references,
   linkTargets,
@@ -49,6 +55,13 @@ export function NodeTextEditorOverlay({
   // text as it stood at mount and commit an empty edit.
   const textRef = useRef(initialText)
   textRef.current = text
+  const onChange = useCallback(
+    (next: string) => {
+      setText(next)
+      onDraft?.(next)
+    },
+    [onDraft],
+  )
 
   const commitAndClose = useCallback(() => {
     if (textRef.current !== initialText) onCommit(textRef.current)
@@ -115,7 +128,7 @@ export function NodeTextEditorOverlay({
       <div className="min-h-0 flex-1">
         <MarkdownEditor
           value={text}
-          onChange={setText}
+          onChange={onChange}
           className="h-full"
           autoFocus
           theme={theme}

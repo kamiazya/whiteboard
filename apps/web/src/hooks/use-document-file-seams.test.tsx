@@ -53,7 +53,12 @@ describe('useDocumentFileSeams', () => {
   it('resolves a referenced canvas once it has been pre-fetched', async () => {
     const adapter = makeAdapter()
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasWith('other'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
 
     // The editor's seam is synchronous, so nothing is available on the first
@@ -70,6 +75,7 @@ describe('useDocumentFileSeams', () => {
         canvas: canvasWith('asset:pic', 'sibling'),
         adapter,
         stampOf: new Map(),
+        bodies: [],
       }),
     )
 
@@ -87,7 +93,7 @@ describe('useDocumentFileSeams', () => {
     const canvas = canvasWith('other')
     const { result, rerender } = renderHook(
       ({ stampOf }: { stampOf: ReadonlyMap<string, string> }) =>
-        useDocumentFileSeams({ canvas, adapter, stampOf }),
+        useDocumentFileSeams({ canvas, adapter, stampOf, bodies: [] }),
       { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
     )
     await waitFor(() => expect(seamsOf(result).resolveReference('other')?.canvas).toBeDefined())
@@ -106,7 +112,12 @@ describe('useDocumentFileSeams', () => {
     const loadImageUrl = vi.fn(async () => undefined)
     const adapter = makeAdapter({ loadImageUrl })
     renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('asset:gone'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasWith('asset:gone'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
 
     // A fresh-but-equal map would re-trigger the effect and retry forever.
@@ -121,7 +132,12 @@ describe('useDocumentFileSeams', () => {
     vi.stubGlobal('URL', { ...URL, revokeObjectURL: revoke, createObjectURL: () => 'blob:x' })
     const adapter = makeAdapter()
     const { result, unmount } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('asset:pic'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasWith('asset:pic'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
     await waitFor(() => expect(seamsOf(result).resolveReference('asset:pic')?.image).toBeDefined())
 
@@ -135,7 +151,7 @@ describe('useDocumentFileSeams', () => {
   it('delegates adding an image to the adapter', async () => {
     const adapter = makeAdapter()
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map(), bodies: [] }),
     )
 
     const file = new File(['x'], 'x.png', { type: 'image/png' })
@@ -148,7 +164,7 @@ describe('useDocumentFileSeams', () => {
   it('exposes the adapter image-ref predicate to the editor', () => {
     const adapter = makeAdapter()
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({ canvas: canvasWith(), adapter, stampOf: new Map(), bodies: [] }),
     )
 
     expect(result.current.isImageFileRef('asset:pic')).toBe(true)
@@ -172,7 +188,12 @@ describe('useDocumentFileSeams reaches what a text node embeds', () => {
       loadDocument: vi.fn(async () => ({ body: 'PROSE FROM THE NOTE', name: 'Note' })),
     })
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasEmbedding(NOTE_ID), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasEmbedding(NOTE_ID),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
     await waitFor(() => {
       expect(seamsOf(result).resolveEmbed(NOTE_ID)?.title).toBe('Note')
@@ -191,6 +212,7 @@ describe('useDocumentFileSeams reaches what a text node embeds', () => {
         resolveAlias: (alias) => (alias === 'notes/plan' ? NOTE_ID : null),
         resolveTitle: (id) => (id === NOTE_ID ? 'Plan' : undefined),
         stampOf: new Map(),
+        bodies: [],
       }),
     )
     await waitFor(() => {
@@ -219,6 +241,7 @@ describe('useDocumentFileSeams reaches what a text node embeds', () => {
         canvas: canvasWith('asset:pic', 'doc-1'),
         adapter,
         stampOf: new Map(),
+        bodies: [],
       }),
     )
     await waitFor(() => {
@@ -306,7 +329,12 @@ describe('useDocumentFileSeams facets', () => {
       })),
     })
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasWith('other'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
 
     expect(seamsOf(result).resolveReference('other')?.facets).toBeUndefined()
@@ -319,7 +347,7 @@ describe('useDocumentFileSeams facets', () => {
       loadDocument: vi.fn(async () => ({ facets: { type: 'note' } })),
     })
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map(), bodies: [] }),
     )
 
     await waitFor(() => expect(seamsOf(result).resolveReference('doc')?.facets).toBeDefined())
@@ -331,7 +359,12 @@ describe('useDocumentFileSeams facets', () => {
       loadDocument: vi.fn(async (ref: string) => ({ canvas: embedded(ref) })),
     })
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({
+        canvas: canvasWith('other'),
+        adapter,
+        stampOf: new Map(),
+        bodies: [],
+      }),
     )
 
     await waitFor(() => expect(seamsOf(result).resolveReference('other')?.canvas).toBeDefined())
@@ -345,7 +378,7 @@ describe('useDocumentFileSeams facets', () => {
     const adapter = makeAdapter()
     const canvas = canvasWith('dangling')
     const { rerender } = renderHook(() =>
-      useDocumentFileSeams({ canvas, adapter, stampOf: new Map() }),
+      useDocumentFileSeams({ canvas, adapter, stampOf: new Map(), bodies: [] }),
     )
 
     await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
@@ -365,11 +398,45 @@ describe('useDocumentFileSeams facets', () => {
     // instance when nothing was added; this loop did not.
     const adapter = makeAdapter({ loadDocument: vi.fn(async () => undefined) })
     const canvas = canvasWith('gone')
-    renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map() }))
+    renderHook(() => useDocumentFileSeams({ canvas, adapter, stampOf: new Map(), bodies: [] }))
 
     await waitFor(() => expect(adapter.loadDocument).toHaveBeenCalledTimes(1))
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('useDocumentFileSeams drafted bodies', () => {
+  it('loads what a body drafted beside the canvas names, so a typed link resolves before the commit', async () => {
+    const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const adapter = makeAdapter({
+      loadDocument: vi.fn(async (ref: string) => ({ body: `prose of ${ref}` })),
+    })
+    const { result, rerender } = renderHook(
+      ({ bodies }) =>
+        useDocumentFileSeams({
+          canvas: canvasWith(),
+          adapter,
+          stampOf: new Map(),
+          resolveAlias: (alias) => (alias === 'notes/plan' ? NOTE_ID : null),
+          resolveTitle: (id) => (id === NOTE_ID ? 'Plan' : undefined),
+          bodies,
+        }),
+      { initialProps: { bodies: [] as readonly string[] } },
+    )
+    expect(adapter.loadDocument).not.toHaveBeenCalled()
+
+    rerender({ bodies: ['see [[notes/plan]]'] })
+    await waitFor(() =>
+      expect(seamsOf(result).resolveReference('notes/plan')?.markdown).toBeDefined(),
+    )
+    expect(adapter.loadDocument).toHaveBeenCalledWith('notes/plan')
+    // What the overlay's preview asks: the written path to an id, the id to
+    // a title and to the prose behind an embed.
+    const seams = seamsOf(result)
+    expect(seams.resolveAlias('notes/plan')).toBe(NOTE_ID)
+    expect(seams.resolveTitle(NOTE_ID)).toBe('Plan')
+    expect(seams.resolveEmbed(NOTE_ID)?.title).toBe('Plan')
   })
 })
 
@@ -384,7 +451,7 @@ describe('useDocumentFileSeams empty documents', () => {
       })),
     })
     const { result } = renderHook(() =>
-      useDocumentFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map() }),
+      useDocumentFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map(), bodies: [] }),
     )
 
     await waitFor(() => expect(seamsOf(result).resolveReference('note')?.facets).toBeDefined())

@@ -53,7 +53,8 @@ it('is a column beside the editor where there is width for one', async () => {
   mount()
   const rail = page.getByTestId('comments-rail').element()
   expect(getComputedStyle(rail).position).toBe('static')
-  expect(rail.getBoundingClientRect().width).toBe(288)
+  // One vessel for every inspector panel, so one width: the history column's.
+  expect(rail.getBoundingClientRect().width).toBe(300)
 })
 
 it('is a sheet over the editor on a phone, and can be closed from it', async () => {

@@ -107,10 +107,14 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
 
   Anything else stateful in chrome needs this list amended first, takes
   amber or nothing, and puts its word in the accessible name.
-- **The AppShell owns brand, connection and settings.** Every page mounts
-  `AppShell` (the signature mark, the ALPHA honesty chip, the settings gear +
-  attention dot) and never renders its own brand, connection or settings
-  chrome.
+- **The AppShell owns brand, connection, fullscreen and settings.** Every
+  page mounts `AppShell` (the signature mark, the ALPHA honesty chip, the
+  fullscreen toggle, the settings gear + attention dot) and never renders its
+  own brand, connection, fullscreen or settings chrome. Fullscreen is the
+  shell's because its subject is the app — how much of the screen it gets —
+  which does not change when a document opens; the target is the whole
+  document (`hooks/use-fullscreen.ts`), both chrome rows step aside in it,
+  and the shell floats the one way back out.
 
   The row reads in two halves, and the spacer is the divider: **left of it is
   what you are working IN** (the mark = this workspace), **right of it is the
@@ -476,7 +480,15 @@ gutter marker beside its line), and the document-level rail both editors
 share (ADR-0026 decision 5; `useCommentsRail` holds its state,
 `CommentsRailAside` is its vessel — a column where there is width, a bottom
 sheet over the editor under 768px, since a 288px column beside a 412px phone
-screen left the editor a strip a finger could not write in). The rail carries
+screen left the editor a strip a finger could not write in). The rail is one
+of four panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
+vessel `InspectorPanel`): a markdown document's properties, its comments, the
+documents linking to it (a daemon keeper only), its history. Opening any one
+closes the others and every opener reads released, because two panels beside
+one editor — measured on a phone as the display popover, the comments sheet
+and the history sheet all open at once — is what the header retune set out to
+end; the properties editor and the connections list used to overlay UNDER the
+header instead, a third shape for the same job. The rail carries
 the conversation's own verbs beside its reply box — Resolve/Reopen and Edit
 of the opening message — because a NOTE's thread has no card, and the rail
 is the only place it can be closed or corrected; both go through the threads

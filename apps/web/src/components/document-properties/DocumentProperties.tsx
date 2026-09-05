@@ -2,17 +2,14 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
-import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
+import { HEADER_TOGGLE_CLASS } from '../../components/ui/header-button.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
-import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface DocumentPropertiesProps {
   /**
    * Renders as a segment of the merged header row instead of a standalone
-   * chrome strip: no own border/background, and the Type/Tags disclosure
-   * overlays below the header rather than growing the row (which would
-   * push the canvas down mid-edit).
+   * chrome strip: no own border/background.
    */
   inline?: boolean
   /**
@@ -31,14 +28,17 @@ export interface DocumentPropertiesProps {
    * The document's OKF frontmatter, or absent when the document has none to
    * hold: a facet belongs to OKF and a JSON Canvas document has nowhere to
    * put one (ADR-0009 decision 3), so a spatial canvas omits both this and
-   * `onFacetsChange` and gets no disclosure. Absent rather than a
+   * `onFacetsChange` and gets no Properties opener. Absent rather than a
    * `showFacets={false}` flag beside a value, because the flag hid the
-   * disclosure while the document went on storing what it would have shown.
+   * opener while the document went on storing what it would have shown.
+   *
+   * The row only OPENS the editor: `DocumentFacetsEditor` lives in the
+   * page's inspector slot beside the document, which the row does not own.
    */
   readonly facets?: StoredCoreFacets
-  readonly onFacetsChange?: (next: StoredCoreFacets) => void
-  /** Offered as datalist completions for `type`; the field stays free text. */
-  readonly typeSuggestions?: readonly string[]
+  /** Whether the inspector slot is showing the facets editor. */
+  readonly propertiesOpen?: boolean
+  readonly onToggleProperties?: () => void
   /**
    * Save-state indicator, rendered LEFT of the title — the canvas's "am I
    * safe" signal reads before its name, like a title-bar dirty dot.
@@ -68,34 +68,19 @@ const DEFAULT_TYPE_SUGGESTIONS = ['markdown', 'note', 'issue', 'spec', 'meeting'
 
 /**
  * The canvas row: the document's name, plus — for a document that HAS OKF
- * frontmatter — an editor for its core facets behind a disclosure.
- *
- * The labels are the product's words, not the format's: OKF's `description`
- * is shown as "Summary" and `resource` as "Describes", because those read to
- * someone who has never heard of OKF. What is STORED is the spec's spelling;
- * only the label is translated.
- *
- * `resource` is NOT labelled "Source". OKF has a separate `sources` field for
- * provenance (§5.1) meaning something else entirely — the materials a concept
- * derives FROM, rather than the asset it describes — and the two would be
- * indistinguishable in a properties panel.
- *
- * Neither field carries an `aria-label`. One would override the visible label
- * as the accessible name, so a voice-control user saying what they can see
- * would match nothing (WCAG 2.5.3). The `<label htmlFor>` is the name.
+ * frontmatter — the opener for its core-facet editor.
  */
 export function DocumentProperties({
   inline = false,
   title,
   onTitleChange,
   facets,
-  onFacetsChange,
-  typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
+  propertiesOpen = false,
+  onToggleProperties,
   status,
   settings,
   actions,
 }: DocumentPropertiesProps) {
-  const [open, setOpen] = useState(false)
   // Null means "not being edited" — the box then shows the canonical name.
   // While it is a string the box shows that instead, because the name comes
   // back NORMALISED (trimmed, and blank replaced by the unnamed sentinel) and
@@ -180,14 +165,10 @@ export function DocumentProperties({
             <TooltipTrigger asChild>
               <button
                 type="button"
-                onClick={() => setOpen((current) => !current)}
+                onClick={onToggleProperties}
                 aria-label="Properties"
-                aria-expanded={open}
-                aria-controls={`${suggestionsId}-disclosure`}
-                className={cn(
-                  'text-muted-foreground hover:text-foreground shrink-0 rounded p-1.5',
-                  TOGGLE_STATE_CLASS,
-                )}
+                aria-expanded={propertiesOpen}
+                className={HEADER_TOGGLE_CLASS}
               >
                 <Info aria-hidden="true" className="size-4" />
               </button>
@@ -200,25 +181,29 @@ export function DocumentProperties({
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}
       </div>
-
-      {facets !== undefined && open && (
-        <FacetDisclosure
-          id={`${suggestionsId}-disclosure`}
-          suggestionsId={suggestionsId}
-          inline={inline}
-          facets={facets}
-          onChange={onFacetsChange}
-          typeSuggestions={typeSuggestions}
-        />
-      )}
     </div>
   )
 }
 
 /**
- * The core-facet editor — OKF's `type`, `description`, `resource` and `tags`.
- * Its own component so the handlers below close over a `facets` that is
- * present by construction rather than re-proving it.
+ * The core-facet editor — OKF's `type`, `description`, `resource` and `tags`
+ * — shown in the page's inspector slot when the row's Properties opener is
+ * pressed. Its own component so the handlers below close over a `facets`
+ * that is present by construction rather than re-proving it.
+ *
+ * The labels are the product's words, not the format's: OKF's `description`
+ * is shown as "Summary" and `resource` as "Describes", because those read to
+ * someone who has never heard of OKF. What is STORED is the spec's spelling;
+ * only the label is translated.
+ *
+ * `resource` is NOT labelled "Source". OKF has a separate `sources` field for
+ * provenance (§5.1) meaning something else entirely — the materials a concept
+ * derives FROM, rather than the asset it describes — and the two would be
+ * indistinguishable in a properties panel.
+ *
+ * Neither field carries an `aria-label`. One would override the visible label
+ * as the accessible name, so a voice-control user saying what they can see
+ * would match nothing (WCAG 2.5.3). The `<label htmlFor>` is the name.
  *
  * Every handler emits a WHOLE `StoredCoreFacets`, never a patch, because
  * `writeCoreFacets` replaces the stored bucket outright and deletes any field
@@ -231,21 +216,17 @@ export function DocumentProperties({
  * are not editable here yet, so the control would have nothing to choose
  * between.
  */
-function FacetDisclosure({
-  id,
-  suggestionsId,
-  inline,
+export function DocumentFacetsEditor({
   facets,
   onChange,
-  typeSuggestions,
+  typeSuggestions = DEFAULT_TYPE_SUGGESTIONS,
 }: {
-  readonly id: string
-  readonly suggestionsId: string
-  readonly inline: boolean
   readonly facets: StoredCoreFacets
   readonly onChange?: (next: StoredCoreFacets) => void
-  readonly typeSuggestions: readonly string[]
+  /** Offered as datalist completions for `type`; the field stays free text. */
+  readonly typeSuggestions?: readonly string[]
 }) {
+  const suggestionsId = useId()
   const [draftTag, setDraftTag] = useState('')
   const tags = facets.tags ?? []
 
@@ -276,14 +257,7 @@ function FacetDisclosure({
   }
 
   return (
-    <div
-      id={id}
-      className={
-        inline
-          ? 'border-border bg-background absolute left-0 right-0 top-full z-20 flex flex-col gap-2 border-b px-3 py-2 shadow-md'
-          : 'flex flex-col gap-2 pb-1'
-      }
-    >
+    <div data-testid="document-facets-editor" className="flex flex-col gap-2 px-3 py-2">
       <div className="flex min-w-0 flex-1 items-center gap-2">
         <label
           className="text-muted-foreground w-16 shrink-0 text-xs"

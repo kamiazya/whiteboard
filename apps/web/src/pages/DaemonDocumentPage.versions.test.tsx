@@ -91,9 +91,11 @@ function makeCreateBackend() {
 // The top bar's History control opens the document's history column. It is
 // in the bar rather than the canvas dock because history belongs to the
 // document, not to one editor — which is what lets a markdown document
-// reach it too.
-function toggleHistoryPanel() {
-  fireEvent.click(screen.getByRole('button', { name: /history/i }))
+// reach it too. Awaited: the bar is a lazy chunk, resolved a tick after the
+// page mounts, so the first test in a process to reach it finds nothing
+// synchronously.
+async function toggleHistoryPanel() {
+  fireEvent.click(await screen.findByRole('button', { name: /history/i }))
 }
 
 // A bookmark is a NAMED point now: the control opens a field rather than
@@ -198,7 +200,7 @@ describe('DaemonDocumentPage versions', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      toggleHistoryPanel()
+      await toggleHistoryPanel()
       await takeBookmark()
 
       await waitFor(() => {
@@ -292,7 +294,7 @@ describe('DaemonDocumentPage versions', () => {
       const saved = vi.fn()
       window.addEventListener('whiteboard:wb_version_saved', saved)
 
-      toggleHistoryPanel()
+      await toggleHistoryPanel()
       await takeBookmark()
 
       // The daemon's manual POST does not broadcast version_created, so the
@@ -345,7 +347,7 @@ describe('DaemonDocumentPage versions', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      toggleHistoryPanel()
+      await toggleHistoryPanel()
       await takeBookmark()
 
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
@@ -387,7 +389,7 @@ describe('DaemonDocumentPage versions', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      toggleHistoryPanel()
+      await toggleHistoryPanel()
       await takeBookmark()
 
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
@@ -467,7 +469,7 @@ describe('DaemonDocumentPage versions', () => {
       // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = await screen.findByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -525,7 +527,7 @@ describe('DaemonDocumentPage versions', () => {
       // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = await screen.findByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -602,7 +604,7 @@ describe('DaemonDocumentPage versions', () => {
       // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'History' })
+      const toggle = await screen.findByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })

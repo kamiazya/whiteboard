@@ -1,7 +1,9 @@
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ResolvedReference } from '../layout/spatial-canvas.js'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { type ReferenceSeams, referenceSeams } from './seams.js'
+import { referenceTargets } from './targets.js'
 
 /**
  * What a surface adds beside a reference's loaded content — a label, an
@@ -81,4 +83,40 @@ export function referenceSeamsFromWire(wire: ReferenceWire): ReferenceSeams {
     resolveTitle: (documentId) => titles.get(documentId),
     extra: (ref) => extras.get(ref),
   })
+}
+
+/**
+ * The rows of a wire that laying out these seeds can read: what they name,
+ * transitively through what loaded (`referenceTargets`), the images their
+ * file nodes show, and the ids those rows resolve to.
+ *
+ * A keeper's wire can hold more than one canvas reads — the editor grows it
+ * for a body being DRAFTED beside the canvas, so the overlay's preview
+ * resolves a link before the commit. Those rows never reach the canvas's
+ * layout, so the layout must not re-run or drop its content cache when they
+ * arrive; restricting the wire first is what makes "the same bytes" the
+ * test for that. Row order is the wire's, so the restriction is idempotent
+ * byte for byte.
+ */
+export function referenceWireFor(
+  wire: ReferenceWire,
+  seeds: { readonly canvases?: readonly SpatialCanvas[]; readonly bodies?: readonly string[] },
+): ReferenceWire {
+  const keys = new Set(referenceTargets({ ...seeds, loaded: new Map(wire.entries) }))
+  // `referenceTargets` names documents; an image file node is not one, and
+  // its href still rides the wire as an extra the layout draws.
+  for (const canvas of seeds.canvases ?? []) {
+    for (const node of canvas.nodes) if (node.type === 'file') keys.add(node.file)
+  }
+  const aliases = wire.aliases.filter(([key]) => keys.has(key))
+  const ids = new Set(aliases.map(([, id]) => id))
+  for (const [key, entry] of wire.entries) {
+    if (keys.has(key) && entry !== null) ids.add(entry.documentId ?? key)
+  }
+  return {
+    entries: wire.entries.filter(([key]) => keys.has(key)),
+    aliases,
+    titles: wire.titles.filter(([id]) => ids.has(id)),
+    extras: wire.extras.filter(([key]) => keys.has(key)),
+  }
 }

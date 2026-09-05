@@ -753,6 +753,44 @@ export function routeCacheKey(edge: CanvasEdge, a: EdgeAnchorPair | undefined): 
 }
 
 /**
+ * The ranked alternative side pairs a trial may re-side `edge` onto. Empty
+ * for a self-loop, a fully authored pair, or a dangling endpoint. The
+ * same-side U-hook fallback (for when every ranked-vocabulary pair crosses,
+ * overlaps, or retraces) comes from rankedSidePairs' last rule,
+ * `u-hook-span-exposed-first` — one producer, not a second list here.
+ */
+function sideCandidatesFor(edge: CanvasEdge, byId: ReadonlyMap<string, SpatialNode>): SidePair[] {
+  if (edge.fromNode === edge.toNode) return []
+  if (edge.fromSide !== undefined && edge.toSide !== undefined) return []
+  const fromNode = byId.get(edge.fromNode)
+  const toNode = byId.get(edge.toNode)
+  if (fromNode === undefined || toNode === undefined) return []
+  const fromRect = rectOf(fromNode)
+  const toRect = rectOf(toNode)
+  const fromCenter = centerOf(fromRect)
+  const toCenter = centerOf(toRect)
+  const pairs = rankedSidePairs(
+    toCenter.x - fromCenter.x,
+    toCenter.y - fromCenter.y,
+    fromRect,
+    toRect,
+    () => 0,
+  )
+  const seen = new Set<string>()
+  return pairs
+    .map((pair) => ({
+      fromSide: edge.fromSide ?? pair.fromSide,
+      toSide: edge.toSide ?? pair.toSide,
+    }))
+    .filter((pair) => {
+      const key = `${pair.fromSide} ${pair.toSide}`
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+}
+
+/**
  * Bounded global improvement over per-edge side choices: iterate edges in
  * document order; adopt an alternative ranked pair only when the WHOLE
  * configuration's cost strictly decreases (lexicographic integer compare —
@@ -760,37 +798,26 @@ export function routeCacheKey(edge: CanvasEdge, a: EdgeAnchorPair | undefined): 
  * overlap-free configuration short-circuits without evaluating a single
  * candidate, which keeps the common case at one scoring sweep.
  */
-function optimizeSideChoices(
+/**
+ * The search's incremental configuration score: per-edge routed paths, the
+ * pairwise score matrix, and the aggregate cost, kept patchable because a
+ * trial re-sides ONE edge — only the edges whose anchor entries actually
+ * changed (the trial edge plus members of the anchor groups it left and
+ * joined) re-route and re-score their pairs, which is what keeps a trial
+ * O(affected * E) instead of O(E^2). `optimizeSideChoices` owns WHICH trials
+ * to try and when to stop; this object owns what a configuration costs and
+ * how to carry that cost across an adopted trial.
+ */
+function createConfigScore(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
   style: EdgeRoutingStyle,
   initial: ReadonlyMap<string, SidePair>,
-  // Edges whose sides are held fixed: candidates are only tried for the
-  // rest. The live-drag overlay locks resting edges (stability) while the
-  // carried ones still get the same optimization the committed render
-  // applies, so mid-drag and post-drop agree.
-  locked?: ReadonlySet<string>,
-  // Whether trials are scored against ALIGNED anchors — the geometry that
-  // will actually be drawn. The search proper runs unaligned (`false`): the
-  // comment on `computeAnchorsFor`'s own `align` records why, and it still
-  // holds. The cost is that a configuration can score clean in unaligned
-  // trial space and acquire real defects once the final pass aligns it —
-  // measured on a reported canvas, an edge settled on a route scoring
-  // `[0,0,0,0,267,3,5]` after alignment while a candidate already in its
-  // ranked list scored `[0,0,0,0,0,1,3]`, strictly better on every tier and
-  // never adopted, because the search saw neither number. So the settled
-  // configuration is handed back through this same search ONCE with
-  // `align: true`. That is not the rejected mid-search alignment: costs
-  // move only BETWEEN the two runs, never during either, so neither run's
-  // equilibrium can oscillate.
-  align = false,
-  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
-  // Routed paths shared across every search in one `assignEdgeAnchors`; see
-  // the comment on `routeCached` for why one layout may share one cache.
-  // Omitted, this search keeps a cache of its own.
-  routeCache?: Map<string, readonly Point[]>,
-): ReadonlyMap<string, SidePair> {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
+  align: boolean,
+  pins: ReadonlyMap<string, EdgeAnchorOverride> | undefined,
+  routeCache: Map<string, readonly Point[]> | undefined,
+  byId: ReadonlyMap<string, SpatialNode>,
+) {
   const othersFor = edges.map((e) =>
     nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
   )
@@ -850,19 +877,6 @@ function optimizeSideChoices(
   // (200 edges in ~1.6ms); the per-trial update did not, and comparing one
   // re-routed edge against all 200 by brute force is where the search spent
   // most of its time.
-  const boundsOf = (path: readonly Point[]): Rect => {
-    let minX = Number.POSITIVE_INFINITY
-    let minY = Number.POSITIVE_INFINITY
-    let maxX = Number.NEGATIVE_INFINITY
-    let maxY = Number.NEGATIVE_INFINITY
-    for (const point of path) {
-      if (point.x < minX) minX = point.x
-      if (point.x > maxX) maxX = point.x
-      if (point.y < minY) minY = point.y
-      if (point.y > maxY) maxY = point.y
-    }
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-  }
   // Inflated by one quantum so a pair that merely touches still reaches the
   // exact scorer: the broad phase must never be tighter than the thing it
   // is standing in for.
@@ -878,10 +892,9 @@ function optimizeSideChoices(
   // re-derive it. Replaced only when a trial is adopted, so it always
   // describes exactly `current`.
   let placement = buildAnchorGroups(ctx, current)
-  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
   let anchors = computeAnchorsFor(ctx, current, align, pins, placement)
   let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
-  let bounds: Rect[] = paths.map(boundsOf)
+  let bounds: Rect[] = paths.map(boundingBoxOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
   // A rect that FULLY CONTAINS one of this edge's endpoints (a group frame
@@ -922,12 +935,6 @@ function optimizeSideChoices(
     matrix.set(key, score)
     currentCost = addCost(currentCost, score, 1)
   }
-  // The realized-bends tier is deliberately ABSENT from the short-circuit
-  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
-  // crossings is healthy, and reshuffling it purely to shave bends is
-  // churn, not repair.
-  if (!hasRepairableProblem(currentCost)) return current
-
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
     // Which edge `trialSides` re-sided. Every trial here differs from the
@@ -954,7 +961,7 @@ function optimizeSideChoices(
     const trialBounds = bounds.slice()
     for (const i of touched) {
       trialPaths[i] = routeCached(edges[i]!, i, trialAnchors.get(edges[i]!.id))
-      trialBounds[i] = boundsOf(trialPaths[i]!)
+      trialBounds[i] = boundingBoxOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
     // Summed in place into a scratch copy: every term below is added exactly once.
@@ -1010,40 +1017,79 @@ function optimizeSideChoices(
       selfUpdates,
     }
   }
-
-  const candidatesFor = (edge: CanvasEdge): SidePair[] => {
-    if (edge.fromNode === edge.toNode) return []
-    if (edge.fromSide !== undefined && edge.toSide !== undefined) return []
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
-    if (fromNode === undefined || toNode === undefined) return []
-    const fromRect = rectOf(fromNode)
-    const toRect = rectOf(toNode)
-    const fromCenter = centerOf(fromRect)
-    const toCenter = centerOf(toRect)
-    // The same-side U-hook fallback (for when every ranked-vocabulary pair
-    // crosses, overlaps, or retraces) comes from rankedSidePairs' last rule,
-    // `u-hook-span-exposed-first` — one producer, not a second list here.
-    const pairs = rankedSidePairs(
-      toCenter.x - fromCenter.x,
-      toCenter.y - fromCenter.y,
-      fromRect,
-      toRect,
-      () => 0,
-    )
-    const seen = new Set<string>()
-    return pairs
-      .map((pair) => ({
-        fromSide: edge.fromSide ?? pair.fromSide,
-        toSide: edge.toSide ?? pair.toSide,
-      }))
-      .filter((pair) => {
-        const key = `${pair.fromSide} ${pair.toSide}`
-        if (seen.has(key)) return false
-        seen.add(key)
-        return true
-      })
+  const contribution = (i: number): ConfigCost => {
+    let cost = selfCosts[i]!
+    for (let j = 0; j < edges.length; j++) {
+      if (j === i) continue
+      const [lo, hi] = i < j ? [i, j] : [j, i]
+      const pair = matrix.get(pairKey(lo, hi))
+      if (pair !== undefined) cost = addCost(cost, pair, 1)
+    }
+    return cost
   }
+
+  const adopt = (
+    trialSides: Map<string, SidePair>,
+    evaluated: ReturnType<typeof evaluateTrial>,
+  ): void => {
+    current = trialSides
+    currentCost = evaluated.cost
+    anchors = evaluated.anchors
+    placement = evaluated.placement
+    paths = evaluated.paths
+    bounds = evaluated.bounds
+    for (const [key, score] of evaluated.updates) matrix.set(key, score)
+    for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
+  }
+
+  return {
+    sides: () => current as ReadonlyMap<string, SidePair>,
+    sideOf: (id: string) => current.get(id),
+    cost: () => currentCost,
+    contribution,
+    evaluateTrial,
+    adopt,
+  }
+}
+
+function optimizeSideChoices(
+  nodes: readonly SpatialNode[],
+  edges: readonly CanvasEdge[],
+  style: EdgeRoutingStyle,
+  initial: ReadonlyMap<string, SidePair>,
+  // Edges whose sides are held fixed: candidates are only tried for the
+  // rest. The live-drag overlay locks resting edges (stability) while the
+  // carried ones still get the same optimization the committed render
+  // applies, so mid-drag and post-drop agree.
+  locked?: ReadonlySet<string>,
+  // Whether trials are scored against ALIGNED anchors — the geometry that
+  // will actually be drawn. The search proper runs unaligned (`false`): the
+  // comment on `computeAnchorsFor`'s own `align` records why, and it still
+  // holds. The cost is that a configuration can score clean in unaligned
+  // trial space and acquire real defects once the final pass aligns it —
+  // measured on a reported canvas, an edge settled on a route scoring
+  // `[0,0,0,0,267,3,5]` after alignment while a candidate already in its
+  // ranked list scored `[0,0,0,0,0,1,3]`, strictly better on every tier and
+  // never adopted, because the search saw neither number. So the settled
+  // configuration is handed back through this same search ONCE with
+  // `align: true`. That is not the rejected mid-search alignment: costs
+  // move only BETWEEN the two runs, never during either, so neither run's
+  // equilibrium can oscillate.
+  align = false,
+  pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+  // Routed paths shared across every search in one `assignEdgeAnchors`; see
+  // the comment on `routeCached` for why one layout may share one cache.
+  // Omitted, this search keeps a cache of its own.
+  routeCache?: Map<string, readonly Point[]>,
+): ReadonlyMap<string, SidePair> {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const score = createConfigScore(nodes, edges, style, initial, align, pins, routeCache, byId)
+  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
+  // The realized-bends tier is deliberately ABSENT from the short-circuit
+  // (hasRepairableProblem, edge-rules.ts): a canvas with no overlap and no
+  // crossings is healthy, and reshuffling it purely to shave bends is
+  // churn, not repair.
+  if (!hasRepairableProblem(score.cost())) return score.sides()
 
   // Above the full-optimization size, each pass tries candidates only for
   // the WORST OFFENDERS — the edges contributing the most cost right now —
@@ -1057,18 +1103,8 @@ function optimizeSideChoices(
     // pass to fix, and trying candidates for it is the whole of the pass's
     // cost with none of its benefit.
     if (!align && edges.length <= FULL_OPT_MAX_EDGES) return edges
-    const contribution = (i: number): ConfigCost => {
-      let cost = selfCosts[i]!
-      for (let j = 0; j < edges.length; j++) {
-        if (j === i) continue
-        const [lo, hi] = i < j ? [i, j] : [j, i]
-        const pair = matrix.get(pairKey(lo, hi))
-        if (pair !== undefined) cost = addCost(cost, pair, 1)
-      }
-      return cost
-    }
     const ranked = edges
-      .map((edge, i) => ({ edge, i, cost: contribution(i) }))
+      .map((edge, i) => ({ edge, i, cost: score.contribution(i) }))
       // An edge with no overlap, no illegibility, and no crossings has
       // nothing to repair — reshuffling it to shave bends is churn, the
       // same judgement the whole-config short-circuit makes
@@ -1085,33 +1121,26 @@ function optimizeSideChoices(
     let improved = false
     for (const edge of trialEdgesForPass()) {
       if (locked?.has(edge.id)) continue
-      const chosen = current.get(edge.id)
+      const chosen = score.sideOf(edge.id)
       if (chosen === undefined) continue
-      for (const candidate of candidatesFor(edge)) {
+      for (const candidate of sideCandidatesFor(edge, byId)) {
         if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
-        const trial = new Map(current)
+        const trial = new Map(score.sides())
         trial.set(edge.id, candidate)
-        const evaluated = evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
+        const evaluated = score.evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
         // incumbent-wins-ties: adopt only on a strict decrease (edge-rules.ts),
         // so a tie never triggers churn and the lexicographic loop cannot oscillate.
-        if (shouldAdoptCandidate(evaluated.cost, currentCost, lessCost)) {
-          current = trial
-          currentCost = evaluated.cost
-          anchors = evaluated.anchors
-          placement = evaluated.placement
-          paths = evaluated.paths
-          bounds = evaluated.bounds
-          for (const [key, score] of evaluated.updates) matrix.set(key, score)
-          for (const [i, score] of evaluated.selfUpdates) selfCosts[i] = score
+        if (shouldAdoptCandidate(evaluated.cost, score.cost(), lessCost)) {
+          score.adopt(trial, evaluated)
           improved = true
           break
         }
       }
-      if (!hasRepairableProblem(currentCost)) return current
+      if (!hasRepairableProblem(score.cost())) return score.sides()
     }
     if (!improved) break
   }
-  return current
+  return score.sides()
 }
 
 /**
@@ -1624,6 +1653,99 @@ function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX):
  * which keeps the common case to a single corner instead of routing every
  * edge around a region that is not there.
  */
+/**
+ * Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can often
+ * share one tangent coordinate — anchors are renderer-chosen defaults, so
+ * sliding one end along its side buys a single straight segment instead of
+ * a stub-jog-stub elbow. Facing is required (each side's outward normal
+ * points toward the other end), or an authored opposing pair with the nodes
+ * swapped would draw a line backwards through both. A blocked lane answers
+ * undefined and the caller falls through to the elbows.
+ */
+function tryZeroBendSlide(
+  start: Point,
+  end: Point,
+  fromSide: Side,
+  toSide: Side,
+  fromRect: Rect,
+  toRect: Rect,
+  inflated: readonly Rect[],
+): Point[] | undefined {
+  if (fromSide !== oppositeSide(toSide)) return undefined
+  const fromNormal = outwardNormal(fromSide)
+  const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
+  if (!facing) return undefined
+  const span = (rect: Rect, side: Side): readonly [number, number] =>
+    side === 'left' || side === 'right'
+      ? [
+          rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+          rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
+        ]
+      : [
+          rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+          rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
+        ]
+  const withTangent = (anchor: Point, side: Side, t: number): Point =>
+    side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
+  const [fromLo, fromHi] = span(fromRect, fromSide)
+  const [toLo, toHi] = span(toRect, toSide)
+  const lo = Math.max(fromLo, toLo)
+  const hi = Math.min(fromHi, toHi)
+  if (lo > hi) return undefined
+  const startT = tangentCoordinate(fromSide, start)
+  const endT = tangentCoordinate(toSide, end)
+  // Keep an existing anchor when one already lies in the shared lane
+  // (departure first, then the arrival's fan position), else move as
+  // little as possible.
+  const t =
+    startT >= lo && startT <= hi
+      ? startT
+      : endT >= lo && endT <= hi
+        ? endT
+        : Math.min(hi, Math.max(lo, startT))
+  const alignedStart = withTangent(start, fromSide, t)
+  const alignedEnd = withTangent(end, toSide, t)
+  if (!pathIsClear([alignedStart, alignedEnd], inflated)) return undefined
+  return [alignedStart, alignedEnd]
+}
+
+/** Axis-aligned bounds of a point set — the broad-phase box the search and
+ * the router both prune with. One definition; the two call sites used to
+ * carry byte-identical copies (`boundsOf`, `boxOf`). */
+function boundingBoxOf(points: readonly Point[]): Rect {
+  let minX = Number.POSITIVE_INFINITY
+  let minY = Number.POSITIVE_INFINITY
+  let maxX = Number.NEGATIVE_INFINITY
+  let maxY = Number.NEGATIVE_INFINITY
+  for (const point of points) {
+    if (point.x < minX) minX = point.x
+    if (point.x > maxX) maxX = point.x
+    if (point.y < minY) minY = point.y
+    if (point.y > maxY) maxY = point.y
+  }
+  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+}
+
+/** The obstacles whose rects touch `box`, with the inflated and raw lists
+ * kept in step — the two windowing passes in routeOrthogonal differ only in
+ * the box they prune to. */
+function windowObstacles(
+  inflated: readonly Rect[],
+  raw: readonly Rect[],
+  box: Rect,
+): { inflated: Rect[]; raw: Rect[] } {
+  const touches = (r: Rect) =>
+    r.x <= box.x + box.w && r.x + r.w >= box.x && r.y <= box.y + box.h && r.y + r.h >= box.y
+  const near: { inflated: Rect[]; raw: Rect[] } = { inflated: [], raw: [] }
+  for (let i = 0; i < inflated.length; i++) {
+    if (touches(inflated[i] as Rect)) {
+      near.inflated.push(inflated[i] as Rect)
+      near.raw.push(raw[i] as Rect)
+    }
+  }
+  return near
+}
+
 function routeOrthogonal(
   startAnchor: Point,
   end: Point,
@@ -1649,53 +1771,8 @@ function routeOrthogonal(
   // beside it, which is a side-choice decision (`rankedSidePairs`), not
   // something this function can invent after the sides are fixed.
   if (start.x === end.x && start.y === end.y) return [start, end]
-  // Zero-bend shortcut: two ends on OPPOSING, mutually facing sides can
-  // often share one tangent coordinate — anchors are renderer-chosen
-  // defaults, so sliding one end along its side buys a single straight
-  // segment instead of a stub-jog-stub elbow. Facing is required (each
-  // side's outward normal points toward the other end), or an authored
-  // opposing pair with the nodes swapped would draw a line backwards
-  // through both. A blocked lane falls through to the elbows.
-  if (fromSide === oppositeSide(toSide)) {
-    const fromNormal = outwardNormal(fromSide)
-    const facing = fromNormal.x * (end.x - start.x) + fromNormal.y * (end.y - start.y) > 0
-    if (facing) {
-      const span = (rect: Rect, side: Side): readonly [number, number] =>
-        side === 'left' || side === 'right'
-          ? [
-              rect.y + Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
-              rect.y + rect.h - Math.min(SLIDE_CORNER_INSET_PX, rect.h / 2),
-            ]
-          : [
-              rect.x + Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
-              rect.x + rect.w - Math.min(SLIDE_CORNER_INSET_PX, rect.w / 2),
-            ]
-      const withTangent = (anchor: Point, side: Side, t: number): Point =>
-        side === 'left' || side === 'right' ? { x: anchor.x, y: t } : { x: t, y: anchor.y }
-      const [fromLo, fromHi] = span(fromRect, fromSide)
-      const [toLo, toHi] = span(toRect, toSide)
-      const lo = Math.max(fromLo, toLo)
-      const hi = Math.min(fromHi, toHi)
-      if (lo <= hi) {
-        const startT = tangentCoordinate(fromSide, start)
-        const endT = tangentCoordinate(toSide, end)
-        // Keep an existing anchor when one already lies in the shared
-        // lane (departure first, then the arrival's fan position), else
-        // move as little as possible.
-        const t =
-          startT >= lo && startT <= hi
-            ? startT
-            : endT >= lo && endT <= hi
-              ? endT
-              : Math.min(hi, Math.max(lo, startT))
-        const alignedStart = withTangent(start, fromSide, t)
-        const alignedEnd = withTangent(end, toSide, t)
-        if (pathIsClear([alignedStart, alignedEnd], inflated)) {
-          return [alignedStart, alignedEnd]
-        }
-      }
-    }
-  }
+  const zeroBend = tryZeroBendSlide(start, end, fromSide, toSide, fromRect, toRect, inflated)
+  if (zeroBend !== undefined) return zeroBend
   const toNormal = outwardNormal(toSide)
   // An arrowhead is ARROW_LENGTH long and is drawn ON the final segment, so
   // an approach shorter than this leaves the arrow with no line behind it —
@@ -1773,30 +1850,10 @@ function routeOrthogonal(
   // is built from `detourCandidates(exit, entry, region)` where `region` is a
   // union of obstacles the elbows CROSS -- so it cannot reach an obstacle the
   // elbow box does not already touch.
-  const boxOf = (points: readonly Point[]): Rect => {
-    let minX = Number.POSITIVE_INFINITY
-    let minY = Number.POSITIVE_INFINITY
-    let maxX = Number.NEGATIVE_INFINITY
-    let maxY = Number.NEGATIVE_INFINITY
-    for (const p of points) {
-      if (p.x < minX) minX = p.x
-      if (p.x > maxX) maxX = p.x
-      if (p.y < minY) minY = p.y
-      if (p.y > maxY) maxY = p.y
-    }
-    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-  }
-  const touches = (r: Rect, box: Rect) =>
-    r.x <= box.x + box.w && r.x + r.w >= box.x && r.y <= box.y + box.h && r.y + r.h >= box.y
-  const elbowBox = boxOf(elbows.flat())
+  const elbowBox = boundingBoxOf(elbows.flat())
   // Stage one: what the elbows themselves can reach. Correct for the
   // clearance tests and for `crossedBy`, which only ever tests elbow segments.
-  const nearIndices: number[] = []
-  for (let i = 0; i < inflated.length; i++) {
-    if (touches(inflated[i] as Rect, elbowBox)) nearIndices.push(i)
-  }
-  const nearInflated = nearIndices.map((i) => inflated[i] as Rect)
-  const nearRaw = nearIndices.map((i) => raw[i] as Rect)
+  const { inflated: nearInflated, raw: nearRaw } = windowObstacles(inflated, raw, elbowBox)
   // An elbow is good enough to stop here only if it is clear of the FOREIGN
   // obstacles AND puts no ink inside its own endpoints. Testing foreign
   // clearance alone returned an elbow that tunnelled straight through the
@@ -1850,12 +1907,7 @@ function routeOrthogonal(
           w: detourReach.w + 2 * DETOUR_REACH_PX,
           h: detourReach.h + 2 * DETOUR_REACH_PX,
         }
-  const workIndices: number[] = []
-  for (let i = 0; i < inflated.length; i++) {
-    if (touches(inflated[i] as Rect, workBox)) workIndices.push(i)
-  }
-  const workInflated = workIndices.map((i) => inflated[i] as Rect)
-  const workRaw = workIndices.map((i) => raw[i] as Rect)
+  const { inflated: workInflated, raw: workRaw } = windowObstacles(inflated, raw, workBox)
   const enumerated = bestCandidate(candidates, workInflated, workRaw, endpointRects)
   if (interiorInkThrough(enumerated, endpointRects) === 0 && pathIsClear(enumerated, workRaw)) {
     return enumerated

@@ -79,6 +79,7 @@ export {
   type ReferenceWire,
   referenceSeamsFromWire,
   referenceWire,
+  referenceWireFor,
 } from './references/wire.js'
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'

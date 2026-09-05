@@ -285,20 +285,9 @@ describe('DaemonDocumentPage comments panel', () => {
     await waitFor(() => expect(panel().getByText('no, we changed it')).toBeTruthy())
   })
 
-  it('keeps the rail visible under a version preview, but withholds the reply box', async () => {
+  it('shares one slot with History: opening either closes the other', async () => {
     const fakeVersionsBackend: VersionsBackend = {
-      list: async () => [
-        {
-          id: 'v1',
-          path: 'board',
-          createdAt: '2026-01-01T00:00:00.000Z',
-          elementCount: 0,
-          label: 'a point',
-          auto: false,
-          hasThumbnail: false,
-          branchName: 'main',
-        },
-      ],
+      list: async () => [],
       loadPast: async () => ({ kind: 'spatial', canvas: { nodes: [], edges: [] } }),
       save: async () => {
         throw new Error('not exercised by this test')
@@ -307,7 +296,6 @@ describe('DaemonDocumentPage comments panel', () => {
       putThumbnail: async () => {},
       loadThumbnail: async () => null,
     }
-
     await act(async () => {
       render(
         <VersionsBackendContext.Provider value={fakeVersionsBackend}>
@@ -322,21 +310,156 @@ describe('DaemonDocumentPage comments panel', () => {
       )
     })
 
+    // Comments, then History: the rail leaves as the column arrives. Two
+    // panels beside one editor was the phone screenshot this exists for —
+    // a display popover, the rail and the history sheet all open at once.
     fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
-    fireEvent.click(panel().getByText('still needs a decision'))
-    await waitFor(() => panel().getByRole('textbox', { name: /reply/i }))
-
+    await screen.findByTestId('comments-panel')
     fireEvent.click(await screen.findByRole('button', { name: /history/i }))
-    const row = (await screen.findAllByTestId('version-row'))[0]
-    const activate = row?.querySelector('button')
-    expect(activate, 'no interactive control on the version row').not.toBeNull()
-    fireEvent.click(activate as HTMLButtonElement)
+    await screen.findByTestId('history-panel')
+    expect(screen.queryByTestId('comments-panel')).toBeNull()
+    // The opener says so too: a toggle has to LOOK toggled off once its
+    // panel has been displaced.
+    expect(screen.getByRole('button', { name: /comments/i }).getAttribute('aria-pressed')).toBe(
+      'false',
+    )
 
-    // A reply is a write to the LIVE document, and the editor surface is
-    // replaced by DocumentPreview during a preview — the rail must not offer
-    // a control that would write against a state that is not the document's.
-    await waitFor(() => expect(panel().queryByRole('textbox', { name: /reply/i })).toBeNull())
-    expect(panel().getByText('still needs a decision')).toBeTruthy()
+    // And back: History gives way to Comments.
+    fireEvent.click(screen.getByRole('button', { name: /comments/i }))
+    await screen.findByTestId('comments-panel')
+    expect(screen.queryByTestId('history-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    )
+  })
+
+  it('Connections takes the same slot: opening it closes the rail, and its list is a column, not a band', async () => {
+    mockGetDocumentBacklinks.mockResolvedValue({
+      backlinks: [
+        {
+          documentId: 'id-source',
+          path: 'source',
+          name: 'Source board',
+          kind: 'spatial',
+          contexts: ['embedded on this canvas'],
+        },
+      ],
+      unlinkedMentions: [],
+    })
+    await renderSpatial()
+    fireEvent.click(await screen.findByRole('button', { name: /^comments/i }))
+    await screen.findByTestId('comments-panel')
+
+    fireEvent.click(await screen.findByRole('button', { name: /connections \(1\)/i }))
+    const panel = await screen.findByTestId('connections-panel')
+    expect(within(panel).getByText('Source board')).toBeTruthy()
+    expect(screen.queryByTestId('comments-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /^comments/i }).getAttribute('aria-pressed')).toBe(
+      'false',
+    )
+    // A column in the editor row — the shell's inspector slot — rather than
+    // a strip overlaid under the header.
+    expect(panel.closest('main')).not.toBeNull()
+    expect(panel.className).not.toContain('top-full')
+  })
+
+  it('Properties takes the slot on a markdown document: opening it closes History', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+    })
+    const fakeVersionsBackend: VersionsBackend = {
+      list: async () => [],
+      loadPast: async () => ({ kind: 'markdown', body: '' }),
+      save: async () => {
+        throw new Error('not exercised by this test')
+      },
+      restore: async () => {},
+      putThumbnail: async () => {},
+      loadThumbnail: async () => null,
+    }
+    await act(async () => {
+      render(
+        <VersionsBackendContext.Provider value={fakeVersionsBackend}>
+          <DaemonDocumentPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            workspaceId="w1"
+            path="note"
+            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+          />
+        </VersionsBackendContext.Provider>,
+        { container: document.body },
+      )
+    })
+    fireEvent.click(await screen.findByRole('button', { name: /history/i }))
+    await screen.findByTestId('history-panel')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Properties' }))
+    const panel = await screen.findByTestId('properties-panel')
+    expect(within(panel).getByRole('combobox', { name: /type/i })).toBeTruthy()
+    expect(screen.queryByTestId('history-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    )
+    // And no second copy of the editor overlaid under the header.
+    expect(screen.getAllByRole('combobox', { name: /type/i })).toHaveLength(1)
+  })
+
+  it('opens the rail under a variation preview, but withholds the reply box', async () => {
+    // A VERSION preview cannot host the rail any more: it is entered from the
+    // History column, which holds the one inspector slot, and the preview
+    // bar hides the rail's opener. A VARIATION preview (`?v=`) keeps the
+    // ordinary top bar, so the rail can be opened over it — and a reply is
+    // still a write to the LIVE document, sent from a surface showing
+    // something else entirely.
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+    })
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/names')) {
+          return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
+        }
+        if (url.endsWith('/branches/idea/document')) {
+          return new Response(JSON.stringify({ kind: 'markdown', body: '# From the idea tip' }), {
+            status: 200,
+          })
+        }
+        if (url.endsWith('/branches')) {
+          return new Response(
+            JSON.stringify({
+              head: 'main',
+              branches: [
+                { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-01-01' },
+                { name: 'idea', tipFrontiers: 'dGlw', color: '#e8590c', createdAt: '2026-01-02' },
+              ],
+            }),
+            { status: 200 },
+          )
+        }
+        return new Response('{}', { status: 404 })
+      }),
+    )
+    await act(async () => {
+      rtlRender(
+        <MemoryRouter initialEntries={['/?v=idea']}>
+          <DaemonDocumentPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            workspaceId="w1"
+            path="note"
+            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+          />
+        </MemoryRouter>,
+        { container: document.body },
+      )
+    })
+    await screen.findByTestId('document-preview')
+
+    fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
+    await waitFor(() => expect(panel().getByText('is this still true?')).toBeTruthy())
+    fireEvent.click(panel().getByText('is this still true?'))
+    expect(panel().queryByRole('textbox', { name: /reply/i })).toBeNull()
   })
 })
 

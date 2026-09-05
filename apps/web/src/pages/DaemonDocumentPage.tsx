@@ -11,50 +11,24 @@ import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import {
-  CommentsRailAside,
-  CommentsRailToggle,
-} from '../components/annotations/CommentsRailChrome.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
-import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
-import { DocumentPreview } from '../components/DocumentPreview.js'
-import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
-import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
-import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
-import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
-import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { Button } from '../components/ui/button.js'
-import {
-  DAEMON_HISTORY_CAPABILITIES,
-  type VersionPreviewSession,
-} from '../components/VersionTimeline'
-import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
-import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
-import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
-import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
-import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
-import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
+import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
-import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
-import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
-import { type ReferenceLoader, useReferenceSeams } from '../hooks/use-reference-seams.js'
+import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
-import { useWhiteboardCommands } from '../lib/commands/index.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -64,7 +38,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
-import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
@@ -72,13 +46,12 @@ import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
-import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
+import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
+import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
-import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 const log = getAppLogger('daemon-document-page')
 
@@ -102,6 +75,13 @@ export interface DaemonDocumentPageProps {
   onNavigateBack?: () => void
 }
 
+/**
+ * The daemon keeper's document page: the controller over the daemon's REST
+ * routes, the sync session over a WebSocket or SSE backend, the markdown
+ * body off that same session, and the daemon's version rows — supplied to
+ * the shared `DocumentPage` as one model (ADR-0004 decision 2: the
+ * controller layer stays capability-selected, the page does not).
+ */
 export function DaemonDocumentPage({
   daemonBaseUrl,
   workspaceId,
@@ -152,12 +132,9 @@ export function DaemonDocumentPage({
     })
   }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
 
-  // Stable across the page's lifetime, mirroring BrowserDocumentPage's
-  // own settingsStore — read fresh (not cached in state) wherever the
-  // current capabilities.webMcpEnabled value is needed.
+  // Stable across the page's lifetime — read fresh (not cached in state)
+  // wherever the current settings are needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
-
-  const { resolvedTheme } = useThemeMode()
 
   // The selected (workspaceId, path) pair once both are known, computed once so
   // every downstream guard and child prop shares a single non-null narrowing
@@ -273,25 +250,10 @@ export function DaemonDocumentPage({
       }
     })()
   }, [canvas, variationPreview, daemonFetch, clearVariationParam])
-  // The document's history column. Cleared on a document switch: this page
-  // does not remount, and a panel left open across a switch would be listing
-  // the departed document's versions under the arrived document's name.
-  const [historyOpen, setHistoryOpen] = useState(false)
-  // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
-  const [bookmarkArmed, setBookmarkArmed] = useState(0)
-  // The past state the person is LOOKING at, drawn in place of the editor.
-  // Read-only by construction — see DocumentPreview — so "look, then decide"
-  // cannot turn into an edit against a state that is not the document's.
-  const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   // Bumped on any version_created broadcast (covers this button's own save,
   // MCP tool saves, and other peers) so an open VersionTimeline updates
   // without waiting for its 15s poll.
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
-  // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
-  useBookmarkShortcut(canvas !== null, () => {
-    setHistoryOpen(true)
-    setBookmarkArmed((n) => n + 1)
-  })
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -404,29 +366,7 @@ export function DaemonDocumentPage({
   // outline lapse on their own, so a crashed agent leaves nothing behind.
   const { state: agentActivity, report: reportAgentActivity } = useAgentActivity()
 
-  const {
-    canvas: canvasValue,
-    loaded: canvasLoaded,
-    onChange,
-    externalVersion,
-    clearLocalUndo,
-    undo,
-    redo,
-    canUndo,
-    canRedo,
-    exportScene,
-    lockedNodeIds,
-    setNodeLock,
-    markdownBody: syncedMarkdownBody,
-    coreFacets,
-    setCoreFacets,
-    lockedEdgeIds,
-    setEdgeLock,
-    syncStatus,
-    readOutlineSource,
-    annotations,
-    threadMarks,
-  } = useDocumentSync(backend, {
+  const sync = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
       : { contentDocumentId: backendState.contentDocumentId }),
@@ -437,6 +377,19 @@ export function DaemonDocumentPage({
     onAgentActivity: (payload) => reportAgentActivity(payload),
     identity: canvas ?? undefined,
   })
+  const {
+    canvas: canvasValue,
+    loaded: canvasLoaded,
+    onChange,
+    clearLocalUndo,
+    markdownBody: syncedMarkdownBody,
+    coreFacets,
+    setCoreFacets,
+    syncStatus,
+    readOutlineSource,
+    annotations,
+    threadMarks,
+  } = sync
 
   // New file nodes store the target's immutable id (ADR-0008: stored
   // references key on ids, so a path rename cannot dangle them); the
@@ -448,11 +401,6 @@ export function DaemonDocumentPage({
   const canvasesRef = useRef(controller.documents)
   canvasesRef.current = controller.documents
 
-  // The document on screen, written during render so a handler that outlives
-  // a switch can ask what arrived rather than reading the `canvas` its own
-  // closure captured. This page switches documents without remounting.
-  const currentDocumentPathRef = useRef(canvas?.path)
-  currentDocumentPathRef.current = canvas?.path
   const resolveRefPath = useCallback(
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
     [],
@@ -491,27 +439,20 @@ export function DaemonDocumentPage({
     () => createUniqueNameResolver(linkEntries(controller.documents)),
     [controller.documents],
   )
-  // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
+  // Canvas embeds (J5a) and image nodes (J5b) read the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
-  // updatedAt, exactly as in browser mode.
-  const fileSeams = useDocumentFileSeams({
-    canvas: canvasValue,
-    adapter: fileAdapter,
-    resolveAlias,
-    resolveTitle,
-    // Keyed by BOTH id and path so id refs and legacy path refs each find
-    // their staleness stamp.
-    stampOf: useMemo(
-      () =>
-        new Map(
-          controller.documents.flatMap((entry) => [
-            [entry.path, entry.updatedAt ?? ''] as const,
-            ...(entry.id ? [[entry.id, entry.updatedAt ?? ''] as const] : []),
-          ]),
-        ),
-      [controller.documents],
-    ),
-  })
+  // updatedAt, exactly as in browser mode — keyed by BOTH id and path so id
+  // refs and legacy path refs each find theirs.
+  const stampOf = useMemo(
+    () =>
+      new Map(
+        controller.documents.flatMap((entry) => [
+          [entry.path, entry.updatedAt ?? ''] as const,
+          ...(entry.id ? [[entry.id, entry.updatedAt ?? ''] as const] : []),
+        ]),
+      ),
+    [controller.documents],
+  )
 
   // The open document's kind, from the documents list summary (default
   // 'spatial'). It picks which editor DocumentEditorSurface mounts — the
@@ -519,32 +460,10 @@ export function DaemonDocumentPage({
   const documentKind: DocumentKind =
     controller.documents.find((entry) => entry.path === controller.path)?.kind ?? 'spatial'
 
-  // A markdown document's body lives in the doc's `body` text container —
-  // the one place it is stored, and the shape `wb_document_set` writes. The
-  // read comes from the sync session (which republishes it on hydration,
-  // remote import and undo alike) and the write travels the session's
-  // ordinary command path, so a body edit gets the same debounce, undo step
-  // and local-update forwarding as every other change, with no second write
-  // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
-  // value passed alongside is the unchanged one this command does not touch.
-  // The CONTROLLER's identity, not this page's props. They are not the same
-  // thing: the controller owns its own `path` and `switchDocument`, and five
-  // call sites here move the document without the props ever changing — one
-  // of them is this very surface's own link-following
-  // (`onOpenDocument` below). Keying on the props would leave the surface
-  // open across exactly the switch it is most likely to be part of.
-  const nodeInEditor = useNodeInEditor(
-    canvasValue,
-    onChange,
-    `${controller.workspaceId}:${controller.path}`,
-  )
-  // SCOPE RESET — see the state's own note above. The comments rail's
-  // thread/compose state clears itself: useCommentsRail owns that reset,
-  // keyed on the same path this effect watches.
+  // SCOPE RESET — see scoped-screen-state.test.ts. The history column, the
+  // save outcome and the comments rail clear themselves inside DocumentPage,
+  // keyed on the same document this effect watches.
   useEffect(() => {
-    setHistoryOpen(false)
-    setBookmarkArmed(0)
-    setPreview(null)
     // The variation view and its message are about the DEPARTED document.
     // `?v` is not stripped by a switch — `switchDocument` sets the path and
     // nothing else — so the effect below re-resolves the same name against
@@ -561,6 +480,14 @@ export function DaemonDocumentPage({
     setConnections(null)
   }, [controller.path])
 
+  // A markdown document's body lives in the doc's `body` text container —
+  // the one place it is stored, and the shape `wb_document_set` writes. The
+  // read comes from the sync session (which republishes it on hydration,
+  // remote import and undo alike) and the write travels the session's
+  // ordinary command path, so a body edit gets the same debounce, undo step
+  // and local-update forwarding as every other change, with no second write
+  // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
+  // value passed alongside is the unchanged one this command does not touch.
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
@@ -575,28 +502,20 @@ export function DaemonDocumentPage({
   // edit here — one undo step, and they travel the annotation channel back.
   // The canvas argument is the CURRENT one unchanged: neither write touches
   // a node or an edge, which is why the commands have their own write path.
-  const commentsRail = useCommentsRail({
-    scopeKey: controller.path,
-    threads: annotations,
-    documentKind,
-    markdownBody,
-    threadMarks,
-    canvas: canvasValue,
-    write: {
-      createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
-      replyToThread: (threadId, message) =>
-        onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
-      setThreadStatus: (threadId, status) =>
-        onChange(canvasValueRef.current, { kind: 'set-thread-status', threadId, status }),
-      editMessage: (threadId, message, opening) =>
-        onChange(canvasValueRef.current, {
-          kind: 'edit-thread-message',
-          threadId,
-          message,
-          opening,
-        }),
-    },
-  })
+  const threadWrite: CommentsRailWrite = {
+    createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
+    replyToThread: (threadId, message) =>
+      onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
+    setThreadStatus: (threadId, status) =>
+      onChange(canvasValueRef.current, { kind: 'set-thread-status', threadId, status }),
+    editMessage: (threadId, message, opening) =>
+      onChange(canvasValueRef.current, {
+        kind: 'edit-thread-message',
+        threadId,
+        message,
+        opening,
+      }),
+  }
 
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
@@ -647,33 +566,6 @@ export function DaemonDocumentPage({
     },
     [fileAdapter, controller.documents],
   )
-  const references = useReferenceSeams({
-    body: markdownBody ?? '',
-    resolveAlias,
-    resolveTitle,
-    load: loadReference,
-  })
-
-  const commands = useWhiteboardCommands({
-    provider: { kind: 'daemon', daemonBaseUrl, capabilities },
-    // The daemon canvas summary carries no display name yet (only
-    // path/updatedAt) — the path doubles as `name` until that changes.
-    canvas:
-      canvas !== null
-        ? { workspaceId: canvas.workspaceId, documentId: canvas.path, name: canvas.path }
-        : null,
-  })
-
-  // Identity key = workspaceId+path, matching this page's own canvas.
-  // Read once at mount: the routed /settings page is the only place this
-  // toggles, and navigating there and back remounts this page (a route
-  // change), which re-reads the store fresh — no in-mount reactivity needed.
-  const webMcpEnabled = settingsStore.load().capabilities.webMcpEnabled !== false
-  useBrowserToolRegistry(
-    commands,
-    canvas !== null ? `${canvas.workspaceId}/${canvas.path}` : null,
-    webMcpEnabled,
-  )
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
   useDocumentFavicon({
@@ -703,28 +595,11 @@ export function DaemonDocumentPage({
     return () => setShellConnection(null)
   }, [authError, syncStatus, daemonBaseUrl])
 
-  // Which pipeline draws it follows the KIND, in one shared place — asking
-  // the spatial exporter for a markdown document produced a valid 1x1 PNG
-  // that uploaded like any other, so every markdown version row here drew an
-  // empty box. PNG on both arms, because the daemon's thumbnail endpoint
-  // validates a PNG signature on upload and rejects anything else.
-  const getThumbnailBlob = useCallback(
-    () => captureBookmarkPicture(documentKind, { exportScene, body: markdownBody }),
-    [documentKind, exportScene, markdownBody],
-  )
   // The keeper this page's history belongs to. No provider is mounted here,
   // so this is the daemon backend over `DaemonApiContext`'s fetch — the
   // picture rides to the same route it always did, by the seam both pages
-  // now share rather than by a URL only this one could build.
+  // share rather than by a URL only this one could build.
   const versionsBackend = useVersionsBackend()
-
-  // The document's own verbs live on the document's ⋯, the same as on the
-  // browser page — one object, one action menu (ADR-0006).
-  const { exportError, handleExport } = useSceneExport({
-    onExport: exportScene,
-    filenameBase: sanitizeExportFilenameBase(canvas?.path ?? 'canvas'),
-    log,
-  })
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one
@@ -738,61 +613,6 @@ export function DaemonDocumentPage({
     } finally {
       setCreating(false)
     }
-  }
-
-  const {
-    saving: savingVersion,
-    outcome: saveVersionOutcome,
-    run: runVersionSave,
-  } = useVersionSaveFlow(currentDocumentPathRef, controller.path, async (label) => {
-    // Narrowed by the precondition in `saveVersion` below, which never
-    // calls `run` (so never reaches this body) while canvas is null.
-    if (canvas === null) {
-      throw new Error('saveVersion: no canvas')
-    }
-    // The shared body pins the beats: capture BEFORE the save, announce,
-    // thumbnail riding along unawaited, re-announce once the picture lands
-    // (see buildVersionSaveBody).
-    return buildVersionSaveBody({
-      capture: getThumbnailBlob,
-      save: async (saveLabel) => {
-        const res = await daemonFetch(
-          `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-          {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ label: saveLabel }),
-          },
-        )
-        if (!res.ok) throw new Error(`save failed: ${res.status}`)
-        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-        if (!parsed.success) {
-          log.error(
-            'POST /versions response did not match saveVersionResponseSchema:',
-            parsed.error,
-          )
-          throw new Error('save response did not match schema')
-        }
-        return {
-          workspaceId: canvas.workspaceId,
-          path: canvas.path,
-          versionId: parsed.data.version.id,
-        }
-      },
-      backend: versionsBackend,
-      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
-      // The server's manual POST /versions route does not broadcast
-      // version_created over the websocket (that only fires for auto-saves
-      // and other peers' saves), so this button must dispatch the same
-      // identity-scoped event useDocumentSync fires on a broadcast — otherwise
-      // nothing listening for the save (the version list, the tab) learns it happened.
-      announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
-      onThumbnailFailed: () => log.error('bookmark thumbnail upload failed'),
-    })(label)
-  })
-  const saveVersion = async (label: string): Promise<void> => {
-    if (canvas === null) return
-    await runVersionSave(label)
   }
 
   // The page-level render state, derived once (see daemon-page-state.ts for
@@ -816,353 +636,286 @@ export function DaemonDocumentPage({
     return <LoadDegradedView message={pageState.message} />
   }
 
-  const versionHeaderActions = canvas ? (
-    <BookmarkAction
-      saving={savingVersion}
-      outcome={saveVersionOutcome}
-      armed={bookmarkArmed}
-      onSave={(label) => void saveVersion(label)}
-    />
-  ) : null
+  const documentKey = canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'
+  const openDocument = (id: string) => controller.switchDocument(resolveRefPath(id) ?? id)
+
+  const emptyState =
+    pageState.kind === 'document-missing' ? (
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+        {onNavigateBack && (
+          <button
+            type="button"
+            onClick={onNavigateBack}
+            className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <span aria-hidden="true">← </span>Back to documents
+          </button>
+        )}
+        <p className="text-sm text-muted-foreground">
+          Nothing is at <span className="font-medium text-foreground">“{pageState.path}”</span> in
+          this workspace. It may have been deleted or renamed.
+        </p>
+        {controller.createError && (
+          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+            {controller.createError}
+          </div>
+        )}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={creating}
+          onClick={() => {
+            setCreating(true)
+            void controller.createDocument(pageState.path).finally(() => setCreating(false))
+          }}
+        >
+          Create a canvas at this path
+        </Button>
+      </div>
+    ) : pageState.kind === 'workspace-empty' ? (
+      <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+        {/* WorkspaceTopBar (the usual home for this button) only mounts once
+            a canvas is selected, so a workspace that resolves to zero
+            documents — an empty workspace, or a gallery row whose canvas was
+            deleted by another client — needs its own back affordance here. */}
+        {onNavigateBack && (
+          <button
+            type="button"
+            onClick={onNavigateBack}
+            className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+          >
+            <span aria-hidden="true">← </span>Back to documents
+          </button>
+        )}
+        <p className="text-sm text-muted-foreground">This workspace has no documents yet.</p>
+        {controller.createError && (
+          <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+            {controller.createError}
+          </div>
+        )}
+        {/* An empty state is a reading surface, not a dense toolbar strip
+            (ADR-0006 point 4), so the control keeps its text label rather
+            than becoming an icon-only "+". */}
+        <Button
+          type="button"
+          variant="outline"
+          size="sm"
+          disabled={creating}
+          onClick={() => void handleCreateDocument()}
+        >
+          Create a canvas
+        </Button>
+      </div>
+    ) : undefined
+
+  const model: DocumentPageModel = {
+    scopeKey: canvas ? `${canvas.workspaceId}:${canvas.path}` : null,
+    documentKey,
+    documentKind,
+    srTitle: 'Whiteboard (daemon)',
+    capabilities,
+    sync,
+    markdown: {
+      body: markdownBody,
+      setBody: setMarkdownBody,
+      meta: coreFacets ?? { type: documentKind },
+      hydrating: false,
+    },
+    // The NAME is the workspace's — the top bar hands it down from `/names`,
+    // the same surface the canvas dropdown renames through.
+    title: 'top-bar',
+    properties: {
+      ready: true,
+      // Facets are OKF frontmatter, so only a markdown document has any —
+      // `readCoreFacets` answers `undefined` for a spatial one (ADR-0009
+      // decision 3), which is what decides the disclosure without a second
+      // flag to keep in sync.
+      ...(coreFacets === undefined ? {} : { facets: coreFacets }),
+      onFacetsChange: setCoreFacets,
+    },
+    threads: { annotations, threadMarks, write: threadWrite, railCanvas: canvasValue },
+    files: {
+      adapter: fileAdapter,
+      stampOf,
+      resolveAlias,
+      resolveTitle,
+      missingFileRef,
+      pickerTargets,
+      loadReference,
+    },
+    openDocument,
+    overlayTitle: canvas?.path ?? 'Untitled',
+    exportFilenameBase: canvas?.path ?? 'canvas',
+    commands: {
+      provider: { kind: 'daemon', daemonBaseUrl, capabilities },
+      // The daemon canvas summary carries no display name yet (only
+      // path/updatedAt) — the path doubles as `name` until that changes.
+      canvas:
+        canvas !== null
+          ? { workspaceId: canvas.workspaceId, documentId: canvas.path, name: canvas.path }
+          : null,
+      // Identity key = workspaceId+path, matching this page's own canvas.
+      registryKey: canvas !== null ? `${canvas.workspaceId}/${canvas.path}` : null,
+    },
+    versions: {
+      enabled: canvas !== null,
+      workspaceId: canvas?.workspaceId ?? '',
+      path: canvas?.path ?? '',
+      historyCapabilities: DAEMON_HISTORY_CAPABILITIES,
+      backend: versionsBackend,
+      save: async (label) => {
+        if (canvas === null) throw new Error('saveVersion: no canvas')
+        const res = await daemonFetch(
+          `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label }),
+          },
+        )
+        if (!res.ok) throw new Error(`save failed: ${res.status}`)
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        if (!parsed.success) {
+          log.error(
+            'POST /versions response did not match saveVersionResponseSchema:',
+            parsed.error,
+          )
+          throw new Error('save response did not match schema')
+        }
+        return {
+          workspaceId: canvas.workspaceId,
+          path: canvas.path,
+          versionId: parsed.data.version.id,
+        }
+      },
+      refreshSignal: versionRefreshSignal,
+      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
+      // The server's manual POST /versions route does not broadcast
+      // version_created over the websocket (that only fires for auto-saves
+      // and other peers' saves), so this save must dispatch the same
+      // identity-scoped event useDocumentSync fires on a broadcast — otherwise
+      // nothing listening for the save (the version list, the tab) learns it happened.
+      announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
+    },
+    topBar: canvas
+      ? {
+          workspaceId: canvas.workspaceId,
+          path: canvas.path,
+          branchRefreshSignal,
+          onPreviewVariation: (name) => {
+            setSearchParams((prev) => {
+              const next = new URLSearchParams(prev)
+              next.set('v', name)
+              return next
+            })
+          },
+          ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
+        }
+      : null,
+    readOnlyPast: variationPreview?.past ?? null,
+    spatial: {
+      editorRef: spatialEditorRef,
+      agentTouchedNodeIds: agentActivity.touchedNodeIds,
+      children: <AgentPresenceChip summary={agentActivity.summary} />,
+    },
+    ...(canvas
+      ? {
+          connections: {
+            backlinks: connections === null ? null : connections.backlinks,
+            ...(connections === null ? {} : { mentions: connections.unlinkedMentions }),
+            onOpen: (entry) => controller.switchDocument(entry.path),
+            onLinkify: (mention) => {
+              if (controller.workspaceId === null || currentDocumentId === undefined) return
+              void linkifyDocumentMentions(
+                daemonFetch,
+                daemonBaseUrl,
+                controller.workspaceId,
+                mention.documentId,
+                currentDocumentId,
+              )
+                .then(() => setConnectionsRefresh((n) => n + 1))
+                .catch(() => {
+                  // The panel simply keeps showing the mention; the
+                  // next open retries.
+                })
+            },
+          },
+        }
+      : {}),
+    slots: {
+      headerExtras: (
+        <>
+          {capabilities.branches && canvas && variationPreview !== null && (
+            <HeaderVariationBanner
+              workspaceId={canvas.workspaceId}
+              path={canvas.path}
+              name={variationPreview.name}
+              head={variationPreview.head}
+              branches={variationPreview.branches}
+              onSwitch={switchToVariation}
+              onExit={clearVariationParam}
+              runMerge={(src, args) =>
+                branchesApi(canvas.workspaceId, canvas.path, daemonFetch).merge(src, args)
+              }
+            />
+          )}
+          {variationNotice !== null && (
+            // role="alert", not "status": every notice here reports a
+            // failure (unknown name, unreadable tip, failed switch), and
+            // an alert injected with its content is the supported pattern
+            // — a conditionally-mounted status region is not
+            // (polite-live-region.test.ts).
+            <div
+              role="alert"
+              data-testid="variation-preview-notice"
+              className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
+            >
+              <span className="min-w-0 flex-1 truncate">{variationNotice}</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                className="shrink-0 rounded-md p-1 hover:bg-accent"
+                onClick={() => setVariationNotice(null)}
+              >
+                ×
+              </button>
+            </div>
+          )}
+          {capabilities.branches && canvas && (
+            <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
+          )}
+          {/* This row only exists when it carries something meaningful: a
+              capability this keeper does not have. A daemon with full
+              capabilities — the common local case — gets no extra header row
+              at all (every header row costs canvas height on a phone). The
+              shell switcher names the workspace on every page, so it is the
+              one carrier of that; raw identifiers are not chrome (ADR-0019). */}
+          {(!capabilities.branches || !capabilities.merge) && (
+            <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
+              {/* WorkspaceTopBar owns the real History/HeaderBranchChip
+                  affordances once a canvas is selected; these page-level teasers
+                  only surface guidance while the capability itself is unavailable. */}
+              {!capabilities.branches && <CapabilityTeaser label="Variations" />}
+              {!capabilities.merge && <CapabilityTeaser label="Combine" />}
+            </div>
+          )}
+        </>
+      ),
+      ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
+      footer: capabilities.merge && canvas && (
+        <MergeToast
+          workspaceId={canvas.workspaceId}
+          path={canvas.path}
+          onRestored={clearLocalUndo}
+        />
+      ),
+    },
+  }
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      <DocumentPageShell
-        srTitle="Whiteboard (daemon)"
-        aside={
-          historyOpen && canvas ? (
-            <VersionPanel
-              workspaceId={canvas.workspaceId}
-              path={canvas.path}
-              capabilities={DAEMON_HISTORY_CAPABILITIES}
-              onRestored={clearLocalUndo}
-              onPreview={setPreview}
-              refreshSignal={versionRefreshSignal}
-              headerActions={versionHeaderActions}
-            />
-          ) : undefined
-        }
-        header={
-          <>
-            {canvas && (
-              <WorkspaceTopBar
-                // Document identity in the merged header row, mirroring the
-                // browser page. The NAME is the workspace's — the top bar
-                // hands it down from `/names`, the same surface the canvas
-                // dropdown renames through — never a `title` read out of the
-                // content, which ADR-0009 decision 2 forbids and
-                // `storedCoreFacetsSchema` has no room for.
-                titleSlot={(identity) => (
-                  <>
-                    <DocumentProperties
-                      inline
-                      key={`${canvas.workspaceId}/${canvas.path}`}
-                      title={identity.name}
-                      onTitleChange={identity.onRename}
-                      // Facets are OKF frontmatter, so only a markdown document
-                      // has any — `readCoreFacets` answers `undefined` for a
-                      // spatial one (ADR-0009 decision 3), which is what decides
-                      // the disclosure here without a second flag to keep in sync.
-                      facets={coreFacets}
-                      onFacetsChange={setCoreFacets}
-                      // Canvas-level display settings, gated on kind the same
-                      // way the facet disclosure above is: a markdown document
-                      // has no canvas to configure. The browser page has placed
-                      // this since it existed and this one did not, which left
-                      // every `canvasSettings` contribution — today `visual`'s
-                      // `visual.edges/v0` — unreachable in daemon mode.
-                      settings={
-                        documentKind === 'spatial' ? (
-                          <CanvasDisplaySettings canvas={canvasValue} onChange={onChange} />
-                        ) : undefined
-                      }
-                      actions={
-                        <>
-                          {/* The opener belongs in the document's own actions
-                              row, not floated over the editor: measured on the
-                              browser page, a control in the surface's
-                              top-right corner sat on top of the markdown
-                              editor's catalog trigger and intercepted every
-                              click meant for it. Both editor kinds put chrome
-                              in their corners, and the annotation layer is a
-                              document-level concern. */}
-                          <CommentsRailToggle rail={commentsRail} />
-                          {exportError && (
-                            <span className="text-destructive truncate text-xs" role="alert">
-                              {exportError}
-                            </span>
-                          )}
-                          <DocumentMenu onExport={(format) => void handleExport(format)} />
-                        </>
-                      }
-                    />
-                    <ConnectionsChip
-                      backlinks={connections === null ? null : connections.backlinks}
-                      mentions={connections?.unlinkedMentions}
-                      onOpen={(entry) => controller.switchDocument(entry.path)}
-                      onLinkify={(mention) => {
-                        if (controller.workspaceId === null || currentDocumentId === undefined)
-                          return
-                        void linkifyDocumentMentions(
-                          daemonFetch,
-                          daemonBaseUrl,
-                          controller.workspaceId,
-                          mention.documentId,
-                          currentDocumentId,
-                        )
-                          .then(() => setConnectionsRefresh((n) => n + 1))
-                          .catch(() => {
-                            // The panel simply keeps showing the mention; the
-                            // next open retries.
-                          })
-                      }}
-                    />
-                  </>
-                )}
-                workspaceId={canvas.workspaceId}
-                path={canvas.path}
-                capabilities={capabilities}
-                // Whatever the document holds: the daemon writes a history for
-                // every kind, and gating this on the editor is what left a
-                // markdown document's checkpoints unreachable.
-                onToggleHistory={canvas ? () => setHistoryOpen((open) => !open) : undefined}
-                historyOpen={historyOpen}
-                {...(preview === null ? {} : { preview })}
-                branchRefreshSignal={branchRefreshSignal}
-                onPreviewVariation={(name) => {
-                  setSearchParams((prev) => {
-                    const next = new URLSearchParams(prev)
-                    next.set('v', name)
-                    return next
-                  })
-                }}
-                onNavigateBack={onNavigateBack}
-                // Version thumbnails come from the same PNG export path the
-                // user can trigger by hand. Without this the save flow skips
-                // the upload entirely and latest-thumbnail stays 204 forever.
-              />
-            )}
-            {capabilities.branches && canvas && variationPreview !== null && (
-              <HeaderVariationBanner
-                workspaceId={canvas.workspaceId}
-                path={canvas.path}
-                name={variationPreview.name}
-                head={variationPreview.head}
-                branches={variationPreview.branches}
-                onSwitch={switchToVariation}
-                onExit={clearVariationParam}
-                runMerge={(src, args) =>
-                  branchesApi(canvas.workspaceId, canvas.path, daemonFetch).merge(src, args)
-                }
-              />
-            )}
-            {variationNotice !== null && (
-              // role="alert", not "status": every notice here reports a
-              // failure (unknown name, unreadable tip, failed switch), and
-              // an alert injected with its content is the supported pattern
-              // — a conditionally-mounted status region is not
-              // (polite-live-region.test.ts).
-              <div
-                role="alert"
-                data-testid="variation-preview-notice"
-                className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
-              >
-                <span className="min-w-0 flex-1 truncate">{variationNotice}</span>
-                <button
-                  type="button"
-                  aria-label="Dismiss"
-                  className="shrink-0 rounded-md p-1 hover:bg-accent"
-                  onClick={() => setVariationNotice(null)}
-                >
-                  ×
-                </button>
-              </div>
-            )}
-            {capabilities.branches && canvas && (
-              <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
-            )}
-            {/* This row only exists when it carries something meaningful: a
-            capability this keeper does not have. A daemon with full
-            capabilities — the common local case — gets no extra header row
-            at all (every header row costs canvas height on a phone).
-
-            It used to also carry a workspace select, which showed raw
-            canonical ids as its own option labels — the "Raw identifiers are
-            not chrome" defect ADR-0019 exists to fix — behind a comment that
-            had gone stale: it deferred to a WorkspaceTopBar dropdown that no
-            longer exists. The shell switcher names the workspace on every
-            page, this one included, so it is the one carrier now. */}
-            {(!capabilities.branches || !capabilities.merge) && (
-              <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-                {/* WorkspaceTopBar owns the real History/HeaderBranchChip
-              affordances once a canvas is selected; these page-level teasers only
-              surface guidance while the capability itself is unavailable. */}
-                {!capabilities.branches && <CapabilityTeaser label="Variations" />}
-                {!capabilities.merge && <CapabilityTeaser label="Combine" />}
-              </div>
-            )}
-          </>
-        }
-      >
-        {pageState.kind === 'document-missing' ? (
-          <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-            {onNavigateBack && (
-              <button
-                type="button"
-                onClick={onNavigateBack}
-                className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <span aria-hidden="true">← </span>Back to documents
-              </button>
-            )}
-            <p className="text-sm text-muted-foreground">
-              Nothing is at <span className="font-medium text-foreground">“{pageState.path}”</span>{' '}
-              in this workspace. It may have been deleted or renamed.
-            </p>
-            {controller.createError && (
-              <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-                {controller.createError}
-              </div>
-            )}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={creating}
-              onClick={() => {
-                setCreating(true)
-                void controller.createDocument(pageState.path).finally(() => setCreating(false))
-              }}
-            >
-              Create a canvas at this path
-            </Button>
-          </div>
-        ) : pageState.kind === 'workspace-empty' ? (
-          <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
-            {/* WorkspaceTopBar (the usual home for this button) only mounts once
-                a canvas is selected, so a workspace that resolves to zero
-                documents — an empty workspace, or a gallery row whose canvas was
-                deleted by another client — needs its own back affordance here. */}
-            {onNavigateBack && (
-              <button
-                type="button"
-                onClick={onNavigateBack}
-                className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <span aria-hidden="true">← </span>Back to documents
-              </button>
-            )}
-            <p className="text-sm text-muted-foreground">This workspace has no documents yet.</p>
-            {controller.createError && (
-              <div role="alert" aria-live="assertive" className="text-xs text-destructive">
-                {controller.createError}
-              </div>
-            )}
-            {/* An empty state is a reading surface, not a dense toolbar strip
-                (ADR-0006 point 4), so the control keeps its text label rather
-                than becoming an icon-only "+". */}
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={creating}
-              onClick={() => void handleCreateDocument()}
-            >
-              Create a canvas
-            </Button>
-          </div>
-        ) : (
-          /* The annotation layer's document-level surface (ADR-0026
-             decision 5) sits BESIDE the editor rather than inside it,
-             because one panel serves both document kinds and a markdown
-             document has no canvas chrome to host one. Its opener lives in
-             the document actions row above, in flow. */
-          <div className="flex h-full min-h-0">
-            <div className="relative min-w-0 flex-1">
-              {preview ? (
-                <DocumentPreview past={preview.past} theme={resolvedTheme} />
-              ) : variationPreview ? (
-                <DocumentPreview past={variationPreview.past} theme={resolvedTheme} />
-              ) : (
-                <DocumentEditorSurface
-                  kind={documentKind}
-                  documentKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-                  markdown={{
-                    body: markdownBody,
-                    setBody: setMarkdownBody,
-                    theme: resolvedTheme,
-                    meta: coreFacets ?? { type: documentKind },
-                    references,
-                    linkTargets: pickerTargets,
-                    onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
-                    threads: annotations,
-                    // Only a markdown document has a body for a mark to live
-                    // in, and this branch is the one that renders one.
-                    threadMarks,
-                    selectedThreadId: commentsRail.selectedThreadId,
-                    onSelectThread: commentsRail.revealThread,
-                    onComposeThread: commentsRail.composeThread,
-                  }}
-                  spatial={() => (
-                    <SpatialEditorPane
-                      className="relative h-full min-h-0"
-                      editorKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-                      canvasLoaded={canvasLoaded}
-                      editorRef={spatialEditorRef}
-                      agentTouchedNodeIds={agentActivity.touchedNodeIds}
-                      canvas={canvasValue}
-                      onChange={onChange}
-                      externalVersion={externalVersion}
-                      theme={resolvedTheme}
-                      // File-node reference = the target's immutable id (rename-
-                      // safe); the same rows the link picker offers (open document
-                      // excluded), so the two pickers cannot label one document two
-                      // ways — the label is the display name now, falling back to
-                      // the path. Legacy documents still carry path refs, which
-                      // resolveRefPath misses and switchDocument takes as-is.
-                      fileRefOptions={fileRefOptions(pickerTargets)}
-                      onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
-                      missingFileRef={missingFileRef}
-                      fileSeams={fileSeams}
-                      lockedNodeIds={lockedNodeIds}
-                      lockedEdgeIds={lockedEdgeIds}
-                      onToggleNodeLock={setNodeLock}
-                      onToggleEdgeLock={setEdgeLock}
-                      nodeInEditor={nodeInEditor}
-                      history={{
-                        onUndo: () => void undo(),
-                        onRedo: () => void redo(),
-                        canUndo: canUndo(),
-                        canRedo: canRedo(),
-                      }}
-                      overlayTitle={canvas?.path ?? 'Untitled'}
-                      linkTargets={pickerTargets}
-                      threads={annotations}
-                    >
-                      <AgentPresenceChip summary={agentActivity.summary} />
-                    </SpatialEditorPane>
-                  )}
-                />
-              )}
-            </div>
-            {/* Not while a past version OR a variation preview is on screen:
-                the editor is replaced by DocumentPreview but this rail is
-                not, and its writes go to the LIVE document. */}
-            <CommentsRailAside
-              rail={commentsRail}
-              threads={annotations}
-              writable={preview === null && variationPreview === null}
-            />
-          </div>
-        )}
-        {capabilities.merge && canvas && (
-          <MergeToast
-            workspaceId={canvas.workspaceId}
-            path={canvas.path}
-            onRestored={clearLocalUndo}
-          />
-        )}
-      </DocumentPageShell>
+      <DocumentPage model={model} />
     </DaemonApiContext.Provider>
   )
 }

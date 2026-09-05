@@ -1,5 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import {
+  CheckCircle2,
   Columns2,
   CopyPlus,
   ExternalLink,
@@ -29,12 +30,15 @@ import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import { PeekDialog } from './PeekDialog.js'
+import { RecentLane } from './RecentLane.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
+import { SelectionBar } from './SelectionBar.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
 import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
+import { useDeviceMemory } from './use-device-memory.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -79,6 +83,16 @@ export interface WorkspaceFilesPanelProps {
   onDuplicateDocument?: (path: string) => void
   onRequestDelete?: (path: string, displayName: string, kind?: DocumentKind) => void
   /**
+   * Delete every one of these paths, behind ONE confirmation.
+   *
+   * Page-owned for the same reason the single delete is: the confirmation
+   * dialog and the store call already live there, and a second copy of
+   * either would be a second set of rules for the same destructive act. Its
+   * absence is what withholds selection mode — a mode whose only verb
+   * cannot fire is a mode with nothing in it.
+   */
+  onRequestDeleteMany?: (paths: readonly string[]) => void
+  /**
    * Any value that changes when the workspace's documents may have changed
    * behind this panel's back.
    *
@@ -120,6 +134,7 @@ export function WorkspaceFilesPanel({
   onFolderChange,
   onDuplicateDocument,
   onRequestDelete,
+  onRequestDeleteMany,
   revision,
 }: WorkspaceFilesPanelProps) {
   const { resolvedTheme } = useThemeMode()
@@ -128,6 +143,7 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
+  const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -144,6 +160,12 @@ export function WorkspaceFilesPanel({
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
   const { columns, chooseColumns } = useBrowserColumns()
+  const {
+    recentIds,
+    changed,
+    remember: rememberOpen,
+    reset: resetDeviceMemory,
+  } = useDeviceMemory(workspace, documents)
   /**
    * A write that LANDED, whose list refresh or open failed after the fact.
    * Separate from the refusal states because the two need opposite things:
@@ -253,6 +275,10 @@ export function WorkspaceFilesPanel({
   // list so an inline arrow from the page above cannot re-create it.
   const onOpenDocumentRef = useRef(onOpenDocument)
   onOpenDocumentRef.current = onOpenDocument
+  // Read through a ref for the same reason `onOpenDocument` is: `openEntry`
+  // is handed to four children and its identity has to stay stable.
+  const workspaceRef = useRef(workspace)
+  workspaceRef.current = workspace
   const lastReadListRef = useRef(readList)
 
   /**
@@ -269,8 +295,61 @@ export function WorkspaceFilesPanel({
    */
   const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
   const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
+    rememberOpen(entry)
     onOpenDocumentRef.current?.(entry.path)
   }, [])
+
+  const toggleSelected = useCallback((entry: WorkspaceDocumentEntry) => {
+    setSelection((current) => {
+      const next = new Set(current ?? [])
+      if (next.has(entry.path)) next.delete(entry.path)
+      else next.add(entry.path)
+      // Emptying it ENDS the mode rather than leaving an empty toggle grid
+      // with a bar offering to delete nothing.
+      return next.size === 0 ? null : next
+    })
+  }, [])
+
+  // A selected path that has left the listing leaves the selection with it.
+  // Pruned rather than merely filtered at the point of use: filtering would
+  // keep the stale path in state, so a document restored from the trash
+  // mid-selection would come back already selected — a document the person
+  // never chose in this session, in a bulk delete.
+  useEffect(() => {
+    if (documents === null) return
+    setSelection((current) => {
+      if (current === null) return current
+      const live = [...current].filter((path) => documents.some((each) => each.path === path))
+      // Same identity when nothing was pruned, or this sets state on every
+      // listing and re-renders forever.
+      if (live.length === current.size) return current
+      return live.length === 0 ? null : new Set(live)
+    })
+  }, [documents])
+
+  const deleteSelected = () => {
+    if (selection === null || documents === null) return
+    // In the order SHOWN, not in insertion order: the confirmation names a
+    // count and the page deletes a list, and a reader comparing the two
+    // should not have to reconcile two orders.
+    const paths = documents.filter((each) => selection.has(each.path)).map((each) => each.path)
+    if (paths.length === 0) return
+    // The selection is NOT cleared here. The page confirms first, and a
+    // cancelled confirmation must return the person to what they had chosen.
+    // What clears it is the re-read after a delete that landed: the pruning
+    // effect above drops every path that left the listing, so a PARTIAL
+    // failure leaves exactly the documents that survived still selected,
+    // with no outcome plumbed back through a prop.
+    const only = paths.length === 1 ? documents.find((each) => each.path === paths[0]) : undefined
+    // A single selection borrows the singular confirmation, which NAMES the
+    // document. A plural dialog reading "Delete 1 document?" would be a
+    // second confirmation that has to agree in number for no gain.
+    if (only !== undefined && onRequestDelete !== undefined) {
+      onRequestDelete(only.path, only.name ?? only.path, only.kind)
+      return
+    }
+    onRequestDeleteMany?.(paths)
+  }
 
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
@@ -287,6 +366,12 @@ export function WorkspaceFilesPanel({
     setSelected(null)
     setCardMenu(null)
     setPeek(null)
+    // A selection names paths, and paths collide across workspaces — a
+    // bulk delete carried across a switch would address the departed
+    // workspace's names into the store now on screen.
+    setSelection(null)
+    // The departed workspace's memory names its documents.
+    resetDeviceMemory()
     setRenaming(null)
     setRenameError(null)
     setRenameBusy(false)
@@ -671,6 +756,15 @@ export function WorkspaceFilesPanel({
                   onSelect: () => void togglePinned(cardMenu.entry),
                 },
               ]),
+          ...(onRequestDeleteMany === undefined
+            ? []
+            : [
+                {
+                  label: 'Select',
+                  icon: <CheckCircle2 />,
+                  onSelect: () => setSelection(new Set([cardMenu.entry.path])),
+                },
+              ]),
           {
             label: 'Rename…',
             icon: <Pencil />,
@@ -811,6 +905,35 @@ export function WorkspaceFilesPanel({
           ))}
         </fieldset>
       )}
+      {selection !== null && (
+        <div className="px-2 pb-2">
+          <SelectionBar
+            count={selection.size}
+            onDelete={deleteSelected}
+            onCancel={() => setSelection(null)}
+          />
+        </div>
+      )}
+      {/* Above the columns, and only in the browse view: a search has its
+          own answer to "which one did you mean", and a lane beside it
+          would compete with the results the person asked for. Absent on a
+          host that cannot open a document, since every tile would be
+          inert. */}
+      {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
+        <RecentLane
+          documents={documents}
+          recentIds={recentIds}
+          onOpen={openEntry}
+          renderThumbnail={(entry) => (
+            <DocumentThumbnail
+              key={entry.documentId}
+              document={entry}
+              loadRender={loadRender}
+              className="size-full"
+            />
+          )}
+        />
+      )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         {documents === null ? (
           // A re-read (a workspace switch, most of all) keeps the toolbar
@@ -931,11 +1054,17 @@ export function WorkspaceFilesPanel({
                   onOpen={(target) =>
                     target.kind === 'folder'
                       ? selectFolder(target.path)
-                      : tapOpens
-                        ? openEntry(target.document)
-                        : setSelected(target.document)
+                      : selection !== null
+                        ? toggleSelected(target.document)
+                        : tapOpens
+                          ? openEntry(target.document)
+                          : setSelected(target.document)
                   }
-                  {...(onOpenDocument === undefined ? {} : { onActivateDocument: openEntry })}
+                  {...(selection === null ? { selection: undefined } : { selection })}
+                  {...(changed === undefined ? {} : { changed })}
+                  {...(onOpenDocument === undefined || selection !== null
+                    ? {}
+                    : { onActivateDocument: openEntry })}
                   onDocumentContextMenu={openCardMenu}
                   renderThumbnail={(entry) => (
                     <DocumentThumbnail

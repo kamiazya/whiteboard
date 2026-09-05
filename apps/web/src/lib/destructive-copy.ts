@@ -30,7 +30,11 @@
  */
 
 /** A destructive confirmation this app shows. */
-export type DestructiveActionId = 'delete-document-browser' | 'delete-document-daemon'
+export type DestructiveActionId =
+  | 'delete-document-browser'
+  | 'delete-document-daemon'
+  | 'delete-documents-browser'
+  | 'delete-documents-daemon'
 
 /**
  * Built from the noun for the thing being destroyed, so a note reads "The
@@ -55,6 +59,17 @@ export const DESTRUCTIVE_COPY = {
   // half worth warning about, rather than a blanket "no undo" that is false.
   'delete-document-daemon': (noun) =>
     `The ${noun} moves to the Trash, where you can restore it. Its versions and branches are deleted, and restoring does not bring them back.`,
+
+  // The bulk pair. Separate entries rather than one number-aware sentence,
+  // because English agreement ("moves"/"move", "it"/"them") would put a
+  // branch inside the one place this module exists to keep branch-free — and
+  // a selection of ONE never reaches here anyway: the panel routes it to the
+  // singular confirmation above, which can name the document.
+  'delete-documents-browser': (noun) =>
+    `The selected ${noun} move to the Trash, where you can restore them.`,
+
+  'delete-documents-daemon': (noun) =>
+    `The selected ${noun} move to the Trash, where you can restore them. Their versions and branches are deleted, and restoring does not bring them back.`,
 } satisfies Record<DestructiveActionId, DestructiveDescription>
 
 /**
