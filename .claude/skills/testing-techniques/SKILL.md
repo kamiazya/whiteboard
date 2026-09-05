@@ -70,13 +70,16 @@ in a file named after a version, which only a reader who already knows the featu
 
 ## Commands
 
-**A release note is a claim about someone else's repo.** Four options that read as obvious
-wins were checked here and all four were wrong for this tree — `isolate: false` (464
-failures), `errorFormat: 'aria'` (already the default), `coverage.autoAttachSubprocess` (no
-real subprocess in the coverage lane), `injectCjsGlobals: false` (a static rung already
-holds it). `fsModuleCache` was adopted, in the one job where a measurement said it pays.
-Measure on the projects that hold state, not the small pure ones; `resources/configuration.md`
-carries each number.
+**A release note is a claim about someone else's repo.** Thirteen features from the 3.x, 4.x
+and 5.0 announcements were checked against this tree and **two** were worth adopting —
+`fsModuleCache`, in the one job a measurement said it pays, and `vi.defineHelper`, on the four
+helpers that assert. The other eleven were wrong for this repo: `isolate: false` (464
+failures), `errorFormat: 'aria'` (already the default), `detectAsyncLeaks` (25 reports, all
+one upstream artefact), the test `{ signal }` (nothing in `userEvent` accepts one),
+`locators.extend`, `frameLocator`, `toBeInViewport`, the `agent` reporter, `schemaMatching`,
+`sequence.groupOrder`, tags-as-quarantine, `coverage.autoAttachSubprocess` and
+`injectCjsGlobals: false`. Measure on the projects that hold state, not the small pure ones;
+`resources/configuration.md` carries each number.
 
 ```bash
 pnpm test --project <name>              # nearest layer (names: test-layer-selection)

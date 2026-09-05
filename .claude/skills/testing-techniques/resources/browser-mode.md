@@ -114,6 +114,15 @@ line, where the HTML dump does not.
   classes compute to nothing, an unstyled dock collides with the scene, and Playwright reports
   a click that never lands — which reads like a hang.
 
+## What cannot cancel an overrun
+
+The test context's `{ signal }` is aborted on timeout, bail and Ctrl+C — and there is nothing
+in browser mode to hand it to. `userEvent.keyboard` is `(text: string) => Promise<void>`, and
+the whole `UserEvent` interface declares no signal or options bag on any method. So the
+overrun that keeps typing into the next test cannot be cancelled from the test side; the
+60s budget below is still the only bound on it. Use `{ signal }` where the TEST itself awaits
+cancellable work (a `fetch`, a poll of your own), not for user events.
+
 ## Timeouts
 
 `web-browser` runs at 60s (`testTimeout` and `hookTimeout`), sized at ~2.2× the slowest test

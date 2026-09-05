@@ -328,6 +328,54 @@ expect(response).toEqual({
 
 Reach for it there; do not churn a passing `not.toThrow` into it.
 
+### The past releases' features, checked the same way
+
+Read after the 5.0 upgrade, because features shipped in 3.x/4.x had never been checked here
+at all. `vi.defineHelper` was the one worth adopting (`executable-rungs.md`). The rest:
+
+- **Test `{ signal }` (3.2)** cannot address the shape it looks made for. The signal is
+  aborted on timeout, but `userEvent` accepts no signal anywhere — `keyboard` is
+  `(text: string) => Promise<void>`, and the whole `UserEvent` interface declares none — so
+  the overrun that keeps typing into the next test has nothing to hand it to
+  (`browser-mode.md`). It is usable where the TEST awaits cancellable work of its own; the
+  repo's 18 in-test `fetch` calls are the only candidates and none is long enough to matter.
+- **`locators.extend` (3.2)** would rewrite `focusEditable`'s 43 call sites from DOM-query
+  closures to locators, to gain retry `vi.waitFor` already provides and lose the diagnostics
+  the helper exists for — its message distinguishes three causes that reached the same line
+  in CI and were otherwise indistinguishable.
+- **`page.frameLocator()` (4.0)** has no site: the iframe tests assert the ELEMENT (sandbox
+  attributes, the cap of three live frames) and never its content, which is sandboxed without
+  `allow-same-origin` by design.
+- **`toBeInViewport` (4.0)** has no site either. The repo's `getBoundingClientRect` reads are
+  pointer coordinates for a synthetic touch and box dimensions for a diagnostic string —
+  neither asks whether an element is in the viewport.
+- **The `agent` reporter (4.1)** produces the same content as the default here: 14 non-noise
+  lines each on a green `web-jsdom` run. It suppresses passing-test output, and this repo's
+  default output has almost none — 94 of 108 lines are jsdom's `Not implemented:
+  HTMLCanvasElement getContext` warnings, which no reporter controls. `AI_AGENT` is not set
+  in Claude Code, so it does not auto-enable either.
+- **`sequence.groupOrder` (3.2)** solves a conflict this repo does not have: `mcp-smoke`
+  serialises with `maxWorkers: 1` for daemon ports WITHIN its project, and nothing binds a
+  fixed port across projects.
+- **Test tags (4.1)** as a quarantine mechanism improve nothing today — there are zero
+  `QUARANTINE(` markers in the tree, and the marker carries a date, an issue and a reason
+  that a tag cannot.
+
+### jsdom creation is 38% of `web-jsdom` — worth its own change
+
+Vitest 5's environment line reports what no earlier version did:
+
+```
+Environment  |web-jsdom| jsdom was created 353 times · 234.29s total, 38% of tracked time
+Duration  218.95s (environment 38%, tests 33%, import 14%, setup 10%, transform 5%)
+```
+
+One jsdom per file, 353 files, and it is the largest single cost in the repo's largest
+project — larger than running the tests. Not acted on here: the levers (`happy-dom`, or a
+per-file environment so only the files that need a DOM pay for one) each change what the
+tests run against, so each needs its own measured change. Recorded because the number only
+became visible at the upgrade.
+
 ### `injectCjsGlobals: false` — already held by a stronger rung
 
 It would make a shared-layer package reading `__dirname` fail at test time. `tools/arch-lint`'s
