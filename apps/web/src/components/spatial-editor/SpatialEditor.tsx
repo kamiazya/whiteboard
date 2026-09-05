@@ -88,10 +88,10 @@ import {
   useMemo,
   useRef,
 } from 'react'
-import { writeLastTool } from '@/lib/initial-tool'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
+import { writeLastTool } from '../../lib/initial-tool.js'
 import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'

@@ -6,7 +6,7 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { gestureTrace, type TraceEntry } from '@/components/spatial-editor/gesture-trace'
+import { gestureTrace, type TraceEntry } from '../../components/spatial-editor/gesture-trace.js'
 import { GestureTraceRow } from './GestureTraceRow'
 
 afterEach(() => {
@@ -14,13 +14,21 @@ afterEach(() => {
   vi.restoreAllMocks()
 })
 
+// Advances per EXECUTION, not per test: the singleton trace outlives every
+// test AND every repeat — vitest --repeats (CI's stress job) re-runs the body
+// in the same process, so a constant minted id accumulates one entry per
+// repeat and `toHaveLength(1)` reads its own earlier runs as duplicates
+// (observed: 4 entries on the stress job's later repeats).
+let nextProbePointerId = 461
+
 it('copies the serialized trace: parseable, replayable entries plus the bundle identity', async () => {
-  // Scoped by a pointerId this test minted: the singleton deliberately
-  // outlives every test, so "the newest entry" would read a neighbour's.
+  // Scoped by a pointerId this execution minted: unique against neighbour
+  // tests and against earlier repeats of this same test alike.
+  const probePointerId = nextProbePointerId++
   gestureTrace.recordDocPointer({
     at: 1,
     type: 'pointerdown',
-    pointerId: 461,
+    pointerId: probePointerId,
     pointerType: 'touch',
     isPrimary: true,
     x: 10,
@@ -45,7 +53,7 @@ it('copies the serialized trace: parseable, replayable entries plus the bundle i
   expect(parsed.bundle.length).toBeGreaterThan(0)
   expect(parsed.userAgent.length).toBeGreaterThan(0)
   const mine = parsed.entries.filter(
-    (entry) => entry.kind === 'doc-pointer' && entry.pointerId === 461,
+    (entry) => entry.kind === 'doc-pointer' && entry.pointerId === probePointerId,
   )
   expect(mine).toHaveLength(1)
   expect(await screen.findByText('copied')).toBeInTheDocument()

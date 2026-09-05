@@ -5,8 +5,8 @@ import type {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '@/lib/merge-committed-event'
+import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { MERGE_COMMITTED_EVENT, mergeCommittedDetailSchema } from '../lib/merge-committed-event.js'
 import { MergeDialog } from './MergeDialog.js'
 
 const main: BranchMeta = {

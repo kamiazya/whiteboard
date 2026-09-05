@@ -3,8 +3,8 @@ import { type ReactNode, type Ref, useState } from 'react'
 import VersionTimeline, {
   type VersionPreviewSession,
   type VersionTimelineCapabilities,
-} from '@/components/VersionTimeline'
-import { cn } from '@/lib/utils'
+} from '../../components/VersionTimeline.js'
+import { cn } from '../../lib/utils.js'
 
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>

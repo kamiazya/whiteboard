@@ -1,7 +1,7 @@
 import { BookmarkPlus, Loader2 } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
+import { cn } from '../../lib/utils.js'
 
 /**
  * Mark the current state as a point worth coming back to.

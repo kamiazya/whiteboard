@@ -1,15 +1,15 @@
 import { documentsApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
-import { getAppLogger } from '@/lib/app-logger'
-import { safeErrorCopy } from '@/lib/error-copy'
+import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import { getAppLogger } from '../lib/app-logger.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import {
   MERGE_COMMITTED_EVENT,
   type MergeCommittedDetail,
   parseMergeCommittedEvent,
-} from '@/lib/merge-committed-event'
-import { cn, displayBranchName } from '@/lib/utils'
+} from '../lib/merge-committed-event.js'
+import { cn, displayBranchName } from '../lib/utils.js'
 import { Button } from './ui/button.js'
 
 const log = getAppLogger('merge-toast')
