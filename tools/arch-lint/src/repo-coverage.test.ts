@@ -10,6 +10,7 @@ import { scanSourceForBoundaryViolations } from './scanner.js'
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
 const SHARED_LAYER_PACKAGES = [
+  'packages/daemon-client',
   'packages/model',
   'packages/codec',
   'packages/canvas-render',
@@ -56,6 +57,13 @@ function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): stri
     if (entry.name === 'node_modules') continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
+      // test-utils are dev surface, not shipping modules — the same line the
+      // manifests already draw (ports keeps fast-check, daemon-client keeps
+      // loro-crdt in devDependencies for exactly these helpers). A contract
+      // suite legitimately mints real Loro bytes; holding it to the runtime
+      // boundary would ban the test for being a good test. `.test.ts` files
+      // are excluded below for the same reason.
+      if (entry.name === 'test-utils') continue
       files.push(...listTsFiles(full, extensions))
       continue
     }

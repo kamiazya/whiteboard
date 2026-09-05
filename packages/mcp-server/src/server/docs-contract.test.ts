@@ -68,6 +68,7 @@ describe('docs/ contract', () => {
       'packages/server-core': 'server-core',
       'packages/workspace-index': 'workspace-index',
       'packages/canvas-viewer': 'canvas-viewer',
+      'packages/daemon-client': 'daemon-client',
       'apps/web': 'web',
     }
     const docsDescribingFullTestSuite = [
@@ -274,6 +275,7 @@ describe('docs/ contract', () => {
       'twenty',
       'twenty-one',
       'twenty-two',
+      'twenty-three',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

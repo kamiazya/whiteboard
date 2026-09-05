@@ -78,7 +78,7 @@ describe('DaemonBackend WS credential selection', () => {
   })
 
   it('prefers the bootstrap global over the transport wsToken when both exist', async () => {
-    ;(globalThis as { window?: Record<string, unknown> }).window = {
+    ;(globalThis as unknown as { window?: Record<string, unknown> }).window = {
       location: { origin: 'http://localhost' },
       __WHITEBOARD_DAEMON_TOKEN__: 'bootstrap-token',
     }
