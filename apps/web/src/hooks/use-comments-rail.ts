@@ -18,6 +18,7 @@ import type {
   AnnotationAnchor,
   CommentMessage,
   CommentThread,
+  CommentThreadStatus,
   DocumentKind,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
@@ -29,6 +30,9 @@ import { markdownAnchorResolver } from '../lib/text-anchor.js'
 export interface CommentsRailWrite {
   readonly createThread: (thread: CommentThread) => void
   readonly replyToThread: (threadId: string, message: CommentMessage) => void
+  readonly setThreadStatus: (threadId: string, status: CommentThreadStatus) => void
+  /** Rewrites one message; `opening` says whether it is the conversation's first. */
+  readonly editMessage: (threadId: string, message: CommentMessage, opening: boolean) => void
 }
 
 export interface CommentsRail {
@@ -50,6 +54,10 @@ export interface CommentsRail {
   readonly resolveAnchor: ((thread: CommentThread) => 'placed' | 'orphaned') | undefined
   readonly createThread: (anchor: AnnotationAnchor, body: string) => void
   readonly reply: (threadId: string, body: string) => void
+  /** Closes or reopens a conversation — the card's Resolve, reachable from the rail too. */
+  readonly resolve: (threadId: string, resolved: boolean) => void
+  /** Rewrites a message's body, stamping `editedAt`; a message the rail does not hold is ignored. */
+  readonly editMessage: (threadId: string, messageId: string, body: string) => void
 }
 
 export function useCommentsRail(args: {
@@ -170,6 +178,27 @@ export function useCommentsRail(args: {
     })
   }, [])
 
+  const resolve = useCallback((threadId: string, resolved: boolean) => {
+    writeRef.current.setThreadStatus(threadId, resolved ? 'resolved' : 'open')
+  }, [])
+
+  // The message is rebuilt from the one the rail holds rather than from the
+  // body alone: the write upserts by id and would otherwise drop the author
+  // and the original stamp.
+  const threadsRef = useRef(threads)
+  threadsRef.current = threads
+  const editMessage = useCallback((threadId: string, messageId: string, body: string) => {
+    const thread = threadsRef.current.find((entry) => entry.id === threadId)
+    const index = thread?.messages.findIndex((entry) => entry.id === messageId) ?? -1
+    const message = thread?.messages[index]
+    if (thread === undefined || message === undefined) return
+    writeRef.current.editMessage(
+      threadId,
+      { ...message, body, editedAt: new Date().toISOString() },
+      index === 0,
+    )
+  }, [])
+
   return {
     open,
     toggle,
@@ -183,5 +212,7 @@ export function useCommentsRail(args: {
     resolveAnchor,
     createThread,
     reply,
+    resolve,
+    editMessage,
   }
 }

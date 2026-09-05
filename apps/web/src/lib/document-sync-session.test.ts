@@ -742,6 +742,56 @@ describe('createDocumentSyncSession', () => {
     })
   })
 
+  it('resolving and editing reach the thread for ANY anchor, which the flat path cannot', async () => {
+    // A note's passage and a document-level thread have no projection in
+    // the canvas envelope, so `set-comment-resolved` / `set-comment-text`
+    // — which travel through it — never reach them. These two write the
+    // plane directly, and the canvas projection follows where one exists.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't-doc',
+      anchor: { kind: 'document' },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'is this document still needed?', author: 'human:yuki' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const before = session.getCanvas()
+    const resolveCommand: EditorCommand = {
+      kind: 'set-thread-status',
+      threadId: 't-doc',
+      status: 'resolved',
+    }
+    session.onChange(applyCommand(before, resolveCommand), resolveCommand)
+    const editCommand: EditorCommand = {
+      kind: 'edit-thread-message',
+      threadId: 't-doc',
+      message: {
+        id: 'm1',
+        body: 'is this document still needed? (edited)',
+        author: 'human:yuki',
+        editedAt: '2026-09-05T12:00:00.000Z',
+      },
+      opening: true,
+    }
+    session.onChange(applyCommand(before, editCommand), editCommand)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const [held] = session.getAnnotations()
+    expect(held?.status).toBe('resolved')
+    expect(held?.messages[0]).toMatchObject({
+      id: 'm1',
+      body: 'is this document still needed? (edited)',
+      author: 'human:yuki',
+      editedAt: '2026-09-05T12:00:00.000Z',
+    })
+  })
+
   it('a local reply reaches the thread, which no comment command could carry', async () => {
     // The gap this closes: every other comment command travels through the
     // CANVAS envelope (`x-whiteboard.comments`), and that shape holds one
