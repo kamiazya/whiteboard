@@ -56,6 +56,35 @@ export rather than falling through to the real implementation. `vi.mock('./modul
   can run at once) and `globalSetup` empties it before every run — a database migrated by an
   older branch once died with unhandled `IncompatibleDatabaseError` while every test passed.
   `vitest-data-dir.test.ts` guards the isolation.
+- **A deletion that resolves on `blocked` has not deleted anything.** IndexedDB fires
+  `blocked` INSTEAD of `success`/`error` while another connection is open, so settling there
+  tells the next test a database was cleared when it was not — and the failure surfaces in
+  another FILE, as a page reporting `This canvas's data could not be read.`, naming neither
+  IndexedDB nor the cleanup that lied. It flaked `BrowserDocumentPage.rename` once and
+  `delete-confirm` twice before anyone looked at the cleanup. `clearWhiteboardDb`
+  (`apps/web/src/test-utils/browser-document.ts`) is the only definition and WAITS, so a
+  connection that never closes becomes a timeout naming the file that holds it;
+  `shared-idb-version-games.test.ts` fails on a hand-rolled 27th copy.
+
+  Two things it measured that generalise to any such sweep:
+
+  - **Probe for the ACT, not the name.** Grepping `function clearDb` found 20 of the 26
+    hand-rolled deletions; six were called `deleteDb` and were invisible. Five of those six
+    were already correct and said why in a comment — the knowledge was in the repo, and only
+    a single definition for it to live in was missing.
+  - **Eventual state could not tell the defect from correct behaviour.** The database is gone
+    a tick later either way (the blocker closes, the deletion completes), so
+    `expect(await databaseExists()).toBe(false)` passes against both. The guard had to assert
+    the ORDER the helper resolved in, closing the blocker from a `setTimeout` inside the
+    `blocked` handler so any promise resolution from that same event loses the race. Two
+    earlier versions of that test passed against the unfixed code, and the second one even
+    verified `blocked` had really fired.
+- **A point-free hook callback that gains a parameter binds the test context to it.**
+  `beforeEach(clearWhiteboardDb)` is fine while the function takes nothing; adding one
+  optional parameter made vitest's `TestContext` the database name. Measured: 18 tests across
+  7 files red, none of them mentioning a name. The fix is the API shape — the shared helper
+  takes no argument and `clearNamedDb(name)` carries the few suites that must pass one —
+  rather than 14 call sites remembering to wrap it.
 - **Per-worker names**: `VITEST_POOL_ID` / `VITEST_WORKER_ID` are 1-based. Nothing in the
   repo reads them (measured).
 - `vi.stubEnv` / `vi.stubGlobal` restore with `vi.unstubAllEnvs()` / `vi.unstubAllGlobals()`

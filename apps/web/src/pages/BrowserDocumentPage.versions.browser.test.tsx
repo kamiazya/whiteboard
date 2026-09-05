@@ -19,8 +19,11 @@ import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpageversions')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpageversions')
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -28,14 +31,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 function textDoc(text: string): LoroDoc {
@@ -94,7 +89,7 @@ async function openPage() {
 // is the top bar, not the canvas dock — history belongs to the document.
 describe('BrowserDocumentPage version history (browser)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {

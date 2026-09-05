@@ -6,9 +6,12 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-rename')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-rename')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
@@ -20,14 +23,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 async function renderLoaded(): Promise<void> {
@@ -57,7 +52,7 @@ async function titleField(): Promise<HTMLElement> {
 
 describe('BrowserDocumentPage rename (real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {

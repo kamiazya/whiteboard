@@ -7,17 +7,12 @@ import { resetShellStatusForTests } from '../lib/shell-status-store.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so the chip is laid out the way it ships.
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-shell-connection')
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-shell-connection')
 
 // The composition main.tsx ships: the shell above the routed page, both in one
 // router. Neither half proves this on its own — the page publishes a state it
@@ -40,7 +35,7 @@ function renderApp() {
 describe('shell mark over a real document kept in this browser', () => {
   beforeEach(async () => {
     resetShellStatusForTests()
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {

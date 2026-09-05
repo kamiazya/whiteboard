@@ -6,9 +6,12 @@ import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
 
 // Real browser + real IndexedDB: the canvas's node count comes from the Loro
 // document the backend actually loads, which is exactly the input the initial
@@ -19,14 +22,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 async function mountLoaded(): Promise<void> {
@@ -44,7 +39,7 @@ beforeEach(async () => {
   // Only the key this suite is about: storages are origin-shared across
   // parallel test files, and clear() wipes the neighbours' state too.
   sessionStorage.removeItem('wb.lastTool')
-  await clearDb()
+  await clearWhiteboardDb()
 })
 
 afterEach(() => {

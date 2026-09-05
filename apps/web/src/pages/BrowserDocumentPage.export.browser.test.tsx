@@ -6,9 +6,12 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-export')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-export')
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -18,14 +21,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 // Captures every Blob handed to URL.createObjectURL so assertions can inspect
@@ -101,7 +96,7 @@ const EXPORT_TIMEOUT_MS = 15_000
 
 describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalidraw)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {

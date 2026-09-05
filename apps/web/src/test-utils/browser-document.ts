@@ -19,16 +19,64 @@ import type { EditorCommand } from '../lib/spatial/commands.js'
 
 const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
 
-/** Deletes the app's IndexedDB database. */
+/**
+ * Deletes the app's IndexedDB database, and resolves only once it is GONE.
+ *
+ * The single definition on purpose: it is awaited in a `beforeEach` to mean
+ * "this file starts from nothing", and every caller depends on that sentence
+ * being true when the promise settles.
+ *
+ * **`blocked` is not a settlement.** `deleteDatabase` fires it — and neither
+ * `success` nor `error` — while another connection is still open, which in
+ * this suite is routine: a store closes its connection in `tx.oncomplete`,
+ * which can land after the operation's own promise has resolved. The
+ * deletion is briefly blocked and then proceeds, so waiting is what makes
+ * the common case correct.
+ *
+ * Resolving on `blocked` instead hands the next test a database it was told
+ * had been cleared. That is not a theoretical hazard: it is the shape behind
+ * a flake that hit `BrowserDocumentPage.rename` and then
+ * `BrowserDocumentPage.delete-confirm` with an identical symptom — the
+ * editor replaced by "This canvas's data could not be read." — a failure
+ * whose message names neither IndexedDB nor the file that broke the
+ * invariant. It only appears under the full parallel run, because that is
+ * when a neighbour's connection is still open often enough to matter.
+ *
+ * A connection that never closes therefore becomes a test TIMEOUT, which is
+ * loud and names the file holding it. That is the trade, and it is the right
+ * way round: a hang is a bug report, a silent wrong answer is not.
+ *
+ * Takes NO ARGUMENT, deliberately. Fourteen call sites pass it point-free to
+ * `beforeEach`, and a hook hands its callback the test context — so an
+ * optional first parameter silently binds that context as the database name
+ * and the deletion goes to a database nobody has. Measured while writing
+ * this: adding one optional parameter turned 18 tests across 7 files red,
+ * none of which said anything about a name. `clearNamedDb` below is the door
+ * for the few suites that need one, and it cannot be passed point-free by
+ * accident because it would delete `undefined`.
+ */
 export async function clearWhiteboardDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(whiteboardDbName())
+  return deleteDatabaseAndWait(whiteboardDbName())
+}
+
+/**
+ * The same deletion, for a suite that names its own database — a migration
+ * fixture, boot's real-name case, a conformance suite deliberately off the
+ * claimed name.
+ *
+ * Separate from `clearWhiteboardDb` rather than an optional parameter on it,
+ * for the reason stated above; here the name is always written out at the
+ * call site, so there is nothing for a hook to fill in.
+ */
+export async function clearNamedDb(dbName: string): Promise<void> {
+  return deleteDatabaseAndWait(dbName)
+}
+
+function deleteDatabaseAndWait(dbName: string): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(dbName)
     req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-    // If a prior connection isn't fully closed, deleteDatabase fires onblocked
-    // (not onsuccess/onerror); settle anyway so the suite fails clearly instead
-    // of hanging until timeout.
-    req.onblocked = () => resolve()
+    req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
   })
 }
 
