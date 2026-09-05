@@ -952,14 +952,15 @@ the table alone.
     alike. Both layouts accept the bundle as `references` and apply it under
     the individual seams (`withReferenceSeams`), which stay for a test
     probing one alone. `ReferenceWire` is the bundle as DATA — the graph
-    plus the alias, title and extras tables evaluated over what it names —
-    and `referenceSeamsFromWire` builds the bundle back on either side of a
-    `postMessage`; `apps/web`'s editor builds its own seams from the wire it
-    posts, so the worker and the main thread cannot disagree. Before it, a
-    text node's `![[note]]` was a placeholder on both, and `referenceTargets`
-    never named it: it scans text-node bodies now. The reason is the drift class decision #11 already
-    names: every root wrote these by hand, each answered a different subset,
-    and the total layout hid the difference. `tools/arch-lint`'s
+    plus the alias, title and extras tables over what it names — and
+    `referenceSeamsFromWire` rebuilds it across a `postMessage`;
+    `apps/web`'s editor builds its seams from the wire it posts, so the two
+    threads cannot disagree. Before it a text node's `![[note]]` drew a
+    placeholder on both; `referenceTargets` scans text-node bodies now.
+    `referenceWireFor` cuts a wire to what a canvas's layout can read, so
+    one widened for a drafted body (the overlay's preview) leaves that
+    canvas's seams, worker request and content cache alone. Decision #11
+    names the drift class; `tools/arch-lint`'s
     `reference-seams-check.test.ts` refuses a seam defined outside this
     directory.
 

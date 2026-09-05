@@ -177,6 +177,7 @@ export function DocumentPage({ model }: { model: DocumentPageModel }) {
     resolveAlias: files.resolveAlias,
     resolveTitle: files.resolveTitle,
     stampOf: files.stampOf,
+    bodies: nodeInEditor.draftBodies,
   })
 
   // Every document the body points at, pre-fetched so the layout's sync

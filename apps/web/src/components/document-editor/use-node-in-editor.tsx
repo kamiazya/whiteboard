@@ -1,3 +1,4 @@
+import { referenceTargets } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useState } from 'react'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
@@ -12,7 +13,22 @@ export interface NodeInEditor {
   readonly commit: (text: string) => void
   /** Pass to the overlay's `onClose`. */
   readonly close: () => void
+  /** Pass to the overlay's `onDraft`: the body as it is being typed. */
+  readonly draft: (text: string) => void
+  /**
+   * The draft, as a body for `useDocumentFileSeams` to load references
+   * from — so a link typed into the overlay resolves in its preview before
+   * the commit. Published only when the SET of references the draft names
+   * changes, never per keystroke: the page re-renders for every value here.
+   */
+  readonly draftBodies: readonly string[]
 }
+
+const NO_DRAFT: { readonly key: string; readonly bodies: readonly string[] } = {
+  key: '',
+  bodies: [],
+}
+const referenceKey = (text: string) => referenceTargets({ bodies: [text] }).join('\n')
 
 /**
  * The state and the write behind "open in editor", shared by both pages.
@@ -34,6 +50,7 @@ export function useNodeInEditor(
   documentKey: string | null,
 ): NodeInEditor {
   const [editing, setEditing] = useState<{ id: string; text: string } | null>(null)
+  const [draft, setDraft] = useState(NO_DRAFT)
   // An open edit belongs to the document it was opened against, and both
   // pages keep their own document switching rather than remounting — so the
   // surface has to be dropped here rather than by a mount boundary.
@@ -53,10 +70,22 @@ export function useNodeInEditor(
   if (scope !== documentKey) {
     setScope(documentKey)
     setEditing(null)
+    setDraft(NO_DRAFT)
   }
   return {
     editing,
-    open: (id, text) => setEditing({ id, text }),
+    // The node's own text is already on the canvas, so what it names loads
+    // without a draft; the key is what a later draft is compared against.
+    open: (id, text) => {
+      setEditing({ id, text })
+      setDraft({ key: referenceKey(text), bodies: [] })
+    },
+    draft: (text) =>
+      setDraft((prev) => {
+        const key = referenceKey(text)
+        return key === prev.key ? prev : { key, bodies: [text] }
+      }),
+    draftBodies: draft.bodies,
     commit: (text) => {
       if (editing === null) return
       const next = withNodeText(canvas, editing.id, text)
@@ -65,6 +94,9 @@ export function useNodeInEditor(
       if (next === canvas) return
       onChange(next, { kind: 'set-text', id: editing.id, text })
     },
-    close: () => setEditing(null),
+    close: () => {
+      setEditing(null)
+      setDraft(NO_DRAFT)
+    },
   }
 }

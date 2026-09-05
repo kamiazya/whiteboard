@@ -154,6 +154,7 @@ import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
+import { useCanvasWire } from './use-canvas-wire.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
@@ -559,9 +560,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
     // drag-static backdrop, resize preview).
+    // What THIS canvas can read of the host's wire, by identity — the host's
+    // is wider (it carries a draft's references for the overlay's preview),
+    // and rows the canvas cannot read must not re-lay it out.
+    const canvasWire = useCanvasWire(canvas, references)
     const seams = useMemo(
-      () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
-      [references],
+      () => (canvasWire === undefined ? undefined : referenceSeamsFromWire(canvasWire)),
+      [canvasWire],
     )
     const { fileSeamOptions, missingFileRefs, expandedFileIds } = useFileSeamScene({
       canvas,
@@ -619,7 +624,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         threads,
       },
       fileSeamOptions,
-      { fileRefLabels: fileRefOptions, missingFileRefs, references, expandedFileIds },
+      { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },
     )
     const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
       useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
