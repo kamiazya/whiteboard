@@ -73,7 +73,7 @@ async function main() {
     }
   }
   console.error(
-    '[audit-with-retry] the registry stayed unreachable across every attempt; failing rather than skipping a security gate',
+    '[audit-with-retry] the registry stayed unreachable across every attempt; failing rather than skipping a security gate. Working offline on purpose? WHITEBOARD_SKIP_AUDIT=1 skips this step loudly.',
   )
   process.exit(1)
 }
