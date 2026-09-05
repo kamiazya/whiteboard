@@ -14,6 +14,7 @@ import {
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
   writeCanvasComment,
+  writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -89,6 +90,12 @@ function commandTargetKey(command: EditorCommand): string {
       // replies to the same thread inside one debounce window are two
       // messages, and a `thread:` key would silently commit only the second.
       return `message:${command.message.id}`
+    case 'create-thread':
+      // Keyed by THREAD, unlike the reply above: what this command carries is
+      // the whole conversation, so two of them for the same id inside one
+      // window really are one target written twice — while two different
+      // threads keep separate keys and both commit.
+      return `thread:${command.thread.id}`
     case 'set-body':
       // One key for the whole body: `text` is always the complete document,
       // so a burst of keystrokes inside one debounce window collapses to the
@@ -338,6 +345,14 @@ function writeCommandTarget(
       // thread this replica does not hold, which is deliberate (replying must
       // never be the write that opens a container).
       writeThreadMessage(doc, command.threadId, command.message)
+      return true
+    case 'create-thread':
+      // Always "handled", for `reply-to-thread`'s reason: the fallback writes
+      // the whole SpatialCanvas, and a markdown document's canvas holds
+      // nothing a new conversation could ride in on. This is the one write
+      // allowed to OPEN a thread container (see `writeCommentThread`), which
+      // is exactly why replying is not.
+      writeCommentThread(doc, command.thread)
       return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the

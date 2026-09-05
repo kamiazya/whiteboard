@@ -1,7 +1,7 @@
 // The document-level surface for the annotation layer (ADR-0026 decision 5).
 // A real browser because the filter is a click and the list is what it
 // changes — jsdom alone is disallowed for interaction by AGENTS.md.
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -153,4 +153,92 @@ it('opens the conversation the host asks for, widening a filter that would have 
   await expect
     .element(page.getByRole('button', { name: 'All' }))
     .toHaveAttribute('aria-pressed', 'true')
+})
+
+const PASSAGE: AnnotationAnchor = {
+  kind: 'text',
+  quote: { prefix: 'Ship the ', exact: 'report', suffix: ' on Friday.' },
+  start: 9,
+  end: 15,
+}
+
+it('composes a new conversation about the passage the host handed it', async () => {
+  // The rail is where a thread is OPENED, not only where existing ones are
+  // read: `commentThreadSchema` has no legal empty thread, so the anchor
+  // waits here as UI state until there is a first message to create it with.
+  const created: { anchor: AnnotationAnchor; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={PASSAGE}
+      onCreateThread={(anchor, body) => created.push({ anchor, body })}
+    />,
+  )
+
+  // The passage is quoted back, because by the time the reader is typing in
+  // the rail their selection in the body is no longer the thing they are
+  // looking at.
+  await expect.element(page.getByTestId('comments-panel-compose')).toHaveTextContent('report')
+  await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), 'is this still true?')
+  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+
+  expect(created).toEqual([{ anchor: PASSAGE, body: 'is this still true?' }])
+})
+
+it('does not create a conversation out of an empty draft', async () => {
+  const created: string[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={PASSAGE}
+      onCreateThread={(_anchor, body) => created.push(body)}
+    />,
+  )
+
+  await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), '   ')
+  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+
+  expect(created).toEqual([])
+})
+
+it('leaves the Resolved filter, which would hide the conversation being written', async () => {
+  // The same defect the reveal case has: the thread is created, the list
+  // does not show it, and that reads as the create having failed.
+  const utils = render(<CommentsPanel threads={[OPEN, RESOLVED]} onCreateThread={() => {}} />)
+  await userEvent.click(page.getByRole('button', { name: 'Resolved' }))
+
+  utils.rerender(
+    <CommentsPanel threads={[OPEN, RESOLVED]} composeAnchor={PASSAGE} onCreateThread={() => {}} />,
+  )
+
+  await expect
+    .element(page.getByRole('button', { name: 'Open' }))
+    .toHaveAttribute('aria-pressed', 'true')
+})
+
+it('offers no compose box with no passage waiting', async () => {
+  render(<CommentsPanel threads={[OPEN]} onCreateThread={() => {}} />)
+
+  expect(page.getByTestId('comments-panel-compose').query()).toBeNull()
+})
+
+it('abandons the passage when the reader cancels', async () => {
+  // Without this the compose box has no exit that is not "write something":
+  // a reader who selected the wrong sentence would have to create a comment
+  // to get rid of the box asking for one.
+  let cancels = 0
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      composeAnchor={PASSAGE}
+      onCreateThread={() => {}}
+      onCancelCompose={() => {
+        cancels += 1
+      }}
+    />,
+  )
+
+  await userEvent.click(page.getByRole('button', { name: 'Cancel' }))
+
+  expect(cancels).toBe(1)
 })

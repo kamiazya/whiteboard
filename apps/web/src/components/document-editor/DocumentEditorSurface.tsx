@@ -43,6 +43,7 @@ export interface MarkdownDocumentSession
     | 'threads'
     | 'selectedThreadId'
     | 'onSelectThread'
+    | 'onComposeThread'
   > {
   /** Null until the document has hydrated — nothing editable renders before. */
   readonly body: string | null
