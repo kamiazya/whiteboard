@@ -187,16 +187,27 @@ jobs:
 
       - name: Collect changed test files
         id: changed
-        # base_ref reaches the shell through env, never ${{ }} interpolation —
-        # a ref name may legally contain shell metacharacters.
         # `.claude/**` is excluded: its test-NAMED files (biome-plugin lint
         # fixtures) belong to no vitest project, and vitest exits 1 on a file
         # list that matches no project.
-        env:
-          BASE_REF: ${{ github.base_ref }}
+        #
+        # HEAD^1 rather than a merge base against a fetched `origin/$BASE_REF`.
+        # On a pull_request event the checked-out ref is the merge commit, so
+        # its first parent IS the base tip and the diff needs no fetch at all.
+        # The previous form fetched the base with `--depth=1`, which leaves it
+        # with no reachable ancestry, and git then answered
+        # `fatal: origin/main...HEAD: no merge base` — on stderr, at the head
+        # of a pipeline, under a shell with `-e` but no `pipefail`. So the
+        # step exited 0 with an empty file list, both stress steps skipped on
+        # their `!= ''` guard, and the job reported SUCCESS in 43s having
+        # stressed nothing. Measured on run 33971406910, where five changed
+        # test files went unstressed.
+        #
+        # `pipefail` is the half that makes this loud rather than correct:
+        # without it any future failure of that git command is a pass again.
         run: |
-          git fetch origin "$BASE_REF" --depth=1
-          files=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
+          set -o pipefail
+          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
