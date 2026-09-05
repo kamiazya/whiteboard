@@ -267,16 +267,33 @@ const imageReferenceLeafArbitrary = fc
 const inlineMathLeafArbitrary = fc
   .string({ maxLength: 20 })
   .map((value) => ({ type: 'inlineMath' as const, value }))
+// `]`, `|` and `#` are the reference grammar's own delimiters, so a fragment
+// holding one is an encoding ambiguity rather than content.
+export const referenceFragmentArbitrary = fc.option(
+  fc
+    .string({ minLength: 1, maxLength: 10 })
+    .filter((s) => !/[\]|#]/.test(s) && s.trim().length > 0),
+  { nil: undefined },
+)
 const wikiLinkLeafArbitrary = fc
   .record({
     documentId: canonicalUlidArbitrary,
     alias: fc.option(fc.string({ maxLength: 10 }), { nil: undefined }),
+    fragment: referenceFragmentArbitrary,
   })
-  .map(({ documentId, alias }) => ({ type: 'wikiLink' as const, documentId, alias }))
-const embedLeafArbitrary = canonicalUlidArbitrary.map((documentId) => ({
-  type: 'embed' as const,
-  documentId,
-}))
+  .map(({ documentId, alias, fragment }) => ({
+    type: 'wikiLink' as const,
+    documentId,
+    alias,
+    ...(fragment === undefined ? {} : { fragment }),
+  }))
+const embedLeafArbitrary = fc
+  .record({ documentId: canonicalUlidArbitrary, fragment: referenceFragmentArbitrary })
+  .map(({ documentId, fragment }) => ({
+    type: 'embed' as const,
+    documentId,
+    ...(fragment === undefined ? {} : { fragment }),
+  }))
 
 /** Leaves shared by both PhrasingContent and TableCell's phrasing-minus-break. */
 const cellPhrasingLeafArbitraries = [

@@ -627,13 +627,18 @@ export function DaemonDocumentPage({
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
-      if (target?.body === undefined) return undefined
-      // Body only. A document's title is the workspace's (ADR-0009 decision
+      if (target === undefined) return undefined
+      // No title. A document's title is the workspace's (ADR-0009 decision
       // 2) and the daemon summary carries no display name, so there is none
       // to label the embed with — the facets deliberately no longer hold one.
-      return { body: target.body }
+      // The summary DOES carry the kind, which decides what the target is: a
+      // spatial document's canvas, or a markdown document's body.
+      const kind = controller.documents.find((entry) => entry.id === documentId)?.kind
+      if (kind === 'spatial')
+        return target.canvas === undefined ? undefined : { canvas: target.canvas }
+      return target.body === undefined ? undefined : { body: target.body }
     },
-    [fileAdapter],
+    [fileAdapter, controller.documents],
   )
   const resolveEmbed = useMarkdownEmbedContent({
     body: markdownBody ?? '',

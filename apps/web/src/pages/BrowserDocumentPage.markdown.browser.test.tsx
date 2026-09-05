@@ -642,6 +642,110 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     )
   })
 
+  it('a block ![[embed]] of a canvas draws that canvas inline in the preview', async () => {
+    const store = new IdbDocumentIndex()
+    const BOARD_ID = await seedIdbDocument(store, {
+      path: 'embed-board',
+      name: 'Embed board',
+      kind: 'spatial',
+    })
+    await seedIdbDocument(store, {
+      path: 'embed-source',
+      name: 'Embed source',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    const boardDoc = new Loro()
+    writeSpatialCanvas(boardDoc, {
+      nodes: [
+        {
+          id: 'b1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 300,
+          height: 120,
+          text: 'unmistakable canvas node text',
+        },
+      ],
+      edges: [],
+    })
+    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    render(<BrowserDocumentPage store={store} />)
+
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+    await userEvent.keyboard(`![[[[${BOARD_ID}]]{Enter}{Enter}and more typing`)
+
+    // The preview loads the board asynchronously and lays it out as a
+    // miniature under its name: both the canvas's own text and the
+    // workspace's display name for it reach the SVG.
+    await waitFor(
+      () => {
+        const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+        expect(preview?.textContent).toContain('unmistakable canvas node text')
+        expect(preview?.textContent).toContain('Embed board')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it('a ![[canvas#Group]] embed draws that group only, under a breadcrumb', async () => {
+    const store = new IdbDocumentIndex()
+    const BOARD_ID = await seedIdbDocument(store, {
+      path: 'embed-board',
+      name: 'Embed board',
+      kind: 'spatial',
+    })
+    await seedIdbDocument(store, {
+      path: 'embed-source',
+      name: 'Embed source',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    const boardDoc = new Loro()
+    writeSpatialCanvas(boardDoc, {
+      nodes: [
+        { id: 'g', type: 'group', x: 0, y: 0, width: 400, height: 200, label: 'Launch' },
+        {
+          id: 'in',
+          type: 'text',
+          x: 10,
+          y: 10,
+          width: 300,
+          height: 100,
+          text: 'launch group text',
+        },
+        {
+          id: 'out',
+          type: 'text',
+          x: 900,
+          y: 900,
+          width: 300,
+          height: 100,
+          text: 'elsewhere text',
+        },
+      ],
+      edges: [],
+    })
+    await new LoroStore().save(BOARD_ID, boardDoc.export({ mode: 'snapshot' }))
+    render(<BrowserDocumentPage store={store} />)
+
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+    // The completion closes at `#`, so the Enter after the fragment ends the
+    // line rather than accepting a candidate.
+    await userEvent.keyboard(`![[[[${BOARD_ID}#Launch]]{Enter}{Enter}and more typing`)
+
+    await waitFor(
+      () => {
+        const preview = document.querySelector('[data-testid="markdown-preview-pane"]')
+        expect(preview?.textContent).toContain('launch group text')
+        expect(preview?.textContent).toContain('Embed board › Launch')
+        expect(preview?.textContent).not.toContain('elsewhere text')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
   describe('a body written the pre-unification way', () => {
     // `wb_document_set` used to store a body as an `okf-body` TEXT NODE
     // rather than the `body` text container CodeMirror binds to. Both sides

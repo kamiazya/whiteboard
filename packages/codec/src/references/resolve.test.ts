@@ -281,4 +281,17 @@ describe('resolveReferences', () => {
     const cell = row.children[0]
     expect(cell.children).toEqual([{ type: 'wikiLink', documentId: ULID, alias: undefined }])
   })
+
+  it('carries a #fragment through to the node, for a bare id and for a resolved path', () => {
+    const root = paragraph(`[[${ULID}#Launch|go]] and ![[plans#Launch]]`)
+    const resolved = resolveReferences(root, (alias) => (alias === 'plans' ? ULID : null))
+
+    const children = resolved.children[0]
+    if (children.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(children.children).toEqual([
+      { type: 'wikiLink', documentId: ULID, alias: 'go', fragment: 'Launch' },
+      { type: 'text', value: ' and ' },
+      { type: 'embed', documentId: ULID, fragment: 'Launch' },
+    ])
+  })
 })

@@ -7,6 +7,8 @@
  * failure caches as "missing" — the preview keeps its placeholder and the
  * failed id is never re-fetched in a retry storm.
  */
+
+import type { EmbeddedDocument } from '@kamiazya/whiteboard-canvas-render'
 import {
   type AliasResolver,
   parseMarkdownBody,
@@ -15,19 +17,17 @@ import {
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { useCallback } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { loadMarkdownEmbedSource } from '../lib/document-embed-content.js'
+import { loadMarkdownEmbedSource, type MarkdownEmbedSource } from '../lib/document-embed-content.js'
 import { type PrefetchRequest, usePrefetchedCache } from './use-prefetched-cache.js'
 
 const log = getAppLogger('markdown-embed-content')
 
-export interface MarkdownEmbedEntry {
-  readonly title?: string
-  readonly root: MdastRoot
-}
+/** What the layout's `resolveEmbed` seam answers: a parsed body or a canvas. */
+export type MarkdownEmbedEntry = EmbeddedDocument
 
-export type MarkdownEmbedLoader = (
-  documentId: string,
-) => Promise<{ body: string; title?: string } | undefined>
+export type { MarkdownEmbedSource }
+
+export type MarkdownEmbedLoader = (documentId: string) => Promise<MarkdownEmbedSource | undefined>
 
 /** Every embed documentId reachable in one parsed document. */
 function collectEmbedIds(root: MdastRoot): readonly string[] {
@@ -78,9 +78,11 @@ export function useMarkdownEmbedContent({
         return undefined
       })
       if (source === undefined) return undefined
+      const title = source.title !== undefined ? { title: source.title } : {}
+      if ('canvas' in source) return { ...title, canvas: source.canvas }
       try {
         return {
-          ...(source.title !== undefined ? { title: source.title } : {}),
+          ...title,
           root: resolveReferences(parseMarkdownBody(source.body), resolveAlias),
         }
       } catch (err) {
@@ -100,7 +102,9 @@ export function useMarkdownEmbedContent({
         // it is the acceptable cost of keeping this simple.
         const wanted = new Set(parseEmbeds(body, resolveAlias))
         for (const entry of loaded) {
-          for (const id of collectEmbedIds(entry.root)) wanted.add(id)
+          // A canvas's text nodes are parsed by the composer without
+          // reference resolution, so nothing inside one can be an embed.
+          if ('root' in entry) for (const id of collectEmbedIds(entry.root)) wanted.add(id)
         }
         return [...wanted].map(
           (id): PrefetchRequest<MarkdownEmbedEntry> => ({ key: id, load: () => loadEntry(id) }),

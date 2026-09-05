@@ -1,3 +1,4 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { useMarkdownEmbedContent } from './use-markdown-embed-content.js'
@@ -18,8 +19,21 @@ describe('useMarkdownEmbedContent', () => {
     })
     const entry = result.current(B)
     expect(entry?.title).toBe('Note B')
-    expect(JSON.stringify(entry?.root)).toContain('embedded body')
+    expect(JSON.stringify(entry)).toContain('embedded body')
     expect(load).toHaveBeenCalledTimes(1)
+  })
+
+  it('a canvas target is exposed as a canvas entry, unparsed', async () => {
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'board node' }],
+      edges: [],
+    }
+    const load = vi.fn(async (id: string) => (id === B ? { canvas, title: 'Board' } : undefined))
+    const { result } = renderHook(() => useMarkdownEmbedContent({ body: `![[${B}]]\n`, load }))
+    await waitFor(() => {
+      expect(result.current(B)).toBeDefined()
+    })
+    expect(result.current(B)).toEqual({ title: 'Board', canvas })
   })
 
   it('follows transitive embeds so nested bodies resolve too', async () => {
@@ -32,7 +46,7 @@ describe('useMarkdownEmbedContent', () => {
     await waitFor(() => {
       expect(result.current(C)).toBeDefined()
     })
-    expect(JSON.stringify(result.current(C)?.root)).toContain('leaf body')
+    expect(JSON.stringify(result.current(C))).toContain('leaf body')
   })
 
   it('resolves aliased embeds through the injected alias resolver', async () => {
@@ -83,7 +97,7 @@ describe('useMarkdownEmbedContent', () => {
     await waitFor(() => {
       expect(result.current(B)).toBeDefined()
     })
-    expect(JSON.stringify(result.current(B)?.root)).toContain('late but wanted')
+    expect(JSON.stringify(result.current(B))).toContain('late but wanted')
   })
 
   it('a body without embeds loads nothing', async () => {

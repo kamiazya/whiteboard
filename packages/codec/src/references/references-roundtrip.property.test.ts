@@ -1,5 +1,8 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { canonicalUlidArbitrary } from '@kamiazya/whiteboard-model/test-utils'
+import {
+  canonicalUlidArbitrary,
+  referenceFragmentArbitrary,
+} from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { resolveReferences } from './resolve.js'
@@ -15,17 +18,25 @@ const wikiLinkAliasArbitrary = fc.option(
   { nil: undefined },
 )
 
-function wikiLinkRoot(documentId: string, alias: string | undefined): MdastRoot {
+function wikiLinkRoot(
+  documentId: string,
+  alias: string | undefined,
+  fragment?: string | undefined,
+): MdastRoot {
+  const withFragment = fragment === undefined ? {} : { fragment }
   return {
     type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'wikiLink', documentId, alias }] }],
+    children: [
+      { type: 'paragraph', children: [{ type: 'wikiLink', documentId, alias, ...withFragment }] },
+    ],
   }
 }
 
-function embedRoot(documentId: string): MdastRoot {
+function embedRoot(documentId: string, fragment?: string | undefined): MdastRoot {
+  const withFragment = fragment === undefined ? {} : { fragment }
   return {
     type: 'root',
-    children: [{ type: 'paragraph', children: [{ type: 'embed', documentId }] }],
+    children: [{ type: 'paragraph', children: [{ type: 'embed', documentId, ...withFragment }] }],
   }
 }
 
@@ -36,6 +47,35 @@ function firstParagraphChild(root: MdastRoot) {
 }
 
 describe('references export/import round-trip properties', () => {
+  fcTest.prop(
+    [canonicalUlidArbitrary, wikiLinkAliasArbitrary, referenceFragmentArbitrary],
+    withDefaults(),
+  )(
+    'an unresolved wikiLink keeps its #fragment through the literal-text degrade',
+    (documentId, alias, fragment) => {
+      const exported = resolveReferencesForExport(
+        wikiLinkRoot(documentId, alias, fragment),
+        () => null,
+      )
+      const node = firstParagraphChild(resolveReferences(exported))
+      expect(node).toEqual({
+        type: 'wikiLink',
+        documentId,
+        alias,
+        ...(fragment === undefined ? {} : { fragment }),
+      })
+    },
+  )
+
+  fcTest.prop([canonicalUlidArbitrary, referenceFragmentArbitrary], withDefaults())(
+    'an unresolved embed keeps its #fragment through the literal-text degrade',
+    (documentId, fragment) => {
+      const exported = resolveReferencesForExport(embedRoot(documentId, fragment), () => null)
+      const node = firstParagraphChild(resolveReferences(exported))
+      expect(node).toMatchObject({ documentId, ...(fragment === undefined ? {} : { fragment }) })
+    },
+  )
+
   fcTest.prop([canonicalUlidArbitrary, wikiLinkAliasArbitrary], withDefaults())(
     'unresolved wikiLink degrades to literal text that resolveReferences re-parses into the same documentId/alias',
     (documentId, alias) => {

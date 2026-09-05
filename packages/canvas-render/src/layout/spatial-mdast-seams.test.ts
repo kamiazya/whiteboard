@@ -110,6 +110,47 @@ function textOf(nodes: readonly SceneNode[]): string[] {
   return out
 }
 
+describe('a canvas-targeted embed inside a text node body', () => {
+  const embedded: SpatialCanvas = {
+    nodes: [{ id: 'e1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'INNER' }],
+    edges: [],
+  }
+  const resolveEmbed = (documentId: string) =>
+    documentId === 'other' ? { title: 'Board', canvas: embedded } : undefined
+
+  it('draws the embedded canvas as a miniature without the caller wiring a composer', () => {
+    // The stub parser answers the OUTER body for everything else; the inner
+    // node's text must come through as itself for the miniature to show.
+    const parseBody = (text: string): MdastRoot =>
+      text === 'INNER'
+        ? {
+            type: 'root',
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+          }
+        : BODY
+    const scene = layoutSpatialCanvas(textCanvas, baseOptions({ parseBody, resolveEmbed }))
+    expect(textOf(scene.nodes)).toContain('INNER')
+  })
+
+  it('a canvas whose text embeds the canvas it is drawn in stops at a cycle placeholder', () => {
+    const scene = layoutSpatialCanvas(
+      textCanvas,
+      baseOptions({
+        resolveEmbed: (documentId) => (documentId === 'other' ? { canvas: textCanvas } : undefined),
+      }),
+    )
+    const reasons: string[] = []
+    const visit = (node: SceneNode) => {
+      const entry = node as { kind: string; reason?: string; children?: readonly SceneNode[] }
+      if (entry.kind === 'embedPlaceholder' && entry.reason !== undefined)
+        reasons.push(entry.reason)
+      for (const child of entry.children ?? []) visit(child)
+    }
+    for (const node of scene.nodes) visit(node)
+    expect(reasons).toContain('cycle')
+  })
+})
+
 describe.each([
   ['a text node body', textCanvas, {} as Partial<SpatialLayoutOptions>],
   ['a markdown file node body', fileCanvas, { resolveReference: () => ({ markdown: BODY }) }],

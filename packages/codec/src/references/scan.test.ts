@@ -8,7 +8,14 @@ describe('scanReferences', () => {
   it('finds a bare id wikilink with its position', () => {
     const value = `before [[${ID}]] after`
     expect(scanReferences(value)).toEqual([
-      { index: 7, full: `[[${ID}]]`, isEmbed: false, target: ID, alias: undefined },
+      {
+        index: 7,
+        full: `[[${ID}]]`,
+        isEmbed: false,
+        target: ID,
+        alias: undefined,
+        fragment: undefined,
+      },
     ])
   })
 
@@ -22,6 +29,28 @@ describe('scanReferences', () => {
 
   it('reports nothing for unclosed brackets', () => {
     expect(scanReferences('[[never closed')).toEqual([])
+  })
+
+  it('splits a #fragment off the target, keeping the alias and the bang', () => {
+    const refs = scanReferences(`[[plans/q4#Launch|the launch]] ![[${ID}#Launch]]`)
+    expect(refs).toEqual([
+      expect.objectContaining({
+        target: 'plans/q4',
+        fragment: 'Launch',
+        alias: 'the launch',
+        isEmbed: false,
+      }),
+      expect.objectContaining({ target: ID, fragment: 'Launch', alias: undefined, isEmbed: true }),
+    ])
+  })
+
+  it('splits at the FIRST #, so a fragment may hold one; an empty fragment is none', () => {
+    expect(scanReferences('[[a#b#c]]')[0]).toMatchObject({ target: 'a', fragment: 'b#c' })
+    expect(scanReferences('[[a#]]')[0]).toMatchObject({ target: 'a', fragment: undefined })
+  })
+
+  it('a reference with no document half is not a reference', () => {
+    expect(scanReferences('[[#Launch]]')).toEqual([])
   })
 })
 

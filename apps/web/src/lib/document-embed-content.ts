@@ -14,7 +14,7 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { DocumentKind, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { getAppLogger } from './app-logger.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -44,7 +44,9 @@ export function resetEmbedIndexForTests(): void {
   embedIndex = null
 }
 
-async function loadDocumentName(documentId: string): Promise<string | undefined> {
+async function loadDocumentEntry(
+  documentId: string,
+): Promise<{ name?: string; kind?: DocumentKind } | undefined> {
   try {
     // The workspace tree owns naming; the production index's fold gate is
     // what makes a legacy record (row + content, not yet in the tree)
@@ -54,14 +56,22 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
       workspaceId: getBrowserWorkspaceId(),
       documentId,
     })
+    if (entry === null) return undefined
     // A document with no name of its own reports one as ABSENT rather than as
     // the sentinel string the old metadata row used, so the caller's fallback
     // to the reference happens without anyone comparing against 'untitled'.
-    return entry?.name
+    return {
+      ...(entry.name !== undefined ? { name: entry.name } : {}),
+      ...(entry.kind !== undefined ? { kind: entry.kind } : {}),
+    }
   } catch (err) {
-    log.warn('document name load failed', { documentId, err })
+    log.warn('document entry load failed', { documentId, err })
     return undefined
   }
+}
+
+async function loadDocumentName(documentId: string): Promise<string | undefined> {
+  return (await loadDocumentEntry(documentId))?.name
 }
 
 /** Loads one referenced canvas's spatial content from IndexedDB. */
@@ -87,18 +97,33 @@ async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocum
 }
 
 /**
- * Loads one referenced MARKDOWN document's body (and title facet) from the
- * same store — the loader behind `useMarkdownEmbedContent`'s cache, total
- * like its spatial sibling above.
+ * What an `![[embed]]` target loads as: a markdown document's raw body
+ * (parsed once by the hook that caches it), or a spatial document's canvas
+ * (drawn by the layout as a miniature). Declared here, in lib, because the
+ * loaders that produce it live here and the hook above only consumes it.
+ */
+export type MarkdownEmbedSource =
+  | { readonly body: string; readonly title?: string }
+  | { readonly canvas: SpatialCanvas; readonly title?: string }
+
+/**
+ * Loads one `![[embed]]` target from the same store — the loader behind
+ * `useMarkdownEmbedContent`'s cache, total like its spatial sibling above.
+ * The workspace entry's kind decides what the target IS: a spatial document
+ * answers its canvas, anything else its body. Kind comes from the index
+ * rather than the content because the browser store writes it there, and a
+ * spatial document's body is an empty string that says nothing.
  */
 export async function loadMarkdownEmbedSource(
   documentId: string,
-): Promise<{ body: string; title?: string } | undefined> {
+): Promise<MarkdownEmbedSource | undefined> {
   try {
     const doc = await loadDocumentContent(documentId)
     if (doc === null) return undefined
-    const title = await loadDocumentName(documentId)
-    return { body: readMarkdownBody(doc), ...(title !== undefined ? { title } : {}) }
+    const entry = await loadDocumentEntry(documentId)
+    const title = entry?.name !== undefined ? { title: entry.name } : {}
+    if (entry?.kind === 'spatial') return { ...title, canvas: readSpatialCanvas(doc) }
+    return { ...title, body: readMarkdownBody(doc) }
   } catch (err) {
     log.warn('embedded markdown load failed', { documentId, err })
     return undefined

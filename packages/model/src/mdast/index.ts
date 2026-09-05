@@ -87,9 +87,12 @@ export type MdastPhrasingContent =
   | { type: 'delete'; children: MdastPhrasingContent[] }
   | { type: 'inlineMath'; value: string }
   // Official custom nodes. Internal link representation is ID-based:
-  // wikiLink/embed carry a documentId (ULID) rather than a file path.
-  | { type: 'wikiLink'; documentId: string; alias?: string }
-  | { type: 'embed'; documentId: string }
+  // wikiLink/embed carry a documentId (ULID) rather than a file path. The
+  // optional `fragment` is the `#...` part of `[[target#fragment]]`: a
+  // secondary resource inside the document (a heading, a canvas group),
+  // kept as the text the author wrote and resolved at render time.
+  | { type: 'wikiLink'; documentId: string; alias?: string; fragment?: string }
+  | { type: 'embed'; documentId: string; fragment?: string }
 
 /** PhrasingContent minus `break` — see the TableCell note above. */
 export type MdastCellPhrasingContent =
@@ -116,8 +119,8 @@ export type MdastCellPhrasingContent =
     }
   | { type: 'delete'; children: MdastCellPhrasingContent[] }
   | { type: 'inlineMath'; value: string }
-  | { type: 'wikiLink'; documentId: string; alias?: string }
-  | { type: 'embed'; documentId: string }
+  | { type: 'wikiLink'; documentId: string; alias?: string; fragment?: string }
+  | { type: 'embed'; documentId: string; fragment?: string }
 
 export type MdastFlowContent =
   | { type: 'paragraph'; children: MdastPhrasingContent[] }
@@ -192,8 +195,13 @@ const wikiLinkNodeSchema = z.object({
   type: z.literal('wikiLink'),
   documentId: documentIdSchema,
   alias: z.string().optional(),
+  fragment: z.string().optional(),
 })
-const embedNodeSchema = z.object({ type: z.literal('embed'), documentId: documentIdSchema })
+const embedNodeSchema = z.object({
+  type: z.literal('embed'),
+  documentId: documentIdSchema,
+  fragment: z.string().optional(),
+})
 const thematicBreakNodeSchema = z.object({ type: z.literal('thematicBreak') })
 const definitionNodeSchema = z.object({
   type: z.literal('definition'),
