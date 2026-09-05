@@ -264,6 +264,11 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',
       '@kamiazya/whiteboard-workspace-index',
+      // history: the branch, merge and checkpoint mechanics the browser
+      // keeper runs, the same ones the daemon does. Both keepers read a
+      // branch out of the workspace record now, so the rules for changing
+      // one live in a package below both rather than in either root.
+      '@kamiazya/whiteboard-history',
     ],
     allowedThirdParty: [],
   },

@@ -194,7 +194,7 @@ function useDaemonDocument(
   }, [setSearchParams])
 
   useEffect(() => {
-    if (!canvas || variationParam === null || !capabilities.branches) {
+    if (!canvas || variationParam === null) {
       setVariationPreview(null)
       return
     }
@@ -244,7 +244,6 @@ function useDaemonDocument(
     canvas?.workspaceId,
     canvas?.path,
     variationParam,
-    capabilities.branches,
     branches,
     clearVariationParam,
     branchRefreshSignal,
@@ -855,7 +854,7 @@ function useDaemonDocument(
     slots: {
       headerExtras: (
         <>
-          {capabilities.branches && canvas && variationPreview !== null && (
+          {canvas && variationPreview !== null && (
             <HeaderVariationBanner
               workspaceId={canvas.workspaceId}
               path={canvas.path}
@@ -889,21 +888,18 @@ function useDaemonDocument(
               </button>
             </div>
           )}
-          {capabilities.branches && canvas && (
-            <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
-          )}
+          {canvas && <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />}
           {/* This row only exists when it carries something meaningful: a
               capability this keeper does not have. A daemon with full
               capabilities — the common local case — gets no extra header row
               at all (every header row costs canvas height on a phone). The
               shell switcher names the workspace on every page, so it is the
               one carrier of that; raw identifiers are not chrome (ADR-0019). */}
-          {(!capabilities.branches || !capabilities.merge) && (
+          {!capabilities.merge && (
             <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
               {/* WorkspaceTopBar owns the real History/HeaderBranchChip
                   affordances once a canvas is selected; these page-level teasers
                   only surface guidance while the capability itself is unavailable. */}
-              {!capabilities.branches && <CapabilityTeaser label="Variations" />}
               {!capabilities.merge && <CapabilityTeaser label="Combine" />}
             </div>
           )}

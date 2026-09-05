@@ -60,6 +60,7 @@ type KeeperReach =
   /** A real difference nobody declared, with the follow-up that closes it. */
   | { readonly reach: 'gap'; readonly missing: string; readonly followUp: string }
 
+const BROWSER_BRANCHES = 'src/lib/browser-branches-backend.ts'
 const BROWSER_VERSIONS = 'src/lib/browser-versions-backend.ts'
 const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
@@ -96,16 +97,24 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
   // The branch seam, in two halves. The context is which keeper answers; the
-  // backend holds the daemon's requests AND the browser's refusal. Together
-  // they make the declared difference the DEFAULT rather than a flag each
-  // caller passes. (`capability` entries take no `note` — the vocabulary's
-  // own type says so — so this is a comment.)
+  // backend holds the daemon's requests. They were `capability` entries while
+  // only the daemon had variations; the browser keeps its own on the
+  // workspace record now, so the difference they named is gone and the answer
+  // is the ordinary one — a browser module that answers without a daemon.
   //
   // `src/hooks/useBranches.ts` is deliberately absent: it stopped reaching
   // the daemon when the transport moved out of it, and this ledger's other
   // direction fails on an entry naming a module that no longer reaches.
-  'src/contexts/BranchesBackendContext.tsx': { reach: 'capability', capability: 'branches' },
-  'src/lib/branches-backend.ts': { reach: 'capability', capability: 'branches' },
+  'src/contexts/BranchesBackendContext.tsx': {
+    reach: 'both-keepers',
+    browser: BROWSER_BRANCHES,
+    note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
+  },
+  'src/lib/branches-backend.ts': {
+    reach: 'both-keepers',
+    browser: BROWSER_BRANCHES,
+    note: "the daemon's half of the seam; the browser's is the module named here",
+  },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -294,13 +303,18 @@ describe('a panel whose behaviour differs by keeper is told which keeper it is',
     ).toBe(true)
   })
 
-  it('agrees with the provider about branches', () => {
-    // Two capability surfaces describing one keeper: the provider's map,
-    // which gates the teaser copy, and the panel's prop, which decides
-    // whether a lane column is drawn. Disagreeing is a silent difference of
-    // its own — the chrome would promise branches while the panel drew one
-    // lane, or the reverse.
-    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(BROWSER_CAPABILITIES.branches)
-    expect(DAEMON_HISTORY_CAPABILITIES.branches).toBe(DAEMON_CAPABILITIES.branches)
+  it('draws lanes for what the ROWS carry, which is not the same as having variations', () => {
+    // This compared the panel's flag to the provider's, back when the
+    // provider had one. It does not any more: both keepers have variations,
+    // so `capabilities.branches` is gone the way `workspaces` and `versions`
+    // went before it.
+    //
+    // The panel's flag survives because it asks a DIFFERENT question — do the
+    // version rows carry a branch to lane by? The browser's do not yet (they
+    // gain `auto`/`branchName` with automatic checkpoints), so one lane there
+    // is correct rather than a leftover, and this pins it as a decision until
+    // that increment lands.
+    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(false)
+    expect(DAEMON_HISTORY_CAPABILITIES.branches).toBe(true)
   })
 })

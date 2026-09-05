@@ -178,6 +178,9 @@ importers:
       '@kamiazya/whiteboard-facet-ui':
         specifier: workspace:*
         version: link:../../packages/facet-ui
+      '@kamiazya/whiteboard-history':
+        specifier: workspace:*
+        version: link:../../packages/history
       '@kamiazya/whiteboard-loro-adapter':
         specifier: workspace:*
         version: link:../../packages/loro-adapter

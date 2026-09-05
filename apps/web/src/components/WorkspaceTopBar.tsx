@@ -2,6 +2,7 @@ import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { HEADER_BUTTON_CLASS, HEADER_TOGGLE_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { cn } from '../lib/utils.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
@@ -34,7 +35,6 @@ export interface TopBarPreview {
 }
 
 export interface WorkspaceTopBarCapabilities {
-  branches?: boolean
   merge?: boolean
 }
 
@@ -136,7 +136,11 @@ export default function WorkspaceTopBar({
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
-  const branchesEnabled = capabilities?.branches ?? true
+  // Whether to show the chip at all is the BACKEND's answer, not a keeper
+  // flag: both keepers have variations now, but a document with no
+  // record-holding backend (a markdown body, or one still loading) has none.
+  // That is per document, which no provider-level flag can say.
+  const branchesEnabled = useBranchesBackend().hasBranches
   const mergeEnabled = capabilities?.merge ?? true
   const daemonFetch = useDaemonApi()
 

@@ -21,34 +21,21 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser capabilities: no branches, no merge — versions is not a capability, both keepers have one', () => {
+  it('browser capabilities: no merge — and neither versions nor branches is a capability', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({
-      kind: 'browser',
-      capabilities: { branches: false, merge: false },
-    })
+    expect(state).toMatchObject({ kind: 'browser', capabilities: { merge: false } })
+    // A flag both keepers set the same way is not a capability, and each of
+    // these left for that reason as the browser keeper grew the feature:
+    // `versions` when it kept its own history, `branches` when it kept its
+    // own variations on the workspace record.
     expect(state.kind === 'browser' && 'versions' in state.capabilities).toBe(false)
+    expect(state.kind === 'browser' && 'branches' in state.capabilities).toBe(false)
   })
 
-  it('daemon capabilities: branches and merge', () => {
+  it('daemon capabilities: merge, which is the one thing the keepers still differ on', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({ kind: 'daemon', capabilities: { branches: true, merge: true } })
-  })
-
-  it('browser capabilities: branches and merge are false', () => {
-    const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({
-      kind: 'browser',
-      capabilities: { branches: false, merge: false },
-    })
-  })
-
-  it('daemon capabilities: branches and merge are true', () => {
-    const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({
-      kind: 'daemon',
-      capabilities: { branches: true, merge: true },
-    })
+    expect(state).toMatchObject({ kind: 'daemon', capabilities: { merge: true } })
+    expect(state.kind === 'daemon' && 'branches' in state.capabilities).toBe(false)
   })
 
   it('descriptor JSON contains no token Authorization Bearer secret fields', () => {

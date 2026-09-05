@@ -296,27 +296,3 @@ export function createDaemonBranchesBackend(fetchFn: typeof globalThis.fetch): B
     loadDocument: (workspaceId, path, name) => api(workspaceId, path).loadDocument(name),
   }
 }
-
-/**
- * The browser keeper, which has no branches.
- *
- * `list` answers the RESTING STATE rather than throwing, because a panel that
- * reads `head` to draw its mini-graph wants an answer, not an error to log
- * and ignore. The mutators refuse, because a caller that got here is offering
- * an action this keeper cannot perform and silently succeeding would be worse
- * than saying so.
- */
-export function createBrowserBranchesBackend(): BranchesBackend {
-  const refuse = (what: string) => Promise.reject(new BranchesUnsupportedError(what))
-  return {
-    hasBranches: false,
-    list: () => Promise.resolve({ branches: [], head: 'main' }),
-    create: () => refuse('create'),
-    remove: () => refuse('delete'),
-    rename: () => refuse('rename'),
-    setHead: () => refuse('switch'),
-    getStats: () => refuse('stats'),
-    merge: () => refuse('merge'),
-    loadDocument: () => Promise.resolve(null),
-  }
-}
