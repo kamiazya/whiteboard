@@ -29,6 +29,7 @@ import { z } from 'zod'
 import type { DocumentContainers } from './containers.js'
 import { contentDigestOf } from './content-digest.js'
 import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
+import { openMergeableMovableList } from './mergeable-containers.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -271,7 +272,7 @@ export function readPinnedDocumentIds(doc: LoroDoc): string[] {
 export function setWorkspacePinned(doc: LoroDoc, documentId: string, pinned: boolean): void {
   documentIdSchema.parse(documentId)
   const map = workspaceMetaMap(doc)
-  const list = map.getOrCreateContainer(PINNED_KEY, new LoroMovableList())
+  const list = openMergeableMovableList(map, PINNED_KEY)
   const index = list.toArray().indexOf(documentId)
   if (pinned) {
     // Idempotent: re-pinning keeps the position it already has.
