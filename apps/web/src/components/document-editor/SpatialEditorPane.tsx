@@ -64,9 +64,6 @@ export interface SpatialEditorPaneProps extends PassedThrough {
     canRedo: boolean
   }
   overlayTitle: string
-  resolveAlias: NodeTextEditorOverlayProps['resolveAlias']
-  resolveEmbed: NodeTextEditorOverlayProps['resolveEmbed']
-  resolveTitle?: NodeTextEditorOverlayProps['resolveTitle']
   linkTargets: NodeTextEditorOverlayProps['linkTargets']
   /** The container's classes — the two pages sit in different grid shells. */
   className: string
@@ -83,9 +80,6 @@ export function SpatialEditorPane({
   onOpenDocument,
   history,
   overlayTitle,
-  resolveAlias,
-  resolveEmbed,
-  resolveTitle,
   linkTargets,
   className,
   editorRef,
@@ -145,9 +139,7 @@ export function SpatialEditorPane({
           title={overlayTitle}
           initialText={nodeInEditor.editing.text}
           theme={theme}
-          resolveAlias={resolveAlias}
-          resolveEmbed={resolveEmbed}
-          resolveTitle={resolveTitle}
+          references={fileSeams.references}
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}

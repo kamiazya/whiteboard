@@ -1,4 +1,4 @@
-import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
@@ -25,9 +25,9 @@ export interface CanvasViewerProps {
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
   /**
-   * A file node's reference resolved to what the host knows about it — a
-   * readable name, and a referenced MARKDOWN document's already-parsed
-   * body.
+   * What the host knows about the documents this canvas points at, as the
+   * one bundle `referenceSeams` builds — a readable name, a referenced
+   * markdown document's body, a referenced canvas.
    *
    * Synchronous by canvas-render's contract, which is why this package
    * takes the resolution as data rather than fetching it: the viewer is
@@ -36,7 +36,7 @@ export interface CanvasViewerProps {
    * side that can read another document. Absent keeps the plain reference
    * card.
    */
-  resolveReference?: (ref: string) => ResolvedReference | undefined
+  references?: ReferenceSeams
   /**
    * The document's conversations, for the chrome the flat comments inside
    * `canvas` cannot carry — a passage's highlight, a node set's outline.
@@ -63,7 +63,7 @@ export function CanvasViewer({
   padding,
   background,
   measure,
-  resolveReference,
+  references,
   threads,
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
@@ -113,7 +113,9 @@ export function CanvasViewer({
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
       appearance: VIEWER_APPEARANCE,
-      ...(resolveReference === undefined ? {} : { resolveReference }),
+      // A viewer has no zoom to gate a miniature by: a referenced canvas
+      // draws at the node's intrinsic size, export's policy.
+      ...(references === undefined ? {} : { references, expandFileNode: () => true }),
       ...(threads === undefined ? {} : { threads }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
@@ -144,7 +146,7 @@ export function CanvasViewer({
     renderHeight,
     padding,
     background,
-    resolveReference,
+    references,
     threads,
     fontReady,
   ])

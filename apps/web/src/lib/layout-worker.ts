@@ -1,3 +1,4 @@
+import { overlayReferences } from '@kamiazya/whiteboard-canvas-render'
 /**
  * Lays a spatial canvas out off the main thread.
  *
@@ -35,7 +36,6 @@ import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
 import {
-  composeReferenceSeam,
   FONT_DEGRADED,
   type LayoutRequest,
   type LayoutResponse,
@@ -317,7 +317,7 @@ self.onmessage = async (
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
-      resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),
+      resolveReference: overlayReferences({ labels, missing: missingRefs }),
       contentCache: contentCacheFor(request.theme),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,

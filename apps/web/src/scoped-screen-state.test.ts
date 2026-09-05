@@ -203,7 +203,7 @@ function stateNames(source: string): Slot[] {
  * switch — most should — but whether anything can act through it afterwards.
  */
 function refNames(source: string): Slot[] {
-  return [...source.matchAll(/const (\w+) = useRef/g)].map((m) => ({
+  return [...source.matchAll(/const (\w+) = useRef\b/g)].map((m) => ({
     name: m[1],
     // A ref has no setter: clearing one is an assignment to `.current`.
     reset: new RegExp(`${m[1]}\\.current\\s*=\\s*${EMPTY}`),

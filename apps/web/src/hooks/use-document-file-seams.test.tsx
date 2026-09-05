@@ -53,9 +53,11 @@ describe('useDocumentFileSeams', () => {
 
     // The editor's seam is synchronous, so nothing is available on the first
     // render — the point of the pre-fetch.
-    expect(result.current.resolveReference('other')?.canvas).toBeUndefined()
-    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
-    expect(result.current.resolveReference('other')?.canvas).toEqual(embedded('other'))
+    expect(result.current.references.resolveReference('other')?.canvas).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('other')?.canvas).toEqual(embedded('other'))
   })
 
   it('routes image refs to the image loader and canvas refs to the canvas loader', async () => {
@@ -68,8 +70,12 @@ describe('useDocumentFileSeams', () => {
       }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('asset:pic')?.image).toBeDefined())
-    expect(result.current.resolveReference('asset:pic')?.image).toEqual({ href: 'blob:asset:pic' })
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('asset:pic')?.image).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('asset:pic')?.image).toEqual({
+      href: 'blob:asset:pic',
+    })
     expect(adapter.loadDocument).toHaveBeenCalledWith('sibling')
     expect(adapter.loadDocument).not.toHaveBeenCalledWith('asset:pic')
     expect(adapter.loadImageUrl).not.toHaveBeenCalledWith('sibling')
@@ -83,7 +89,9 @@ describe('useDocumentFileSeams', () => {
         useDocumentFileSeams({ canvas, adapter, stampOf }),
       { initialProps: { stampOf: new Map([['other', 'v1']]) as ReadonlyMap<string, string> } },
     )
-    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
+    )
     expect(adapter.loadDocument).toHaveBeenCalledTimes(1)
 
     // Same stamp, new map identity: a re-render must not re-fetch.
@@ -116,7 +124,9 @@ describe('useDocumentFileSeams', () => {
     const { result, unmount } = renderHook(() =>
       useDocumentFileSeams({ canvas: canvasWith('asset:pic'), adapter, stampOf: new Map() }),
     )
-    await waitFor(() => expect(result.current.resolveReference('asset:pic')?.image).toBeDefined())
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('asset:pic')?.image).toBeDefined(),
+    )
 
     unmount()
 
@@ -227,9 +237,11 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    expect(result.current.resolveReference('other')?.facets).toBeUndefined()
-    await waitFor(() => expect(result.current.resolveReference('other')?.facets).toBeDefined())
-    expect(result.current.resolveReference('other')?.facets?.title).toBe('Spec')
+    expect(result.current.references.resolveReference('other')?.facets).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('other')?.facets).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('other')?.facets?.title).toBe('Spec')
   })
 
   it('keeps a facet-only document cached even though it has no canvas', async () => {
@@ -240,8 +252,10 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('doc'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('doc')?.facets).toBeDefined())
-    expect(result.current.resolveReference('doc')?.canvas).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('doc')?.facets).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('doc')?.canvas).toBeUndefined()
   })
 
   it('has no card for a document that loads without facets', async () => {
@@ -252,8 +266,10 @@ describe('useDocumentFileSeams facets', () => {
       useDocumentFileSeams({ canvas: canvasWith('other'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('other')?.canvas).toBeDefined())
-    expect(result.current.resolveReference('other')?.facets).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('other')?.canvas).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('other')?.facets).toBeUndefined()
   })
 
   it('settles at one load for a reference that has no staleness stamp', async () => {
@@ -305,8 +321,10 @@ describe('useDocumentFileSeams empty documents', () => {
       useDocumentFileSeams({ canvas: canvasWith('note'), adapter, stampOf: new Map() }),
     )
 
-    await waitFor(() => expect(result.current.resolveReference('note')?.facets).toBeDefined())
-    expect(result.current.resolveReference('note')?.canvas).toBeUndefined()
+    await waitFor(() =>
+      expect(result.current.references.resolveReference('note')?.facets).toBeDefined(),
+    )
+    expect(result.current.references.resolveReference('note')?.canvas).toBeUndefined()
   })
 })
 

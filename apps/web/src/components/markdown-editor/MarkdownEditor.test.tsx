@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -199,7 +200,9 @@ describe('MarkdownEditor', () => {
       <MarkdownEditor
         value="See [[Snippet]]."
         onChange={() => {}}
-        resolveAlias={(alias) => (alias === 'Snippet' ? UUID : null)}
+        references={referenceSeams(new Map(), {
+          resolveAlias: (alias) => (alias === 'Snippet' ? UUID : null),
+        })}
         onOpenDocument={onOpenDocument}
         previewDebounceMs={150}
       />,

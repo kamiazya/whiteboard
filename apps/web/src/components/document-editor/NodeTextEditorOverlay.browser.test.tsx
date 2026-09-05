@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 // The full editing surface a canvas node's body gets when its own box is
 // too small: the same MarkdownEditor a document uses, over the canvas, with
 // the inline editor's commit grammar (close = commit, Escape = discard) so
@@ -18,7 +19,9 @@ const TARGET_NAME = 'reviews/weekly'
 const targets = [
   { id: TARGET_ID, path: TARGET_NAME, name: 'Weekly review', kind: 'markdown' as const },
 ]
-const resolveAlias = (alias: string) => (alias === TARGET_NAME ? TARGET_ID : null)
+const references = referenceSeams(new Map(), {
+  resolveAlias: (alias: string) => (alias === TARGET_NAME ? TARGET_ID : null),
+})
 
 function renderOverlay(
   overrides: { onCommit?: (text: string) => void; onClose?: () => void } = {},
@@ -156,7 +159,7 @@ describe('the node text overlay (real browser)', () => {
         title="Weekly review"
         initialText={`See [[${TARGET_NAME}]]`}
         linkTargets={targets}
-        resolveAlias={resolveAlias}
+        references={references}
         onCommit={onCommit}
         onClose={vi.fn()}
         onOpenDocument={onOpenDocument}

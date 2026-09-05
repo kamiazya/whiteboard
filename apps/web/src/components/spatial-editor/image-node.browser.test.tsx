@@ -1,3 +1,4 @@
+import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
 // Media file nodes (embed spec J5b): images arrive via the host's storage
 // seam (picker input, drop, paste) and render as <image> elements filling
 // the node's padded box. The reference is opaque to the editor; the host
@@ -45,11 +46,12 @@ function makeHost(initial: SpatialCanvas) {
             latest.stored.push(file)
             return Promise.resolve(`asset:${latest.stored.length}`)
           }}
-          resolveReference={(ref) =>
-            ref.startsWith('asset:')
-              ? { image: { href: PNG_HREF, alt: 'stored image' } }
-              : undefined
-          }
+          references={referenceSeams(new Map(), {
+            extra: (ref) =>
+              ref.startsWith('asset:')
+                ? { image: { href: PNG_HREF, alt: 'stored image' } }
+                : undefined,
+          })}
           isImageFileRef={(file) => file.startsWith('asset:')}
           onOpenFileRef={(file) => latest.opened.push(file)}
         />

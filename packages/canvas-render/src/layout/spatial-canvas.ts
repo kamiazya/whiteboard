@@ -42,6 +42,7 @@ import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/ren
 
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
+import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -226,6 +227,13 @@ export interface SpatialLayoutOptions {
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
+  /**
+   * Every reference seam at once — `resolveReference` for file nodes and
+   * the markdown seams for every body — built by `referenceSeams` from what
+   * a keeper loaded. The form a composition root passes; an individual seam
+   * set beside it wins, for a caller probing one in isolation.
+   */
+  readonly references?: ReferenceSeams
   /**
    * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
    * implementation, for the same reason `parseBody` defaults to codec's
@@ -480,6 +488,7 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
+    ...(options.references !== undefined ? { references: options.references } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
     ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
     embedPath: [...options.activeEmbedPath],
@@ -1306,7 +1315,7 @@ export function layoutSpatialCanvasWithAnchors(
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const resolved = resolveContributions(options)
   return layoutSpatialCanvasInternal(canvas, {
-    ...options,
+    ...withSpatialReferenceSeams(options),
     ...resolved,
     passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
     regionsByThread: regionsOf(options.threads ?? [], canvas),
@@ -1341,7 +1350,7 @@ export function naturalNodeContentSize(
   options: SpatialLayoutOptions,
 ): { readonly w: number; readonly h: number } {
   const content = composeNode(node, {
-    ...options,
+    ...withSpatialReferenceSeams(options),
     ...resolveContributions(options),
     // A natural size asks how big the box must be; a highlight adds no
     // extent beyond the words it sits under, so none is composed here.
@@ -1366,6 +1375,14 @@ export function naturalNodeContentSize(
     w: Math.max(0, right - (node.x + padding)),
     h: Math.max(0, bottom - (node.y + padding)),
   }
+}
+
+/** `SpatialLayoutOptions` with the reference bundle applied — see `withReferenceSeams`. */
+function withSpatialReferenceSeams(options: SpatialLayoutOptions): SpatialLayoutOptions {
+  const applied = withReferenceSeams(options)
+  const seams = options.references
+  if (seams === undefined || options.resolveReference !== undefined) return applied
+  return { ...applied, resolveReference: seams.resolveReference }
 }
 
 /** The embed path needs only the scene; the anchor map is per-top-level-canvas. */
@@ -1762,7 +1779,7 @@ export function layoutSpatialEdges(
   options: SpatialLayoutOptions,
 ): SceneNode[] {
   return composeEdgesAndLabels(canvas, {
-    ...options,
+    ...withSpatialReferenceSeams(options),
     ...resolveContributions(options),
     passagesByNode: new Map(),
     regionsByThread: new Map(),

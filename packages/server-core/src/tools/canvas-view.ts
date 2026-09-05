@@ -5,10 +5,9 @@ import {
   spatialCanvasSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { mdastRootSchema } from '@kamiazya/whiteboard-model/mdast'
 import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
-import { resolveFileReferences } from '../render/resolve-file-references.js'
+import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -21,12 +20,23 @@ import { loadDocument } from './document-io.js'
  * side paired with an unschematized payload here is exactly the drift
  * zod-schema-discipline exists to prevent.
  */
+/**
+ * One referenced document as the widget receives it — canvas-render's
+ * `LoadedReference` on the wire, so the widget builds its seams with the
+ * same `referenceSeams` every other surface uses and this schema never has
+ * to know what a body or a canvas is FOR. Raw body, not parsed: parsing is
+ * the seams' job, once, on whichever side lays out.
+ */
 export const canvasViewReferenceSchema = z
   .object({
+    /** The canonical id, so the seams answer by id when the node wrote a path. */
+    documentId: documentIdSchema.optional(),
     /** The document's display name, so the node's label is not a raw id. */
-    label: z.string().optional(),
-    /** Present only for a markdown document: its body, already parsed. */
-    body: mdastRootSchema.optional(),
+    name: z.string().optional(),
+    /** Present only for a markdown document: its raw body. */
+    body: z.string().optional(),
+    /** Present only for a spatial document: its canvas. */
+    canvas: spatialCanvasSchema.optional(),
   })
   .strict()
 
@@ -87,25 +97,32 @@ export function createCanvasViewTool(deps: ServerDeps) {
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
-      const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
+      const { graph } = await loadReferenceGraph(deps, input.workspaceId, { canvases: [canvas] })
       return {
         workspaceId: input.workspaceId,
         documentId: input.documentId,
         scene: canvas,
         threads: readAnnotations(doc),
-        // `markdown` -> `body` is the one place the internal record and the
-        // wire disagree. The record is canvas-render's `ResolvedReference`,
-        // which names every content kind it can carry; this schema names
-        // only the two a widget receives, and renaming a published tool's
-        // field is its own increment (vocabulary.md).
+        // Only the file references themselves, not what their bodies go on to
+        // name: the widget lays out one canvas, and a body's own embeds are
+        // resolved on whichever side reads that body.
         references: Object.fromEntries(
-          [...resolved].map(([ref, { label, markdown }]) => [
-            ref,
-            {
-              ...(label !== undefined ? { label } : {}),
-              ...(markdown !== undefined ? { body: markdown } : {}),
-            },
-          ]),
+          canvas.nodes.flatMap((node) => {
+            if (node.type !== 'file') return []
+            const loaded = graph.get(node.file)
+            if (loaded === undefined || loaded === null) return []
+            return [
+              [
+                node.file,
+                {
+                  ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
+                  ...(loaded.name !== undefined ? { name: loaded.name } : {}),
+                  ...(loaded.body !== undefined ? { body: loaded.body } : {}),
+                  ...(loaded.canvas !== undefined ? { canvas: loaded.canvas } : {}),
+                },
+              ],
+            ]
+          }),
         ),
       }
     },

@@ -10,6 +10,7 @@ import { LineBreaker } from 'css-line-break'
 import { selectCanvasFragment } from '../../canvas-fragment.js'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
+import { type ReferenceSeams, withReferenceSeams } from '../../references/seams.js'
 import type {
   Appearance,
   BlockquoteNode,
@@ -221,6 +222,13 @@ export interface MdastLayoutOptions {
    * `title` when known.
    */
   readonly resolveEmbed?: (documentId: string) => EmbeddedDocument | undefined
+  /**
+   * Every reference seam at once, built by `referenceSeams` from what a
+   * keeper loaded. The form a composition root passes: the individual
+   * seams above stay for a caller probing one in isolation, but a root
+   * that hands over the bundle cannot forget one of them.
+   */
+  readonly references?: ReferenceSeams
   /**
    * Draws a canvas-targeted embed's miniature into the box the typesetter
    * reserves for it. The typesetter owns the frame, the title and the
@@ -1462,7 +1470,7 @@ export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions):
  * shape `layoutSpatialCanvas` uses for `parseBody`.
  */
 export function resolveTheme(options: MdastLayoutOptions): ResolvedMdastOptions {
-  return { ...options, theme: options.theme ?? MARKDOWN_THEME_NODE }
+  return { ...withReferenceSeams(options), theme: options.theme ?? MARKDOWN_THEME_NODE }
 }
 
 /** `MdastLayoutOptions` after `resolveTheme` — `theme` is no longer optional. */
