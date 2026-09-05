@@ -129,17 +129,37 @@ export default defineConfig({
 
 CLI: `vitest --browser.traceView`. Records a DOM snapshot at every interaction, assertion and
 `page.mark`, and replays them step by step — interacted elements highlighted, failed steps
-in red, keyboard navigation — in the browser UI, the Vitest UI and the HTML reporter, for
-local runs and CI failures alike. Provider-independent, no separate viewer. Artifacts land
-under `.vitest/`. `recordCanvas` includes canvas pixels but weakens the replay iframe's
-sandbox (canvas redraw needs script execution); `inlineImages` embeds image data so a
-single-file HTML report stays portable. Pair it with the single-file HTML reporter
-(`resources/configuration.md`) to upload one `index.html` from CI.
+in red, keyboard navigation — in the browser UI, the Vitest UI and the HTML reporter.
+Provider-independent, no separate viewer. `recordCanvas` includes canvas pixels but weakens
+the replay iframe's sandbox (canvas redraw needs script execution); `inlineImages` embeds
+image data so a single-file HTML report stays portable.
 
-Why it matters here: this records DOM snapshots rather than every served resource, which is
-what made Playwright's `snapshots: true` cost 302MB per 16 files. Whether it is the missing
-DOM view at a fraction of the size is a HYPOTHESIS until measured on the same subset
-(`resources/vitest-upgrade.md`).
+**The flag alone persists nothing.** Measured on `apps/web`'s 20 page files (79 tests): with
+`--browser.traceView` and the default reporter, `.vitest/` held only one failure's Playwright
+trace copy. The replays materialise through the HTML reporter (`--reporter=html`, which needs
+`@vitest/ui`) or `vitest --ui`; `pnpm test:browser:replay` is the wired-up form and writes
+`.vitest/index.html`.
+
+**It is the DOM view the default trace lacks, at a size that does not matter.** Same 20 files:
+
+| run | `.vitest/ui/html.meta.json.gz` | Playwright traces kept |
+|---|---|---|
+| HTML reporter only | 177KB | 0 (all passed) |
+| HTML reporter + `traceView` | 774KB (7.8MB uncompressed, 251 snapshots) | 55KB (one failure) |
+
+Against Playwright's `snapshots: true` at 302MB for 16 page files, the replay costs ~600KB
+for every test in the subset, passing ones included — so it is a default, where the
+Playwright DOM recording is a one-file tool. Runtime: two paired rounds on the same subset
+measured 40.4s → 44.0s and 39.1s → 40.1s with the flag on, which is inside the noise of two
+samples; re-measure before calling it free or costly. What it does not replace: the
+Playwright trace still carries the network log and the provider's own screenshots.
+
+Not a caveat about the flag, but found by the measurement: the 20-file page subset failed
+`BrowserDocumentPage.rename`'s Escape test in three of seven runs — twice under `traceView`,
+once without it, that time alongside a `delete-confirm` FOCUS test — and passed it alone
+under the flag and in the quiet 196-file run. That is the focus-contention shape above, reached by running
+exactly the IndexedDB page files together, and three occurrences is past the
+root-cause-lane threshold (`resources/stability-checks.md`) if it shows on main.
 
 ## Dependency optimisation
 

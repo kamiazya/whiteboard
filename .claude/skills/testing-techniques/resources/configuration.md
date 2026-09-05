@@ -117,7 +117,11 @@ export default defineConfig({ test: { reporters: [['html', { singleFile: true }]
 ```
 
 Inlines the UI assets, metadata and attachments — including `traceView` replays — into one
-`index.html`, which is the shape a CI artifact wants.
+`index.html`, which is the shape a CI artifact wants. The multi-file form measured 1.7MB for
+20 page files with replays, of which ~0.9MB is the UI's own static assets; the report data
+itself was 774KB gzipped with replays against 177KB without (`browser-mode.md` › Traces).
+`pnpm test:browser:replay` runs the three browser projects with `traceView` and this
+reporter.
 
 ### Merging reports across environments
 

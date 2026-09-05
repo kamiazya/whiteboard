@@ -73,7 +73,8 @@ in a file named after a version, which only a reader who already knows the featu
 ```bash
 pnpm test --project <name>              # nearest layer (names: test-layer-selection)
 pnpm test:browser                       # the three real-browser projects
-pnpm test:browser:trace                 # + DOM snapshots — ONE failing file only (23GB otherwise)
+pnpm test:browser:replay                # + DOM replay of EVERY test in .vitest/index.html (~1MB per 100 tests)
+pnpm test:browser:trace                 # + Playwright DOM snapshots — ONE failing file only (23GB otherwise)
 for i in 1 2 3 4 5; do pnpm exec vitest run <file>; done   # what CI's stress step does
 pnpm lint                               # includes the GritQL flake-shape plugin
 pnpm test:scripts                       # plugin fixture guard + quarantine budget

@@ -29,7 +29,9 @@ Vite ≥ 6.4 and Node ≥ 22.12; the catalog holds Vite 8.2 and `.node-version` 
    `web-jsdom` files failed on `expected undefined to be 'blob:stubbed'`, which is the
    wrong-Node-major shape `local-node-version.test.ts` names, not the upgrade.
 5. **Re-measure what a number pinned**: the browser title budget's forced-failure recipe,
-   the trace size baseline, any timeout sized on a measurement.
+   the trace size baseline, any timeout sized on a measurement. Measure a new feature on the
+   same subset the old number came from, and read the artifact, not the flag's description —
+   `traceView` wrote nothing at all until a reporter that renders it was attached.
 6. Rewrite the resources to the shipped state and delete any version tags.
 
 ## What the 4 → 5 move changed on this tree (2026-09-05)
@@ -44,5 +46,6 @@ Vite ≥ 6.4 and Node ≥ 22.12; the catalog holds Vite 8.2 and `.node-version` 
 | `clearMocks` default `true` | — | green without pre-adoption |
 | artifacts under `.vitest/` (repo root, for every project) | `.gitignore`, AGENTS.md, the title-budget guard's header | `.vitest-attachments/` → `.vitest/`; the attachment name shape re-measured, budget unchanged (`configuration.md` › Artifacts) |
 | `--repeats` | CI `stress-changed-tests` | a `--repeats=3` pass added beside the five fresh-process runs |
+| `browser.traceView` | the 23GB Playwright DOM-snapshot path | measured on 20 page files: the flag alone persists nothing; with the html reporter (`@vitest/ui` added) the replays cost 774KB against 177KB without — `pnpm test:browser:replay` (`browser-mode.md` › Traces) |
 | `sequential`, worker ids, `Assertion<R, T>`, inline projects, `browser.api`, removed entrypoints, `-t` chain, `toThrow('')` | 0 | — |
 | nested `projects` | — | **still not adopted**: `vitest-projects.mjs` regex-scans the root config |
