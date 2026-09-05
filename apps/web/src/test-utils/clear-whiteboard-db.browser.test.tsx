@@ -98,6 +98,41 @@ describe('clearWhiteboardDb', () => {
     expect(await databaseExists()).toBe(false)
   })
 
+  it('keeps deleting while a page tail is still re-creating the database', async () => {
+    // What an unmounted page does: its workspace-record save runs on, opens
+    // the database BY NAME, and re-creates it after the deletion succeeded.
+    // Measured at 100ms with a real page; a timer stands in for it here so
+    // the case is deterministic and names no page.
+    // The state every real call is made in: the previous test wrote, so the
+    // database is there to be deleted. Without this the helper would take its
+    // "nothing was written, nothing can be mid-write" fast path and the case
+    // would be about a situation that never happens.
+    ;(await openHeld()).close()
+    expect(await databaseExists()).toBe(true)
+
+    let writes = 0
+    const tail = setInterval(() => {
+      if (writes >= 3) {
+        clearInterval(tail)
+        return
+      }
+      writes += 1
+      void openHeld().then((db) => db.close())
+    }, 60)
+
+    try {
+      await clearWhiteboardDb()
+      // The old contract ends here, and this is where it was wrong: the
+      // database is gone at this instant and back a tick later.
+      expect(await databaseExists()).toBe(false)
+      await new Promise((resolve) => setTimeout(resolve, 300))
+      expect(await databaseExists()).toBe(false)
+      expect(writes).toBeGreaterThan(0)
+    } finally {
+      clearInterval(tail)
+    }
+  })
+
   it('waits out a blocked deletion instead of resolving over it', async () => {
     // The whole contract: when this resolves, the database is gone. A
     // version that settles on `blocked` hands the next test a database it
