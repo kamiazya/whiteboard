@@ -317,6 +317,7 @@ export function BrowserDocumentPage({
     setBookmarkArmed(0)
     setPreview(null)
     setSelectedThreadId(null)
+    setComposeAnchor(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same

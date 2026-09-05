@@ -549,6 +549,11 @@ export function DaemonDocumentPage({
     setBookmarkArmed(0)
     setPreview(null)
     setSelectedThreadId(null)
+    // A passage inside the DEPARTED document's body: submitted after a
+    // switch it would open a conversation on the arrived document about a
+    // sentence nobody there wrote. (`scoped-screen-state.test.ts` does not
+    // scan this page — see its glob — so this reset is by hand.)
+    setComposeAnchor(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
