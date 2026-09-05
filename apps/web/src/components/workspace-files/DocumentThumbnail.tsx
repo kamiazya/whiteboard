@@ -72,7 +72,11 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
         // no layout, so a selector aimed one level too high still passes every
         // test and draws a 2000px canvas inside a 24px row in a real browser.
         <span
-          className="size-full [&>svg]:size-full"
+          // The render lands well after the card (measured on a switch: 430ms
+          // later), so it arrives as a pop over a placeholder icon. A fade
+          // makes it read as the picture developing; the global
+          // prefers-reduced-motion floor collapses it.
+          className="size-full animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out) [&>svg]:size-full"
           // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
           dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
         />
