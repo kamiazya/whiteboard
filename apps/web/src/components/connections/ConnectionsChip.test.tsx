@@ -1,6 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
-import { ConnectionsChip } from './ConnectionsChip.js'
+import {
+  type ConnectionsBacklink,
+  ConnectionsChip,
+  ConnectionsPanel,
+  type ConnectionsPanelProps,
+} from './ConnectionsChip.js'
 
 const TWO = [
   {
@@ -18,9 +24,43 @@ const TWO = [
   },
 ]
 
+/**
+ * The opener and the panel the way the document page composes them: the
+ * page holds the inspector slot, the chip asks for it, the panel shows in
+ * it. The chip alone opens nothing — that is the point of the split.
+ */
+function Connections({
+  backlinks,
+  ...panel
+}: Omit<ConnectionsPanelProps, 'backlinks'> & {
+  readonly backlinks: readonly ConnectionsBacklink[] | null
+}) {
+  const [open, setOpen] = useState(false)
+  return (
+    <>
+      <ConnectionsChip backlinks={backlinks} open={open} onToggle={() => setOpen((o) => !o)} />
+      {open && backlinks !== null && <ConnectionsPanel backlinks={backlinks} {...panel} />}
+    </>
+  )
+}
+
 describe('ConnectionsChip', () => {
+  it('is controlled by the page: aria-expanded follows `open`, a press only asks', () => {
+    const onToggle = vi.fn()
+    const { rerender } = render(
+      <ConnectionsChip backlinks={TWO} open={false} onToggle={onToggle} />,
+    )
+    const chip = screen.getByRole('button', { name: /connections/i })
+    expect(chip.getAttribute('aria-expanded')).toBe('false')
+    fireEvent.click(chip)
+    expect(onToggle).toHaveBeenCalledTimes(1)
+    expect(chip.getAttribute('aria-expanded')).toBe('false')
+    rerender(<ConnectionsChip backlinks={TWO} open={true} onToggle={onToggle} />)
+    expect(chip.getAttribute('aria-expanded')).toBe('true')
+  })
+
   it('shows the backlink count and opens the panel with sources and contexts', () => {
-    render(<ConnectionsChip backlinks={TWO} onOpen={() => {}} />)
+    render(<Connections backlinks={TWO} onOpen={() => {}} />)
     const chip = screen.getByRole('button', { name: /connections/i })
     expect(chip.textContent).toContain('2')
     expect(screen.queryByRole('region', { name: /connections/i })).toBeNull()
@@ -36,7 +76,7 @@ describe('ConnectionsChip', () => {
   it('shows unlinked mentions as their own section, and navigates on click', () => {
     const onOpen = vi.fn()
     render(
-      <ConnectionsChip
+      <Connections
         backlinks={TWO}
         mentions={[
           {
@@ -68,25 +108,20 @@ describe('ConnectionsChip', () => {
       contexts: ['…Release plan の前提が…'],
     }
     const { unmount } = render(
-      <ConnectionsChip
-        backlinks={TWO}
-        mentions={[mention]}
-        onOpen={() => {}}
-        onLinkify={onLinkify}
-      />,
+      <Connections backlinks={TWO} mentions={[mention]} onOpen={() => {}} onLinkify={onLinkify} />,
     )
     fireEvent.click(screen.getByRole('button', { name: /connections/i }))
     fireEvent.click(screen.getByRole('button', { name: /link it/i }))
     expect(onLinkify).toHaveBeenCalledWith(expect.objectContaining({ path: 'standup' }))
     unmount()
 
-    render(<ConnectionsChip backlinks={TWO} mentions={[mention]} onOpen={() => {}} />)
+    render(<Connections backlinks={TWO} mentions={[mention]} onOpen={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /connections/i }))
     expect(screen.queryByRole('button', { name: /link it/i })).toBeNull()
   })
 
   it('hides the mentions section when there are none', () => {
-    render(<ConnectionsChip backlinks={TWO} mentions={[]} onOpen={() => {}} />)
+    render(<Connections backlinks={TWO} mentions={[]} onOpen={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /connections/i }))
     expect(screen.getByRole('region', { name: /connections/i }).textContent).not.toContain(
       'Mentioned, not linked',
@@ -95,19 +130,19 @@ describe('ConnectionsChip', () => {
 
   it('navigates to the source document when its row is clicked', () => {
     const onOpen = vi.fn()
-    render(<ConnectionsChip backlinks={TWO} onOpen={onOpen} />)
+    render(<Connections backlinks={TWO} onOpen={onOpen} />)
     fireEvent.click(screen.getByRole('button', { name: /connections/i }))
     fireEvent.click(screen.getByRole('button', { name: /sprint notes/i }))
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'notes' }))
   })
 
   it('renders a zero count rather than hiding — the empty state is the invitation', () => {
-    render(<ConnectionsChip backlinks={[]} onOpen={() => {}} />)
+    render(<Connections backlinks={[]} onOpen={() => {}} />)
     expect(screen.getByRole('button', { name: /connections/i }).textContent).toContain('0')
   })
 
   it('stays quiet while backlinks are not loaded yet', () => {
-    render(<ConnectionsChip backlinks={null} onOpen={() => {}} />)
+    render(<Connections backlinks={null} onOpen={() => {}} />)
     expect(screen.getByRole('button', { name: /connections/i }).hasAttribute('disabled')).toBe(true)
   })
 })

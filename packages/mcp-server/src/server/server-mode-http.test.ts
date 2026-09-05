@@ -23,6 +23,17 @@ const { mockServe, getLastServer } = vi.hoisted(() => {
 
 vi.mock('@hono/node-server', () => ({ serve: mockServe }))
 vi.mock('./app.js', () => ({ createApp: vi.fn(() => ({ fetch: vi.fn() })) }))
+// The root now builds real ServerDeps before createApp (the /api/v1 mount
+// fix); this unit harness is about listen/close mechanics, so the store
+// layer is stubbed — unmocked, ensureWorkspaceId/getDb would open the
+// contributor's real data dir and time the test out.
+vi.mock('./current-workspace.js', () => ({ ensureWorkspaceId: vi.fn(async () => 'ws') }))
+vi.mock('./store/db/index.js', () => ({ getDb: vi.fn(async () => ({})) }))
+vi.mock('../di/container.js', () => ({
+  createContainer: vi.fn(() => ({})),
+  resolveServerDeps: vi.fn(() => ({})),
+}))
+vi.mock('../di/store-local.module.js', () => ({ createStoreLocalModule: vi.fn(() => ({})) }))
 
 import { createApp } from './app.js'
 import { startServerModeHttp } from './server-mode-http.js'
@@ -37,6 +48,21 @@ function makeOptions() {
   }
 }
 
+/**
+ * The mock server, once startServerModeHttp has actually reached serve().
+ * The root now awaits its ServerDeps construction first, so lastServer is
+ * null for a few microtasks after the call — reading it synchronously (the
+ * old pattern) hands the test a null and the 'listening' emit goes nowhere.
+ */
+async function serverOnceServing() {
+  await vi.waitFor(() => {
+    expect(mockServe).toHaveBeenCalled()
+  })
+  const server = getLastServer()
+  expect(server).not.toBeNull()
+  return server!
+}
+
 describe('startServerModeHttp', () => {
   afterEach(() => {
     vi.clearAllMocks()
@@ -45,7 +71,7 @@ describe('startServerModeHttp', () => {
   it('resolves with port, host, startedAt, resolvedDataDir, and close on successful startup', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     setImmediate(() => server.emit('listening'))
 
     const result = await startPromise
@@ -60,7 +86,7 @@ describe('startServerModeHttp', () => {
   it('close() calls server.close() exactly once and resolves', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     setImmediate(() => server.emit('listening'))
     const { close } = await startPromise
 
@@ -72,7 +98,7 @@ describe('startServerModeHttp', () => {
   it('close() is idempotent — subsequent calls do nothing', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     setImmediate(() => server.emit('listening'))
     const { close } = await startPromise
 
@@ -86,7 +112,7 @@ describe('startServerModeHttp', () => {
   it('wires getStatus() to report the always-available server-placeholder UI', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     setImmediate(() => server.emit('listening'))
     await startPromise
 
@@ -124,7 +150,7 @@ describe('startServerModeHttp', () => {
       ...makeOptions(),
       fileGcSweeperFactory: () => sweeper,
     })
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     setImmediate(() => server.emit('listening'))
     const { close } = await startPromise
 
@@ -140,7 +166,7 @@ describe('startServerModeHttp', () => {
   it('rejects when the server emits an error before listening', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)
-    const server = getLastServer()!
+    const server = await serverOnceServing()
     const portError = Object.assign(new Error('EADDRINUSE'), { code: 'EADDRINUSE' })
     setImmediate(() => server.emit('error', portError))
 

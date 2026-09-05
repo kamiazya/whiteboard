@@ -6,10 +6,93 @@
   "description": "The daemon's browser-safe client half: the /api contracts the web app parses (Zod, single source of truth), the fetch/WS/SSE document backends, the api-client wrapper, and the shared backend contract test suites. Runs unchanged in the browser; no node:*, no server internals.",
   "type": "module",
   "exports": {
-    "./package.json": "./package.json",
-    "./*": {
-      "types": "./src/*.ts",
-      "import": "./src/*.ts"
+    "./api-client": {
+      "types": "./src/api-client.ts",
+      "import": "./src/api-client.ts"
+    },
+    "./api-contracts/branches": {
+      "types": "./src/api-contracts/branches.ts",
+      "import": "./src/api-contracts/branches.ts"
+    },
+    "./api-contracts/document": {
+      "types": "./src/api-contracts/document.ts",
+      "import": "./src/api-contracts/document.ts"
+    },
+    "./api-contracts/document-url": {
+      "types": "./src/api-contracts/document-url.ts",
+      "import": "./src/api-contracts/document-url.ts"
+    },
+    "./api-contracts/errors": {
+      "types": "./src/api-contracts/errors.ts",
+      "import": "./src/api-contracts/errors.ts"
+    },
+    "./api-contracts/fonts": {
+      "types": "./src/api-contracts/fonts.ts",
+      "import": "./src/api-contracts/fonts.ts"
+    },
+    "./api-contracts/index": {
+      "types": "./src/api-contracts/index.ts",
+      "import": "./src/api-contracts/index.ts"
+    },
+    "./api-contracts/pairing": {
+      "types": "./src/api-contracts/pairing.ts",
+      "import": "./src/api-contracts/pairing.ts"
+    },
+    "./api-contracts/pairing-link": {
+      "types": "./src/api-contracts/pairing-link.ts",
+      "import": "./src/api-contracts/pairing-link.ts"
+    },
+    "./api-contracts/roundtrip.test-helper": {
+      "types": "./src/api-contracts/roundtrip.test-helper.ts",
+      "import": "./src/api-contracts/roundtrip.test-helper.ts"
+    },
+    "./api-contracts/runtime": {
+      "types": "./src/api-contracts/runtime.ts",
+      "import": "./src/api-contracts/runtime.ts"
+    },
+    "./daemon-backend": {
+      "types": "./src/daemon-backend.ts",
+      "import": "./src/daemon-backend.ts"
+    },
+    "./document-backend-contract": {
+      "types": "./src/document-backend-contract.ts",
+      "import": "./src/document-backend-contract.ts"
+    },
+    "./select-document-transport": {
+      "types": "./src/select-document-transport.ts",
+      "import": "./src/select-document-transport.ts"
+    },
+    "./sse-backend": {
+      "types": "./src/sse-backend.ts",
+      "import": "./src/sse-backend.ts"
+    },
+    "./sse-stream-hub": {
+      "types": "./src/sse-stream-hub.ts",
+      "import": "./src/sse-stream-hub.ts"
+    },
+    "./sync-sse-contract": {
+      "types": "./src/sync-sse-contract.ts",
+      "import": "./src/sync-sse-contract.ts"
+    },
+    "./test-utils/document-backend-contract": {
+      "types": "./src/test-utils/document-backend-contract.ts",
+      "import": "./src/test-utils/document-backend-contract.ts"
+    },
+    "./test-utils/sse-stream-source-contract": {
+      "types": "./src/test-utils/sse-stream-source-contract.ts",
+      "import": "./src/test-utils/sse-stream-source-contract.ts"
+    },
+    "./token-store": {
+      "types": "./src/token-store.ts",
+      "import": "./src/token-store.ts"
+    },
+    "./ws-messages": {
+      "types": "./src/ws-messages.ts",
+      "import": "./src/ws-messages.ts"
+    },
+    "./ws-protocol": {
+      "types": "./src/ws-protocol.ts",
+      "import": "./src/ws-protocol.ts"
     }
   },
   "scripts": {
@@ -20,13 +103,6 @@
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/context-zone": "^2.10.0",
-    "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
-    "@opentelemetry/instrumentation": "^0.221.0",
-    "@opentelemetry/instrumentation-fetch": "^0.221.0",
-    "@opentelemetry/resources": "^2.10.0",
-    "@opentelemetry/sdk-trace-web": "^2.10.0",
-    "@opentelemetry/semantic-conventions": "^1.43.0",
     "zod": "catalog:"
   },
   "devDependencies": {

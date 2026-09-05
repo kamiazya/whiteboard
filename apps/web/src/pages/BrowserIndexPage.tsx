@@ -185,7 +185,10 @@ export function BrowserIndexPage({
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
   const [pendingDelete, setPendingDelete] = useState<{
-    path: string
+    // A LIST, so one confirmation and one handler serve both the single
+    // delete and the selection's bulk delete. A single delete is a list of
+    // one, and keeps naming its document.
+    paths: readonly string[]
     displayName: string
     kind?: DocumentKind
   } | null>(null)
@@ -204,13 +207,23 @@ export function BrowserIndexPage({
       // would hand the user an error screen the next time they open the
       // editor.
       const pointed = await pointer.get()
-      const target = await index.resolveDocument({
-        workspaceId: getBrowserWorkspaceId(),
-        path: pendingDelete.path,
-      })
-      await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: pendingDelete.path })
-      if (pointed !== null && target !== null && pointed === target.documentId) {
-        await pointer.clear()
+      // Sequential, and each failure recorded rather than thrown: one path
+      // that cannot be deleted must not abandon the rest, and the person has
+      // to be told how many did not go.
+      const failed: string[] = []
+      for (const path of pendingDelete.paths) {
+        try {
+          const target = await index.resolveDocument({
+            workspaceId: getBrowserWorkspaceId(),
+            path,
+          })
+          await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path })
+          if (pointed !== null && target !== null && pointed === target.documentId) {
+            await pointer.clear()
+          }
+        } catch {
+          failed.push(path)
+        }
       }
       setSnapshots(await listLocalDocuments(index, clock))
       // The delete just moved a document INTO the trash — re-count so the
@@ -220,6 +233,33 @@ export function BrowserIndexPage({
       // The tree view holds its own copy of the list; this identity change is
       // its signal to re-read, same contract as the daemon page's `revision`.
       setFilesRevision((revision) => revision + 1)
+      if (failed.length > 0) {
+        const attempted = pendingDelete.paths.length
+        // Held open on the count, because the list behind it has already
+        // changed (refreshed above): the ones that went are gone, and closing
+        // silently would read as "all deleted". The panel's own pruning
+        // leaves exactly the failures selected.
+        //
+        // Narrowed to what failed, so pressing Delete again retries exactly
+        // those. This browser index no-ops a delete for an absent row, so a
+        // re-send would be harmless here — but the daemon page answers 404
+        // and its retry genuinely diverged, and one operation should not
+        // converge differently per keeper.
+        const only = failed.length === 1 ? snapshots?.find((s) => s.path === failed[0]) : undefined
+        setPendingDelete({
+          paths: failed,
+          // A lone survivor gets its NAME back: `Delete "2 documents"?` would
+          // be the count of the attempt, not of what it now offers to do.
+          displayName: only?.name ?? (failed[0] as string),
+          ...(only?.kind === undefined ? {} : { kind: only.kind }),
+        })
+        setDeleteError(
+          failed.length === attempted
+            ? 'Failed to delete the document from this browser.'
+            : `${failed.length} of ${attempted} could not be deleted.`,
+        )
+        return
+      }
       setPendingDelete(null)
     } catch {
       setDeleteError('Failed to delete the document from this browser.')
@@ -307,7 +347,10 @@ export function BrowserIndexPage({
           onFolderChange={setRoutedFolder}
           onOpenDocument={onOpenDocument}
           onRequestDelete={(path, displayName, kind) =>
-            setPendingDelete({ path, displayName, kind })
+            setPendingDelete({ paths: [path], displayName, kind })
+          }
+          onRequestDeleteMany={(paths) =>
+            setPendingDelete({ paths, displayName: `${paths.length} documents` })
           }
           revision={filesRevision}
         />
@@ -326,10 +369,22 @@ export function BrowserIndexPage({
         </button>
       )}
       <DeleteDocumentDialog
-        pending={pendingDelete}
+        pending={
+          pendingDelete === null
+            ? null
+            : {
+                displayName: pendingDelete.displayName,
+                ...(pendingDelete.kind === undefined ? {} : { kind: pendingDelete.kind }),
+                ...(pendingDelete.paths.length > 1 ? { count: pendingDelete.paths.length } : {}),
+              }
+        }
         busy={deleting}
         error={deleteError}
-        action="delete-document-browser"
+        action={
+          pendingDelete !== null && pendingDelete.paths.length > 1
+            ? 'delete-documents-browser'
+            : 'delete-document-browser'
+        }
         onCancel={() => {
           setPendingDelete(null)
           setDeleteError(null)
