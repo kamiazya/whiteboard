@@ -71,7 +71,35 @@ function matchedAfter(body: string, at: number, suffix: string): number {
   return shared
 }
 
-export function resolveTextAnchor(body: string, anchor: TextAnchor): ResolvedTextAnchor {
+/**
+ * Where the CRDT still holds this passage, when it does.
+ *
+ * A Loro rich-text mark on the body belongs to the CHARACTERS it covers, so
+ * it followed every edit that moved them — including a concurrent one merged
+ * from another peer, which is precisely what offsets and a quote cannot
+ * reproduce. It is the live answer; the quote below is the durable one.
+ */
+export interface LivePassage {
+  readonly start: number
+  readonly end: number
+}
+
+export function resolveTextAnchor(
+  body: string,
+  anchor: TextAnchor,
+  live?: LivePassage,
+): ResolvedTextAnchor {
+  // The mark wins outright rather than being scored against the quote. It is
+  // not a better guess at where the passage is — it IS where the passage is,
+  // maintained by the same structure that moved the text. Reading the quote
+  // afterwards could only disagree with the truth.
+  //
+  // Absent means "this document has no mark for that thread", which happens
+  // for every document that arrived through a markdown file (marks do not
+  // travel through the text) and for every thread written before marks
+  // existed. That is a reason to ask the quote, never a reason to orphan.
+  if (live !== undefined) return { kind: 'placed', start: live.start, end: live.end }
+
   const { exact, prefix = '', suffix = '' } = anchor.quote
   // The stored offsets first. This is a COST shortcut, not a rule about which
   // answer is right: on consistent data the search below reproduces it (the
@@ -129,7 +157,10 @@ export function resolveTextAnchor(body: string, anchor: TextAnchor): ResolvedTex
  */
 export function markdownAnchorResolver(
   body: string | null,
-): ((thread: { readonly anchor: AnnotationAnchor }) => 'placed' | 'orphaned') | undefined {
+  marks?: ReadonlyMap<string, LivePassage>,
+):
+  | ((thread: { readonly id: string; readonly anchor: AnnotationAnchor }) => 'placed' | 'orphaned')
+  | undefined {
   if (body === null) return undefined
   return (thread) => {
     // A spatial anchor on a markdown document has nothing here to be judged
@@ -137,6 +168,7 @@ export function markdownAnchorResolver(
     // have. Saying `placed` is the honest answer for "not something I can
     // tell you about".
     if (thread.anchor.kind !== 'text') return 'placed'
-    return resolveTextAnchor(body, thread.anchor).kind === 'placed' ? 'placed' : 'orphaned'
+    const live = marks?.get(thread.id)
+    return resolveTextAnchor(body, thread.anchor, live).kind === 'placed' ? 'placed' : 'orphaned'
   }
 }

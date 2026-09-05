@@ -31,7 +31,7 @@ import {
 } from '@codemirror/state'
 import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
-import { resolveTextAnchor } from '@/lib/text-anchor'
+import { type LivePassage, resolveTextAnchor } from '@/lib/text-anchor'
 
 /** Where one conversation sits in the body as it stands right now. */
 export interface PlacedThread {
@@ -51,6 +51,7 @@ export interface PlacedThread {
 export function placeThreads(
   body: string,
   threads: readonly CommentThread[],
+  marks?: ReadonlyMap<string, LivePassage>,
 ): readonly PlacedThread[] {
   const placed: PlacedThread[] = []
   for (const thread of threads) {
@@ -58,7 +59,7 @@ export function placeThreads(
     // surface this document has not got, and there is nothing here to draw
     // it over. `markdownAnchorResolver` says the same thing for the rail.
     if (thread.anchor.kind !== 'text') continue
-    const resolved = resolveTextAnchor(body, thread.anchor)
+    const resolved = resolveTextAnchor(body, thread.anchor, marks?.get(thread.id))
     if (resolved.kind !== 'placed') continue
     placed.push({
       threadId: thread.id,
@@ -79,6 +80,19 @@ export function placeThreads(
 export interface AnnotationProjection {
   readonly threads: readonly CommentThread[]
   readonly selectedThreadId: string | null
+  /**
+   * Where the CRDT still holds each passage, by thread id.
+   *
+   * Travels in the same effect as the threads for the same reason the
+   * selection does: a mark map applied a frame apart from the thread list it
+   * describes would place a passage using a range that belongs to a document
+   * the pane has not been shown yet.
+   *
+   * Absent for a host that has no marks to give — a document read out of a
+   * markdown file, or one written before marks existed — which `placeThreads`
+   * reads as "ask the quote".
+   */
+  readonly marks?: ReadonlyMap<string, LivePassage>
 }
 
 export const setAnnotationProjection = StateEffect.define<AnnotationProjection>()
@@ -130,7 +144,7 @@ class ThreadGutterMarker extends GutterMarker {
 }
 
 function project(doc: string, projection: AnnotationProjection): AnnotationState {
-  const placed = placeThreads(doc, projection.threads)
+  const placed = placeThreads(doc, projection.threads, projection.marks)
   const marks = new RangeSetBuilder<Decoration>()
   // No empty-range branch, and that is a decision rather than an oversight:
   // CodeMirror throws on an empty mark decoration, and what stops one here is
