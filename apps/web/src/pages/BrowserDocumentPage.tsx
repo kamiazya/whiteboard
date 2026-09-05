@@ -44,6 +44,7 @@ import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.j
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
+import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
@@ -89,7 +90,6 @@ import {
   type LoroStoreLike,
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
-import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 

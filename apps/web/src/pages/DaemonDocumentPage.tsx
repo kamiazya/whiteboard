@@ -42,6 +42,7 @@ import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
+import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
   type MarkdownEmbedLoader,
@@ -82,7 +83,6 @@ import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
-import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
