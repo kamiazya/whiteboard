@@ -19,12 +19,12 @@
  * So it asks on BOTH the document's change notification and the published
  * value, rather than picking one. Measured in the running app: typing into a
  * markdown document in browser mode fires no `whiteboard:doc_changed` at all
- * (`dispatchIdentityEvent` returns early without a workspace identity, which
- * is why `useDirtyState`'s save dot stays clean there too), so an outline
- * driven by the event alone never updated. The published value is what
- * covers that; the event is what covers a change that arrives without one.
- * Asking twice for one state costs a map lookup — the version is the same,
- * so the second ask is answered from the memo.
+ * — `dispatchIdentityEvent` dispatches nothing unless a workspace identity is
+ * set, and the browser page sets none — so an outline driven by the event
+ * alone never updated. The published value is what covers that; the event is
+ * what covers a change that arrives without one. Asking twice for one state
+ * costs a map lookup — the version is the same, so the second ask is answered
+ * from the memo.
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'

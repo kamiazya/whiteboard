@@ -54,6 +54,7 @@ import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import {
@@ -732,9 +733,15 @@ export function DaemonDocumentPage({
     return () => setShellConnection(null)
   }, [authError, syncStatus, daemonBaseUrl])
 
-  // PNG, because the daemon's thumbnail endpoint validates a PNG signature
-  // on upload and rejects anything else.
-  const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
+  // Which pipeline draws it follows the KIND, in one shared place — asking
+  // the spatial exporter for a markdown document produced a valid 1x1 PNG
+  // that uploaded like any other, so every markdown version row here drew an
+  // empty box. PNG on both arms, because the daemon's thumbnail endpoint
+  // validates a PNG signature on upload and rejects anything else.
+  const getThumbnailBlob = useCallback(
+    () => captureBookmarkPicture(documentKind, { exportScene, body: markdownBody }),
+    [documentKind, exportScene, markdownBody],
+  )
   // The keeper this page's history belongs to. No provider is mounted here,
   // so this is the daemon backend over `DaemonApiContext`'s fetch — the
   // picture rides to the same route it always did, by the seam both pages

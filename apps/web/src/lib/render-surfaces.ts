@@ -78,10 +78,10 @@ export const RENDER_SURFACES = {
   'version-thumbnail': {
     pipeline: 'png-raster',
     kinds: {
-      spatial:
-        'not covered: written on every save and read by nothing — DocumentThumb has no call site',
-      markdown: 'not covered: the route predates markdown documents entirely',
+      spatial: 'covered',
+      markdown: 'covered',
     },
-    broker: 'not yet: whether this surface should exist at all is open (ADR-0027)',
+    broker:
+      'not yet: written once at save and read back as stored bytes, so there is no repeated render for an in-tab memo to join — and png-raster is deliberately outside brokeredPipelineSchema',
   },
 } satisfies Record<RenderSurfaceId, RenderSurface>
