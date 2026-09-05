@@ -198,7 +198,17 @@ export function FolderContentsList({
                   role="img"
                   aria-label="Changed since you last opened it"
                   data-testid="card-changed-dot"
-                  className="bg-primary absolute top-1 right-1 size-2.5 rounded-full"
+                  // A HUE, not `--primary`. This theme's primary is
+                  // `oklch(0.205 0 0)` — chroma zero — so the dot shipped
+                  // black in light mode and white in dark, reading as
+                  // punctuation rather than as a status. Blue is the unread
+                  // convention; a raw palette colour rather than a token
+                  // because the conflict badge below does the same, and
+                  // `--manipulation` is spoken for (it means selection and
+                  // handles on the canvas, not "something happened here").
+                  // The ring keeps it legible over a thumbnail of any
+                  // colour, which is what a real document renders as.
+                  className="absolute top-1 right-1 size-2.5 rounded-full bg-sky-500 ring-2 ring-background dark:bg-sky-400"
                 />
               )}
               {selection !== undefined && (
