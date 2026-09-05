@@ -151,7 +151,7 @@ Do not rediscover these; they are wired and tested.
   incremental path, `'snapshot'` for stored state, `'shallow-snapshot'`
   with a frontier for compaction (`document-store.ts`). The delta log is
   what the scoreboard above prices.
-- **Rich-text marks.** `configureTextStyle` REPLACES the config rather than
+- **Rich-text marks.** `configTextStyle` REPLACES the config rather than
   adding to it, so the complete set is configured at once —
   `markThreadPassages` derives it from every thread it can see, so no call
   site can forget. A mark belongs to the CHARACTERS: it follows edits and

@@ -74,7 +74,10 @@ implementations live in the composition roots.
 - A tree-node host opens containers through `mergeable-containers.ts`, never
   `setContainer`. The latter REPLACES what is at the key: measured, a second
   `setContainer` on an occupied key leaves `{}`, so writing a document twice
-  would wipe it. A document's own content containers stay REGULAR children
+  would wipe it. The one place `setContainer` is right is `copyNodeData`,
+  whose target is a node `createNode()` just minted — replacing on an empty
+  node replaces nothing, and it is what copies a container by KIND without a
+  hardcoded list of keys. A document's own content containers stay REGULAR children
   deliberately — pre-attached at creation, so no replica opens one first, and
   mergeable would cost 18.6% of the delta log to close a hazard that is
   already closed (`mergeable-containers.test.ts` carries the numbers).
