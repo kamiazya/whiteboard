@@ -820,7 +820,7 @@ export function DaemonDocumentPage({
     saving: savingVersion,
     outcome: saveVersionOutcome,
     run: runVersionSave,
-  } = useVersionSaveFlow(currentDocumentPathRef, async (label) => {
+  } = useVersionSaveFlow(currentDocumentPathRef, controller.path, async (label) => {
     // Narrowed by the precondition in `saveVersion` below, which never
     // calls `run` (so never reaches this body) while canvas is null.
     if (canvas === null) {

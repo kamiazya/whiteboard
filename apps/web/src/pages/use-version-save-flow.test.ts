@@ -52,7 +52,7 @@ describe('useVersionSaveFlow', () => {
           resolveSave = resolve
         }),
     )
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     let runPromise!: Promise<void>
     act(() => {
@@ -79,7 +79,7 @@ describe('useVersionSaveFlow', () => {
     const scopeRef = scope('doc-a')
     const commit = vi.fn()
     const save = vi.fn((): Promise<() => void> => Promise.reject(new Error('boom')))
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     await act(async () => {
       await result.current.run('a bookmark').catch(() => undefined)
@@ -99,7 +99,7 @@ describe('useVersionSaveFlow', () => {
           resolveSave = resolve
         }),
     )
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     let firstRun!: Promise<void>
     act(() => {
@@ -121,7 +121,7 @@ describe('useVersionSaveFlow', () => {
   it('clears a prior outcome to null at the start of a new run', async () => {
     const scopeRef = scope('doc-a')
     const save = vi.fn((): Promise<() => void> => Promise.reject(new Error('boom')))
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     await act(async () => {
       await result.current.run('first').catch(() => undefined)
@@ -154,7 +154,7 @@ describe('useVersionSaveFlow', () => {
           resolveSave = resolve
         }),
     )
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     let runPromise!: Promise<void>
     act(() => {
@@ -183,7 +183,7 @@ describe('useVersionSaveFlow', () => {
           rejectSave = reject
         }),
     )
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, 'doc-1', save))
 
     let runPromise!: Promise<void>
     act(() => {
@@ -200,19 +200,20 @@ describe('useVersionSaveFlow', () => {
     expect(result.current.saving).toBe(true)
   })
 
-  it('clearOutcome resets outcome to null', async () => {
+  it('a scope-key change clears the outcome — the hook owns its own reset', async () => {
     const scopeRef = scope('doc-a')
     const save = vi.fn((): Promise<() => void> => Promise.reject(new Error('boom')))
-    const { result } = renderHook(() => useVersionSaveFlow(scopeRef, save))
+    const { result, rerender } = renderHook(
+      ({ key }: { key: string }) => useVersionSaveFlow(scopeRef, key, save),
+      { initialProps: { key: 'doc-1' } },
+    )
 
     await act(async () => {
       await result.current.run('first').catch(() => undefined)
     })
     expect(result.current.outcome).toBe('failed')
 
-    act(() => {
-      result.current.clearOutcome()
-    })
+    rerender({ key: 'doc-2' })
     expect(result.current.outcome).toBe(null)
   })
 })

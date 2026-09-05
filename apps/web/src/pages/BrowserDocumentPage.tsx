@@ -312,7 +312,8 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    clearSaveVersionOutcome()
+    // saveVersionOutcome clears itself: useVersionSaveFlow owns that reset,
+    // keyed on the same documentId this effect watches.
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
@@ -638,8 +639,7 @@ export function BrowserDocumentPage({
     saving: savingVersion,
     outcome: saveVersionOutcome,
     run: runVersionSave,
-    clearOutcome: clearSaveVersionOutcome,
-  } = useVersionSaveFlow(currentDocumentIdRef, async (label) => {
+  } = useVersionSaveFlow(currentDocumentIdRef, documentId, async (label) => {
     // Narrowed by the precondition in `saveVersionFromPanel` below, which
     // never calls `run` (so never reaches this body) while either is null.
     if (versionsBackend === null || documentPath === null) {
