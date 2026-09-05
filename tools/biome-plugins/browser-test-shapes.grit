@@ -1,0 +1,34 @@
+language js
+
+// Shapes that fail only in a REAL browser (vitest browser mode), so the
+// plugin is scoped to *.browser.test.* in biome.json — a jsdom test that
+// types the same string is deterministic and has nothing to fix.
+// Guarded by .claude/scripts/biome-plugin.test.mjs (fixture pair).
+any {
+  // The eighth flake shape's companion (.claude/rules/integrator-flow.md):
+  // userEvent.keyboard / userEvent.type synthesize one key event per
+  // character, except that a character with no keycode (CJK, an em dash, a
+  // curly quote) is synthesized OUT OF BAND from the plain keystrokes around
+  // it — and under a loaded parallel browser run that is the part that goes
+  // missing. Measured as `'# Hello from an agent  edited here'`: both spaces
+  // present, the dash gone, indistinguishable from an edit that never
+  // reached the backend. The receiver is deliberately unbound (`$r`), so a
+  // `const user = userEvent.setup()` alias is caught the same as
+  // `userEvent` itself; template literals match too.
+  `$r.keyboard($s)` where {
+    $s <: r".*[^\x00-\x7F].*",
+    register_diagnostic(
+      span = $s,
+      message = "Non-ASCII in a keyboard() string: a character with no keycode is synthesized apart from the keystrokes around it and is the one that goes missing under load. Use an ASCII stand-in, or userEvent.fill(element, text) — one atomic value set — when the exact text matters (paste() for a contenteditable).",
+      severity = "error"
+    )
+  },
+  `$r.type($el, $s)` where {
+    $s <: r".*[^\x00-\x7F].*",
+    register_diagnostic(
+      span = $s,
+      message = "Non-ASCII in a type() string: a character with no keycode is synthesized apart from the keystrokes around it and is the one that goes missing under load. Use an ASCII stand-in, or userEvent.fill(element, text) — one atomic value set — when the exact text matters (paste() for a contenteditable).",
+      severity = "error"
+    )
+  }
+}

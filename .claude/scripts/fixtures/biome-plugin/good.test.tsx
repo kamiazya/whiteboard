@@ -14,9 +14,6 @@ export async function good() {
   })
 }
 
-export async function goodKeystrokes() {
-  await userEvent.keyboard('hello world')
-}
 
 export function goodTimers() {
   vi.useFakeTimers()
