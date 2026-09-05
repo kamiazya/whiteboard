@@ -1,4 +1,4 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { FileRefOption } from '../../lib/link-entries.js'
 /**
  * Canvas picker — the reference-entry surface for file nodes, used by the
  * palette's Document entry (create) and the context menu's "Change target"
@@ -11,21 +11,6 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
  * must behave identically where the app stylesheet is absent
  * (browser-mode component tests).
  */
-
-export interface FileRefOption {
-  /** Opaque reference stored as the file node's `file` value. */
-  readonly file: string
-  /** Human-readable name shown in the picker. */
-  readonly label: string
-  /**
-   * What the referenced document IS, used to size the node the picker
-   * creates. A markdown document renders its prose inside the node, which
-   * needs room a reference card does not — at the card's height not one
-   * block fits and the body silently does not render at all. Absent keeps
-   * the card-sized default.
-   */
-  readonly kind?: DocumentKind
-}
 
 export interface DocumentPickerDialogProps {
   readonly title: string

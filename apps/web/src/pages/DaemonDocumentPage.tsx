@@ -67,7 +67,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
-import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
+import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -1109,16 +1109,12 @@ export function DaemonDocumentPage({
                       externalVersion={externalVersion}
                       theme={resolvedTheme}
                       // File-node reference = the target's immutable id (rename-
-                      // safe); the label shows its current path and the current
-                      // canvas is excluded. Legacy documents still carry path refs,
-                      // which resolveRefPath misses and switchDocument takes as-is.
-                      fileRefOptions={controller.documents
-                        .filter((entry) => entry.path !== canvas?.path)
-                        .map((entry) => ({
-                          file: entry.id,
-                          label: entry.path,
-                          kind: entry.kind,
-                        }))}
+                      // safe); the same rows the link picker offers (open document
+                      // excluded), so the two pickers cannot label one document two
+                      // ways — the label is the display name now, falling back to
+                      // the path. Legacy documents still carry path refs, which
+                      // resolveRefPath misses and switchDocument takes as-is.
+                      fileRefOptions={fileRefOptions(pickerTargets)}
                       onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
                       missingFileRef={missingFileRef}
                       fileSeams={fileSeams}

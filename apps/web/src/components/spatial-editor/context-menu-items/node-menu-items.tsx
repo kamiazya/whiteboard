@@ -37,12 +37,12 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
+import type { FileRefOption } from '../../../lib/link-entries.js'
 import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { AlignableBox } from '../align.js'
 import { alignBoxes, distributeBoxes } from '../align.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
-import type { FileRefOption } from '../DocumentPickerDialog.js'
 import { nodePropertyItems } from '../facet-widgets/index.js'
 import { type GestureState, reduceGesture } from '../gestures.js'
 import { colorRow } from './color-row.js'
