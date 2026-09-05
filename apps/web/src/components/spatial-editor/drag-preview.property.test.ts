@@ -1,8 +1,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe } from 'vitest'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { computeDragPreview } from './drag-preview.js'
-import type { NodeBox } from './geometry.js'
 import type { GestureState } from './gestures.js'
 import { reduceGesture } from './gestures.js'
 

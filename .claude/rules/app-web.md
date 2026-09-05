@@ -55,16 +55,14 @@ Done so far, in the order that paid best:
    `lib/browser-persistence-state`. The hook or component that owned each
    now imports it like everyone else; nothing re-exports the old path.
 
-Still open (7):
+3. **The spatial editor's pure core** (retired 4): `viewport`, `geometry`,
+   `minimap` and `commands` now live in `lib/spatial/`, with
+   `SpatialEditorHandle` beside the `Viewport` it names
+   (`lib/spatial/editor-handle`) — none of them React; `commands` alone
+   had 12 production importers and 23 test importers, all re-pointed.
 
-3. **The spatial editor's pure core** (4 edges): `spatial-editor/viewport`
-   imports nothing, `geometry` reads only `viewport` and the model,
-   `minimap` reads `geometry`, and `commands` (872 lines, 10 importers)
-   reads `viewport`'s `Point` and `lib/clipboard-fragment` — none of them
-   React. Moving the four together into `lib/spatial/` retires
-   `EditorCommand` (2), `minimap` (`favicon.ts` draws the favicon with it)
-   and lets `SpatialEditorHandle`, which names `Viewport`, follow. Its own
-   increment: `geometry` alone has 21 importers.
+Still open (3):
+
 4. **The render glue `lib/layout-worker.ts` runs off the main thread**
    (3 value edges): `spatial-editor/scene-render`, `scene-render-core`,
    `markdown-editor/render-preview`. A worker importing from

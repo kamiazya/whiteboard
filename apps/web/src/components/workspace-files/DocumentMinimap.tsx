@@ -28,7 +28,7 @@ import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FaviconRect } from '../../lib/favicon.js'
-import { fitMinimap, projectBox } from '../spatial-editor/minimap.js'
+import { fitMinimap, projectBox } from '../../lib/spatial/minimap.js'
 
 /**
  * The icon's own box, in percent-of-element units.

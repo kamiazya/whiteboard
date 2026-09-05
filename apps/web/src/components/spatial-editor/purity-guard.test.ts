@@ -29,7 +29,7 @@ const modules = import.meta.glob(['./**/*.{ts,tsx}', '../../lib/**/*.{ts,tsx}'],
 const SCANNED_PATHS = [
   './editor-appearance.ts',
   './scene-render.ts',
-  './viewport.ts',
+  '../../lib/spatial/viewport.ts',
   './node-factories.ts',
   // Pointer snapping serves preview AND commit from one call path, so it
   // must stay a pure function of its inputs — an ambient read here could

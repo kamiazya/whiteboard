@@ -25,8 +25,9 @@ import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef, useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
 import { fc } from '@/test-utils/fast-check'
-import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
-import type { Viewport } from './viewport.js'
+import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import type { Viewport } from '../../lib/spatial/viewport.js'
+import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
 

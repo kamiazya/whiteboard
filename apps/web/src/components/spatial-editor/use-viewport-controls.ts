@@ -7,7 +7,7 @@
 // returned here, so there is exactly one viewport.
 
 import { useState } from 'react'
-import type { NodeBox } from './geometry.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import {
   type ContainerSize,
   contentBounds,
@@ -16,7 +16,7 @@ import {
   type Point,
   type Viewport,
   zoomAt,
-} from './viewport.js'
+} from '../../lib/spatial/viewport.js'
 
 /** Margin around framed content, in screen px. */
 const FRAME_MARGIN_PX = 24

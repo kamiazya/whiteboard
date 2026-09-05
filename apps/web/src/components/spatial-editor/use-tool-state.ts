@@ -5,8 +5,8 @@
 
 import { useEffect, useRef, useState } from 'react'
 import type { EditorTool } from '../../lib/editor-tool.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 import type { ContextMenuTarget } from './CanvasContextMenu.js'
-import type { Point } from './viewport.js'
 
 export interface ToolStateInputs {
   readonly defaultTool: EditorTool

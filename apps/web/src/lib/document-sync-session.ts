@@ -31,7 +31,6 @@ export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers[
 
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { sameAnnotations } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
 import { frontierOf } from './document-frontier.js'
@@ -45,6 +44,7 @@ import {
   type SyncStatus,
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
+import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
 
 const log = getAppLogger('document-sync')
 

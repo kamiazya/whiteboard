@@ -4,11 +4,11 @@
 // landing exactly where the last frame drew it).
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { HANDLE_SIGN, type NodeBox } from './geometry.js'
+import { HANDLE_SIGN, type NodeBox } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 import { carriedByGesture } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
-import type { Point } from './viewport.js'
 
 /**
  * Attraction radius in SCREEN pixels, converted to canvas units per gesture

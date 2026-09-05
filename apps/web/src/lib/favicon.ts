@@ -21,8 +21,8 @@ export type FaviconStatus = 'saved' | 'unsaved' | 'syncing' | 'offline'
 export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
-import { fitMinimap, projectBox } from '../components/spatial-editor/minimap.js'
 import type { SyncStatus } from './document-sync-types.js'
+import { fitMinimap, projectBox } from './spatial/minimap.js'
 
 export interface FaviconRect {
   x: number

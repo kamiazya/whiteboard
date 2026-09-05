@@ -7,11 +7,15 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
-import type { EditorCommand } from './commands.js'
-import { applyCommand, buildFragmentInsertCommand, DUPLICATE_OFFSET_PX } from './commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import {
+  applyCommand,
+  buildFragmentInsertCommand,
+  DUPLICATE_OFFSET_PX,
+} from '../../lib/spatial/commands.js'
+import type { Point, Viewport } from '../../lib/spatial/viewport.js'
+import { screenToCanvas } from '../../lib/spatial/viewport.js'
 import { textNodeDefaults } from './node-factories.js'
-import type { Point, Viewport } from './viewport.js'
-import { screenToCanvas } from './viewport.js'
 
 /**
  * The deferred half of a cut: the originals stay on the canvas as a ghost

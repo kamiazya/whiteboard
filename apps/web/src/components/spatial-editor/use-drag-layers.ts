@@ -20,11 +20,12 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import { computeDragPreview } from './drag-preview.js'
 import { createEditorAppearance } from './editor-appearance.js'
-import type { NodeBox } from './geometry.js'
 import {
   type CarriedSideCache,
   canReuseCarriedSides,
@@ -40,7 +41,6 @@ import { type RenderedCanvas, renderCanvasToSvg } from './scene-render.js'
 import { renderedCanvasKeyed } from './scene-render-core.js'
 import type { useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
-import type { Point } from './viewport.js'
 
 export interface DragLayersInputs {
   gestureState: GestureState

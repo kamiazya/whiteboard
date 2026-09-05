@@ -23,9 +23,9 @@
 import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
+import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { renderCanvasToSvg } from './scene-render.js'
-import type { Point } from './viewport.js'
 
 export interface CommentDragLayerProps {
   /** The comment as it was when the drag started (its stored anchor). */

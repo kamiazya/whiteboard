@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import { panBy, zoomAt } from '../../lib/spatial/viewport.js'
 import { computePinchUpdate } from './touch-pinch.js'
-import { panBy, zoomAt } from './viewport.js'
 
 describe('computePinchUpdate', () => {
   it('two fingers translating together pan without zooming', () => {

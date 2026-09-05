@@ -30,9 +30,14 @@
  * hold that edit.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { EditorCommand } from './commands.js'
-import { type Box, type ResizeHandleKind, resizeBoxByDelta, scaleBoxWithin } from './geometry.js'
-import type { Point } from './viewport.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import {
+  type Box,
+  type ResizeHandleKind,
+  resizeBoxByDelta,
+  scaleBoxWithin,
+} from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 interface MoveSnapshot {
   readonly kind: 'moving'

@@ -32,7 +32,7 @@ import type {
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
-import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
+import { remintClipboardFragment } from '../clipboard-fragment.js'
 import type { Point } from './viewport.js'
 
 export type EditorLeafCommand =

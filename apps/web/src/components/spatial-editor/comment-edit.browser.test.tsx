@@ -12,7 +12,7 @@ import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
-import type { EditorCommand } from './commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)

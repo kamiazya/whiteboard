@@ -6,7 +6,7 @@
 // definition.
 
 import { useEffect, useMemo } from 'react'
-import type { NodeBox } from './geometry.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { createIdleState, type GestureState } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 

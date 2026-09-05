@@ -5,7 +5,7 @@
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
-import { type Box, indexNodeBoxes, type NodeBox } from './geometry.js'
+import { type Box, indexNodeBoxes, type NodeBox } from '../../lib/spatial/geometry.js'
 
 export interface NodeBoxesInputs {
   readonly canvas: SpatialCanvas

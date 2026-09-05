@@ -18,8 +18,8 @@
  */
 
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import type { Box } from '../../lib/spatial/geometry.js'
 import { EditorExitHint } from '../EditorExitHint.js'
-import type { Box } from './geometry.js'
 
 export interface TextNodeEditorProps {
   readonly box: Box
