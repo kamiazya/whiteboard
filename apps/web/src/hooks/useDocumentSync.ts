@@ -3,8 +3,8 @@ import {
   withViewerFontEmbedded,
 } from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type {
   CommentThread,
   DocumentKind,
@@ -12,6 +12,7 @@ import type {
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import {
   type BackendErrorReason,
@@ -20,11 +21,14 @@ import {
   type DocumentSyncSession,
 } from '../lib/document-sync-session.js'
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
+
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
+
+const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
 
 export type { UseDocumentSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook
@@ -38,6 +42,8 @@ export type SceneExportFormat = 'png' | 'svg'
 
 export interface UseDocumentSyncResult {
   syncStatus: SyncStatus
+  /** The session's account of its writes — see the state's own comment. */
+  persistence: BrowserPersistenceState
   backendError: BackendErrorReason | null
   /**
    * True once the backend has published this canvas's document at least
@@ -188,6 +194,14 @@ export function useDocumentSync(
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
   /**
+   * The session's own account of its writes (SessionDeps.onPersistenceChange):
+   * unsaved from the instant an edit is published, saved once every write
+   * behind it landed. A fact, not a display state — the page decides what,
+   * if anything, to show for it. Reset with the backend: a new document
+   * starts with nothing unsaved.
+   */
+  const [persistence, setPersistence] = useState<BrowserPersistenceState>(NOTHING_UNSAVED)
+  /**
    * Why the last backend failure happened, or null.
    *
    * Kept beside `syncStatus` rather than folded into it: 'error' answers
@@ -251,6 +265,7 @@ export function useDocumentSync(
     // turns the next one — which may be perfectly readable — into an error
     // screen the page cannot distinguish from a real failure.
     setBackendError(null)
+    setPersistence(NOTHING_UNSAVED)
 
     if (backend === null) {
       sessionRef.current = null
@@ -272,6 +287,7 @@ export function useDocumentSync(
         setRestoreInProgress(inProgress)
         setRestoreLabel(label)
       },
+      onPersistenceChange: setPersistence,
       dispatchIdentityEvent,
       generations: generationsRef.current,
       // Captured once per session, deliberately: the scope names the document
@@ -470,6 +486,7 @@ export function useDocumentSync(
 
   return {
     syncStatus,
+    persistence,
     backendError,
     loaded,
     canvas,

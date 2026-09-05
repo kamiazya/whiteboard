@@ -6,9 +6,12 @@ import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-initial-tool')
 
 // Real browser + real IndexedDB: the canvas's node count comes from the Loro
 // document the backend actually loads, which is exactly the input the initial
@@ -19,14 +22,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 async function mountLoaded(): Promise<void> {
@@ -44,7 +39,7 @@ beforeEach(async () => {
   // Only the key this suite is about: storages are origin-shared across
   // parallel test files, and clear() wipes the neighbours' state too.
   sessionStorage.removeItem('wb.lastTool')
-  await clearDb()
+  await clearWhiteboardDb()
 })
 
 afterEach(() => {
@@ -63,11 +58,16 @@ describe('initial tool follows the canvas shape (real browser)', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
     // The new node's inline editor opens focused; commit it by clicking away.
     await userEvent.click(screen.getByTestId('spatial-editor-container'))
+    // A landed write, from the facts the page publishes hidden: `saved` alone
+    // is true of a never-written document too, so the timestamp is what
+    // proves the node reached the store before the next mount reads it.
     await waitFor(
-      () => expect(screen.getByTestId('save-status-chip').getAttribute('aria-label')).toBe('Saved'),
-      {
-        timeout: 5000,
+      () => {
+        const fact = screen.getByTestId('persistence-state')
+        expect(fact.getAttribute('data-save-state')).toBe('saved')
+        expect(fact.getAttribute('data-last-saved-at')).toBeTruthy()
       },
+      { timeout: 5000 },
     )
 
     cleanup()

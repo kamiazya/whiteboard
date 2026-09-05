@@ -9,10 +9,9 @@ vi.mock('./HeaderBranchChip', () => ({
   HeaderBranchChip: () => <div data-testid="header-branch-chip" />,
 }))
 vi.mock('./VersionTimeline', () => ({ default: () => null }))
-vi.mock('@/hooks/useDirtyState', () => ({ useDirtyState: () => ({ isDirty: false }) }))
-vi.mock('@kamiazya/whiteboard-mcp/api-client', () => ({ apiFetch: vi.fn() }))
+vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
+import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 

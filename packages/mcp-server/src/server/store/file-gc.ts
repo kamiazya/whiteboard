@@ -1,6 +1,7 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
+import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   collectImageRefIds,
   projectWorkspaceDocument,
@@ -8,7 +9,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
-import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
@@ -41,7 +41,7 @@ const log = getLogger('file-gc')
 const IMAGE_EXTS = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.svg'])
 
 // Single source of truth for the wire shape is purgeResultSchema
-// (shared/api-contracts/document.ts) — both routes/files.ts's response and
+// (daemon-client's api-contracts/document.ts) — both routes/files.ts's response and
 // this internal return type derive from it so they cannot drift apart.
 export type PurgeFilesResult = z.infer<typeof purgeResultSchema>
 

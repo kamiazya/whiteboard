@@ -14,10 +14,13 @@ import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-delete-confirm')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
@@ -29,14 +32,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 async function renderLoaded(
@@ -63,7 +58,7 @@ async function openDeleteDialog(): Promise<HTMLElement> {
 
 describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {
@@ -133,7 +128,8 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument()
+    // No save state is drawn; the facts stay published, hidden, and untouched.
+    expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('cancelling via Escape keeps the canvas intact', async () => {

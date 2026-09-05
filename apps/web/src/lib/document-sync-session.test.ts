@@ -6,6 +6,10 @@
  * document-shaped surface this session now owns.
  */
 
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
@@ -18,10 +22,6 @@ import {
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import type {
   CanvasComment,
   CommentThread,
@@ -83,14 +83,25 @@ type FakeBackendControl = {
   /** Models a transport that is down: pushes are accepted and discarded,
    *  which is what DaemonBackend does when its socket is not OPEN. */
   transportDown: boolean
+  /** When set, every push parks until `releasePushes()` — a slow store. */
+  holdPushes: boolean
+  releasePushes: () => void
+  /** When set, every push rejects — a store that refuses the write. */
+  rejectPushes: boolean
 }
 
 function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
+  const held: Array<() => void> = []
   const ctrl: FakeBackendControl = {
     handlers: null,
     disconnectCalled: false,
     pushLocalUpdateCalls: [],
     transportDown: false,
+    holdPushes: false,
+    releasePushes: () => {
+      for (const release of held.splice(0)) release()
+    },
+    rejectPushes: false,
   }
   return {
     _ctrl: ctrl,
@@ -105,6 +116,12 @@ function makeFakeBackend(): DocumentBackend & { _ctrl: FakeBackendControl } {
     pushLocalUpdate(bytes) {
       if (ctrl.transportDown) return Promise.resolve()
       ctrl.pushLocalUpdateCalls.push(bytes)
+      if (ctrl.rejectPushes) return Promise.reject(new Error('store refused the write'))
+      if (ctrl.holdPushes) {
+        return new Promise<void>((resolve) => {
+          held.push(resolve)
+        })
+      }
       return Promise.resolve()
     },
     getFile: async () => null,
@@ -351,6 +368,170 @@ describe('createDocumentSyncSession', () => {
         expect(backend._ctrl.pushLocalUpdateCalls.length).toBe(before)
       } finally {
         restore()
+        vi.useRealTimers()
+      }
+    })
+  })
+
+  // What the session KNOWS about its own writes, reported as facts for a
+  // page to judge: an edit is unsaved from the instant it is published, and
+  // saved only once every write behind it has landed — not when the debounce
+  // fired, not when the commit ran, but when the store's promise resolved.
+  // This is the one place the spatial write path can say so; the store
+  // itself never learns which edit a write carried.
+  describe('reports persistence facts', () => {
+    function kinds(spy: ReturnType<typeof vi.fn>): string[] {
+      return spy.mock.calls.map((call) => (call[0] as { kind: string }).kind)
+    }
+
+    it('pending on publish, saved once the push has landed', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        expect(kinds(onPersistenceChange)).toEqual([])
+
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+        // The debounce firing and the commit running are not landing.
+        await vi.advanceTimersByTimeAsync(299)
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+
+        await vi.advanceTimersByTimeAsync(1)
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved'])
+        const saved = onPersistenceChange.mock.calls[1][0] as { lastSavedAt: string | null }
+        expect(saved.lastSavedAt).not.toBeNull()
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // Two edits, the second published while the first's write is still in
+    // flight: the first landing does not make the document saved, because
+    // the second edit is not in it. Only the last write landing does.
+    it('stays pending while any write behind an edit is still in flight', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        backend._ctrl.holdPushes = true
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(2)
+
+        // Both pushes land now. Nothing between the two edits reported saved.
+        expect(kinds(onPersistenceChange)).toEqual(['pending'])
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it('degraded when the store refuses the write', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        backend._ctrl.rejectPushes = true
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // The browser backend never rejects a push: its write runs on a queue it
+    // owns, and a store that throws is reported through `onError`
+    // ('storage-failure') while the push's own promise resolves. That report
+    // is the same fact as a rejection and has to reach the same place, or a
+    // browser whose IndexedDB refused the write reads as saved.
+    it('degraded when the backend reports a storage failure, saved again once a later write lands', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        backend._ctrl.holdPushes = true
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+        // The order the browser backend produces: the push is in flight, its
+        // write throws and is REPORTED, then the push's own promise resolves
+        // as if nothing happened. That resolution must not read as saved.
+        backend._ctrl.handlers!.onError?.('storage-failure')
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded'])
+
+        // A LATER write that completes with no failure reported against it is
+        // what clears the condition.
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        backend._ctrl.releasePushes()
+        await flushMicrotasks()
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'degraded', 'saved'])
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    // A settled edit that is edited again is pending again — the fact is
+    // about the document as it stands, not about the first write.
+    it('goes pending again on the next edit after saving', async () => {
+      vi.useFakeTimers()
+      try {
+        const backend = makeFakeBackend()
+        const onPersistenceChange = vi.fn()
+        const session = createDocumentSyncSession(backend, makeDeps({ onPersistenceChange }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        const first: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        const afterFirst = applyCommand(twoNodeCanvas(), first)
+        session.onChange(afterFirst, first)
+        await vi.advanceTimersByTimeAsync(300)
+        await flushMicrotasks()
+        const second: EditorCommand = { kind: 'move-node', id: 'n-b', x: 5, y: 5 }
+        session.onChange(applyCommand(afterFirst, second), second)
+        expect(kinds(onPersistenceChange)).toEqual(['pending', 'saved', 'pending'])
+        session.dispose()
+      } finally {
         vi.useRealTimers()
       }
     })

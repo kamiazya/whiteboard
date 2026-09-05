@@ -6,7 +6,7 @@ import {
   type StorageCategory,
   type StorageReportPayload,
   storageReportPayloadSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'

@@ -9,8 +9,8 @@ paths:
 
 - The `/api` Zod contracts apps/web parses (`api-contracts/`): documents,
   branches, errors, fonts, pairing, runtime, and the URL builders. The barrel
-  (`api-contracts/index.ts`) is deliberately NARROW — it is republished as an
-  npm subpath by mcp-server, and every export is 0.0.x surface.
+  (`api-contracts/index.ts`) is deliberately NARROW — it is the whole
+  contract surface apps/web reads (`api-contracts-barrel.test.ts` pins it).
 - The document backends the browser drives a daemon with: `daemon-backend`
   (WS), `sse-backend` + `sse-stream-hub` (SSE), `select-document-transport`,
   and the `document-backend-contract` types they implement.
@@ -36,16 +36,13 @@ routes), zod, and the OpenTelemetry browser SDK set. DOM globals are this
 package's normal job (`WebSocket`/`EventSource`/`fetch`) — exempted as
 `dom-global` in `architecture-map.ts`, the same carve-out canvas-viewer has.
 
-## The shim relationship with mcp-server
+## The relationship with mcp-server
 
-mcp-server's `src/shared/*` old paths are one-line re-export shims: they keep
-the published subpath exports (`publish-contract.test.ts` pins the exports
-map by equality), the tsup entries, and mcp-server's internal relative
-imports working. tsup's `noExternal` MUST list this package or the published
-tarball carries a bare specifier for an unpublished workspace dep
-(`document-backend-contract.subpath.test.ts` asserts the chain). Do not add
-NEW imports through the shims; the follow-up increment rewrites mcp-server's
-internals to import this package directly and retires them.
+Both composition roots import this package directly; the `src/shared/*`
+re-export shims and mcp-server's published client subpaths are retired
+(`publish-contract.test.ts` pins the exports map — `.` and `./package.json`
+only). tsup's `noExternal` MUST list this package or the published tarball
+carries a bare specifier for an unpublished workspace dep.
 
 ## Tests
 

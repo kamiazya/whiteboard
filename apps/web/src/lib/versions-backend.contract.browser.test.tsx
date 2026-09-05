@@ -1,12 +1,13 @@
+import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   projectWorkspaceDocument,
   readSpatialCanvas,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend } from './browser-backend.js'
 import { BrowserVersionStore } from './browser-version-store.js'
@@ -20,7 +21,9 @@ import {
 } from './versions-backend.contract.js'
 import { createDaemonVersionsBackend } from './versions-backend.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('versionsbackendcontract')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('versionsbackendcontract')
 
 function textDoc(text: string): LoroDoc {
   const doc = new LoroDoc()
@@ -38,20 +41,12 @@ function textOf(doc: LoroDoc | null): string | undefined {
   return node?.type === 'text' ? node.text : undefined
 }
 
-function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
-
 /**
  * The browser keeper, end to end: a real IndexedDB record, the real store,
  * the real backend that reconciles a restore onto it.
  */
 async function browserHarness(): Promise<VersionsBackendHarness> {
-  await clearDb()
+  await clearWhiteboardDb()
   const workspaceId = getBrowserWorkspaceId()
   const index = new FoldingBrowserIndex()
   await index.createWorkspace({ workspaceId })
@@ -120,7 +115,7 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
     },
     async cleanup() {
       backend.disconnect()
-      await clearDb()
+      await clearWhiteboardDb()
     },
   }
 }

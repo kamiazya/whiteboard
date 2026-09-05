@@ -1,4 +1,4 @@
-import { storageReportPayloadSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { storageReportPayloadSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import {
   Cable,
   ChevronLeft,

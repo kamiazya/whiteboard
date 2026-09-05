@@ -1,4 +1,7 @@
-import type { BranchMeta, MergeResponse } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type {
+  BranchMeta,
+  MergeResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'

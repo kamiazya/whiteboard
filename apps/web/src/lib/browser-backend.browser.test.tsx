@@ -9,6 +9,10 @@
  * treated on the way in.
  */
 
+import type {
+  BinaryFileDataLike,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 // Stays in REAL-browser mode on purpose: this file is part of the real-IDB
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
@@ -22,10 +26,6 @@ import {
   writeSpatialCanvas,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  BinaryFileDataLike,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro, LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -36,6 +36,7 @@ import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb } from './browser-idb.js'
 /** A canonical id no fixture mints, so a save under it can only be the bug. */
 const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 
@@ -57,14 +58,6 @@ function target(documentId: string, path = 'design'): BrowserBackendTarget {
 // handler call (instead of wall-clock time) keeps the test both fast on a
 // healthy machine and stable under CI load.
 const WAIT_TIMEOUT = 10_000
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
 
 function makeHandlers(overrides: Partial<DocumentBackendHandlers> = {}): DocumentBackendHandlers {
   return {
@@ -122,10 +115,10 @@ function editAsSession(snapshotBytes: Uint8Array, documentId: string, nodeId: st
 
 describe('BrowserBackend', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
   afterEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   it('connect() on an empty store delivers a workspace snapshot already holding the target document', async () => {

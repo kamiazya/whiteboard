@@ -1,6 +1,6 @@
+import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { describe, expect, it } from 'vitest'
 import { type DaemonStatusResult, daemonStatusResultSchema } from './daemon-status.js'
-import { roundtrip } from './roundtrip.test-helper.js'
 
 describe('daemonStatusResultSchema', () => {
   it('round-trips record-not-found', () => {

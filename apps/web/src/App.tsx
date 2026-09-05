@@ -1,4 +1,4 @@
-import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
+import { readDaemonTokenOnce } from '@kamiazya/whiteboard-daemon-client/api-client'
 import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'

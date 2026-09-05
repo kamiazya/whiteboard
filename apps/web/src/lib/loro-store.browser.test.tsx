@@ -10,21 +10,16 @@
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import { LoroStore } from './loro-store.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('loro-store')
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('loro-store')
 
 function makeSnapshot(elements: unknown[]): Uint8Array {
   const doc = new Loro()
@@ -67,10 +62,10 @@ describe('loroRecordEnvelopeSchema', () => {
 
 describe('LoroStore (real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
   afterEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   it('load returns not-found for unknown documentId', async () => {

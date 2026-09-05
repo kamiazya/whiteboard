@@ -1,8 +1,8 @@
-import { Hono } from 'hono'
 import type {
   OptimizeAllDocumentsResponse,
   PruneSandwichedVersionsResponse,
-} from '../../../shared/api-contracts/document.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { Hono } from 'hono'
 import { evictDoc } from '../../store/doc-cache.js'
 import { compactDocument, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'

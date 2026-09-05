@@ -4,7 +4,7 @@ import {
   decodeBase64UrlText,
   encodeBase64UrlText,
   DAEMON_CONNECTION_FRAGMENT_KEY as FRAGMENT_KEY,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { z } from 'zod'
 
 export type { DaemonConnectionPayload }

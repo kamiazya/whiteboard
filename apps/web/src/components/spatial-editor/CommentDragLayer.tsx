@@ -59,22 +59,20 @@ export function CommentDragLayer({
     [comment, measure, theme, obstacles],
   )
   return (
-    <>
-      <div
-        data-testid="comment-drag-preview"
-        aria-hidden="true"
-        style={{
-          position: 'absolute',
-          left: fragment.bounds.x + delta.x,
-          top: fragment.bounds.y + delta.y,
-          pointerEvents: 'none',
-          opacity: 0.85,
-        }}
-        // Same trusted producer as the committed scene: canvas-render's
-        // escaping serializer is the sole source of this string.
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
-        dangerouslySetInnerHTML={{ __html: fragment.svg }}
-      />
-    </>
+    <div
+      data-testid="comment-drag-preview"
+      aria-hidden="true"
+      style={{
+        position: 'absolute',
+        left: fragment.bounds.x + delta.x,
+        top: fragment.bounds.y + delta.y,
+        pointerEvents: 'none',
+        opacity: 0.85,
+      }}
+      // Same trusted producer as the committed scene: canvas-render's
+      // escaping serializer is the sole source of this string.
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene — canvas-render's escaping serializer
+      dangerouslySetInnerHTML={{ __html: fragment.svg }}
+    />
   )
 }

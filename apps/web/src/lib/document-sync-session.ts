@@ -1,3 +1,7 @@
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   type DocumentContainers,
   deleteSpatialNode,
@@ -25,10 +29,6 @@ import {
   writeSpatialNode,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 
 /**
  * One identity for "this document has no marks", so a publish that found
@@ -43,6 +43,7 @@ import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/w
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
+import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { contentStateOf } from './document-state.js'
 import {
   type ExportRequestHandlerDeps,
@@ -169,6 +170,16 @@ export interface SessionDeps {
    */
   onBackendError: (reason: BackendErrorReason) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
+  /**
+   * What the session knows about its own writes, as facts for the page to
+   * judge: `pending` from the instant an edit is published, `saved` once
+   * every write behind it has landed (the store's promise resolved — not the
+   * debounce firing, not the commit), `degraded` when the store refused one.
+   * Meaningful for a backend whose push answers for durability, which is
+   * the browser's; the daemon's push is fire-and-forget over a socket and
+   * resolves at once, so a daemon page must not read this as "saved".
+   */
+  onPersistenceChange?: (state: BrowserPersistenceState) => void
   dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
   /**
@@ -594,6 +605,56 @@ export function createDocumentSyncSession(
   // synchronously (not otherwise observable in plain JS).
   let pendingCommitCount = 0
 
+  // Persistence facts (see SessionDeps.onPersistenceChange). `unsaved` flips
+  // on publish and clears only when nothing is left anywhere behind the edit:
+  // no debounce armed, no commit queued, no push in flight. Checked after
+  // every push settles AND after every commit drains, because a commit that
+  // changed nothing in the document produces no update and therefore no
+  // push — without the second check that edit would read as pending forever.
+  let unsaved = false
+  let inFlightPushes = 0
+  let lastSavedAt: string | null = null
+  // A refused write keeps the document unsaved until a LATER write lands;
+  // a quiet session after a failure is not a saved one.
+  let writeFailed = false
+  // Counts failure reports, so a push can tell whether one arrived WHILE it
+  // was in flight. The browser backend never rejects a push — its write runs
+  // on a queue it owns, and a store that throws is reported through
+  // `onError('storage-failure')` while the push's own promise resolves — so
+  // "this push resolved" is not "this write landed". A push clears the
+  // failure only when no report arrived between its start and its end.
+  let failureEpoch = 0
+  function reportPersistence(state: BrowserPersistenceState): void {
+    deps.onPersistenceChange?.(state)
+  }
+  function reportWriteFailed(): void {
+    failureEpoch++
+    writeFailed = true
+    reportPersistence({
+      kind: 'degraded',
+      reason: 'write-failed',
+      message: 'The last write to this browser failed. Your edits stay in memory for this session.',
+      lastSavedAt,
+    })
+  }
+  function settleIfQuiet(): void {
+    if (!unsaved || writeFailed) return
+    if (debounceTimer !== null || pendingTargets.size > 0) return
+    if (pendingCommitCount > 0 || inFlightPushes > 0) return
+    unsaved = false
+    lastSavedAt = new Date().toISOString()
+    reportPersistence({ kind: 'saved', lastSavedAt })
+  }
+  // Loro delivers subscribeLocalUpdates on a later microtask than the commit
+  // (see the subscription below), so "the commit drained" is not yet "the
+  // push was issued". Two turns are what drainBeforePushHasFired gives it
+  // too; only then can a quiet session honestly be called saved.
+  async function settleAfterCommitDrained(): Promise<void> {
+    await Promise.resolve()
+    await Promise.resolve()
+    settleIfQuiet()
+  }
+
   function isStale(): boolean {
     return disposed || deps.generations.currentConnectionGeneration() !== myGeneration
   }
@@ -816,10 +877,15 @@ export function createDocumentSyncSession(
       .then(() => republishAnnotationsIfChanged(targetDoc))
       .finally(() => {
         pendingCommitCount--
+        void settleAfterCommitDrained()
       })
   }
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
+    if (!unsaved) {
+      unsaved = true
+      reportPersistence({ kind: 'pending', lastSavedAt })
+    }
     pendingTargets.set(commandTargetKey(command), command)
     latestNext = next
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -953,10 +1019,21 @@ export function createDocumentSyncSession(
           // it, the transport could already be closed by the time this push
           // happens, silently losing the last edit before a canvas switch or
           // unmount.
-          void Promise.resolve(backend.pushLocalUpdate(update)).catch(() => {
-            if (isStale()) return
-            deps.onStatusChange('error')
-          })
+          inFlightPushes++
+          const epochAtPush = failureEpoch
+          void Promise.resolve(backend.pushLocalUpdate(update)).then(
+            () => {
+              inFlightPushes--
+              if (failureEpoch === epochAtPush) writeFailed = false
+              settleIfQuiet()
+            },
+            () => {
+              inFlightPushes--
+              if (isStale()) return
+              deps.onStatusChange('error')
+              reportWriteFailed()
+            },
+          )
         })
 
         newDoc.subscribe((e) => {
@@ -1061,6 +1138,11 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onBackendError(reason)
         deps.onStatusChange('error')
+        // The browser backend's write failure arrives here, not as a rejected
+        // push (see `failureEpoch`). The same reason also names a failed LOAD,
+        // which the page shows on its own screen — so this is a persistence
+        // fact only while there is a write to have failed.
+        if (reason === 'storage-failure' && (unsaved || inFlightPushes > 0)) reportWriteFailed()
       },
     })
   }

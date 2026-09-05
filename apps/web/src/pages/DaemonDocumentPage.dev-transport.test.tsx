@@ -42,10 +42,12 @@ function stubBackend(name: string) {
   }
 }
 
-vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
+vi.mock('@kamiazya/whiteboard-daemon-client/daemon-backend', () => ({
   DaemonBackend: stubBackend('websocket'),
 }))
-vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({ SseBackend: stubBackend('sse') }))
+vi.mock('@kamiazya/whiteboard-daemon-client/sse-backend', () => ({
+  SseBackend: stubBackend('sse'),
+}))
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)

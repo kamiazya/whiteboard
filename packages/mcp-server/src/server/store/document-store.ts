@@ -16,6 +16,7 @@
  * additionally take `withDocumentWriteLock` — see their comments.
  */
 import { unlink } from 'node:fs/promises'
+import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -51,7 +52,6 @@ import {
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
-import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'

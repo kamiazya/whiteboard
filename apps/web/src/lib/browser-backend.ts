@@ -1,14 +1,14 @@
+import type {
+  BinaryFileDataLike,
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  BinaryFileDataLike,
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isStoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'

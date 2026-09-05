@@ -6,6 +6,7 @@
 import { adoptWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it } from 'vitest'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { browserDocumentCounts } from './browser-document-counts.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
@@ -20,19 +21,11 @@ const DB_NAME = claimIsolatedWhiteboardDb('browser-doc-counts')
 const ACTIVE = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const SECOND = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-function deleteDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
 beforeEach(async () => {
-  await deleteDb()
+  await clearWhiteboardDb()
   // Through the seam rather than whatever the page resolved earlier. The
   // accessor is a module singleton shared by every test in this browser page,
-  // and `deleteDb` above pulls the row it resolved from under it — so leaving
+  // and `clearWhiteboardDb` above pulls the row it resolved from under it — so leaving
   // it ambient made this file assert against an id it did not choose, and a
   // re-resolution added a third workspace nothing had seeded.
   setBrowserWorkspaceIdForTests(ACTIVE)

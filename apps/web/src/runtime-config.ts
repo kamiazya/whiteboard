@@ -2,7 +2,7 @@ import {
   bareOriginSchema,
   type RuntimeConfig,
   runtimeConfigSchema,
-} from '@kamiazya/whiteboard-mcp/api-client'
+} from '@kamiazya/whiteboard-daemon-client/api-client'
 import { classifyPagesOrigin } from './lib/pages-origin-policy.js'
 
 export type { RuntimeConfig }

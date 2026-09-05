@@ -25,7 +25,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { describe, expect, it } from 'vitest'
 import { daemonLinkEntries } from './daemon-link-entries.js'
 

@@ -76,22 +76,13 @@ const SHARED_CANVAS_CHROME = [
  * by design, not drift.
  *
  * Listed rather than left implicit so the scan above stays a statement about
- * what SHOULD agree. Save state is the interesting entry: the daemon page does
- * show it, through `WorkspaceTopBar`'s dirty dot rather than a
- * `SaveStatusChip` in the properties row, so the two presentations differ
- * while the capability does not.
+ * what SHOULD agree. Save state is deliberately NOT an entry any more: neither
+ * page draws one in its chrome. Both publish their keeper's health to the
+ * shell mark (`setShellConnection`), which draws only a condition — a
+ * browser write that is stuck or refused, a daemon session that dropped or
+ * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  // Not a substitute for a save indicator the other mode lacks: BOTH pages
-  // render WorkspaceTopBar, whose dot comes from its own `useDirtyState` and
-  // means "no manual version named yet" rather than "unsaved". The browser
-  // page adds this finer chip because its markdown path has two writers — the
-  // controller and the body's debounced save — and one dot reported `Saved`
-  // over unwritten text.
-  SaveStatusChip: {
-    page: './BrowserDocumentPage.tsx',
-    why: 'a second, finer indicator its markdown path needs',
-  },
   HeaderBranchBanner: {
     page: './DaemonDocumentPage.tsx',
     why: 'branches are a daemon concept (ADR-0004)',

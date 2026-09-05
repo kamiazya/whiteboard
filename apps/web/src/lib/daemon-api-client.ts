@@ -41,7 +41,7 @@ import {
   workspaceDocumentTagsResponseSchema,
   workspaceNamesSchema,
   workspaceSummarySchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
 // Re-exported so existing callers keep one import site; the implementation

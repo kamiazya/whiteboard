@@ -4,7 +4,7 @@ import {
   saveVersionResponseSchema,
   type VersionEntry,
   versionDocumentResponseSchema,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 /**

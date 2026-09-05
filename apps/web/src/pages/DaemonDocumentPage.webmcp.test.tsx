@@ -1,7 +1,7 @@
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   act,
   cleanup,

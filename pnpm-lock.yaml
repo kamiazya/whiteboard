@@ -168,6 +168,9 @@ importers:
       '@kamiazya/whiteboard-codec':
         specifier: workspace:*
         version: link:../../packages/codec
+      '@kamiazya/whiteboard-daemon-client':
+        specifier: workspace:*
+        version: link:../../packages/daemon-client
       '@kamiazya/whiteboard-facet-engine':
         specifier: workspace:*
         version: link:../../packages/facet-engine
@@ -177,9 +180,6 @@ importers:
       '@kamiazya/whiteboard-loro-adapter':
         specifier: workspace:*
         version: link:../../packages/loro-adapter
-      '@kamiazya/whiteboard-mcp':
-        specifier: workspace:*
-        version: link:../../packages/mcp-server
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../../packages/model

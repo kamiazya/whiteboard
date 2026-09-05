@@ -41,7 +41,7 @@ export function useFavicon({
   useEffect(
     () => () => {
       applyFavicon(null)
-      updateAppBadge('saved')
+      updateAppBadge('quiet')
     },
     [],
   )

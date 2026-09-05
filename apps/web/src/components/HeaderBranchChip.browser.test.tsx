@@ -1,4 +1,4 @@
-import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'

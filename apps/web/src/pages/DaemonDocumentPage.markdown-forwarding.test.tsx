@@ -7,16 +7,16 @@
  * by loro-binding.browser.test.tsx.
  */
 
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   MARKDOWN_BODY_KEY,
   writeCoreFacets,
   writeDocumentKind,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
 import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'

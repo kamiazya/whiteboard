@@ -14,10 +14,19 @@
 
 /**
  * `# ` + text, with the space required — `#tag` is body text, matching
- * `set-heading-level.ts`'s heading rule. A closed ATX heading (`# Title #`)
- * drops its trailing run so the name does not keep a stray marker.
+ * `set-heading-level.ts`'s heading rule.
  */
-const ATX_H1 = /^#[ \t]+(.+?)(?:[ \t]+#+)?[ \t]*$/
+const ATX_H1 = /^#[ \t]+(.+)$/
+
+/**
+ * A closed ATX heading (`# Title #`) drops its trailing marker run so the
+ * name does not keep a stray marker. EVERY trailing run goes, not just the
+ * last one as CommonMark reads it: `# ! # # ` would otherwise answer `! #`,
+ * a name that re-reads as `!` — deriving a title must be idempotent, and a
+ * marker-only tail is never a name someone meant. `C#` keeps its `#` (no
+ * whitespace before it, so it is part of the word, not a marker).
+ */
+const TRAILING_MARKER_RUNS = /(?:[ \t]+#+)+[ \t]*$/
 
 /**
  * Long enough for any title someone means as one, short enough that a name
@@ -34,7 +43,7 @@ export function titleFromMarkdownBody(body: string): string | undefined {
     // document has not told us what it is called.
     const matched = ATX_H1.exec(line)
     if (matched === null) return undefined
-    const title = (matched[1] ?? '').replace(/\s+/g, ' ').trim()
+    const title = (matched[1] ?? '').replace(TRAILING_MARKER_RUNS, '').replace(/\s+/g, ' ').trim()
     if (title === '' || title.length > MAX_TITLE_LENGTH) return undefined
     return title
   }

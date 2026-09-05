@@ -1,9 +1,12 @@
+import type {
+  BranchMeta,
+  DocumentBranchesState,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
 import {
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   updateWorkspaceDocumentMeta,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { BranchMeta, DocumentBranchesState } from '../../shared/api-contracts/branches.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
@@ -21,7 +24,7 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // across the path → documentId migration. Internally the path is resolved to
 // the stable canvas id before any branches/documents write.
 
-export type { BranchMeta } from '../../shared/api-contracts/branches.js'
+export type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
 
 // Internal alias: this store's DocumentBranches predates the shared contract
 // and its callers already spell that name — kept to avoid a same-package

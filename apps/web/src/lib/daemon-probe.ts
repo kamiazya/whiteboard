@@ -1,4 +1,4 @@
-import { daemonPingResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { daemonPingResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
 
 // Default loopback origin for the local daemon (matches
