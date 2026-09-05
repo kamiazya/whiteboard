@@ -361,11 +361,12 @@ function reducePointerDown(
       }
     }
 
-    // Hand mode is navigation-only, so there is no menu for the timer to
-    // open — and arming it anyway is actively harmful: the press below
-    // starts a pan, and the timer's teardown would clear it mid-drag,
-    // stranding the pan under a finger that is still moving.
-    if (next.touches.size === 1 && !context.handMode) {
+    // Armed under the hand tool too: its menu is the annotation layer's
+    // verbs, which a reader panning around a canvas has as much reason to
+    // reach as one selecting on it. The pan the press starts below is not
+    // stranded by the timer's teardown, because a finger that travels
+    // clears the timer first and a finger that does not has not panned.
+    if (next.touches.size === 1) {
       effects.push({ kind: 'clear-long-press' })
       effects.push({ kind: 'arm-long-press', pointerId: event.pointerId, screen: event.point })
     }

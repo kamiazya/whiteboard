@@ -6,7 +6,6 @@ import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import {
   Lock as LockIcon,
   LockOpen,
-  MessageSquare,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -20,6 +19,7 @@ import type { Point } from '../../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
+import { commentOnEdgeItem } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
 
 export interface EdgeMenuItemsInput {
@@ -133,19 +133,7 @@ export function edgeMenuItems({
       icon: <Tag />,
       onSelect: () => setEdgeLabelEditId(edge.id),
     },
-    {
-      // The annotation layer's entry on an edge, beside the node's "Comment
-      // on this": the point pressed is what the comment stores, and the
-      // layer pins it on the edge's routed path from there (canvas-render's
-      // `commentAnchor`), so it rides a reroute.
-      label: 'Comment on this',
-      icon: <MessageSquare />,
-      onSelect: () =>
-        setCommentCompose({
-          point: { x: Math.round(point.x), y: Math.round(point.y) },
-          targetEdgeId: edge.id,
-        }),
-    },
+    commentOnEdgeItem(edge, point, setCommentCompose),
     ...(edgeLockEnabled
       ? [
           {

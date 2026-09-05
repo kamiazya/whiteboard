@@ -102,20 +102,48 @@ it('cancels touchstart on the canvas so iOS cannot claim the press, but not on o
   expect(onOverlay.defaultPrevented).toBe(false)
 })
 
-it('hand mode stays navigation-only, and a slow pan keeps panning', async () => {
-  const { container } = mount(withNode, 'hand')
+it('hand mode: a stationary long-press opens the comment verbs, and a finger that moves first keeps panning', async () => {
+  const { container, latest } = mount(withNode, 'hand')
   const root = rootOf(container)
   const transform = () =>
     (container.querySelector('[data-testid="viewport-transform"]') as HTMLElement).style.transform
 
+  // Held still past the delay over the node: the annotation verb for it,
+  // none of its edit verbs, and the node untouched by the press.
   touch(root, 'pointerdown', 200, 130)
-  // Held past the long-press delay WITHOUT moving — the shape of a slow
-  // one-finger pan. No menu, and the pan must survive: an armed timer
-  // would have cleared isPanningRef here and stranded the drag.
+  // Waited on as a condition: the menu is what the delay produces.
+  await vi.waitFor(
+    () => {
+      expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+    },
+    { timeout: 2000 },
+  )
+  expect(container.textContent).toContain('Comment on this')
+  expect(container.textContent).not.toContain('Delete')
+  touch(root, 'pointerup', 200, 130)
+  expect(latest.canvas.nodes[0]).toMatchObject({ x: 100, y: 100 })
+  // Closing it: a pointerdown anywhere outside is the menu's own dismissal.
+  // The menu takes focus in the same effect that subscribes to that press,
+  // so focus is the condition that the press will be heard.
+  await vi.waitFor(() =>
+    expect(document.activeElement?.closest('[data-testid="context-menu"]')).not.toBeNull(),
+  )
+  touch(root, 'pointerdown', 700, 500, 8)
+  touch(root, 'pointerup', 700, 500, 8)
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+  })
+
+  // A pan that starts moving before the delay is a pan: the timer is
+  // cleared by the travel and the drag keeps going past the delay.
+  const before = transform()
+  touch(root, 'pointerdown', 400, 400, 9)
+  touch(root, 'pointermove', 440, 440, 9)
+  await vi.waitFor(() => expect(transform()).not.toBe(before))
   await new Promise((resolve) => setTimeout(resolve, 650))
   expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
-  const before = transform()
-  touch(root, 'pointermove', 260, 190)
-  await vi.waitFor(() => expect(transform()).not.toBe(before))
-  touch(root, 'pointerup', 260, 190)
+  const mid = transform()
+  touch(root, 'pointermove', 480, 480, 9)
+  await vi.waitFor(() => expect(transform()).not.toBe(mid))
+  touch(root, 'pointerup', 480, 480, 9)
 })

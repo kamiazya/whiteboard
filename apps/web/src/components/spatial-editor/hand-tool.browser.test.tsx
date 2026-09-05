@@ -111,19 +111,25 @@ it('in hand mode a plain drag pans the viewport — over empty space AND over a 
   expect(container.querySelector('[data-testid="selection-overlay"]')).toBeNull()
 })
 
-it('hand mode suppresses the long-press context menu — navigation only', () => {
+it('hand mode: a right-click opens the annotation verbs, never the edit catalog', () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const r = root.getBoundingClientRect()
+  const labels = () =>
+    [...container.querySelectorAll('[role="menuitem"]')].map(
+      (item) => item.textContent?.trim() ?? '',
+    )
   // Android synthesises a contextmenu from a touch long-press; in hand
-  // mode that must not surface editing affordances.
+  // mode that reaches the annotation layer and nothing else — every row
+  // is a comment verb, so no editing affordance surfaces mid-pan.
   fireEvent.contextMenu(root, { clientX: r.left + 150, clientY: r.top + 130 })
-  expect(container.querySelector('[data-testid="context-menu"]')).toBeNull()
+  expect(labels().length).toBeGreaterThan(0)
+  for (const label of labels()) expect(label).toMatch(/^Comment |resolved comments$/)
 
   fireEvent.click(container.querySelector('[data-testid="select-tool-button"]') as HTMLElement)
   fireEvent.contextMenu(root, { clientX: r.left + 150, clientY: r.top + 130 })
-  expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+  expect(labels().some((label) => !/^Comment |resolved comments$/.test(label))).toBe(true)
 })
 
 it('the dock does NOT swap by mode: the host history cluster stays in hand mode too', () => {

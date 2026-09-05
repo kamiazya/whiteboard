@@ -6,13 +6,10 @@ import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   ClipboardPaste,
-  Eye,
-  EyeOff,
   FileBox,
   Frame,
   Image as ImageIcon,
   Link,
-  MessageSquarePlus,
   Sparkles,
   StickyNote,
 } from 'lucide-react'
@@ -23,6 +20,7 @@ import type { Point } from '../../../lib/spatial/viewport.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { CREATION_LABELS } from '../creation-labels.js'
+import { commentHereItem, resolvedCommentsItem } from './annotation-verbs.js'
 
 export interface CanvasMenuItemsInput {
   readonly point: Point
@@ -125,17 +123,7 @@ export function canvasMenuItems({
   // Its own band: a comment is not content, so it sits apart from the
   // creation set rather than reading as a sixth node kind.
   emptyItems.push({ kind: 'separator' })
-  emptyItems.push({
-    label: 'Comment here',
-    icon: <MessageSquarePlus />,
-    onSelect: () => setCommentCompose({ point }),
-  })
-  // Resolved comments stay in the document; this is the one way to see
-  // them again (and reopen one). View state, per user.
-  emptyItems.push({
-    label: showResolvedComments ? 'Hide resolved comments' : 'Show resolved comments',
-    icon: showResolvedComments ? <EyeOff /> : <Eye />,
-    onSelect: () => setShowResolvedComments(!showResolvedComments),
-  })
+  emptyItems.push(commentHereItem(point, setCommentCompose))
+  emptyItems.push(resolvedCommentsItem(showResolvedComments, setShowResolvedComments))
   return emptyItems
 }
