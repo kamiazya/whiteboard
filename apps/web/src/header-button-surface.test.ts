@@ -37,9 +37,8 @@ const sources = import.meta.glob('./**/*.tsx', {
  * ninth file to the rows, changes a number here — on purpose.
  */
 const HEADER_SURFACES: Record<string, number> = {
-  './components/AppShell.tsx': 1,
+  './components/AppShell.tsx': 3,
   './components/WorkspaceTopBar.tsx': 2,
-  './components/workspace-top-bar/TopBarSecondaryActions.tsx': 2,
   './components/workspace-top-bar/DocumentMenu.tsx': 1,
   './components/document-properties/DocumentProperties.tsx': 1,
   './components/spatial-editor/CanvasDisplaySettings.tsx': 1,

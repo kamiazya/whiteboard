@@ -100,7 +100,6 @@ describe('dark-mode chrome (root token application)', () => {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         titleSlot={() => <span>Login flow</span>}
       />,
