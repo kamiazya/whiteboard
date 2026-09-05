@@ -45,6 +45,7 @@ const sources = import.meta.glob(
     './components/workspace-files/WorkspaceFilesPanel.tsx',
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
+    './components/workspace-files/use-device-memory.ts',
     './pages/DaemonIndexPage.tsx',
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
@@ -81,6 +82,10 @@ const PANEL = './components/workspace-files/WorkspaceFilesPanel.tsx'
 // there, not away, so the scan surface is the concatenation of all three.
 const PANEL_COLUMNS_HOOK = './components/workspace-files/use-browser-columns.ts'
 const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-search.ts'
+// What this device remembers about the workspace — the recently-opened
+// lane and the changed-dot baselines. Extracted from the panel when its
+// file-size budget said so; same SCREEN by the same rule as the two above.
+const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
@@ -108,6 +113,12 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // workspace on screen. Its own effect, since the handle can arrive after
   // the source.
   recentIds: 'cleared on switch',
+  // A COUNTER, not a subject: it names no document and no path, and its
+  // only job is to tell the derived `changed` memo that this panel wrote a
+  // baseline. Surviving a switch is harmless — the memo also keys on
+  // `documents` and `workspace`, both of which change with the scope.
+  seenRevision:
+    'no subject: a bump counter for the changed-dot memo, naming nothing that belongs to a workspace',
   // Paths, and paths collide across workspaces — `untitled` is the first
   // document in most. A selection carried across a switch would address the
   // departed workspace's names into the store now on screen, in a BULK
@@ -459,7 +470,7 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
 const CASES = [
   {
-    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK],
+    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK, PANEL_DEVICE_MEMORY_HOOK],
     ledger: PANEL_STATE,
     label: 'WorkspaceFilesPanel',
     scanRefs: true,
