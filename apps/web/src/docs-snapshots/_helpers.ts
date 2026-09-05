@@ -3,17 +3,20 @@
 // PNG straight to docs/assets/, so the source-of-truth image lives next
 // to the markdown that embeds it.
 //
-// __DOCS_ASSETS_DIR__ is inlined at build time by the vitest define block
-// in vitest.docs-snapshots.config.ts (node:path is not available inside
-// the browser-mode test bundle).
+// The directory reaches the browser bundle as
+// `import.meta.env.VITE_DOCS_ASSETS_DIR`, set by vitest.docs-snapshots.config.ts
+// (node:path is not available inside the browser-mode test bundle, and
+// `define` cannot carry a string here — see the config for the measurement).
 
 import { waitFor } from '@testing-library/react'
 import { page } from 'vitest/browser'
 
-declare const __DOCS_ASSETS_DIR__: string
-
 export function resolveDocAssetPath(name: `${string}.png`): string {
-  return `${__DOCS_ASSETS_DIR__}/${name}`
+  const dir: unknown = import.meta.env.VITE_DOCS_ASSETS_DIR
+  if (typeof dir !== 'string' || dir.length === 0) {
+    throw new Error('VITE_DOCS_ASSETS_DIR is not set; run through vitest.docs-snapshots.config.ts')
+  }
+  return `${dir}/${name}`
 }
 
 export function jsonResponse(body: unknown): Response {

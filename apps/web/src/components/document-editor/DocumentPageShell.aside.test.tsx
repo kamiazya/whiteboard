@@ -34,14 +34,28 @@ describe('DocumentPageShell places the history column', () => {
     expect(screen.getByTestId('hdr').parentElement).not.toBe(pane.parentElement)
   })
 
-  it('leaves the editor row untouched when no aside is passed, so every existing page is unchanged', () => {
-    const { container } = render(
+  it('keeps the editor mounted when an aside arrives, rather than re-parenting the row around it', () => {
+    // The row is wrapped whether or not there is an aside. Wrapping it only
+    // once one arrived moved the editor to a new parent, and React remounts
+    // what changes parent — the spatial editor lost its viewport and
+    // selection every time the history column or the comments rail opened.
+    const { rerender } = render(
       <DocumentPageShell srTitle="doc" header={<div />}>
         <div data-testid="editor" />
       </DocumentPageShell>,
     )
-    const main = container.querySelector('main')
-    // The editor is a DIRECT child of the grid, exactly as before.
-    expect(screen.getByTestId('editor').parentElement).toBe(main)
+    const editorBefore = screen.getByTestId('editor')
+    rerender(
+      <DocumentPageShell
+        srTitle="doc"
+        header={<div />}
+        aside={<aside data-testid="pane">history</aside>}
+      >
+        <div data-testid="editor" />
+      </DocumentPageShell>,
+    )
+    // The same DOM node, still attached: a remount would have replaced it.
+    expect(screen.getByTestId('editor')).toBe(editorBefore)
+    expect(editorBefore.isConnected).toBe(true)
   })
 })

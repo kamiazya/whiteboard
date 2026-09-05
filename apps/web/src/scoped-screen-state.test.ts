@@ -103,6 +103,11 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
   peek: 'cleared on switch',
+  // Reloaded from storage on every `workspace` change rather than emptied,
+  // which is the same guarantee: what is on screen always belongs to the
+  // workspace on screen. Its own effect, since the handle can arrive after
+  // the source.
+  recentIds: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
@@ -119,6 +124,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   rootRef: 'no subject: the panel’s own DOM node',
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
   onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
+  workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
   moveDocumentRef: 'no subject: mirrors the current handler, reassigned every render',
   lastReadListRef:
     'no subject: holds the PREVIOUS source’s identity so the reset block can tell a real switch from a StrictMode replay — clearing it would make every replay read as a switch, which is the trap the effect’s own note describes',
@@ -352,7 +358,6 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   // and a submitted one would open a conversation on the wrong document
   // about a sentence nobody there wrote. Cleared by useCommentsRail.
   composeAnchor: 'cleared on switch',
-  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   threadsRef:
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
@@ -360,7 +365,15 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
-  historyOpen: 'cleared on switch',
+  // Which panel the one inspector slot shows — the history column or the
+  // comments rail. How the reader looks rather than what at: everything a
+  // panel SAYS is document-scoped and cleared on its own (`preview` and
+  // `bookmarkArmed` below, `selectedThreadId` and `composeAnchor` above),
+  // and both panels refetch on the path, so a column left open across a
+  // switch shows the arrived document — as the rail always did, and as the
+  // threads themselves are republished per document.
+  inspector:
+    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries, and the panels refetch on the path',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
   preview: 'cleared on switch',
