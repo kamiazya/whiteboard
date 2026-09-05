@@ -71,18 +71,20 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
         />
       ) : (
         <>
-          {/* The icon LEAVES rather than vanishing. Measured on the real app
-              before this: it unmounted in the same frame the render mounted
-              at opacity 0 (1913ms icon=1.00 -> 1929ms icon gone, render=0.00),
-              so the box was empty for a frame and the picture arrived over
-              nothing. */}
-          <KindIcon className="text-muted-foreground animate-out fade-out-0 fill-mode-forwards absolute inset-0 size-full duration-(--motion-duration-normal) ease-linear" />
-          {/* The SVG is produced by this app's own renderer from the
-              document's own content, never by a remote party.
-              The rule lives on the span that actually PARENTS the svg. jsdom
-              has no layout, so a selector aimed one level too high still
-              passes every test and draws a 2000px canvas inside a 24px row in
-              a real browser.
+          {/* The render comes FIRST in document order, and rides above the
+              icon on z-10 rather than by being later in the tree. Both halves
+              are svgs now, and this box is reached for with
+              `querySelector('svg')` in more than one place — the same hazard
+              DocumentMinimap and MinimapOverlay each carry a note about. Put
+              the leaving icon first and that selector starts answering with
+              a 24x24 kind glyph instead of the document's own render.
+
+              The SVG is produced by this app's own renderer from the
+              document's own content, never by a remote party. The size rule
+              lives on the span that actually PARENTS the svg: jsdom has no
+              layout, so a selector aimed one level too high still passes
+              every test and draws a 2000px canvas inside a 24px row in a
+              real browser.
 
               Linear, not the shared ease-out: that curve is built for
               movement and front-loads opacity — measured, it reached 0.80 in
@@ -90,10 +92,17 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
               dissolve wants the two halves to trade evenly, and they now do:
               their opacities sum to 1.00 across the whole 220ms. */}
           <span
-            className="animate-in fade-in-0 relative size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
+            className="animate-in fade-in-0 relative z-10 size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
             // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
             dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
           />
+          {/* The icon LEAVES rather than vanishing. Measured on the real app
+              before this: it unmounted in the same frame the render mounted
+              at opacity 0 (1913ms icon=1.00 -> 1929ms icon gone, render=0.00),
+              so the box was empty for a frame and the picture arrived over
+              nothing. No `data-kind` here: its absence is how a test knows a
+              render landed. */}
+          <KindIcon className="text-muted-foreground animate-out fade-out-0 fill-mode-forwards absolute inset-0 size-full duration-(--motion-duration-normal) ease-linear" />
         </>
       )}
     </span>
