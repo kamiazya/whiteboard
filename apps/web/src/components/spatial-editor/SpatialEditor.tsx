@@ -93,6 +93,7 @@ import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
 import type { BoxMove } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
@@ -615,6 +616,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         theme,
         suppressedBodyNodeIds,
         showResolved: showResolvedComments,
+        threads,
       },
       fileSeamOptions,
       fileRefOptions,
@@ -1133,11 +1135,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handleContextMenu = (e: React.MouseEvent<HTMLDivElement>) => {
+      const root = rootRef.current
+      if (root === null) return
+      // Inside a node's text editor the object is the TEXT: the menu is the
+      // editing catalog (the note editor's own, Comment included), the way
+      // the note editor answers a right-click on a selection.
+      const editor = getActiveMarkdownEditor()
+      if (
+        editor !== null &&
+        e.target instanceof Element &&
+        e.target.closest('[data-testid="text-node-editor"]') !== null
+      ) {
+        e.preventDefault()
+        const at = clientPointToRootLocal(e, root)
+        setContextMenu({
+          x: at.x,
+          y: at.y,
+          nodeId: undefined,
+          edgeId: undefined,
+          point: screenToCanvas(at, viewport),
+          editor,
+        })
+        return
+      }
       if (isOverlayEvent(e)) return
       // Replace the browser menu with the object's own action menu.
       e.preventDefault()
-      const root = rootRef.current
-      if (root === null) return
       openContextMenuAt(clientPointToRootLocal(e, root))
     }
 

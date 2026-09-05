@@ -1,6 +1,6 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
-import type { Extension, StateCommand } from '@codemirror/state'
+import type { Extension } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
@@ -32,12 +32,6 @@ import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
 import { commentAnchors, setCommentThreads, setSelectedCommentThread } from './comment-anchors.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
-import {
-  levelCommand,
-  MARKDOWN_EDITOR_VERBS,
-  type MarkdownVerbBand,
-  selfContainedCommand,
-} from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
 import { MinimapRail } from './MinimapRail.js'
@@ -53,7 +47,7 @@ import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
-import { VERB_ICONS } from './verb-icons.js'
+import { verbCatalogItems } from './verb-catalog.js'
 import {
   wikiLinkCompletionSource,
   wikiLinkCompletionTheme,
@@ -743,76 +737,31 @@ export function MarkdownEditor({
     return () => host.removeEventListener('contextmenu', onContextMenu)
   }, [openCatalogAt])
 
-  const catalogItems = useMemo((): readonly ContextMenuItem[] => {
-    const level = sourceApiRef.current?.headingLevel() ?? 0
-    const run = (command: StateCommand) => () => {
-      sourceApiRef.current?.run(command)
-      setCatalog(null)
-    }
-    // Every row is derived from MARKDOWN_EDITOR_VERBS, so a verb added
-    // there reaches both the catalog and the source pane's keymap without a
-    // second edit — which is what the two hand-kept lists this replaced
-    // could not promise.
-    const items: ContextMenuItem[] = []
-    let band: MarkdownVerbBand | null = null
-    for (const spec of MARKDOWN_EDITOR_VERBS) {
-      if (band !== null && spec.band !== band) items.push({ kind: 'separator' })
-      band = spec.band
-
-      if (spec.action.kind === 'levels') {
-        items.push({
-          kind: 'options',
-          label: spec.label,
-          options: spec.action.levels.map((option) => ({
-            label: option.label,
-            selected: level === option.level,
-            onSelect: run(levelCommand(option.level)),
-          })),
-        })
-        continue
-      }
-
-      // The one verb that asks before it writes. With nothing to pick from
-      // there is nothing to ask, and it falls through to the wrap the table
-      // declares for exactly that case.
-      const icon = VERB_ICONS[spec.id]
-      if (spec.action.kind === 'interactive') {
-        if (spec.action.hook === 'link' && linkTargets !== undefined && linkTargets.length > 0) {
-          items.push({
-            label: spec.label,
-            icon,
-            onSelect: () => {
-              const scope = sourceApiRef.current?.pinScope()
-              if (scope === undefined) return
-              setCatalog(null)
-              setLinkPicker({ query: scope.text, text: scope.text })
-            },
-          })
-          continue
-        }
-        if (spec.action.hook === 'comment' && onRequestComment !== undefined) {
-          items.push({
-            label: spec.label,
-            icon,
-            onSelect: () => {
-              setCatalog(null)
-              sourceApiRef.current?.openCommentComposer()
-            },
-          })
-          continue
-        }
-      }
-
-      const command = selfContainedCommand(spec)
-      // A verb with neither a dialog nor a self-contained command has no
-      // plain row to render. Only `levels` is that today, and it returned
-      // above; this is what keeps a future action kind from rendering a
-      // dead menu item.
-      if (command === null) continue
-      items.push({ label: spec.label, icon, onSelect: run(command) })
-    }
-    return items
-  }, [catalog, linkTargets])
+  const catalogItems = useMemo(
+    (): readonly ContextMenuItem[] =>
+      verbCatalogItems({
+        headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
+        run: (command) => sourceApiRef.current?.run(command),
+        close: () => setCatalog(null),
+        // With nothing to pick from there is nothing to ask, and the link
+        // verb falls through to the wrap the table declares for that case.
+        ...(linkTargets !== undefined && linkTargets.length > 0
+          ? {
+              openLinkPicker: () => {
+                const scope = sourceApiRef.current?.pinScope()
+                if (scope === undefined) return
+                setLinkPicker({ query: scope.text, text: scope.text })
+              },
+            }
+          : {}),
+        ...(onRequestComment === undefined
+          ? {}
+          : { openCommentComposer: () => sourceApiRef.current?.openCommentComposer() }),
+      }),
+    // `catalog` is a dependency on purpose: the heading level is read when
+    // the catalog OPENS, from the caret's line at that moment.
+    [catalog, linkTargets, onRequestComment],
+  )
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''

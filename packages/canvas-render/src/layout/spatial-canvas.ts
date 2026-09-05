@@ -29,6 +29,7 @@ import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type {
   CanvasComment,
   CanvasEdge,
+  CommentThread,
   EdgeRoutingStyle,
   SpatialCanvas,
   SpatialNode,
@@ -79,6 +80,12 @@ import {
 } from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { fitToWidth } from './nodes/truncate.js'
+import {
+  collectTextRuns,
+  composePassageHighlights,
+  type NodePassage,
+  nodePassagesOf,
+} from './passage-highlight.js'
 import { scaleScene } from './scale-scene.js'
 import { translateScene } from './translate-scene.js'
 
@@ -310,6 +317,17 @@ export interface SpatialLayoutOptions {
    * unmigrated caller byte-identical, and it goes once none is left.
    */
   readonly comments?: readonly CanvasComment[]
+  /**
+   * The document's conversations, for what the flat `comments` cannot
+   * carry: a thread about a PASSAGE of a text node's text (the text arm
+   * naming a node, ADR-0026 §3) is drawn as a highlight behind the words it
+   * quotes, re-found in the node's laid-out runs by its quote. Pins and
+   * bubbles still come from `comments` / the envelope — the projection a
+   * caller's optimistic state already holds — so a caller passes both.
+   * Absent, no passage is highlighted; the pin at the node's corner still
+   * says the conversation exists.
+   */
+  readonly threads?: readonly CommentThread[]
 }
 
 /**
@@ -370,6 +388,8 @@ export interface ResolvedReference {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /** `threads`'s node passages, grouped by the node they are about. */
+  readonly passagesByNode: ReadonlyMap<string, readonly NodePassage[]>
   /** The contribution set actually in force, defaulted once at the entry
    *  point so no inner function repeats the `?? [visual]`. */
   readonly contributions: readonly RenderContribution[]
@@ -666,7 +686,35 @@ function composeTextNode(
       body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
     }
   }
-  return [chromeWithFit(node, options, body), ...placeInNode(node, { nodes: body.nodes }, options)]
+  // Behind the runs, in the same origin-relative space, so `placeInNode`
+  // carries them into the node together. A resolved passage is drawn only
+  // with the resolved comments, muted like its pin.
+  const passages = (options.passagesByNode.get(node.id) ?? []).filter(
+    (passage) => !passage.resolved || options.showResolved === true,
+  )
+  const highlights =
+    passages.length === 0
+      ? []
+      : composePassageHighlights(passages, collectTextRuns(body.nodes), options.measure, {
+          open: options.appearance.resolveComment?.()?.passage,
+          resolved: options.appearance.resolveComment?.()?.resolvedOverlay.passage,
+        })
+  return [
+    chromeWithFit(node, options, body),
+    ...placeInNode(node, { nodes: [...highlights, ...body.nodes] }, options),
+  ]
+}
+
+function groupPassages(
+  passages: readonly NodePassage[],
+): ReadonlyMap<string, readonly NodePassage[]> {
+  const byNode = new Map<string, NodePassage[]>()
+  for (const passage of passages) {
+    const list = byNode.get(passage.nodeId) ?? []
+    list.push(passage)
+    byNode.set(passage.nodeId, list)
+  }
+  return byNode
 }
 
 /**
@@ -1199,6 +1247,7 @@ export function layoutSpatialCanvasWithAnchors(
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
     ...resolved,
+    passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1232,6 +1281,9 @@ export function naturalNodeContentSize(
   const content = composeNode(node, {
     ...options,
     ...resolveContributions(options),
+    // A natural size asks how big the box must be; a highlight adds no
+    // extent beyond the words it sits under, so none is composed here.
+    passagesByNode: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1590,6 +1642,7 @@ export function layoutSpatialEdges(
   return composeEdgesAndLabels(canvas, {
     ...options,
     ...resolveContributions(options),
+    passagesByNode: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,

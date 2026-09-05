@@ -56,6 +56,12 @@ export interface SpatialCommentChromeAppearance {
   readonly bubble: Appearance
   /** The dashed line tying pin to bubble, so the pair reads as one comment. */
   readonly leader: Appearance
+  /**
+   * The wash behind the words a thread quotes inside a text node (the text
+   * arm naming a node). Optional: a resolver that predates passages still
+   * lays them out, unpainted, the way a bare resolver lays pins out.
+   */
+  readonly passage?: Appearance
 }
 
 /** What a resolver decided for the comment layer's chrome. */

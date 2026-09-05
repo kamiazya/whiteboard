@@ -309,6 +309,7 @@ export function SourcePane({
         view.focus()
       },
       headingLevel: () => headingLevelAt(view.state),
+      focus: () => view.focus(),
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
       // Only with a seam: a bar reads the absence as "leave the verb off".
       ...(onRequestCommentRef.current === undefined

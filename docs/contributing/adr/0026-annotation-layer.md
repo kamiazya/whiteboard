@@ -196,9 +196,12 @@ decision said every arm has: an optional `nodeId` naming the text node whose
 text holds the passage — a passage inside a node lives on the canvas, but
 its position is a place in a string, not a point. Absent, the passage is the
 note's own body. A node passage projects onto the canvas as a comment on
-that node, at its corner (`canvasCommentFromThread`, model), and draws
-highlighted inside the node's editor while the node is edited; the flat
-projection written back keeps the passage it could not carry. What a reader
+that node, at its corner (`canvasCommentFromThread`, model); the flat
+projection written back keeps the passage it could not carry. The words
+themselves are highlighted on the canvas (`layoutSpatialCanvas`'s `threads`
+option: the passage is re-found in the node's laid-out runs by its quote,
+since the runs hold rendered text and the offsets are into the source) and
+inside the node's editor while it is edited. What a reader
 can comment on, and which arm carries it, is the table on
 `annotationAnchorSchema`. A region of several nodes and a document as a
 whole are still not anchorable; both are deferred until asked for.

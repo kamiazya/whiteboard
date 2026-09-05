@@ -36,6 +36,7 @@ export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
 } from './layout/nodes/spatial-appearance.js'
+export { findPassage } from './layout/passage-highlight.js'
 export { scaleScene } from './layout/scale-scene.js'
 export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {

@@ -126,14 +126,20 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
         strokeWidth: 1,
         strokeDasharray: COMMENT_LEADER_DASH,
       }
+      // The pin's own amber at a wash: the passage stays readable, and the
+      // highlight reads as the same object as the pin beside it. The same
+      // 22% the note's source pane paints its passages with.
+      const passage: Appearance = { fill: palette.comment.pin.fill, fillOpacity: 0.22 }
       return {
         pin,
         bubble,
         leader,
+        passage,
         resolvedOverlay: {
           pin: muteForResolved(pin),
           bubble: muteForResolved(bubble),
           leader: muteForResolved(leader),
+          passage: { ...passage, fillOpacity: 0.1 },
         },
       }
     },

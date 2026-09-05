@@ -55,6 +55,9 @@ import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
 import type { Box } from './geometry.js'
 
+const isMenuTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest('[role="menu"]') !== null
+
 export interface MarkdownNodeEditorProps {
   readonly box: Box
   readonly initialText: string
@@ -184,8 +187,13 @@ export function MarkdownNodeEditor({
             if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
             return false
           },
-          blur: (_event, view) => {
+          blur: (event, view) => {
             if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
+            // Focus moving INTO a menu is the editing catalog taking the
+            // keyboard for its rows, not the user leaving the node: the
+            // catalog acts on this editor and hands the caret back on
+            // close, so the edit stays open. Any other departure commits.
+            if (isMenuTarget(event.relatedTarget)) return false
             commit(view)
             return false
           },
@@ -220,6 +228,7 @@ export function MarkdownNodeEditor({
         view.focus()
       },
       headingLevel: () => headingLevelAt(view.state),
+      focus: () => view.focus(),
       ...(onRequestCommentRef.current === undefined
         ? {}
         : { openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current) }),

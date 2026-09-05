@@ -2,7 +2,7 @@
 // bubbles composed into the SVG scene AFTER nodes and edges, so they paint
 // above content on every surface — widget, viewer, export — with no per-
 // surface wiring. Placement floats near the anchor; nothing here is stored.
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type {
@@ -31,10 +31,12 @@ const fakeAppearance: SpatialAppearanceResolver = {
     pin: { fill: '#d97706' },
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
+    passage: { fill: '#d97706', fillOpacity: 0.22 },
     resolvedOverlay: {
       pin: { fill: '#d97706', fillOpacity: 0.45 },
       bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
       leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
+      passage: { fill: '#d97706', fillOpacity: 0.1 },
     },
   }),
 }
@@ -536,5 +538,83 @@ describe('comment layer', () => {
       expect(withoutObstacle.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
       expect(withObstacle.bbox.y + withObstacle.bbox.h).toBe(100 - COMMENT_BUBBLE_OFFSET_PX)
     })
+  })
+})
+
+describe('a passage of a node’s text (the text arm naming a node)', () => {
+  const NOTE: SpatialNode = {
+    id: 'n1',
+    type: 'text',
+    x: 0,
+    y: 0,
+    width: 400,
+    height: 100,
+    text: 'ship the plan by friday',
+  }
+  const passage = (exact: string, status: CommentThread['status'] = 'open'): CommentThread => ({
+    id: 't1',
+    anchor: { kind: 'text', nodeId: 'n1', quote: { exact }, start: 0, end: 1 },
+    status,
+    messages: [{ id: 'm1', body: 'about it' }],
+  })
+  const highlightsOf = (nodes: readonly SceneNode[]) =>
+    shapesOf(nodes).filter((shape) => shape.id?.startsWith('t1/passage-'))
+
+  it('highlights exactly the quoted words, measured with the run’s own font, behind the run', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan')] }),
+    )
+    const run = runsOf(scene.nodes).find((r) => r.text.includes('plan'))
+    expect(run).toBeDefined()
+    const size = run?.appearance?.fontSize as number
+    const [box] = highlightsOf(scene.nodes)
+    expect(box).toBeDefined()
+    // The fake measurer: 0.6em per character. "ship the " is nine.
+    expect(box?.bbox).toEqual({
+      x: (run?.bbox.x as number) + 9 * 0.6 * size,
+      y: run?.bbox.y,
+      w: 4 * 0.6 * size,
+      h: run?.bbox.h,
+    })
+    expect(box?.commentChrome).toBe(true)
+    expect(box?.appearance).toEqual({ fill: '#d97706', fillOpacity: 0.22 })
+    // Painted before the run, so the words stay on top.
+    const order = scene.nodes.indexOf(box as (typeof scene.nodes)[number])
+    const runIndex = scene.nodes.findIndex(
+      (n) =>
+        (n.kind === 'paragraph' || n.kind === 'heading') && n.runs.includes(run as TextRunNode),
+    )
+    expect(order).toBeLessThan(runIndex)
+  })
+
+  it('follows a passage across a wrap with one box per line', () => {
+    // Narrow enough that "plan by" breaks: the second box starts at its line's start.
+    const scene = layoutSpatialCanvas(
+      { nodes: [{ ...NOTE, width: 110 }], edges: [] },
+      baseOptions({ threads: [passage('plan by friday')] }),
+    )
+    const boxes = highlightsOf(scene.nodes)
+    expect(boxes.length).toBeGreaterThan(1)
+    const ys = new Set(boxes.map((b) => b.bbox.y))
+    expect(ys.size).toBe(boxes.length)
+  })
+
+  it('draws nothing for a quote the rendered text does not hold, or a resolved passage by default', () => {
+    const gone = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('monday')] }),
+    )
+    expect(highlightsOf(gone.nodes)).toEqual([])
+    const resolved = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan', 'resolved')] }),
+    )
+    expect(highlightsOf(resolved.nodes)).toEqual([])
+    const shown = layoutSpatialCanvas(
+      { nodes: [NOTE], edges: [] },
+      baseOptions({ threads: [passage('plan', 'resolved')], showResolved: true }),
+    )
+    expect(highlightsOf(shown.nodes)).toHaveLength(1)
   })
 })

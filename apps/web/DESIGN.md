@@ -503,7 +503,7 @@ on — a menu row where the place is an object, a verb where it is text:
 | a spot on the canvas | canvas menu, "Comment here" | `spatial` point |
 | a node | node menu, "Comment on this" | `spatial` + `nodeId` |
 | an edge | edge menu, "Comment on this" | `spatial` + `edgeId` |
-| a passage of a text node | the `comment` verb while editing the node (verb bar, touch bar) | `text` + `nodeId` |
+| a passage of a text node | the `comment` verb while editing the node (verb bar, touch bar, right-click catalog) | `text` + `nodeId` |
 | a passage of a note | the `comment` verb (toolbar, ⋯ catalog, touch bar) | `text` |
 
 The `comment` verb is ONE entry in `MARKDOWN_EDITOR_VERBS`, so every bar
@@ -512,7 +512,22 @@ to, and a bar leaves it off on a host that offers no seam
 (`ActiveMarkdownEditor.openCommentComposer`) rather than showing it inert.
 The canvas answers the verb with its compose bubble at the node's corner;
 a note answers with a draft composer at the top of the rail, labelled with
-the quoted passage. Both write the same thread shape.
+the quoted passage. Both write the same thread shape. The right-click
+catalog is ONE builder (`verb-catalog.tsx`) for the note editor's ⋯ and
+right-click and for a right-click inside a node's editor, so the two
+editors cannot offer different verbs for the same text. The menu takes
+focus for its rows, and the node editor — which commits on blur — reads a
+departure INTO a menu as the catalog's, not the user's; the menu hands the
+caret back on close, so the edit outlives the menu and still commits on
+the next real exit.
+
+A passage is drawn where its words are, on every surface that has them:
+the note's source pane and the node's editor as CodeMirror decorations,
+the static canvas as highlight shapes canvas-render composes behind the
+runs (from the `threads` it is handed; the pin still comes from the flat
+projection the optimistic state holds), and the export through the same
+layout. The MCP Apps widget receives no threads yet, so it shows the pin
+without the highlight.
 
 **Which conversation is open is the PAGE's answer, held once.** The rail
 and the in-place projection both read it and both may change it: a press on

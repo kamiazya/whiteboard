@@ -1,4 +1,5 @@
 import { constantRatioMeasureText, renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
@@ -51,6 +52,9 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
         (await deps.measure?.()) ?? constantRatioMeasureText,
         {
           ...(references === undefined ? {} : { references }),
+          // The export draws what the editor draws: a thread about a passage
+          // of a node's text is a highlight behind those words.
+          threads: readAnnotations(doc),
         },
       )
       const { width, height } = computeSceneDimensions(scene)

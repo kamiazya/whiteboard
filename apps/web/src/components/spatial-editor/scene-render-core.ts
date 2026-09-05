@@ -29,7 +29,7 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
@@ -66,6 +66,13 @@ export interface RenderCanvasCoreOptions {
    * (committed, worker, drag layers) and is never written to the document.
    */
   readonly showResolved?: boolean
+  /**
+   * The document's conversations, for the passages inside text nodes
+   * (canvas-render's `threads`): a highlight behind the quoted words. Pins
+   * still come from the canvas's own projection, which is what the
+   * optimistic state holds.
+   */
+  readonly threads?: readonly CommentThread[]
 }
 
 export interface RenderedCanvas {
@@ -94,6 +101,7 @@ export function renderCanvasToSvgWith(
     suppressedBodyNodeIds: options.suppressedBodyNodeIds,
     commentObstacles: options.commentObstacles,
     showResolved: options.showResolved,
+    threads: options.threads,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

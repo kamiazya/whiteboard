@@ -12,6 +12,11 @@ export interface ActiveMarkdownEditor {
   readonly run: (command: StateCommand) => void
   readonly headingLevel: () => number
   /**
+   * Returns the caret to the host. A menu opened ON the host takes focus
+   * for its own keyboard handling and hands it back through this on close.
+   */
+  readonly focus: () => void
+  /**
    * Opens the host's link picker and answers true; false when it has nothing
    * to pick from, so the caller falls back to the verb's plain wrap. Absent
    * on hosts without a picker.
