@@ -36,7 +36,7 @@ export interface CommentsRailWrite {
 }
 
 export interface CommentsRail {
-  /** Whether the rail is open. Per-user view state, written nowhere. */
+  /** Whether the rail is open — the page's inspector slot showing it. */
   readonly open: boolean
   readonly toggle: () => void
   /** The conversation the reader is on, shared by rail and body projection. */
@@ -66,11 +66,19 @@ export function useCommentsRail(args: {
    * thread id and a compose anchor both belong to the DOCUMENT (left
    * standing across a switch they would scroll the arrived body to a
    * passage the departed document quoted, or open a conversation about a
-   * sentence nobody there wrote). `open` is deliberately NOT reset — what a
-   * switch changes is the list, not whether the reader wanted to be looking
-   * at one.
+   * sentence nobody there wrote). Whether the rail is OPEN is the page's
+   * inspector slot and is not reset either — what a switch changes is the
+   * list, not whether the reader wanted to be looking at one.
    */
   scopeKey: unknown
+  /**
+   * Whether the rail is open, and how to change that. Owned by the PAGE
+   * rather than here because the rail shares one inspector slot with the
+   * history column: opening either closes the other, and a slot that lives
+   * in two hooks cannot be exclusive. Per-user view state, written nowhere.
+   */
+  open: boolean
+  onOpenChange: (open: boolean) => void
   threads: readonly CommentThread[]
   documentKind: DocumentKind | null
   /** The markdown body, for judging text anchors; null off a markdown doc. */
@@ -86,8 +94,8 @@ export function useCommentsRail(args: {
   canvas: SpatialCanvas | null
   write: CommentsRailWrite
 }): CommentsRail {
-  const { scopeKey, threads, documentKind, markdownBody, canvas, threadMarks } = args
-  const [open, setOpen] = useState(false)
+  const { scopeKey, open, onOpenChange, threads, documentKind, markdownBody, canvas, threadMarks } =
+    args
   const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
 
@@ -102,21 +110,27 @@ export function useCommentsRail(args: {
     setComposeAnchor(null)
   }, [scopeKey])
 
-  const toggle = useCallback(() => setOpen((wasOpen) => !wasOpen), [])
+  const toggle = useCallback(() => onOpenChange(!open), [open, onOpenChange])
   const selectThread = useCallback((threadId: string | null) => {
     setSelectedThreadId(threadId)
   }, [])
-  const revealThread = useCallback((threadId: string) => {
-    setOpen(true)
-    setSelectedThreadId(threadId)
-  }, [])
-  const composeThread = useCallback((anchor: AnnotationAnchor) => {
-    setOpen(true)
-    // Nothing else expanded: the reader asked for a new conversation, and an
-    // already-open one beside the draft box is two reply fields on screen.
-    setSelectedThreadId(null)
-    setComposeAnchor(anchor)
-  }, [])
+  const revealThread = useCallback(
+    (threadId: string) => {
+      onOpenChange(true)
+      setSelectedThreadId(threadId)
+    },
+    [onOpenChange],
+  )
+  const composeThread = useCallback(
+    (anchor: AnnotationAnchor) => {
+      onOpenChange(true)
+      // Nothing else expanded: the reader asked for a new conversation, and an
+      // already-open one beside the draft box is two reply fields on screen.
+      setSelectedThreadId(null)
+      setComposeAnchor(anchor)
+    },
+    [onOpenChange],
+  )
   const cancelCompose = useCallback(() => setComposeAnchor(null), [])
 
   const openThreadCount = useMemo(

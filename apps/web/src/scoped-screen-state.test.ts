@@ -358,7 +358,6 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   // and a submitted one would open a conversation on the wrong document
   // about a sentence nobody there wrote. Cleared by useCommentsRail.
   composeAnchor: 'cleared on switch',
-  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   threadsRef:
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
@@ -366,7 +365,15 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
-  historyOpen: 'cleared on switch',
+  // Which panel the one inspector slot shows — the history column or the
+  // comments rail. How the reader looks rather than what at: everything a
+  // panel SAYS is document-scoped and cleared on its own (`preview` and
+  // `bookmarkArmed` below, `selectedThreadId` and `composeAnchor` above),
+  // and both panels refetch on the path, so a column left open across a
+  // switch shows the arrived document — as the rail always did, and as the
+  // threads themselves are republished per document.
+  inspector:
+    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries, and the panels refetch on the path',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
   preview: 'cleared on switch',

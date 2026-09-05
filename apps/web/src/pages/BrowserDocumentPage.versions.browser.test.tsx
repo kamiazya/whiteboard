@@ -170,20 +170,26 @@ describe('BrowserDocumentPage version history (browser)', () => {
     expect(await storedText(documentId)).toBe('second')
     await openPage()
 
-    await userEvent.click(screen.getByRole('button', { name: 'History' }))
-    const reopened = await screen.findByTestId('history-panel')
-    await waitFor(() => expect(within(reopened).getAllByTestId('version-row')).toHaveLength(2))
-    // Newest first; the OLDER row is the one holding 'first'.
-    // The annotation rail, opened while the LIVE document is on screen —
-    // its opener rides the editor's chrome, which the preview replaces, so
-    // this is also the only order a reader can reach the state below in.
-    await userEvent.click(screen.getByRole('button', { name: /comments/i }))
+    // The annotation rail first, while the LIVE document is on screen.
     // Scoped to the rail: the canvas draws this same text in its own bubble,
     // so an unscoped query matches two elements and reads the wrong one.
+    await userEvent.click(screen.getByRole('button', { name: /comments/i }))
     const rail = await screen.findByTestId('comments-panel')
     await userEvent.click(within(rail).getByText('still needs a decision'))
     expect(within(rail).getByRole('textbox', { name: /reply/i })).toBeTruthy()
 
+    // History takes the one inspector slot from it: the rail leaves as the
+    // column arrives, and its opener reads released. Two panels beside one
+    // editor was the phone screenshot the header retune started from.
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const reopened = await screen.findByTestId('history-panel')
+    expect(screen.queryByTestId('comments-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /comments/i })).toHaveAttribute(
+      'aria-pressed',
+      'false',
+    )
+    await waitFor(() => expect(within(reopened).getAllByTestId('version-row')).toHaveLength(2))
+    // Newest first; the OLDER row is the one holding 'first'.
     const row = within(reopened).getAllByTestId('version-row')[1]
     const restoreTarget = row?.querySelector('button')
     if (!restoreTarget) throw new Error('the version row is not restorable')
@@ -200,14 +206,11 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // Read-only: the editor is not on screen while a past state is.
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
 
-    // …and read-only includes the annotation rail, which the preview does NOT
-    // replace: it is still open, still listing the conversation, and its reply
-    // box is gone. A reply is a write to the LIVE document, and offered here it
-    // would be sent by a reader with every reason to think they are answering
-    // what they can see.
-    const railInPreview = screen.getByTestId('comments-panel')
-    expect(within(railInPreview).getByText('still needs a decision')).toBeTruthy()
-    expect(within(railInPreview).queryByRole('textbox', { name: /reply/i })).toBeNull()
+    // The rail cannot be reached from here: the column that offered the
+    // preview holds the inspector slot, and the preview bar hides the rail's
+    // opener. (Its read-only stance under a preview is pinned on the daemon
+    // page's variation preview, where the opener stays.)
+    expect(screen.queryByTestId('comments-panel')).toBeNull()
 
     // The controls sit on the DOCUMENT's chrome, not inside the history.
     // What changed is the document, and on a narrow screen the panel is a

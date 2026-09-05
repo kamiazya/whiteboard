@@ -209,19 +209,24 @@ describe('the body surface does not outlive its document (daemon)', () => {
     })
     await waitFor(() => expect(screen.getByText('Bookmark saved')).toBeTruthy())
 
-    // The switch this page makes by itself; the history panel closes with it.
+    // The switch this page makes by itself. The history column stays open —
+    // which panel the inspector slot shows is how the reader looks, not what
+    // at — so the badge has to clear on its own rather than with a panel.
     await act(async () => {
       openFileRef?.('id-b')
     })
-    await waitFor(() => expect(screen.queryByTestId('bookmark-action')).toBeNull())
-
-    // Reopen history on the ARRIVED document via the toolbar (not ⌘S, which
-    // would arm the naming field and hide the badge either way).
-    fireEvent.click(screen.getByRole('button', { name: 'History' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Bookmark saved'),
+        "a 'saved' badge earned on the departed document is still lit under the arrived one",
+      ).toBeNull(),
+    )
+    // Still there once the arrived document lands (the column steps out
+    // while the canvas is null between the two, and back in with it).
     await screen.findByTestId('bookmark-action')
     expect(
-      screen.queryByText('Bookmark saved'),
-      "a 'saved' badge earned on the departed document is still lit under the arrived one",
+      screen.queryByLabelText('Name this point'),
+      'the naming field armed on the departed document is open under the arrived one',
     ).toBeNull()
   })
 
