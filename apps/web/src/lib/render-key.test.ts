@@ -69,9 +69,15 @@ describe('renderKeyPath — the pipeline is part of the identity', () => {
     )
   })
 
+  // The family is named by a SEGMENT, not by the extension. Both are stored
+  // as JSON because what a caller needs back is the whole worker reply — an
+  // SVG plus the bounds it is scaled to, or an outline's rectangles — so an
+  // entry named `.svg` would be describing one field of the file it holds.
   it('names each family in the path, so a stored entry says what it holds', () => {
-    expect(renderKeyPath(renderKeyOf(subject, 'light')).endsWith('.svg')).toBe(true)
-    expect(renderKeyPath(outlineKeyOf(subject)).endsWith('.svg')).toBe(false)
+    expect(renderKeyPath(renderKeyOf(subject, 'light'))).toContain('/svg/')
+    expect(renderKeyPath(outlineKeyOf(subject))).toContain('/outline/')
+    expect(renderKeyPath(renderKeyOf(subject, 'light')).endsWith('.json')).toBe(true)
+    expect(renderKeyPath(outlineKeyOf(subject)).endsWith('.json')).toBe(true)
   })
 
   it('defaults to the svg family, which every existing caller is', () => {

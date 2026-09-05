@@ -19,12 +19,12 @@
  * So it asks on BOTH the document's change notification and the published
  * value, rather than picking one. Measured in the running app: typing into a
  * markdown document in browser mode fires no `whiteboard:doc_changed` at all
- * (`dispatchIdentityEvent` returns early without a workspace identity, which
- * is why `useDirtyState`'s save dot stays clean there too), so an outline
- * driven by the event alone never updated. The published value is what
- * covers that; the event is what covers a change that arrives without one.
- * Asking twice for one state costs a map lookup — the version is the same,
- * so the second ask is answered from the memo.
+ * — `dispatchIdentityEvent` dispatches nothing unless a workspace identity is
+ * set, and the browser page sets none — so an outline driven by the event
+ * alone never updated. The published value is what covers that; the event is
+ * what covers a change that arrives without one. Asking twice for one state
+ * costs a map lookup — the version is the same, so the second ask is answered
+ * from the memo.
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -35,7 +35,7 @@ import type { FaviconRect } from '../lib/favicon.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../lib/layout-worker-pool.js'
 import type { OutlineResponse } from '../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../lib/render-broker.js'
-import { outlineKeyOf } from '../lib/render-key.js'
+import { cacheKeyFor, outlineKeyOf } from '../lib/render-key.js'
 
 /**
  * The width a markdown document is laid out at for these renditions. Fixed
@@ -51,6 +51,7 @@ const NO_RECTS: readonly FaviconRect[] = []
 /** The shared fleet at idle priority: a tab icon is below even a list. */
 async function outlineInPool(
   source: DocumentOutlineSource,
+  cacheKey?: string,
 ): Promise<readonly FaviconRect[] | null> {
   const reply = await sharedLayoutWorkerPool().run<OutlineResponse>(
     {
@@ -59,6 +60,9 @@ async function outlineInPool(
       ...(source.snapshot === undefined
         ? { body: source.body, maxWidth: OUTLINE_LAYOUT_WIDTH }
         : { snapshot: source.snapshot }),
+      // The persistent tier reads and writes this INSIDE the worker, so a
+      // tab icon restored from disk costs the asking thread nothing.
+      ...(cacheKey === undefined ? {} : { cacheKey }),
     },
     'idle',
   )
@@ -87,7 +91,10 @@ export function useDocumentOutline({
   readSource: (kind: DocumentKind) => DocumentOutlineSource | null
   broker: RenderBroker
   /** Injected so the branch that produces a shape is assertable without a worker. */
-  outline?: (source: DocumentOutlineSource) => Promise<readonly FaviconRect[] | null>
+  outline?: (
+    source: DocumentOutlineSource,
+    cacheKey?: string,
+  ) => Promise<readonly FaviconRect[] | null>
 }): readonly FaviconRect[] {
   const [rects, setRects] = useState<readonly FaviconRect[]>(NO_RECTS)
 
@@ -106,7 +113,7 @@ export function useDocumentOutline({
       }
       const key = outlineKeyOf({ documentId, kind, updatedAt: source.frontier })
       broker
-        .render(key, () => outline(source))
+        .render(key, () => outline(source, cacheKeyFor(key)))
         .then((next) => {
           if (live && next !== null) setRects(next)
         })

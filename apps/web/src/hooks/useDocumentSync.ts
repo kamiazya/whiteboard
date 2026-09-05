@@ -23,6 +23,7 @@ import {
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
+import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 
 export type { UseDocumentSyncOptions }
 // Re-exported so existing call sites can keep importing it from the hook
@@ -106,35 +107,6 @@ const EMPTY_LOCKED_IDS: ReadonlySet<string> = new Set()
 const EMPTY_ANNOTATIONS: readonly CommentThread[] = []
 
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
-
-/**
- * Rasterizes an already-serialized SVG through an <img> + <canvas> 2D context.
- * Returns null when no real 2D context exists (e.g. jsdom) — that is
- * "format unavailable in this environment", not an error.
- */
-async function rasterizeSvgToPng(svg: string, width: number, height: number): Promise<Blob | null> {
-  const canvasEl = document.createElement('canvas')
-  canvasEl.width = width
-  canvasEl.height = height
-  const ctx = canvasEl.getContext('2d')
-  if (!ctx) return null
-
-  const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml' }))
-  try {
-    const image = await new Promise<HTMLImageElement>((resolve, reject) => {
-      const img = new Image()
-      img.onload = () => resolve(img)
-      img.onerror = () => reject(new Error('failed to load rasterized SVG'))
-      img.src = url
-    })
-    ctx.drawImage(image, 0, 0, width, height)
-  } finally {
-    URL.revokeObjectURL(url)
-  }
-  return new Promise<Blob | null>((resolve) => {
-    canvasEl.toBlob(resolve, 'image/png')
-  })
-}
 
 function isEditingText(target: EventTarget | null): boolean {
   if (!(target instanceof HTMLElement)) return false
