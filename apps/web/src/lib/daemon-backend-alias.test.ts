@@ -3,7 +3,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend
 import { describe, expect, it, vi } from 'vitest'
 
 // Regression lock for source-level resolution of the daemon-client package.
-// Its wildcard `exports` points every subpath at `src/*.ts`, so there is no
+// Its explicit `exports` map points every subpath at `src/*.ts`, so there is no
 // dist to go stale — and this test keeps it that way: if the package ever
 // switches its exports to a built dist, a stale build's DaemonBackend would
 // stop observing the injected fetch here before anything subtler breaks.
