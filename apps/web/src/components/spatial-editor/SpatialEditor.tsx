@@ -58,18 +58,12 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type { BoundingBox, MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
-  COMMENT_BUBBLE_PADDING_PX,
-  COMMENT_BUBBLE_RADIUS_PX,
-  commentAnchor,
   outlineContentBox,
-  placeCommentBubble,
   referenceSeamsFromWire,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -118,6 +112,7 @@ import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
+import { CommentComposeOverlay, commentComposeStyle } from './comment-compose-overlay.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -151,7 +146,6 @@ import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
-import { TextNodeEditor } from './TextNodeEditor.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
@@ -334,61 +328,6 @@ export interface SpatialEditorProps {
    * navigating to an asset reference is a dead end.
    */
   readonly isImageFileRef?: (file: string) => boolean
-}
-
-/** The compose bubble sits where the saved comment's bubble will be drawn,
- * so committing reads as the draft settling rather than jumping. */
-const COMMENT_COMPOSE_WIDTH_PX = 216
-const COMMENT_COMPOSE_HEIGHT_PX = 64
-/**
- * Where the draft opens: placed by canvas-render's own bubble placer over
- * the same obstacles, so it opens in the quadrant the settled bubble will
- * take rather than over the node the comment is about.
- */
-function commentDraftBox(
-  anchor: Point,
-  obstacles: readonly BoundingBox[],
-): { x: number; y: number; width: number; height: number } {
-  const placed = placeCommentBubble(
-    anchor,
-    { w: COMMENT_COMPOSE_WIDTH_PX, h: COMMENT_COMPOSE_HEIGHT_PX },
-    obstacles,
-  )
-  return { x: placed.x, y: placed.y, width: placed.w, height: placed.h }
-}
-
-/**
- * The compose bubble wears the theme's comment chrome — the same palette
- * entry, padding and corner the renderer draws the settled bubble with —
- * so the draft and the saved comment read as one object rather than a
- * plain editor a card replaces on commit. The shadow mirrors the SVG
- * drop-shadow filter (dy 1, blur ~3px at 30% black) that lifts the
- * settled chrome off the canvas plane.
- */
-function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
-  const { bubble } = (theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE).comment
-  return {
-    background: bubble.fill,
-    color: editorTextFill(theme),
-    border: `1px solid ${bubble.stroke}`,
-    borderRadius: COMMENT_BUBBLE_RADIUS_PX,
-    padding: COMMENT_BUBBLE_PADDING_PX,
-    // Focus is shown as a soft halo in the bubble's own stroke colour
-    // rather than the UA's dark outline ring, which read as a second,
-    // heavier border around the card. The bubble is only ever mounted
-    // focused, so the halo is always the focus indicator.
-    outline: 'none',
-    boxShadow: `0 0 0 2px ${bubble.stroke}55, 0 1px 3px rgba(0, 0, 0, 0.3)`,
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    fontSize: BODY_FONT_SIZE_PX,
-    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-    // Size to the draft like the settled bubble sizes to its text: one
-    // line to start, growing as lines are added (`field-sizing`; browsers
-    // without it keep the one-line minimum and scroll).
-    height: 'auto',
-    minHeight: BODY_LINE_HEIGHT_PX + 2 * COMMENT_BUBBLE_PADDING_PX + 2,
-    ...({ fieldSizing: 'content' } as React.CSSProperties),
-  }
 }
 
 /** Screen-space px within which a press/right-click counts as hitting an
@@ -2582,94 +2521,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               />
             )}
             {commentCompose !== null && (
-              <TextNodeEditor
-                exitHintScale={1 / viewport.zoom}
-                box={commentDraftBox(
-                  // An edge comment opens ON the routed path, where the layer
-                  // will pin it — one producer for the geometry.
-                  commentCompose.targetEdgeId === undefined
-                    ? commentCompose.point
-                    : commentAnchor(
-                        {
-                          id: '',
-                          text: ' ',
-                          x: commentCompose.point.x,
-                          y: commentCompose.point.y,
-                          targetEdgeId: commentCompose.targetEdgeId,
-                        },
-                        canvas,
-                        edgePathOf,
-                      ),
-                  commentPlacementObstacles(commentCompose.editing?.id),
-                )}
-                initialText={commentCompose.editing?.initialText ?? ''}
-                testId="comment-compose"
-                style={commentComposeStyle(theme)}
-                onCommit={(draft) => {
-                  const text = draft.trim()
-                  // A blank commit is a cancel: an empty comment says nothing
-                  // and would still ask the reader to resolve it. Editing an
-                  // existing comment to blank likewise keeps its stored text —
-                  // removal stays MCP-only in v1 (ADR-0025).
-                  if (commentCompose.editing !== undefined) {
-                    if (text.length > 0 && text !== commentCompose.editing.initialText) {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          {
-                            kind: 'set-comment-text',
-                            id: commentCompose.editing.id,
-                            text,
-                          } as const,
-                        ],
-                      })
-                    }
-                  } else if (text.length > 0 && commentCompose.threadAnchor !== undefined) {
-                    // A passage of a node's text, or a node set: a THREAD,
-                    // since a flat comment cannot carry either anchor.
-                    const id = (createId ?? defaultCreateId)()
-                    const createdAt = new Date().toISOString()
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        {
-                          kind: 'create-thread',
-                          thread: {
-                            id,
-                            anchor: commentCompose.threadAnchor,
-                            status: 'open',
-                            createdAt,
-                            messages: [{ id: `${id}-m1`, body: text, createdAt }],
-                          },
-                        } as const,
-                      ],
-                    })
-                  } else if (text.length > 0) {
-                    const { point, targetNodeId, targetEdgeId } = commentCompose
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        {
-                          kind: 'create-comment',
-                          comment: {
-                            id: (createId ?? defaultCreateId)(),
-                            // Rounded for the same reason the pin drag rounds:
-                            // an integer by schema, and a fractional anchor
-                            // is dropped on read rather than rejected here.
-                            x: Math.round(point.x),
-                            y: Math.round(point.y),
-                            text,
-                            createdAt: new Date().toISOString(),
-                            ...(targetNodeId === undefined ? {} : { targetNodeId }),
-                            ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
-                          },
-                        } as const,
-                      ],
-                    })
-                  }
-                  setCommentCompose(null)
-                }}
-                onCancel={() => setCommentCompose(null)}
+              <CommentComposeOverlay
+                compose={commentCompose}
+                canvas={canvas}
+                edgePathOf={edgePathOf}
+                obstacles={commentPlacementObstacles(commentCompose.editing?.id)}
+                createId={createId}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setCommentCompose(null)}
               />
             )}
             {gestureState.kind === 'editing-text' &&
