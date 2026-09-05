@@ -3,10 +3,11 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
+import { ExitFullscreenControl } from '../components/document-editor/ExitFullscreenControl.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import {
   AlertDialog,
@@ -18,7 +19,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
-import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { BROWSER_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
@@ -954,47 +954,7 @@ export function BrowserDocumentPage({
           </AlertDialogContent>
         </AlertDialog>
       ),
-      overlay: isFullscreen && (
-        <Button
-          ref={exitFullscreenRef}
-          variant="outline"
-          size="icon"
-          aria-label="Exit fullscreen"
-          onClick={() =>
-            document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-          }
-          // The BOTTOM edge, because no camera can reach it. Fullscreen removes
-          // the browser chrome, so a corner here is the physical screen corner
-          // — and the web only ever exposes the safe area as a uniform band per
-          // edge, never where along that edge the cutout actually is (Android's
-          // own DisplayCutout.getBoundingRects has no web counterpart). A
-          // control on the top edge therefore has to choose between colliding
-          // with a punch-hole and stepping back from the whole band on every
-          // device that has one, however far the camera is from that corner;
-          // both were seen on a real phone. The bottom edge escapes the choice
-          // in every orientation: rotating puts the device's camera edge on a
-          // SIDE of the screen, never its bottom. What remains there is the
-          // home indicator, which genuinely IS the full width, so clearing it
-          // reads as intended rather than as a control that drifted.
-          //
-          // Lifted by a strip's height, because the bottom edge is also where
-          // both surfaces keep their own: 70px is the canvas dock's 0.75rem
-          // offset, its 46px, and the same gap again. The dock is a fixed
-          // 295px island, centred, so its left edge walks toward the corner as
-          // the viewport narrows — measured x=33 at 360px CSS, against a
-          // corner control's 12..48. The same offset clears the markdown
-          // editor's formatting bar (44px, `fixed bottom-0`, full width), so
-          // this is not conditional on the document's kind. That bar does not
-          // actually appear in fullscreen today — it portals to
-          // `document.body`, which paints behind the fullscreen backdrop, and
-          // measured, `isConnected` and `checkVisibility()` both still answer
-          // true, so only a hit test sees it — but the offset means whoever
-          // gives it a place in the top layer has nothing to fix here.
-          className="absolute bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
-        >
-          <Minimize2 aria-hidden="true" className="size-4" />
-        </Button>
-      ),
+      overlay: isFullscreen && <ExitFullscreenControl ref={exitFullscreenRef} />,
     },
   }
 
