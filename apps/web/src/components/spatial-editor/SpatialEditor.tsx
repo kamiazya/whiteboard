@@ -900,6 +900,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           case 'clear-press-memory':
             lastPressRef.current = null
             doublePressRef.current = null
+            // A second finger made this a pinch; the comment under the
+            // first is not being opened.
+            pressedCommentRef.current = null
             break
           case 'cancel-manipulation':
             applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
@@ -998,6 +1001,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (openCommentId !== null && hitTestComment(point) !== openCommentId) {
         setOpenCommentId(null)
       }
+      // A press on a comment's chrome is remembered BEFORE navigation gets
+      // the press, because in hand mode navigation takes every plain press
+      // as a pan and never hands it back — and a comment is chrome, not
+      // content: a reader panning around a canvas has as much reason to
+      // open a conversation as one selecting on it. The release decides
+      // (see handlePointerUp): a press that never travelled opens the card
+      // under either tool; one that travelled was the pan (hand) or the
+      // pin drag (select) it became on the way.
+      const hitCommentId = e.button === 0 ? hitTestComment(point) : undefined
+      if (hitCommentId !== undefined) {
+        const comment = commentById(hitCommentId)
+        if (comment !== undefined) {
+          pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
+        }
+      }
       // Navigation answers first, and answers for its own state. Everything
       // it owns — which finger is down, whether two of them are driving the
       // viewport, whether this press continues a gather — lives in one value
@@ -1034,25 +1052,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (navigation.preventDefault === true) e.preventDefault()
       if (!navigation.fallThrough) return
       if (e.button !== 0) return
-      // A comment's chrome floats above content, so it is tested before the
-      // nodes under it. A press on it never falls through to node or
-      // marquee handling: a press that stays put OPENS the conversation at
-      // the release, and one that travels drags the pin of a point-anchored
-      // comment. A node-anchored comment's anchor IS its node's corner, so
-      // its pin does not drag — moving the node is how it moves (and the
-      // comment rides along).
+      // A comment's chrome floats above content, so it was tested before
+      // the nodes under it (above). A press on it never falls through to
+      // node or marquee handling: a press that stays put OPENS the
+      // conversation at the release, and one that travels drags the pin of
+      // a point-anchored comment. A node-anchored comment's anchor IS its
+      // node's corner, so its pin does not drag — moving the node is how it
+      // moves (and the comment rides along).
       //
       // There is deliberately no double-press-to-edit here any more. A
       // single press now opens the card, whose own top-right Edit is the
       // successor: the second press of a pair would land on that card, which
       // stops propagation, so the pairing could never complete.
-      const hitCommentId = hitTestComment(point)
-      if (hitCommentId !== undefined) {
-        const comment = commentById(hitCommentId)
-        if (comment === undefined) return
-        pressedCommentRef.current = { comment, startScreen: screenPoint, startPoint: point }
-        return
-      }
+      if (pressedCommentRef.current !== null) return
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -1252,6 +1264,41 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         capturePointer(root, e.pointerId)
       }
+      // A comment press that travels past the slop is spent as a press.
+      // Under the select tool it becomes the pin drag of a point-anchored
+      // comment (a node-anchored one's anchor is its node's corner, and
+      // moving the node is how it moves); under the hand tool it was a pan,
+      // which navigation below is already running and which the release
+      // must not turn into an opened card. Decided BEFORE navigation because
+      // a pan's moves never fall through. Capture FIRST for the drag: it
+      // takes the committed copy out of the surface, and a touch pointer's
+      // implicit capture sits on that copy.
+      const pressedComment = pressedCommentRef.current
+      if (
+        pressedComment !== null &&
+        commentDrag === null &&
+        Math.hypot(
+          screenPoint.x - pressedComment.startScreen.x,
+          screenPoint.y - pressedComment.startScreen.y,
+        ) >= COMMENT_PRESS_SLOP_PX
+      ) {
+        pressedCommentRef.current = null
+        if (
+          tool !== 'hand' &&
+          !spaceDownRef.current &&
+          pressedComment.comment.targetNodeId === undefined
+        ) {
+          capturePointer(root, e.pointerId)
+          setCommentDrag({
+            comment: pressedComment.comment,
+            startPoint: pressedComment.startPoint,
+            live: screenToCanvas(screenPoint, viewport),
+            obstacles: commentPlacementObstacles(pressedComment.comment.id),
+            dropped: null,
+          })
+          return
+        }
+      }
       const navigation = runNavigation(
         root,
         {
@@ -1263,31 +1310,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         e.timeStamp,
       )
       if (!navigation.fallThrough) return
-      const pressedComment = pressedCommentRef.current
-      if (pressedComment !== null && commentDrag === null) {
-        // A press that travels past the slop becomes a pin drag — of a
-        // point-anchored comment only; a node-anchored comment's anchor is
-        // its node's corner, and moving the node is how it moves. Capture
-        // FIRST: the drag takes the committed copy out of the surface, and
-        // a touch pointer's implicit capture sits on that copy.
-        if (
-          Math.hypot(
-            screenPoint.x - pressedComment.startScreen.x,
-            screenPoint.y - pressedComment.startScreen.y,
-          ) < COMMENT_PRESS_SLOP_PX
-        )
-          return
-        if (pressedComment.comment.targetNodeId !== undefined) return
-        capturePointer(root, e.pointerId)
-        setCommentDrag({
-          comment: pressedComment.comment,
-          startPoint: pressedComment.startPoint,
-          live: screenToCanvas(screenPoint, viewport),
-          obstacles: commentPlacementObstacles(pressedComment.comment.id),
-          dropped: null,
-        })
-        return
-      }
       if (commentDrag !== null) {
         if (commentDrag.dropped !== null) return
         setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
@@ -1329,16 +1351,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
         e.timeStamp,
       )
+      // Consumed here whatever happens next, so a press on a comment can
+      // never open its card two gestures later. A press that never
+      // travelled opens the card under EITHER tool: in hand mode the press
+      // armed a pan that this release is ending, and the machine answers
+      // for that pan — but the pan moved nothing, and the comment's answer
+      // comes first. (A travelled press was spent on the first move.)
+      const pressedComment = pressedCommentRef.current
+      pressedCommentRef.current = null
+      if (pressedComment !== null && commentDrag === null) {
+        toggleCommentCard(pressedComment.comment.id)
+        return
+      }
       // A release the machine answered was navigation — a finger leaving a
       // gather or a pinch, or the end of a pan. None of them run the click
       // and marquee semantics below: the sequence was never a gesture on the
       // canvas, and treating its release as one would re-collapse the very
       // selection the gather just built.
       if (!navigation.fallThrough) return
-      // Consumed here whatever happens next, so a press on a comment can
-      // never open its card two gestures later.
-      const pressedComment = pressedCommentRef.current
-      pressedCommentRef.current = null
       if (commentDrag !== null) {
         if (commentDrag.dropped !== null) return
         const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
@@ -1373,11 +1403,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           state: { kind: 'idle' },
           commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
         })
-        return
-      }
-      if (pressedComment !== null) {
-        // A press that never travelled past the slop, on any comment.
-        toggleCommentCard(pressedComment.comment.id)
         return
       }
       const armed = doublePressRef.current
