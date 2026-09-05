@@ -1,8 +1,12 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { render } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
+
+// The returned queries are bound to document.body, so a render left mounted
+// by the previous test (or the previous REPEAT of this one) answers too.
+afterEach(cleanup)
 
 const fakeMeasure: MeasureText = (text) => ({
   advanceWidth: text.length * 8,
