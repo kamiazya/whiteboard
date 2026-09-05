@@ -19,7 +19,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/daemon-client` | the daemon's browser-safe client half: the `/api` Zod contracts the web app parses, the fetch/WS/SSE document backends, `api-client`, and the shared backend contract test suites. Extracted from mcp-server's `src/shared` so browser-safety is structural (this table scans it), not positional; consumed directly by both composition roots | model, server-core, history, zod, @opentelemetry (browser SDK set) |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, workspace-index, daemon-client + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, workspace-index, daemon-client, history + port impls |
 
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has

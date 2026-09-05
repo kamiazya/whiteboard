@@ -15,14 +15,14 @@
 import { describe } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { BrowserBackend } from './browser-backend.js'
-import { createBrowserBranchesBackend } from './browser-branches-backend.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import {
   type BranchesBackendHarness,
   branchesBackendContract,
 } from './branches-backend.contract.js'
+import { BrowserBackend } from './browser-backend.js'
+import { createBrowserBranchesBackend } from './browser-branches-backend.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 
 claimIsolatedWhiteboardDb('branchesbackendcontract')

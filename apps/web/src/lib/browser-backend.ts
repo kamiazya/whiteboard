@@ -177,6 +177,67 @@ export class BrowserBackend implements DocumentBackend {
     return queued
   }
 
+  /**
+   * Change the workspace record this backend holds, and deliver the change
+   * the way a peer's would arrive.
+   *
+   * The same shape as `applyRestore` — queued behind pending pushes so a
+   * keystroke in flight is not lost under it, saved through the same store,
+   * and handed to the sync session as a remote update so its twin of the
+   * record converges. Two differences, both deliberate: no restore brackets,
+   * because this is not a restore and a page must not draw the overlay for
+   * it; and no `touchContentTimestamp`, because what this writes is not the
+   * document's content.
+   *
+   * That last point is what makes it safe at all. A plane lives outside
+   * `CONTENT_CONTAINER_KEYS` and outside `projectWorkspaceDocument`, so the
+   * update produced here cannot be read back as content by the session and
+   * written over by the next save — which is exactly what happened to the
+   * daemon's branch tips before planes were namespaced.
+   */
+  mutateRecord<T>(mutate: (doc: LoroDoc, documentId: string) => T): Promise<T> {
+    const workspaceDoc = this.workspaceDoc
+    const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
+    const handlers = this.handlers
+    const run = async (): Promise<T> => {
+      if (workspaceDoc === null || workspaceId === null || handlers === null) {
+        throw new Error('record write before the document was delivered')
+      }
+      const before = workspaceDoc.version()
+      const result = mutate(workspaceDoc, this.target.documentId)
+      const update = workspaceDoc.export({ mode: 'update', from: before })
+      // A mutation that changed nothing writes nothing: the branch ops are
+      // read-modify-write and several of them legitimately no-op (setHead to
+      // the current head, a tip that already matches).
+      if (update.length > 0) {
+        await this.docs.save(workspaceId, workspaceDoc)
+        if (!this.isStale(handlers)) handlers.onRemoteUpdate(update)
+      }
+      return result
+    }
+    const queued = this._writeQueue.then(run)
+    // The queue itself must never reject, or every later push would be
+    // refused by one failed mutation.
+    this._writeQueue = queued.then(
+      () => {},
+      () => {},
+    )
+    return queued
+  }
+
+  /**
+   * Read the live record without writing to it, or `null` before it has been
+   * delivered.
+   *
+   * Separate from `mutateRecord` rather than a flag on it: a read must not
+   * take the write queue, and a caller that only reads should not be able to
+   * write by forgetting an argument.
+   */
+  readRecord<T>(read: (doc: LoroDoc, documentId: string) => T): T | null {
+    if (this.workspaceDoc === null) return null
+    return read(this.workspaceDoc, this.target.documentId)
+  }
+
   private async _doWrite(
     bytes: Uint8Array,
     workspaceDoc: LoroDoc | null,
