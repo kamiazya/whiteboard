@@ -59,14 +59,7 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import {
-  BODY_FONT_SIZE_PX,
-  BODY_LINE_HEIGHT_PX,
-  outlineContentBox,
-  referenceSeamsFromWire,
-  SPATIAL_THEME_FONT_FAMILY,
-  SPATIAL_THEME_GEOMETRY,
-} from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -86,7 +79,7 @@ import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
-import { createEditorAppearance, editorTextFill } from '../../lib/spatial/editor-appearance.js'
+import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import {
   distanceToPolyline,
@@ -129,10 +122,10 @@ import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
-import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
+import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
@@ -2536,40 +2529,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             {gestureState.kind === 'editing-text' &&
               selectedNode?.type === 'text' &&
               selection !== undefined && (
-                <MarkdownNodeEditor
-                  // The scene keeps drawing this node's chrome (its body is
-                  // suppressed while this editor is open), so the editor is
-                  // TRANSPARENT and sits in the same box the committed text
-                  // uses: the silhouette's inscribed content box. A shaped
-                  // node therefore keeps its silhouette for the whole edit,
-                  // and the text does not jump on entering edit mode.
-                  box={(() => {
-                    const chrome = scene.nodes.find(
-                      (entry) => entry.kind === 'shape' && entry.id === selectedNode.id,
-                    )
-                    const shapeId =
-                      chrome !== undefined && chrome.kind === 'shape' ? chrome.shape : undefined
-                    const bbox = {
-                      x: selection.box.x,
-                      y: selection.box.y,
-                      w: selection.box.width,
-                      h: selection.box.height,
-                    }
-                    const inner = outlineContentBox(shapeId, bbox)
-                    return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
-                  })()}
-                  initialText={selectedNode.text}
-                  // The conversations about passages of this node's text,
-                  // highlighted over the draft; and the comment verb's seam,
-                  // which attaches the caret's scope to this node and opens
-                  // the compose bubble at the node's corner, where a node
-                  // comment opens. The editor commits on the blur the bubble
-                  // causes, so the passage the anchor quotes is the text
-                  // that gets committed.
-                  threads={threads?.filter(
-                    (thread) =>
-                      thread.anchor.kind === 'text' && thread.anchor.nodeId === selectedNode.id,
-                  )}
+                <MarkdownBodyEditorOverlay
+                  node={selectedNode}
+                  selectionBox={selection.box}
+                  sceneNodes={scene.nodes}
+                  sceneCurrent={sceneCurrent}
+                  threads={threads}
                   onRequestComment={(anchor) => {
                     setCommentCompose({
                       point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
@@ -2578,55 +2543,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     })
                     return true
                   }}
-                  exitHintTop={selection.box.y + selection.box.height + 6}
-                  exitHintScale={1 / viewport.zoom}
-                  centerContent={scene.nodes.some(
-                    (entry) =>
-                      entry.kind === 'shape' &&
-                      entry.id === selectedNode.id &&
-                      entry.shape !== undefined,
-                  )}
-                  style={{
-                    // Transparent once the scene below has stopped drawing
-                    // this node's text. An offloaded canvas lags one worker
-                    // round trip behind the suppression change, so for that
-                    // gap the overlay keeps the old opaque cover — otherwise
-                    // the committed text shows doubled under the draft.
-                    background: sceneCurrent
-                      ? 'transparent'
-                      : (() => {
-                          const fill =
-                            createEditorAppearance(theme).resolveNode(selectedNode).appearance?.fill
-                          return fill !== undefined && fill !== 'none'
-                            ? fill
-                            : theme === 'dark'
-                              ? 'oklch(0.145 0 0)'
-                              : '#ffffff'
-                        })(),
-                    color: editorTextFill(theme),
-                    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-                    fontSize: BODY_FONT_SIZE_PX,
-                    // The overlay must advance by the SAME line box the
-                    // committed render uses, or the text moves under the
-                    // cursor on entering edit mode. Shared constant, not a
-                    // second copy of the number — these were equal until the
-                    // markdown theme took body line height to 1.5.
-                    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-                    padding: SPATIAL_THEME_GEOMETRY.paddingPx,
-                  }}
-                  onCommit={(text) => {
-                    applyResult(
-                      reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }),
-                    )
-                  }}
-                  onCancel={() => {
-                    applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
-                  }}
-                  onChange={(text) => {
-                    applyResult(
-                      reduceGesture(gestureState, canvas, { type: 'update-text-edit', text }),
-                    )
-                  }}
+                  zoom={viewport.zoom}
+                  theme={theme}
+                  canvas={canvas}
+                  gestureState={gestureState}
+                  applyResult={applyResult}
                 />
               )}
           </div>
