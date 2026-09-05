@@ -112,8 +112,8 @@ function windowStart(value: string, at: number): number | null {
 
 /** The cluster the window around `at` puts `at` inside, in document offsets. */
 function clusterAround(value: string, at: number, from: number): { start: number; end: number } {
-  const window = value.slice(from, Math.min(value.length, at + LOCAL_UNITS))
-  const found = GRAPHEMES.segment(window).containing(at - from)
+  const span = value.slice(from, Math.min(value.length, at + LOCAL_UNITS))
+  const found = GRAPHEMES.segment(span).containing(at - from)
   const start = from + (found?.index ?? 0)
   return { start, end: start + (found?.segment.length ?? 0) }
 }
