@@ -3,7 +3,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
-import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
+import { DropdownMenuItem } from '../../components/ui/dropdown-menu.js'
 import { DocumentMenu } from './DocumentMenu'
 
 function renderMenu(props?: {

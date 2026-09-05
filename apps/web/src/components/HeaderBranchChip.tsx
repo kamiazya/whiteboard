@@ -19,8 +19,8 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
-import { Button } from '@/components/ui/button'
+} from '../components/ui/alert-dialog.js'
+import { Button } from '../components/ui/button.js'
 import {
   Dialog,
   DialogContent,
@@ -28,7 +28,7 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from '@/components/ui/dialog'
+} from '../components/ui/dialog.js'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -36,14 +36,14 @@ import {
   DropdownMenuLabel,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import type { MergeResult } from '@/hooks/useBranches'
-import { useBranches } from '@/hooks/useBranches'
-import { safeErrorCopy } from '@/lib/error-copy'
-import { cn, displayBranchName } from '@/lib/utils'
+} from '../components/ui/dropdown-menu.js'
+import { Input } from '../components/ui/input.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import type { MergeResult } from '../hooks/useBranches.js'
+import { useBranches } from '../hooks/useBranches.js'
+import { safeErrorCopy } from '../lib/error-copy.js'
 import { isImeComposingKeydown } from '../lib/ime-keydown.js'
+import { cn, displayBranchName } from '../lib/utils.js'
 
 // MergeDialog pulls in its own thumbnail-fetch effect and a second Dialog
 // surface; loading it on demand keeps it out of the daemon-canvas chunk

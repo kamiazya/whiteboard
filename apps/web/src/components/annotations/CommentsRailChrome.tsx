@@ -9,7 +9,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { ChevronDown, ChevronUp, MessageSquare, X } from 'lucide-react'
 import { type JSX, useState } from 'react'
-import { Button } from '@/components/ui/button'
+import { Button } from '../../components/ui/button.js'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
 import { cn } from '../../lib/utils.js'
 import { TOGGLE_STATE_CLASS } from '../ui/dock-button.js'

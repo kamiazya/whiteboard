@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useVersionsBackend } from '@/contexts/VersionsBackendContext'
+import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 
 interface VersionThumbnailProps {
   workspaceId: string

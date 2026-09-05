@@ -1,5 +1,5 @@
 import { createContext, useContext, useMemo } from 'react'
-import { createDaemonVersionsBackend, type VersionsBackend } from '@/lib/versions-backend'
+import { createDaemonVersionsBackend, type VersionsBackend } from '../lib/versions-backend.js'
 import { useDaemonApi } from './DaemonApiContext'
 
 /**

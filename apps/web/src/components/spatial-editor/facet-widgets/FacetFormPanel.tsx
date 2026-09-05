@@ -19,7 +19,7 @@ import type { SpatialNode } from '@kamiazya/whiteboard-model'
 const storedFacets = (node: SpatialNode): Record<string, unknown> =>
   node['x-whiteboard']?.facets ?? {}
 
-import { cn } from '@/lib/utils'
+import { cn } from '../../../lib/utils.js'
 import { NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {

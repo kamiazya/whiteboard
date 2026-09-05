@@ -1,8 +1,8 @@
 import { Eye, GitMerge, X } from 'lucide-react'
 import { type JSX, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import type { BranchMeta, MergeResult } from '@/hooks/useBranches'
-import { displayBranchName } from '@/lib/utils'
+import { Button } from '../components/ui/button.js'
+import type { BranchMeta, MergeResult } from '../hooks/useBranches.js'
+import { displayBranchName } from '../lib/utils.js'
 import { MergeDialog } from './MergeDialog'
 
 // The banner over a `?v=<name>` variation preview (ADR-0022's addressability

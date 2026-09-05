@@ -1,5 +1,5 @@
 import type { ReactNode, Ref } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils.js'
 
 /**
  * The two-row grid shell both document pages stand in.

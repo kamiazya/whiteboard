@@ -9,8 +9,8 @@ import {
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Button } from '@/components/ui/button'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
+import { Button } from '../components/ui/button.js'
+import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { formatBytes } from '../lib/format-bytes.js'
 
 // Storage starts as visibility-before-enforcement: rows expose where bytes are

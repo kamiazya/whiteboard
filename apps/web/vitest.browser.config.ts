@@ -16,10 +16,6 @@ export default defineConfig({
   define: { ...rendererBuildDefine },
   resolve: {
     alias: {
-      // Matches vitest.config.ts and tsconfig's '@/*' path — needed once any
-      // browser-tested component pulls in a components/ui/* file (they all
-      // import '@/lib/utils' for the cn() helper).
-      '@': resolve(__dirname, 'src'),
       // Subpath alias must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(

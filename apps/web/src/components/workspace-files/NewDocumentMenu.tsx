@@ -7,8 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuSeparator,
   DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+} from '../../components/ui/dropdown-menu.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 import { NewDocumentDialog } from './NewDocumentDialog.js'
 

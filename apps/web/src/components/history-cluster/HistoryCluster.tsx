@@ -25,10 +25,10 @@
 
 import { Redo2, Undo2 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { cn } from '@/lib/utils'
+import { DOCK_BUTTON_CLASS } from '../../components/ui/dock-button.js'
+import { Tooltip, TooltipContent, TooltipTrigger } from '../../components/ui/tooltip.js'
 import { isMacPlatform } from '../../lib/platform.js'
+import { cn } from '../../lib/utils.js'
 
 export interface HistoryClusterProps {
   readonly onUndo: () => void

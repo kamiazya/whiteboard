@@ -15,8 +15,8 @@
  * and the last two defects were both a field that outlived its gesture.
  */
 import { afterAll, describe, expect, it } from 'vitest'
-import { assertLedger, emptyTally, type SurfaceCoverage } from '@/test-utils/coverage-ledger'
-import { fc } from '@/test-utils/fast-check'
+import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
+import { fc } from '../../test-utils/fast-check.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_SLOP_PX,

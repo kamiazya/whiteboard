@@ -21,7 +21,7 @@
  *   carrying half a sentence across.
  */
 import { useState } from 'react'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils.js'
 
 export interface ReplyComposerProps {
   readonly onReply: (body: string) => void

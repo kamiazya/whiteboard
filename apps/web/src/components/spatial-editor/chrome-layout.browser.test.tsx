@@ -13,8 +13,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it } from 'vitest'
-import { HistoryCluster } from '@/components/history-cluster/HistoryCluster'
-import { dockControlSizesPx } from '@/components/ui/dock-button'
+import { HistoryCluster } from '../../components/history-cluster/HistoryCluster.js'
+import { dockControlSizesPx } from '../../components/ui/dock-button.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)

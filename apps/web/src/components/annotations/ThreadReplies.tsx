@@ -7,7 +7,7 @@
  * none, so a host renders this unconditionally.
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { cn } from '@/lib/utils'
+import { cn } from '../../lib/utils.js'
 import { MessageBy } from './message-meta.js'
 
 export interface ThreadRepliesProps {
