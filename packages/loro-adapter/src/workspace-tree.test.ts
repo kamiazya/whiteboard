@@ -555,6 +555,29 @@ describe('row-relocated meta (dual-plane collapse S4a)', () => {
     expect(readPinnedDocumentIds(doc)).toEqual([ULID_A])
   })
 
+  it('keeps both pins when two replicas pin first on a workspace nobody had pinned', () => {
+    // The list is opened lazily by the first pin — nothing pre-attaches it —
+    // so this is a first creation at one key on both sides. Opened the
+    // regular way the merge keeps one list and the other pin is gone, with
+    // both replicas agreeing on the truncated result.
+    const a = new LoroDoc()
+    a.setPeerId(1)
+    createWorkspaceDocumentAtPath(a, { path: 'a', documentId: ULID_A, kind: 'spatial' })
+    createWorkspaceDocumentAtPath(a, { path: 'b', documentId: ULID_B, kind: 'spatial' })
+    a.commit()
+    const b = new LoroDoc()
+    b.setPeerId(2)
+    b.import(a.export({ mode: 'snapshot' }))
+
+    setWorkspacePinned(a, ULID_A, true)
+    setWorkspacePinned(b, ULID_B, true)
+    a.import(b.export({ mode: 'update' }))
+    b.import(a.export({ mode: 'update' }))
+
+    expect([...readPinnedDocumentIds(a)].sort()).toEqual([ULID_A, ULID_B].sort())
+    expect(readPinnedDocumentIds(a)).toEqual(readPinnedDocumentIds(b))
+  })
+
   it('lastCompactedAt is workspace-level meta', () => {
     const doc = new LoroDoc()
     expect(readWorkspaceMeta(doc).lastCompactedAt).toBeUndefined()
