@@ -12,6 +12,9 @@ catalogs:
     '@vitest/coverage-v8':
       specifier: ^5.0.0
       version: 5.0.0
+    '@vitest/ui':
+      specifier: ^5.0.0
+      version: 5.0.0
     css-line-break:
       specifier: ^2.1.0
       version: 2.1.0
@@ -117,6 +120,9 @@ importers:
       '@vitest/browser-playwright':
         specifier: 'catalog:'
         version: 5.0.0(msw@2.15.0(@types/node@24.13.1)(typescript@6.0.3))(playwright@1.61.1)(vite@8.2.0(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@5.0.0)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 5.0.0(vitest@5.0.0)
       concurrently:
         specifier: ^9
         version: 9.2.1
@@ -13278,7 +13284,7 @@ snapshots:
       '@types/ws': 8.18.1
       entities: 7.0.1
       whatwg-mimetype: 3.0.0
-      ws: 8.21.0
+      ws: 8.21.3
     transitivePeerDependencies:
       - bufferutil
       - utf-8-validate
@@ -16071,7 +16077,7 @@ snapshots:
   vite@8.2.0(@types/node@24.12.2)(esbuild@0.27.7)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       postcss: 8.5.25
       rolldown: 1.2.1
       tinyglobby: 0.2.17
@@ -16087,7 +16093,7 @@ snapshots:
   vite@8.2.0(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0):
     dependencies:
       lightningcss: 1.33.0
-      picomatch: 4.0.5
+      picomatch: 4.0.7
       postcss: 8.5.25
       rolldown: 1.2.1
       tinyglobby: 0.2.17
