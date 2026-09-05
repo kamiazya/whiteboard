@@ -14,6 +14,7 @@
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import {
+  createWorkspaceDocumentAtPath,
   documentContainers,
   projectWorkspaceDocument,
   readSpatialCanvas,
@@ -183,6 +184,40 @@ describe('BrowserBackend', () => {
     expect(projected === null ? [] : readSpatialCanvas(projected).nodes.map((n) => n.id)).toEqual([
       'n-old',
     ])
+    backend.disconnect()
+  })
+
+  it('refuses to deliver when another document already owns the target path, without calling it corruption', async () => {
+    // The tree already has a DIFFERENT document standing where this one
+    // wants to be placed. `createWorkspaceDocumentAtPath` answers null for
+    // that, and the backend used to ignore the answer: it saved and delivered
+    // bytes holding no node for the target, and the session then reported
+    // `corrupt-snapshot` — the screen whose one action deletes the record.
+    // Nothing is corrupt. The bytes are intact and say exactly what is there.
+    const workspaceId = getBrowserWorkspaceId()
+    const docs = new BrowserWorkspaceDocs()
+    const seeded = await docs.create(workspaceId)
+    expect(
+      createWorkspaceDocumentAtPath(seeded, { path: 'design', documentId: ID_B, kind: 'spatial' }),
+    ).not.toBeNull()
+    await docs.save(workspaceId, seeded)
+
+    const handlers = makeHandlers()
+    const backend = new BrowserBackend(target(ID_A, 'design'))
+    backend.connect(handlers)
+    await vi.waitFor(
+      () => {
+        expect(handlers.onError).toHaveBeenCalledTimes(1)
+      },
+      { timeout: WAIT_TIMEOUT },
+    )
+
+    // Non-destructive: a reason the page answers with "try again", never
+    // with an offer to start fresh over the document that IS there.
+    expect(handlers.onError).toHaveBeenCalledWith('read-unavailable')
+    // And no snapshot — an editor over bytes that lack this document is how
+    // the next save shadows the one at that path.
+    expect(handlers.onSnapshot).not.toHaveBeenCalled()
     backend.disconnect()
   })
 
