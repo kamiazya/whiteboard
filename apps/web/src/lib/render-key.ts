@@ -49,8 +49,9 @@ export const renderKeySchema = z.object({
   documentId: z.string().min(1),
   kind: documentKindSchema,
   /**
-   * What the document was when it was drawn, or null from a keeper that
-   * stamps no time.
+   * What the document's content WAS when it was drawn — a list row's content
+   * digest, the open document's committed frontier — or null from a keeper
+   * that cannot say.
    *
    * Null is not a version that happens to be missing — it is the absence of
    * any way to notice a change, so a key carrying it is NOT memoisable (see
