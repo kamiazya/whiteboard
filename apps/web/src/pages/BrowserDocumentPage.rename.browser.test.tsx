@@ -55,6 +55,22 @@ async function titleField(): Promise<HTMLElement> {
   return all[all.length - 1]!
 }
 
+/**
+ * The rename's write has LANDED, from the persistence facts the page
+ * publishes hidden — the row itself draws no save state. `saved` alone is
+ * true of a document never written, so the timestamp is what proves it.
+ */
+async function waitForWriteLanded(): Promise<void> {
+  await waitFor(
+    () => {
+      const fact = screen.getByTestId('persistence-state')
+      expect(fact.getAttribute('data-save-state')).toBe('saved')
+      expect(fact.getAttribute('data-last-saved-at')).toBeTruthy()
+    },
+    { timeout: 5000 },
+  )
+}
+
 describe('BrowserDocumentPage rename (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
@@ -74,13 +90,11 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     expect(document.activeElement).toBe(titleInput)
 
     // The plain Enter is "I am done": the field blurs, the name stands, and
-    // the save chip is the receipt.
+    // the landed write is the receipt.
     fireEvent.keyDown(titleInput, { key: 'Enter' })
     expect(document.activeElement).not.toBe(titleInput)
     await waitForTitle('\u4f01\u753b')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
   })
 
   it('reload: edited title survives an unmount + fresh-store remount', async () => {
@@ -90,9 +104,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Reloaded title' } })
     titleInput.blur()
     await waitForTitle('Reloaded title')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
@@ -166,18 +178,14 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Named canvas' } })
     titleInput.blur()
     await waitForTitle('Named canvas')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     const titleInput2 = await titleField()
     titleInput2.focus()
     fireEvent.change(titleInput2, { target: { value: '   ' } })
     titleInput2.blur()
     await waitForTitle('untitled')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)

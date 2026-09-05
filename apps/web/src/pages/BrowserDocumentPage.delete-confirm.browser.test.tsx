@@ -133,7 +133,8 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), { timeout: 5000 })
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
     expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument()
+    // No save state is drawn; the facts stay published, hidden, and untouched.
+    expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('cancelling via Escape keeps the canvas intact', async () => {
