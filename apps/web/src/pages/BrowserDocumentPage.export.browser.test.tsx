@@ -71,6 +71,10 @@ async function openExportMenuItem(label: string): Promise<HTMLElement> {
     const kebab = allKebabs[allKebabs.length - 1]!
     fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
     try {
+      // The formats sit behind one `Export…` row now; Radix opens a submenu
+      // on pointerMove over its trigger (hover intent).
+      const triggers = await waitFor(() => screen.getAllByText('Export…'), { timeout: 1500 })
+      fireEvent.pointerMove(triggers[triggers.length - 1]!, { pointerType: 'mouse' })
       const allItems = await waitFor(() => screen.getAllByText(label), { timeout: 1500 })
       item = allItems[allItems.length - 1]!
     } catch {
@@ -156,6 +160,9 @@ describe('BrowserDocumentPage export (browser — real SpatialEditor, no Excalid
       button: 0,
       ctrlKey: false,
     })
+    // Open the formats submenu: what this asserts is about the formats
+    // OFFERED, so it has to look where they are.
+    fireEvent.pointerMove(await screen.findByText('Export…'), { pointerType: 'mouse' })
     await waitFor(() => expect(screen.getByText('Export as PNG')).toBeInTheDocument())
 
     expect(screen.queryByText(/excalidraw/i)).toBeNull()
