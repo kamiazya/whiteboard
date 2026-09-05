@@ -107,6 +107,5 @@ export function useCanvasReplacement({
     // gestureState intentionally omitted: this effect only reacts to a new
     // canvas identity, not every gestureState transition (that would create
     // an infinite render loop feeding the reducer's own output back in).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [canvas, externalVersion])
 }

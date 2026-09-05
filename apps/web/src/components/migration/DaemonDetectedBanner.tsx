@@ -206,7 +206,6 @@ export function DaemonDetectedBanner({
     }
     // challengeFn is an injected seam with a stable default; re-challenging
     // is keyed on WHICH daemon was detected, not the callback identity.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [detectedCount, detectedBaseUrl])
 
   // 'http:'/'https:' -> 'http'/'https'; any other scheme (e.g. jsdom's
@@ -337,7 +336,6 @@ export function DaemonDetectedBanner({
       clearHintTimer()
     }
     // Auto-probe once on mount for the http: (loopback) path only.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [locationProtocol])
 
   function handleDismiss() {

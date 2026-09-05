@@ -72,7 +72,6 @@ try {
   // would behave: the Workers/Pages platform injects __WHITEBOARD_RUNTIME_CONFIG__
   // with the deploy's public origin before serving the HTML.
   await page.addInitScript(() => {
-    // eslint-disable-next-line no-undef
     window.__WHITEBOARD_RUNTIME_CONFIG__ = { publicOrigin: 'https://abc123.whiteboard.pages.dev' }
   })
 

@@ -119,7 +119,7 @@ export function useFileSeamScene({
   // (LayoutRequest carries plain data only); the worker keeps its own.
   const contentCache = useMemo(
     () => createSpatialContentCache(),
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- theme, measure
+    // Theme, measure
     // and the references a text node's body can embed invalidate cached
     // layout; nothing else does.
     [resolvedMeasure, theme, references],

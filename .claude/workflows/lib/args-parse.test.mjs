@@ -35,7 +35,7 @@ function extractArgsParser(file) {
   const source = readFileSync(path.join(workflowDir, file), 'utf8')
   const match = source.match(/\nconst A = (\(\(\) => \{[\s\S]*?\n\}\)\(\))\n/)
   assert.ok(match, `could not locate the \`const A = (() => {...})()\` args parser in ${file}`)
-  // eslint-disable-next-line no-new-func -- evaluating our own source with `args` injected, not untrusted input
+  // Evaluating our own source with `args` injected, not untrusted input
   return new Function('args', `return ${match[1]}`)
 }
 

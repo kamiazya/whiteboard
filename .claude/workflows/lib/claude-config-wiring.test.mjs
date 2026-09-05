@@ -37,7 +37,7 @@ function defaultWorkflowDimensions() {
   const source = readFileSync(reviewWorkflowPath, 'utf8')
   const match = source.match(/const RAW_DIMENSIONS = A\.dimensions \|\| (\[[^\]]*\])/)
   assert.ok(match, 'could not locate the default `RAW_DIMENSIONS` array in review.workflow.mjs')
-  // eslint-disable-next-line no-new-func -- evaluating a plain array literal from our own source
+  // Evaluating a plain array literal from our own source
   return new Function(`return (${match[1]})`)()
 }
 
@@ -143,7 +143,7 @@ test('every workflow script parses as a workflow function body', () => {
       // The runtime runs scripts as an ASYNC function body (top-level await is legal), so the
       // parse check must use the async function constructor, not `new Function`.
       const AsyncFunction = Object.getPrototypeOf(async () => {}).constructor
-      // eslint-disable-next-line no-new-func -- parse check of our own scripts, never executed
+      // Parse check of our own scripts, never executed
       new AsyncFunction('args', 'agent', 'workflow', 'phase', 'log', 'parallel', 'pipeline', 'budget', source)
     } catch (err) {
       bad.push(`${file}: ${err.message}`)

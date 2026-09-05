@@ -391,7 +391,6 @@ export function BrowserDocumentPage({
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
     navigate(path, { replace: isFirstSync })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [documentPath, navigate])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
@@ -458,7 +457,6 @@ export function BrowserDocumentPage({
     void switchDocument(requestedId).then((switched) => {
       if (!switched) repair()
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, documentId, documentPath, switchDocument])
 
   useEffect(() => {
@@ -498,7 +496,6 @@ export function BrowserDocumentPage({
       })
     },
     // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [documentId, documentKind],
   )
 

@@ -131,6 +131,6 @@ it('measures the main-thread block at drag start on a heavy canvas', async () =>
   const summarize = (gaps: number[]) =>
     `maxGapMs=${Math.max(...gaps).toFixed(1)} gapsOver50ms=${gaps.filter((g) => g > 50).length}`
   const report = `[drag-start-instrument] nodes=${NODES} edges=${EDGES} first: ${summarize(first)} second: ${summarize(second)}`
-  // eslint-disable-next-line no-console -- the instrument's output IS the point
+  // The instrument's output IS the point
   console.log(report)
 }, 30_000)

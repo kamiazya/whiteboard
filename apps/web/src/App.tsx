@@ -191,7 +191,6 @@ export function App({ providerState }: AppProps) {
     }).then(setGrantConnection)
     // Runs once per page load — the fragment only exists on a fresh
     // top-level navigation back from the consent page.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Silent renewal: a later visit to a hosted origin that already holds a
@@ -229,7 +228,6 @@ export function App({ providerState }: AppProps) {
       }
     })
     // Cold-load decision over mount-time facts; the ref guards StrictMode.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // A #wb= fragment carrying both workspaceId+path skips straight to the
@@ -391,7 +389,6 @@ export function App({ providerState }: AppProps) {
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonView, navigate, isPairRoute, daemonKept])
 
   // Which daemon the SHELL is talking to, resolved once from the same three
@@ -610,7 +607,6 @@ export function App({ providerState }: AppProps) {
     setDaemonView((current) =>
       workspaceRoutePath(current) === workspaceRoutePath(parsed) ? current : parsed,
     )
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, isPairRoute])
 
   // Persists ONLY the reconnect target (baseUrl/workspaceId/path), never the
@@ -643,7 +639,6 @@ export function App({ providerState }: AppProps) {
     // daemonConnection is a stable module-scope singleton for the life of the
     // tab (see useDaemonConnection.ts) — this effect is meant to run once per
     // successful pairing, not on every unrelated re-render.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonConnection.status])
 
   useEffect(() => {
@@ -652,7 +647,6 @@ export function App({ providerState }: AppProps) {
       ...current,
       storage: { ...current.storage, daemonBaseUrl: grantConnection.daemonBaseUrl },
     }))
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grantConnection?.status])
 
   // /settings renders on its own route ahead of (and independent from) the

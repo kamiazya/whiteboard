@@ -5,7 +5,7 @@
 // Canvas 2D silently falls back to a system font, and the editor's on-screen
 // layout diverges from what a user exports (see font.ts's doc comment).
 
-// eslint-disable-next-line import/no-unresolved -- Vite's `?url` asset suffix, resolved at build/dev-server time.
+// Vite's `?url` asset suffix, resolved at build/dev-server time.
 import robotoFontUrl from '../assets/fonts/Roboto/Roboto-Regular.ttf?url'
 import { VIEWER_FONT_FAMILY } from './font.js'
 

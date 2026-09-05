@@ -145,7 +145,6 @@ export function useDragLayers({
       originY: gestureState.startY - rendered.bounds.y,
     }
     // isLocked closes over lockedNodeIds/lockEnabled, both listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     gestureState,
     canvas,
@@ -226,7 +225,6 @@ export function useDragLayers({
       committedAnchors: gestureCommitted.anchors,
     }
     // isLocked closes over lockedNodeIds/lockEnabled, both listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     gestureState,
     canvas,

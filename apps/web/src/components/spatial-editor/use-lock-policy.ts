@@ -52,7 +52,6 @@ export function useLockPolicy({
   const selectableBoxes = useMemo(
     () => (lockEnabled ? boxes.filter((entry) => !isLocked(entry.id)) : boxes),
     // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [boxes, lockEnabled, lockedNodeIds],
   )
   /** Same seam rule as the node lock: no callback, no enforcement. */
@@ -76,7 +75,6 @@ export function useLockPolicy({
       setEdgeLabelEditId((current) => (current === selectedEdgeId ? null : current))
     }
     // isEdgeLocked closes over lockedEdgeIds/edgeLockEnabled, both listed.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [edgeLockEnabled, lockedEdgeIds, selectedEdgeId])
 
   useEffect(() => {
@@ -89,7 +87,6 @@ export function useLockPolicy({
     )
     if (lockedMembers.size > 0) applySelection({ type: 'drop-locked', lockedIds: lockedMembers })
     // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lockEnabled, lockedNodeIds, selectedId, extraIds, gestureState])
 
   return { lockEnabled, isLocked, selectableBoxes, edgeLockEnabled, isEdgeLocked }

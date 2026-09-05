@@ -137,8 +137,8 @@ export function CanvasViewer({
       padding: padding ?? 0,
       background,
     })
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- fontReady is a
-    // pure re-measure trigger, not a value read inside the callback.
+    // fontReady is a pure re-measure trigger, not a value read inside the
+    // callback.
   }, [
     canvas,
     resolvedMeasure,
