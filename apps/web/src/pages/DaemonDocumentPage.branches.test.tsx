@@ -153,7 +153,7 @@ describe('DaemonDocumentPage branches', () => {
       })
     }
 
-    it('renders HeaderBranchChip when capabilities.branches is true, using the daemon-origin fetch (not global apiFetch)', async () => {
+    it('renders HeaderBranchChip using the daemon-origin fetch (not global apiFetch)', async () => {
       const fetchMock = branchesFetchMock()
       vi.stubGlobal('fetch', fetchMock)
 
@@ -186,14 +186,13 @@ describe('DaemonDocumentPage branches', () => {
       vi.unstubAllGlobals()
     })
 
-    it('shows the static disabled teasers when capabilities.branches/merge are false', async () => {
+    it('shows the Combine teaser when capabilities.merge is false, and still the chip', async () => {
       await act(async () => {
         render(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              branches: false,
               merge: false,
             }}
           />,
@@ -205,8 +204,12 @@ describe('DaemonDocumentPage branches', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      expect(screen.queryByTestId('header-branch-chip')).toBeNull()
-      expect(screen.getByText('Variations')).toBeTruthy()
+      // The chip is here even though merge is off: having variations and
+      // being able to combine them are separate, and the chip hides only its
+      // merge entry point. There is no Variations teaser any more — both
+      // keepers have variations, so the flag that drove it is gone.
+      expect(await screen.findByTestId('header-branch-chip')).toBeTruthy()
+      expect(screen.queryByText('Variations')).toBeNull()
       expect(screen.getByText('Combine')).toBeTruthy()
     })
 
@@ -251,7 +254,7 @@ describe('DaemonDocumentPage branches', () => {
       vi.unstubAllGlobals()
     })
 
-    it('renders HeaderBranchBanner when capabilities.branches is true and the head branch is unmerged', async () => {
+    it('renders HeaderBranchBanner when the head branch is unmerged', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -312,69 +315,9 @@ describe('DaemonDocumentPage branches', () => {
       vi.unstubAllGlobals()
     })
 
-    it('does not render HeaderBranchBanner when capabilities.branches is false', async () => {
-      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
-        (input) => {
-          const url = String(input)
-          if (url.includes('/branches/feature-x/stats')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ unmergedCommits: 2, isHead: true }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
-          }
-          if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(
-                JSON.stringify({
-                  head: 'feature-x',
-                  branches: [
-                    {
-                      name: 'main',
-                      color: '#1971c2',
-                      tipFrontiers: '',
-                      createdAt: '2026-01-01T00:00:00Z',
-                    },
-                    {
-                      name: 'feature-x',
-                      color: '#9333ea',
-                      tipFrontiers: '',
-                      createdAt: '2026-01-01T00:00:00Z',
-                    },
-                  ],
-                }),
-                { status: 200, headers: { 'Content-Type': 'application/json' } },
-              ),
-            )
-          }
-          return Promise.resolve(new Response('{}', { status: 200 }))
-        },
-      )
-      vi.stubGlobal('fetch', fetchMock)
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{
-              branches: false,
-              merge: false,
-            }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      expect(screen.queryByTestId('header-branch-banner')).toBeNull()
-
-      vi.unstubAllGlobals()
-    })
+    // A case for `capabilities.branches: false` stood here. That state no
+    // longer exists — both keepers have variations, so the flag is gone — and
+    // the banner's own behaviour stays covered by the positive case above.
   })
 
   describe('MergeToast integration', () => {
@@ -429,7 +372,6 @@ describe('DaemonDocumentPage branches', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              branches: true,
               merge: false,
             }}
           />,

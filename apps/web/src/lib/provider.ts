@@ -31,7 +31,12 @@ export type WhiteboardCapabilities = {
   // now, so both keepers answer true and the flag gates nothing. What the
   // daemon adds on top (automatic checkpoints, thumbnails) is a per-panel
   // fact the page states where it mounts the panel, not a keeper flag.
-  readonly branches: boolean
+  // `branches` left the same way, and for the same reason stated twice
+  // above: the browser keeps its variations on the workspace record now, so
+  // both keepers answer true and the flag gates nothing. WHERE the chip is
+  // shown became a per-document fact instead — a markdown document has no
+  // record-holding backend and so no branches — which the backend answers
+  // through `hasBranches`, in the one place that cannot forget it.
   readonly merge: boolean
 }
 
@@ -45,12 +50,20 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  branches: false,
+  // The browser keeper can commit a merge now, so this flag is on borrowed
+  // time: both keepers agree, and a flag both keepers agree on is not a
+  // capability — `provider.capability-reach.test.ts` refuses it by name the
+  // moment it is flipped, exactly as it refused `branches`.
+  //
+  // It stays false for one increment because turning it true retires the
+  // capability SYSTEM rather than this flag: `WhiteboardCapabilities` has
+  // nothing else left in it, and the prop threads through App, both pages,
+  // the top bar and `CapabilityTeaser`. That is its own diff to review, and
+  // it is what turns the browser's merge on.
   merge: false,
 }
 
 export const DAEMON_CAPABILITIES: WhiteboardCapabilities = {
-  branches: true,
   merge: true,
 }
 
