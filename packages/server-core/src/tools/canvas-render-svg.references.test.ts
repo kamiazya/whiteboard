@@ -127,10 +127,10 @@ describe('wb_scene_render reference resolution', () => {
     expect(explicitlyOff.svg).toBe(byDefault.svg)
   })
 
-  test('keeps the card for a reference that resolves to a SPATIAL document', async () => {
-    // The markdown seam answers for markdown documents only. A spatial
-    // document is not prose, and rendering its first text node as if it
-    // were would misreport what the reference points at.
+  test('draws a reference that resolves to a SPATIAL document as a miniature of it', async () => {
+    // A spatial document is not prose, so it is never read as a body; it is
+    // laid out as the canvas it is and scaled into the node — the same
+    // picture the web editor draws for the same file node.
     const store = new FakeDocumentStore()
     await seedWorkspace(store, DIAGRAM_ID)
     store.documentIndex.seed({
@@ -154,7 +154,7 @@ describe('wb_scene_render reference resolution', () => {
       embedReferences: true,
     })
 
-    expect(result.svg).not.toContain('INNER')
+    expect(result.svg).toContain('INNER')
   })
 
   test('renders a dangling reference as the plain card rather than failing', async () => {

@@ -1,4 +1,5 @@
 import type {
+  MdastLayoutOptions,
   MeasureText,
   ResolvedReference,
   Scene,
@@ -41,6 +42,14 @@ function onDegrade({ kind, ...data }: SpatialLayoutDegradation): void {
  */
 export interface ComposeCanvasSceneOptions {
   readonly references?: ReadonlyMap<string, ResolvedReference>
+  /**
+   * What a `![[embed]]` inside a laid-out body resolves to, and what labels
+   * a bare `[[link]]` — the markdown seams, forwarded to every body the
+   * composer lays out (a text node's, a referenced document's). Absent
+   * keeps the placeholders, which is the pure render's answer.
+   */
+  readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
 }
 
 /**
@@ -69,7 +78,14 @@ export function composeCanvasScene(
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
-    ...(references === undefined ? {} : { resolveReference: (ref: string) => references.get(ref) }),
+    // A render has no on-screen size to gate a miniature by, so every
+    // resolved canvas reference expands — export's policy, in the editor's
+    // words: a node's intrinsic size, not its zoom.
+    ...(references === undefined
+      ? {}
+      : { resolveReference: (ref: string) => references.get(ref), expandFileNode: () => true }),
+    ...(options?.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
+    ...(options?.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
   })
 }
 

@@ -59,7 +59,7 @@ describe('wb_scene_render tool', () => {
     ).rejects.toThrow(SnapshotNotFoundError)
   })
 
-  test('refuses a markdown document instead of rendering an empty SVG', async () => {
+  test('renders a markdown document as a page rather than an empty scene', async () => {
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeDocumentKind(doc, 'markdown')
@@ -67,18 +67,21 @@ describe('wb_scene_render tool', () => {
     })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
-    await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, embedReferences: false }),
-    ).rejects.toMatchObject({
-      name: 'NotASpatialDocumentError',
-      message: expect.stringMatching(/markdown.*wb_document_get/s),
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
     })
+
+    expect(result.svg).toContain('Real prose')
+    expect(result.height).toBeGreaterThan(0)
   })
 
-  test('refuses when only the index row records the markdown kind (legacy doc bytes)', async () => {
-    // Pins wb_scene_render's OWN wiring of the index-row fallback — the
-    // shared guard is covered through digest, but a call-site mistake here
-    // (swapped ids, wrong workspace) would otherwise stay green.
+  test('reads the markdown kind from the index row when the doc bytes carry none (legacy)', async () => {
+    // Pins wb_scene_render's OWN wiring of the index-row fallback: a
+    // call-site mistake here (swapped ids, wrong workspace) would lay the
+    // body out as an EMPTY canvas — no nodes, no text — and stay green
+    // under any assertion weaker than the prose being present.
     const store = new FakeDocumentStore()
     await seedDoc(store, DOCUMENT_ID, (doc) => {
       writeMarkdownBody(doc, 'row-kind only')
@@ -91,9 +94,13 @@ describe('wb_scene_render tool', () => {
     })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
-    await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, embedReferences: false }),
-    ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+    })
+
+    expect(result.svg).toContain('row-kind only')
   })
 })
 
