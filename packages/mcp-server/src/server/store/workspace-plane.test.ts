@@ -148,6 +148,33 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
   expect(Buffer.from(after.frontier).equals(Buffer.from(before.frontier))).toBe(false)
 })
 
+it('readSnapshotManifest answers for a tree-served document with generation 0, matching loadSnapshot', async () => {
+  // The one test exercising the #treeEntry !== null branch of
+  // readSnapshotManifest: every ref the conformance suite below drives
+  // deliberately falls through it instead. Without this, inverting that
+  // guard (or reporting the wrong generation for a tree-served doc) would
+  // pass every test in the file.
+  const { inner, routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const ref = { kind: 'document', workspaceId: 'ws-a', documentId: rowId } as const
+
+  const manifestResult = await routed.readSnapshotManifest({ docRef: ref })
+  expect(manifestResult).not.toBeNull()
+  if (manifestResult === null) return
+  expect(manifestResult.generation).toBe(0)
+
+  const loaded = await routed.loadSnapshot({ docRef: ref })
+  expect(loaded).not.toBeNull()
+  if (loaded === null) return
+  expect(manifestResult.manifest).toEqual(loaded.manifest)
+
+  // Proves the tree-served branch was actually taken rather than a
+  // fall-through: the legacy plane has no record for this ref at all.
+  expect(await inner.readSnapshotManifest({ docRef: ref })).toBeNull()
+})
+
 it('routes a document ref by ITS OWN workspace, with no documents-table lookup (S6)', async () => {
   // The ref carries the workspace since W3, so the route needs no reverse
   // row lookup — and migration 0017 dropped the documents table outright,
