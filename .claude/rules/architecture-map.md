@@ -175,24 +175,19 @@ was — wired at one, leaving export drawing every fence plain. `highlightCode`
 remains an option, so a caller can substitute a tokeniser or pass a no-op; only
 the direction of the default changed.
 
-**What a document points at is resolved in ONE place, and the seams it
-produces are passed as a bundle.** `canvas-render/src/references/` holds the
-record every keeper loads a document into (`LoadedReference`: name, raw body
-or canvas), the one definition of what counts as a reference
-(`referenceTargets`: a body's `[[…]]`/`![[…]]`, a canvas's file nodes), and
-the one builder of the four seams a layout reads (`referenceSeams`:
-`resolveAlias`/`resolveTitle`/`resolveEmbed`/`resolveReference`). A
-composition root supplies I/O — reach the store for one reference — and
-passes the bundle as `references`; it never writes a seam's body. The layout
-is total by design, so a seam a root forgot never failed: the web preview
-drew a canvas behind `![[path]]` while `wb_scene_render` refused the
-document, and the daemon answered file references with bodies while the
-browser answered canvases too, all green. `tools/arch-lint`'s
-`reference-seams-check.test.ts` fails on a seam defined by hand outside that
-module (passing one along, wrapping it with `overlayReferences`, or handing
-the builder a page's alias table is fine). The gap that remains, stated so
-nobody rediscovers it: the editor's canvas text-node bodies still take no
-markdown seams, because the layout worker cannot receive a function and the
-worker and main-thread renders of one canvas must not disagree.
+**What a document points at is resolved in ONE place, and passed as a
+bundle.** `canvas-render/src/references/` holds what a keeper loads a
+reference into (`LoadedReference`), the one definition of what counts as one
+(`referenceTargets`), and the one builder of the four seams a layout reads
+(`referenceSeams`: `resolveAlias`/`resolveTitle`/`resolveEmbed`/
+`resolveReference`). A composition root supplies I/O and passes the bundle as
+`references`; it never writes a seam's body. Why: the layout is total, so a
+seam a root forgot never failed — the web preview drew a canvas behind
+`![[path]]` while `wb_scene_render` refused the document, all green.
+`tools/arch-lint`'s `reference-seams-check.test.ts` fails on a seam defined
+by hand outside that module (passing one along, `overlayReferences`, or
+handing the builder an alias table is fine). The gap that remains, so nobody
+rediscovers it: the editor's canvas text-node bodies take no markdown seams,
+because the layout worker cannot receive a function.
 
 The LoroDoc<->model bridge originally scoped for `codec` is DEFERRED to `crdt` — a single-document codec has no need for CRDT merge semantics, and pulling `loro-crdt` into this package would violate its own "model + remark only" dependency rule.
