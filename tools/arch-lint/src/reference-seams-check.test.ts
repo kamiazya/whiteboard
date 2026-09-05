@@ -84,9 +84,49 @@ function isTest(path: string): boolean {
   return /\.(test|spec)\.tsx?$/.test(path) || path.split(sep).includes('test-utils')
 }
 
-/** Comments stripped, so prose describing a seam is not read as defining one. */
+/**
+ * Comments removed and string contents blanked (except a lone identifier,
+ * which may be a quoted key), so prose describing a seam is not read as
+ * defining one — and a `//` inside a string does not swallow the definition
+ * after it. One pass with a state machine rather than
+ * regexes, because a regex cannot tell `"//"` from a comment or `// don't`
+ * from a string, and the scan measured both mistakes. Regex literals are not
+ * tracked: a `/'/` would open a "string" here, which is the one shape left
+ * for a fixture to catch.
+ */
 function stripComments(source: string): string {
-  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:\\])\/\/[^\n]*/g, '$1')
+  let out = ''
+  let i = 0
+  while (i < source.length) {
+    const ch = source[i] as string
+    const next = source[i + 1]
+    if (ch === '/' && next === '/') {
+      while (i < source.length && source[i] !== '\n') i += 1
+      continue
+    }
+    if (ch === '/' && next === '*') {
+      const end = source.indexOf('*/', i + 2)
+      i = end === -1 ? source.length : end + 2
+      continue
+    }
+    if (ch === "'" || ch === '"' || ch === '`') {
+      const start = i + 1
+      i = start
+      while (i < source.length && source[i] !== ch) {
+        if (source[i] === '\\') i += 1
+        i += 1
+      }
+      // A string that is one identifier may be a quoted key, which the
+      // patterns must still see; anything longer is prose and is blanked.
+      const body = source.slice(start, i)
+      out += ch + (/^[A-Za-z_$][\w$]*$/.test(body) ? body : '') + ch
+      i += 1
+      continue
+    }
+    out += ch
+    i += 1
+  }
+  return out
 }
 
 const files: string[] = []
@@ -119,6 +159,9 @@ const DEFINITION_FIXTURES: readonly { readonly source: string; readonly defines:
   { source: 'referenceSeams(graph, { resolveAlias, resolveTitle })', defines: false },
   { source: '// resolveEmbed: (id) => this is prose about a seam', defines: false },
   { source: '/* const resolveReference = (ref) => in a comment */', defines: false },
+  { source: "const note = '//'; const resolveReference = (ref) => undefined", defines: true },
+  { source: "// don't\nconst resolveTitle = (id) => id", defines: true },
+  { source: "const s = 'resolveEmbed: (id) => x'", defines: false },
 ]
 
 describe('references resolve in one place', () => {
