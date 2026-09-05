@@ -10,6 +10,7 @@ import {
   StateField,
 } from '@codemirror/state'
 import { EditorView, keymap, placeholder } from '@codemirror/view'
+import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
@@ -21,7 +22,6 @@ import {
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
-import { minimalChange } from './minimal-change.js'
 import { rangeToActOn } from './word-at.js'
 
 /**

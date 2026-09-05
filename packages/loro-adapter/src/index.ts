@@ -39,6 +39,7 @@ export {
   writeSpatialNode,
   writeTrustFacets,
 } from './loro-bridge.js'
+export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
   adoptWorkspaceDocument,
   type CreateWorkspaceDocumentInput,
