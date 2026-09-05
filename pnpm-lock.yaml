@@ -112,8 +112,8 @@ importers:
         specifier: 13.0.2
         version: 13.0.2
       '@secretlint/secretlint-rule-preset-recommend':
-        specifier: 13.0.2
-        version: 13.0.2
+        specifier: 13.0.5
+        version: 13.0.5
       '@tanstack/intent':
         specifier: ^0.0.40
         version: 0.0.40
@@ -3977,8 +3977,8 @@ packages:
     resolution: {integrity: sha512-ntXHndXRJLB4TEt9bGY+dKH4naOq3mHM8h4hwftg/HA1EyrmuRN8+6qPUbBzsJvZWmMd7CZBBBU7DsNERdMqCQ==}
     engines: {node: '>=22.0.0'}
 
-  '@secretlint/secretlint-rule-preset-recommend@13.0.2':
-    resolution: {integrity: sha512-D03Kw51qOgffj9zNlJFZUarVmP8zGcCZNi7A14+vZtHskbbBPEsS/f09idb48rrlMSaRMBN29IkqfbmPyL9xtw==}
+  '@secretlint/secretlint-rule-preset-recommend@13.0.5':
+    resolution: {integrity: sha512-dxOmTLf1w7I6rQEFPL8Hkdz6dR1FQXF0bzmTahH/Wyezy89TMPLL+8LbZ2YD8trkmYBnS37zUmOsZT6rMVftKQ==}
     engines: {node: '>=22.0.0'}
 
   '@secretlint/source-creator@13.0.2':
@@ -11322,7 +11322,7 @@ snapshots:
   '@secretlint/resolver@13.0.2':
     dependencies:
       '@secretlint/secretlint-rule-pattern': 13.0.2
-      '@secretlint/secretlint-rule-preset-recommend': 13.0.2
+      '@secretlint/secretlint-rule-preset-recommend': 13.0.5
     transitivePeerDependencies:
       - supports-color
 
@@ -11335,7 +11335,7 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@secretlint/secretlint-rule-preset-recommend@13.0.2': {}
+  '@secretlint/secretlint-rule-preset-recommend@13.0.5': {}
 
   '@secretlint/source-creator@13.0.2':
     dependencies:
