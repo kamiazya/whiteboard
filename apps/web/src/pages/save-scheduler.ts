@@ -16,8 +16,7 @@
  * command-based model generates and a hand-written example does not.
  */
 import type { Dispatch, SetStateAction } from 'react'
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
-
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 /** Whatever the host's timer handle is; opaque here so a test can use its own. */
 export type SaveTimer = unknown
 

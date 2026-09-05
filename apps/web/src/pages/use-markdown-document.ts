@@ -43,13 +43,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
 import { sameAnnotations } from '../lib/annotations-equal.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
 import { titleFromMarkdownBody } from '../lib/title-from-body.js'
 import { createSaveScheduler, type SaveScheduler } from './save-scheduler.js'
-import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
 

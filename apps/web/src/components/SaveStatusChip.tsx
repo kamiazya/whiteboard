@@ -9,7 +9,7 @@
  * browser's storage actually landed, including the degraded failure state
  * the version dot has no equivalent of.
  */
-import type { BrowserPersistenceState } from '../pages/use-browser-document-controller.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { StateDot, type StateDotTone } from './StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'

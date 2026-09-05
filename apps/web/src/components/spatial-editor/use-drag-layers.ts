@@ -20,7 +20,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import { computeDragPreview } from './drag-preview.js'
 import { createEditorAppearance } from './editor-appearance.js'

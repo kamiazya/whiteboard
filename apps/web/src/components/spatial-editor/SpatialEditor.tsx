@@ -81,10 +81,11 @@ import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteb
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { forwardRef, type ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import type { BoxMove } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
@@ -128,12 +129,7 @@ import { keyedWithoutPrefix } from './scene-render-core.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
-import {
-  type DraggableCreation,
-  draggedCreation,
-  type EditorTool,
-  ToolPalette,
-} from './ToolPalette.js'
+import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentState } from './use-comment-state.js'

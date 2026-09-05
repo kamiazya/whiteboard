@@ -5,7 +5,7 @@
 // decomposition created.
 import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import type { EditorTool } from './ToolPalette.js'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import { useToolState } from './use-tool-state.js'
 
 type Props = { initialTool: EditorTool | undefined }

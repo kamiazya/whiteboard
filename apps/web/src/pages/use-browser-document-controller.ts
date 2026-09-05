@@ -2,6 +2,7 @@ import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
@@ -24,12 +25,6 @@ import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/wor
 // Re-exported so the many page-side consumers keep their import path; the
 // type itself lives beside the concrete store.
 export type { LoroStoreLike }
-
-export type BrowserPersistenceState =
-  | { kind: 'saved'; lastSavedAt: null | string }
-  | { kind: 'pending'; lastSavedAt: null | string }
-  | { kind: 'saving'; lastSavedAt: null | string }
-  | { kind: 'degraded'; reason: string; message: string; lastSavedAt: null | string }
 
 export interface BrowserDocumentController {
   /**

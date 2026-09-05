@@ -1,9 +1,9 @@
 import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useState } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { createSpatialContentCache } from '../../lib/content-cache.js'
 import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import type { FileRefOption } from './DocumentPickerDialog.js'
 
 /**
