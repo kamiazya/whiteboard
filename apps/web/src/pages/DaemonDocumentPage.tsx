@@ -336,7 +336,6 @@ export function DaemonDocumentPage({
       ),
       contentDocumentId: workspaceSyncDocumentId,
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     controller.workspaceId,
     controller.path,

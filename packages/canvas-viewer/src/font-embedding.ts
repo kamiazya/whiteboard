@@ -1,4 +1,4 @@
-// eslint-disable-next-line import/no-unresolved -- Vite's `?url` asset suffix, resolved at build/dev-server time.
+// Vite's `?url` asset suffix, resolved at build/dev-server time.
 import robotoFontUrl from '../assets/fonts/Roboto/Roboto-Regular.ttf?url'
 import { VIEWER_FONT_FAMILY } from './font.js'
 

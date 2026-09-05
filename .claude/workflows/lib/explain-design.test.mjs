@@ -124,7 +124,7 @@ test('inline shouldHandBackForLiveVerification in dev-loop matches this module, 
   const source = readFileSync(path.join(__dirname, '..', 'dev-loop.workflow.mjs'), 'utf8')
   const match = source.match(/\nfunction shouldHandBackForLiveVerification\(\{[\s\S]*?\n\}\n/)
   assert.ok(match, 'could not locate the inline shouldHandBackForLiveVerification')
-  // eslint-disable-next-line no-new-func -- evaluating our own source
+  // Evaluating our own source
   const inline = new Function(`${match[0]}\nreturn shouldHandBackForLiveVerification`)()
   for (const input of [
     { manualVerification: 'drag a node', dogfood: false },

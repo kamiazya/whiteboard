@@ -62,7 +62,7 @@ test('inline triageReview in dev-loop.workflow.mjs matches this module', () => {
   const source = readFileSync(workflowPath, 'utf8')
   const match = source.match(/\nconst SEVERITY_RANK = [\s\S]*?\nfunction triageReview\(review, threshold\) \{[\s\S]*?\n\}\n/)
   assert.ok(match, 'could not locate the inline SEVERITY_RANK + triageReview in dev-loop.workflow.mjs')
-  // eslint-disable-next-line no-new-func -- evaluating our own source, not untrusted input
+  // Evaluating our own source, not untrusted input
   const inline = new Function(`${match[0]}\nreturn { SEVERITY_RANK, triageReview }`)()
   assert.deepEqual(inline.SEVERITY_RANK, SEVERITY_RANK)
   const review = {

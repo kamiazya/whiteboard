@@ -399,7 +399,6 @@ export function SourcePane({
     }
     // Intentionally created once per mount — external `value` changes are
     // reconciled below, not by recreating the view.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => {

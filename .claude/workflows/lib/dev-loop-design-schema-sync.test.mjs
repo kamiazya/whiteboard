@@ -24,7 +24,7 @@ const source = readFileSync(workflowPath, 'utf8')
 function extractInlineDesignSchema() {
   const match = source.match(/\nconst DESIGN_SCHEMA = (\{[\s\S]*?\n\})\n\nconst PLAN_VERDICT_SCHEMA/)
   assert.ok(match, 'could not locate the inline `const DESIGN_SCHEMA = {...}` literal in dev-loop.workflow.mjs')
-  // eslint-disable-next-line no-new-func -- evaluating a plain object literal extracted from our own source, not untrusted input
+  // Evaluating a plain object literal extracted from our own source, not untrusted input
   return new Function(`return (${match[1]})`)()
 }
 
@@ -36,14 +36,14 @@ function extractIsValidDesignShape() {
     match,
     'could not locate `nonBlankItem` + `function isValidDesignShape(d) {...}` in dev-loop.workflow.mjs',
   )
-  // eslint-disable-next-line no-new-func -- evaluating our own source (DESIGN_SCHEMA + a plain function declaration), not untrusted input
+  // Evaluating our own source (DESIGN_SCHEMA + a plain function declaration), not untrusted input
   return new Function('DESIGN_SCHEMA', `${match[0]}\nreturn isValidDesignShape`)(DESIGN_SCHEMA)
 }
 
 function extractShouldGenerateDesign() {
   const match = source.match(/\nfunction shouldGenerateDesign\(\{[\s\S]*?\n\}\n/)
   assert.ok(match, 'could not locate `function shouldGenerateDesign({...}) {...}` in dev-loop.workflow.mjs')
-  // eslint-disable-next-line no-new-func -- evaluating a plain function declaration extracted from our own source, not untrusted input
+  // Evaluating a plain function declaration extracted from our own source, not untrusted input
   return new Function(`${match[0]}\nreturn shouldGenerateDesign`)()
 }
 
@@ -53,7 +53,7 @@ function extractShouldBlockOnFailedPlanReview() {
     match,
     'could not locate `function shouldBlockOnFailedPlanReview({...}) {...}` in dev-loop.workflow.mjs',
   )
-  // eslint-disable-next-line no-new-func -- evaluating a plain function declaration extracted from our own source, not untrusted input
+  // Evaluating a plain function declaration extracted from our own source, not untrusted input
   return new Function(`${match[0]}\nreturn shouldBlockOnFailedPlanReview`)()
 }
 

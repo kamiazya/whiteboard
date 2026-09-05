@@ -102,7 +102,6 @@ export function useDaemonDocumentController(
     // Resolution is a one-shot mount effect; daemonFetch/options are stable
     // for the page's lifetime (App.tsx only mounts DaemonDocumentPage once per
     // pairing).
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const switchDocument = useCallback((nextPath: string) => {

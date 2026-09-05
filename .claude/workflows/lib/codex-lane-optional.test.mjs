@@ -41,7 +41,7 @@ function extractOptionalLane(file) {
   const source = readFileSync(path.join(workflowDir, file), 'utf8')
   const match = source.match(/\nconst optionalLane = (\([\s\S]*?)\n/)
   assert.ok(match, `could not locate \`const optionalLane = ...\` in ${file}`)
-  // eslint-disable-next-line no-new-func -- evaluating a plain arrow function from our own source, not untrusted input
+  // Evaluating a plain arrow function from our own source, not untrusted input
   return { fn: new Function(`return (${match[1]})`)(), source }
 }
 
