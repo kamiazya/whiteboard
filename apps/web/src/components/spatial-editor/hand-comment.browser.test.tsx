@@ -208,8 +208,10 @@ it('a stationary touch long-press under the hand tool opens the comment verbs, a
   // that follows the menu must not ALSO open the card — the press was
   // spent on the menu.
   touch(root, 'pointerdown', BUBBLE.x, BUBBLE.y)
-  await new Promise((resolve) => setTimeout(resolve, 650))
-  await vi.waitFor(() => expect(menuLabels(container)).toEqual(['Edit comment', 'Resolve']))
+  // Waited on as a condition: the menu is what the delay produces.
+  await vi.waitFor(() => expect(menuLabels(container)).toEqual(['Edit comment', 'Resolve']), {
+    timeout: 2000,
+  })
   touch(root, 'pointerup', BUBBLE.x, BUBBLE.y)
   // Closing the menu is the condition waited on: a card the release had
   // opened would have rendered by the time the menu is gone, and a plain

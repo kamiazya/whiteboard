@@ -111,15 +111,23 @@ it('hand mode: a stationary long-press opens the comment verbs, and a finger tha
   // Held still past the delay over the node: the annotation verb for it,
   // none of its edit verbs, and the node untouched by the press.
   touch(root, 'pointerdown', 200, 130)
-  await new Promise((resolve) => setTimeout(resolve, 650))
-  await vi.waitFor(() => {
-    expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
-  })
+  // Waited on as a condition: the menu is what the delay produces.
+  await vi.waitFor(
+    () => {
+      expect(container.querySelector('[data-testid="context-menu"]')).not.toBeNull()
+    },
+    { timeout: 2000 },
+  )
   expect(container.textContent).toContain('Comment on this')
   expect(container.textContent).not.toContain('Delete')
   touch(root, 'pointerup', 200, 130)
   expect(latest.canvas.nodes[0]).toMatchObject({ x: 100, y: 100 })
   // Closing it: a pointerdown anywhere outside is the menu's own dismissal.
+  // The menu takes focus in the same effect that subscribes to that press,
+  // so focus is the condition that the press will be heard.
+  await vi.waitFor(() =>
+    expect(document.activeElement?.closest('[data-testid="context-menu"]')).not.toBeNull(),
+  )
   touch(root, 'pointerdown', 700, 500, 8)
   touch(root, 'pointerup', 700, 500, 8)
   await vi.waitFor(() => {
