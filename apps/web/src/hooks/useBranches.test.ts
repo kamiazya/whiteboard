@@ -1,14 +1,15 @@
 import { act, renderHook } from '@testing-library/react'
 import { createElement } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import {
-  type BranchesState,
   branchesApi,
   buildBranchUrls,
+  createDaemonBranchesBackend,
   parseBranchesResponse,
-  useBranches,
-} from './useBranches.js'
+} from '../lib/branches-backend.js'
+import { type BranchesState, useBranches } from './useBranches.js'
 
 describe('buildBranchUrls', () => {
   it('encodes hierarchical path with "/" safely', () => {
@@ -111,6 +112,38 @@ describe('branchesApi', () => {
     expect(state.branches).toHaveLength(1)
     const firstCall = fetchMock.mock.calls[0]
     expect(firstCall?.[0]).toBe('/api/workspaces/sess_1/documents/canvas-a/branches')
+  })
+
+  it('loadDocument() GETs the branch document URL and parses the past shape', async () => {
+    const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
+      async () =>
+        new Response(JSON.stringify({ kind: 'markdown', body: '# at the tip' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+    )
+    vi.stubGlobal('fetch', fetchMock)
+    const api = branchesApi('sess_1', 'canvas-a')
+    const past = await api.loadDocument('idea/2')
+    expect(past).toEqual({ kind: 'markdown', body: '# at the tip' })
+    expect(fetchMock.mock.calls[0]?.[0]).toBe(
+      '/api/workspaces/sess_1/documents/canvas-a/branches/idea%2F2/document',
+    )
+  })
+
+  it('loadDocument() answers null on 404 (branch gone) and rejects on other errors', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{"error":"branch_not_found"}', { status: 404 })),
+    )
+    expect(await branchesApi('sess_1', 'canvas-a').loadDocument('gone')).toBeNull()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('{}', { status: 500 })),
+    )
+    await expect(branchesApi('sess_1', 'canvas-a').loadDocument('sick')).rejects.toMatchObject({
+      status: 500,
+    })
   })
 
   it('create() POSTs JSON body', async () => {
@@ -842,7 +875,11 @@ describe('useBranches hook (callback model, no window event subscription)', () =
         }),
     )
 
-    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a', providedFetch), {
+    // No longer passed as an argument — the hook takes its keeper from
+    // BranchesBackendContext, whose fallback builds the daemon backend over
+    // whatever fetch DaemonApiContext carries. The provider IS the path now,
+    // which is what this case was always trying to establish.
+    const { result } = renderHook(() => useBranches('sess_1', 'canvas-a'), {
       wrapper: ({ children }) =>
         createElement(DaemonApiContext.Provider, { value: providedFetch }, children),
     })
@@ -855,7 +892,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     expect(result.current.state.head).toBe('main')
   })
 
-  it('rerendering with a new fetch identity (same workspaceId/path) routes the next refetch through it', async () => {
+  it('a new backend identity from the context (same workspaceId/path) routes the next refetch through it', async () => {
     const fetchA = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
       async () =>
         new Response(JSON.stringify({ head: 'from-a', branches: [] }), {
@@ -871,22 +908,27 @@ describe('useBranches hook (callback model, no window event subscription)', () =
         }),
     )
 
-    const { result, rerender } = renderHook(
-      ({ fetchFn }: { fetchFn: typeof fetch }) => useBranches('sess_1', 'canvas-a', fetchFn),
-      { initialProps: { fetchFn: fetchA } },
-    )
+    // Driven through the context the hook now reads. The value is held
+    // outside the wrapper because `rerender` re-invokes the wrapper, which is
+    // what carries the new backend down.
+    let backend = createDaemonBranchesBackend(fetchA as unknown as typeof fetch)
+    const { result, rerender } = renderHook(() => useBranches('sess_1', 'canvas-a'), {
+      wrapper: ({ children }) =>
+        createElement(BranchesBackendContext.Provider, { value: backend }, children),
+    })
     await act(async () => {
       await new Promise((r) => setTimeout(r, 0))
     })
     expect(result.current.state.head).toBe('from-a')
 
-    rerender({ fetchFn: fetchB })
+    backend = createDaemonBranchesBackend(fetchB as unknown as typeof fetch)
+    rerender()
     await act(async () => {
       await result.current.refetch()
     })
 
-    // A stale apiRef (recreated only on workspaceId/path change, not fetchFn)
-    // would still call fetchA here.
+    // A stale apiRef (recreated only on workspaceId/path change, not on the
+    // backend identity the context hands down) would still call fetchA here.
     expect(result.current.state.head).toBe('from-b')
     expect(fetchB).toHaveBeenCalled()
   })

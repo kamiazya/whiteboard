@@ -34,15 +34,13 @@ import {
   BROWSER_HISTORY_CAPABILITIES,
   type VersionPreviewSession,
 } from '../components/VersionTimeline'
-import {
-  BookmarkAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/BookmarkAction.js'
+import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
+import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
@@ -57,6 +55,7 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
+import { createBrowserBranchesBackend } from '../lib/branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
@@ -89,6 +88,7 @@ import {
   useBrowserDocumentController,
 } from './use-browser-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
+import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -311,7 +311,7 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    setSaveVersionOutcome(null)
+    clearSaveVersionOutcome()
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
@@ -594,6 +594,13 @@ export function BrowserDocumentPage({
     [backend, store],
   )
   const versionsEnabled = versionsBackend !== null
+
+  // Unconditional, unlike `versionsBackend`: this keeper has no branches at
+  // all, so there is nothing to build it out of and nothing that could make
+  // it unavailable. Mounting it is what stops a branch consumer on this page
+  // falling through to the context's daemon fallback and issuing a request
+  // to a daemon that is not there.
+  const branchesBackend = useMemo(() => createBrowserBranchesBackend(), [])
   // The panel refetches on a CHANGE of this signal. A manual save announces
   // itself on the window (the page dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
@@ -625,28 +632,34 @@ export function BrowserDocumentPage({
   // dot is small, so the panel a finger opens has to carry one too — the
   // daemon page's panel does. Announced on the window like every other
   // save, which is what clears the dot and refreshes the list.
-  const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
-  const saveVersionFromPanel = async (label: string): Promise<void> => {
-    if (versionsBackend === null || documentPath === null || savingVersion) return
-    // The document this run is about, fixed before the first await. The page
-    // switches documents without remounting, so a save that started on A can
-    // settle after B is on screen — and the scope-reset effect has already
-    // cleared the outcome by then, so the message would appear under B as if
-    // B had been saved. Same residual `handleDuplicate` guards against.
-    const startedOn = currentDocumentIdRef.current
-    setSavingVersion(true)
-    setSaveVersionOutcome(null)
+  const {
+    saving: savingVersion,
+    outcome: saveVersionOutcome,
+    run: runVersionSave,
+    clearOutcome: clearSaveVersionOutcome,
+  } = useVersionSaveFlow(currentDocumentIdRef, async (label) => {
+    // Narrowed by the precondition in `saveVersionFromPanel` below, which
+    // never calls `run` (so never reaches this body) while either is null.
+    if (versionsBackend === null || documentPath === null) {
+      throw new Error('saveVersionFromPanel: no versions backend or document path')
+    }
+    // Captured BEFORE the save, not after. `exportScene` reads the live
+    // scene synchronously at call time, so starting it here binds the
+    // picture to the state the save is about to mark. Awaiting the save
+    // first meant an edit made during it was drawn onto the older point —
+    // a picture of content that version does not contain.
+    const picture = exportScene('png')
+    let saved: Awaited<ReturnType<typeof versionsBackend.save>>
     try {
-      // Captured BEFORE the save, not after. `exportScene` reads the live
-      // scene synchronously at call time, so starting it here binds the
-      // picture to the state the save is about to mark. Awaiting the save
-      // first meant an edit made during it was drawn onto the older point —
-      // a picture of content that version does not contain.
-      const picture = exportScene('png')
-      const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('saved')
+      saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+    } catch (err) {
+      log.warn('save version from the History panel failed', err)
+      throw err
+    }
+    // The rest is the post-save announce work — thumbnail attach, the
+    // event that clears the dot and refreshes the History panel — run only
+    // once the guard has confirmed this save's document is still on screen.
+    return () => {
       // The picture rides with the bookmark, as it does on the daemon page —
       // one path through the seam, so a browser-kept row is not the one that
       // silently has no picture. Not awaited: the bookmark has landed, and
@@ -679,13 +692,11 @@ export function BrowserDocumentPage({
           detail: { workspaceId: 'local', path: documentPath },
         }),
       )
-    } catch (err) {
-      log.warn('save version from the History panel failed', err)
-      if (currentDocumentIdRef.current !== startedOn) return
-      setSaveVersionOutcome('failed')
-    } finally {
-      if (currentDocumentIdRef.current === startedOn) setSavingVersion(false)
     }
+  })
+  const saveVersionFromPanel = async (label: string): Promise<void> => {
+    if (versionsBackend === null || documentPath === null) return
+    await runVersionSave(label)
   }
 
   // The second phase of the page state. `pageState` above is derived from what
@@ -1117,203 +1128,207 @@ export function BrowserDocumentPage({
     // falls through to the browser's default black backdrop — which turned
     // the canvas area black under a light theme.
     <VersionsBackendContext.Provider value={versionsBackend}>
-      <DocumentPageShell
-        srTitle={renderState.snapshot.name}
-        mainRef={mainRef}
-        mainClassName="bg-background"
-        aside={
-          historyOpen && versionsEnabled ? (
-            <VersionPanel
-              workspaceId={getBrowserWorkspaceId()}
-              path={renderState.snapshot.path}
-              capabilities={BROWSER_HISTORY_CAPABILITIES}
-              onRestored={clearLocalUndo}
-              onPreview={setPreview}
-              refreshSignal={versionRefreshSignal}
-              headerActions={
-                <BookmarkAction
-                  saving={savingVersion}
-                  outcome={saveVersionOutcome}
-                  armed={bookmarkArmed}
-                  onSave={(label) => void saveVersionFromPanel(label)}
-                />
-              }
-            />
-          ) : undefined
-        }
-        header={
-          <>
-            {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
+      <BranchesBackendContext.Provider value={branchesBackend}>
+        <DocumentPageShell
+          srTitle={renderState.snapshot.name}
+          mainRef={mainRef}
+          mainClassName="bg-background"
+          aside={
+            historyOpen && versionsEnabled ? (
+              <VersionPanel
+                workspaceId={getBrowserWorkspaceId()}
+                path={renderState.snapshot.path}
+                capabilities={BROWSER_HISTORY_CAPABILITIES}
+                onRestored={clearLocalUndo}
+                onPreview={setPreview}
+                refreshSignal={versionRefreshSignal}
+                headerActions={
+                  <BookmarkAction
+                    saving={savingVersion}
+                    outcome={saveVersionOutcome}
+                    armed={bookmarkArmed}
+                    onSave={(label) => void saveVersionFromPanel(label)}
+                  />
+                }
+              />
+            ) : undefined
+          }
+          header={
+            <>
+              {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
             switcher, rename, menus — steps aside. The floating control below
             replaces its exit path, Escape still works natively, and the dock
             stays because editing is what the extra space is FOR. */}
-            {!isFullscreen && (
-              <Suspense
-                fallback={
-                  <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-                }
-              >
-                <WorkspaceTopBar
-                  // Local mode names documents through its own store, not through
-                  // the daemon's `/names`, so the identity the bar offers is unused
-                  // here and `documentName`/`onTitleChange` stay the source.
-                  titleSlot={() => documentTitleSlot}
-                  dataMode="local"
-                  workspaceId="local"
-                  path={renderState.snapshot.path}
-                  // The way out of the editor. This page had none until now —
-                  // the app-shell brand mark was the only exit, and it says
-                  // nothing about where it goes.
-                  onNavigateBack={() => {
-                    const handle = browserWorkspaceHandleOrNull()
-                    navigate(handle === null ? indexPath() : workspacePath(handle))
-                  }}
-                  isFullscreen={isFullscreen}
-                  onToggleFullscreen={() => {
-                    // Entering hides this whole bar; the floating exit control and
-                    // native Escape are the ways back out. requestFullscreen can
-                    // REJECT (Permissions-Policy, an iframe without
-                    // allow="fullscreen", no user activation) — a swallowed
-                    // rejection is unhandled-rejection noise, so both directions log.
-                    if (document.fullscreenElement)
-                      document
-                        .exitFullscreen()
-                        .catch((err) => log.warn('exitFullscreen failed', err))
-                    else
-                      mainRef.current
-                        ?.requestFullscreen()
-                        .catch((err) => log.warn('requestFullscreen rejected', err))
-                  }}
-                  capabilities={capabilities}
-                  onToggleHistory={
-                    versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
+              {!isFullscreen && (
+                <Suspense
+                  fallback={
+                    <div
+                      className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')}
+                    />
                   }
-                  historyOpen={historyOpen}
-                  {...(preview === null ? {} : { preview })}
-                />
-              </Suspense>
-            )}
-          </>
-        }
-      >
-        {/* The snapshot's kind picks the editor: markdown documents open the
+                >
+                  <WorkspaceTopBar
+                    // Local mode names documents through its own store, not through
+                    // the daemon's `/names`, so the identity the bar offers is unused
+                    // here and `documentName`/`onTitleChange` stay the source.
+                    titleSlot={() => documentTitleSlot}
+                    dataMode="local"
+                    workspaceId="local"
+                    path={renderState.snapshot.path}
+                    // The way out of the editor. This page had none until now —
+                    // the app-shell brand mark was the only exit, and it says
+                    // nothing about where it goes.
+                    onNavigateBack={() => {
+                      const handle = browserWorkspaceHandleOrNull()
+                      navigate(handle === null ? indexPath() : workspacePath(handle))
+                    }}
+                    isFullscreen={isFullscreen}
+                    onToggleFullscreen={() => {
+                      // Entering hides this whole bar; the floating exit control and
+                      // native Escape are the ways back out. requestFullscreen can
+                      // REJECT (Permissions-Policy, an iframe without
+                      // allow="fullscreen", no user activation) — a swallowed
+                      // rejection is unhandled-rejection noise, so both directions log.
+                      if (document.fullscreenElement)
+                        document
+                          .exitFullscreen()
+                          .catch((err) => log.warn('exitFullscreen failed', err))
+                      else
+                        mainRef.current
+                          ?.requestFullscreen()
+                          .catch((err) => log.warn('requestFullscreen rejected', err))
+                    }}
+                    capabilities={capabilities}
+                    onToggleHistory={
+                      versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
+                    }
+                    historyOpen={historyOpen}
+                    {...(preview === null ? {} : { preview })}
+                  />
+                </Suspense>
+              )}
+            </>
+          }
+        >
+          {/* The snapshot's kind picks the editor: markdown documents open the
           markdown editor (body and OKF core facets persisted as containers
           of one Loro document — see use-markdown-document.ts), everything
           else the spatial editor. */}
-        {isFullscreen && (
-          <Button
-            ref={exitFullscreenRef}
-            variant="outline"
-            size="icon"
-            aria-label="Exit fullscreen"
-            onClick={() =>
-              document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-            }
-            className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
-          >
-            <Minimize2 aria-hidden="true" className="size-4" />
-          </Button>
-        )}
-        {/* The annotation layer's document-level surface (ADR-0026
+          {isFullscreen && (
+            <Button
+              ref={exitFullscreenRef}
+              variant="outline"
+              size="icon"
+              aria-label="Exit fullscreen"
+              onClick={() =>
+                document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+              }
+              className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
+            >
+              <Minimize2 aria-hidden="true" className="size-4" />
+            </Button>
+          )}
+          {/* The annotation layer's document-level surface (ADR-0026
             decision 5) sits BESIDE the editor rather than inside it,
             because one panel serves both document kinds and a markdown
             document has no canvas chrome to host one. Its opener lives in
             the document actions row above, in flow — see commentsToggle. */}
-        <div className="flex h-full min-h-0">
-          <div className="relative min-w-0 flex-1">
-            {preview ? (
-              <DocumentPreview past={preview.past} theme={resolvedTheme} />
-            ) : (
-              <DocumentEditorSurface
-                kind={documentKind}
-                documentKey={documentId ?? 'no-canvas'}
-                markdown={
-                  markdownDoc.coreFacets === null
-                    ? { body: null, setBody: markdownDoc.setBody }
-                    : {
-                        body: markdownDoc.body,
-                        setBody: markdownDoc.setBody,
-                        sourceExtensions: markdownBinding,
-                        autoFocus: true,
-                        theme: resolvedTheme,
-                        meta: markdownDoc.coreFacets,
-                        title: titleOf(documentName, documentPath),
-                        resolveAlias,
-                        resolveTitle,
-                        linkTargets,
-                        onOpenDocument: (id) => navigateToDocument(id),
-                        resolveEmbed,
-                        threads: annotations,
-                        selectedThreadId,
-                        onSelectThread: revealThread,
-                      }
-                }
-                spatial={() => (
-                  <div className="flex h-full min-h-0 flex-col">
-                    <SpatialEditorPane
-                      className="relative min-h-0 flex-1"
-                      editorKey={documentId ?? 'no-canvas'}
-                      canvasLoaded={canvasLoaded}
-                      canvas={canvas}
-                      onChange={onChange}
-                      externalVersion={externalVersion}
-                      theme={resolvedTheme}
-                      // File-node reference = canvas id minted in the browser; the
-                      // current canvas is excluded (a self-reference card is pure
-                      // noise).
-                      fileRefOptions={documents
-                        .filter((entry) => entry.documentId !== documentId)
-                        .map((entry) => ({
-                          file: entry.documentId,
-                          label: entry.name,
-                          kind: entry.kind,
-                        }))}
-                      onOpenDocument={navigateToDocument}
-                      missingFileRef={missingFileRef}
-                      fileSeams={fileSeams}
-                      lockedNodeIds={lockedNodeIds}
-                      lockedEdgeIds={lockedEdgeIds}
-                      onToggleNodeLock={setNodeLock}
-                      onToggleEdgeLock={setEdgeLock}
-                      nodeInEditor={nodeInEditor}
-                      history={{
-                        onUndo: () => void undo(),
-                        onRedo: () => void redo(),
-                        canUndo: canUndo(),
-                        canRedo: canRedo(),
-                      }}
-                      overlayTitle={documentName ?? 'Untitled'}
-                      resolveAlias={resolveAlias}
-                      resolveEmbed={resolveEmbed}
-                      resolveTitle={resolveTitle}
-                      linkTargets={linkTargets}
-                      threads={annotations}
-                    />
-                  </div>
-                )}
-              />
-            )}
-            {/* Markdown documents keep CodeMirror's own history (its keymap
+          <div className="flex h-full min-h-0">
+            <div className="relative min-w-0 flex-1">
+              {preview ? (
+                <DocumentPreview past={preview.past} theme={resolvedTheme} />
+              ) : (
+                <DocumentEditorSurface
+                  kind={documentKind}
+                  documentKey={documentId ?? 'no-canvas'}
+                  markdown={
+                    markdownDoc.coreFacets === null
+                      ? { body: null, setBody: markdownDoc.setBody }
+                      : {
+                          body: markdownDoc.body,
+                          setBody: markdownDoc.setBody,
+                          sourceExtensions: markdownBinding,
+                          autoFocus: true,
+                          theme: resolvedTheme,
+                          meta: markdownDoc.coreFacets,
+                          title: titleOf(documentName, documentPath),
+                          resolveAlias,
+                          resolveTitle,
+                          linkTargets,
+                          onOpenDocument: (id) => navigateToDocument(id),
+                          resolveEmbed,
+                          threads: annotations,
+                          selectedThreadId,
+                          onSelectThread: revealThread,
+                        }
+                  }
+                  spatial={() => (
+                    <div className="flex h-full min-h-0 flex-col">
+                      <SpatialEditorPane
+                        className="relative min-h-0 flex-1"
+                        editorKey={documentId ?? 'no-canvas'}
+                        canvasLoaded={canvasLoaded}
+                        canvas={canvas}
+                        onChange={onChange}
+                        externalVersion={externalVersion}
+                        theme={resolvedTheme}
+                        // File-node reference = canvas id minted in the browser; the
+                        // current canvas is excluded (a self-reference card is pure
+                        // noise).
+                        fileRefOptions={documents
+                          .filter((entry) => entry.documentId !== documentId)
+                          .map((entry) => ({
+                            file: entry.documentId,
+                            label: entry.name,
+                            kind: entry.kind,
+                          }))}
+                        onOpenDocument={navigateToDocument}
+                        missingFileRef={missingFileRef}
+                        fileSeams={fileSeams}
+                        lockedNodeIds={lockedNodeIds}
+                        lockedEdgeIds={lockedEdgeIds}
+                        onToggleNodeLock={setNodeLock}
+                        onToggleEdgeLock={setEdgeLock}
+                        nodeInEditor={nodeInEditor}
+                        history={{
+                          onUndo: () => void undo(),
+                          onRedo: () => void redo(),
+                          canUndo: canUndo(),
+                          canRedo: canRedo(),
+                        }}
+                        overlayTitle={documentName ?? 'Untitled'}
+                        resolveAlias={resolveAlias}
+                        resolveEmbed={resolveEmbed}
+                        resolveTitle={resolveTitle}
+                        linkTargets={linkTargets}
+                        threads={annotations}
+                      />
+                    </div>
+                  )}
+                />
+              )}
+              {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
+            </div>
+            {commentsOpen ? (
+              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
+                <CommentsPanel
+                  threads={annotations}
+                  resolveAnchor={resolveAnchor}
+                  revealThreadId={selectedThreadId}
+                  onSelect={(thread) => setSelectedThreadId(thread.id)}
+                  // Not while a past version is on screen: the editor is
+                  // replaced by DocumentPreview but this rail is not, and a
+                  // reply is a write to the LIVE document — sent from a
+                  // surface showing something else entirely.
+                  onReply={preview === null ? handleReply : undefined}
+                />
+              </aside>
+            ) : null}
           </div>
-          {commentsOpen ? (
-            <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-              <CommentsPanel
-                threads={annotations}
-                resolveAnchor={resolveAnchor}
-                revealThreadId={selectedThreadId}
-                onSelect={(thread) => setSelectedThreadId(thread.id)}
-                // Not while a past version is on screen: the editor is
-                // replaced by DocumentPreview but this rail is not, and a
-                // reply is a write to the LIVE document — sent from a
-                // surface showing something else entirely.
-                onReply={preview === null ? handleReply : undefined}
-              />
-            </aside>
-          ) : null}
-        </div>
-      </DocumentPageShell>
+        </DocumentPageShell>
+      </BranchesBackendContext.Provider>
     </VersionsBackendContext.Provider>
   )
 }

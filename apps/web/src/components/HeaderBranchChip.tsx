@@ -1,6 +1,7 @@
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   ChevronDown,
+  Eye,
   GitBranch,
   GitMerge,
   MoreHorizontal,
@@ -38,7 +39,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
@@ -78,6 +78,10 @@ export interface HeaderBranchChipProps {
   // callers must pass `capabilities.merge` explicitly to hide the merge
   // entry point when the provider does not support it.
   mergeEnabled?: boolean
+  // Look at a variation WITHOUT switching (ADR-0022's addressable preview).
+  // The host page owns the address, so this only reports the chosen name;
+  // omitted (a host with no preview surface) hides the control.
+  onPreviewVariation?: (name: string) => void
 }
 
 interface PendingMerge {
@@ -103,8 +107,8 @@ export function HeaderBranchChip({
   disabled,
   refreshSignal,
   mergeEnabled = true,
+  onPreviewVariation,
 }: HeaderBranchChipProps): JSX.Element {
-  const fetchFn = useDaemonApi()
   const {
     state,
     refetch,
@@ -114,7 +118,7 @@ export function HeaderBranchChip({
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(workspaceId, path, fetchFn)
+  } = useBranches(workspaceId, path)
 
   // Skip the initial mount (refetch already runs internally via useBranches'
   // own effect) — only react to a refreshSignal value that actually changes
@@ -406,6 +410,23 @@ export function HeaderBranchChip({
               <span className="truncate" title={b.name}>
                 {displayBranchName(b.name)}
               </span>
+              {onPreviewVariation && (
+                <button
+                  type="button"
+                  aria-label={`Preview variation ${displayBranchName(b.name)}`}
+                  data-testid={`branch-preview-${b.name}`}
+                  className="ml-auto shrink-0 rounded p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  // Looking must not become switching: stop the row's own
+                  // select (setHead) from firing under this button.
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    event.preventDefault()
+                    onPreviewVariation(b.name)
+                  }}
+                >
+                  <Eye className="size-3.5" aria-hidden />
+                </button>
+              )}
             </DropdownMenuItem>
           ))}
           <DropdownMenuSeparator />

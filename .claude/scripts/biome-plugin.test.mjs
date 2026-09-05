@@ -34,19 +34,20 @@ function lint(file, plugin = 'tools/biome-plugins/test-flake-shapes.grit') {
   }
 }
 
-test('the bad fixture trips ALL FOUR rules', () => {
+test('the bad fixture trips ALL FIVE rules', () => {
   const out = lint(join(FIXTURES, 'bad.test.tsx'))
   assert.match(out, /Side effect inside waitFor/)
   assert.match(out, /afterEach wipes document\.body/)
   assert.match(out, /Non-ASCII character in a userEvent/)
   assert.match(out, /vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/)
+  assert.match(out, /A focused test drops every other test/)
 })
 
 test('the good fixture trips none of the four rules', () => {
   const out = lint(join(FIXTURES, 'good.test.tsx'))
   assert.doesNotMatch(
     out,
-    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)/,
+    /Side effect inside waitFor|afterEach wipes|Non-ASCII character in a userEvent|vi\.useFakeTimers\(\) with no vi\.useRealTimers\(\)|A focused test drops every other test/,
   )
 })
 

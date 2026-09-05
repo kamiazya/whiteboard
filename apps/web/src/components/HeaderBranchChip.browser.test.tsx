@@ -66,6 +66,32 @@ describe('HeaderBranchChip (real Radix dropdown/dialog)', () => {
     expect(stateHolder.current.setHead).toHaveBeenCalledWith('feature-x')
   })
 
+  it('the preview control on a non-HEAD row previews without switching (ADR-0022)', async () => {
+    const onPreviewVariation = vi.fn()
+    render(<HeaderBranchChip workspaceId="s1" path="c1" onPreviewVariation={onPreviewVariation} />)
+    await userEvent.click(screen.getByTestId('header-branch-chip'))
+
+    const previewButton = await screen.findByTestId('branch-preview-feature-x')
+    await userEvent.click(previewButton)
+
+    expect(onPreviewVariation).toHaveBeenCalledWith('feature-x')
+    // Looking is not switching: the shared act must not ride along.
+    expect(stateHolder.current.setHead).not.toHaveBeenCalled()
+  })
+
+  it('offers no preview control for the HEAD row, and none at all without the callback', async () => {
+    render(<HeaderBranchChip workspaceId="s1" path="c1" onPreviewVariation={vi.fn()} />)
+    await userEvent.click(screen.getByTestId('header-branch-chip'))
+    await screen.findByText('feature-x')
+    expect(screen.queryByTestId('branch-preview-main')).toBeNull()
+    cleanup()
+
+    render(<HeaderBranchChip workspaceId="s1" path="c1" />)
+    await userEvent.click(screen.getByTestId('header-branch-chip'))
+    await screen.findByText('feature-x')
+    expect(screen.queryByTestId('branch-preview-feature-x')).toBeNull()
+  })
+
   it('kebab -> rename -> Enter calls renameBranch with the old and new names', async () => {
     // Rename is disabled while head === 'main', so switch HEAD first.
     stateHolder.current.state = { head: 'feature-x', branches }

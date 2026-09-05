@@ -76,15 +76,15 @@ export function topBarFetchHandler({ dirty }: { dirty: boolean }): DocFetchHandl
 // content shift layout after the capture, producing a byte-unstable PNG.
 export async function waitForSnapshotContent(
   container: HTMLElement,
-  { sceneText, topBarWorkspaceName }: { sceneText: string; topBarWorkspaceName?: string },
+  { sceneText, topBarTitle }: { sceneText: string; topBarTitle?: string },
 ): Promise<void> {
   await waitFor(() => {
-    if (topBarWorkspaceName !== undefined) {
-      // The workspace name, not the canvas name: row one says where you ARE
-      // (application + workspace) and row two owns the canvas. Waiting on a
-      // canvas name here waits for something this row never renders.
-      if (!(container.textContent ?? '').includes(topBarWorkspaceName)) {
-        throw new Error('TopBar workspace name not yet rendered')
+    if (topBarTitle !== undefined) {
+      // The document's title (WorkspaceTopBar's titleSlot), not the canvas
+      // scene text: waiting on scene content here waits for something this
+      // check never renders.
+      if (!(container.textContent ?? '').includes(topBarTitle)) {
+        throw new Error('TopBar title not yet rendered')
       }
       if (!container.querySelector('[aria-label^="Switch variation"]')) {
         throw new Error('HeaderBranchChip not yet rendered')
