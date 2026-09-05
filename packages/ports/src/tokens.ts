@@ -1,7 +1,6 @@
 import type { BlobStore } from './blob-store.js'
 import type { DocumentIndex } from './document-index.js'
 import type { DocumentStore } from './document-store.js'
-import type { PresenceChannel } from './presence.js'
 
 /**
  * A DI token that carries its bound type only at compile time (`__type` is
@@ -26,5 +25,4 @@ export const TOKENS = {
   DocumentStore: defineToken<DocumentStore>('DocumentStore'),
   BlobStore: defineToken<BlobStore>('BlobStore'),
   DocumentIndex: defineToken<DocumentIndex>('DocumentIndex'),
-  PresenceChannel: defineToken<PresenceChannel>('PresenceChannel'),
 } as const
