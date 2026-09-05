@@ -171,7 +171,10 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     expect(screen.queryByText('What will you make first?')).toBeNull()
 
     // Restore one from the trash: the card returns to the list.
-    await userEvent.click(within(trash).getByText(/^Trash \(2\)/))
+    // The count is a SECOND async list, and the loop above only waited for the
+    // card list to shrink — so the section can still read `Trash (1)` here while
+    // the delete's own trash re-read is in flight.
+    await userEvent.click(await within(trash).findByText(/^Trash \(2\)/))
     await userEvent.click((await within(trash).findAllByRole('button', { name: 'Restore' }))[0]!)
     await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(1), {
       timeout: 15_000,
