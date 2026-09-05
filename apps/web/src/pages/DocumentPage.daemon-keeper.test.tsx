@@ -16,7 +16,7 @@ import {
   type ContractDocument,
   type DocumentPageFixture,
   describeDocumentPageContract,
-} from './document-page.contract.js'
+} from '../test-utils/document-page.contract.js'
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()

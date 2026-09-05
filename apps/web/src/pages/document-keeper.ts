@@ -15,7 +15,7 @@
  *
  * Mirrors `VersionsBackend` and `BranchesBackend` one level up: a seam with
  * two implementations and one contract suite run against both
- * (`document-page.contract.tsx`), so a scenario written once is a scenario
+ * (`test-utils/document-page.contract.tsx`), so a scenario written once is a scenario
  * both keepers answer.
  */
 import type { ReactNode } from 'react'

@@ -19,7 +19,7 @@ const ALLOWED_FILES = new Set([
   // The document-page contract injects a fake `document.modelContext` to
   // prove the registry is mounted, for BOTH keepers — the same proof the
   // per-page `.webmcp.test.tsx` files below give, run from one place.
-  'pages/document-page.contract.tsx',
+  'test-utils/document-page.contract.tsx',
   // This guard's own source necessarily spells out the banned strings to
   // scan for them.
   'lib/webmcp/webmcp-api-confinement.test.ts',

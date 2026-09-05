@@ -7,12 +7,12 @@ import { act, render as rtlRender, screen, waitFor } from '@testing-library/reac
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
-import { InMemoryLoroStore, LocalStoreDouble } from '../test-utils/local-index.js'
 import {
   type ContractDocument,
   type DocumentPageFixture,
   describeDocumentPageContract,
-} from './document-page.contract.js'
+} from '../test-utils/document-page.contract.js'
+import { InMemoryLoroStore, LocalStoreDouble } from '../test-utils/local-index.js'
 
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()

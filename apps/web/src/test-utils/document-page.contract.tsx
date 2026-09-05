@@ -25,7 +25,7 @@ import {
   capturedEditorProps,
   latestEditorProps,
   resetCapturedEditorProps,
-} from '../test-utils/capturing-spatial-editor.js'
+} from './capturing-spatial-editor.js'
 
 export interface ContractDocument {
   readonly id: string

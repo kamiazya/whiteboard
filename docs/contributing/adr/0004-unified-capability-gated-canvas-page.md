@@ -180,7 +180,7 @@ each exporting its keeper and the page bound to it, so `App`'s lazy chunks,
 the bundle-size gate's `daemon-document-*` name and every guard that names
 the two files by path are unchanged.
 
-One contract suite, `pages/document-page.contract.tsx`, runs the scenarios
+One contract suite, `test-utils/document-page.contract.tsx`, runs the scenarios
 the body owns against both keepers from a fixture each supplies (how to mount
 open on a set of documents, what its picker labels a document, how an open is
 observed). Scenarios that were written twice — theme threading, WebMCP
