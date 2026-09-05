@@ -27,8 +27,9 @@ all count as references too.
 
 ## Embed a document
 
-Write `![[path]]` (or `![[<document id>]]`) on a line of its own to show
-the target *inside* this document instead of linking out to it:
+Write `![[path]]` on a line of its own to show the target *inside* this
+document instead of linking out to it. The `[[` completion works here too,
+so type `![[` and pick the document:
 
 - A **markdown** target renders its body inline, as if the text were
   written here. Embeds nest, three levels deep; a document that embeds
