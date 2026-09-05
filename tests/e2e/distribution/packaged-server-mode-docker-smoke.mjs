@@ -336,8 +336,23 @@ try {
     const resp = await fetch(`${serverBaseUrl}/api/runtime/ping`)
     if (resp.status !== 200) fail(`scenario 4: ping expected 200, got ${resp.status}`)
     const body = await resp.json()
+    // The contract is daemonPingResponseSchema (daemon-client/api-contracts/
+    // runtime.ts): { ok: true, instanceId: string, identity?: {alg, publicKey} }.
+    // This asserted `typeof body.pid === 'number'` — a field the response has
+    // not carried since instanceId replaced it, and the route parses through
+    // the schema, so a raw pid could not reach the wire even if the handler
+    // built one. Nothing caught the drift because this smoke ran only on the
+    // release path. The startup line on stdout is a DIFFERENT payload and does
+    // still carry pid; that is what waitForReadyJson reads.
     if (body.ok !== true) fail('scenario 4: ping.ok must be true')
-    if (typeof body.pid !== 'number') fail('scenario 4: ping.pid must be a number')
+    if (typeof body.instanceId !== 'string' || body.instanceId.length === 0) {
+      fail('scenario 4: ping.instanceId must be a non-empty string')
+    }
+    if (body.identity !== undefined) {
+      if (typeof body.identity.alg !== 'string' || typeof body.identity.publicKey !== 'string') {
+        fail('scenario 4: ping.identity must carry alg and publicKey')
+      }
+    }
     assertNoLeak('scenario 4 ping response', JSON.stringify(body))
     console.log('[docker-smoke] scenario 4 PASS: /api/runtime/ping → 200, ok:true')
   }
