@@ -69,7 +69,9 @@ export default defineConfig({
   },
   test: {
     name: 'web-browser',
-    include: ['src/**/*.browser.test.tsx'],
+    // BOTH extensions: a `.browser.test.ts` (no x) matched by neither this
+    // include nor web-jsdom (which excludes it) would silently never run.
+    include: ['src/**/*.browser.test.tsx', 'src/**/*.browser.test.ts'],
     // Browser mode's 15s default is a real ceiling here, not a safety net: a
     // test that mounts a page, drives Radix through a portal and waits on
     // IndexedDB spends most of its budget on machine time, and vitest runs

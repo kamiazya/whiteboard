@@ -15,9 +15,10 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
 vi.mock('../config.js', () => ({
@@ -145,6 +146,33 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
   expect(after).not.toBeNull()
   if (after === null) return
   expect(Buffer.from(after.frontier).equals(Buffer.from(before.frontier))).toBe(false)
+})
+
+it('readSnapshotManifest answers for a tree-served document with generation 0, matching loadSnapshot', async () => {
+  // The one test exercising the #treeEntry !== null branch of
+  // readSnapshotManifest: every ref the conformance suite below drives
+  // deliberately falls through it instead. Without this, inverting that
+  // guard (or reporting the wrong generation for a tree-served doc) would
+  // pass every test in the file.
+  const { inner, routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const ref = { kind: 'document', workspaceId: 'ws-a', documentId: rowId } as const
+
+  const manifestResult = await routed.readSnapshotManifest({ docRef: ref })
+  expect(manifestResult).not.toBeNull()
+  if (manifestResult === null) return
+  expect(manifestResult.generation).toBe(0)
+
+  const loaded = await routed.loadSnapshot({ docRef: ref })
+  expect(loaded).not.toBeNull()
+  if (loaded === null) return
+  expect(manifestResult.manifest).toEqual(loaded.manifest)
+
+  // Proves the tree-served branch was actually taken rather than a
+  // fall-through: the legacy plane has no record for this ref at all.
+  expect(await inner.readSnapshotManifest({ docRef: ref })).toBeNull()
 })
 
 it('routes a document ref by ITS OWN workspace, with no documents-table lookup (S6)', async () => {
@@ -292,4 +320,27 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   saveSpy.mockRestore()
 
   expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+})
+
+describe('DocumentStore conformance (production wiring: routed over a tree-backed workspace)', () => {
+  // `conformance-ws` is tree-backed (createWorkspace + one seed document at a
+  // path the suite never names), but the suite's own DOC/OTHER ids are never
+  // placed on that tree. A store's byte-level contract is about opaque
+  // records; the tree-served path is a CRDT projection that would import the
+  // suite's non-Loro bytes as a document and fail on unrelated grounds. So
+  // every ref the suite exercises falls through #treeEntry to the inner
+  // store — exactly the path the production dual-plane wiring depends on for
+  // any document the tree does not (yet) hold.
+  describeDocumentStoreConformance(async () => {
+    const { inner, routed, index } = await stores()
+    await index.createWorkspace({ workspaceId: 'conformance-ws' })
+    await index.createDocument({ workspaceId: 'conformance-ws', path: 'seed', kind: 'spatial' })
+    return {
+      store: routed,
+      writeUnreadableRecord: (docRef) => inner.writeUnreadableRecord(docRef),
+      // The file-level beforeEach/afterEach own tempDir + the db handle
+      // (fresh per case), so there is nothing extra to tear down here.
+      dispose: async () => {},
+    }
+  })
 })

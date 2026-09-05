@@ -271,8 +271,8 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(title.closest('header')).toBeTruthy()
     await userEvent.click(title)
     // Non-ASCII goes through fill, not per-key synthesis: characters with no
-    // keycode are synthesized out of band and drop under load (see
-    // browser-test-keyboard-ascii.test.ts).
+    // keycode are synthesized out of band and drop under load (the rule in
+    // tools/biome-plugins/browser-test-shapes.grit).
     await userEvent.fill(title, 'リリース計画')
     await expectTitleValue('リリース計画')
 

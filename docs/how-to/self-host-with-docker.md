@@ -7,6 +7,12 @@ Provider (OAuth/JWT resource-server validation with external IdP). It is a
 separate deployment path from the local daemon mode — do not mix local-daemon
 tokens with server JWT authentication.
 
+> **Server mode serves no browser UI.** The web app is not part of this
+> deployment: the container's root URL answers with a small placeholder
+> page, because the web app has no server-mode-aware sign-in yet. What this
+> deployment serves is the HTTP API under `/api/...` and the MCP endpoint at
+> `/mcp` — point API clients and MCP agents at those.
+
 ## Prerequisites
 
 - Docker 20.10+ with Compose v2

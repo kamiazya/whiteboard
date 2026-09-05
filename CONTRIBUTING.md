@@ -7,10 +7,12 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
+                   # pnpm is pinned by package.json's packageManager (pnpm@11.12.0) — run `corepack enable` first,
+                   # or an older global pnpm silently rewrites the lockfile and fails CI's --frozen-lockfile
                    # ImageMagick (convert/identify) is also required — pnpm test:scripts and pnpm check:local call it;
                    # full prerequisites: docs/contributing/development.md
 pnpm install
-pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
+pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser)
 pnpm test         # all 22 vitest projects (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
@@ -83,6 +85,7 @@ Hooks are a local safety net, **not** a replacement for CI (the authoritative ga
 
 ## Pull request checklist
 
+- `pnpm check:local` is green — the local mirror of CI's `check` job (needs ImageMagick)
 - `pnpm test` is green
 - `pnpm typecheck` is green
 - New behavior has at least one nearest-layer automated test

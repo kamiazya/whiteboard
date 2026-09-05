@@ -4,7 +4,9 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
 
 ## Prerequisites
 
-- Node.js **24** — the major `.node-version` pins and CI installs — and `pnpm`.
+- Node.js **24** — the major `.node-version` pins and CI installs — and `pnpm`,
+  pinned by `package.json`'s `packageManager` (pnpm@11.12.0): run `corepack enable`
+  before `pnpm install`, or an older global pnpm rewrites the lockfile.
   Not a recommendation: `local-node-version.test.ts` fails on any other major,
   because nine `web-jsdom` tests fail on 22 with a message about `Blob` that
   names neither Node nor the cause, so a run on the wrong major looks like nine
@@ -21,7 +23,7 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard
 pnpm install
-pnpm exec playwright install --with-deps chromium
+pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium
 ```
 
 This installs Playwright's own Chromium, which is what a local browser-mode run uses. **CI does not**: every browser job in `.github/workflows/ci.yml` sets `WHITEBOARD_CHROME_PATH=/usr/bin/google-chrome-stable`, so CI drives the runner's system Chrome. Local and CI therefore execute browser tests in *different* browser builds — worth remembering when a browser test disagrees between them, since the browser itself is one of the variables. Set `WHITEBOARD_CHROME_PATH` locally to match CI when you are chasing exactly that kind of divergence.

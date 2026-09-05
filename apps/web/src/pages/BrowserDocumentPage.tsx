@@ -1,12 +1,15 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { AnnotationAnchor, CommentThread, DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, MessageSquare, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
+import {
+  CommentsRailAside,
+  CommentsRailToggle,
+} from '../components/annotations/CommentsRailChrome.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
@@ -28,7 +31,6 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
-import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import {
   BROWSER_HISTORY_CAPABILITIES,
@@ -42,11 +44,12 @@ import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.j
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
+import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
+import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
-import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -67,16 +70,18 @@ import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
-import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import {
+  DOCUMENT_SYNC_VERSION_SAVED_EVENT,
+  dispatchIdentityEvent,
+} from '../lib/document-sync-types.js'
+import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
-import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
-import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
@@ -276,14 +281,15 @@ export function BrowserDocumentPage({
   // clobber a newer refresh triggered by a fast switch.
   const [documents, setDocuments] = useState<DocumentSnapshot[]>([])
   const listGenerationRef = useRef(0)
-  // A ref that matches no live canvas id points at a deleted canvas: the
-  // editor renders a quiet "Missing reference" and hides the follow
-  // affordances instead of navigating to a dead route. Image refs live in
-  // the file store, not this list; undefined while the list has not loaded
-  // keeps everything ordinary.
+  // A ref that matches NEITHER a live id nor a live path points at a
+  // deleted canvas: the editor renders a quiet "Missing reference" and hides
+  // the follow affordances instead of navigating to a dead route. Paths are
+  // known too — a legacy path ref names a live document, same rule as the
+  // daemon page. Image refs live in the file store, not this list; undefined
+  // while the list has not loaded keeps everything ordinary.
   const missingFileRef = useMemo(() => {
     if (documents.length === 0) return undefined
-    const known = new Set(documents.map((entry) => entry.documentId))
+    const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
   // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
@@ -312,12 +318,13 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    clearSaveVersionOutcome()
+    // saveVersionOutcome clears itself: useVersionSaveFlow owns that reset,
+    // keyed on the same documentId this effect watches.
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
-    setSelectedThreadId(null)
-    setComposeAnchor(null)
+    // The comments rail's thread/compose state clears itself:
+    // useCommentsRail owns that reset, keyed on the same documentId.
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -624,11 +631,12 @@ export function BrowserDocumentPage({
     setBookmarkArmed((n) => n + 1)
   })
 
-  useEffect(() => {
-    const onSaved = () => setVersionRefreshSignal((n) => n + 1)
-    window.addEventListener('whiteboard:wb_version_saved', onSaved)
-    return () => window.removeEventListener('whiteboard:wb_version_saved', onSaved)
-  }, [])
+  // Scoped to THIS document's identity — an unchecked listener refreshed on
+  // any document's announcement, where the daemon page has always routed
+  // the same signal through identity-checked dispatch.
+  useIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, 'local', documentPath, () =>
+    setVersionRefreshSignal((n) => n + 1),
+  )
   // A save the History panel itself offers. The top bar's dot and ⌘/Ctrl+S
   // are the other two routes; on a phone the shortcut is nothing and the
   // dot is small, so the panel a finger opens has to carry one too — the
@@ -638,8 +646,7 @@ export function BrowserDocumentPage({
     saving: savingVersion,
     outcome: saveVersionOutcome,
     run: runVersionSave,
-    clearOutcome: clearSaveVersionOutcome,
-  } = useVersionSaveFlow(currentDocumentIdRef, async (label) => {
+  } = useVersionSaveFlow(currentDocumentIdRef, documentId, async (label) => {
     // Narrowed by the precondition in `saveVersionFromPanel` below, which
     // never calls `run` (so never reaches this body) while either is null.
     if (versionsBackend === null || documentPath === null) {
@@ -684,19 +691,17 @@ export function BrowserDocumentPage({
         // the list this save already refreshed holds a row that says it has
         // none — and without this the picture appears only when something
         // else happens to refetch, which for a person means reloading.
-        window.dispatchEvent(
-          new CustomEvent('whiteboard:wb_version_saved', {
-            detail: { workspaceId: 'local', path: documentPath },
-          }),
-        )
+        dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+          workspaceId: 'local',
+          path: documentPath,
+        })
       })
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
-      window.dispatchEvent(
-        new CustomEvent('whiteboard:wb_version_saved', {
-          detail: { workspaceId: 'local', path: documentPath },
-        }),
-      )
+      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
+        workspaceId: 'local',
+        path: documentPath,
+      })
     }
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
@@ -713,36 +718,6 @@ export function BrowserDocumentPage({
   )
 
   /**
-   * Whether the comments rail is open. Per-user view state, held here and
-   * written nowhere: the panel is an answer to a question the reader asks,
-   * not a rail that takes a third of the surface from everyone.
-   */
-  const [commentsOpen, setCommentsOpen] = useState(false)
-  // The conversation the reader is currently on, shared by the rail and the
-  // body's own projection so the two always point at the same one: pressing
-  // a gutter marker opens the thread in the rail, and pressing a rail row
-  // scrolls the body to its passage.
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
-  const revealThread = useCallback((threadId: string) => {
-    setCommentsOpen(true)
-    setSelectedThreadId(threadId)
-  }, [])
-  /**
-   * A passage the reader asked to comment on, waiting for its first message.
-   *
-   * Held here rather than in the rail because the rail is UNMOUNTED until it
-   * is opened, and the gesture that produces this passage is what opens it —
-   * state inside a component that does not exist yet cannot receive it.
-   */
-  const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
-  const composeThread = useCallback((anchor: AnnotationAnchor) => {
-    setCommentsOpen(true)
-    // Nothing else expanded: the reader asked for a new conversation, and an
-    // already-open one beside the draft box is two reply fields on screen.
-    setSelectedThreadId(null)
-    setComposeAnchor(anchor)
-  }, [])
-  /**
    * This document's conversations, whichever half of the page holds them.
    *
    * A markdown document is given no BrowserBackend on purpose (see the
@@ -752,114 +727,33 @@ export function BrowserDocumentPage({
    * from here down nothing cares which of the two did the reading.
    */
   const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
-  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
-  /**
-   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
-   * deleting the subject of a conversation must not delete the conversation).
-   *
-   * Spatial documents only, because only they have a canvas to judge against
-   * — a markdown document would report EMPTY_CANVAS and call every
-   * node-anchored thread orphaned, which is the opposite of not knowing.
-   * Within one, only an anchor that NAMES a node is judged: an anchor at bare
-   * coordinates has nothing to outlive, and a text anchor needs its quote
-   * matched against the body, which is the markdown projection's job.
-   */
-  const resolveAnchor = useMemo(() => {
-    // A markdown document CAN tell now: a text anchor's passage is either
-    // still findable in the body or it is gone (see text-anchor.ts). Until
-    // that reader existed this branch answered `undefined` for every note,
-    // which the panel correctly read as "this host cannot tell" — true then,
-    // and a thread whose sentence had been deleted looked exactly like one
-    // whose sentence was still there.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body)
-    if (documentKind !== 'spatial') return undefined
-    const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
-    }
-  }, [documentKind, canvas, markdownDoc.body])
 
   /**
-   * Appends the reader's reply to a conversation.
-   *
-   * On a spatial document it goes through `onChange` like every other edit,
-   * so it is one undo step and rides the annotation channel — a direct write
-   * there would put a second door onto the same plane with different history
-   * behaviour. The canvas argument is the CURRENT one unchanged: a reply
-   * touches no node and no edge, which is exactly why the command needed its
-   * own write path.
-   *
-   * A markdown document has no session for that command to travel through,
-   * so its reply goes to the host holding it instead. The two doors are not a
+   * The rail's write door. A markdown document is given no BrowserBackend
+   * on purpose (see the `backend` memo), so there is no session for a
+   * command to travel through: its writes go to the host holding it. A
+   * spatial document's writes ride `onChange` like every other edit — one
+   * undo step, on the annotation channel. The two doors are not a
    * duplicate: they lead to different documents, and the second exists
    * precisely because the first is closed on a note.
    */
-  const handleReply = useCallback(
-    (threadId: string, body: string) => {
-      const message = {
-        id: crypto.randomUUID(),
-        body,
-        // No author: this app has no accounts, so there is no name to write
-        // that would not be invented. A message an MCP peer wrote carries
-        // the one its caller supplied, and the panel shows whichever it has.
-        createdAt: new Date().toISOString(),
-      }
-      // A markdown document has no session to send a command through, so its
-      // reply goes to the host that holds it. Routing both through `onChange`
-      // would leave the rail's reply box present and inert on a note — the
-      // one thing the panel's contract says a host must not offer.
-      if (documentKind === 'markdown') {
-        markdownDoc.replyToThread(threadId, message)
-        return
-      }
-      onChange(canvas, { kind: 'reply-to-thread', threadId, message })
+  const commentsRail = useCommentsRail({
+    scopeKey: documentId,
+    threads: annotations,
+    documentKind,
+    markdownBody: documentKind === 'markdown' ? markdownDoc.body : null,
+    canvas: documentKind === 'spatial' ? canvas : null,
+    write: {
+      createThread: (thread) => {
+        if (documentKind === 'markdown') markdownDoc.createThread(thread)
+        else onChange(canvas, { kind: 'create-thread', thread })
+      },
+      replyToThread: (threadId, message) => {
+        if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
+        else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
+      },
     },
-    [canvas, documentKind, markdownDoc.replyToThread, onChange],
-  )
-
-  /**
-   * Opens the conversation the compose box collected, whole.
-   *
-   * The thread is built HERE rather than in the rail because minting an id
-   * and stamping a time are keeper concerns, and because the two hosts below
-   * take different routes to the same plane — the markdown branch for the
-   * same reason `handleReply` has one: a note is given no BrowserBackend, so
-   * there is no session for a command to travel through.
-   *
-   * Only the markdown surface produces a passage today (the canvas has its
-   * own compose bubble, which writes a comment its own way), so the spatial
-   * arm is the one a spatial gesture would arrive on rather than one this
-   * page reaches now. It is written rather than omitted because the rail is
-   * kind-agnostic: whatever hands this a passage next must not find the
-   * handler silently doing nothing.
-   */
-  const handleCreateThread = useCallback(
-    (anchor: AnnotationAnchor, body: string) => {
-      const thread: CommentThread = {
-        id: crypto.randomUUID(),
-        anchor,
-        status: 'open',
-        messages: [
-          {
-            id: crypto.randomUUID(),
-            body,
-            // No author, like every message this app writes: there are no
-            // accounts, so any name here would be invented.
-            createdAt: new Date().toISOString(),
-          },
-        ],
-      }
-      if (documentKind === 'markdown') markdownDoc.createThread(thread)
-      else onChange(canvas, { kind: 'create-thread', thread })
-      setComposeAnchor(null)
-      // Straight into the conversation just opened, so the reader can keep
-      // going rather than hunting their own new row in the list.
-      setSelectedThreadId(thread.id)
-    },
-    [canvas, documentKind, markdownDoc.createThread, onChange],
-  )
+  })
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
@@ -924,11 +818,6 @@ export function BrowserDocumentPage({
 
   // Tab favicon: persistence state as the status dot (degraded reads as
   // offline — data is at risk either way), scene content as the minimap.
-  // Read once at mount for the same remount-re-reads reason as webMcpEnabled
-  // above — the style picker now lives on the routed /settings page.
-  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
-  // One shape for whichever kind this document is — the favicon draws
-  // it today, and a tree row's icon draws the same one.
   // Which owner holds THIS document — see `composeOutlineSource`, which is
   // where the two of them and the reason are written down.
   const readDocumentOutlineSource = useCallback(
@@ -936,25 +825,13 @@ export function BrowserDocumentPage({
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
     [readOutlineSource, markdownDoc],
   )
-
-  // One broker per page mount, for the tab icon's outline. It is the same
-  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
-  // a re-render, a sync-status change or a remount does not recompute a
-  // shape the document already has — the version key is what makes that safe.
-  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
-
-  const documentOutline = useDocumentOutline({
+  useDocumentFavicon({
+    settingsStore,
     documentId,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
-    broker: outlineBroker,
-  })
-
-  useFavicon({
-    style: faviconStyle,
     status: browserFaviconStatus(persistence.kind),
-    rects: documentOutline,
   })
 
   // The option list refreshes asynchronously (see the effect above) while the
@@ -1031,23 +908,7 @@ export function BrowserDocumentPage({
   // intercepted every click meant for it. Both editor kinds put chrome in
   // their corners, and the annotation layer is a document-level concern, so
   // the row that already carries document-level verbs is where it goes.
-  const commentsToggle = (
-    <Button
-      variant="ghost"
-      size="sm"
-      aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
-      aria-pressed={commentsOpen}
-      onClick={() => setCommentsOpen((open) => !open)}
-      // A toggle has to LOOK toggled. Without this the rail's open state was
-      // announced to a screen reader and invisible to everyone else, which is
-      // how it read in the running app: the panel was open and its opener was
-      // indistinguishable from the closed one.
-      className={TOGGLE_STATE_CLASS}
-    >
-      <MessageSquare aria-hidden="true" className="size-4" />
-      {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}
-    </Button>
-  )
+  const commentsToggle = <CommentsRailToggle rail={commentsRail} />
 
   const canvasRowActions = (
     <>
@@ -1320,9 +1181,9 @@ export function BrowserDocumentPage({
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
                           threads: annotations,
-                          selectedThreadId,
-                          onSelectThread: revealThread,
-                          onComposeThread: composeThread,
+                          selectedThreadId: commentsRail.selectedThreadId,
+                          onSelectThread: commentsRail.revealThread,
+                          onComposeThread: commentsRail.composeThread,
                         }
                   }
                   spatial={() => (
@@ -1374,27 +1235,14 @@ export function BrowserDocumentPage({
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
             </div>
-            {commentsOpen ? (
-              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-                <CommentsPanel
-                  threads={annotations}
-                  resolveAnchor={resolveAnchor}
-                  revealThreadId={selectedThreadId}
-                  onSelect={(thread) => setSelectedThreadId(thread.id)}
-                  // Not while a past version is on screen: the editor is
-                  // replaced by DocumentPreview but this rail is not, and a
-                  // reply is a write to the LIVE document — sent from a
-                  // surface showing something else entirely.
-                  onReply={preview === null ? handleReply : undefined}
-                  // Same rule as the reply above, and for the same reason: a
-                  // new conversation is a write to the LIVE document, and the
-                  // surface behind this rail is showing a past version.
-                  composeAnchor={preview === null ? composeAnchor : null}
-                  onCreateThread={preview === null ? handleCreateThread : undefined}
-                  onCancelCompose={() => setComposeAnchor(null)}
-                />
-              </aside>
-            ) : null}
+            {/* Not while a past version is on screen: the editor is replaced
+                by DocumentPreview but this rail is not, and its writes go to
+                the LIVE document. */}
+            <CommentsRailAside
+              rail={commentsRail}
+              threads={annotations}
+              writable={preview === null}
+            />
           </div>
         </DocumentPageShell>
       </BranchesBackendContext.Provider>

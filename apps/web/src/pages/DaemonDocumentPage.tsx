@@ -4,13 +4,14 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
-import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
-import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
+import {
+  CommentsRailAside,
+  CommentsRailToggle,
+} from '../components/annotations/CommentsRailChrome.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
@@ -27,7 +28,6 @@ import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { Button } from '../components/ui/button.js'
-import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import {
   DAEMON_HISTORY_CAPABILITIES,
   type VersionPreviewSession,
@@ -42,15 +42,15 @@ import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
+import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
-import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
@@ -69,14 +69,12 @@ import {
 } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { daemonFaviconStatus } from '../lib/favicon.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
-import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
-import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import type { PastDocument } from '../lib/versions-backend.js'
@@ -283,16 +281,6 @@ export function DaemonDocumentPage({
   // does not remount, and a panel left open across a switch would be listing
   // the departed document's versions under the arrived document's name.
   const [historyOpen, setHistoryOpen] = useState(false)
-  /**
-   * Whether the comments rail is open. Per-user view state, written nowhere,
-   * and NOT cleared on a document switch: what a switch changes is the list,
-   * not whether the reader wanted to be looking at one. Same decision the
-   * browser page took.
-   */
-  const [commentsOpen, setCommentsOpen] = useState(false)
-  // The conversation the reader is currently on, shared by the rail and the
-  // markdown body's own projection so the two always point at the same one.
-  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
@@ -543,85 +531,17 @@ export function DaemonDocumentPage({
     onChange,
     `${controller.workspaceId}:${controller.path}`,
   )
-  // SCOPE RESET — see the state's own note above.
+  // SCOPE RESET — see the state's own note above. The comments rail's
+  // thread/compose state clears itself: useCommentsRail owns that reset,
+  // keyed on the same path this effect watches.
   useEffect(() => {
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
-    setSelectedThreadId(null)
-    // A passage inside the DEPARTED document's body: submitted after a
-    // switch it would open a conversation on the arrived document about a
-    // sentence nobody there wrote. (`scoped-screen-state.test.ts` does not
-    // scan this page — see its glob — so this reset is by hand.)
-    setComposeAnchor(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
-  /** Opens the rail on one conversation — what a gutter marker press means. */
-  const revealThread = useCallback((threadId: string) => {
-    setCommentsOpen(true)
-    setSelectedThreadId(threadId)
-  }, [])
-  /**
-   * A passage the reader asked to comment on, waiting for its first message.
-   * Held here rather than in the rail, which is unmounted until the gesture
-   * that produces the passage opens it.
-   */
-  const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
-  const composeThread = useCallback((anchor: AnnotationAnchor) => {
-    setCommentsOpen(true)
-    setSelectedThreadId(null)
-    setComposeAnchor(anchor)
-  }, [])
-  /**
-   * Opens the conversation the compose box collected, through `onChange`
-   * like every other edit here — one undo step, and it rides the annotation
-   * channel back. The canvas argument is the CURRENT one unchanged: opening
-   * a thread touches no node and no edge, which is why the command has its
-   * own write path at all.
-   */
-  const handleCreateThread = useCallback(
-    (anchor: AnnotationAnchor, body: string) => {
-      const thread: CommentThread = {
-        id: crypto.randomUUID(),
-        anchor,
-        status: 'open',
-        messages: [{ id: crypto.randomUUID(), body, createdAt: new Date().toISOString() }],
-      }
-      onChange(canvasValueRef.current, { kind: 'create-thread', thread })
-      setComposeAnchor(null)
-      setSelectedThreadId(thread.id)
-    },
-    [onChange],
-  )
-  /**
-   * Appends the reader's reply to a conversation.
-   *
-   * Through `onChange` like every other edit here, so it is one undo step and
-   * rides the annotation channel back — the alternative, a direct write to
-   * the doc, would put a second door onto the same plane with different
-   * history behaviour. The canvas argument is the CURRENT one unchanged: a
-   * reply touches no node and no edge, which is why the command has its own
-   * write path at all.
-   */
-  const handleReply = useCallback(
-    (threadId: string, body: string) => {
-      onChange(canvasValueRef.current, {
-        kind: 'reply-to-thread',
-        threadId,
-        message: {
-          id: crypto.randomUUID(),
-          body,
-          // No author: this app has no accounts, so there is no name to write
-          // that would not be invented. A message an MCP peer wrote carries
-          // the one its caller supplied, and the panel shows whichever it has.
-          createdAt: new Date().toISOString(),
-        },
-      })
-    },
-    [onChange],
-  )
   const setMarkdownBody = useCallback(
     (next: string) => {
       onChange(canvasValueRef.current, { kind: 'set-body', text: next })
@@ -630,28 +550,22 @@ export function DaemonDocumentPage({
   )
   const markdownBody = documentKind === 'markdown' && canvasLoaded ? syncedMarkdownBody : null
 
-  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
-  /**
-   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
-   * deleting the subject of a conversation must not delete the conversation).
-   *
-   * Spatial documents only, and only an anchor that NAMES a node — the same
-   * rule the browser page keeps, for the same reason: a markdown document has
-   * no canvas to judge against and would call every node-anchored thread
-   * orphaned, which is the opposite of not knowing.
-   */
-  const resolveAnchor = useMemo(() => {
-    // Same reader as the browser page, deliberately: whether a passage is
-    // still there is a fact about the document, not about who keeps it.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody)
-    if (documentKind !== 'spatial') return undefined
-    const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
-    }
-  }, [documentKind, canvasValue, markdownBody])
+  // The rail's write door: both writes ride `onChange` like every other
+  // edit here — one undo step, and they travel the annotation channel back.
+  // The canvas argument is the CURRENT one unchanged: neither write touches
+  // a node or an edge, which is why the commands have their own write path.
+  const commentsRail = useCommentsRail({
+    scopeKey: controller.path,
+    threads: annotations,
+    documentKind,
+    markdownBody,
+    canvas: canvasValue,
+    write: {
+      createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
+      replyToThread: (threadId, message) =>
+        onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
+    },
+  })
 
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
@@ -734,31 +648,15 @@ export function DaemonDocumentPage({
     webMcpEnabled,
   )
 
-  // Tab favicon: sync state as the status dot, scene content as the minimap
-  // (style user-selectable on the routed /settings page; same remount-
-  // re-reads reasoning as webMcpEnabled above).
-  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
+  // Tab favicon: sync state as the status dot, scene content as the minimap.
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
-  // One shape for whichever kind this document is — the favicon draws
-  // it today, and a tree row's icon draws the same one.
-  // One broker per page mount, for the tab icon's outline. It is the same
-  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
-  // a re-render, a sync-status change or a remount does not recompute a
-  // shape the document already has — the version key is what makes that safe.
-  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
-
-  const documentOutline = useDocumentOutline({
+  useDocumentFavicon({
+    settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    broker: outlineBroker,
-  })
-
-  useFavicon({
-    style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
-    rects: documentOutline,
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
@@ -820,7 +718,7 @@ export function DaemonDocumentPage({
     saving: savingVersion,
     outcome: saveVersionOutcome,
     run: runVersionSave,
-  } = useVersionSaveFlow(currentDocumentPathRef, async (label) => {
+  } = useVersionSaveFlow(currentDocumentPathRef, controller.path, async (label) => {
     // Narrowed by the precondition in `saveVersion` below, which never
     // calls `run` (so never reaches this body) while canvas is null.
     if (canvas === null) {
@@ -976,26 +874,7 @@ export function DaemonDocumentPage({
                               click meant for it. Both editor kinds put chrome
                               in their corners, and the annotation layer is a
                               document-level concern. */}
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            aria-label={
-                              openThreadCount === 0
-                                ? 'Comments'
-                                : `Comments, ${openThreadCount} open`
-                            }
-                            aria-pressed={commentsOpen}
-                            onClick={() => setCommentsOpen((open) => !open)}
-                            // A toggle has to LOOK toggled: without this the
-                            // rail's open state was announced to a screen
-                            // reader and invisible to everyone else.
-                            className={TOGGLE_STATE_CLASS}
-                          >
-                            <MessageSquare aria-hidden="true" className="size-4" />
-                            {openThreadCount > 0 ? (
-                              <span className="ml-1 text-xs">{openThreadCount}</span>
-                            ) : null}
-                          </Button>
+                          <CommentsRailToggle rail={commentsRail} />
                           {exportError && (
                             <span className="text-destructive truncate text-xs" role="alert">
                               {exportError}
@@ -1207,9 +1086,9 @@ export function DaemonDocumentPage({
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
                     threads: annotations,
-                    selectedThreadId,
-                    onSelectThread: revealThread,
-                    onComposeThread: composeThread,
+                    selectedThreadId: commentsRail.selectedThreadId,
+                    onSelectThread: commentsRail.revealThread,
+                    onComposeThread: commentsRail.composeThread,
                   }}
                   spatial={() => (
                     <SpatialEditorPane
@@ -1260,29 +1139,14 @@ export function DaemonDocumentPage({
                 />
               )}
             </div>
-            {commentsOpen ? (
-              <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-                <CommentsPanel
-                  threads={annotations}
-                  resolveAnchor={resolveAnchor}
-                  revealThreadId={selectedThreadId}
-                  onSelect={(thread) => setSelectedThreadId(thread.id)}
-                  // Not while a past version OR a variation preview is on
-                  // screen: the editor is replaced by DocumentPreview but
-                  // this rail is not, and a reply is a write to the LIVE
-                  // document — sent from a surface showing something else
-                  // entirely.
-                  onReply={preview === null && variationPreview === null ? handleReply : undefined}
-                  composeAnchor={
-                    preview === null && variationPreview === null ? composeAnchor : null
-                  }
-                  onCreateThread={
-                    preview === null && variationPreview === null ? handleCreateThread : undefined
-                  }
-                  onCancelCompose={() => setComposeAnchor(null)}
-                />
-              </aside>
-            ) : null}
+            {/* Not while a past version OR a variation preview is on screen:
+                the editor is replaced by DocumentPreview but this rail is
+                not, and its writes go to the LIVE document. */}
+            <CommentsRailAside
+              rail={commentsRail}
+              threads={annotations}
+              writable={preview === null && variationPreview === null}
+            />
           </div>
         )}
         {capabilities.merge && canvas && (

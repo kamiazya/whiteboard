@@ -1,5 +1,4 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
-import { userEvent } from '@testing-library/user-event'
 import { afterEach, expect, vi } from 'vitest'
 
 afterEach(() => {
@@ -12,9 +11,6 @@ export async function bad() {
   })
 }
 
-export async function badKeystrokes() {
-  await userEvent.keyboard('hello — world')
-}
 
 export function badTimers() {
   vi.useFakeTimers()

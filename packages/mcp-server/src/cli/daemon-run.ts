@@ -20,20 +20,12 @@ import { startHttpServer } from '../server/http-server.js'
 import { getLogger } from '../server/log.js'
 import { parseOAuthClientRegistryEnv } from '../server/security/oauth-authz-registry.js'
 import { loadAllowedWebOriginsFromEnv } from '../server/security/web-origin-allowlist.js'
+import {
+  type DaemonRunReadyResult,
+  daemonRunReadyResultSchema,
+} from '../shared/api-contracts/daemon-run.js'
 import { getDataDir, overrideDataDir } from '../shared/data-dir-secure.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
-
-const DAEMON_RUN_SCHEMA_VERSION = 1 as const
-
-interface DaemonRunReadyResult {
-  readonly schemaVersion: typeof DAEMON_RUN_SCHEMA_VERSION
-  readonly ok: true
-  readonly pid: number
-  readonly port: number
-  readonly host: string
-  readonly version: string
-  readonly startedAt: string
-}
 
 export type DaemonRunOutcome =
   | {
@@ -241,15 +233,15 @@ export async function runDaemonRun(options: DaemonRunOptions): Promise<DaemonRun
 
     return {
       kind: 'running' as const,
-      result: {
-        schemaVersion: DAEMON_RUN_SCHEMA_VERSION,
+      result: daemonRunReadyResultSchema.parse({
+        schemaVersion: 1,
         ok: true,
         pid: process.pid,
         port: running.port,
         host,
         version: PACKAGE_VERSION,
         startedAt,
-      },
+      }),
     }
   })
 }

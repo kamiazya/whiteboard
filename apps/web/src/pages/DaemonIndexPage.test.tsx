@@ -498,7 +498,7 @@ describe('DaemonIndexPage', () => {
     // The selection does not move — ws-a is still the right answer — so the
     // report is the ONLY signal, and it has to fire anyway.
     await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('ws-a'))
-    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
   it('finds a workspace created since its list was read, instead of falling back off it', async () => {
@@ -642,7 +642,7 @@ describe('DaemonIndexPage', () => {
     )
 
     await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('marketing'))
-    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(await screen.findByText('alpha')).toBeTruthy()
     expect(screen.queryByText('beta')).toBeNull()
   })
 

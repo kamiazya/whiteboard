@@ -22,7 +22,6 @@ import type {
   ReadFrontierResult,
   SaveSnapshotInput,
 } from './document-store.js'
-import type { PresenceChannel, PresenceState } from './presence.js'
 
 // Compile-time only: proves each port method's Parameters/Awaited-ReturnType
 // are exactly the named z.infer DTOs, so the interface cannot silently drift
@@ -75,14 +74,4 @@ it('DocumentIndex: createWorkspace/listWorkspaces param/return are exactly their
   expectTypeOf<Awaited<ReturnType<DocumentIndex['listWorkspaces']>>>().toEqualTypeOf<
     WorkspaceEntry[]
   >()
-})
-
-it('PresenceChannel: publish param and subscribe callback param are PresenceState; subscribe return is control-plane (not a DTO)', () => {
-  expectTypeOf<Parameters<PresenceChannel['publish']>[0]>().toEqualTypeOf<PresenceState>()
-  expectTypeOf<Awaited<ReturnType<PresenceChannel['publish']>>>().toEqualTypeOf<void>()
-
-  expectTypeOf<
-    Parameters<Parameters<PresenceChannel['subscribe']>[0]>[0]
-  >().toEqualTypeOf<PresenceState>()
-  expectTypeOf<ReturnType<PresenceChannel['subscribe']>>().toEqualTypeOf<() => void>()
 })
