@@ -67,7 +67,6 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
         {...props}
       />
@@ -103,22 +102,13 @@ afterEach(async () => {
 })
 
 describe('WorkspaceTopBar browser mode', () => {
-  // RED-first: the ~400px collapse is a new UX decision, not part of the
-  // original component — Tailwind's arbitrary max-*/min-* breakpoint
-  // variants only take effect against the real viewport width, so this
-  // guard can only run in the browser layer (jsdom class-list checks alone
-  // would pass even if the CSS never generated).
-  it('collapses the right-side actions into a "View options" kebab under 400px, without hiding the left-side group', async () => {
-    // `display:none` on an ancestor (the collapse group, not the button
-    // itself) drops the button out of the accessibility tree, so
-    // page.getByRole()/toBeVisible() can't distinguish "present but hidden"
-    // from "not rendered", and getComputedStyle(button).display never
-    // reports 'none' since that property isn't inherited from the hidden
-    // ancestor. Query with RTL's `hidden: true` to bypass the a11y filter
-    // and use checkVisibility(), which walks the ancestor chain.
-    const isDisplayNone = (el: Element) =>
-      'checkVisibility' in el ? !(el as HTMLElement).checkVisibility() : false
-
+  // Tailwind's arbitrary breakpoint variants only take effect against the
+  // real viewport width, so a narrow-width guard can only run in the
+  // browser layer. The "View options" kebab that used to collapse the
+  // right-side actions here went with fullscreen to the shell row; what is
+  // left to hold is that the row keeps its height and its left-side group
+  // at a phone width, with no second ⋯ growing back.
+  it('keeps its height and the left-side group at 375px, with no second kebab', async () => {
     await page.viewport(375, 900)
     renderTopBar()
 
@@ -126,53 +116,10 @@ describe('WorkspaceTopBar browser mode', () => {
     await waitFor(() => {
       expect(header.getBoundingClientRect().height).toBeCloseTo(48, 0)
     })
-
-    // Exposed right-side actions are hidden at this width.
-    await waitFor(() => {
-      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen', hidden: true }))).toBe(
-        true,
-      )
-      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen', hidden: true }))).toBe(
-        true,
-      )
-    })
-
-    // The kebab is visible instead.
-    // Use the testid rather than an accessible-name role query: an element
-    // that is itself display:none (the kebab is, at ≥400px) has no
-    // computable accessible name per the ARIA name-computation algorithm,
-    // so a name-filtered role query would spuriously not-find it there.
-    const kebab = screen.getByTestId('topbar-more-actions-trigger')
-    expect(isDisplayNone(kebab)).toBe(false)
-
-    // The left-side group (back button + HeaderBranchChip) still renders
-    // without overflow or wrapping.
-    expect(isDisplayNone(screen.getByRole('button', { name: /back to documents/i }))).toBe(false)
-
-    // Opening the kebab and selecting Fullscreen calls the same handler as
-    // the exposed button would.
-    const onToggleFullscreen = vi.fn()
-    cleanup()
-    renderTopBar({ onToggleFullscreen })
-    await page.getByRole('button', { name: 'View options' }).click()
-    await page.getByRole('menuitem', { name: 'Fullscreen' }).click()
-    expect(onToggleFullscreen).toHaveBeenCalledTimes(1)
-
-    // At ≥400px the kebab is hidden again and the three buttons are visible.
-    // 401 (not exactly 400) sidesteps the boundary ambiguity between
-    // `max-[400px]:hidden` and `min-[400px]:hidden`, which both match at
-    // precisely 400px — the component intentionally treats 400px itself as
-    // "narrow" so the two collapse states never both show at once.
-    await page.viewport(401, 900)
-    cleanup()
-    renderTopBar()
-    await waitFor(() => {
-      expect(isDisplayNone(screen.getByTestId('topbar-more-actions-trigger'))).toBe(true)
-      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
-      expect(isDisplayNone(screen.getByRole('button', { name: 'Fullscreen' }))).toBe(false)
-    })
-
-    const headerAfter = screen.getByRole('banner')
-    expect(headerAfter.getBoundingClientRect().height).toBeCloseTo(48, 0)
+    expect(
+      (screen.getByRole('button', { name: /back to documents/i }) as HTMLElement).checkVisibility(),
+    ).toBe(true)
+    expect(screen.queryByRole('button', { name: 'View options' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull()
   })
 })

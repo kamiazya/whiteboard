@@ -394,15 +394,9 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   duplicateError: 'cleared on switch',
   isDuplicating: 'cleared on switch',
 
-  isFullscreen:
-    'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
-  exitFullscreenRef: 'no subject: a DOM node',
-  mainRef: 'no subject: a DOM node',
-  wasFullscreenRef:
-    'no subject: the previous fullscreen state, for handing focus over — about the viewport, not a document',
   listGenerationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:

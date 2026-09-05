@@ -1,13 +1,14 @@
-// Fullscreen means the CANVAS, maximised. The top bar rode along into the
+// Fullscreen means the DOCUMENT, maximised. The top bar rode along into the
 // top layer — the way back, the title, its menus — which is 48px of chrome
-// nobody entered fullscreen to see. It now steps aside, leaving the canvas
-// and the dock, with one floating way back out.
+// nobody entered fullscreen to see. It steps aside, leaving the editor and
+// the dock. The control and the way back out are the SHELL's
+// (AppShell.fullscreen.test.tsx); this page carries neither.
 // jsdom has no IndexedDB, and the page's backend reads content from a real
 // one. Without this every content read fails — which the page now reports as
 // an unreadable document instead of silently drawing an editor over it, so a
 // suite about fullscreen chrome would otherwise be testing the error screen.
 import 'fake-indexeddb/auto'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, render as rtlRender, screen } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -80,9 +81,9 @@ it('hides the top bar in fullscreen and brings it back on exit', async () => {
   await renderLoaded()
 
   await act(async () => {
-    setFullscreenElement(screen.getByRole('main'))
+    setFullscreenElement(document.documentElement)
   })
-  // The chrome steps aside — the canvas is what fullscreen is FOR.
+  // The chrome steps aside — the document is what fullscreen is FOR.
   expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull()
 
   await act(async () => {
@@ -91,47 +92,14 @@ it('hides the top bar in fullscreen and brings it back on exit', async () => {
   await screen.findByRole('button', { name: 'Back to documents' })
 })
 
-it('floats one exit control while the chrome is gone, and it exits', async () => {
+it('carries no fullscreen control of its own: the shell owns the toggle and the way out', async () => {
   await renderLoaded()
-  const exitFullscreen = vi.fn(async () => {})
-  document.exitFullscreen = exitFullscreen
-
-  // Not there in normal view — the top bar's own toggle covers that state.
-  expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull()
-
+  expect(screen.queryByRole('button', { name: 'Fullscreen' })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'View options' })).toBeNull()
   await act(async () => {
-    setFullscreenElement(screen.getByRole('main'))
-  })
-  const exit = screen.getByRole('button', { name: 'Exit fullscreen' })
-  // The control someone just activated unmounted with the top bar; focus must
-  // land on its replacement, not fall to <body>.
-  expect(document.activeElement).toBe(exit)
-  exit.click()
-  expect(exitFullscreen).toHaveBeenCalledTimes(1)
-
-  // And it leaves with the mode — the top bar's own toggle takes over.
-  await act(async () => {
-    setFullscreenElement(null)
+    setFullscreenElement(document.documentElement)
   })
   expect(screen.queryByRole('button', { name: 'Exit fullscreen' })).toBeNull()
-  await waitFor(() =>
-    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Fullscreen' })),
-  )
-})
-
-it('a rejected requestFullscreen is reported, not an unhandled rejection', async () => {
-  await renderLoaded()
-  const rejection = new DOMException('denied', 'NotAllowedError')
-  Element.prototype.requestFullscreen = vi.fn(() => Promise.reject(rejection))
-  const warnings: unknown[] = []
-  vi.spyOn(console, 'warn').mockImplementation((...args) => void warnings.push(args))
-
-  screen.getByRole('button', { name: 'Fullscreen' }).click()
-  // Let the rejection propagate through the catch.
-  await act(async () => {
-    await Promise.resolve()
-  })
-  expect(warnings.some((args) => JSON.stringify(args).includes('requestFullscreen'))).toBe(true)
 })
 
 it('starts OUT of fullscreen under jsdom, where fullscreenElement is undefined', async () => {

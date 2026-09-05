@@ -3,7 +3,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, Trash2 } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
@@ -18,7 +18,6 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
-import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { BROWSER_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
@@ -179,46 +178,6 @@ export function BrowserDocumentPage({
     }
   }
 
-  // Fullscreen can also be left with Escape or the browser's own chrome, so
-  // the button's label follows the DOCUMENT rather than our own click.
-  const [isFullscreen, setIsFullscreen] = useState(false)
-  const exitFullscreenRef = useRef<HTMLButtonElement | null>(null)
-  const wasFullscreenRef = useRef(false)
-  // The toggle unmounts the element that was just activated (entering removes
-  // the top bar's button, exiting removes the floating one), and a removed
-  // focused element drops focus to <body> — a keyboard user would have to
-  // tab back from nothing. Hand focus to whichever control replaced it.
-  useEffect(() => {
-    if (isFullscreen) {
-      wasFullscreenRef.current = true
-      exitFullscreenRef.current?.focus()
-      return
-    }
-    if (!wasFullscreenRef.current) return
-    wasFullscreenRef.current = false
-    // The top bar is lazy, so its toggle may land a frame later; retry
-    // briefly rather than racing the remount.
-    let attempts = 12
-    const tryFocus = () => {
-      const toggle = document.querySelector<HTMLButtonElement>('button[aria-label="Fullscreen"]')
-      if (toggle !== null) {
-        toggle.focus()
-        return
-      }
-      attempts -= 1
-      if (attempts > 0) requestAnimationFrame(tryFocus)
-    }
-    tryFocus()
-  }, [isFullscreen])
-  useEffect(() => {
-    // Boolean(): jsdom leaves fullscreenElement undefined rather than null,
-    // and `undefined !== null` read as "in fullscreen" on first mount there.
-    const sync = () => setIsFullscreen(Boolean(document.fullscreenElement))
-    sync()
-    document.addEventListener('fullscreenchange', sync)
-    return () => document.removeEventListener('fullscreenchange', sync)
-  }, [])
-
   const pageState = derivePageState({ snapshot, persistence, cleanupCompleted })
 
   // Enumeration is a Promise, not reactive state — refresh whenever the
@@ -239,9 +198,6 @@ export function BrowserDocumentPage({
     const known = new Set(documents.flatMap((entry) => [entry.documentId, entry.path]))
     return (ref: string) => !isImageRef(ref) && !known.has(ref)
   }, [documents])
-  // Fullscreen target for WorkspaceTopBar's onToggleFullscreen; the whole page
-  // (editor + chrome), not just the canvas.
-  const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
 
@@ -769,12 +725,6 @@ export function BrowserDocumentPage({
     documentKind,
     srTitle: renderState.snapshot.name,
     capabilities,
-    // `bg-background` on the FULLSCREEN TARGET, not just on `body`: going
-    // fullscreen promotes this element to the top layer, where the body's
-    // background no longer shows. Anything this element does not paint itself
-    // falls through to the browser's default black backdrop — which turned
-    // the canvas area black under a light theme.
-    shell: { mainRef, mainClassName: 'bg-background' },
     sync,
     markdown: {
       body: markdownDoc.body,
@@ -860,25 +810,6 @@ export function BrowserDocumentPage({
         const handle = browserWorkspaceHandleOrNull()
         navigate(handle === null ? indexPath() : workspacePath(handle))
       },
-      isFullscreen,
-      onToggleFullscreen: () => {
-        // Entering hides this whole bar; the floating exit control and
-        // native Escape are the ways back out. requestFullscreen can
-        // REJECT (Permissions-Policy, an iframe without
-        // allow="fullscreen", no user activation) — a swallowed
-        // rejection is unhandled-rejection noise, so both directions log.
-        if (document.fullscreenElement)
-          document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-        else
-          mainRef.current
-            ?.requestFullscreen()
-            .catch((err) => log.warn('requestFullscreen rejected', err))
-      },
-      // Fullscreen means the CANVAS, maximised: the whole top-bar row —
-      // switcher, rename, menus — steps aside. The floating control below
-      // replaces its exit path, Escape still works natively, and the dock
-      // stays because editing is what the extra space is FOR.
-      hidden: isFullscreen,
     },
     readOnlyPast: null,
     spatial: {},
@@ -953,20 +884,6 @@ export function BrowserDocumentPage({
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
-      ),
-      overlay: isFullscreen && (
-        <Button
-          ref={exitFullscreenRef}
-          variant="outline"
-          size="icon"
-          aria-label="Exit fullscreen"
-          onClick={() =>
-            document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-          }
-          className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
-        >
-          <Minimize2 aria-hidden="true" className="size-4" />
-        </Button>
       ),
     },
   }
