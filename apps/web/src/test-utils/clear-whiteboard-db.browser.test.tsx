@@ -110,24 +110,33 @@ describe('clearWhiteboardDb', () => {
     ;(await openHeld()).close()
     expect(await databaseExists()).toBe(true)
 
-    let writes = 0
+    const TAIL_WRITES = 3
+    let started = 0
+    let finished = 0
     const tail = setInterval(() => {
-      if (writes >= 3) {
+      if (started >= TAIL_WRITES) {
         clearInterval(tail)
         return
       }
-      writes += 1
-      void openHeld().then((db) => db.close())
+      started += 1
+      void openHeld().then((db) => {
+        db.close()
+        finished += 1
+      })
     }, 60)
 
     try {
       await clearWhiteboardDb()
-      // The old contract ends here, and this is where it was wrong: the
-      // database is gone at this instant and back a tick later.
+
+      // What the old contract could not say. It resolved on the first
+      // successful deletion, which is true for an instant and false a tick
+      // later — so the discriminator is not whether the database is gone
+      // NOW, it is whether the helper outlasted the thing re-creating it.
+      // Every re-creation the tail could make has already been made, and
+      // deleted, by the time this resolves; with the settle removed the
+      // helper returns before the tail has opened the database once.
+      expect(finished).toBe(TAIL_WRITES)
       expect(await databaseExists()).toBe(false)
-      await new Promise((resolve) => setTimeout(resolve, 300))
-      expect(await databaseExists()).toBe(false)
-      expect(writes).toBeGreaterThan(0)
     } finally {
       clearInterval(tail)
     }
