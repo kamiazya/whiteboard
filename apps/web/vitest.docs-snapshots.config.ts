@@ -28,10 +28,21 @@ const __dirname = dirname(fileURLToPath(import.meta.url))
 // where node:path / node:url are unavailable.
 const DOCS_ASSETS_DIR = resolve(__dirname, '..', '..', 'docs', 'assets')
 
+// Handed to the browser bundle as `import.meta.env.VITE_DOCS_ASSETS_DIR`, NOT
+// through `define`. Vitest 5's browser mode assigns `config.define` verbatim
+// onto `globalThis` (setup-common: `globalThis[key] = config.defines[key]`),
+// so a `JSON.stringify`-ed path arrives as the JSON text, quotes included,
+// and `page.screenshot` mkdir-p's a directory literally named `"` under
+// `src/docs-snapshots/` while every snapshot reports passed. A plain string
+// in `define` is worse: Vite still inlines it as code and `/home/...` parses
+// as a regex literal. An env var goes through Vite's own env inlining, which
+// is a string on both sides. `asset-path.docs-snapshot.test.tsx` reads the
+// resulting path instead of the exit code.
+process.env.VITE_DOCS_ASSETS_DIR = DOCS_ASSETS_DIR
+
 export default defineConfig({
   define: {
     ...rendererBuildDefine,
-    __DOCS_ASSETS_DIR__: JSON.stringify(DOCS_ASSETS_DIR),
   },
   // The doc-snapshot tests need to read existing scene fixtures (e.g.
   // docs/assets/architecture.canvas) as raw JSON Canvas text so they can
