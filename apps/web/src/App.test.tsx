@@ -28,12 +28,7 @@ import { resetShellStatusForTests, setShellConnection } from './lib/shell-status
 // not.
 import './components/status/NotFoundPage.js'
 import './pages/PairConsentPage.js'
-import {
-  BROWSER_CAPABILITIES,
-  type ProviderState,
-  resolveHostedProviderStateFromRaw,
-  type WhiteboardCapabilities,
-} from './lib/provider.js'
+import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
 
 afterEach(() => {
@@ -44,11 +39,9 @@ afterEach(() => {
   resetShellStatusForTests()
 })
 
-// Records the props BrowserDocumentPage receives so tests can assert
-// capabilities actually flow from App down to the page, not just that the
-// page mounts. BrowserDocumentPage pulls in loro-crdt, which needs a
-// real browser (WASM), so it stays mocked.
-let receivedCapabilities: WhiteboardCapabilities | undefined
+// BrowserDocumentPage pulls in loro-crdt, which needs a real browser (WASM),
+// so it stays mocked. It used to capture a `capabilities` prop as well —
+// that prop is gone, along with the map behind it.
 // Captures the initialPath prop so a test can assert App derives it from
 // the /w/:workspace/d/:path URL (parseBrowserRoute) rather than merely
 // mounting the page.
@@ -57,14 +50,7 @@ let receivedInitialPath: string | undefined
 // during render, so App's ErrorBoundary wiring has something real to catch.
 let throwInBrowserDocumentPage = false
 vi.mock('./pages/BrowserDocumentPage.js', () => ({
-  BrowserDocumentPage: ({
-    capabilities,
-    initialPath,
-  }: {
-    capabilities?: WhiteboardCapabilities
-    initialPath?: string
-  }) => {
-    receivedCapabilities = capabilities
+  BrowserDocumentPage: ({ initialPath }: { initialPath?: string }) => {
     receivedInitialPath = initialPath
     if (throwInBrowserDocumentPage) {
       throw new Error('boom')
@@ -142,17 +128,11 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
 
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
-  capabilities: {
-    merge: false,
-  },
 }
 
 const DAEMON_STATE: ProviderState = {
   kind: 'daemon',
   daemonBaseUrl: 'http://127.0.0.1:3000',
-  capabilities: {
-    merge: true,
-  },
 }
 
 const INVALID_CONFIG_STATE: ProviderState = {
@@ -175,6 +155,12 @@ describe('silent renewal on a hosted origin', () => {
         version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
+        // The USER SETTINGS' capabilities (`webMcpEnabled`), which have
+        // nothing to do with the retired per-keeper capability map. Required
+        // by a `.strict()` schema whose loader falls back to defaults on any
+        // parse failure — so dropping it here does not fail loudly, it
+        // silently discards the stored daemon URL and every test below
+        // renders browser mode instead.
         capabilities: {},
       }),
     )
@@ -445,19 +431,18 @@ describe('App backend configuration chip', () => {
   })
 })
 
-describe('App capability wiring', () => {
-  beforeEach(() => {
-    receivedCapabilities = undefined
-  })
-
-  it('passes the browser capabilities down to BrowserDocumentPage', async () => {
+describe('App keeper wiring', () => {
+  // The capability map this described is gone: both keepers answer the same
+  // for everything it held, and what still differs is answered per document
+  // by the backend instead. What survives is the wiring itself — App resolves
+  // a provider kind and mounts the page that belongs to it.
+  it('mounts BrowserDocumentPage for the browser keeper', async () => {
     render(
       <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
     await screen.findByTestId('browser-document-page')
-    expect(receivedCapabilities).toEqual(BROWSER_STATE.capabilities)
   })
 
   it('derives initialPath from a /w/:workspace/d/:path cold-load URL, folders and all', async () => {
@@ -665,7 +650,6 @@ describe('App daemon provider state', () => {
     expect(screen.queryByTestId('daemon-index-page')).toBeNull()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
-    expect(receivedDaemonPageProps?.capabilities).toEqual(DAEMON_STATE.capabilities)
     // browserStore is deliberately NOT passed by App: the page defaults to the
     // shared index itself so the concrete class stays out of the entry chunk
     // (entry-graph-loro-free.test.ts).
@@ -1008,10 +992,9 @@ describe('App daemon provider state', () => {
     fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))
     expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
-    // Capabilities flow to the editor: open a canvas from the escaped list.
+    // The editor opens from the escaped list.
     act(() => receivedIndexPageOnOpenCanvas?.('c1'))
     await screen.findByTestId('browser-document-page')
-    expect(receivedCapabilities).toEqual(BROWSER_CAPABILITIES)
     expect(screen.queryByText(/Configured for local daemon/)).toBeNull()
   })
 

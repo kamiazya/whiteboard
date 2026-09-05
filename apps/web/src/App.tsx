@@ -51,11 +51,7 @@ import {
   workspaceRoutePath,
 } from './lib/app-routes.js'
 import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
-import {
-  BROWSER_CAPABILITIES,
-  type ProviderState,
-  resolveHostedProviderStateFromRaw,
-} from './lib/provider.js'
+import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { findReplicaForHandle } from './lib/replicas.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { workspaceHandle } from './lib/workspace-handle.js'
@@ -308,7 +304,7 @@ export function App({ providerState }: AppProps) {
   // a failed-pairing escape onto the invalid-config error page.
   const effectiveState =
     forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
-      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
+      ? { kind: 'browser' as const }
       : state
 
   // WHO KEEPS this session's workspace, stated once.
@@ -855,7 +851,6 @@ export function App({ providerState }: AppProps) {
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   workspaceId={daemonView.workspace}
                   path={daemonView.path}
-                  capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   onNavigateBack={() =>
                     setDaemonView({ kind: 'index', workspace: daemonView.workspace })
@@ -954,10 +949,7 @@ export function App({ providerState }: AppProps) {
                 revision={location}
               />
             ) : (
-              <BrowserDocumentPage
-                capabilities={effectiveState.capabilities}
-                initialPath={browserPath}
-              />
+              <BrowserDocumentPage initialPath={browserPath} />
             )}
           </Suspense>
         </div>

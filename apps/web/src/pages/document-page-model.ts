@@ -25,7 +25,6 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { linkTargets } from '../lib/link-entries.js'
-import type { WhiteboardCapabilities } from '../lib/provider.js'
 import type { PastDocument, VersionsBackend } from '../lib/versions-backend.js'
 
 export interface DocumentPageModel {
@@ -39,7 +38,6 @@ export interface DocumentPageModel {
   readonly documentKey: string
   readonly documentKind: DocumentKind
   readonly srTitle: string
-  readonly capabilities: WhiteboardCapabilities
   /** The live sync session; the backend behind it is the keeper's. */
   readonly sync: UseDocumentSyncResult
   readonly markdown: Pick<

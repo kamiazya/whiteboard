@@ -28,6 +28,20 @@ What that means today, read off the code rather than assumed:
   branch API, which is why the connect copy offers "version history,
   variations and merging" as things a daemon adds.
 
+> **Note (2026-09-05): that third bullet has expired.** The browser keeper
+> keeps its variations on the workspace record and combines them, through the
+> same `packages/history` mechanics the daemon runs; nothing about a variation
+> is a daemon concept any more, and the per-keeper capability map that said so
+> is gone (see [ADR-0004](0004-unified-capability-gated-canvas-page.md)'s
+> addendum of the same date). Neither decision below is affected — they are
+> about the ADDRESS, which is the same grammar whoever keeps the document.
+>
+> What has NOT followed yet: `?v=` is supplied only by `DaemonDocumentPage`,
+> even though the browser backend answers `loadDocument` for a named
+> variation. So a browser-kept variation can be switched and combined but not
+> yet linked to. That is a gap in the page wiring rather than in this
+> decision, and it is recorded as one.
+
 The open question was the grammar: if a variation ever becomes addressable,
 does the DEFAULT one appear in the address?
 

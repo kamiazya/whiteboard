@@ -25,7 +25,6 @@ import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
-import type { WhiteboardCapabilities } from '../lib/provider.js'
 import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
@@ -40,7 +39,6 @@ import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 export interface DaemonIndexPageProps {
   daemonBaseUrl: string
   token?: string
-  capabilities?: WhiteboardCapabilities
   /**
    * The workspace the ADDRESS names, in either of ADR-0019's resolvable
    * layers. Absent when the address names none — `/`, or a workspace-level

@@ -1,12 +1,11 @@
 import { renderHook } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
-import { BROWSER_CAPABILITIES } from '../provider.js'
 import type { WhiteboardCommandDeps } from './types.js'
 import { useWhiteboardCommands } from './use-whiteboard-commands.js'
 
 function deps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
-    provider: { kind: 'browser', capabilities: BROWSER_CAPABILITIES },
+    provider: { kind: 'browser' },
     canvas: { documentId: 'c1', name: 'Canvas 1' },
     ...overrides,
   }
@@ -28,7 +27,6 @@ describe('useWhiteboardCommands', () => {
         provider: {
           kind: 'daemon',
           daemonBaseUrl: 'http://x',
-          capabilities: BROWSER_CAPABILITIES,
         },
       }),
     )
