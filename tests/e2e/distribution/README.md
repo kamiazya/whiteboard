@@ -76,3 +76,25 @@ Each `.mjs` script in this directory targets a specific packaged deployment scen
 The gates in `release-gate-matrix.json` reference commands from the root `package.json`.
 Two gates — `smoke:tarball` and `smoke:packaged` — are covered transitively through
 `test:e2e:distribution` rather than appearing directly in `check:release-candidate`.
+
+A gate's `requiredFor` tiers name the aggregate **script** that must invoke it, not
+where it happens to run. Each tier has exactly one runner:
+
+| tier | runner |
+|---|---|
+| `ci` | `pnpm check:release-candidate` |
+| `local-release` | `pnpm check:release-candidate:local` |
+| `docker-release` | `pnpm check:release-candidate:docker` |
+| `publish` | `pnpm publish-gate` (`tools/checks/src/publish-gate.mjs`) |
+| `pages-release` | `pnpm check:pages-release` (`tools/checks/src/pages-release.mjs`) |
+| `publish-dry-run` | `pnpm publish:dry-run` |
+
+`publish-dry-run` is disjoint from every other tier by design. Rehearsing a publish
+does not belong in a release-candidate check, and `publish-gate.mjs` executes every
+`publish` gate — so tagging a rehearsal `publish` would re-run it during the real
+publish. Its two gates are the only Docker-capable gates outside `docker-release`;
+that is allowed because `publish:dry-run:docker` exits 0 with a skip line when no
+daemon answers, a fail-soft the `ci` and `local-release` aggregates must not have.
+
+Whether a gate is exercised on a pull request is the separate `prCoverage` axis,
+checked structurally against `ci.yml` by `gate-isomorphism.test.ts`.

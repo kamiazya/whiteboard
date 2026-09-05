@@ -191,7 +191,7 @@
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
         "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+        "reason": "requires docker daemon + multi-minute image builds. The PR-side docker path is gate publish:dry-run:docker, which BUILDS the image and never runs a container, so none of this gate's runtime scenarios are exercised on a pull request"
       }
     },
     {
@@ -204,7 +204,7 @@
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
         "kind": "exception",
-        "reason": "requires docker daemon + multi-minute image builds; release-candidate docker path exercised by the dry-run-docker job"
+        "reason": "requires docker daemon + multi-minute image builds. The PR-side docker path is gate publish:dry-run:docker, which BUILDS the image and never runs a container, so the backup/restore round trip is exercised only on the docker-release path"
       }
     },
     {
@@ -233,6 +233,36 @@
       "requiresDocker": false,
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow"
+    },
+    {
+      "id": "publish:dry-run:npm",
+      "command": "pnpm publish:dry-run:npm",
+      "category": "publish",
+      "requiredFor": ["publish-dry-run"],
+      "requiresDocker": false,
+      "requiresNetwork": false,
+      "expectedRuntimeBucket": "medium",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-npm",
+        "stepName": "npm publish dry-run"
+      }
+    },
+    {
+      "id": "publish:dry-run:docker",
+      "command": "pnpm publish:dry-run:docker",
+      "category": "docker",
+      "requiredFor": ["publish-dry-run"],
+      "requiresDocker": true,
+      "requiresNetwork": true,
+      "expectedRuntimeBucket": "slow",
+      "prCoverage": {
+        "kind": "workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Docker build dry-run"
+      }
     }
   ]
 }

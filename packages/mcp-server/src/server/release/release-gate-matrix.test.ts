@@ -305,6 +305,52 @@ describe('test:e2e:distribution step-count drift', () => {
   })
 })
 
+// The two `publish:dry-run:*` jobs rehearse a publish on every pull request.
+// They ran that way for months while appearing in NO tier of this matrix, so
+// nothing tied their ci.yml steps to a policy file — and `smoke:docker`'s
+// prCoverage exception cited "the dry-run-docker job", a job the matrix had
+// never heard of. The `publish-dry-run` tier is what those two gates belong
+// to: its runner is the root `publish:dry-run` script, and it is deliberately
+// disjoint from every other tier. Release-candidate aggregates must not
+// rehearse a publish, and `publish-gate.mjs` (which EXECUTES every
+// `publish` gate) must not re-run the rehearsal during the real publish.
+describe('publish-dry-run tier wiring drift', () => {
+  const dryRunGates = matrix.gates.filter((g) => g.requiredFor.includes('publish-dry-run'))
+
+  it('has at least one publish-dry-run-required gate in the matrix', () => {
+    expect(dryRunGates.length, 'at least one publish-dry-run gate must exist').toBeGreaterThan(0)
+  })
+
+  it('publish-dry-run gates are not mixed into any other tier', () => {
+    for (const gate of dryRunGates) {
+      expect(
+        gate.requiredFor,
+        `publish-dry-run gate "${gate.id}" must not also be required for other tiers`,
+      ).toEqual(['publish-dry-run'])
+    }
+  })
+
+  it('root publish:dry-run covers every publish-dry-run gate as a command segment', () => {
+    const script = rootPkg.scripts['publish:dry-run'] ?? ''
+    for (const gate of dryRunGates) {
+      expect(
+        isGatePresentAsSegment(script, gate),
+        `publish:dry-run is missing publish-dry-run gate "${gate.id}"`,
+      ).toBe(true)
+    }
+  })
+
+  it('check:release-candidate does not rehearse a publish', () => {
+    const segs = scriptSegments(rootPkg.scripts['check:release-candidate'] ?? '')
+    for (const gate of dryRunGates) {
+      expect(
+        segs,
+        `check:release-candidate must not invoke publish-dry-run gate "${gate.id}"`,
+      ).not.toContain(gate.command)
+    }
+  })
+})
+
 // The hosted web app (apps/web) Cloudflare Pages release gates run on the
 // `pages-release` tier. The root `check:pages-release` command delegates to the
 // private `@whiteboard/checks` tooling package, which executes the matrix's

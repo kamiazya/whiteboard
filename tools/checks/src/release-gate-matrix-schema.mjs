@@ -29,6 +29,7 @@ export const KNOWN_REQUIRED_FOR_TIERS = new Set([
   'docker-release',
   'publish',
   'pages-release',
+  'publish-dry-run',
 ])
 export const KNOWN_CATEGORIES = new Set([
   'unit',
@@ -173,6 +174,16 @@ export function validateGate(gate) {
   // Docker-required gates must never appear in non-Docker aggregates.
   // ci and local-release scripts run without Docker; mixing Docker gates
   // in would silently skip them on non-Docker runners.
+  //
+  // The `publish-dry-run` tier is deliberately NOT on that list. Its runner is
+  // `pnpm publish:dry-run`, whose Docker half exits 0 with a skip line when no
+  // daemon answers — the same fail-soft the ci/local-release aggregates must
+  // not have, and correct here because the tier's job is to rehearse a publish,
+  // not to gate one. That distinction is the tier's whole reason to exist:
+  // before it, the two `publish:dry-run:*` jobs ran on every PR while being
+  // declared in no tier at all, so nothing tied their ci.yml steps to a policy
+  // file and `smoke:docker`'s prCoverage exception could cite a job the matrix
+  // had never heard of.
   if (g.requiresDocker === true) {
     const tiers = /** @type {string[]} */ (g.requiredFor)
     if (tiers.includes('ci')) {
