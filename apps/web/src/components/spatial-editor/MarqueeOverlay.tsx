@@ -1,4 +1,4 @@
-import type { Point } from './viewport.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 /**
  * The in-flight marquee rectangle, in canvas space (rides the pan/zoom

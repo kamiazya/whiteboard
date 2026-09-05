@@ -1,5 +1,5 @@
 import { type RefObject, useLayoutEffect, useRef, useState } from 'react'
-import type { ContainerSize, Point } from './viewport.js'
+import type { ContainerSize, Point } from '../../lib/spatial/viewport.js'
 
 /**
  * Below this root width the minimap is noise rather than orientation, and

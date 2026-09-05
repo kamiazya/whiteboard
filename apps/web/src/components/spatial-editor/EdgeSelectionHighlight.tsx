@@ -1,4 +1,4 @@
-import type { Point } from './viewport.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 
 /**
  * The selected connection, re-drawn thicker over the committed ink. The

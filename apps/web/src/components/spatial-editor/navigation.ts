@@ -26,8 +26,9 @@
  * `clientPointToRootLocal` produces; this module never sees a client
  * coordinate or a canvas one.
  */
+
+import type { Point } from '../../lib/spatial/viewport.js'
 import { computePinchUpdate } from './touch-pinch.js'
-import type { Point } from './viewport.js'
 
 /**
  * Window for double-press detection, for BOTH of this editor's double

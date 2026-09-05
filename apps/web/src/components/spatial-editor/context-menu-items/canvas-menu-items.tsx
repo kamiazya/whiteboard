@@ -18,11 +18,11 @@ import {
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
 import { hasClipboardFragment } from '../../../lib/clipboard-store.js'
+import type { Point } from '../../../lib/spatial/viewport.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { CREATION_LABELS } from '../creation-labels.js'
 import type { FileRefOption } from '../DocumentPickerDialog.js'
-import type { Point } from '../viewport.js'
 
 export interface CanvasMenuItemsInput {
   readonly point: Point

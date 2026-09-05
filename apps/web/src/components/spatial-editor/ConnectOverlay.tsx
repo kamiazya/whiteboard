@@ -4,7 +4,7 @@
  * (matching `reducePointerUpConnecting`'s `targetNodeId` contract).
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import type { NodeBox } from './geometry.js'
+import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 
 export interface ConnectOverlayProps {

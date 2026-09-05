@@ -15,8 +15,8 @@
 
 import type { BoundingBox, EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Box } from '../../lib/spatial/geometry.js'
 import { carriedWithDrag } from './drag-preview.js'
-import type { Box } from './geometry.js'
 import type { GestureState } from './gestures.js'
 
 /**

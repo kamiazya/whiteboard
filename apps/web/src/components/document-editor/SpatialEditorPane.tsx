@@ -1,12 +1,9 @@
 import type { ReactNode, Ref } from 'react'
 import type { DocumentFileSeams } from '../../hooks/use-document-file-seams.js'
 import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
+import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
-import {
-  SpatialEditor,
-  type SpatialEditorHandle,
-  type SpatialEditorProps,
-} from '../spatial-editor/index.js'
+import { SpatialEditor, type SpatialEditorProps } from '../spatial-editor/index.js'
 import { CanvasVerbBar } from './CanvasVerbBar.js'
 import { NodeTextEditorOverlay, type NodeTextEditorOverlayProps } from './NodeTextEditorOverlay.js'
 import type { NodeInEditor } from './use-node-in-editor.js'

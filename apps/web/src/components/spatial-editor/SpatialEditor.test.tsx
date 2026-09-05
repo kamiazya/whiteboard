@@ -8,7 +8,8 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { createRef } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
+import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
+import { SpatialEditor } from './SpatialEditor.js'
 
 function fakeMeasure() {
   return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }
