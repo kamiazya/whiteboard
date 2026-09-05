@@ -43,15 +43,14 @@ import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
-import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
@@ -70,9 +69,8 @@ import {
 } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { daemonFaviconStatus } from '../lib/favicon.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
-import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -650,31 +648,15 @@ export function DaemonDocumentPage({
     webMcpEnabled,
   )
 
-  // Tab favicon: sync state as the status dot, scene content as the minimap
-  // (style user-selectable on the routed /settings page; same remount-
-  // re-reads reasoning as webMcpEnabled above).
-  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
+  // Tab favicon: sync state as the status dot, scene content as the minimap.
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
-  // One shape for whichever kind this document is — the favicon draws
-  // it today, and a tree row's icon draws the same one.
-  // One broker per page mount, for the tab icon's outline. It is the same
-  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
-  // a re-render, a sync-status change or a remount does not recompute a
-  // shape the document already has — the version key is what makes that safe.
-  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
-
-  const documentOutline = useDocumentOutline({
+  useDocumentFavicon({
+    settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    broker: outlineBroker,
-  })
-
-  useFavicon({
-    style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
-    rects: documentOutline,
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
