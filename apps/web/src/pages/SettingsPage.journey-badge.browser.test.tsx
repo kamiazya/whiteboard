@@ -1,6 +1,6 @@
-import { render, screen } from '@testing-library/react'
+import { cleanup, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { findVisibleJourneyBadge } from '../components/settings/SetupJourney.js'
 import { SettingsPage } from './SettingsPage.js'
 
@@ -8,6 +8,13 @@ import { SettingsPage } from './SettingsPage.js'
 // desktop structures, switched by `sm:` CSS), and findVisibleJourneyBadge
 // disambiguates them via offsetParent — layout jsdom cannot compute, so the
 // selection branch is only testable here.
+// Unmount between runs: vitest --repeats (CI's stress job) re-executes the
+// body in the same page, so a render left mounted accumulates one duplicate
+// journey per repeat (observed: 8 badges where a single run has 2).
+afterEach(() => {
+  cleanup()
+})
+
 describe('findVisibleJourneyBadge (real browser)', () => {
   it('picks the laid-out badge, not the display:none duplicate', async () => {
     render(
