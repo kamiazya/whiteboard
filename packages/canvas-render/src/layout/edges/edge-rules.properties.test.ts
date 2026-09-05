@@ -331,36 +331,105 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
    * The tier-placement properties compare a composed slot against the rule's
    * own term, so a domain where every term is zero compares zero to zero and
    * a composition that never wrote a slot passes. This is the reachability
-   * half: each rule has to be seen contributing something, at least once,
-   * through the same composed call.
+   * half: each rule has to be seen contributing something through the same
+   * composed call.
+   *
+   * A hand-built WITNESS per rule, not a sampled floor. This guard has been
+   * statistical twice and flaked both times: "at least once over 600
+   * samples" failed on a domain nobody changed, and the floor of 5 that
+   * replaced it (set from measured counts of 16-31) still fell short on
+   * three main runs inside two weeks — `border-tracing` landed under 5 in
+   * an unseeded sample. What the guard actually owes is one input per rule
+   * that provably makes it contribute, and that needs no distribution at
+   * all. Domain density for the properties above stays the generators'
+   * business; a generator that stops reaching a rule now weakens those
+   * properties silently instead of failing this one loudly — the honest
+   * trade, because the loud failure was wrong three times and true zero
+   * times.
    */
-  // A FLOOR rather than "at least once", because at least once is what this
-  // guard used to ask and it made the guard itself flaky: `border-tracing`
-  // was reached 4, 2, 2 and 0 times across four runs of 600 samples, so one
-  // run in roughly fifteen failed on a domain nobody had changed — a red build
-  // pointing at the wrong file. The generator is denser now (see
-  // `tracedBorderArb`); measured over five runs it lands 16, 21, 20, 31 and
-  // 16, and every other self-scoring rule is in the dozens or hundreds. The
-  // floor sits well below that without pinning a distribution.
-  const SELF_CONTRIBUTION_FLOOR = 5
+  const SELF_WITNESSES: Record<
+    string,
+    | {
+        path: readonly Point[]
+        foreign?: readonly Rect[]
+        borders?: readonly Rect[]
+        endpoints?: readonly Rect[]
+      }
+    | 'pair-only'
+  > = {
+    // A horizontal segment tunnelling straight through a foreign body whose
+    // vertical span strictly contains it.
+    'overlap-and-intrusion': {
+      path: [
+        { x: 0, y: 20 },
+        { x: 120, y: 20 },
+      ],
+      foreign: [{ x: 40, y: 0, w: 40, h: 40 }],
+    },
+    illegibility: 'pair-only',
+    crossings: 'pair-only',
+    // A segment strictly between an endpoint rect's two horizontal borders.
+    'endpoint-body-ink': {
+      path: [
+        { x: 8, y: 20 },
+        { x: 32, y: 20 },
+      ],
+      endpoints: [{ x: 0, y: 0, w: 40, h: 40 }],
+    },
+    // A segment riding exactly ON a node border (the top side).
+    'border-tracing': {
+      path: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+      ],
+      borders: [{ x: 0, y: 0, w: 40, h: 40 }],
+    },
+    // Right, then back left along the same axis.
+    'path-reversal': {
+      path: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 20, y: 0 },
+      ],
+    },
+    // One bend.
+    'realized-bends': {
+      path: [
+        { x: 0, y: 0 },
+        { x: 40, y: 0 },
+        { x: 40, y: 40 },
+      ],
+    },
+  }
 
-  it('the domain makes every penalty rule contribute a nonzero term', () => {
-    const samples = fc.sample(
-      fc.tuple(pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb),
-      600,
+  it('every penalty rule has a witness that makes it contribute through the composed call', () => {
+    // Keyed by name so a NEW rule fails here until its witness exists — the
+    // forcing function the sampled floor was for, kept without the sampling.
+    expect(Object.keys(SELF_WITNESSES).sort()).toEqual(
+      PENALTY_RULES.map((rule) => rule.name).sort(),
     )
-    const reached = PENALTY_RULES.map((rule) => ({
-      name: rule.name,
-      contributes:
-        samples.filter(
-          ([path, foreign, borders, endpoints]) =>
-            selfPenalty(path, foreign, borders, endpoints)[rule.tier] !== 0,
-        ).length >= SELF_CONTRIBUTION_FLOOR ||
-        // pairTerm-only rules (overlap, illegibility, crossings) read the
-        // narrow-phase triple instead, and have no self contribution at all.
-        rule.pairTerm([1, 1, 1]) !== 0,
-    }))
-    expect(reached).toEqual(reached.map(({ name }) => ({ name, contributes: true })))
+    for (const rule of PENALTY_RULES) {
+      const witness = SELF_WITNESSES[rule.name]
+      if (witness === 'pair-only') {
+        expect(
+          rule.pairTerm([1, 1, 1]),
+          `${rule.name}: declared pair-only but its pairTerm ignores the triple`,
+        ).not.toBe(0)
+        continue
+      }
+      expect(witness, `${rule.name}: no witness`).toBeDefined()
+      if (witness === undefined) continue
+      const cost = selfPenalty(
+        witness.path,
+        witness.foreign ?? [],
+        witness.borders ?? [],
+        witness.endpoints ?? [],
+      )
+      expect(
+        cost[rule.tier],
+        `${rule.name}: its witness input scores zero through the composed call`,
+      ).not.toBe(0)
+    }
   })
 })
 
