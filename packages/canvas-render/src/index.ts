@@ -1,3 +1,4 @@
+export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
@@ -11,19 +12,20 @@ export {
   routeEdge,
 } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
+export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export type {
   CodeToken,
   CodeTokenLines,
   CodeTokenRole,
+  EmbeddedCanvasBox,
+  EmbeddedCanvasMiniature,
+  EmbeddedDocument,
   FittedBlocks,
   MdastLayoutOptions,
   RenderedSvgFragment,
 } from './layout/nodes/mdast-blocks.js'
-export {
-  BODY_FONT_SIZE_PX,
-  BODY_LINE_HEIGHT_PX,
-  layoutMdastBlocks,
-} from './layout/nodes/mdast-blocks.js'
+export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX } from './layout/nodes/mdast-blocks.js'
+export { selectMarkdownSection } from './layout/nodes/mdast-section.js'
 export type { ShapeContribution, ShapeTable } from './layout/nodes/node-outline.js'
 export {
   type NodeOutline,

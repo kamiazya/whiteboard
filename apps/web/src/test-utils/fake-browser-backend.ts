@@ -7,12 +7,13 @@
  * scope resolution and renders the unreadable-content view instead of the
  * editor. This double builds the same shape the real backend guarantees.
  */
+
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import type { BrowserBackendTarget } from '../lib/browser-backend.js'

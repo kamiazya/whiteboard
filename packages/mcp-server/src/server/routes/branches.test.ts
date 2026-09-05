@@ -1,6 +1,9 @@
+import {
+  apiErrorBodySchema,
+  apiErrorReason,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
 import { Hono } from 'hono'
 import { describe, expect, it, vi } from 'vitest'
-import { apiErrorBodySchema, apiErrorReason } from '../../shared/api-contracts/errors.js'
 import { withTempDataDir } from './_test-helpers.js'
 
 const tmp = withTempDataDir('branches-route-test-')
@@ -59,7 +62,10 @@ function makeApp(
       sid: string,
       path: string,
       tip: string,
-    ) => Promise<import('../../shared/api-contracts/document.js').VersionDocumentResponse | null>
+    ) => Promise<
+      | import('@kamiazya/whiteboard-daemon-client/api-contracts/document').VersionDocumentResponse
+      | null
+    >
   } = {},
 ) {
   const app = new Hono()

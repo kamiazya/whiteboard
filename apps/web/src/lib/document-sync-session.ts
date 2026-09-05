@@ -1,13 +1,20 @@
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
+  markThreadPassages,
+  type PassageRange,
   readAnnotations,
   readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
+  readThreadMarks,
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   withSpatialBatch,
@@ -22,18 +29,21 @@ import {
   writeSpatialNode,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type {
-  DocumentBackend,
-  DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+
+/**
+ * One identity for "this document has no marks", so a publish that found
+ * none does not hand every subscriber a fresh map to diff against.
+ */
+const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
 import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import { sameAnnotations } from './annotations-equal.js'
+import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
+import type { BrowserPersistenceState } from './browser-persistence-state.js'
 import { contentStateOf } from './document-state.js'
 import {
   type ExportRequestHandlerDeps,
@@ -46,6 +56,7 @@ import {
   type UseDocumentSyncOptions,
 } from './document-sync-types.js'
 import type { EditorCommand, EditorLeafCommand } from './spatial/commands.js'
+import { missingThreadMarks } from './text-anchor.js'
 
 const log = getAppLogger('document-sync')
 
@@ -159,6 +170,16 @@ export interface SessionDeps {
    */
   onBackendError: (reason: BackendErrorReason) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
+  /**
+   * What the session knows about its own writes, as facts for the page to
+   * judge: `pending` from the instant an edit is published, `saved` once
+   * every write behind it has landed (the store's promise resolved — not the
+   * debounce firing, not the commit), `degraded` when the store refused one.
+   * Meaningful for a backend whose push answers for durability, which is
+   * the browser's; the daemon's push is fire-and-forget over a socket and
+   * resolves at once, so a daemon page must not read this as "saved".
+   */
+  onPersistenceChange?: (state: BrowserPersistenceState) => void
   dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
   /**
@@ -287,8 +308,26 @@ export interface DocumentSyncSession {
    * all, would have no channel to hear about anything.
    */
   getAnnotations(): readonly CommentThread[]
-  /** Registers a listener for every published annotation-layer value. */
-  subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void
+  /**
+   * Where each conversation's passage sits in the body right now, by thread
+   * id, as the CRDT's own rich-text marks report it.
+   *
+   * A thread ABSENT from this map is not an error: either its passage was
+   * deleted — the orphan signal a stored offset could never give — or the
+   * document is one no writer has marked. `resolveTextAnchor` falls back to
+   * the quote for both, which is why the quote is still stored.
+   */
+  getThreadMarks(): ReadonlyMap<string, PassageRange>
+  /**
+   * Registers a listener for every published annotation-layer value.
+   *
+   * The marks travel WITH the threads rather than on a channel of their
+   * own, so a subscriber can never apply a mark map taken at one instant to
+   * a thread list taken at another.
+   */
+  subscribeAnnotations(
+    listener: (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void,
+  ): () => void
 }
 
 /**
@@ -301,6 +340,7 @@ export interface DocumentSyncSession {
  * peer edit to a different node survives a merge against this write.
  */
 function writeCommandTarget(
+  host: LoroDoc,
   doc: DocumentContainers,
   next: SpatialCanvas,
   command: EditorCommand,
@@ -353,6 +393,23 @@ function writeCommandTarget(
       // allowed to OPEN a thread container (see `writeCommentThread`), which
       // is exactly why replying is not.
       writeCommentThread(doc, command.thread)
+      // And where the passage IS, so the CRDT carries it from here on. The
+      // thread's quote is what survives the document leaving the CRDT; a
+      // mark is what follows an edit — including a concurrent one merged
+      // from another peer, which the quote and its offsets can only
+      // approximate. Both, because neither replaces the other.
+      if (command.thread.anchor.kind === 'text') {
+        markThreadPassages(
+          host,
+          doc,
+          new Map([
+            [
+              command.thread.id,
+              { start: command.thread.anchor.start, end: command.thread.anchor.end },
+            ],
+          ]),
+        )
+      }
       return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
@@ -481,9 +538,14 @@ function writeSubCommand(
  * so the fallback is also what recovers from a node/edge removed from `next`
  * without a corresponding command.
  */
-function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: EditorCommand): void {
+function commitToDoc(
+  host: LoroDoc,
+  doc: DocumentContainers,
+  next: SpatialCanvas,
+  command: EditorCommand,
+): void {
   try {
-    if (writeCommandTarget(doc, next, command)) return
+    if (writeCommandTarget(host, doc, next, command)) return
     log.warn('editor command target missing from next canvas; falling back to full resync', {
       command,
     })
@@ -522,7 +584,15 @@ export function createDocumentSyncSession(
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
   let currentAnnotations: readonly CommentThread[] = []
-  const annotationListeners = new Set<(threads: readonly CommentThread[]) => void>()
+  let currentThreadMarks: ReadonlyMap<string, PassageRange> = NO_THREAD_MARKS
+  // Which doc the quote has already been asked about. Compared by identity
+  // to the doc itself rather than kept as a boolean: `onSnapshot` mints a
+  // fresh LoroDoc for every reconnect, and a boolean would leave the second
+  // one un-backfilled forever.
+  let backfilledMarksFor: LoroDoc | null = null
+  const annotationListeners = new Set<
+    (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void
+  >()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
@@ -535,6 +605,56 @@ export function createDocumentSyncSession(
   // synchronously (not otherwise observable in plain JS).
   let pendingCommitCount = 0
 
+  // Persistence facts (see SessionDeps.onPersistenceChange). `unsaved` flips
+  // on publish and clears only when nothing is left anywhere behind the edit:
+  // no debounce armed, no commit queued, no push in flight. Checked after
+  // every push settles AND after every commit drains, because a commit that
+  // changed nothing in the document produces no update and therefore no
+  // push — without the second check that edit would read as pending forever.
+  let unsaved = false
+  let inFlightPushes = 0
+  let lastSavedAt: string | null = null
+  // A refused write keeps the document unsaved until a LATER write lands;
+  // a quiet session after a failure is not a saved one.
+  let writeFailed = false
+  // Counts failure reports, so a push can tell whether one arrived WHILE it
+  // was in flight. The browser backend never rejects a push — its write runs
+  // on a queue it owns, and a store that throws is reported through
+  // `onError('storage-failure')` while the push's own promise resolves — so
+  // "this push resolved" is not "this write landed". A push clears the
+  // failure only when no report arrived between its start and its end.
+  let failureEpoch = 0
+  function reportPersistence(state: BrowserPersistenceState): void {
+    deps.onPersistenceChange?.(state)
+  }
+  function reportWriteFailed(): void {
+    failureEpoch++
+    writeFailed = true
+    reportPersistence({
+      kind: 'degraded',
+      reason: 'write-failed',
+      message: 'The last write to this browser failed. Your edits stay in memory for this session.',
+      lastSavedAt,
+    })
+  }
+  function settleIfQuiet(): void {
+    if (!unsaved || writeFailed) return
+    if (debounceTimer !== null || pendingTargets.size > 0) return
+    if (pendingCommitCount > 0 || inFlightPushes > 0) return
+    unsaved = false
+    lastSavedAt = new Date().toISOString()
+    reportPersistence({ kind: 'saved', lastSavedAt })
+  }
+  // Loro delivers subscribeLocalUpdates on a later microtask than the commit
+  // (see the subscription below), so "the commit drained" is not yet "the
+  // push was issued". Two turns are what drainBeforePushHasFired gives it
+  // too; only then can a quiet session honestly be called saved.
+  async function settleAfterCommitDrained(): Promise<void> {
+    await Promise.resolve()
+    await Promise.resolve()
+    settleIfQuiet()
+  }
+
   function isStale(): boolean {
     return disposed || deps.generations.currentConnectionGeneration() !== myGeneration
   }
@@ -546,6 +666,46 @@ export function createDocumentSyncSession(
    * the node under a NEW TreeID for the same documentId, and a cached handle
    * would keep pointing at the deleted node.
    */
+  /**
+   * Where each conversation's passage is now, and — once per body — the
+   * marks a document arrived without.
+   *
+   * Marks do not travel through a markdown file, and a thread an MCP peer
+   * wrote never had one, so the quote is asked ONCE at the moment the body
+   * is known and its answer written down for the CRDT to carry. Once,
+   * because this runs on every external update: re-asking would pay a body
+   * search per update for every thread whose passage is genuinely gone, and
+   * would keep re-deriving nothing.
+   *
+   * Guarded, and the read is what matters: a body the backfill cannot write
+   * to must still publish the marks it already has, rather than costing the
+   * whole annotation channel its value.
+   */
+  function refreshThreadMarks(
+    targetDoc: LoroDoc,
+    content: DocumentContainers,
+    threads: readonly CommentThread[],
+  ): ReadonlyMap<string, PassageRange> {
+    let marks: ReadonlyMap<string, PassageRange>
+    try {
+      marks = readThreadMarks(content)
+    } catch (err) {
+      log.warn('reading thread marks failed', err)
+      return NO_THREAD_MARKS
+    }
+    if (backfilledMarksFor === targetDoc) return marks
+    backfilledMarksFor = targetDoc
+    try {
+      const missing = missingThreadMarks(readMarkdownBody(content), threads, marks)
+      if (missing.size === 0) return marks
+      markThreadPassages(targetDoc, content, missing)
+      return readThreadMarks(content)
+    } catch (err) {
+      log.warn('backfilling thread marks failed', err)
+      return marks
+    }
+  }
+
   function contentOf(targetDoc: LoroDoc): DocumentContainers {
     return deps.contentDocumentId === undefined
       ? targetDoc
@@ -557,7 +717,7 @@ export function createDocumentSyncSession(
   }
 
   function notifyAnnotations(threads: readonly CommentThread[]): void {
-    for (const listener of annotationListeners) listener(threads)
+    for (const listener of annotationListeners) listener(threads, currentThreadMarks)
   }
 
   function getCanvas(): SpatialCanvas {
@@ -576,7 +736,13 @@ export function createDocumentSyncSession(
     return currentAnnotations
   }
 
-  function subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void {
+  function getThreadMarks(): ReadonlyMap<string, PassageRange> {
+    return currentThreadMarks
+  }
+
+  function subscribeAnnotations(
+    listener: (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void,
+  ): () => void {
     annotationListeners.add(listener)
     return () => {
       annotationListeners.delete(listener)
@@ -611,6 +777,7 @@ export function createDocumentSyncSession(
     // published values are always a pair taken at one instant rather than
     // two reads a remote update could land between.
     currentAnnotations = readAnnotations(content)
+    currentThreadMarks = refreshThreadMarks(targetDoc, content, currentAnnotations)
     notify(canvas, 'external')
     notifyAnnotations(currentAnnotations)
   }
@@ -641,7 +808,14 @@ export function createDocumentSyncSession(
       log.error('reading annotations after a commit failed', err)
       return
     }
-    if (sameAnnotations(currentAnnotations, next)) return
+    // The marks are the second half of the same question: a thread whose
+    // passage merely MOVED leaves the thread list byte-for-byte identical,
+    // so gating on the threads alone would keep drawing the highlight where
+    // the text used to be. Both are compared, and neither alone decides.
+    const marks = refreshThreadMarks(targetDoc, contentOf(targetDoc), next)
+    const movedMarks = !sameThreadMarks(currentThreadMarks, marks)
+    currentThreadMarks = marks
+    if (!movedMarks && sameAnnotations(currentAnnotations, next)) return
     currentAnnotations = next
     notifyAnnotations(next)
   }
@@ -687,7 +861,7 @@ export function createDocumentSyncSession(
           // scheduling and commit throws here, and must fail only this
           // target — guardedCommit's contract is that the chain never
           // rejects.
-          commitToDoc(contentOf(targetDoc), next, command)
+          commitToDoc(targetDoc, contentOf(targetDoc), next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -703,10 +877,15 @@ export function createDocumentSyncSession(
       .then(() => republishAnnotationsIfChanged(targetDoc))
       .finally(() => {
         pendingCommitCount--
+        void settleAfterCommitDrained()
       })
   }
 
   function onCanvasChange(next: SpatialCanvas, command: EditorCommand): void {
+    if (!unsaved) {
+      unsaved = true
+      reportPersistence({ kind: 'pending', lastSavedAt })
+    }
     pendingTargets.set(commandTargetKey(command), command)
     latestNext = next
     if (debounceTimer) clearTimeout(debounceTimer)
@@ -721,7 +900,40 @@ export function createDocumentSyncSession(
     commitPendingTargets()
   }
 
+  // The window holds edits that are already on screen, and a tab that goes
+  // away inside it loses them. `pagehide` and `visibilitychange` → hidden are
+  // the last signals a page reliably gets (Page Lifecycle API; `beforeunload`
+  // is not delivered on mobile and `unload` is unreliable everywhere), so the
+  // write goes out on them. Becoming visible again is the same event name
+  // and must NOT flush — that would write mid-gesture on every tab switch.
+  //
+  // What this covers, measured in Chromium with the tab's scripts frozen
+  // after the signal so the debounce could not be what landed it: a tab that
+  // is HIDDEN (switched away, backgrounded) keeps running, and the write
+  // reaches IndexedDB within 50ms. A tab CLOSED or reloaded inside the window
+  // is torn down before the asynchronous chain behind the flush reaches the
+  // store, and the edit is still lost — the same as without this listener.
+  // Closing that last gap means not having a window at all (write at once,
+  // commit later), not a better signal.
+  function onVisibilityChange(): void {
+    if (document.visibilityState === 'hidden') onCanvasChange.flush()
+  }
+  function onPageHide(): void {
+    onCanvasChange.flush()
+  }
+  function listenForPageLeaving(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    document.addEventListener('visibilitychange', onVisibilityChange)
+    window.addEventListener('pagehide', onPageHide)
+  }
+  function stopListeningForPageLeaving(): void {
+    if (typeof document === 'undefined' || typeof window === 'undefined') return
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+    window.removeEventListener('pagehide', onPageHide)
+  }
+
   function connect(): void {
+    listenForPageLeaving()
     backend.connect({
       onConnected() {
         if (isStale()) return
@@ -807,10 +1019,21 @@ export function createDocumentSyncSession(
           // it, the transport could already be closed by the time this push
           // happens, silently losing the last edit before a canvas switch or
           // unmount.
-          void Promise.resolve(backend.pushLocalUpdate(update)).catch(() => {
-            if (isStale()) return
-            deps.onStatusChange('error')
-          })
+          inFlightPushes++
+          const epochAtPush = failureEpoch
+          void Promise.resolve(backend.pushLocalUpdate(update)).then(
+            () => {
+              inFlightPushes--
+              if (failureEpoch === epochAtPush) writeFailed = false
+              settleIfQuiet()
+            },
+            () => {
+              inFlightPushes--
+              if (isStale()) return
+              deps.onStatusChange('error')
+              reportWriteFailed()
+            },
+          )
         })
 
         newDoc.subscribe((e) => {
@@ -915,6 +1138,11 @@ export function createDocumentSyncSession(
         if (isStale()) return
         deps.onBackendError(reason)
         deps.onStatusChange('error')
+        // The browser backend's write failure arrives here, not as a rejected
+        // push (see `failureEpoch`). The same reason also names a failed LOAD,
+        // which the page shows on its own screen — so this is a persistence
+        // fact only while there is a write to have failed.
+        if (reason === 'storage-failure' && (unsaved || inFlightPushes > 0)) reportWriteFailed()
       },
     })
   }
@@ -957,6 +1185,7 @@ export function createDocumentSyncSession(
     // calls doc.commit() synchronously, but its subscribeLocalUpdates
     // callback fires on a later microtask — see the comment on that
     // subscription for why it has no isStale() guard.
+    stopListeningForPageLeaving()
     onCanvasChange.flush()
     disposed = true
     // Bumps the shared apply generation unconditionally, mirroring the
@@ -1100,6 +1329,7 @@ export function createDocumentSyncSession(
     canUndo,
     canRedo,
     getAnnotations,
+    getThreadMarks,
     getCanvas,
     getContentState,
     exportSnapshot,

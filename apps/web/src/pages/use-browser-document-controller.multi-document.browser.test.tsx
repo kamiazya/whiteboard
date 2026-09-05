@@ -10,18 +10,13 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { useBrowserDocumentController } from './use-browser-document-controller.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('use-browser-document-controller-multi-document')
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('use-browser-document-controller-multi-document')
 
 function snapshotWithElements(elements: unknown[]): Uint8Array {
   const doc = new Loro()
@@ -32,12 +27,12 @@ function snapshotWithElements(elements: unknown[]): Uint8Array {
 
 describe('multi-canvas foundation (real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(async () => {
     cleanup()
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   it('createDocument twice persists both, and listDocuments returns both by their real id', async () => {

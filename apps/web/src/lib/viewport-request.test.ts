@@ -1,5 +1,5 @@
 // @vitest-environment node
-import type { ViewportRequestPayload } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type { ViewportRequestPayload } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorHandle } from './spatial/editor-handle.js'
 import { applyViewportRequest } from './viewport-request.js'

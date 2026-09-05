@@ -1,4 +1,4 @@
-import { documentsApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { documentsApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'

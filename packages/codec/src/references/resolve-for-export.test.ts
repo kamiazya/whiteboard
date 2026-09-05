@@ -16,6 +16,28 @@ function withWikiLink(alias?: string) {
 }
 
 describe('resolveReferencesForExport', () => {
+  it('keeps a #fragment on the exported address, link and embed alike', () => {
+    const root = {
+      type: 'root' as const,
+      children: [
+        {
+          type: 'paragraph' as const,
+          children: [
+            { type: 'wikiLink' as const, documentId: ULID, alias: 'go', fragment: 'Launch' },
+            { type: 'embed' as const, documentId: ULID, fragment: 'Launch' },
+          ],
+        },
+      ],
+    }
+    const exported = resolveReferencesForExport(root, () => 'plans.md')
+    const paragraph = exported.children[0]
+    if (paragraph.type !== 'paragraph') throw new Error('expected paragraph')
+    expect(paragraph.children).toEqual([
+      { type: 'text', value: '[go](plans.md#Launch)' },
+      { type: 'text', value: '![plans.md#Launch](plans.md#Launch)' },
+    ])
+  })
+
   it('rewrites a resolved wikiLink into a relative-path markdown link', () => {
     const root = withWikiLink('My Note')
     const exported = resolveReferencesForExport(root, () => '../notes/my-note.md')

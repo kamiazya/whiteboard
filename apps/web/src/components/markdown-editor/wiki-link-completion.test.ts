@@ -97,6 +97,11 @@ describe('wikiLinkCompletionSource', () => {
     view.destroy()
   })
 
+  it('closes once a # starts the fragment, so Enter finishes the line instead', () => {
+    expect(complete('[[release-plan#', 15)).toBeNull()
+    expect(complete('![[release-plan#Lau', 19)).toBeNull()
+  })
+
   it('stays silent outside a [[ context and across a line break', () => {
     expect(complete('plain text', 10)).toBeNull()
     const doc = '[[\nRe'

@@ -81,7 +81,7 @@ describe('ConnectionStatus chip', () => {
 
   it('browser state explains browser-only storage and hosts extra content (daemon detection)', async () => {
     render(
-      <ConnectionStatus state={{ keeper: 'browser' }}>
+      <ConnectionStatus state={{ keeper: 'browser', storage: 'ok' }}>
         <button type="button">Use here</button>
       </ConnectionStatus>,
     )

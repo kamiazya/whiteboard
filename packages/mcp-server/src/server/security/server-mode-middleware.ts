@@ -1,5 +1,5 @@
+import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import type { MiddlewareHandler } from 'hono'
-import type { RuntimeStatusResponse } from '../../shared/api-contracts/runtime.js'
 import type { AuthScope } from './auth-strategy.js'
 import type { AsyncAuthStrategy } from './oauth-resource-strategy.js'
 import { matchOrigin, parseOriginPatterns } from './origin-pattern.js'

@@ -12,7 +12,7 @@
 // The reading goes through the shared apiErrorBodySchema — the single owner of what a daemon
 // error body may look like — rather than hand-rolled field checks; three separate readers is
 // how the branch routes' reasons got discarded while every test stayed green.
-import { apiErrorReason } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { apiErrorReason } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 
 export function safeErrorCopy(err: unknown, fallback: string): string {
   if (err instanceof Error) return fallback

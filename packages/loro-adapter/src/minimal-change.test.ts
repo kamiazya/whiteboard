@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { minimalChange } from './minimal-change.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 
 function apply(current: string, next: string): string {
   const { from, to, insert } = minimalChange(current, next)

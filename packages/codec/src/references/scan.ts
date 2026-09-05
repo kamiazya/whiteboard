@@ -10,8 +10,23 @@ export interface ReferenceMatch {
   /** Full matched text, e.g. `[[ID]]` or `![[target|alias]]`. */
   full: string
   isEmbed: boolean
+  /** The document half of the address — what resolves to a documentId. */
   target: string
   alias: string | undefined
+  /**
+   * The `#...` half, when written: a secondary resource inside the target
+   * (RFC 3986 §3.5's sense), such as a heading or a canvas group's label.
+   * Split at the FIRST `#`, so a fragment may itself contain one. An empty
+   * fragment (`[[path#]]`) is the same as none.
+   */
+  fragment: string | undefined
+}
+
+function splitFragment(raw: string): { target: string; fragment: string | undefined } {
+  const hash = raw.indexOf('#')
+  if (hash === -1) return { target: raw, fragment: undefined }
+  const fragment = raw.slice(hash + 1)
+  return { target: raw.slice(0, hash), fragment: fragment.length > 0 ? fragment : undefined }
 }
 
 /**
@@ -38,7 +53,7 @@ export function findNextReference(value: string, cursor: number): ReferenceMatch
     while (i < value.length && value[i] !== ']' && value[i] !== '|') i++
     if (i >= value.length) return undefined // no `]`/`|` left anywhere -> no possible match remains
 
-    const target = value.slice(contentStart, i)
+    const { target, fragment } = splitFragment(value.slice(contentStart, i))
     if (target.length === 0) {
       pos = contentStart
       continue
@@ -52,6 +67,7 @@ export function findNextReference(value: string, cursor: number): ReferenceMatch
           isEmbed: hasBang,
           target,
           alias: undefined,
+          fragment,
         }
       }
       pos = i + 1
@@ -68,6 +84,7 @@ export function findNextReference(value: string, cursor: number): ReferenceMatch
         isEmbed: hasBang,
         target,
         alias,
+        fragment,
       }
     }
     pos = j + 1

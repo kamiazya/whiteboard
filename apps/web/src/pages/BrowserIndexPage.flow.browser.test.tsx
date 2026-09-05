@@ -171,8 +171,20 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     expect(screen.queryByText('What will you make first?')).toBeNull()
 
     // Restore one from the trash: the card returns to the list.
-    await userEvent.click(within(trash).getByText(/^Trash \(2\)/))
-    await userEvent.click((await within(trash).findAllByRole('button', { name: 'Restore' }))[0]!)
+    // The count is a SECOND async list, and the loop above only waited for the
+    // card list to shrink — so the section can still read `Trash (1)` here while
+    // the delete's own trash re-read is in flight. These two were the last
+    // waits in this file left on testing-library's 1000ms default, and the
+    // count was the step that failed on CI (run 33952850675: `Unable to find
+    // ... /^Trash \(2\)/` — the same class as the typing wait above, fixed the
+    // same way): the assertion is unchanged, only the budget matches the
+    // fifteen-second waits around it.
+    await userEvent.click(
+      await within(trash).findByText(/^Trash \(2\)/, undefined, { timeout: 15_000 }),
+    )
+    await userEvent.click(
+      (await within(trash).findAllByRole('button', { name: 'Restore' }, { timeout: 15_000 }))[0]!,
+    )
     await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(1), {
       timeout: 15_000,
     })

@@ -61,7 +61,7 @@ describe('shell-status-store', () => {
   })
 
   it('clearing a published connection notifies', () => {
-    setShellConnection({ state: { keeper: 'browser' } })
+    setShellConnection({ state: { keeper: 'browser', storage: 'ok' } })
     const listener = vi.fn()
     subscribeShellStatus(listener)
     setShellConnection(null)

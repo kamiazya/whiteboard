@@ -13,8 +13,8 @@
  * contract's send case skips, and the effect-based equivalent lives in the
  * browser-mode suite ("a pushed edit lands on the document tree node").
  */
-import type { DocumentBackendHarness } from '@kamiazya/whiteboard-mcp/document-backend-contract-suite'
-import { documentBackendContract } from '@kamiazya/whiteboard-mcp/document-backend-contract-suite'
+import type { DocumentBackendHarness } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
+import { documentBackendContract } from '@kamiazya/whiteboard-daemon-client/test-utils/document-backend-contract'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'

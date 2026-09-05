@@ -20,15 +20,6 @@ export default defineConfig({
     'server/app': 'src/server/app.ts',
     'server/backup-restore': 'src/server/backup-restore.ts',
     'server/security/server-mode-auth-plan': 'src/server/security/server-mode-auth-plan.ts',
-    'shared/document-backend-contract': 'src/shared/document-backend-contract.ts',
-    'shared/browser-shared-index': 'src/shared/browser-shared-index.ts',
-    'shared/daemon-backend': 'src/shared/daemon-backend.ts',
-    'shared/sse-backend': 'src/shared/sse-backend.ts',
-    'shared/sse-stream-hub': 'src/shared/sse-stream-hub.ts',
-    'shared/select-document-transport': 'src/shared/select-document-transport.ts',
-    'shared/api-client': 'src/shared/api-client.ts',
-    'shared/api-contracts/index': 'src/shared/api-contracts/index.ts',
-    'shared/api-contracts/runtime': 'src/shared/api-contracts/runtime.ts',
     'shared/data-dir-secure': 'src/shared/data-dir-secure.ts',
     'shared/package-version': 'src/shared/package-version.ts',
     'server/export/headless-renderer': 'src/server/export/headless-renderer.ts',
@@ -50,6 +41,7 @@ export default defineConfig({
   // Keep it external and list it in dependencies so npx finds it at runtime.
   external: ['yaml'],
   noExternal: [
+    '@kamiazya/whiteboard-daemon-client',
     '@kamiazya/whiteboard-model',
     '@kamiazya/whiteboard-codec',
     '@kamiazya/whiteboard-canvas-render',

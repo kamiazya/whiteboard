@@ -37,8 +37,16 @@ export const runtimeVerifyRequestSchema = z
       .string()
       .regex(/^[A-Za-z0-9_-]+$/, 'nonce must be base64url')
       .refine((value) => {
-        const bytes = Buffer.from(value, 'base64url')
-        return bytes.length >= 16 && bytes.length <= 32
+        // Decoded length from the base64url text alone — the previous
+        // Buffer.from would throw ReferenceError the moment a BROWSER
+        // parsed this schema (it is exported through the browser-safe
+        // barrel; only the daemon happened to parse requests so far).
+        // Unpadded base64url: 4 chars -> 3 bytes, remainder 2 -> +1,
+        // remainder 3 -> +2, remainder 1 is never valid.
+        const rem = value.length % 4
+        if (rem === 1) return false
+        const bytes = 3 * Math.floor(value.length / 4) + (rem === 2 ? 1 : rem === 3 ? 2 : 0)
+        return bytes >= 16 && bytes <= 32
       }, 'nonce must decode to 16-32 bytes'),
   })
   .strict()

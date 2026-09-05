@@ -19,11 +19,11 @@
  * `components/annotations/CommentsPanel.browser.test.tsx`.
  */
 
-import { writeCommentThread, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeCommentThread, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { act, cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import type { ReactElement } from 'react'

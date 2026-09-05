@@ -1522,7 +1522,7 @@ describe('createApp daemon mutation auth', () => {
     })
 
     it('emitted runtime-config is accepted by the shared api-client reader (strict, token-free)', async () => {
-      const { runtimeConfigSchema } = await import('../shared/api-client.js')
+      const { runtimeConfigSchema } = await import('@kamiazya/whiteboard-daemon-client/api-client')
       const emittedConfig = { daemonBaseUrl: 'http://127.0.0.1:3099' }
       expect(() => runtimeConfigSchema.parse(emittedConfig)).not.toThrow()
     })
@@ -1531,7 +1531,7 @@ describe('createApp daemon mutation auth', () => {
       // .strict() forbids unknown keys. daemonToken is NOT in the schema, so
       // .parse({ daemonToken, daemonBaseUrl }) must throw. This locks the
       // token-channel split as a deliberate guarded step.
-      const { runtimeConfigSchema } = await import('../shared/api-client.js')
+      const { runtimeConfigSchema } = await import('@kamiazya/whiteboard-daemon-client/api-client')
       const badPayload = { daemonToken: 'secret', daemonBaseUrl: 'http://127.0.0.1:3099' }
       expect(() => runtimeConfigSchema.parse(badPayload)).toThrow()
     })
@@ -1545,7 +1545,9 @@ describe('createApp daemon mutation auth', () => {
     // or http-server.ts (wrong host/port composition, or the
     // authMode/daemonBaseUrl condition silently never true).
     it('embeds the daemonBaseUrl passed into createApp in the minted pairing link', async () => {
-      const { decodeBase64UrlText } = await import('../shared/api-contracts/pairing-link.js')
+      const { decodeBase64UrlText } = await import(
+        '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
+      )
       // Longer than MIN_BOOTSTRAP_TOKEN_LENGTH — 'secret' alone is 6 chars,
       // which the tool refuses to embed as too short.
       const token = 'secret-daemon-token'
@@ -1651,7 +1653,9 @@ describe('createApp daemon mutation auth', () => {
 
   describe('/api/runtime/ping Zod schema', () => {
     it('ping response parses via daemonPingResponseSchema', async () => {
-      const { daemonPingResponseSchema } = await import('../shared/api-contracts/runtime.js')
+      const { daemonPingResponseSchema } = await import(
+        '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+      )
       const app = createApp(createRuntimeOptions('secret'))
       const res = await app.request('/api/runtime/ping')
       expect(res.status).toBe(200)

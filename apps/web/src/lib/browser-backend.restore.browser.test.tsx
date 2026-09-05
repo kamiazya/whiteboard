@@ -1,10 +1,10 @@
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import {
   projectWorkspaceDocument,
   readSpatialCanvas,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'

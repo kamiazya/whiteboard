@@ -15,7 +15,7 @@ export interface PreviewPaneProps {
   theme?: ResolvedTheme
   /** Maps `[[path]]` aliases to document ids; see render-preview.ts. */
   resolveAlias?: AliasResolver
-  /** Resolves `![[embed]]` bodies for inline rendering; see render-preview.ts. */
+  /** Resolves `![[embed]]` targets (a body or a canvas) for inline rendering; see render-preview.ts. */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   resolveTitle?: MdastLayoutOptions['resolveTitle']
   /** Renders math blocks; see render-preview.ts. */
@@ -80,6 +80,7 @@ export function PreviewPane({
         background,
         resolveAlias,
         resolveEmbed,
+        theme,
         resolveTitle,
         renderMath,
         renderDiagram,
@@ -91,6 +92,7 @@ export function PreviewPane({
       background,
       resolveAlias,
       resolveEmbed,
+      theme,
       resolveTitle,
       renderMath,
       renderDiagram,

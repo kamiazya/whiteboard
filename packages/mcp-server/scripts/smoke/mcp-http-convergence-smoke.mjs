@@ -24,6 +24,12 @@ import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { listWorkspacesResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { documentApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/document-url'
+import {
+  buildWhiteboardWsProtocols,
+  buildWhiteboardWsUrl,
+} from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import {
   documentContainers,
   readSpatialCanvas,
@@ -32,9 +38,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
-import { listWorkspacesResponseSchema } from '../../src/shared/api-contracts/document.js'
-import { documentApiUrl } from '../../src/shared/api-contracts/document-url.js'
-import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../src/shared/ws-protocol.js'
 import { waitForEventWithTimeout } from './lib/wait-for-event.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))

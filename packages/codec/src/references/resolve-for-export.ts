@@ -21,13 +21,24 @@ function exportPhrasing(
 ): MdastPhrasingContent {
   if (node.type === 'wikiLink' || node.type === 'embed') {
     const path = resolver(node.documentId)
+    // The fragment stays on the address in every form: it is part of what
+    // the reference points at, and a plain-markdown reader can follow
+    // `path#heading` exactly as it follows the path.
+    const fragment = node.fragment === undefined ? '' : `#${node.fragment}`
     if (path === null) {
       const alias = node.type === 'wikiLink' ? node.alias : undefined
-      return { type: 'text', value: `[[${node.documentId}${alias ? `|${alias}` : ''}]]` }
+      return {
+        type: 'text',
+        value: `[[${node.documentId}${fragment}${alias ? `|${alias}` : ''}]]`,
+      }
     }
+    const address = `${path}${fragment}`
     return {
       type: 'text',
-      value: node.type === 'embed' ? `![${path}](${path})` : wikiLinkExportText(node.alias, path),
+      value:
+        node.type === 'embed'
+          ? `![${address}](${address})`
+          : wikiLinkExportText(node.alias, address),
     }
   }
   if ('children' in node) {

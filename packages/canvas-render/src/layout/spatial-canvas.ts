@@ -60,6 +60,8 @@ import {
   routeEdge,
 } from './edges/spatial-edges.js'
 import {
+  type EmbeddedCanvasBox,
+  type EmbeddedCanvasMiniature,
   type FittedBlocks,
   firstLineOfBlocks,
   fitBlocksToHeight,
@@ -152,6 +154,13 @@ export interface SpatialLayoutOptions {
    */
   readonly nodeOutlines?: Readonly<Record<string, string>>
   /**
+   * Documents already on the embed recursion path when this canvas is
+   * itself embedded content — a markdown body's `![[canvas]]`. Seeds the
+   * depth cap and the path-local cycle check so they span the
+   * markdown/canvas boundary; absent for a top-level canvas.
+   */
+  readonly embedPath?: readonly string[]
+  /**
    * Nodes whose BODY the scene must not draw this pass, because a DOM
    * editor overlay owns their text right now. The chrome — silhouette,
    * stroke, fill, decorations — still draws, which is what lets that
@@ -202,6 +211,7 @@ export interface SpatialLayoutOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
    * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
    * implementation, for the same reason `parseBody` defaults to codec's
@@ -370,8 +380,8 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly contributions: readonly RenderContribution[]
   /** Their shapes, composed to namespaced ids. */
   readonly shapeTable: ShapeTable
-  /** File references on the CURRENT recursion path, plus its depth. */
-  readonly embedPath: ReadonlySet<string>
+  /** Document references on the CURRENT recursion path, plus its depth. */
+  readonly activeEmbedPath: ReadonlySet<string>
   readonly embedDepth: number
   readonly geometry: SpatialGeometry
   readonly parseBody: (text: string) => MdastRoot
@@ -438,7 +448,32 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
+    ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
+    embedPath: [...options.activeEmbedPath],
+    layoutEmbeddedCanvas: (canvas, box) => layoutCanvasMiniature(canvas, box, options),
   }
+}
+
+/**
+ * The composer's half of a markdown body's `![[canvas]]`: the referenced
+ * canvas laid out with the SAME contributions and seams as the canvas the
+ * body sits in, on the recursion path the typesetter hands back, and fitted
+ * into the box it reserved. What the file-node miniature does for a node,
+ * for a block of prose.
+ */
+function layoutCanvasMiniature(
+  canvas: SpatialCanvas,
+  box: EmbeddedCanvasBox,
+  options: ResolvedLayoutOptions,
+): EmbeddedCanvasMiniature | undefined {
+  const scene = layoutSpatialCanvasInternalScene(canvas, {
+    ...options,
+    // Per-canvas silhouettes, for the reason composeFileEmbed gives.
+    nodeOutlines: resolveNodeOutlines(canvas, undefined, options.contributions),
+    activeEmbedPath: new Set(box.embedPath),
+    embedDepth: box.embedPath.length,
+  })
+  return fitSceneIntoBox(scene, box)
 }
 
 /**
@@ -717,7 +752,7 @@ function composeFileEmbed(
   const child = resolved?.canvas
   if (child === undefined) return undefined
   if (options.expandFileNode?.(node) !== true) return undefined
-  if (options.embedDepth >= FILE_EMBED_DEPTH_CAP || options.embedPath.has(node.file)) {
+  if (options.embedDepth >= FILE_EMBED_DEPTH_CAP || options.activeEmbedPath.has(node.file)) {
     return undefined
   }
 
@@ -728,27 +763,45 @@ function composeFileEmbed(
     // same-id root node's shape into the embedded canvas. Explicit per-node
     // overrides are root-keyed by contract, so they do not descend.
     nodeOutlines: resolveNodeOutlines(child, undefined, options.contributions),
-    embedPath: new Set([...options.embedPath, node.file]),
+    activeEmbedPath: new Set([...options.activeEmbedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
-  const bounds = sceneBounds(childScene)
   const padding = options.geometry.paddingPx
   // The reference label sits OUTSIDE the frame (see placeAboveNode), so
   // the miniature gets the whole padded box.
-  const innerW = node.width - 2 * padding
-  const innerH = node.height - 2 * padding
-  const fit = Math.min(innerW / bounds.w, innerH / bounds.h, 1)
-  if (!Number.isFinite(fit) || fit <= 0) return undefined
-
-  const atOrigin = translateScene(childScene, -bounds.x, -bounds.y)
-  const scaled = scaleScene(atOrigin, fit)
-  const placed = translateScene(scaled, node.x + padding, node.y + padding)
+  const fitted = fitSceneIntoBox(childScene, {
+    x: node.x + padding,
+    y: node.y + padding,
+    maxWidth: node.width - 2 * padding,
+    maxHeight: node.height - 2 * padding,
+  })
+  if (fitted === undefined) return undefined
   return {
     kind: 'embedResolved',
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     documentId: node.file,
-    children: placed.nodes,
+    children: fitted.nodes,
   }
+}
+
+/**
+ * A laid-out scene scaled to fit a box (never upscaled) and placed at its
+ * top-left corner. `undefined` for a degenerate fit — an empty scene, or a
+ * box with no room — so the caller can draw its fallback instead. Shared by
+ * the file-node miniature and the markdown body's canvas embed, which are
+ * the same picture in two frames.
+ */
+export function fitSceneIntoBox(
+  scene: Scene,
+  box: Omit<EmbeddedCanvasBox, 'embedPath'>,
+): EmbeddedCanvasMiniature | undefined {
+  const bounds = sceneBounds(scene)
+  const fit = Math.min(box.maxWidth / bounds.w, box.maxHeight / bounds.h, 1)
+  if (!Number.isFinite(fit) || fit <= 0) return undefined
+  const atOrigin = translateScene(scene, -bounds.x, -bounds.y)
+  const scaled = scaleScene(atOrigin, fit)
+  const placed = translateScene(scaled, box.x, box.y)
+  return { nodes: placed.nodes, w: bounds.w * fit, h: bounds.h * fit }
 }
 
 /** The image rendering of a file node: fills the padded box, aspect kept. */
@@ -1198,8 +1251,8 @@ export function layoutSpatialCanvasWithAnchors(
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
     nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, resolved.contributions),
-    embedPath: new Set(),
-    embedDepth: 0,
+    activeEmbedPath: new Set(options.embedPath ?? []),
+    embedDepth: options.embedPath?.length ?? 0,
     fitToBox: true,
   })
 }
@@ -1230,7 +1283,7 @@ export function naturalNodeContentSize(
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    embedPath: new Set(),
+    activeEmbedPath: new Set(),
     embedDepth: 0,
     fitToBox: false,
   }).filter(
@@ -1565,7 +1618,7 @@ export function layoutSpatialEdges(
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    embedPath: new Set(),
+    activeEmbedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
   }).content

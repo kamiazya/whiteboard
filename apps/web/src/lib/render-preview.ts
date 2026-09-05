@@ -15,6 +15,8 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import { outlineFromScene } from './document-outline.js'
 import type { RailBlock } from './rail-geometry.js'
+import { createEditorAppearance } from './spatial/editor-appearance.js'
+import type { ResolvedTheme } from './theme.js'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText
@@ -31,6 +33,12 @@ export interface RenderMarkdownPreviewOptions {
    * (canvas-render's layout seam, threaded through verbatim).
    */
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /**
+   * The app theme an embedded CANVAS is painted in, so its miniature matches
+   * the page around it. The markdown itself is themed by the host's
+   * inherited fill, not here; absent, a miniature takes the light theme.
+   */
+  readonly theme?: ResolvedTheme
   /** Labels a bare `[[path]]`/`[[id]]` with the target's current display name. */
   readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /** Renders math blocks (canvas-render's layout seam, threaded verbatim). */
@@ -109,6 +117,7 @@ export function renderMarkdownPreview(
     background,
     resolveAlias,
     resolveEmbed,
+    theme,
     resolveTitle,
     renderMath,
     renderDiagram,
@@ -118,6 +127,7 @@ export function renderMarkdownPreview(
     measure,
     maxWidth,
     resolveAlias,
+    theme,
     resolveEmbed,
     resolveTitle,
     renderMath,
@@ -186,6 +196,7 @@ function layoutScene(
     maxWidth,
     resolveAlias,
     resolveEmbed,
+    theme,
     resolveTitle,
     renderMath,
     renderDiagram,
@@ -196,6 +207,7 @@ function layoutScene(
       measure,
       maxWidth,
       resolveTitle,
+      canvasAppearance: createEditorAppearance(theme ?? 'light'),
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
       // A page, not an object. This pane runs to a readable measure, where the
       // node scale — cut so a heading cannot eat a third of a 280px box —

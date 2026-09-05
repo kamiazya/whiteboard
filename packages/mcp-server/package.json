@@ -31,38 +31,6 @@
       "types": "./dist/server/mcp/index.d.ts",
       "import": "./dist/server/mcp/index.js"
     },
-    "./browser-contract": {
-      "types": "./src/shared/document-backend-contract.ts",
-      "import": "./dist/shared/document-backend-contract.js"
-    },
-    "./browser-shared": {
-      "types": "./src/shared/browser-shared-index.ts",
-      "import": "./dist/shared/browser-shared-index.js"
-    },
-    "./daemon-backend": {
-      "types": "./src/shared/daemon-backend.ts",
-      "import": "./dist/shared/daemon-backend.js"
-    },
-    "./sse-backend": {
-      "types": "./src/shared/sse-backend.ts",
-      "import": "./dist/shared/sse-backend.js"
-    },
-    "./sse-stream-hub": {
-      "types": "./src/shared/sse-stream-hub.ts",
-      "import": "./dist/shared/sse-stream-hub.js"
-    },
-    "./select-document-transport": {
-      "types": "./src/shared/select-document-transport.ts",
-      "import": "./dist/shared/select-document-transport.js"
-    },
-    "./api-client": {
-      "types": "./src/shared/api-client.ts",
-      "import": "./dist/shared/api-client.js"
-    },
-    "./api-contracts": {
-      "types": "./src/shared/api-contracts/index.ts",
-      "import": "./dist/shared/api-contracts/index.js"
-    },
     "./package.json": "./package.json"
   },
   "bin": {
@@ -88,38 +56,6 @@
       ".": {
         "types": "./dist/server/mcp/index.d.ts",
         "import": "./dist/server/mcp/index.js"
-      },
-      "./browser-contract": {
-        "types": "./dist/shared/document-backend-contract.d.ts",
-        "import": "./dist/shared/document-backend-contract.js"
-      },
-      "./browser-shared": {
-        "types": "./dist/shared/browser-shared-index.d.ts",
-        "import": "./dist/shared/browser-shared-index.js"
-      },
-      "./daemon-backend": {
-        "types": "./dist/shared/daemon-backend.d.ts",
-        "import": "./dist/shared/daemon-backend.js"
-      },
-      "./sse-backend": {
-        "types": "./dist/shared/sse-backend.d.ts",
-        "import": "./dist/shared/sse-backend.js"
-      },
-      "./sse-stream-hub": {
-        "types": "./dist/shared/sse-stream-hub.d.ts",
-        "import": "./dist/shared/sse-stream-hub.js"
-      },
-      "./select-document-transport": {
-        "types": "./dist/shared/select-document-transport.d.ts",
-        "import": "./dist/shared/select-document-transport.js"
-      },
-      "./api-client": {
-        "types": "./dist/shared/api-client.d.ts",
-        "import": "./dist/shared/api-client.js"
-      },
-      "./api-contracts": {
-        "types": "./dist/shared/api-contracts/index.d.ts",
-        "import": "./dist/shared/api-contracts/index.js"
       },
       "./package.json": "./package.json"
     }
@@ -185,15 +121,11 @@
     "@modelcontextprotocol/ext-apps": "1.7.5",
     "@modelcontextprotocol/server": "^2.0.0",
     "@opentelemetry/api": "^1.9.1",
-    "@opentelemetry/context-zone": "^2.10.0",
     "@opentelemetry/core": "^2.10.0",
     "@opentelemetry/exporter-trace-otlp-http": "^0.221.0",
-    "@opentelemetry/instrumentation": "^0.221.0",
-    "@opentelemetry/instrumentation-fetch": "^0.221.0",
     "@opentelemetry/resources": "^2.10.0",
     "@opentelemetry/sdk-node": "^0.221.0",
     "@opentelemetry/sdk-trace-base": "^2.10.0",
-    "@opentelemetry/sdk-trace-web": "^2.10.0",
     "@opentelemetry/semantic-conventions": "^1.43.0",
     "@resvg/resvg-js": "^2.6.2",
     "cosmiconfig": "^9.0.0",
@@ -224,6 +156,7 @@
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
+    "@kamiazya/whiteboard-daemon-client": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",

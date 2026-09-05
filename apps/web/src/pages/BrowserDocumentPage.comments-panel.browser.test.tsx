@@ -9,8 +9,9 @@
  * has to serve a markdown document, and a markdown document has no canvas to
  * hang anything on.
  */
+
+import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
 import { writeCommentThread, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackendHandlers } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor, within } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
@@ -323,6 +324,70 @@ it('opens a conversation from the markdown body, end to end', async () => {
   // Read back from the layer, not from the draft that was typed: the count
   // comes off the same annotations list the document publishes.
   await waitFor(() => expect(screen.getByRole('button', { name: /comments, 1 open/i })), {
+    timeout: 15_000,
+  })
+})
+
+/**
+ * A note whose one conversation is about a passage of its body, with no mark
+ * on it — which is every document that arrived through a markdown file, and
+ * every thread written before marks existed.
+ */
+function noteHoldingAMarkedPassage(): Uint8Array {
+  const doc = new LoroDoc()
+  writeMarkdownBody(doc, 'Ship the report on Friday.')
+  writeCommentThread(doc, {
+    id: 't-note',
+    anchor: { kind: 'text', quote: { exact: 'report on Friday' }, start: 9, end: 25 },
+    status: 'open',
+    messages: [{ id: 'm1', body: 'why Friday?' }],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+it('keeps the body highlight through an edit inside its own passage', async () => {
+  // The case the quote alone gets WRONG, driven through the real editor.
+  // Typing inside a passage makes the stored quote stale — no occurrence of
+  // it is left in the body — so a search-based resolver answers `orphaned`
+  // and the highlight disappears out from under a reader mid-sentence. The
+  // Loro mark belongs to the characters, so it simply grows by one.
+  //
+  // Two layers only this test connects: the backfill that gave an imported
+  // thread its mark at load, and the projection that draws from the mark
+  // rather than from the quote.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingAMarkedPassage())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  const highlight = () => document.querySelector('.cm-annotation[data-thread-id="t-note"]')
+  await waitFor(() => expect(highlight()).not.toBeNull(), { timeout: 15_000 })
+
+  await focusEditable(
+    () =>
+      document
+        .querySelector('[data-testid="markdown-source-pane"]')
+        ?.querySelector('[contenteditable="true"]') ?? null,
+  )
+  // Into the middle of `report`, so what is typed lands strictly INSIDE the
+  // passage — at either edge `expand: 'none'` would put it outside, which is
+  // a different question and a deliberate one.
+  await userEvent.keyboard('{Control>}{Home}{/Control}')
+  for (let i = 0; i < 12; i++) await userEvent.keyboard('{ArrowRight}')
+  await userEvent.keyboard('X')
+
+  // Queried fresh, never held: the pane re-renders around this and a node
+  // grabbed before the edit reports what it said when it was detached.
+  await waitFor(() => expect(highlight()?.textContent).toBe('repXort on Friday'), {
     timeout: 15_000,
   })
 })

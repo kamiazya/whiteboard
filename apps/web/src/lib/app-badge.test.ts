@@ -19,7 +19,7 @@ describe('updateAppBadge', () => {
     withBadging(set, clear)
     updateAppBadge('unsaved')
     expect(set).toHaveBeenCalledWith()
-    updateAppBadge('saved')
+    updateAppBadge('quiet')
     expect(clear).toHaveBeenCalled()
     updateAppBadge('syncing')
     updateAppBadge('offline')

@@ -8,6 +8,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -29,10 +30,6 @@ function mount(canvas: SpatialCanvas, tool: 'select' | 'hand' = 'select') {
     )
   }
   return { latest, ...render(<Host />) }
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function touch(el: HTMLElement, type: string, x: number, y: number, pointerId = 7) {

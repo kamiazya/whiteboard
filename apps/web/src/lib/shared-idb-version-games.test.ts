@@ -33,6 +33,25 @@ const sources = import.meta.glob('../**/*.{test,browser.test}.{ts,tsx}', {
 /** `indexedDB.open(<anything>, <version>)` — a version-pinned open, however the name is spelled. */
 const VERSION_PINNED_OPEN = /indexedDB\.open\([^,)]+,\s*([^)]+)\)/g
 
+/** Any deletion at all, however the database is named. */
+const ANY_DELETE = /indexedDB\s*\.\s*deleteDatabase\(/
+
+/**
+ * The one place a test may delete a database, and the one reasoned exception.
+ *
+ * `clearWhiteboardDb` is the definition; everything else awaits it. The
+ * exception deletes a name NO LATER CASE REUSES, so a blocked deletion there
+ * cannot hand anyone stale rows — and it must stay best-effort, because it
+ * does not own when its collaborators close their connections and waiting
+ * could hang instead.
+ *
+ * Both sides are checked below, so an entry cannot outlive what it names.
+ */
+const MAY_DELETE = [
+  '../test-utils/browser-document.ts',
+  './folding-browser-index.conformance.browser.test.tsx',
+]
+
 /** The shared database's name as a standalone literal, not a prefix of another one. */
 const SHARED_NAME_LITERAL = /'whiteboard'/
 
@@ -58,6 +77,14 @@ function offendingFiles(entries: Record<string, string>): string[] {
 /** Touching the SHARED database by its literal name, in either destructive form. */
 const DELETES_SHARED = /deleteDatabase\(\s*['"]whiteboard['"]\s*\)/
 const OPENS_SHARED = /indexedDB\s*\.\s*open\(\s*['"]whiteboard['"]/
+
+function handRolledDeleters(entries: Record<string, string>): string[] {
+  return Object.entries(entries)
+    .filter(([path]) => !MAY_DELETE.includes(path))
+    .filter(([, source]) => ANY_DELETE.test(source))
+    .map(([path]) => path)
+    .sort()
+}
 
 function sharedDbTouchers(entries: Record<string, string>): string[] {
   return Object.entries(entries)
@@ -113,5 +140,37 @@ describe('the shared whiteboard database, by name', () => {
     expect(
       sharedDbTouchers({ 'x.browser.test.tsx': "extractTextFromPng(bytes, 'whiteboard')" }),
     ).toEqual([])
+  })
+})
+
+describe('deleting a database between cases', () => {
+  // 26 files hand-rolled this, and 20 of them got `blocked` wrong the same
+  // way: they resolved on it. `blocked` fires INSTEAD of success or error
+  // while another connection is open, so resolving there tells the next test
+  // a database was cleared when it was not — and the failure surfaces
+  // somewhere else entirely, as a page reporting it could not read its own
+  // data. It took two files showing that symptom before anyone looked here.
+  //
+  // The five that had it right said so in a comment each. The knowledge was
+  // in the repo the whole time; what was missing was one definition for it
+  // to live in.
+  it('goes through clearWhiteboardDb, which is the only definition', () => {
+    expect(handRolledDeleters(sources)).toEqual([])
+  })
+
+  it('exempts only files that exist, so an entry cannot outlive what it names', () => {
+    // The other half. A path that stops matching any file is an exemption
+    // nobody can trip over — and reads exactly like a rule being obeyed.
+    expect(MAY_DELETE.filter((path) => !(path in sources))).toEqual([
+      // The definition itself is not a test file, so the glob never sees it.
+      '../test-utils/browser-document.ts',
+    ])
+  })
+
+  it('is actually detected — an empty result means clean, not blind', () => {
+    expect(handRolledDeleters({ 'x.browser.test.tsx': 'indexedDB.deleteDatabase(NAME)' })).toEqual([
+      'x.browser.test.tsx',
+    ])
+    expect(handRolledDeleters({ 'x.browser.test.tsx': 'await clearNamedDb(NAME)' })).toEqual([])
   })
 })

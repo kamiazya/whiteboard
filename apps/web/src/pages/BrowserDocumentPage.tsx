@@ -18,7 +18,6 @@ import { LoadDegradedView } from '../components/document-editor/LoadDegradedView
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
-import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import {
   AlertDialog,
@@ -50,6 +49,7 @@ import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
+import { useStorageHealth } from '../hooks/useStorageHealth.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -77,6 +77,7 @@ import {
 import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
+import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -84,7 +85,7 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
+import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -96,9 +97,9 @@ import {
 import { useMarkdownDocument } from './use-markdown-document.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
-// WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
+// WorkspaceTopBar statically imports Radix, lucide,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
-// @kamiazya/whiteboard-mcp/api-contracts client. None of that daemon-mode
+// @kamiazya/whiteboard-daemon-client/api-contracts/index client. None of that daemon-mode
 // weight is needed for the entry chunk of a page whose local mode never
 // exercises those affordances (see App.tsx's equivalent rationale for
 // lazy-loading DaemonDocumentPage).
@@ -184,15 +185,6 @@ export function BrowserDocumentPage({
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
-
-  // The connection is app-level, so the App-mounted shell draws it and this
-  // page only reports what it knows: while a document kept in this browser is open,
-  // the data lives in this browser and nowhere else. Cleared on unmount so an
-  // index page makes no claim of its own.
-  useEffect(() => {
-    setShellConnection({ state: { keeper: 'browser' } })
-    return () => setShellConnection(null)
-  }, [])
 
   // duplicateDocument() rejects on failure (see the controller hook) rather
   // than carrying its own error/pending state, so this page owns both: a
@@ -350,22 +342,25 @@ export function BrowserDocumentPage({
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
-  // [[path]] resolution for the markdown preview: display names are
-  // retired from resolution (path + id are the only written forms), and
-  // the name labels the link at render time via `resolveTitle` instead.
-  // `createUniqueNameResolver` takes {id, name}; a stored row says
-  // `documentId`, so the projection is explicit rather than structural.
-  const resolveAlias = useMemo(
+  // [[path]] resolution for the markdown preview goes through the same
+  // link-entries table the daemon page reads; a stored row says
+  // `documentId`/`name`, so the projection onto LinkableDocument is
+  // explicit rather than structural.
+  const linkableDocuments = useMemo(
     () =>
-      createUniqueNameResolver(
-        documents.map((entry) => ({ id: entry.documentId, name: entry.path })),
-      ),
+      documents.map((entry) => ({
+        id: entry.documentId,
+        path: entry.path,
+        displayName: entry.name,
+        kind: entry.kind,
+      })),
     [documents],
   )
-  const resolveTitle = useMemo(() => {
-    const byId = new Map(documents.map((entry) => [entry.documentId, entry.name]))
-    return (documentId: string) => byId.get(documentId)
-  }, [documents])
+  const resolveAlias = useMemo(
+    () => createUniqueNameResolver(linkEntries(linkableDocuments)),
+    [linkableDocuments],
+  )
+  const resolveTitle = useMemo(() => linkTitles(linkableDocuments), [linkableDocuments])
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -405,18 +400,20 @@ export function BrowserDocumentPage({
     [pathOfDocument, navigate],
   )
 
-  const linkTargets = useMemo(
+  // From switcherOptions rather than the raw list: the open document's row
+  // is overlaid with its live snapshot, so the picker never offers a stale
+  // name for the document being edited.
+  const pickerTargets = useMemo(
     () =>
-      switcherOptions
-        // Never the open document itself: a link's whole job is to reach
-        // some OTHER document, and backlinks skip self-references anyway.
-        .filter((entry) => entry.documentId !== documentId)
-        .map((entry) => ({
+      linkTargets(
+        switcherOptions.map((entry) => ({
           id: entry.documentId,
           path: entry.path,
-          name: entry.name,
+          displayName: entry.name,
           kind: entry.kind,
         })),
+        { excludeDocumentId: documentId ?? undefined },
+      ),
     [switcherOptions, documentId],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
@@ -581,6 +578,7 @@ export function BrowserDocumentPage({
     backendError,
     clearLocalUndo,
     readOutlineSource,
+    persistence: syncPersistence,
   } = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
@@ -652,57 +650,36 @@ export function BrowserDocumentPage({
     if (versionsBackend === null || documentPath === null) {
       throw new Error('saveVersionFromPanel: no versions backend or document path')
     }
-    // Captured BEFORE the save, not after. Both arms read the live document
-    // at call time, so starting the capture here binds the picture to the
-    // state the save is about to mark. Awaiting the save first meant an edit
-    // made during it was drawn onto the older point — a picture of content
-    // that version does not contain.
-    const picture = captureBookmarkPicture(documentKind, {
-      exportScene,
-      body: markdownDoc.body,
-    })
-    let saved: Awaited<ReturnType<typeof versionsBackend.save>>
-    try {
-      saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
-    } catch (err) {
-      log.warn('save version from the History panel failed', err)
-      throw err
-    }
-    // The rest is the post-save announce work — thumbnail attach, the
-    // event that clears the dot and refreshes the History panel — run only
-    // once the guard has confirmed this save's document is still on screen.
-    return () => {
-      // The picture rides with the bookmark, as it does on the daemon page —
-      // one path through the seam, so a browser-kept row is not the one that
-      // silently has no picture. Not awaited: the bookmark has landed, and
-      // its picture arriving late or not at all must not hold up the row.
-      void attachVersionThumbnail({
-        backend: versionsBackend,
-        workspaceId: getBrowserWorkspaceId(),
-        path: documentPath,
-        versionId: saved.id,
-        getBlob: () => picture,
-      }).then((outcome) => {
-        if (outcome === 'failed') {
-          log.warn('bookmark thumbnail failed')
-          return
+    // The shared body pins the beats: capture BEFORE the save, announce,
+    // thumbnail riding along unawaited, re-announce once the picture lands
+    // (see buildVersionSaveBody).
+    return buildVersionSaveBody({
+      capture: () =>
+        captureBookmarkPicture(documentKind, {
+          exportScene,
+          body: markdownDoc.body,
+        }),
+      save: async (saveLabel) => {
+        try {
+          const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, {
+            label: saveLabel,
+          })
+          return { workspaceId: getBrowserWorkspaceId(), path: documentPath, versionId: saved.id }
+        } catch (err) {
+          log.warn('save version from the History panel failed', err)
+          throw err
         }
-        // Announce a SECOND time. The row landed before its picture did, so
-        // the list this save already refreshed holds a row that says it has
-        // none — and without this the picture appears only when something
-        // else happens to refetch, which for a person means reloading.
+      },
+      backend: versionsBackend,
+      // The top bar addresses this document as `local`/path (its
+      // `dataMode="local"` placeholder), so the dot listens under that id.
+      announceRefresh: () =>
         dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
           workspaceId: 'local',
           path: documentPath,
-        })
-      })
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-        workspaceId: 'local',
-        path: documentPath,
-      })
-    }
+        }),
+      onThumbnailFailed: () => log.warn('bookmark thumbnail failed'),
+    })(label)
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (versionsBackend === null || documentPath === null) return
@@ -727,6 +704,11 @@ export function BrowserDocumentPage({
    * from here down nothing cares which of the two did the reading.
    */
   const annotations = documentKind === 'markdown' ? markdownDoc.annotations : spatialAnnotations
+  // Where the CRDT still holds each passage. Only a markdown document has a
+  // body for a mark to live in; the spatial side answers with nothing rather
+  // than with the sync session's map, which is about a body it is not
+  // showing.
+  const threadMarks = documentKind === 'markdown' ? markdownDoc.threadMarks : undefined
 
   /**
    * The rail's write door. A markdown document is given no BrowserBackend
@@ -742,6 +724,7 @@ export function BrowserDocumentPage({
     threads: annotations,
     documentKind,
     markdownBody: documentKind === 'markdown' ? markdownDoc.body : null,
+    threadMarks,
     canvas: documentKind === 'spatial' ? canvas : null,
     write: {
       createThread: (thread) => {
@@ -816,10 +799,34 @@ export function BrowserDocumentPage({
     })
   }, [createDocument])
 
-  // Tab favicon: persistence state as the status dot (degraded reads as
-  // offline — data is at risk either way), scene content as the minimap.
-  // Which owner holds THIS document — see `composeOutlineSource`, which is
-  // where the two of them and the reason are written down.
+  // One account of the document's writes over its three writers — the
+  // controller (renames), the markdown body's own save, and the spatial sync
+  // session — worst first, because the writer that is behind is the one
+  // holding unsaved work. A FACT, not a display state: the page shows nothing
+  // for the ordinary unsaved few hundred milliseconds while someone types.
+  // What it shows is the judgement below, and only when there is one.
+  const writes = mergePersistence(
+    mergePersistence(persistence, markdownDoc.saveState),
+    syncPersistence,
+  )
+  const storageHealth = useStorageHealth(writes)
+
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows: while a document kept in this browser
+  // is open, the data lives in this browser and nowhere else — and whether
+  // that browser is keeping it (`storage`). The last landed write goes with
+  // it, for the popover to answer "is it saved" on asking. Cleared on
+  // unmount so an index page makes no claim of its own.
+  const lastWrittenAt = writes.lastSavedAt
+  useEffect(() => {
+    setShellConnection({ state: { keeper: 'browser', storage: storageHealth }, lastWrittenAt })
+    return () => setShellConnection(null)
+  }, [storageHealth, lastWrittenAt])
+
+  // Tab favicon: the same judgement as the shell mark (quiet unless a write
+  // is stuck or refused), scene content as the minimap. Which owner holds
+  // THIS document — see `composeOutlineSource`, which is where the two of
+  // them and the reason are written down.
   const readDocumentOutlineSource = useCallback(
     (kind: DocumentKind): DocumentOutlineSource | null =>
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
@@ -831,8 +838,20 @@ export function BrowserDocumentPage({
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
-    status: browserFaviconStatus(persistence.kind),
+    status: browserFaviconStatus(storageHealth),
   })
+
+  // The facts themselves, published for tests and nothing else: hidden, so
+  // the row shows no save state, while a wait can still require a landed
+  // write that covers what was typed (`test-utils/wait-for-saved.ts`).
+  const persistenceFact = (
+    <span
+      hidden
+      data-testid="persistence-state"
+      data-save-state={writes.kind}
+      {...(writes.lastSavedAt === null ? {} : { 'data-last-saved-at': writes.lastSavedAt })}
+    />
+  )
 
   // The option list refreshes asynchronously (see the effect above) while the
   // selected id changes synchronously on switch/create. Synthesize a
@@ -993,8 +1012,8 @@ export function BrowserDocumentPage({
   // below is the point, not a coincidence.
   const onTitleChange = (next: string) => {
     void renameDocument(next).catch(() => {
-      // Surfaced through persistence state, which the save chip beside this
-      // box already renders.
+      // Surfaced through persistence state: a refused write reaches the
+      // shell mark as `failed`, and the page's degraded screen.
     })
   }
 
@@ -1007,15 +1026,9 @@ export function BrowserDocumentPage({
         <DocumentProperties
           inline
           key={documentId ?? 'no-canvas'}
-          // A markdown document has two writers — this page's controller and
-          // the body's own debounced save — and one dot. Showing the
-          // controller alone reported `Saved` over unwritten text, because a
-          // body edit never moves it.
-          status={
-            <SaveStatusChip
-              state={mergePersistence(renderState.persistence, markdownDoc.saveState)}
-            />
-          }
+          // No save state in the row: the shell mark answers for the keeper,
+          // and only when there is a condition. The hidden fact is for tests.
+          status={persistenceFact}
           actions={canvasRowActions}
           title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
@@ -1032,7 +1045,7 @@ export function BrowserDocumentPage({
       <DocumentProperties
         inline
         key={documentId ?? 'no-canvas'}
-        status={<SaveStatusChip state={renderState.persistence} />}
+        status={persistenceFact}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
         title={titleOf(documentName, documentPath)}
@@ -1177,10 +1190,11 @@ export function BrowserDocumentPage({
                           title: titleOf(documentName, documentPath),
                           resolveAlias,
                           resolveTitle,
-                          linkTargets,
+                          linkTargets: pickerTargets,
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
                           threads: annotations,
+                          threadMarks,
                           selectedThreadId: commentsRail.selectedThreadId,
                           onSelectThread: commentsRail.revealThread,
                           onComposeThread: commentsRail.composeThread,
@@ -1196,16 +1210,11 @@ export function BrowserDocumentPage({
                         onChange={onChange}
                         externalVersion={externalVersion}
                         theme={resolvedTheme}
-                        // File-node reference = canvas id minted in the browser; the
-                        // current canvas is excluded (a self-reference card is pure
-                        // noise).
-                        fileRefOptions={documents
-                          .filter((entry) => entry.documentId !== documentId)
-                          .map((entry) => ({
-                            file: entry.documentId,
-                            label: entry.name,
-                            kind: entry.kind,
-                          }))}
+                        // File-node reference = canvas id minted in the browser;
+                        // the same rows the link picker offers (open document
+                        // excluded, live-snapshot overlay), under the picker's
+                        // field names.
+                        fileRefOptions={fileRefOptions(pickerTargets)}
                         onOpenDocument={navigateToDocument}
                         missingFileRef={missingFileRef}
                         fileSeams={fileSeams}
@@ -1224,7 +1233,7 @@ export function BrowserDocumentPage({
                         resolveAlias={resolveAlias}
                         resolveEmbed={resolveEmbed}
                         resolveTitle={resolveTitle}
-                        linkTargets={linkTargets}
+                        linkTargets={pickerTargets}
                         threads={annotations}
                       />
                     </div>

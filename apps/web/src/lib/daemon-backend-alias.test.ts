@@ -1,13 +1,12 @@
 // @vitest-environment node
-import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
+import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
 import { describe, expect, it, vi } from 'vitest'
 
-// Regression lock for the daemon-backend source alias in vite.config.ts /
-// vitest.config.ts / vitest.browser.config.ts. The apiTransport constructor
-// seam used here exists only in packages/mcp-server's workspace `src` on
-// this branch — a stale-dist resolution of '@kamiazya/whiteboard-mcp/daemon-backend'
-// would make this test fail to observe the injected fetch, catching alias
-// drift the type system alone cannot.
+// Regression lock for source-level resolution of the daemon-client package.
+// Its wildcard `exports` points every subpath at `src/*.ts`, so there is no
+// dist to go stale — and this test keeps it that way: if the package ever
+// switches its exports to a built dist, a stale build's DaemonBackend would
+// stop observing the injected fetch here before anything subtler breaks.
 describe('daemon-backend alias resolution', () => {
   it('uses the injected apiTransport.fetch for getFile instead of the module apiFetch', async () => {
     const injectedFetch = vi.fn().mockResolvedValue(new Response(null, { status: 404 }))

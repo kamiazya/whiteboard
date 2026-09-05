@@ -1,9 +1,12 @@
 import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
-import { documentsApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
-import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
-import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
+import {
+  documentsApiUrl,
+  saveVersionResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { DaemonBackend } from '@kamiazya/whiteboard-daemon-client/daemon-backend'
+import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
+import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
@@ -49,7 +52,6 @@ import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
-import { useDirtyState } from '../hooks/useDirtyState.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -62,21 +64,17 @@ import {
   linkifyDocumentMentions,
 } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
-import {
-  daemonLinkEntries,
-  daemonLinkTargets,
-  daemonLinkTitles,
-} from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
+import { fileRefOptions, linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
+import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -429,6 +427,7 @@ export function DaemonDocumentPage({
     syncStatus,
     readOutlineSource,
     annotations,
+    threadMarks,
   } = useDocumentSync(backend, {
     ...(backendState?.contentDocumentId === undefined
       ? {}
@@ -538,6 +537,20 @@ export function DaemonDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
+    // The variation view and its message are about the DEPARTED document.
+    // `?v` is not stripped by a switch — `switchDocument` sets the path and
+    // nothing else — so the effect below re-resolves the same name against
+    // the ARRIVED document, and until it answers the previous document's
+    // preview is on screen under the new one's name. The notice is worse: no
+    // branch of that effect clears it, so `Variation «x» was not found`
+    // about one document outlives it onto the next.
+    setVariationPreview(null)
+    setVariationNotice(null)
+    // Backlinks OF this document. The fetch below nulls them itself, but only
+    // once it knows the arrived document's id — which comes from a list that
+    // may still be refreshing, so the departed document's connections would
+    // be listed under the arrived one until it does.
+    setConnections(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
@@ -559,6 +572,7 @@ export function DaemonDocumentPage({
     threads: annotations,
     documentKind,
     markdownBody,
+    threadMarks,
     canvas: canvasValue,
     write: {
       createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
@@ -570,16 +584,16 @@ export function DaemonDocumentPage({
   // `[[path]]` aliases resolve against the same list the user can see;
   // display names are retired from resolution and label the link at render
   // time instead (`resolveTitle`).
-  const resolveTitle = useMemo(() => daemonLinkTitles(controller.documents), [controller.documents])
+  const resolveTitle = useMemo(() => linkTitles(controller.documents), [controller.documents])
   const resolveAlias = useMemo(
-    () => createUniqueNameResolver(daemonLinkEntries(controller.documents)),
+    () => createUniqueNameResolver(linkEntries(controller.documents)),
     [controller.documents],
   )
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
-  const linkTargets = useMemo(
+  const pickerTargets = useMemo(
     () =>
-      daemonLinkTargets(controller.documents, {
+      linkTargets(controller.documents, {
         excludeDocumentId: controller.documents.find((d) => d.path === controller.path)?.id,
       }),
     [controller.documents, controller.path],
@@ -613,13 +627,18 @@ export function DaemonDocumentPage({
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
-      if (target?.body === undefined) return undefined
-      // Body only. A document's title is the workspace's (ADR-0009 decision
+      if (target === undefined) return undefined
+      // No title. A document's title is the workspace's (ADR-0009 decision
       // 2) and the daemon summary carries no display name, so there is none
       // to label the embed with — the facets deliberately no longer hold one.
-      return { body: target.body }
+      // The summary DOES carry the kind, which decides what the target is: a
+      // spatial document's canvas, or a markdown document's body.
+      const kind = controller.documents.find((entry) => entry.id === documentId)?.kind
+      if (kind === 'spatial')
+        return target.canvas === undefined ? undefined : { canvas: target.canvas }
+      return target.body === undefined ? undefined : { body: target.body }
     },
-    [fileAdapter],
+    [fileAdapter, controller.documents],
   )
   const resolveEmbed = useMarkdownEmbedContent({
     body: markdownBody ?? '',
@@ -649,14 +668,13 @@ export function DaemonDocumentPage({
   )
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
-  const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
   useDocumentFavicon({
     settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
-    status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
+    status: daemonFaviconStatus({ authError, syncStatus }),
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
@@ -724,59 +742,45 @@ export function DaemonDocumentPage({
     if (canvas === null) {
       throw new Error('saveVersion: no canvas')
     }
-    // Captured BEFORE the POST, not after. `exportScene` reads the live scene
-    // synchronously at call time, so starting it here binds the picture to the
-    // state this save is about to mark. Awaiting the response first meant an
-    // edit made during it was drawn onto the older point — a picture of
-    // content that version does not contain.
-    const picture = getThumbnailBlob()
-    const res = await daemonFetch(
-      `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      },
-    )
-    if (!res.ok) throw new Error(`save failed: ${res.status}`)
-    const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-    if (!parsed.success) {
-      log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
-      throw new Error('save response did not match schema')
-    }
-    // The rest is the post-save announce work — refresh signals, thumbnail
-    // attach, the identity event — run only once the guard has confirmed
-    // this save's document is still the one on screen.
-    return () => {
-      setVersionRefreshSignal((n) => n + 1)
-      // The thumbnail rides with the bookmark, as it did when the top bar
-      // owned the save. It moved here with the save itself: the bar no
-      // longer takes versions, so it no longer needs the scene exporter.
-      // Not awaited — the bookmark has landed, and its picture arriving late
-      // or not at all must not hold up the row.
-      void attachVersionThumbnail({
-        backend: versionsBackend,
-        workspaceId: canvas.workspaceId,
-        path: canvas.path,
-        versionId: parsed.data.version.id,
-        getBlob: () => picture,
-      }).then((outcome) => {
-        if (outcome === 'failed') {
-          log.error('bookmark thumbnail upload failed')
-          return
+    // The shared body pins the beats: capture BEFORE the save, announce,
+    // thumbnail riding along unawaited, re-announce once the picture lands
+    // (see buildVersionSaveBody).
+    return buildVersionSaveBody({
+      capture: getThumbnailBlob,
+      save: async (saveLabel) => {
+        const res = await daemonFetch(
+          `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: saveLabel }),
+          },
+        )
+        if (!res.ok) throw new Error(`save failed: ${res.status}`)
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        if (!parsed.success) {
+          log.error(
+            'POST /versions response did not match saveVersionResponseSchema:',
+            parsed.error,
+          )
+          throw new Error('save response did not match schema')
         }
-        // Refresh a SECOND time, for the reason the browser page does: the
-        // row landed before its picture did, so the list refreshed above
-        // holds a row that says it has none.
-        setVersionRefreshSignal((n) => n + 1)
-      })
+        return {
+          workspaceId: canvas.workspaceId,
+          path: canvas.path,
+          versionId: parsed.data.version.id,
+        }
+      },
+      backend: versionsBackend,
+      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
       // identity-scoped event useDocumentSync fires on a broadcast — otherwise
-      // HeaderSaveDot never learns this save happened and stays dirty.
-      dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
-    }
+      // nothing listening for the save (the version list, the tab) learns it happened.
+      announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
+      onThumbnailFailed: () => log.error('bookmark thumbnail upload failed'),
+    })(label)
   })
   const saveVersion = async (label: string): Promise<void> => {
     if (canvas === null) return
@@ -982,7 +986,7 @@ export function DaemonDocumentPage({
             page, this one included, so it is the one carrier now. */}
             {(!capabilities.branches || !capabilities.merge) && (
               <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-                {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
+                {/* WorkspaceTopBar owns the real History/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
                 {!capabilities.branches && <CapabilityTeaser label="Variations" />}
@@ -1082,10 +1086,13 @@ export function DaemonDocumentPage({
                     meta: coreFacets ?? { type: documentKind },
                     resolveAlias,
                     resolveTitle,
-                    linkTargets,
+                    linkTargets: pickerTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
                     threads: annotations,
+                    // Only a markdown document has a body for a mark to live
+                    // in, and this branch is the one that renders one.
+                    threadMarks,
                     selectedThreadId: commentsRail.selectedThreadId,
                     onSelectThread: commentsRail.revealThread,
                     onComposeThread: commentsRail.composeThread,
@@ -1102,16 +1109,12 @@ export function DaemonDocumentPage({
                       externalVersion={externalVersion}
                       theme={resolvedTheme}
                       // File-node reference = the target's immutable id (rename-
-                      // safe); the label shows its current path and the current
-                      // canvas is excluded. Legacy documents still carry path refs,
-                      // which resolveRefPath misses and switchDocument takes as-is.
-                      fileRefOptions={controller.documents
-                        .filter((entry) => entry.path !== canvas?.path)
-                        .map((entry) => ({
-                          file: entry.id,
-                          label: entry.path,
-                          kind: entry.kind,
-                        }))}
+                      // safe); the same rows the link picker offers (open document
+                      // excluded), so the two pickers cannot label one document two
+                      // ways — the label is the display name now, falling back to
+                      // the path. Legacy documents still carry path refs, which
+                      // resolveRefPath misses and switchDocument takes as-is.
+                      fileRefOptions={fileRefOptions(pickerTargets)}
                       onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
                       missingFileRef={missingFileRef}
                       fileSeams={fileSeams}
@@ -1130,7 +1133,7 @@ export function DaemonDocumentPage({
                       resolveAlias={resolveAlias}
                       resolveEmbed={resolveEmbed}
                       resolveTitle={resolveTitle}
-                      linkTargets={linkTargets}
+                      linkTargets={pickerTargets}
                       threads={annotations}
                     >
                       <AgentPresenceChip summary={agentActivity.summary} />

@@ -12,11 +12,11 @@ import { createRequire } from 'node:module'
  * first even for worker chunks. `require.resolve` applies Node's own
  * conditions (no `browser`), which lands on exactly that build.
  *
- * Shared by vite.config.ts and vitest.browser.config.ts for the same reason
- * mcp-source-alias.ts is: two hand-kept copies drift, and the drifted copy
- * here would ship a production worker that throws before handling a message
- * while the test suite (running on the other copy) stays green.
- * mcp-source-alias-coverage.test.ts pins that both configs spread this map.
+ * Shared by vite.config.ts and vitest.browser.config.ts because two
+ * hand-kept copies drift, and the drifted copy here would ship a production
+ * worker that throws before handling a message while the test suite (running
+ * on the other copy) stays green. worker-safe-deps-alias-coverage.test.ts
+ * pins that both configs spread this map.
  */
 export const workerSafeDepsAlias: Record<string, string> = {
   'decode-named-character-reference': createRequire(import.meta.url).resolve(

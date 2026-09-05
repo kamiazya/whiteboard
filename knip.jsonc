@@ -38,18 +38,7 @@
       "project": ["src/**/*.mjs"]
     },
     "packages/mcp-server": {
-      "entry": [
-        // browser-shared-index.ts re-exports specific members from these
-        // two — but apps/web's stricter tsconfig (noUnusedLocals)
-        // type-checks these source files wholesale via the
-        // "./browser-shared" subpath's "types" resolution, so every local
-        // declaration in them must stay `export`ed even when unused
-        // elsewhere, or apps/web's typecheck fails on "declared but never
-        // read"/"never used" for the bare (non-exported) symbol.
-        "src/shared/browser-tracing.ts",
-        "src/shared/ws-messages.ts",
-        "scripts/**/*.mjs"
-      ],
+      "entry": ["scripts/**/*.mjs"],
       "project": ["src/**/*.ts", "scripts/**/*.mjs"],
       "ignoreIssues": {
         // AUTH_SCOPES (the literal tuple, source of the AuthScope union type)

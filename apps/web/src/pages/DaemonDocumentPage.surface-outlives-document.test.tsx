@@ -16,11 +16,11 @@
  * `onOpenFileRef` is how following a file-node reference switches document.
  */
 
-import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
@@ -36,8 +36,8 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 
-function render(ui: ReactElement) {
-  return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, {
+function render(ui: ReactElement, search = '') {
+  return rtlRender(<MemoryRouter initialEntries={[`/${search}`]}>{ui}</MemoryRouter>, {
     container: document.body,
   })
 }
@@ -223,5 +223,42 @@ describe('the body surface does not outlive its document (daemon)', () => {
       screen.queryByText('Bookmark saved'),
       "a 'saved' badge earned on the departed document is still lit under the arrived one",
     ).toBeNull()
+  })
+
+  it('a variation notice about the document being left does not follow the switch', async () => {
+    // `?v` is not stripped by a switch — `switchDocument` sets the path and
+    // nothing else — and no branch of the variation effect clears the
+    // NOTICE. So `Variation «nope» was not found`, which is a statement
+    // about doc-a, was still on screen over doc-b.
+    //
+    // A message naming a document the reader has left is the same class as
+    // the dialog above, one surface over: it reads as being about what is in
+    // front of them.
+    await act(async () => {
+      render(
+        <DaemonDocumentPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          path="doc-a"
+          createBackend={() => new FakeBackend()}
+        />,
+        '?v=nope',
+      )
+    })
+    await waitFor(() => expect(openFileRef).not.toBeNull())
+    await waitFor(
+      () => expect(screen.queryByTestId('variation-preview-notice')).not.toBeNull(),
+      // Without the notice on screen the switch below proves nothing, so
+      // this wait is the case's premise rather than part of its assertion.
+      { timeout: 3000 },
+    )
+
+    await act(async () => {
+      openFileRef?.('id-b')
+    })
+
+    await waitFor(() => expect(screen.queryByTestId('variation-preview-notice')).toBeNull(), {
+      timeout: 2000,
+    })
   })
 })

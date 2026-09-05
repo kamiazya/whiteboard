@@ -1,5 +1,5 @@
+import { clientTextMessageSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { describe, expect, it } from 'vitest'
-import { clientTextMessageSchema } from '../../shared/ws-messages.js'
 import {
   hasRequiredScopes,
   requiredScopesForClientTextMessage,

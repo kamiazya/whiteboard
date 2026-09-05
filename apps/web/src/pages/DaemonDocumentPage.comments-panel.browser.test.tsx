@@ -10,11 +10,12 @@
  * SpatialEditor is mocked — the subject is the document-level surface, not
  * the canvas.
  */
-import { writeCommentThread } from '@kamiazya/whiteboard-loro-adapter'
+
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
-} from '@kamiazya/whiteboard-mcp/browser-contract'
+} from '@kamiazya/whiteboard-daemon-client/document-backend-contract'
+import { writeCommentThread } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'

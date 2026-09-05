@@ -2,8 +2,8 @@ import { createPublicKey, verify as cryptoVerify } from 'node:crypto'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { runtimeVerifyResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { runtimeVerifyResponseSchema } from '../../shared/api-contracts/runtime.js'
 
 // Hermetic harness — these tests must NEVER touch the developer's real
 // data directory. Stub `../config.js` (DATA_DIR) and the helpers behind

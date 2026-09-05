@@ -90,7 +90,7 @@ export function useDaemonConnection(): DaemonConnectionResult {
 
 // Test-only: clears the module-level cache so each test can seed its own
 // hash and observe a fresh computation. Pair with resetTokenStoreForTests()
-// from '@kamiazya/whiteboard-mcp/api-client' so token-store state doesn't
+// from '@kamiazya/whiteboard-daemon-client/api-client' so token-store state doesn't
 // bleed across tests either.
 export function resetDaemonConnectionForTests(): void {
   cached = null

@@ -26,7 +26,6 @@
 //   it never mutates daemon data and never widens any other origin's
 //   access, so a forged cross-site POST yields the attacker nothing.
 import { createHash } from 'node:crypto'
-import { Hono } from 'hono'
 import {
   type CreateGrantResponse,
   createGrantRequestSchema,
@@ -35,7 +34,8 @@ import {
   type PairingTokenResponse,
   pairingTokenRequestSchema,
   pairingTokenResponseSchema,
-} from '../../shared/api-contracts/pairing.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing'
+import { Hono } from 'hono'
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'

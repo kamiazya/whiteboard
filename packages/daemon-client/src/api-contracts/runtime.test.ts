@@ -11,6 +11,7 @@ import {
   daemonPingResponseSchema,
   type RuntimeVerifyResponse,
   runtimeStatusResponseSchema,
+  runtimeVerifyRequestSchema,
   runtimeVerifyResponseSchema,
 } from './runtime.js'
 
@@ -84,14 +85,15 @@ describe('runtimeVerifyResponseSchema', () => {
 })
 
 // The barrel is a published npm subpath (0.0.x semver liability), so widening
-// it is a deliberate decision — see index.ts's own comment. This guard makes
-// the other deliberate decision executable too: runtimeVerifyRequestSchema's
-// refine touches Buffer (Node-only) and must never reach a browser bundle
-// through the barrel, only through its module path (routes/runtime.ts's
-// import). The positive-control assertion (…DOES contain
-// runtimeVerifyResponseSchema) keeps the negative assertion from passing
-// vacuously if the barrel export is ever renamed away.
-describe('api-contracts barrel excludes the Buffer-refining request schema', () => {
+// it is a deliberate decision — see index.ts's own comment. The request
+// schema stays off it because only the daemon parses verify REQUESTS; a
+// browser needs the response schema alone. (Historically this was also a
+// Buffer fence — the refine used Buffer.from and would have thrown in a
+// browser — but the length check is text-arithmetic now, so the exclusion
+// is purely a surface decision.) The positive-control assertion (…DOES
+// contain runtimeVerifyResponseSchema) keeps the negative assertion from
+// passing vacuously if the barrel export is ever renamed away.
+describe('api-contracts barrel excludes the daemon-only request schema', () => {
   it('exports runtimeVerifyResponseSchema but not runtimeVerifyRequestSchema', () => {
     const keys = Object.keys(barrel)
     expect(keys).toContain('runtimeVerifyResponseSchema')
@@ -125,5 +127,22 @@ describe('runtimeStatusResponseSchema app.ui enum (R5 legacy retirement)', () =>
         baseStatus({ served: true, buildPresent: false, ui: 'legacy' }),
       ),
     ).toThrow()
+  })
+})
+
+describe('runtimeVerifyRequestSchema nonce length', () => {
+  // The bound is computed from the base64url TEXT (no Buffer/atob), so the
+  // schema parses identically in the browser and the daemon. Unpadded
+  // base64url: 22 chars -> 16 bytes, 43 -> 32, 20 -> 15, 44 -> 33; a
+  // length % 4 === 1 string is never valid base64url at all.
+  it.each([
+    [22, true],
+    [43, true],
+    [20, false],
+    [44, false],
+    [21, false],
+  ])('a %i-char nonce is accepted=%s', (chars, ok) => {
+    const parsed = runtimeVerifyRequestSchema.safeParse({ nonce: 'A'.repeat(chars as number) })
+    expect(parsed.success).toBe(ok)
   })
 })

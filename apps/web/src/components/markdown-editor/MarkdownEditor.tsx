@@ -27,7 +27,7 @@ import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
 import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
-import type { TextAnchor } from '../../lib/text-anchor.js'
+import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
@@ -125,9 +125,9 @@ export interface MarkdownEditorProps {
    */
   onOpenDocument?: (documentId: string) => void
   /**
-   * Resolves `![[embed]]` targets' parsed bodies so block embeds render
-   * inline (canvas-render's layout seam; the host pre-fetches, see
-   * useMarkdownEmbedContent).
+   * Resolves `![[embed]]` targets — a note's parsed body, or a canvas — so
+   * block embeds render inline (canvas-render's layout seam; the host
+   * pre-fetches, see useMarkdownEmbedContent).
    */
   resolveEmbed?: MdastLayoutOptions['resolveEmbed']
   /**
@@ -153,6 +153,17 @@ export interface MarkdownEditorProps {
    * which is what that surface is for.
    */
   threads?: readonly CommentThread[]
+  /**
+   * Where the CRDT still holds each passage, by thread id.
+   *
+   * The live half of a text anchor: a mark belongs to the characters it
+   * covers, so it followed every edit that moved them — including one merged
+   * from another peer, which the quote and its stored offsets can only
+   * approximate. Absent for a host with none to give (a document read out of
+   * a markdown file, one written before marks existed), which the projection
+   * reads as "ask the quote".
+   */
+  threadMarks?: ReadonlyMap<string, LivePassage>
   /** The conversation the host currently has open; scrolled to and lit up. */
   selectedThreadId?: string | null
   /** A gutter marker was pressed. */
@@ -171,6 +182,8 @@ export interface MarkdownEditorProps {
 
 /** Stable identity, so the projection effect below does not fire per render. */
 const NO_THREADS: readonly CommentThread[] = []
+/** Same purpose as NO_THREADS, for the passages beside them. */
+const NO_MARKS: ReadonlyMap<string, LivePassage> = new Map()
 
 const DEFAULT_MAX_WIDTH = 720
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
@@ -319,6 +332,7 @@ export function MarkdownEditor({
   fragmentLoaders,
   sourceExtensions,
   threads,
+  threadMarks,
   selectedThreadId = null,
   onSelectThread,
   onComposeThread,
@@ -429,11 +443,16 @@ export function MarkdownEditor({
   // the view is created once per mount (see SourcePane), so an extension
   // array that changed with the thread list would never reach it.
   const projectedThreads = threads ?? NO_THREADS
+  const projectedMarks = threadMarks ?? NO_MARKS
   useEffect(() => {
     sourceApiRef.current?.applyEffects([
-      setAnnotationProjection.of({ threads: projectedThreads, selectedThreadId }),
+      setAnnotationProjection.of({
+        threads: projectedThreads,
+        selectedThreadId,
+        marks: projectedMarks,
+      }),
     ])
-  }, [projectedThreads, selectedThreadId])
+  }, [projectedThreads, projectedMarks, selectedThreadId])
 
   // Scroll to the passage when the SELECTION changes, and only then. `value`
   // is a dependency because the passage's offset is derived from it, but a
@@ -444,7 +463,7 @@ export function MarkdownEditor({
     const previous = revealedThreadRef.current
     revealedThreadRef.current = selectedThreadId
     if (selectedThreadId === null || selectedThreadId === previous) return
-    const placed = placeThreads(value, projectedThreads).find(
+    const placed = placeThreads(value, projectedThreads, projectedMarks).find(
       (one) => one.threadId === selectedThreadId,
     )
     // Nothing to scroll to: the passage is gone. The rail still opens the
@@ -452,7 +471,7 @@ export function MarkdownEditor({
     if (placed === undefined) return
     const line = value.slice(0, placed.from).split('\n').length
     sourceApiRef.current?.revealLine(line)
-  }, [selectedThreadId, projectedThreads, value])
+  }, [selectedThreadId, projectedThreads, projectedMarks, value])
   const [catalog, setCatalog] = useState<{
     x: number
     y: number

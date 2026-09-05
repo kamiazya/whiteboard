@@ -17,7 +17,7 @@ const FULL_AT = '2026-08-30T01:00:02.000Z'
 
 function mountChip(): HTMLElement {
   const chip = document.createElement('div')
-  chip.setAttribute('data-testid', 'save-status-chip')
+  chip.setAttribute('data-testid', 'persistence-state')
   document.body.append(chip)
   return chip
 }
@@ -33,7 +33,7 @@ afterEach(() => {
   // root, but a raw DOM wipe is the teardown that leaves roots mounted on
   // detached nodes elsewhere in this repo, and the pattern should not be
   // copied out of here.
-  for (const el of document.querySelectorAll('[data-testid="save-status-chip"]')) el.remove()
+  for (const el of document.querySelectorAll('[data-testid="persistence-state"]')) el.remove()
 })
 
 describe('waitForMarkdownSaved', () => {

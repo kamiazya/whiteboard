@@ -1,4 +1,3 @@
-import { Hono } from 'hono'
 import {
   type BranchStatsResponse,
   type CreateBranchResponse,
@@ -11,9 +10,10 @@ import {
   renameBranchRequestSchema,
   type SetHeadResponse,
   setHeadRequestSchema,
-} from '../../shared/api-contracts/branches.js'
-import type { VersionDocumentResponse } from '../../shared/api-contracts/document.js'
-import type { ApiErrorBody } from '../../shared/api-contracts/errors.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
+import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
+import { Hono } from 'hono'
 import type { PerformMergeHookResult } from '../store/branch-merge.js'
 import {
   BranchConflictError,

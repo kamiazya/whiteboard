@@ -11,6 +11,7 @@ import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { PAN_MARGIN_PX } from '../../lib/spatial/viewport.js'
+import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { DESKTOP_BAR_HEIGHT_PX, TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/verb-bar-layout.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -53,10 +54,6 @@ function Host({ start, height = 600 }: { start: SpatialCanvas; height?: number }
       />
     </div>
   )
-}
-
-function rootOf(container: HTMLElement): HTMLElement {
-  return container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
 }
 
 function transformOf(container: HTMLElement): string {

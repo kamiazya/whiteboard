@@ -26,9 +26,9 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { describe, expect, it } from 'vitest'
-import { daemonLinkEntries } from './daemon-link-entries.js'
+import { linkEntries } from './link-entries.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
@@ -41,7 +41,7 @@ const listed = (path: string, displayName: string): DocumentSummary[] => [
 function resolvedCount(body: string, docs: readonly DocumentSummary[]): number {
   const root = resolveReferences(
     parseMarkdownBody(body),
-    createUniqueNameResolver(daemonLinkEntries(docs)),
+    createUniqueNameResolver(linkEntries(docs)),
   )
   let found = 0
   const walk = (node: { type: string; children?: unknown[] }): void => {
