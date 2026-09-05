@@ -98,20 +98,18 @@ describe('resolveRectColor', () => {
 })
 
 describe('status mappings', () => {
-  it('daemon: dirty beats saved, transport beats dirty, auth beats all', () => {
-    const base = { authError: false, syncStatus: 'connected' as const, isDirty: false }
-    expect(daemonFaviconStatus(base)).toBe('saved')
-    expect(daemonFaviconStatus({ ...base, isDirty: true })).toBe('unsaved')
-    expect(daemonFaviconStatus({ ...base, syncStatus: 'reconnecting', isDirty: true })).toBe(
-      'syncing',
-    )
+  // A healthy keeper is QUIET — no dot — for the same reason the shell mark
+  // draws none: the routine state asks nothing of a tab strip.
+  it('daemon: quiet while synced, transport trouble shows, auth beats all', () => {
+    const base = { authError: false, syncStatus: 'connected' as const }
+    expect(daemonFaviconStatus(base)).toBe('quiet')
+    expect(daemonFaviconStatus({ ...base, syncStatus: 'reconnecting' })).toBe('syncing')
     expect(daemonFaviconStatus({ ...base, authError: true })).toBe('offline')
   })
 
-  it('browser: persistence kinds map one-to-one', () => {
-    expect(browserFaviconStatus('saved')).toBe('saved')
-    expect(browserFaviconStatus('saving')).toBe('syncing')
-    expect(browserFaviconStatus('pending')).toBe('unsaved')
-    expect(browserFaviconStatus('degraded')).toBe('offline')
+  it('browser: the storage judgement maps one-to-one, ok being quiet', () => {
+    expect(browserFaviconStatus('ok')).toBe('quiet')
+    expect(browserFaviconStatus('stuck')).toBe('unsaved')
+    expect(browserFaviconStatus('failed')).toBe('offline')
   })
 })

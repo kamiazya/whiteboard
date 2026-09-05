@@ -206,6 +206,28 @@ describe('useDocumentSync', () => {
     expect(result.current.backendError).toBeNull()
   })
 
+  // The page judges "is my work safe" from facts the session reports, not
+  // from the debounce: an edit is unsaved from the instant it is published,
+  // and saved only once the write behind it has landed in the store.
+  it('exposes the session persistence facts, pending on publish and saved on landing', async () => {
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+    await hydrate(backend)
+    expect(result.current.persistence).toEqual({ kind: 'saved', lastSavedAt: null })
+
+    const move: EditorCommand = { kind: 'move-node', id: 'n1', x: 5, y: 5 }
+    act(() => {
+      result.current.onChange(applyCommand(emptyCanvas(), move), move)
+    })
+    expect(result.current.persistence.kind).toBe('pending')
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(400)
+    })
+    expect(result.current.persistence.kind).toBe('saved')
+    expect(result.current.persistence.lastSavedAt).not.toBeNull()
+  })
+
   it('sets syncStatus to "error" when onError fires', () => {
     const backend = makeFakeBackend()
     const { result } = renderHook(() => useDocumentSync(backend))

@@ -10,6 +10,12 @@ export interface ShellConnection {
   readonly state: ConnectionState
   /** Named in the synced popover, and the target of repair/disconnect. */
   readonly daemonBaseUrl?: string
+  /**
+   * browser keeper: when the open document's writes last landed, ISO-8601.
+   * The popover's answer to "is it saved" — the mark itself draws nothing
+   * for a write that landed.
+   */
+  readonly lastWrittenAt?: string | null
 }
 
 /**

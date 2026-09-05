@@ -456,9 +456,12 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy()
-    // the raw "saved" enum token must not leak to the UI
+    // No save state is drawn for a document whose writes land: neither a
+    // labelled control nor the raw enum token. The fact is published hidden,
+    // for waits that need a landed write to anchor on.
+    expect(screen.queryByRole('button', { name: 'Saved' })).toBeNull()
     expect(screen.queryByText('saved')).toBeNull()
+    expect(screen.getByTestId('persistence-state').getAttribute('data-save-state')).toBe('saved')
   })
 
   it('the canvas row carries state, settings and operations in ONE row (no separate strip)', async () => {
@@ -476,8 +479,12 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    // Save state is the color-only dot, named for assistive tech.
-    expect(screen.getByTestId('save-status-chip').getAttribute('aria-label')).toBe('Saved')
+    // No save state in the row: the shell mark answers for the keeper, and
+    // only on a condition. The facts stay published for tests, hidden.
+    expect(screen.queryByTestId('save-status-chip')).toBeNull()
+    const fact = screen.getByTestId('persistence-state')
+    expect(fact.hidden).toBe(true)
+    expect(fact.getAttribute('data-save-state')).toBe('saved')
     // A spatial canvas offers its display settings from the same row.
     expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy()
     // The whole cluster lives inside the canvas row (DocumentProperties) —
@@ -490,9 +497,6 @@ describe('BrowserDocumentPage', () => {
     const row = title.closest('header') as HTMLElement
     expect(row).toBeTruthy()
     expect(row.contains(screen.getByRole('button', { name: 'Back to documents' }))).toBe(true)
-    const chip = screen.getByTestId('save-status-chip')
-    expect(row.contains(chip)).toBe(true)
-    expect(chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     const kebab = await screen.findByRole('button', { name: 'More actions' })
     expect(row.contains(kebab)).toBe(true)
     // Duplicate/Delete are menu items, not always-visible buttons.
@@ -503,7 +507,7 @@ describe('BrowserDocumentPage', () => {
     expect(await documentOpsItem(/^delete$/i)).toBeTruthy()
   })
 
-  it('surfaces the degraded save message in the header when a save fails', async () => {
+  it('publishes a healthy keeper to the shell until a write actually fails', async () => {
     const base = new LocalStoreDouble()
     await base.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
     await base.save(snap)
@@ -521,9 +525,12 @@ describe('BrowserDocumentPage', () => {
       )
     })
     // A real save-failure round trip through SpatialEditor's onChange needs a
-    // pointer gesture this suite does not drive; verify the persistence
-    // state at least starts as Saved rather than immediately degraded.
-    expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy()
+    // pointer gesture this suite does not drive; verify the judgement at least
+    // starts as a keeping browser rather than immediately failed. The
+    // failure path itself is `useStorageHealth.test.ts` (degraded -> failed)
+    // over facts `document-sync-session.test.ts` pins (a refused push ->
+    // degraded).
+    expect(getShellConnection()?.state).toEqual({ keeper: 'browser', storage: 'ok' })
   })
 
   it('offers a Start fresh action in the cleanup-completed view', async () => {
@@ -828,7 +835,10 @@ describe('BrowserDocumentPage', () => {
       // App-mounted shell draws it (and hosts the CTA in its popover) from
       // the state this page publishes.
       expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
-      expect(getShellConnection()).toEqual({ state: { keeper: 'browser' } })
+      expect(getShellConnection()).toEqual({
+        state: { keeper: 'browser', storage: 'ok' },
+        lastWrittenAt: null,
+      })
 
       cleanup()
       expect(getShellConnection()).toBeNull()

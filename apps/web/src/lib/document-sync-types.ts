@@ -12,7 +12,7 @@ import type {
 // never lib -> hooks.
 
 // Dispatched on window as CustomEvent<DirtyEventDetail> by
-// dispatchIdentityEvent below; consumed by hooks/useDirtyState.ts.
+// dispatchIdentityEvent below; consumed through hooks/use-identity-event.ts.
 export interface DirtyEventDetail {
   workspaceId: string
   path: string
@@ -28,10 +28,9 @@ export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 
 // Named constants for the window-event contract dispatched by
 // dispatchIdentityEvent below. The literal values are pinned — several other
-// modules (useDirtyState, HeaderBranchBanner, useBranches,
-// merge-committed-event) still match on the raw string and are out of this
-// slice's scope, so changing the constant's NAME here must never change its
-// VALUE.
+// modules (HeaderBranchBanner, useBranches, merge-committed-event) still
+// match on the raw string and are out of this slice's scope, so changing the
+// constant's NAME here must never change its VALUE.
 export const DOCUMENT_SYNC_CHANGED_EVENT = 'whiteboard:doc_changed'
 export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'whiteboard:wb_version_saved'
 
@@ -56,8 +55,8 @@ export interface UseDocumentSyncOptions {
   // transition on a WS auth failure (close 1008), so a daemon-backed page
   // can surface a dedicated banner instead of the generic error state.
   onAuthError?: () => void
-  // When set, drives the window-event contract that useDirtyState/HeaderSaveDot
-  // listen for: 'whiteboard:doc_changed' on local/remote doc edits and
+  // When set, drives the window-event contract the version surfaces listen
+  // for: 'whiteboard:doc_changed' on local/remote doc edits and
   // 'whiteboard:wb_version_saved' on a version_created broadcast. Read via
   // optionsRef (never in the connect effect's dep array) so passing a fresh
   // identity object every render never forces a reconnect. Only dispatched

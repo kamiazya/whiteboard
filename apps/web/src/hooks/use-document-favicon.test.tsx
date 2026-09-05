@@ -60,7 +60,7 @@ describe('useDocumentFavicon', () => {
         kind: 'markdown',
         revision: null,
         readSource: () => null,
-        status: 'saved',
+        status: 'quiet',
       }),
     )
     expect(useFaviconMock).toHaveBeenCalledWith(expect.objectContaining({ style: 'minimap' }))
@@ -73,7 +73,7 @@ describe('useDocumentFavicon', () => {
       kind: 'spatial' as const,
       revision: 'r1' as unknown,
       readSource: () => null,
-      status: 'saved' as const,
+      status: 'quiet' as const,
     }
     const { rerender } = renderHook((p: typeof props) => useDocumentFavicon(p), {
       initialProps: props,

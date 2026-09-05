@@ -6,9 +6,12 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 
-const ISOLATED_DB = claimIsolatedWhiteboardDb('browserdocumentpage-rename')
+// The claim seeds the db-name seam every opener in this page resolves;
+// nothing here needs the name itself now that clearWhiteboardDb reads it.
+claimIsolatedWhiteboardDb('browserdocumentpage-rename')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
@@ -20,14 +23,6 @@ function render(ui: ReactElement) {
       <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
     </div>,
   )
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(ISOLATED_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 async function renderLoaded(): Promise<void> {
@@ -55,9 +50,25 @@ async function titleField(): Promise<HTMLElement> {
   return all[all.length - 1]!
 }
 
+/**
+ * The rename's write has LANDED, from the persistence facts the page
+ * publishes hidden — the row itself draws no save state. `saved` alone is
+ * true of a document never written, so the timestamp is what proves it.
+ */
+async function waitForWriteLanded(): Promise<void> {
+  await waitFor(
+    () => {
+      const fact = screen.getByTestId('persistence-state')
+      expect(fact.getAttribute('data-save-state')).toBe('saved')
+      expect(fact.getAttribute('data-last-saved-at')).toBeTruthy()
+    },
+    { timeout: 5000 },
+  )
+}
+
 describe('BrowserDocumentPage rename (real IndexedDB)', () => {
   beforeEach(async () => {
-    await clearDb()
+    await clearWhiteboardDb()
   })
 
   afterEach(() => {
@@ -74,13 +85,11 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     expect(document.activeElement).toBe(titleInput)
 
     // The plain Enter is "I am done": the field blurs, the name stands, and
-    // the save chip is the receipt.
+    // the landed write is the receipt.
     fireEvent.keyDown(titleInput, { key: 'Enter' })
     expect(document.activeElement).not.toBe(titleInput)
     await waitForTitle('\u4f01\u753b')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
   })
 
   it('reload: edited title survives an unmount + fresh-store remount', async () => {
@@ -90,9 +99,7 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Reloaded title' } })
     titleInput.blur()
     await waitForTitle('Reloaded title')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)
@@ -166,18 +173,14 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     fireEvent.change(titleInput, { target: { value: 'Named canvas' } })
     titleInput.blur()
     await waitForTitle('Named canvas')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     const titleInput2 = await titleField()
     titleInput2.focus()
     fireEvent.change(titleInput2, { target: { value: '   ' } })
     titleInput2.blur()
     await waitForTitle('untitled')
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
-      timeout: 5000,
-    })
+    await waitForWriteLanded()
 
     cleanup()
     render(<BrowserDocumentPage store={new IdbDocumentIndex()} />)

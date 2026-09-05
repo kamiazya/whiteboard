@@ -2,7 +2,9 @@
 
 An index, not an explanation. Every entry's reasoning, measurement and fix
 lives in `.claude/rules/integrator-flow.md` (always loaded) — this file exists
-so a symptom string can be recognised before it is investigated.
+so a symptom string can be recognised before it is investigated. One entry
+points elsewhere, and says so in the row: a test-infrastructure defect with no
+PR attached belongs beside the technique, not in the CI-flakes section.
 
 Contents: browser suites · property tests · environment · order effects.
 
@@ -19,6 +21,7 @@ Contents: browser suites · property tests · environment · order effects.
 | an assertion reads an empty value that was definitely typed | The element was remounted and the held reference is detached. Query inside the assertion |
 | a test times out only under the full suite | An `await import()` of a heavy module inside a test body, or a `React.lazy` page racing a `findBy*` (testing-library's budget is 1000ms). Hoist the import |
 | an assertion on a global counter or a "most recent" handle | Another test's `SharedWorker` is still alive. Scope every assertion to a handle the test itself minted |
+| a page reports `This canvas's data could not be read.` as the lone failure | Not the page. A cleanup resolved while its `deleteDatabase` was still `blocked`, so this file started on the previous one's rows. Went through `rename` and twice through `delete-confirm` reading as a missing kebab menu. Fix and measurements: `testing-techniques/resources/isolation-and-state.md` |
 
 ## Property tests
 

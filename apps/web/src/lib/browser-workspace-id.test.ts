@@ -4,6 +4,7 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { BROWSER_DEFAULT_SEGMENT, setWhiteboardDbNameForTests } from './browser-idb.js'
 import {
   browserWorkspaceHandleOrNull,
@@ -25,23 +26,15 @@ const DB_NAME = 'whiteboard-workspace-id-test'
 const EARLIER_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const LATER_ULID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
-
 describe('browser workspace id accessor', () => {
   beforeEach(async () => {
     resetBrowserWorkspaceIdForTests()
     setWhiteboardDbNameForTests(DB_NAME)
-    await clearDb()
+    await clearNamedDb(DB_NAME)
   })
   afterEach(async () => {
     resetBrowserWorkspaceIdForTests()
-    await clearDb()
+    await clearNamedDb(DB_NAME)
   })
 
   it('throws an actionable message before resolveBrowserWorkspaceId() has completed', () => {

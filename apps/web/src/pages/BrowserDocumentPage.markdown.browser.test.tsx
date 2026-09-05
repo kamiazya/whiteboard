@@ -70,7 +70,8 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 /**
  * Waits until a debounced save has actually LANDED for this document.
  *
- * Not `getByRole('button', { name: 'Saved' })`. A document that has never
+ * From the hidden persistence fact the page publishes for tests — the row
+ * itself draws no save state any more. A document that has never
  * been written is already `Saved` — correct for a reader, and useless as
  * proof that a write completed. That wait matched the state the page was
  * already in, so these tests navigated away with the write still pending and
@@ -84,7 +85,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 async function waitForSaved(): Promise<void> {
   await waitFor(
     () => {
-      const chip = document.querySelector('[data-testid="save-status-chip"]')
+      const chip = document.querySelector('[data-testid="persistence-state"]')
       expect(chip?.getAttribute('data-save-state')).toBe('saved')
       expect(chip?.getAttribute('data-last-saved-at')).toBeTruthy()
     },
@@ -257,7 +258,9 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // Edge routing has no meaning for a document with no spatial scene —
     // the gear must not carry over; the rest of the canvas row does.
     expect(document.querySelector('[data-testid="canvas-settings-button"]')).toBeNull()
-    expect(document.querySelector('[data-testid="save-status-chip"]')).toBeTruthy()
+    // The rest of the row does carry over: the hidden persistence fact rides
+    // the same slot the spatial row uses.
+    expect(document.querySelector('[data-testid="persistence-state"]')).toBeTruthy()
   })
 
   it("the title survives a remount and is the document's one name", async () => {

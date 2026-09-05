@@ -11,6 +11,7 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
@@ -21,14 +22,6 @@ import {
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = 'whiteboard-summary-test'
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
-}
 
 async function seedWorkspace(): Promise<IdbDocumentIndex> {
   // This file's DB is claimed by literal name rather than through
@@ -48,8 +41,8 @@ async function writeContent(documentId: string): Promise<void> {
 }
 
 describe('local document summary', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(DB_NAME))
+  afterEach(() => clearNamedDb(DB_NAME))
 
   it('carries the index entry plus the time its content was last written', async () => {
     const index = await seedWorkspace()

@@ -11,6 +11,7 @@ import type { DocRef } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, docRefKey } from '@kamiazya/whiteboard-ports'
 import { describeDocumentStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import { SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE } from './browser-idb.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 
@@ -19,25 +20,13 @@ import { IdbDocumentStore } from './idb-document-store.js'
 // is mid-fixture, and the failure would land there.
 const DB_NAME = 'whiteboard-document-store-conformance'
 
-async function deleteDb(): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
-    // No `onblocked` resolve: `blocked` means the delete has NOT happened yet,
-    // so resolving there starts the next case against the previous one's rows.
-    // `IdbDocumentStore` closes its connection in a `finally`, so nothing this
-    // suite opens outlives its own call.
-    req.onsuccess = () => resolve()
-    req.onerror = () => reject(req.error)
-  })
-}
-
 describe('IdbDocumentStore', () => {
   describeDocumentStoreConformance(async () => {
-    await deleteDb()
+    await clearNamedDb(DB_NAME)
     const store = new IdbDocumentStore(DB_NAME)
     return {
       store,
-      dispose: deleteDb,
+      dispose: () => clearNamedDb(DB_NAME),
       writeUnreadableRecord: (docRef) => store.writeUnreadableRecord(docRef),
     }
   })
@@ -114,8 +103,8 @@ describe('IdbDocumentStore layout', () => {
     })
   }
 
-  beforeEach(deleteDb)
-  afterEach(deleteDb)
+  beforeEach(() => clearNamedDb(DB_NAME))
+  afterEach(() => clearNamedDb(DB_NAME))
 
   it('keeps snapshot bytes out of the record the delta log lives in', async () => {
     const store = new IdbDocumentStore(DB_NAME)

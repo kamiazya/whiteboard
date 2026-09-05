@@ -1,54 +1,45 @@
 /**
- * The signature mark, carrying the live session's state.
+ * The signature mark, carrying the state of whoever keeps the open document.
  *
- * The shell used to answer "is my work safe" with a labelled chip on the
- * right while the mark sat on the left meaning nothing but "home". Two
- * carriers, and the row had no subject. This is the merge: the mark is the
- * one place the shell speaks about the workspace, and the chip is gone.
+ * It says nothing while the keeper is keeping. A browser whose writes land
+ * and a daemon whose session is up draw the plain stroke and no cap — the
+ * routine state asks nothing of the person looking at it, and a mark that
+ * lit up for it would be lit up always. What it draws is a CONDITION, each
+ * one something a person could act on:
  *
- * The state vocabulary is deliberately borrowed rather than invented:
+ * - browser `stuck` — an edit has stayed unsaved past `STUCK_AFTER_MS`:
+ *   filled amber cap.
+ * - daemon `reconnecting` — the session dropped and is retrying: filled
+ *   amber cap over `wb-loader`'s travelling dash, the loader mark's own
+ *   gesture on this exact path (BRAND.md reads it as "the pen is moving").
+ * - browser `failed` / daemon `sync-off` — the keeper is NOT keeping: the
+ *   stroke sits broken and dimmed (`wb-mark-broken`). The daemon's cap is
+ *   filled and the browser's is hollow, so the two read apart when both
+ *   carry amber and the mark has no word to separate them. The word moves
+ *   to the accessible name and the popover.
  *
- * - The TONE comes from `StateDot`'s closed set, so the mark cannot drift
- *   from the save chip and the version dot the way three hand-copied colour
- *   literals once did.
- * - `reconnecting` reuses `wb-loader` — the loader mark's travelling dash,
- *   on this exact same path (`loader-mark.svg` normalises it to 120 units
- *   for the same dash math). BRAND.md already reads that gesture as "the pen
- *   is moving, work is happening", which is what reconnecting means.
- *
- * That reuse is load-bearing, not tidiness: `reconnecting` and `sync-off`
- * are BOTH attention-toned in StateDot's set. The chip separated them with
- * its word; a mark has no word, so motion is what tells them apart — one
- * travels, one sits broken and dimmed.
+ * Amber is the only tone left in chrome (DESIGN.md): "safe" is the absence
+ * of a cap, not a colour, and a hollow ring rather than a second hue is what
+ * separates "not keeping" from "not yet".
  */
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import type { ConnectionState, SessionHealth } from '../../lib/connection-state.js'
-import type { StateDotTone } from '../StateDot.js'
+import {
+  type ConnectionState,
+  isNotKeeping,
+  type SessionHealth,
+} from '../../lib/connection-state.js'
+import type { StorageHealth } from '../../lib/storage-health.js'
 
 /** The signature path, shared verbatim with `home-mark.svg` and `loader-mark.svg`. */
 const SIGNATURE = 'M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25'
 
 /**
- * The signature's own end point, in the 88×56 view box. The state dot rides
- * it rather than floating beside the mark: the squiggle already ends in a
- * gesture, so the dot reads as its punctuation instead of as a second object
- * competing with it in a 40px row.
+ * The signature's own end point, in the 88×56 view box. The cap rides
+ * there, so the mark reads as one stroke ending in a point rather than a
+ * logo with a badge on it.
  */
 const TERMINUS = { x: 68, y: 25 } as const
-
-// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
-const SESSION_TONE: Record<SessionHealth, StateDotTone> = {
-  synced: 'safe',
-  reconnecting: 'attention',
-  'sync-off': 'attention',
-}
-
-const TONE_FILL: Record<StateDotTone, string> = {
-  safe: 'fill-emerald-500',
-  attention: 'fill-amber-500',
-  neutral: 'fill-muted-foreground/60',
-}
 
 /**
  * How long the recovery gesture holds before the mark returns to rest.
@@ -58,26 +49,51 @@ const TONE_FILL: Record<StateDotTone, string> = {
  */
 const RECOVERED_MS = 900
 
+type CapShape = 'filled' | 'ring'
+
+/**
+ * What the cap draws for a state, or nothing. One table for both keepers,
+ * so the vocabulary cannot drift between them the way three hand-copied
+ * colour literals once did.
+ */
+function capOf(state: ConnectionState): CapShape | undefined {
+  if (state.keeper === 'browser') {
+    const by: Record<StorageHealth, CapShape | undefined> = {
+      ok: undefined,
+      stuck: 'filled',
+      failed: 'ring',
+    }
+    return by[state.storage]
+  }
+  const by: Record<SessionHealth, CapShape | undefined> = {
+    synced: undefined,
+    reconnecting: 'filled',
+    'sync-off': 'filled',
+  }
+  return by[state.session]
+}
+
 export interface ShellMarkProps {
   /**
-   * Omitted when no page holds a live session. The mark then draws plain,
-   * with no dot at all — the shell's standing rule is that it states a
+   * Omitted when no page holds a live document. The mark then draws plain,
+   * with no cap at all — the shell's standing rule is that it states a
    * connection only while a page holds one, and never latches the last.
    */
   readonly state?: ConnectionState
   readonly className?: string
 }
 
-function toneOf(state: ConnectionState): StateDotTone {
-  return state.keeper === 'browser' ? 'neutral' : SESSION_TONE[state.session]
-}
-
 function sessionOf(state: ConnectionState | undefined): SessionHealth | undefined {
   return state !== undefined && state.keeper === 'daemon' ? state.session : undefined
 }
 
+function storageOf(state: ConnectionState | undefined): StorageHealth | undefined {
+  return state !== undefined && state.keeper === 'browser' ? state.storage : undefined
+}
+
 export function ShellMark({ state, className }: ShellMarkProps) {
   const session = sessionOf(state)
+  const storage = storageOf(state)
   const [recovered, setRecovered] = useState(false)
   // The PREVIOUS session, so the gesture keys on a transition rather than on
   // a value. Keyed on the value alone, every re-render that happened to be
@@ -108,7 +124,8 @@ export function ShellMark({ state, className }: ShellMarkProps) {
     return () => clearTimeout(timer)
   }, [session])
 
-  const tone = state === undefined ? undefined : toneOf(state)
+  const cap = state === undefined ? undefined : capOf(state)
+  const broken = state !== undefined && isNotKeeping(state)
   // Gated on the session as well as on the flag. `useEffect` is PASSIVE — it
   // runs after paint — so between the render that carries the new session and
   // the effect that clears the flag there is a real painted frame showing the
@@ -124,6 +141,7 @@ export function ShellMark({ state, className }: ShellMarkProps) {
       data-testid="shell-mark"
       {...(state === undefined ? {} : { 'data-keeper': state.keeper })}
       {...(session === undefined ? {} : { 'data-session': session })}
+      {...(storage === undefined ? {} : { 'data-storage': storage })}
       {...(playingRecovery ? { 'data-gesture': 'recovered' } : {})}
       viewBox="0 0 88 56"
       fill="none"
@@ -156,20 +174,20 @@ export function ShellMark({ state, className }: ShellMarkProps) {
         strokeLinecap="round"
         className={cn(
           session === 'reconnecting' && 'wb-loader',
-          // Broken and dimmed: the session was rejected and is not coming
-          // back on its own. Distinct from reconnecting's travel while
+          // Broken and dimmed: the keeper is not keeping and will not start
+          // again on its own. Distinct from reconnecting's travel while
           // sharing its tone, which is the whole reason motion carries this.
-          session === 'sync-off' && 'wb-mark-broken',
+          broken && 'wb-mark-broken',
           session === 'synced' && 'wb-mark-stroke',
         )}
       />
       {/* One-shot attention echo behind the cap: mounts exactly when the mark
-          enters sync-off, pulses twice, then rests. Finite by design — a
-          standing ping would be noise, not guidance — and it is the failure
-          direction's counterpart to the recovery gesture above. Carried over
-          from the chip verbatim, including its keyframe: sync-off arriving is
-          the one thing in this shell that has to be noticed. */}
-      {session === 'sync-off' && (
+          enters a not-keeping state, pulses twice, then rests. Finite by
+          design — a standing ping would be noise, not guidance — and it is
+          the failure direction's counterpart to the recovery gesture above.
+          The keeper giving up is the one thing in this shell that has to be
+          noticed. */}
+      {broken && (
         <circle
           data-testid="shell-mark-pulse"
           cx={TERMINUS.x}
@@ -178,14 +196,19 @@ export function ShellMark({ state, className }: ShellMarkProps) {
           className="wb-mark-cap animate-[attention-pulse_900ms_var(--motion-ease-out)_2] fill-amber-500"
         />
       )}
-      {tone !== undefined && (
+      {cap !== undefined && (
         <circle
           data-testid="shell-mark-cap"
-          data-tone={tone}
+          data-tone="attention"
+          data-shape={cap}
           cx={TERMINUS.x}
           cy={TERMINUS.y}
-          r={8}
-          className={cn('wb-mark-cap', TONE_FILL[tone])}
+          r={cap === 'ring' ? 6 : 8}
+          className={cn(
+            'wb-mark-cap',
+            cap === 'filled' && 'fill-amber-500',
+            cap === 'ring' && 'fill-none stroke-amber-500 [stroke-width:4]',
+          )}
         />
       )}
     </svg>

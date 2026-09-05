@@ -345,10 +345,11 @@
    *
    * What lives here is the rest of the vocabulary:
    *
-   * `wb-mark-broken` is sync-off. It shares reconnecting's amber tone (both
-   * are `attention` in StateDot's closed set), so the STROKE is what tells
-   * them apart: one travels, this one sits in pieces and dimmed. Colour
-   * cannot carry that distinction on a mark that has no label.
+   * `wb-mark-broken` is the keeper NOT keeping — the daemon's sync-off, the
+   * browser's refused write. Amber is the only state colour left in chrome
+   * (DESIGN.md), so the STROKE is what tells these apart from reconnecting:
+   * one travels, this one sits in pieces and dimmed. Colour cannot carry that
+   * distinction on a mark that has no label.
    *
    * `wb-mark-recovered` is the one celebration in the shell, and it is
    * deliberately the rare one: reconnecting/sync-off -> synced. The routine

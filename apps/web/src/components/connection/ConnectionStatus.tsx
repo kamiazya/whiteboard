@@ -30,8 +30,22 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '@/lib/app-routes'
-import { type ConnectionState, isSyncOff, type SessionHealth } from '../../lib/connection-state.js'
+import {
+  type ConnectionState,
+  isNotKeeping,
+  isSyncOff,
+  type SessionHealth,
+} from '../../lib/connection-state.js'
+import type { StorageHealth } from '../../lib/storage-health.js'
 import { ShellMark } from '../shell/ShellMark.js'
+
+/** A wall-clock time for the popover: `10:32`, in the reader's locale. */
+function formatWrittenAt(iso: string): string {
+  const at = new Date(iso)
+  if (Number.isNaN(at.getTime())) return iso
+  return at.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' })
+}
+
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
 export interface ConnectionStatusProps {
@@ -49,6 +63,12 @@ export interface ConnectionStatusProps {
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
+  /**
+   * browser only: when the open document's writes last landed, ISO-8601.
+   * Said in the popover and nowhere else — the mark draws nothing for a
+   * write that landed, so this is where "saved" is answered, on asking.
+   */
+  readonly lastWrittenAt?: string | null
   /** What the mark's accessible name states. The popover's head is the menu's own. */
   readonly workspaceName?: string
   /** The workspace section, composed by the shell and rendered above the session's own. */
@@ -78,7 +98,18 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
  */
 export function connectionLabel(state: ConnectionState | null): string | null {
   if (state === null) return null
-  return state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
+  return state.keeper === 'browser' ? STORAGE_LABEL[state.storage] : SESSION_LABEL[state.session]
+}
+
+/**
+ * The browser keeper's word. `ok` stays the bare keeper name: nothing is
+ * wrong, so there is nothing to add. The two conditions name what the mark
+ * only shapes.
+ */
+const STORAGE_LABEL: Record<StorageHealth, string> = {
+  ok: 'Browser',
+  stuck: 'Browser — still writing',
+  failed: 'Browser — write failed',
 }
 
 export function ConnectionStatus({
@@ -87,14 +118,20 @@ export function ConnectionStatus({
   onRepair,
   onWorkInBrowser,
   children,
+  lastWrittenAt,
   workspaceName,
   workspaceMenu,
 }: ConnectionStatusProps) {
   const label = connectionLabel(state)
   const syncOff = state !== null && isSyncOff(state)
-  // Empty while sync is on: the region has to exist BEFORE the message, but
-  // an empty one must not claim a name either.
-  const syncOffAnnouncement = syncOff ? 'Live sync off' : ''
+  // Empty while the keeper is keeping: the region has to exist BEFORE the
+  // message, but an empty one must not claim a name either. Both not-keeping
+  // states announce, because both mean the same thing to the person typing.
+  const syncOffAnnouncement = syncOff
+    ? 'Live sync off'
+    : state !== null && isNotKeeping(state)
+      ? 'Writing to this browser failed'
+      : ''
 
   return (
     <Popover>
@@ -174,14 +211,38 @@ export function ConnectionStatus({
             </p>
           </div>
         )}
-        {state?.keeper === 'browser' && (
+        {state?.keeper === 'browser' && state.storage === 'ok' && (
           <div className="flex flex-col gap-2 text-sm">
             <p className="font-medium">Kept in this browser</p>
             <p className="text-muted-foreground">
+              {/* The one place "saved" is said, and only on asking: the mark
+                  draws nothing for it. A time, because a bare "saved" is true
+                  of a document never written too. */}
+              {lastWrittenAt ? `Written at ${formatWrittenAt(lastWrittenAt)}. ` : ''}
               Your documents live in this browser's storage. Other browsers cannot see them, and
               clearing site data removes them.
             </p>
             {children}
+          </div>
+        )}
+        {state?.keeper === 'browser' && state.storage === 'stuck' && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="font-medium">Still writing to this browser</p>
+            <p className="text-muted-foreground">
+              Your latest edits have not reached this browser's storage yet. They are kept in this
+              tab meanwhile; if this does not clear, reload the page.
+            </p>
+          </div>
+        )}
+        {state?.keeper === 'browser' && state.storage === 'failed' && (
+          <div className="flex flex-col gap-2 text-sm">
+            <p className="font-medium">This browser could not be written to</p>
+            <p className="text-muted-foreground">
+              {lastWrittenAt
+                ? `Edits since ${formatWrittenAt(lastWrittenAt)} are in this tab only. `
+                : 'Your edits are in this tab only. '}
+              Export the document before closing the tab, or reload to try again.
+            </p>
           </div>
         )}
         {syncOff && (

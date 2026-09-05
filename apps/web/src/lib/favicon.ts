@@ -7,9 +7,16 @@
  *   logo squiggle.
  * - 'dot': always the logo squiggle.
  *
- * Both carry the same status grammar: green dot = saved, amber = unsaved,
- * blue = syncing, and offline breaks the board outline into dashes (the
- * frame IS the connection) besides a gray dot and a faded mark.
+ * Both carry the same status grammar as the shell mark, and it is quiet for
+ * the same reason: `quiet` draws no dot at all — a document whose writes
+ * land and whose session is up asks nothing of a tab strip. What a tab
+ * shows is a condition: amber = a write that is stuck, or a session that is
+ * reconnecting; offline breaks the board outline into dashes (the frame IS
+ * the connection) besides a gray dot and a faded mark, for a refused write
+ * or a rejected session. Green-for-saved and blue-for-saving are gone with
+ * the header's save dot: by the time anyone looks at a tab strip, both are
+ * over, and a routine state painted in colour is what made the header
+ * restless.
  *
  * Redraws happen only on state changes — no animation frames — so
  * background-tab timer throttling never distorts it. Browsers without
@@ -17,12 +24,13 @@
  * /favicon.svg.
  */
 
-export type FaviconStatus = 'saved' | 'unsaved' | 'syncing' | 'offline'
+export type FaviconStatus = 'quiet' | 'unsaved' | 'syncing' | 'offline'
 export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import type { SyncStatus } from './document-sync-types.js'
 import { fitMinimap, projectBox } from './spatial/minimap.js'
+import type { StorageHealth } from './storage-health.js'
 
 export interface FaviconRect {
   x: number
@@ -49,36 +57,35 @@ export function resolveRectColor(color: string | undefined): string {
 }
 
 /**
- * Status for the daemon canvas page. `isDirty` is the header save dot's own
- * signal (changes since the last named version, useDirtyState) so the tab
- * and the header never disagree; transport trouble outranks dirtiness, and
- * a failed auth outranks everything.
+ * Status for the daemon document page: the live session's health, and
+ * nothing about the document's own edits — the daemon's writes are sent
+ * over the socket and never acknowledged, so there is no landed/unlanded
+ * fact to draw. A rejected session outranks a dropped one.
  */
 export function daemonFaviconStatus({
   authError,
   syncStatus,
-  isDirty,
 }: {
   authError: boolean
   syncStatus: SyncStatus
-  isDirty: boolean
 }): FaviconStatus {
   if (authError) return 'offline'
   if (syncStatus !== 'connected') return 'syncing'
-  return isDirty ? 'unsaved' : 'saved'
+  return 'quiet'
 }
 
-/** Status for the browser page: persistence kinds map one-to-one. */
-export function browserFaviconStatus(
-  kind: 'saved' | 'saving' | 'pending' | 'degraded',
-): FaviconStatus {
-  return kind === 'saved'
-    ? 'saved'
-    : kind === 'saving'
-      ? 'syncing'
-      : kind === 'pending'
-        ? 'unsaved'
-        : 'offline'
+/**
+ * Status for the browser page: the same judgement the shell mark draws.
+ * `ok` is quiet — the ordinary unsaved moments while typing are not a
+ * condition and never reach the tab.
+ */
+export function browserFaviconStatus(health: StorageHealth): FaviconStatus {
+  const by: Record<StorageHealth, FaviconStatus> = {
+    ok: 'quiet',
+    stuck: 'unsaved',
+    failed: 'offline',
+  }
+  return by[health]
 }
 
 export const STATIC_FAVICON_HREF = '/favicon.svg'
@@ -89,17 +96,15 @@ const INNER = { x: 4.4, y: 7.2, w: 23.2, h: 17.6 }
 const MIN_RECT_PX = 1.4
 const MAX_RECTS = 16
 
-const GREEN = '#16a34a'
 const AMBER = '#d97706'
-const BLUE = '#3b6ecc'
 const GRAY = '#909090'
 const OFFLINE_GRAY = '#7c7c7c'
 const BOARD_LINE = 'rgba(156, 163, 175, 0.62)'
 
-const DOT_COLOR: Record<FaviconStatus, string> = {
-  saved: GREEN,
+// `quiet` has no entry on purpose: it draws no dot.
+const DOT_COLOR: Record<Exclude<FaviconStatus, 'quiet'>, string> = {
   unsaved: AMBER,
-  syncing: BLUE,
+  syncing: AMBER,
   offline: OFFLINE_GRAY,
 }
 
@@ -165,6 +170,7 @@ function drawSquiggle(ctx: CanvasRenderingContext2D): void {
 }
 
 function drawStatusDot(ctx: CanvasRenderingContext2D, status: FaviconStatus): void {
+  if (status === 'quiet') return
   const x = 26.5
   const y = 6.5
   ctx.save()

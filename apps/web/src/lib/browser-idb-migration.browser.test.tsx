@@ -23,6 +23,7 @@ import { workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { clearNamedDb } from '../test-utils/browser-document.js'
 import {
   BROWSER_DEFAULT_SEGMENT,
   DB_VERSION,
@@ -63,7 +64,7 @@ import { purgeLegacyReconnectCredentials } from './purge-legacy-reconnect-creden
  */
 const MIGRATION_DB = 'whiteboard-migration-test'
 
-// Every test in this file re-seeds MIGRATION_DB from scratch (see `clearDb`
+// Every test in this file re-seeds MIGRATION_DB from scratch (see `(() => clearNamedDb(MIGRATION_DB))`
 // below), so the id `getBrowserWorkspaceId()` would answer is different on
 // every run — a v13 fixture's rekey step mints a fresh ULID each time the
 // database is torn down and rebuilt. Resetting the accessor's cache before
@@ -124,14 +125,6 @@ async function loroStore(): Promise<LoroStore> {
  */
 function letFixtureStepAside(db: IDBDatabase): void {
   db.onversionchange = () => db.close()
-}
-
-async function clearDb(): Promise<void> {
-  return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(MIGRATION_DB)
-    req.onsuccess = () => resolve()
-    req.onerror = () => resolve()
-  })
 }
 
 /** Seed a pre-v3 ("v2 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
@@ -488,8 +481,8 @@ async function legacyLocalKeys(): Promise<{
 const V13_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 describe("IndexedDB v13 -> v14 (re-keys the 'local' workspace)", () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 14 or higher', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(14)
@@ -654,8 +647,8 @@ describe("IndexedDB v13 -> v14 (re-keys the 'local' workspace)", () => {
 })
 
 describe('IndexedDB v14 -> v15 (the browser workspace gets a segment)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 15 or higher', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(15)
@@ -745,8 +738,8 @@ describe('IndexedDB v14 -> v15 (the browser workspace gets a segment)', () => {
 })
 
 describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 7 or higher (guards against reverting the bump alone)', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(7)
@@ -761,7 +754,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     const db = await openWhiteboardDb(MIGRATION_DB)
     // Read before asserting, and assert after: a failed expect() between the
     // open and the close would leak the connection, and every later test in
-    // this file would then meet a database clearDb cannot delete.
+    // this file would then meet a database (() => clearNamedDb(MIGRATION_DB)) cannot delete.
     const storeNames = [...db.objectStoreNames].sort()
     // The old names are DELETED, not merely abandoned. A store left in place
     // would keep a second copy of every document readable by anything that
@@ -840,10 +833,10 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
 describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
   const LEGACY_RECONNECT_SECRET_KEY = 'whiteboard.reconnect-secret.v1'
 
-  beforeEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
   afterEach(() => {
     localStorage.removeItem(LEGACY_RECONNECT_SECRET_KEY)
-    return clearDb()
+    return clearNamedDb(MIGRATION_DB)
   })
 
   it('current DB_VERSION is 6 or higher (guards against reverting the bump alone)', () => {
@@ -918,8 +911,8 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
 })
 
 describe('IndexedDB v4 -> v5', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 5 or higher (guards against reverting the bump alone)', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(5)
@@ -964,8 +957,8 @@ describe('IndexedDB v4 -> v5', () => {
 })
 
 describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 4 or higher (guards against reverting the bump alone)', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(4)
@@ -998,8 +991,8 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
 })
 
 describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 3 or higher (guards against reverting the bump alone)', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(3)
@@ -1165,8 +1158,8 @@ const POST_PATH_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const PRE_PATH_ID = 'f81d4fae-7dec-11d0-a765-00a0c91e6bf6'
 
 describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('current DB_VERSION is 8 or higher (guards against reverting the bump alone)', () => {
     expect(DB_VERSION).toBeGreaterThanOrEqual(8)
@@ -1251,8 +1244,8 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
 })
 
 describe('v6 -> v8 in one upgrade (the discard must see what the v7 copy produced)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('discards a pre-path row that arrives in `documents` via the v7 rename copy', async () => {
     // The two passes share ONE versionchange transaction: the rename copies
@@ -1270,8 +1263,8 @@ describe('v6 -> v8 in one upgrade (the discard must see what the v7 copy produce
 })
 
 describe('cross-tab upgrades', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('an open connection closes itself so a newer version is not blocked behind it', async () => {
     // Stands in for the second tab: a connection this module handed out and
@@ -1363,14 +1356,14 @@ describe('cross-tab upgrades', () => {
       // created it, is what keeps the next test's seed from meeting a
       // database at a version it did not put there.
       await new Promise((r) => setTimeout(r, 300))
-      await clearDb()
+      await clearNamedDb(MIGRATION_DB)
     }
   })
 })
 
 describe('IndexedDB v9 -> v10 (backfills the index)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('carries every surviving document into the index', async () => {
     // v9 added the index stores EMPTY and said the bespoke `documents` store
@@ -1427,8 +1420,8 @@ describe('IndexedDB v9 -> v10 (backfills the index)', () => {
 })
 
 describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
-  beforeEach(clearDb)
-  afterEach(clearDb)
+  beforeEach(() => clearNamedDb(MIGRATION_DB))
+  afterEach(() => clearNamedDb(MIGRATION_DB))
 
   it('carries a snapshot, its log and its timestamp across', async () => {
     // The whole point of the version: content moves to the `DocumentStore`
