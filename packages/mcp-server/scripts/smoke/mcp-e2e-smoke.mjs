@@ -742,6 +742,46 @@ async function main() {
   }
   console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
 
+  // The two references a spatial anchor may carry beyond a node, and the
+  // text arm naming a node: an EDGE comment, and a comment on a passage of
+  // a node's text. Both reach canvas_view through the projection — the edge
+  // one carrying its edge, the passage one standing at its node — which is
+  // what the widget draws pins from, and what no unit test of the tool sees.
+  const anchoredOnCanvas = await callTool('wb_thread_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [
+      {
+        op: 'thread.add',
+        threadId: 'smoke-edge-thread',
+        anchor: { kind: 'spatial', edgeId: 'link', x: 100, y: 50 },
+        body: 'about this connection',
+        author: 'agent:smoke',
+      },
+      {
+        op: 'thread.add',
+        threadId: 'smoke-passage-thread',
+        anchor: { kind: 'text', nodeId: 'lockable', quote: { exact: 'lock' }, start: 0, end: 4 },
+        body: 'about this word',
+        author: 'agent:smoke',
+      },
+    ],
+  })
+  if (anchoredOnCanvas.threads?.length < 3) {
+    throw new Error(`thread.add on the canvas did not report: ${JSON.stringify(anchoredOnCanvas)}`)
+  }
+  const afterAnchors = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const projected = afterAnchors.scene['x-whiteboard']?.comments ?? []
+  const edgeProjected = projected.find((c) => c.id === 'smoke-edge-thread')
+  const passageProjected = projected.find((c) => c.id === 'smoke-passage-thread')
+  if (edgeProjected?.targetEdgeId !== 'link') {
+    throw new Error(`an edge thread did not project with its edge: ${JSON.stringify(projected)}`)
+  }
+  if (passageProjected?.targetNodeId !== 'lockable') {
+    throw new Error(`a node passage did not project onto its node: ${JSON.stringify(projected)}`)
+  }
+  console.log('[e2e] wb_thread_edit → an edge thread and a node-passage thread reach canvas_view')
+
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read
   // below cannot cover it. It is also the only tool result still built

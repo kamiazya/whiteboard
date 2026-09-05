@@ -17,6 +17,12 @@ export interface ActiveMarkdownEditor {
    * on hosts without a picker.
    */
   readonly openLinkPicker?: () => boolean
+  /**
+   * Opens the host's comment composer on the caret's scope and answers
+   * true; false when there is nothing to comment on. Absent on a host
+   * that draws no annotation layer.
+   */
+  readonly openCommentComposer?: () => boolean
 }
 
 let current: ActiveMarkdownEditor | null = null

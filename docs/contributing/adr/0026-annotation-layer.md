@@ -186,6 +186,23 @@ text arm is written. The design holds without it (quote + position is what
 Hypothesis and Google Docs ship); it is materially better with it, because a
 cursor is exact under merge where a quote is a search.
 
+*Amended 2026-09-05 — the reference names any object of the surface.* The
+spatial arm's reference is `nodeId` **or** `edgeId` (never both): an edge is
+as much an object of the canvas as a node, and a reader has as much to say
+about a connection as about what it connects; the pin rides the edge's
+routed path, re-projected from the stored point on each layout, and stands
+at the point when the edge is gone. The text arm gains the reference this
+decision said every arm has: an optional `nodeId` naming the text node whose
+text holds the passage — a passage inside a node lives on the canvas, but
+its position is a place in a string, not a point. Absent, the passage is the
+note's own body. A node passage projects onto the canvas as a comment on
+that node, at its corner (`canvasCommentFromThread`, model), and draws
+highlighted inside the node's editor while the node is edited; the flat
+projection written back keeps the passage it could not carry. What a reader
+can comment on, and which arm carries it, is the table on
+`annotationAnchorSchema`. A region of several nodes and a document as a
+whole are still not anchorable; both are deferred until asked for.
+
 **The union stays closed.** Every format is in this repo, and a closed union
 buys the exhaustiveness checking the renderers rely on — the same decision
 `canvas-render` made for its scene-node union. A plugin-registered anchor kind

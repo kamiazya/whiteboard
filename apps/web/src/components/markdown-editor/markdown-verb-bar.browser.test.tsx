@@ -21,7 +21,14 @@ const lastValue = (onChange: ReturnType<typeof vi.fn>) =>
 async function mount(onChange = vi.fn()) {
   render(
     <div style={{ height: 400 }}>
-      <MarkdownEditor value="milk" onChange={onChange} autoFocus initialViewMode="write" />
+      {/* With a comment seam: a host without one leaves that verb off, by design. */}
+      <MarkdownEditor
+        value="milk"
+        onChange={onChange}
+        autoFocus
+        initialViewMode="write"
+        onRequestComment={() => true}
+      />
     </div>,
   )
   await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())

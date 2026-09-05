@@ -53,6 +53,18 @@ export interface CommentsPanelProps {
   readonly openThreadId?: string | null
   readonly onOpenThreadChange?: (threadId: string | null) => void
   /**
+   * A conversation about to be opened — the host has an anchor (a passage
+   * the reader selected) and needs the opening message. Shown above the
+   * list as a composer labelled with what it is about; the host writes the
+   * thread on submit and clears this on submit or cancel.
+   */
+  readonly draft?: {
+    /** What the conversation is about, as the reader would recognise it (the quoted passage). */
+    readonly about: string
+    readonly onSubmit: (body: string) => void
+    readonly onCancel: () => void
+  }
+  /**
    * Appends a message to a conversation. Absent hides the reply box entirely
    * rather than showing a control that silently does nothing — a host with no
    * write path (a read-only view, or one with no session yet) has no reply to
@@ -80,6 +92,7 @@ export function CommentsPanel({
   onReply,
   openThreadId: controlledOpenThreadId,
   onOpenThreadChange,
+  draft,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -119,6 +132,27 @@ export function CommentsPanel({
       data-testid="comments-panel"
       className="flex flex-col gap-2"
     >
+      {draft !== undefined ? (
+        <div
+          data-testid="comment-draft"
+          className="flex flex-col gap-1 rounded border border-(--comment-accent) p-2"
+        >
+          <p className="text-xs text-muted-foreground">
+            Comment on{' '}
+            <q className="text-foreground" data-testid="comment-draft-about">
+              {draft.about}
+            </q>
+          </p>
+          <ReplyComposer compact onReply={draft.onSubmit} autoFocus />
+          <button
+            type="button"
+            onClick={draft.onCancel}
+            className="self-end text-xs text-muted-foreground hover:text-foreground"
+          >
+            Cancel
+          </button>
+        </div>
+      ) : null}
       <fieldset aria-label="Filter comments" className="flex gap-1 border-0 p-0">
         {FILTERS.map(({ value, label }) => (
           <button

@@ -6,14 +6,19 @@
 // positional fallback", and that today's flat comment is a one-message thread.
 import { describe, expect, it } from 'vitest'
 import {
+  ANNOTATION_ANCHOR_KINDS,
   type AnnotationAnchor,
   annotationAnchorSchema,
+  type CommentThread,
+  canvasCommentFromThread,
   commentMessageSchema,
   commentThreadSchema,
   compareMessages,
   threadFromCanvasComment,
 } from './annotation.js'
 import type { CanvasComment } from './spatial.js'
+import { annotationAnchorArbitrary } from './test-utils/arbitraries.js'
+import { fc } from './test-utils/fast-check.js'
 
 const SPATIAL: AnnotationAnchor = { kind: 'spatial', x: 10, y: 20 }
 
@@ -67,6 +72,23 @@ describe('annotationAnchorSchema', () => {
     expect(
       annotationAnchorSchema.safeParse({ kind: 'text', quote: ok, start: 9, end: 4 }).success,
     ).toBe(false)
+  })
+
+  it('lets a spatial anchor name an edge, the way it names a node — but never both', () => {
+    // An edge is as much an object of the canvas as a node: the surface is
+    // the arm, the reference names an object on it.
+    expect(
+      annotationAnchorSchema.safeParse({ kind: 'spatial', edgeId: 'e1', x: 1, y: 2 }).success,
+    ).toBe(true)
+    expect(
+      annotationAnchorSchema.safeParse({ kind: 'spatial', nodeId: 'n1', edgeId: 'e1', x: 1, y: 2 })
+        .success,
+    ).toBe(false)
+  })
+
+  it('lets a text anchor name the node whose text holds the passage', () => {
+    const anchor = { kind: 'text', nodeId: 'n1', quote: { exact: 'launch' }, start: 4, end: 10 }
+    expect(annotationAnchorSchema.safeParse(anchor).success).toBe(true)
   })
 
   it('rejects an unknown format arm rather than passing it through', () => {
@@ -175,5 +197,102 @@ describe('threadFromCanvasComment', () => {
     // borrowing it means a migrated record has no id nobody has seen before.
     const migrated = threadFromCanvasComment({ id: 'c4', x: 0, y: 0, text: 'x' })
     expect(migrated.messages[0]?.id).toBe(migrated.id)
+  })
+})
+
+describe('the generator covers every arm the schema declares', () => {
+  // The closest thing an anchor has to a coverage ledger: a property that
+  // only ever drew the spatial arm would say nothing about the shape's
+  // reason for existing, and nothing would fail when a third arm arrived.
+  // The kinds are read off the schema, so this cannot go stale by hand.
+  it('draws each kind, and each reference a spatial anchor may carry', () => {
+    const seen = new Set<string>()
+    fc.assert(
+      fc.property(annotationAnchorArbitrary, (anchor) => {
+        seen.add(anchor.kind)
+        if (anchor.kind === 'spatial') {
+          seen.add(
+            anchor.nodeId !== undefined
+              ? 'spatial:node'
+              : anchor.edgeId !== undefined
+                ? 'spatial:edge'
+                : 'spatial:point',
+          )
+        } else {
+          seen.add(anchor.nodeId !== undefined ? 'text:node' : 'text:body')
+        }
+        return annotationAnchorSchema.safeParse(anchor).success
+      }),
+      { numRuns: 300 },
+    )
+    for (const kind of ANNOTATION_ANCHOR_KINDS) expect(seen).toContain(kind)
+    expect([...seen].sort()).toEqual([
+      'spatial',
+      'spatial:edge',
+      'spatial:node',
+      'spatial:point',
+      'text',
+      'text:body',
+      'text:node',
+    ])
+  })
+})
+
+describe('canvasCommentFromThread', () => {
+  const opened = (anchor: AnnotationAnchor): CommentThread => ({
+    id: 't1',
+    anchor,
+    status: 'open',
+    messages: [{ id: 'm1', body: 'look here', createdAt: '2026-09-02T00:00:00.000Z' }],
+  })
+  const nodes = new Map([['n1', { id: 'n1', x: 100, y: 200, width: 50 }]])
+  const nodeById = (id: string) => nodes.get(id)
+
+  it('projects a spatial anchor with its node or edge reference', () => {
+    expect(
+      canvasCommentFromThread(opened({ kind: 'spatial', nodeId: 'n1', x: 1, y: 2 })),
+    ).toMatchObject({ id: 't1', x: 1, y: 2, targetNodeId: 'n1', text: 'look here' })
+    expect(
+      canvasCommentFromThread(opened({ kind: 'spatial', edgeId: 'e1', x: 1, y: 2 })),
+    ).toMatchObject({ targetEdgeId: 'e1' })
+  })
+
+  it("projects a passage of a node's text as a comment on that node, at its corner", () => {
+    const projected = canvasCommentFromThread(
+      opened({ kind: 'text', nodeId: 'n1', quote: { exact: 'here' }, start: 5, end: 9 }),
+      nodeById,
+    )
+    expect(projected).toMatchObject({ x: 150, y: 200, targetNodeId: 'n1' })
+  })
+
+  it('projects nothing for a passage whose node is gone, or a passage of a note', () => {
+    const gone = opened({ kind: 'text', nodeId: 'n-gone', quote: { exact: 'x' }, start: 0, end: 1 })
+    expect(canvasCommentFromThread(gone, nodeById)).toBeUndefined()
+    // Without a lookup a node passage is unplaceable too — not a wrong place.
+    expect(
+      canvasCommentFromThread(
+        opened({ kind: 'text', nodeId: 'n1', quote: { exact: 'x' }, start: 0, end: 1 }),
+      ),
+    ).toBeUndefined()
+    expect(
+      canvasCommentFromThread(
+        opened({ kind: 'text', quote: { exact: 'x' }, start: 0, end: 1 }),
+        nodeById,
+      ),
+    ).toBeUndefined()
+  })
+
+  it('round-trips a flat comment through a thread and back, reference included', () => {
+    fc.assert(
+      fc.property(annotationAnchorArbitrary, (anchor) => {
+        if (anchor.kind !== 'spatial') return true
+        const back = canvasCommentFromThread(opened(anchor))
+        return (
+          back !== undefined &&
+          threadFromCanvasComment(back).anchor.kind === 'spatial' &&
+          JSON.stringify(threadFromCanvasComment(back).anchor) === JSON.stringify(anchor)
+        )
+      }),
+    )
   })
 })

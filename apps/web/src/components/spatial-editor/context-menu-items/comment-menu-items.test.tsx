@@ -14,6 +14,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose: vi.fn(),
       applyResult: vi.fn(),
     })
@@ -27,6 +28,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose,
       applyResult: vi.fn(),
     })
@@ -43,6 +45,7 @@ describe('commentMenuItems', () => {
     const items = commentMenuItems({
       comment: resolved,
       canvasRef: { current: canvas },
+      edgePathOf: () => undefined,
       setCommentCompose: vi.fn(),
       applyResult,
     })

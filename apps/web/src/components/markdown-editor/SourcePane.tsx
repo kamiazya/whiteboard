@@ -14,11 +14,13 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
+import type { TextAnchor } from '../../lib/text-anchor.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
   setActiveMarkdownEditor,
 } from './active-markdown-editor.js'
+import { requestCommentOnScope } from './comment-anchors.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { headingLevelAt } from './line-prefix.js'
@@ -137,6 +139,8 @@ export interface SourcePaneApi {
    * pull the caret out of whatever the reader is doing).
    */
   dispatch: (spec: TransactionSpec) => void
+  /** The comment verb on the caret's scope; false when there is nothing to comment on. */
+  openCommentComposer: () => boolean
 }
 
 export interface SourcePaneProps {
@@ -170,6 +174,13 @@ export interface SourcePaneProps {
    * the bar wraps instead.
    */
   onRequestLinkPicker?: () => boolean
+  /**
+   * The comment verb's host seam, like `onRequestLinkPicker`: called with
+   * the anchor for the caret's scope (the selection, else the word), it
+   * opens the host's composer and answers true. False, or absent, leaves
+   * the verb inert — a comment has no wrap to degrade to.
+   */
+  onRequestComment?: (anchor: TextAnchor) => boolean
 }
 
 /**
@@ -188,6 +199,7 @@ export function SourcePane({
   extensions,
   reconcileExternalValue = true,
   onRequestLinkPicker,
+  onRequestComment,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -197,6 +209,8 @@ export function SourcePane({
   onChangeRef.current = onChange
   const onRequestLinkPickerRef = useRef(onRequestLinkPicker)
   onRequestLinkPickerRef.current = onRequestLinkPicker
+  const onRequestCommentRef = useRef(onRequestComment)
+  onRequestCommentRef.current = onRequestComment
   // Filled once the view exists; the focus/blur handlers below read it lazily.
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
 
@@ -296,6 +310,10 @@ export function SourcePane({
       },
       headingLevel: () => headingLevelAt(view.state),
       openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
+      // Only with a seam: a bar reads the absence as "leave the verb off".
+      ...(onRequestCommentRef.current === undefined
+        ? {}
+        : { openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current) }),
     }
     if (apiRef) {
       apiRef.current = {
@@ -343,6 +361,7 @@ export function SourcePane({
           return line + Math.max(0, Math.min(1, fraction))
         },
         dispatch: (spec) => view.dispatch(spec),
+        openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current),
         revealLine: (line: number) => {
           const clamped = Math.max(1, Math.min(view.state.doc.lines, Math.round(line)))
           const pos = view.state.doc.line(clamped).from

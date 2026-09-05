@@ -508,19 +508,29 @@ export function mdastRootArbitrary(maxDepth = 3): fc.Arbitrary<MdastRoot> {
 // `targetNodeId` is free-standing on purpose — a dangling target is VALID
 // (a comment may outlive its subject), so the canvas arbitrary does not need
 // to correlate it with node ids the way edges must be.
-export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc.record(
-  {
-    id: nodeIdArbitrary,
-    x: geometryArbitrary,
-    y: geometryArbitrary,
-    text: fc.string({ minLength: 1, maxLength: 40 }),
-    author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
-    createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
-    targetNodeId: nodeIdArbitrary,
-    resolved: fc.boolean(),
-  },
-  { requiredKeys: ['id', 'x', 'y', 'text'] },
-)
+export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc
+  .tuple(
+    fc.record(
+      {
+        id: nodeIdArbitrary,
+        x: geometryArbitrary,
+        y: geometryArbitrary,
+        text: fc.string({ minLength: 1, maxLength: 40 }),
+        author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
+        createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
+        resolved: fc.boolean(),
+      },
+      { requiredKeys: ['id', 'x', 'y', 'text'] },
+    ),
+    // A node, an edge, or neither — the anchor refuses both, so drawn as one
+    // choice the same way `annotationAnchorArbitrary` draws it.
+    fc.oneof(
+      fc.constant<{ targetNodeId?: string; targetEdgeId?: string }>({}),
+      nodeIdArbitrary.map((targetNodeId) => ({ targetNodeId })),
+      nodeIdArbitrary.map((targetEdgeId) => ({ targetEdgeId })),
+    ),
+  )
+  .map(([comment, target]) => ({ ...comment, ...target }))
 
 /**
  * The annotation layer's generators (ADR-0026). Valid-by-construction against
@@ -529,19 +539,24 @@ export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc.record(
  * nothing about the shape's whole reason for existing.
  */
 export const annotationAnchorArbitrary: fc.Arbitrary<AnnotationAnchor> = fc.oneof(
-  fc.record(
-    {
-      kind: fc.constant('spatial' as const),
-      nodeId: nodeIdArbitrary,
-      x: geometryArbitrary,
-      y: geometryArbitrary,
-    },
-    { requiredKeys: ['kind', 'x', 'y'] },
-  ),
+  // A spatial anchor names a node, an edge, or nothing — never both, which
+  // the schema refuses, so the reference is drawn as one choice.
+  fc
+    .tuple(
+      fc.oneof(
+        fc.constant<{ nodeId?: string; edgeId?: string }>({}),
+        nodeIdArbitrary.map((nodeId) => ({ nodeId })),
+        nodeIdArbitrary.map((edgeId) => ({ edgeId })),
+      ),
+      geometryArbitrary,
+      geometryArbitrary,
+    )
+    .map(([reference, x, y]) => ({ kind: 'spatial' as const, ...reference, x, y })),
   fc
     .record(
       {
         kind: fc.constant('text' as const),
+        nodeId: nodeIdArbitrary,
         quote: fc.record(
           {
             prefix: fc.string({ maxLength: 8 }),

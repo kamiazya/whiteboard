@@ -185,31 +185,3 @@ export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number 
   }
   return migrated
 }
-
-/**
- * One thread as the canvas API still sees it: a single comment at a spatial
- * anchor. Lossy by construction — a thread's replies have nowhere to go in a
- * `CanvasComment`, and a text anchor has no canvas position at all — which is
- * why this is a PROJECTION rather than the shape anything stores. The panel
- * that shows a conversation (ADR-0026 step 3) reads threads directly.
- */
-export function canvasCommentFromThread(thread: CommentThread): CanvasComment | undefined {
-  if (thread.anchor.kind !== 'spatial') return undefined
-  // `readCommentThreads` sorts by `compareMessages`, so this is the message
-  // the conversation opened with rather than whichever arrived first.
-  const opening = thread.messages[0]
-  if (opening === undefined) return undefined
-  return {
-    id: thread.id,
-    x: thread.anchor.x,
-    y: thread.anchor.y,
-    text: opening.body,
-    ...(opening.author === undefined ? {} : { author: opening.author }),
-    ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
-    ...(thread.anchor.nodeId === undefined ? {} : { targetNodeId: thread.anchor.nodeId }),
-    // Only the closed state is spelled out: `resolved: false` and no field
-    // are the same state under `canvasCommentSchema`, and emitting one of
-    // them keeps a reader from treating the other as unknown.
-    ...(thread.status === 'resolved' ? { resolved: true } : {}),
-  }
-}

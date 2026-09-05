@@ -113,7 +113,7 @@ export function createThreadEditTool(deps: ServerDeps) {
   return {
     name: 'wb_thread_edit' as const,
     description:
-      "Comment on any document — a spatial canvas or a markdown note — through its annotation layer: open a thread anchored to a node, a point, or a quoted passage; reply to one; resolve or reopen one. Threads are never deleted, by an agent or by a person: resolving is the only way to close one. Returns every thread the document holds, so a newly opened thread's id needs no second read.",
+      "Comment on any document — a spatial canvas or a markdown note — through its annotation layer: open a thread anchored to a node, an edge, a point, a quoted passage of a note's body, or a quoted passage of a text node's text (a text anchor naming the node); reply to one; resolve or reopen one. Threads are never deleted, by an agent or by a person: resolving is the only way to close one. Returns every thread the document holds, so a newly opened thread's id needs no second read.",
     inputSchema: threadEditInputSchema,
     outputSchema: threadEditOutputSchema,
     async execute(input: ThreadEditInput): Promise<ThreadEditOutput> {

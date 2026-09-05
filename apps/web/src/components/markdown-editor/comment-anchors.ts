@@ -35,7 +35,8 @@ import {
   type ViewUpdate,
 } from '@codemirror/view'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { resolveTextAnchor } from '../../lib/text-anchor.js'
+import { resolveTextAnchor, type TextAnchor, textAnchorAt } from '../../lib/text-anchor.js'
+import { rangeToActOn } from './word-at.js'
 
 export interface CommentAnchorRange {
   readonly threadId: string
@@ -217,12 +218,31 @@ const revealOnSelect = ViewPlugin.fromClass(
   },
 )
 
-export function commentAnchors(onSelect?: (threadId: string) => void): Extension {
+export interface CommentAnchorsOptions {
+  readonly onSelect?: (threadId: string) => void
+  /**
+   * The gutter marker column. Off for a text node's editor, which sits in
+   * the node's own box where a 22px column would push the text off the
+   * committed render underneath; there the highlight alone is the marker.
+   */
+  readonly gutter?: boolean
+}
+
+export function commentAnchors({
+  onSelect,
+  gutter: withGutter = true,
+}: CommentAnchorsOptions = {}): Extension {
   return [
     commentAnchorsField,
     revealOnSelect,
     ...(onSelect === undefined ? [] : [commentMarkerSelect.of(onSelect)]),
     EditorView.decorations.from(commentAnchorsField, decorationsOf),
+    ...(withGutter ? [markerGutter()] : []),
+  ]
+}
+
+function markerGutter(): Extension {
+  return [
     gutter({
       class: 'cm-comment-gutter',
       markers: markersOf,
@@ -244,4 +264,21 @@ export function commentAnchors(onSelect?: (threadId: string) => void): Extension
       '.cm-gutters': { backgroundColor: 'transparent', border: 'none' },
     }),
   ]
+}
+
+/**
+ * The comment verb's host seam, shared by both CodeMirror hosts: the
+ * caret's scope (the selection, else the word under it) becomes a text
+ * anchor written from the live document, and the host decides what to do
+ * with it. False when there is nothing to comment on — a caret in blank
+ * space — or when the host has no composer to open.
+ */
+export function requestCommentOnScope(
+  view: EditorView,
+  onRequestComment: ((anchor: TextAnchor) => boolean) | undefined,
+): boolean {
+  if (onRequestComment === undefined) return false
+  const range = rangeToActOn(view.state)
+  if (range.from === range.to) return false
+  return onRequestComment(textAnchorAt(view.state.doc.toString(), range.from, range.to))
 }

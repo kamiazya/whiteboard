@@ -50,7 +50,12 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
+import {
+  commentLeaderEnd,
+  nearestPointOnPolyline,
+  placeCommentBubble,
+} from './comment-placement.js'
+import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
 import {
@@ -1339,8 +1344,16 @@ function layoutSpatialCanvasInternal(
   ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
   // Comments LAST: the annotation layer paints above every node and edge,
-  // which a flat document-order paint list can only express by position.
-  const commentContent = composeComments(canvas, resolved)
+  // which a flat document-order paint list can only express by position —
+  // and after the edges are ROUTED, since a comment about an edge is pinned
+  // on the path the edge was actually drawn along.
+  const edgePaths = new Map<string, readonly { x: number; y: number }[]>()
+  for (const node of content) {
+    if (node.kind === 'edge' && node.id !== undefined) {
+      edgePaths.set(node.id, flattenDrawnEdgePath(node.path, node.jumps, node.rounded === true))
+    }
+  }
+  const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
   return { scene: { nodes: [...nodeContent, ...content, ...commentContent] }, anchors }
 }
 
@@ -1355,23 +1368,37 @@ const COMMENT_TEXT_MAX_WIDTH_PX = 200
 export const COMMENT_BUBBLE_PADDING_PX = 8
 export const COMMENT_BUBBLE_RADIUS_PX = 8
 
+/** The routed path of an edge, by id, as the layout drew it — absent when the edge is gone. */
+export type EdgePathLookup = (edgeId: string) => readonly { x: number; y: number }[] | undefined
+
 /**
  * Where a comment points: the target node's top-right corner while the node
- * exists (the pin FOLLOWS the node), the stored anchor otherwise. The
- * fallback is what makes a dangling `targetNodeId` harmless, per the model's
- * contract that a comment may outlive its subject.
+ * exists (the pin FOLLOWS the node); the point of the target edge's routed
+ * path nearest the stored anchor while the edge exists (the pin RIDES the
+ * edge through a reroute); the stored anchor otherwise. The fallback is what
+ * makes a dangling target harmless, per the model's contract that a comment
+ * may outlive its subject.
  *
  * Exported because the editor places its compose bubble and its edit bubble
  * at the same anchor this layer draws from — one producer for the geometry,
- * so the draft cannot open one place and settle another.
+ * so the draft cannot open one place and settle another. The editor passes
+ * the paths it already flattened for hit-testing as `edgePathOf`; without
+ * one, an edge comment stands at its stored point.
  */
 export function commentAnchor(
   comment: CanvasComment,
   canvas: SpatialCanvas,
+  edgePathOf?: EdgePathLookup,
 ): { readonly x: number; readonly y: number } {
   if (comment.targetNodeId !== undefined) {
     const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
     if (target !== undefined) return { x: target.x + target.width, y: target.y }
+  }
+  if (comment.targetEdgeId !== undefined) {
+    const path = edgePathOf?.(comment.targetEdgeId)
+    if (path !== undefined && path.length > 0) {
+      return nearestPointOnPolyline({ x: comment.x, y: comment.y }, path)
+    }
   }
   return { x: comment.x, y: comment.y }
 }
@@ -1403,6 +1430,7 @@ export function commentAnchor(
 function composeComments(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,
+  edgePathOf: EdgePathLookup,
 ): readonly SceneNode[] {
   const comments = options.comments ?? canvas['x-whiteboard']?.comments
   if (comments === undefined || comments.length === 0) return []
@@ -1422,7 +1450,7 @@ function composeComments(
     // bare resolver (no `resolveComment`) still composes full geometry with
     // no appearance at all, resolved or not.
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    const anchor = commentAnchor(comment, canvas)
+    const anchor = commentAnchor(comment, canvas, edgePathOf)
 
     // The text goes through the same mdast pipeline as a text node's body,
     // so wrapping (CJK included) and theming have one producer. A parse

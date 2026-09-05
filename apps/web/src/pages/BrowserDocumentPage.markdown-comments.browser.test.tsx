@@ -14,6 +14,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { focusEditable } from '../test-utils/focus-editable.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 
@@ -109,4 +110,32 @@ it('on a phone the rail is a sheet over the note, and the marker still opens it'
   await expect.element(rail).toBeInTheDocument()
   expect(getComputedStyle(rail.element()).position).toBe('absolute')
   await page.screenshot({ path: '../../../../tmp/screenshots/phone-10-markdown-rail-sheet.png' })
+})
+
+it('the comment verb opens the rail on a draft for the selected passage, and the thread it writes is drawn', async () => {
+  await mountNote()
+  await vi.waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull())
+  const content = document.querySelector('.cm-content') as HTMLElement
+  await focusEditable(() => content)
+  // "annotation": the caret inside the word is scope enough.
+  await userEvent.keyboard('{Control>}{Home}{/Control}')
+  await userEvent.keyboard('{ArrowRight}'.repeat(12))
+
+  await userEvent.click(page.getByRole('button', { name: 'Comment', exact: true }))
+
+  const draft = page.getByTestId('comment-draft')
+  await expect.element(draft).toBeInTheDocument()
+  expect(page.getByTestId('comment-draft-about').element().textContent).toBe('annotation')
+  await userEvent.keyboard('is this the right word?')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+  await vi.waitFor(() => expect(document.querySelector('[data-testid="comment-draft"]')).toBeNull())
+  // Written to the note's own plane and back through the projection: two
+  // highlights now, the seeded thread's and this one's.
+  await vi.waitFor(() =>
+    expect(
+      Array.from(document.querySelectorAll('.cm-comment-anchor')).map((el) => el.textContent),
+    ).toEqual(['annotation', 'three steps']),
+  )
+  await expect.element(page.getByText('is this the right word?')).toBeInTheDocument()
 })

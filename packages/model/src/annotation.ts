@@ -40,25 +40,48 @@ export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
  * what survives the object being deleted, and is what an orphaned annotation
  * is still drawn from.
  *
+ * The arm is the SURFACE, and the reference names an object on it — which
+ * is why the spatial arm may name a node or an edge (an edge is as much an
+ * object of the canvas as a node is, and a reader has as much to say about
+ * a connection as about what it connects), and why the text arm may name
+ * the node whose text it is about: a passage inside a text node lives on
+ * the canvas, but its position is a place in a string, not a point. The
+ * places a reader wants to comment on, and the arm that carries each:
+ *
+ * | place                              | arm       | reference | fallback        |
+ * |------------------------------------|-----------|-----------|-----------------|
+ * | a spot on the canvas               | `spatial` | —         | the point       |
+ * | a node (text, file, link, group)   | `spatial` | `nodeId`  | the point       |
+ * | an edge                            | `spatial` | `edgeId`  | the point       |
+ * | a passage of a note's body         | `text`    | —         | quote + offsets |
+ * | a passage of a text node's text    | `text`    | `nodeId`  | quote + offsets |
+ *
  * The union is closed on purpose — a new format is a new arm here, so every
  * renderer's switch over it stays exhaustive rather than silently ignoring a
- * kind it has never seen.
+ * kind it has never seen. A new object on an existing surface is a new
+ * reference on that surface's arm, never a new arm.
  */
 export const annotationAnchorSchema = z.discriminatedUnion('kind', [
   z
     .object({
       kind: z.literal('spatial'),
       nodeId: nodeIdSchema.optional(),
+      edgeId: nodeIdSchema.optional(),
       // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
       // fractional anchor taken from a zoomed viewport survives the session
       // and then vanishes, because the next read drops what fails the schema.
       x: z.number().int(),
       y: z.number().int(),
     })
-    .strict(),
+    .strict()
+    .refine((anchor) => anchor.nodeId === undefined || anchor.edgeId === undefined, {
+      message: 'a spatial anchor names a node or an edge, not both',
+    }),
   z
     .object({
       kind: z.literal('text'),
+      /** The text node whose text the passage is in; absent, the document's own body. */
+      nodeId: nodeIdSchema.optional(),
       quote: textQuoteSelectorSchema,
       start: z.number().int().nonnegative(),
       end: z.number().int().nonnegative(),
@@ -142,6 +165,7 @@ export function threadFromCanvasComment(comment: CanvasComment): CommentThread {
   const anchor: AnnotationAnchor = {
     kind: 'spatial',
     ...(comment.targetNodeId === undefined ? {} : { nodeId: comment.targetNodeId }),
+    ...(comment.targetEdgeId === undefined ? {} : { edgeId: comment.targetEdgeId }),
     x: comment.x,
     y: comment.y,
   }
@@ -160,3 +184,77 @@ export function threadFromCanvasComment(comment: CanvasComment): CommentThread {
     ],
   }
 }
+
+/** What the projection needs to know about a node: where its top-right corner is. */
+export interface CommentTargetNode {
+  readonly id: string
+  readonly x: number
+  readonly y: number
+  readonly width: number
+}
+
+/**
+ * One thread as the canvas still sees it: a single comment at a spatial
+ * anchor. Lossy by construction — a thread's replies have nowhere to go in a
+ * `CanvasComment`, and a passage has no canvas position of its own — which
+ * is why this is a PROJECTION rather than the shape anything stores. The
+ * panel that shows a conversation reads threads directly.
+ *
+ * Every arm projects, or says why not:
+ * - `spatial` → the comment as it always was, its node or edge reference
+ *   carried as `targetNodeId` / `targetEdgeId`.
+ * - `text` naming a node → a node comment at that node's top-right corner,
+ *   found through `nodeById`; the renderer follows the node from there. The
+ *   node gone, there is no corner to stand at: `undefined`, which is the
+ *   orphaned state (ADR-0026 decision 4) and the panel's to show.
+ * - `text` naming no node → a note's passage, which the canvas cannot draw:
+ *   `undefined`.
+ *
+ * `nodeById` is optional so a caller that has no canvas (a reader of the
+ * threads plane alone) still projects every spatial thread; it then answers
+ * `undefined` for a node passage, the same as for a node that is gone.
+ */
+export function canvasCommentFromThread(
+  thread: CommentThread,
+  nodeById?: (id: string) => CommentTargetNode | undefined,
+): CanvasComment | undefined {
+  // Messages arrive sorted by `compareMessages`, so this is the message the
+  // conversation opened with rather than whichever arrived first.
+  const opening = thread.messages[0]
+  if (opening === undefined) return undefined
+  const { anchor } = thread
+  let place: {
+    readonly x: number
+    readonly y: number
+    readonly targetNodeId?: string
+    readonly targetEdgeId?: string
+  }
+  if (anchor.kind === 'spatial') {
+    place = {
+      x: anchor.x,
+      y: anchor.y,
+      ...(anchor.nodeId === undefined ? {} : { targetNodeId: anchor.nodeId }),
+      ...(anchor.edgeId === undefined ? {} : { targetEdgeId: anchor.edgeId }),
+    }
+  } else {
+    if (anchor.nodeId === undefined) return undefined
+    const node = nodeById?.(anchor.nodeId)
+    if (node === undefined) return undefined
+    place = { x: node.x + node.width, y: node.y, targetNodeId: node.id }
+  }
+  return {
+    id: thread.id,
+    ...place,
+    text: opening.body,
+    ...(opening.author === undefined ? {} : { author: opening.author }),
+    ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
+    // Only the closed state is spelled out: `resolved: false` and no field
+    // are the same state under `canvasCommentSchema`, and emitting one of
+    // them keeps a reader from treating the other as unknown.
+    ...(thread.status === 'resolved' ? { resolved: true } : {}),
+  }
+}
+
+/** The surfaces the anchor union carries — one per arm, read off the schema so a new arm cannot be missed. */
+export const ANNOTATION_ANCHOR_KINDS: readonly AnnotationAnchor['kind'][] =
+  annotationAnchorSchema.options.map((option) => option.shape.kind.value)

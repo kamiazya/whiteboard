@@ -1,10 +1,12 @@
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
+import type { EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { MutableRefObject } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { BoxMove } from './align.js'
 import { alignableBoxesOf } from './align.js'
 import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
@@ -50,6 +52,15 @@ export type DocumentPickerState =
 export interface CommentComposeState {
   readonly point: Point
   readonly targetNodeId?: string
+  /** The edge the comment is about; the bubble opens on its routed path. */
+  readonly targetEdgeId?: string
+  /**
+   * A passage of a node's text (ADR-0026's text arm with a node reference):
+   * the commit opens a THREAD rather than a flat comment, since a flat
+   * comment cannot carry a passage. `targetNodeId` names the node as well,
+   * so the bubble opens at the node's corner like a node comment.
+   */
+  readonly passage?: TextAnchor
   /**
    * Present when the bubble edits an EXISTING comment rather than drafting
    * a new one: the commit rewrites that comment's text instead of creating.
@@ -108,6 +119,7 @@ export interface CanvasContextMenuProps {
   readonly setContextMenu: (target: ContextMenuTarget | null) => void
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
+  readonly edgePathOf: EdgePathLookup
   readonly theme: ResolvedTheme
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
@@ -130,6 +142,7 @@ export function CanvasContextMenu({
   setContextMenu,
   canvas,
   canvasRef,
+  edgePathOf,
   theme,
   gestureState,
   isEdgeLocked,
@@ -201,10 +214,12 @@ export function CanvasContextMenu({
 
   const items: readonly ContextMenuItem[] =
     comment !== undefined
-      ? commentMenuItems({ comment, canvasRef, setCommentCompose, applyResult })
+      ? commentMenuItems({ comment, canvasRef, edgePathOf, setCommentCompose, applyResult })
       : node === undefined && edge !== undefined
         ? edgeMenuItems({
             edge,
+            point: contextMenu.point,
+            setCommentCompose,
             theme,
             isEdgeLocked,
             edgeLockEnabled,

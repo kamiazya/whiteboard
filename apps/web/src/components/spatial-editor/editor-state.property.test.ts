@@ -316,6 +316,8 @@ const COMMAND_COVERAGE = {
     'not modelled: written by the pin drag (comment-move.browser.test.tsx), a side state beside the gesture machine rather than a GestureState arm; single-field write',
   'set-comment-text':
     'not modelled: written by the edit bubble (comment-edit.browser.test.tsx), outside the gesture machine; single-field write',
+  'create-thread':
+    'not modelled: appends the thread’s canvas projection (a node comment) — a single append written by the comment verb on a node’s text selection (node-text-comment.browser.test.tsx); the thread itself is written by document-sync-session.test.ts',
   'reply-to-thread':
     'not modelled: applyCommand is the IDENTITY for it — a reply writes the threads plane beside the canvas, so this model, whose subject is what a command does to a canvas, has nothing to observe. Its write path is document-sync-session.test.ts and its gestures are comment-reply.browser.test.tsx',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>

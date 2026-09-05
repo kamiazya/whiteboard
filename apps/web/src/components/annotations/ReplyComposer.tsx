@@ -27,9 +27,11 @@ export interface ReplyComposerProps {
   readonly onReply: (body: string) => void
   /** The panel's dense typography; the card inherits the bubble's own. */
   readonly compact?: boolean
+  /** Take the caret on mount — for a composer the reader just asked for. */
+  readonly autoFocus?: boolean
 }
 
-export function ReplyComposer({ onReply, compact = false }: ReplyComposerProps) {
+export function ReplyComposer({ onReply, compact = false, autoFocus = false }: ReplyComposerProps) {
   const [draft, setDraft] = useState('')
 
   function commit(): void {
@@ -48,6 +50,8 @@ export function ReplyComposer({ onReply, compact = false }: ReplyComposerProps) 
       }}
     >
       <textarea
+        // biome-ignore lint/a11y/noAutofocus: the composer only mounts because the reader asked to write; the caret is the request answered
+        autoFocus={autoFocus}
         aria-label="Reply"
         aria-keyshortcuts="Meta+Enter Control+Enter"
         placeholder="Reply…"

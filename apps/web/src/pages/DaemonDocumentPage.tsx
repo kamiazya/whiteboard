@@ -4,7 +4,6 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
-import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -53,6 +52,7 @@ import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
+import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
@@ -75,7 +75,7 @@ import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
-import { markdownAnchorResolver } from '../lib/text-anchor.js'
+import type { TextAnchor } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import type { PastDocument } from '../lib/versions-backend.js'
@@ -555,6 +555,40 @@ export function DaemonDocumentPage({
 
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
+  // A passage waiting for its opening message; see the browser page. Here
+  // the thread rides the sync session's command, like a reply does.
+  const [pendingAnchor, setPendingAnchor] = useState<TextAnchor | null>(null)
+  const requestComment = useCallback((anchor: TextAnchor) => {
+    setPendingAnchor(anchor)
+    setCommentsOpen(true)
+    return true
+  }, [])
+  const commentDraft = useMemo(
+    () =>
+      pendingAnchor === null
+        ? undefined
+        : {
+            about: pendingAnchor.quote.exact,
+            onSubmit: (body: string) => {
+              const id = crypto.randomUUID()
+              const createdAt = new Date().toISOString()
+              onChange(canvasValueRef.current, {
+                kind: 'create-thread',
+                thread: {
+                  id,
+                  anchor: pendingAnchor,
+                  status: 'open',
+                  createdAt,
+                  messages: [{ id: `${id}-m1`, body, createdAt }],
+                },
+              })
+              setPendingAnchor(null)
+              setOpenThreadId(id)
+            },
+            onCancel: () => setPendingAnchor(null),
+          },
+    [pendingAnchor, onChange],
+  )
   /**
    * Appends the reader's reply to a conversation.
    *
@@ -603,14 +637,10 @@ export function DaemonDocumentPage({
   const resolveAnchor = useMemo(() => {
     // Same reader as the browser page, deliberately: whether a passage is
     // still there is a fact about the document, not about who keeps it.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownBody)
+    if (documentKind === 'markdown')
+      return anchorResolverFor({ kind: 'markdown', body: markdownBody })
     if (documentKind !== 'spatial') return undefined
-    const nodeIds = new Set(canvasValue.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
-    }
+    return anchorResolverFor({ kind: 'spatial', canvas: canvasValue })
   }, [documentKind, canvasValue, markdownBody])
 
   // `[[path]]` aliases resolve against the same list the user can see;
@@ -1163,6 +1193,8 @@ export function DaemonDocumentPage({
                     threads: annotations,
                     selectedThreadId: openThreadId,
                     onSelectThread: openThreadFromEditor,
+                    onRequestComment:
+                      preview === null && variationPreview === null ? requestComment : undefined,
                   }}
                   spatial={() => (
                     <SpatialEditorPane
@@ -1226,6 +1258,7 @@ export function DaemonDocumentPage({
                 // document — sent from a surface showing something else
                 // entirely.
                 onReply={preview === null && variationPreview === null ? handleReply : undefined}
+                draft={preview === null && variationPreview === null ? commentDraft : undefined}
               />
             ) : null}
           </div>

@@ -6,6 +6,7 @@ import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import {
   Lock as LockIcon,
   LockOpen,
+  MessageSquare,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -18,10 +19,14 @@ import type { ResolvedTheme } from '../../../hooks/useThemeMode.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
+import type { Point } from '../viewport.js'
 import { colorRow } from './color-row.js'
 
 export interface EdgeMenuItemsInput {
   readonly edge: CanvasEdge
+  /** Where the menu was opened, in canvas coordinates — the comment's stored point. */
+  readonly point: Point
+  readonly setCommentCompose: CanvasCommands['setCommentCompose']
   readonly theme: ResolvedTheme
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly edgeLockEnabled: boolean
@@ -33,6 +38,8 @@ export interface EdgeMenuItemsInput {
 
 export function edgeMenuItems({
   edge,
+  point,
+  setCommentCompose,
   theme,
   isEdgeLocked,
   edgeLockEnabled,
@@ -125,6 +132,19 @@ export function edgeMenuItems({
       label: 'Edit label',
       icon: <Tag />,
       onSelect: () => setEdgeLabelEditId(edge.id),
+    },
+    {
+      // The annotation layer's entry on an edge, beside the node's "Comment
+      // on this": the point pressed is what the comment stores, and the
+      // layer pins it on the edge's routed path from there (canvas-render's
+      // `commentAnchor`), so it rides a reroute.
+      label: 'Comment on this',
+      icon: <MessageSquare />,
+      onSelect: () =>
+        setCommentCompose({
+          point: { x: Math.round(point.x), y: Math.round(point.y) },
+          targetEdgeId: edge.id,
+        }),
     },
     ...(edgeLockEnabled
       ? [

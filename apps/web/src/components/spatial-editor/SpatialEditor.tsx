@@ -68,6 +68,7 @@ import {
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
+  commentAnchor,
   edgeLabelAnchor,
   outlineContentBox,
   placeCommentBubble,
@@ -79,7 +80,14 @@ import {
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import { forwardRef, type ReactNode, useImperativeHandle, useMemo, useRef } from 'react'
+import {
+  forwardRef,
+  type ReactNode,
+  useCallback,
+  useImperativeHandle,
+  useMemo,
+  useRef,
+} from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
@@ -614,6 +622,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
       useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    /**
+     * The routed path of an edge, as drawn — for a comment about an edge to
+     * open its bubble on the path (canvas-render's `commentAnchor`), the
+     * same producer the layer pins it with.
+     */
+    const edgePathOf = useCallback(
+      (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
+      [edgePaths],
+    )
     const {
       commentPlacementObstacles,
       hitTestComment,
@@ -627,7 +644,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, commentChromeBoxes })
+    } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -2139,6 +2156,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setContextMenu={setContextMenu}
               canvas={canvas}
               canvasRef={canvasRef}
+              edgePathOf={edgePathOf}
               theme={theme}
               gestureState={gestureState}
               isEdgeLocked={isEdgeLocked}
@@ -2534,7 +2552,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <TextNodeEditor
                 exitHintScale={1 / viewport.zoom}
                 box={commentDraftBox(
-                  commentCompose.point,
+                  // An edge comment opens ON the routed path, where the layer
+                  // will pin it — one producer for the geometry.
+                  commentCompose.targetEdgeId === undefined
+                    ? commentCompose.point
+                    : commentAnchor(
+                        {
+                          id: '',
+                          text: ' ',
+                          x: commentCompose.point.x,
+                          y: commentCompose.point.y,
+                          targetEdgeId: commentCompose.targetEdgeId,
+                        },
+                        canvas,
+                        edgePathOf,
+                      ),
                   commentPlacementObstacles(commentCompose.editing?.id),
                 )}
                 initialText={commentCompose.editing?.initialText ?? ''}
@@ -2559,8 +2591,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                         ],
                       })
                     }
+                  } else if (text.length > 0 && commentCompose.passage !== undefined) {
+                    // A passage of a node's text: a THREAD, since a flat
+                    // comment cannot carry where in the text it points.
+                    const id = (createId ?? defaultCreateId)()
+                    const createdAt = new Date().toISOString()
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        {
+                          kind: 'create-thread',
+                          thread: {
+                            id,
+                            anchor: commentCompose.passage,
+                            status: 'open',
+                            createdAt,
+                            messages: [{ id: `${id}-m1`, body: text, createdAt }],
+                          },
+                        } as const,
+                      ],
+                    })
                   } else if (text.length > 0) {
-                    const { point, targetNodeId } = commentCompose
+                    const { point, targetNodeId, targetEdgeId } = commentCompose
                     applyResult({
                       state: { kind: 'idle' },
                       commands: [
@@ -2576,6 +2628,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                             text,
                             createdAt: new Date().toISOString(),
                             ...(targetNodeId === undefined ? {} : { targetNodeId }),
+                            ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
                           },
                         } as const,
                       ],
@@ -2612,6 +2665,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
                   })()}
                   initialText={selectedNode.text}
+                  // The conversations about passages of this node's text,
+                  // highlighted over the draft; and the comment verb's seam,
+                  // which attaches the caret's scope to this node and opens
+                  // the compose bubble at the node's corner, where a node
+                  // comment opens. The editor commits on the blur the bubble
+                  // causes, so the passage the anchor quotes is the text
+                  // that gets committed.
+                  threads={threads?.filter(
+                    (thread) =>
+                      thread.anchor.kind === 'text' && thread.anchor.nodeId === selectedNode.id,
+                  )}
+                  onRequestComment={(anchor) => {
+                    setCommentCompose({
+                      point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
+                      targetNodeId: selectedNode.id,
+                      passage: { ...anchor, nodeId: selectedNode.id },
+                    })
+                    return true
+                  }}
                   exitHintTop={selection.box.y + selection.box.height + 6}
                   exitHintScale={1 / viewport.zoom}
                   centerContent={scene.nodes.some(

@@ -1,5 +1,5 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { CommentThread, DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -48,6 +48,7 @@ import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
+import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
   documentPath as documentRoutePath,
@@ -75,7 +76,7 @@ import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
-import { markdownAnchorResolver } from '../lib/text-anchor.js'
+import type { TextAnchor } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
@@ -723,6 +724,42 @@ export function BrowserDocumentPage({
     setCommentsOpen(true)
   }, [])
   /**
+   * A passage the reader asked to comment on, waiting for its opening
+   * message: the editor's comment verb hands over the anchor, the rail
+   * opens on a composer labelled with the quote, and the thread is written
+   * on submit — through the note's own door, since a note has no session
+   * to send a command through.
+   */
+  const [pendingAnchor, setPendingAnchor] = useState<TextAnchor | null>(null)
+  const requestComment = useCallback((anchor: TextAnchor) => {
+    setPendingAnchor(anchor)
+    setCommentsOpen(true)
+    return true
+  }, [])
+  const commentDraft = useMemo(
+    () =>
+      pendingAnchor === null
+        ? undefined
+        : {
+            about: pendingAnchor.quote.exact,
+            onSubmit: (body: string) => {
+              const id = crypto.randomUUID()
+              const createdAt = new Date().toISOString()
+              markdownDoc.addThread({
+                id,
+                anchor: pendingAnchor,
+                status: 'open',
+                createdAt,
+                messages: [{ id: `${id}-m1`, body, createdAt }],
+              })
+              setPendingAnchor(null)
+              setOpenThreadId(id)
+            },
+            onCancel: () => setPendingAnchor(null),
+          },
+    [pendingAnchor, markdownDoc.addThread],
+  )
+  /**
    * This document's conversations, whichever half of the page holds them.
    *
    * A markdown document is given no BrowserBackend on purpose (see the
@@ -745,20 +782,11 @@ export function BrowserDocumentPage({
    * matched against the body, which is the markdown projection's job.
    */
   const resolveAnchor = useMemo(() => {
-    // A markdown document CAN tell now: a text anchor's passage is either
-    // still findable in the body or it is gone (see text-anchor.ts). Until
-    // that reader existed this branch answered `undefined` for every note,
-    // which the panel correctly read as "this host cannot tell" — true then,
-    // and a thread whose sentence had been deleted looked exactly like one
-    // whose sentence was still there.
-    if (documentKind === 'markdown') return markdownAnchorResolver(markdownDoc.body)
-    if (documentKind !== 'spatial') return undefined
-    const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-    return (thread: CommentThread): 'placed' | 'orphaned' => {
-      const { anchor } = thread
-      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
-      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
+    if (documentKind === 'markdown') {
+      return anchorResolverFor({ kind: 'markdown', body: markdownDoc.body })
     }
+    if (documentKind !== 'spatial') return undefined
+    return anchorResolverFor({ kind: 'spatial', canvas })
   }, [documentKind, canvas, markdownDoc.body])
 
   /**
@@ -1260,6 +1288,7 @@ export function BrowserDocumentPage({
                           threads: annotations,
                           selectedThreadId: openThreadId,
                           onSelectThread: openThreadFromEditor,
+                          onRequestComment: preview === null ? requestComment : undefined,
                         }
                   }
                   spatial={() => (
@@ -1323,6 +1352,7 @@ export function BrowserDocumentPage({
                 // reply is a write to the LIVE document — sent from a
                 // surface showing something else entirely.
                 onReply={preview === null ? handleReply : undefined}
+                draft={preview === null ? commentDraft : undefined}
               />
             ) : null}
           </div>

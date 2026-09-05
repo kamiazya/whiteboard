@@ -252,6 +252,51 @@ describe('comment layer', () => {
     expect(danglingPin?.bbox.y).toBe(70 - COMMENT_PIN_SIZE_PX / 2)
   })
 
+  it('rides the target edge: pinned on its routed path, at the point nearest the stored anchor', () => {
+    // Two nodes side by side, so the edge between them is a straight line
+    // at their shared centre height; the comment is stored well below it.
+    const left: SpatialNode = {
+      id: 'a',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 100,
+      height: 100,
+      text: 'a',
+    }
+    const right: SpatialNode = {
+      id: 'b',
+      type: 'text',
+      x: 400,
+      y: 0,
+      width: 100,
+      height: 100,
+      text: 'b',
+    }
+    const canvas: SpatialCanvas = {
+      nodes: [left, right],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      'x-whiteboard': {
+        comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
+      },
+    }
+    const scene = layoutSpatialCanvas(canvas, baseOptions())
+    const edge = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'e1',
+    )
+    const ys = new Set((edge?.path ?? []).map((point) => point.y))
+    expect(ys.size).toBe(1)
+    const [edgeY] = ys
+    const pin = pinOf(scene.nodes, 'c1')
+    expect(pin?.bbox.y).toBe((edgeY as number) - COMMENT_PIN_SIZE_PX / 2)
+    expect(pin?.bbox.x).toBe(250 - COMMENT_PIN_SIZE_PX / 2)
+
+    // The edge gone, the comment stands where it was stored — orphaned in
+    // the panel, never dropped from the canvas.
+    const dangling = layoutSpatialCanvas({ ...canvas, edges: [] }, baseOptions())
+    expect(pinOf(dangling.nodes, 'c1')?.bbox.y).toBe(130 - COMMENT_PIN_SIZE_PX / 2)
+  })
+
   it('does not draw a resolved comment — the record stays in the document, not on the canvas', () => {
     const withoutComments = layoutSpatialCanvas({ nodes: [TEXT_NODE], edges: [] }, baseOptions())
     const withResolved = layoutSpatialCanvas(

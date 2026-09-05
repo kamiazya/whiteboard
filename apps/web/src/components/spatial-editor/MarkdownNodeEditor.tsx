@@ -34,14 +34,21 @@ import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { GFM } from '@lezer/markdown'
-import { type CSSProperties, useLayoutEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react'
+import type { TextAnchor } from '../../lib/text-anchor.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
   setActiveMarkdownEditor,
 } from '../markdown-editor/active-markdown-editor.js'
+import {
+  commentAnchors,
+  requestCommentOnScope,
+  setCommentThreads,
+} from '../markdown-editor/comment-anchors.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
@@ -77,6 +84,18 @@ export interface MarkdownNodeEditorProps {
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
   readonly onChange?: (text: string) => void
+  /**
+   * The comment verb's host seam: the caret's scope as a text anchor over
+   * this editor's document, for the host to attach to its node and open a
+   * composer for. See SourcePane's prop of the same name.
+   */
+  readonly onRequestComment?: (anchor: TextAnchor) => boolean
+  /**
+   * The conversations about passages of THIS node's text, drawn as
+   * highlights over the draft while it is edited (no gutter: the editor
+   * sits in the node's own box). Offsets are into the node's text.
+   */
+  readonly threads?: readonly CommentThread[]
 }
 
 export function MarkdownNodeEditor({
@@ -90,6 +109,8 @@ export function MarkdownNodeEditor({
   onCommit,
   onCancel,
   onChange,
+  onRequestComment,
+  threads,
 }: MarkdownNodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -97,6 +118,8 @@ export function MarkdownNodeEditor({
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
   const finishedRef = useRef(false)
   const mountedRef = useRef(false)
+  const onRequestCommentRef = useRef(onRequestComment)
+  onRequestCommentRef.current = onRequestComment
   // Latest callbacks without recreating the EditorView per parent render.
   const callbacksRef = useRef({ onCommit, onCancel, onChange })
   callbacksRef.current = { onCommit, onCancel, onChange }
@@ -151,6 +174,7 @@ export function MarkdownNodeEditor({
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
+        commentAnchors({ gutter: false }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
@@ -196,6 +220,9 @@ export function MarkdownNodeEditor({
         view.focus()
       },
       headingLevel: () => headingLevelAt(view.state),
+      ...(onRequestCommentRef.current === undefined
+        ? {}
+        : { openCommentComposer: () => requestCommentOnScope(view, onRequestCommentRef.current) }),
     }
     view.focus()
     // Continue typing where the text ends — programmatic focus leaves the
@@ -213,6 +240,9 @@ export function MarkdownNodeEditor({
     // Mount-once by design: initialText is the seed, later parent renders
     // must not reset the document under the caret.
   }, [])
+  useEffect(() => {
+    viewRef.current?.dispatch({ effects: setCommentThreads.of(threads ?? []) })
+  }, [threads])
 
   return (
     <>

@@ -64,6 +64,8 @@ const VERB_COVERAGE = {
   strikethrough: 'covered',
   code: 'covered',
   link: 'covered',
+  comment:
+    'not modelled: no document transform at all — it opens the comment composer on the host, covered by node-text-comment.browser.test.tsx and markdown-selection-comment.browser.test.tsx',
   math: 'covered',
   'bullet-list': 'covered',
   'ordered-list': 'covered',

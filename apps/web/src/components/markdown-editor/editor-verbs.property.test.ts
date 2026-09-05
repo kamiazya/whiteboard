@@ -51,6 +51,8 @@ const VERB_COVERAGE = {
   italic: 'covered',
   code: 'covered',
   link: 'covered',
+  comment:
+    'not modelled: no document transform at all — it opens the comment composer on the host, covered by node-text-comment.browser.test.tsx and markdown-selection-comment.browser.test.tsx',
   'toggle-task': 'covered',
   'bullet-list': 'covered',
   'ordered-list': 'covered',
@@ -460,6 +462,10 @@ describe('markdown editor verbs', () => {
     // run never made change anything has asserted nothing about its own
     // behaviour, however green the properties above look.
     for (const id of Object.keys(VERB_COVERAGE) as MarkdownVerbId[]) {
+      // A verb the ledger says this run does not model has no effect to
+      // demand; its reason names where it IS exercised. Until `comment`
+      // every verb was a document transform, so the guard had never met one.
+      if (VERB_COVERAGE[id] !== 'covered') continue
       expect(
         effects[id],
         `editing verb "${id}" was driven ${drives[id]} times and never changed the document — the generator cannot reach the arrangement it acts on, so its properties are vacuous. Make the generator denser, do not lower the bar`,

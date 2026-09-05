@@ -14,6 +14,7 @@ import {
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
   writeCanvasComment,
+  writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -82,6 +83,8 @@ function commandTargetKey(command: EditorCommand): string {
     case 'move-comment':
     case 'set-comment-text':
       return `comment:${command.id}`
+    case 'create-thread':
+      return `thread:${command.thread.id}`
     case 'reply-to-thread':
       // Keyed by MESSAGE, not by thread. Every other key here dedupes to the
       // last value for one target, which is right when the target holds one
@@ -339,6 +342,13 @@ function writeCommandTarget(
       // thread this replica does not hold, which is deliberate (replying must
       // never be the write that opens a container).
       writeThreadMessage(doc, command.threadId, command.message)
+      return true
+    case 'create-thread':
+      // Always "handled", for the reply's reason: a thread lives in the
+      // plane beside the canvas, and the fallback's whole-canvas resync
+      // would never open it. Its canvas projection (the pin) is the
+      // reader's to derive on the next read.
+      writeCommentThread(doc, command.thread)
       return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the

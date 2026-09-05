@@ -33,6 +33,7 @@ import {
   readMarkdownBody,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
   writeThreadMessage,
@@ -186,6 +187,12 @@ export interface MarkdownDocumentState {
    * either by hand.
    */
   readonly replyToThread: (threadId: string, message: CommentMessage) => void
+  /**
+   * Opens a conversation on this document — the one write that MAY create
+   * a thread container, which is why it is a separate door from
+   * `replyToThread`. A no-op for a document still loading.
+   */
+  readonly addThread: (thread: CommentThread) => void
 }
 
 /**
@@ -511,6 +518,12 @@ export function useMarkdownDocument(
     writeThreadMessage(host.containers, threadId, message)
   }, [])
 
+  const addThread = useCallback((thread: CommentThread) => {
+    const host = hostRef.current
+    if (host === null) return
+    writeCommentThread(host.containers, thread)
+  }, [])
+
   const bodyTextOf = useCallback(
     (target: Loro): LoroText => {
       const host = hostRef.current
@@ -532,5 +545,6 @@ export function useMarkdownDocument(
     bodyTextOf,
     annotations,
     replyToThread,
+    addThread,
   }
 }

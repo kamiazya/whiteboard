@@ -114,29 +114,29 @@ export function resolveTextAnchor(body: string, anchor: TextAnchor): ResolvedTex
   return { kind: 'placed', start: best, end: best + exact.length }
 }
 
+/** Characters of context kept on each side of a quote, enough to tell a repeated phrase apart. */
+const QUOTE_CONTEXT_CHARS = 32
+
 /**
- * Whether each of a document's threads still finds its place, for the rail's
- * `resolveAnchor`.
- *
- * One function so the two keeper pages cannot answer this differently — the
- * gap that let the rail exist on one page and not the other was exactly this
- * shape, a decision made twice.
- *
- * `body` null means the document's text has not loaded yet, which is NOT the
- * same as a passage being gone: answering `orphaned` there would mark every
- * thread as lost for the moment before the body arrives, and a reader would
- * see the badges appear and then vanish.
+ * The anchor for a passage a reader selected: the quote with its
+ * surroundings, plus the offsets — both halves of a text anchor, written
+ * from the body as it is at the moment of selection. `nodeId` names the
+ * text node the body belongs to; absent, it is a note's own body.
  */
-export function markdownAnchorResolver(
-  body: string | null,
-): ((thread: { readonly anchor: AnnotationAnchor }) => 'placed' | 'orphaned') | undefined {
-  if (body === null) return undefined
-  return (thread) => {
-    // A spatial anchor on a markdown document has nothing here to be judged
-    // against — it is not lost, it is about a surface this document does not
-    // have. Saying `placed` is the honest answer for "not something I can
-    // tell you about".
-    if (thread.anchor.kind !== 'text') return 'placed'
-    return resolveTextAnchor(body, thread.anchor).kind === 'placed' ? 'placed' : 'orphaned'
+export function textAnchorAt(body: string, from: number, to: number, nodeId?: string): TextAnchor {
+  const start = Math.max(0, Math.min(from, to))
+  const end = Math.min(body.length, Math.max(from, to))
+  const prefix = body.slice(Math.max(0, start - QUOTE_CONTEXT_CHARS), start)
+  const suffix = body.slice(end, end + QUOTE_CONTEXT_CHARS)
+  return {
+    kind: 'text',
+    ...(nodeId === undefined ? {} : { nodeId }),
+    quote: {
+      ...(prefix === '' ? {} : { prefix }),
+      exact: body.slice(start, end),
+      ...(suffix === '' ? {} : { suffix }),
+    },
+    start,
+    end,
   }
 }

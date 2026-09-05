@@ -19,17 +19,19 @@
  * produce a canvas with a dangling edge endpoint.
  */
 
-import type {
-  CanvasColor,
-  CanvasComment,
-  CanvasEdge,
-  ClipboardFragment,
-  CommentMessage,
-  EdgeRoutingStyle,
-  LineJumps,
-  SpatialCanvas,
-  SpatialNode,
-  StoredCoreFacets,
+import {
+  type CanvasColor,
+  type CanvasComment,
+  type CanvasEdge,
+  type ClipboardFragment,
+  type CommentMessage,
+  type CommentThread,
+  canvasCommentFromThread,
+  type EdgeRoutingStyle,
+  type LineJumps,
+  type SpatialCanvas,
+  type SpatialNode,
+  type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
@@ -210,6 +212,18 @@ export type EditorLeafCommand =
       readonly kind: 'reply-to-thread'
       readonly threadId: string
       readonly message: CommentMessage
+    }
+  | {
+      /**
+       * Opens a conversation whose anchor a flat comment cannot carry — a
+       * passage of a node's text, today. The thread itself is what the sync
+       * session writes; on the canvas it appears as its projection (a
+       * comment on the node, at its corner), appended so the renderer draws
+       * a pin without waiting for the annotation channel. A colliding id is
+       * a no-op, like create-comment.
+       */
+      readonly kind: 'create-thread'
+      readonly thread: CommentThread
     }
 
 /**
@@ -697,6 +711,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return patchComment(canvas, command.id, { x: command.x, y: command.y })
     case 'set-comment-text':
       return patchComment(canvas, command.id, { text: command.text })
+    case 'create-thread': {
+      const projected = canvasCommentFromThread(command.thread, (id) =>
+        canvas.nodes.find((node) => node.id === id),
+      )
+      return projected === undefined ? canvas : createComment(canvas, projected)
+    }
     case 'reply-to-thread':
       // Identity, and deliberately: the conversation is a plane beside the
       // canvas, so a reply has no canvas effect to compute. Returning the

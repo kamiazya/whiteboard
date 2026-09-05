@@ -25,7 +25,7 @@ import {
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { resolveTextAnchor } from '../../lib/text-anchor.js'
+import { resolveTextAnchor, type TextAnchor } from '../../lib/text-anchor.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
@@ -153,6 +153,12 @@ export interface MarkdownEditorProps {
   selectedThreadId?: string | null
   /** A press on a gutter marker: the host opens that conversation. */
   onSelectThread?: (threadId: string) => void
+  /**
+   * The comment verb: called with the anchor for the selected passage, the
+   * host opens its composer and answers true. Absent, the verb shows on no
+   * bar and in no catalog here — a control that could not open anything.
+   */
+  onRequestComment?: (anchor: TextAnchor) => boolean
 }
 
 const DEFAULT_MAX_WIDTH = 720
@@ -304,6 +310,7 @@ export function MarkdownEditor({
   threads,
   selectedThreadId = null,
   onSelectThread,
+  onRequestComment,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   // [[ completion reads targets through a ref: the source is installed once
@@ -348,7 +355,7 @@ export function MarkdownEditor({
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
   const annotationExtension = useMemo(
-    () => commentAnchors((threadId) => onSelectThreadRef.current?.(threadId)),
+    () => commentAnchors({ onSelect: (threadId) => onSelectThreadRef.current?.(threadId) }),
     [],
   )
   const paneExtensions = useMemo(
@@ -769,22 +776,31 @@ export function MarkdownEditor({
       // there is nothing to ask, and it falls through to the wrap the table
       // declares for exactly that case.
       const icon = VERB_ICONS[spec.id]
-      if (
-        spec.action.kind === 'interactive' &&
-        linkTargets !== undefined &&
-        linkTargets.length > 0
-      ) {
-        items.push({
-          label: spec.label,
-          icon,
-          onSelect: () => {
-            const scope = sourceApiRef.current?.pinScope()
-            if (scope === undefined) return
-            setCatalog(null)
-            setLinkPicker({ query: scope.text, text: scope.text })
-          },
-        })
-        continue
+      if (spec.action.kind === 'interactive') {
+        if (spec.action.hook === 'link' && linkTargets !== undefined && linkTargets.length > 0) {
+          items.push({
+            label: spec.label,
+            icon,
+            onSelect: () => {
+              const scope = sourceApiRef.current?.pinScope()
+              if (scope === undefined) return
+              setCatalog(null)
+              setLinkPicker({ query: scope.text, text: scope.text })
+            },
+          })
+          continue
+        }
+        if (spec.action.hook === 'comment' && onRequestComment !== undefined) {
+          items.push({
+            label: spec.label,
+            icon,
+            onSelect: () => {
+              setCatalog(null)
+              sourceApiRef.current?.openCommentComposer()
+            },
+          })
+          continue
+        }
       }
 
       const command = selfContainedCommand(spec)
@@ -816,6 +832,11 @@ export function MarkdownEditor({
         runVerb={(command) => {
           sourceApiRef.current?.run(command)
         }}
+        openCommentComposer={
+          onRequestComment === undefined
+            ? undefined
+            : () => sourceApiRef.current?.openCommentComposer() ?? false
+        }
         openLinkPicker={() => {
           if (linkTargets === undefined || linkTargets.length === 0) return false
           const scope = sourceApiRef.current?.pinScope()
@@ -861,6 +882,7 @@ export function MarkdownEditor({
                   }
                 : undefined
             }
+            onRequestComment={onRequestComment}
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"

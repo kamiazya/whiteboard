@@ -24,6 +24,7 @@ export interface EditorToolbarProps {
   /** Runs a verb from the inline bar. Absent in read mode, where there is no source. */
   readonly runVerb?: (command: StateCommand) => void
   readonly openLinkPicker?: () => boolean
+  readonly openCommentComposer?: () => boolean
   /**
    * Step back and forward through the source pane's own history. Absent
    * where there is no source pane to act on (Read mode), for the reason
@@ -115,6 +116,7 @@ export function EditorToolbar({
   catalogAvailable,
   runVerb,
   openLinkPicker,
+  openCommentComposer,
   onUndo,
   onRedo,
 }: EditorToolbarProps) {
@@ -125,7 +127,11 @@ export function EditorToolbar({
         // complete catalog and stays. It is not the same list twice — the
         // catalog offers the heading LEVELS directly, where the bar has one
         // slot that cycles them.
-        <MarkdownVerbBar run={runVerb} openLinkPicker={openLinkPicker} />
+        <MarkdownVerbBar
+          run={runVerb}
+          openLinkPicker={openLinkPicker}
+          openCommentComposer={openCommentComposer}
+        />
       ) : (
         <div className="flex-1" />
       )}
