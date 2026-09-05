@@ -982,9 +982,11 @@ export function WorkspaceFilesPanel({
           </div>
         )}
       </div>
-      {/* Not while the list is loading: the trash is about content, there is
-          nothing to restore INTO yet, and rendering it early costs its own
-          read on every re-read — which is what a workspace switch is. */}
+      {/* Not while the list is loading. The trash is a SECOND list of the
+          departed workspace's documents and reads on its own, so left
+          mounted it keeps showing that workspace's rows under the new
+          address until its own read answers — measured with a trash read
+          that never answers, which is the window this closes. */}
       {documents !== null &&
         source.listTrash !== undefined &&
         source.restoreFromTrash !== undefined && (
