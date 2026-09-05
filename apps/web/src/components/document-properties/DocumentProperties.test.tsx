@@ -364,17 +364,24 @@ describe('DocumentProperties as the canvas row', () => {
     )
   })
 
-  it('renders the settings slot beside the toggle and the actions cluster at the right edge', () => {
+  it('renders the actions cluster at the right edge', () => {
     render(
       <DocumentProperties
         {...titleProps()}
         facets={{ type: 'markdown' }}
-        settings={<button type="button" aria-label="Display settings" />}
         actions={<span data-testid="row-actions">ops</span>}
       />,
     )
-    expect(screen.getByRole('button', { name: 'Display settings' })).toBeTruthy()
     expect(screen.getByTestId('row-actions')).toBeTruthy()
+  })
+
+  // Display settings had a slot of their own here, beside the properties
+  // toggle. They are the only VIEW control the row ever carried; they live
+  // in the ⋯ menu's leading band now, so the row has no way to take one.
+  it('has no slot for a display control', () => {
+    render(<DocumentProperties {...titleProps()} facets={{ type: 'canvas' }} />)
+
+    expect(screen.queryByRole('button', { name: 'Display settings' })).toBeNull()
   })
 })
 

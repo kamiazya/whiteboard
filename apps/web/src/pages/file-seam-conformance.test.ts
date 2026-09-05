@@ -66,7 +66,8 @@ async function read(page: string): Promise<string> {
  *
  * Measured when this was added: `resolveFacetContributions(bundledFacetRegistry,
  * 'canvasSettings')` answers one group — `visual` contributing
- * `visual.edges/v0` — and only BrowserDocumentPage rendered the gear. A grep
+ * `visual.edges/v0` — and only BrowserDocumentPage rendered it (a gear of its
+ * own then; the document's ⋯ opens it now, from the shared page). A grep
  * for the string `canvasSettings` in plugin-visual finds nothing, because the
  * contribution is declared through the facet definition rather than spelled
  * at a call site; resolving the registry is what shows it is real.
