@@ -1,9 +1,12 @@
 # Repo Codex MCP override.
 #
-# Connects every Codex reload to the long-lived daemon launched by
-# `pnpm mcp:http:dev`, which serves http://127.0.0.1:3099/mcp. The HTTP
-# transport sidesteps the stdio + daemon-registry path that would otherwise
-# reuse stale daemons recorded in ~/.whiteboard/daemon.json.
+# Connects every Codex reload to THIS CHECKOUT's dev daemon through the
+# stdio proxy (mcp-http-stdio-proxy.mjs), which derives the checkout's own
+# port from its on-disk location — the main checkout and every linked
+# worktree each reach their own daemon, code, and data. The proxy also
+# survives daemon watch restarts and sidesteps the daemon-registry path
+# that would otherwise reuse stale daemons recorded in
+# ~/.whiteboard/daemon.json.
 #
 # A SessionStart hook below starts the dev daemon automatically. If hooks are
 # disabled or the project is not trusted yet, start it manually:
@@ -13,8 +16,8 @@
 #   system < user (~/.codex/config.toml) < cwd < tree (./.codex/config.toml)
 #   < repo (<git-root>/.codex/config.toml) < runtime
 # This file disables the plugin-provided published `whiteboard` stdio server
-# and adds `whiteboard_dev` for the local HTTP daemon. The separate name avoids
-# merging `url` into the plugin's stdio `command`/`args` entry.
+# and adds `whiteboard_dev` for the dev stdio proxy. The separate name keeps
+# Codex from merging the override into the plugin's published entry.
 #
 # Trust gating: the cwd / tree / repo layers stay disabled unless either
 #   [projects."<absolute_path>"]
@@ -42,9 +45,8 @@ timeout = 40
 statusMessage = "Starting whiteboard MCP dev daemon"
 
 # Codex currently merges this repo-local table with the plugin-provided
-# `.mcp.json` stdio entry when the server name is also `whiteboard`. That leaves
-# `command`/`args` in place and rejects `url` with "url is not supported for
-# stdio", so the hot-reload HTTP endpoint uses a dev-only server name.
+# `.mcp.json` stdio entry when the server name is also `whiteboard`, so the
+# hot-reload dev override uses a dev-only server name.
 [mcp_servers.whiteboard]
 enabled = false
 # Codex >= 0.144 validates every mcp_servers entry's transport even when
@@ -54,6 +56,9 @@ enabled = false
 command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 
+# args arrays are not shell-expanded, so the git-root resolution needs the
+# same `sh -c` wrapper the SessionStart hook above already uses. The proxy
+# sends the bearer token itself; no headers needed here.
 [mcp_servers.whiteboard_dev]
-url = "http://127.0.0.1:3099/mcp"
-http_headers = { Authorization = "Bearer whiteboard-dev" }
+command = "sh"
+args = ["-c", 'exec node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"']
