@@ -84,7 +84,7 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
+import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -644,57 +644,36 @@ export function BrowserDocumentPage({
     if (versionsBackend === null || documentPath === null) {
       throw new Error('saveVersionFromPanel: no versions backend or document path')
     }
-    // Captured BEFORE the save, not after. Both arms read the live document
-    // at call time, so starting the capture here binds the picture to the
-    // state the save is about to mark. Awaiting the save first meant an edit
-    // made during it was drawn onto the older point — a picture of content
-    // that version does not contain.
-    const picture = captureBookmarkPicture(documentKind, {
-      exportScene,
-      body: markdownDoc.body,
-    })
-    let saved: Awaited<ReturnType<typeof versionsBackend.save>>
-    try {
-      saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
-    } catch (err) {
-      log.warn('save version from the History panel failed', err)
-      throw err
-    }
-    // The rest is the post-save announce work — thumbnail attach, the
-    // event that clears the dot and refreshes the History panel — run only
-    // once the guard has confirmed this save's document is still on screen.
-    return () => {
-      // The picture rides with the bookmark, as it does on the daemon page —
-      // one path through the seam, so a browser-kept row is not the one that
-      // silently has no picture. Not awaited: the bookmark has landed, and
-      // its picture arriving late or not at all must not hold up the row.
-      void attachVersionThumbnail({
-        backend: versionsBackend,
-        workspaceId: getBrowserWorkspaceId(),
-        path: documentPath,
-        versionId: saved.id,
-        getBlob: () => picture,
-      }).then((outcome) => {
-        if (outcome === 'failed') {
-          log.warn('bookmark thumbnail failed')
-          return
+    // The shared body pins the beats: capture BEFORE the save, announce,
+    // thumbnail riding along unawaited, re-announce once the picture lands
+    // (see buildVersionSaveBody).
+    return buildVersionSaveBody({
+      capture: () =>
+        captureBookmarkPicture(documentKind, {
+          exportScene,
+          body: markdownDoc.body,
+        }),
+      save: async (saveLabel) => {
+        try {
+          const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, {
+            label: saveLabel,
+          })
+          return { workspaceId: getBrowserWorkspaceId(), path: documentPath, versionId: saved.id }
+        } catch (err) {
+          log.warn('save version from the History panel failed', err)
+          throw err
         }
-        // Announce a SECOND time. The row landed before its picture did, so
-        // the list this save already refreshed holds a row that says it has
-        // none — and without this the picture appears only when something
-        // else happens to refetch, which for a person means reloading.
+      },
+      backend: versionsBackend,
+      // The top bar addresses this document as `local`/path (its
+      // `dataMode="local"` placeholder), so the dot listens under that id.
+      announceRefresh: () =>
         dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
           workspaceId: 'local',
           path: documentPath,
-        })
-      })
-      // The top bar addresses this document as `local`/path (its
-      // `dataMode="local"` placeholder), so the dot listens under that id.
-      dispatchIdentityEvent(DOCUMENT_SYNC_VERSION_SAVED_EVENT, {
-        workspaceId: 'local',
-        path: documentPath,
-      })
-    }
+        }),
+      onThumbnailFailed: () => log.warn('bookmark thumbnail failed'),
+    })(label)
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (versionsBackend === null || documentPath === null) return

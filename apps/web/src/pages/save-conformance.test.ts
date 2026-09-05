@@ -34,52 +34,18 @@ async function read(page: string): Promise<string> {
 }
 
 describe('a saved point carries a picture, whoever keeps it', () => {
-  it.each(PAGES)('%s attaches one after its save', async (page) => {
+  it.each(PAGES)('%s routes its save through the shared body', async (page) => {
+    // buildVersionSaveBody is where the beats live now — attach through the
+    // seam, capture started BEFORE the save (mutation-checked in
+    // lib/version-save-body.test.ts), the unawaited thumbnail ride-along,
+    // the re-announce once the picture lands. A page that hand-rolls its
+    // save again loses every one of those silently, which is exactly the
+    // per-page blindness this file exists for.
     const source = await read(page)
     expect(
-      source.includes('attachVersionThumbnail('),
-      `${page} saves a version and never attaches a picture to it — its keeper's rows would be the ones that silently have none`,
+      source.includes('buildVersionSaveBody('),
+      `${page} saves a version without the shared body — its keeper's rows would be the ones that silently lose the pinned save beats`,
     ).toBe(true)
-  })
-
-  it.each(PAGES)('%s captures the picture before the save, not inside the attach', async (page) => {
-    // The bytes handed to the attach must be something captured EARLIER.
-    // `exportScene` reads the live scene at call time, so a `getBlob` that
-    // calls it runs after the save has resolved — and draws an edit made
-    // during the save onto the older point, a picture of content that
-    // version does not contain.
-    const source = await read(page)
-    const getBlob = /getBlob:\s*([^,\n]*)/.exec(source)?.[1] ?? ''
-    expect(getBlob, `${page} has no getBlob argument to check`).not.toBe('')
-    expect(
-      /exportScene|getThumbnailBlob|captureBookmarkPicture/.test(getBlob),
-      `${page} renders the picture inside getBlob, so it is taken after the save resolves — capture it before the save and hand the promise over`,
-    ).toBe(false)
-  })
-
-  it.each(PAGES)('%s starts the capture before it asks for the save', async (page) => {
-    // The check above is satisfied by a page that renders AFTER its save
-    // resolves and only then assigns the variable — the very ordering the
-    // change was about. So compare where each happens: the capture has to
-    // come first in the source, which for two straight-line functions is
-    // the order they run in.
-    const source = await read(page)
-    const at = (label: string, pattern: RegExp): number => {
-      const found = [...source.matchAll(pattern)]
-      // Exactly one, or "the first occurrence" would be a different
-      // statement from the one that matters and the order would say nothing.
-      expect(found.length, `${page}: expected one ${label}, found ${found.length}`).toBe(1)
-      return found[0]?.index ?? -1
-    }
-    const capture = at(
-      'picture capture',
-      /const picture = (?:captureBookmarkPicture\(|getThumbnailBlob\(\))/g,
-    )
-    const save = at('version save', /versionsBackend\.save\(|documentsApiUrl\([^)]*'versions'\)/g)
-    expect(
-      capture,
-      `${page} asks for the picture at ${capture} and saves at ${save} — capture it first, or the picture can hold an edit made during the save`,
-    ).toBeLessThan(save)
   })
 
   it.each(
