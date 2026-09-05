@@ -78,7 +78,7 @@ import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
+import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -727,59 +727,45 @@ export function DaemonDocumentPage({
     if (canvas === null) {
       throw new Error('saveVersion: no canvas')
     }
-    // Captured BEFORE the POST, not after. `exportScene` reads the live scene
-    // synchronously at call time, so starting it here binds the picture to the
-    // state this save is about to mark. Awaiting the response first meant an
-    // edit made during it was drawn onto the older point — a picture of
-    // content that version does not contain.
-    const picture = getThumbnailBlob()
-    const res = await daemonFetch(
-      `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ label }),
-      },
-    )
-    if (!res.ok) throw new Error(`save failed: ${res.status}`)
-    const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-    if (!parsed.success) {
-      log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
-      throw new Error('save response did not match schema')
-    }
-    // The rest is the post-save announce work — refresh signals, thumbnail
-    // attach, the identity event — run only once the guard has confirmed
-    // this save's document is still the one on screen.
-    return () => {
-      setVersionRefreshSignal((n) => n + 1)
-      // The thumbnail rides with the bookmark, as it did when the top bar
-      // owned the save. It moved here with the save itself: the bar no
-      // longer takes versions, so it no longer needs the scene exporter.
-      // Not awaited — the bookmark has landed, and its picture arriving late
-      // or not at all must not hold up the row.
-      void attachVersionThumbnail({
-        backend: versionsBackend,
-        workspaceId: canvas.workspaceId,
-        path: canvas.path,
-        versionId: parsed.data.version.id,
-        getBlob: () => picture,
-      }).then((outcome) => {
-        if (outcome === 'failed') {
-          log.error('bookmark thumbnail upload failed')
-          return
+    // The shared body pins the beats: capture BEFORE the save, announce,
+    // thumbnail riding along unawaited, re-announce once the picture lands
+    // (see buildVersionSaveBody).
+    return buildVersionSaveBody({
+      capture: getThumbnailBlob,
+      save: async (saveLabel) => {
+        const res = await daemonFetch(
+          `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ label: saveLabel }),
+          },
+        )
+        if (!res.ok) throw new Error(`save failed: ${res.status}`)
+        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
+        if (!parsed.success) {
+          log.error(
+            'POST /versions response did not match saveVersionResponseSchema:',
+            parsed.error,
+          )
+          throw new Error('save response did not match schema')
         }
-        // Refresh a SECOND time, for the reason the browser page does: the
-        // row landed before its picture did, so the list refreshed above
-        // holds a row that says it has none.
-        setVersionRefreshSignal((n) => n + 1)
-      })
+        return {
+          workspaceId: canvas.workspaceId,
+          path: canvas.path,
+          versionId: parsed.data.version.id,
+        }
+      },
+      backend: versionsBackend,
+      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
       // identity-scoped event useDocumentSync fires on a broadcast — otherwise
       // nothing listening for the save (the version list, the tab) learns it happened.
-      dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
-    }
+      announceOnce: () => dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined),
+      onThumbnailFailed: () => log.error('bookmark thumbnail upload failed'),
+    })(label)
   })
   const saveVersion = async (label: string): Promise<void> => {
     if (canvas === null) return
