@@ -55,6 +55,7 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
+import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { createBrowserBranchesBackend } from '../lib/branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
@@ -642,12 +643,15 @@ export function BrowserDocumentPage({
     if (versionsBackend === null || documentPath === null) {
       throw new Error('saveVersionFromPanel: no versions backend or document path')
     }
-    // Captured BEFORE the save, not after. `exportScene` reads the live
-    // scene synchronously at call time, so starting it here binds the
-    // picture to the state the save is about to mark. Awaiting the save
-    // first meant an edit made during it was drawn onto the older point —
-    // a picture of content that version does not contain.
-    const picture = exportScene('png')
+    // Captured BEFORE the save, not after. Both arms read the live document
+    // at call time, so starting the capture here binds the picture to the
+    // state the save is about to mark. Awaiting the save first meant an edit
+    // made during it was drawn onto the older point — a picture of content
+    // that version does not contain.
+    const picture = captureBookmarkPicture(documentKind, {
+      exportScene,
+      body: markdownDoc.body,
+    })
     let saved: Awaited<ReturnType<typeof versionsBackend.save>>
     try {
       saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })

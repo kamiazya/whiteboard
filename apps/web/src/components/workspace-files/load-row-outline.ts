@@ -28,7 +28,7 @@ import type { FaviconRect } from '../../lib/favicon.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { OutlineResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
-import { outlineKeyOf } from '../../lib/render-key.js'
+import { cacheKeyFor, outlineKeyOf } from '../../lib/render-key.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { WorkspaceFilesSource } from './files-source.js'
 
@@ -53,9 +53,13 @@ export interface RowOutlineDeps {
   readonly outlineMarkdown?: (
     body: string,
     maxWidth: number,
+    cacheKey?: string,
   ) => Promise<readonly FaviconRect[] | null>
   /** Takes the stored SNAPSHOT — the worker decodes it, not this thread. */
-  readonly outlineSpatial?: (snapshot: Uint8Array) => Promise<readonly FaviconRect[] | null>
+  readonly outlineSpatial?: (
+    snapshot: Uint8Array,
+    cacheKey?: string,
+  ) => Promise<readonly FaviconRect[] | null>
 }
 
 /** The shared fleet, at idle priority: nobody is waiting on a 24px icon. */
@@ -69,8 +73,13 @@ async function outlineInPool(
   return reply.type === 'outlined' ? reply.rects : null
 }
 
-const outlineMarkdownInPool = (body: string, maxWidth: number) => outlineInPool({ body, maxWidth })
-const outlineSpatialInPool = (snapshot: Uint8Array) => outlineInPool({ snapshot })
+// `cacheKey` rides ON the request rather than being applied around the call:
+// the persistent tier lives in the worker, beside the bytes, so that reading
+// it costs nothing on the thread that asked (ADR-0027 decision 5).
+const outlineMarkdownInPool = (body: string, maxWidth: number, cacheKey?: string) =>
+  outlineInPool({ body, maxWidth, ...(cacheKey === undefined ? {} : { cacheKey }) })
+const outlineSpatialInPool = (snapshot: Uint8Array, cacheKey?: string) =>
+  outlineInPool({ snapshot, ...(cacheKey === undefined ? {} : { cacheKey }) })
 
 /**
  * The kind the pipeline will actually take, which is what the key has to
@@ -98,15 +107,20 @@ function outlinedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' 
 export function createRowOutlineLoader(deps: RowOutlineDeps) {
   const produce = async (
     document: WorkspaceDocumentEntry,
+    cacheKey: string | undefined,
   ): Promise<readonly FaviconRect[] | null> => {
     if (outlinedKind(document) === 'markdown') {
       const markdown = await deps.source.loadMarkdown(document)
       if (markdown.trim() === '') return null
-      return await (deps.outlineMarkdown ?? outlineMarkdownInPool)(markdown, ROW_LAYOUT_WIDTH)
+      return await (deps.outlineMarkdown ?? outlineMarkdownInPool)(
+        markdown,
+        ROW_LAYOUT_WIDTH,
+        cacheKey,
+      )
     }
 
     const snapshot = await deps.source.loadSpatialSnapshot(document)
-    return await (deps.outlineSpatial ?? outlineSpatialInPool)(snapshot)
+    return await (deps.outlineSpatial ?? outlineSpatialInPool)(snapshot, cacheKey)
   }
 
   return async (document: WorkspaceDocumentEntry): Promise<readonly FaviconRect[] | null> => {
@@ -119,7 +133,7 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
         kind: outlinedKind(document),
         ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
       })
-      return await deps.broker.render(key, () => produce(document))
+      return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
     } catch {
       return null
     }

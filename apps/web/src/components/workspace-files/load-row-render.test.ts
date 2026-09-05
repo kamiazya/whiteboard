@@ -98,7 +98,7 @@ describe('createRowRenderLoader', () => {
     expect(d.source.loadMarkdown).toHaveBeenCalledWith(
       expect.objectContaining({ documentId: 'd1' }),
     )
-    expect(d.renderMarkdown).toHaveBeenCalledWith('# Hi', expect.any(Number))
+    expect(d.renderMarkdown).toHaveBeenCalledWith('# Hi', expect.any(Number), undefined)
     expect(d.source.loadSpatialSnapshot).not.toHaveBeenCalled()
   })
 
@@ -115,14 +115,14 @@ describe('createRowRenderLoader', () => {
     expect(d.source.loadSpatialSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'deep/one' }),
     )
-    expect(d.renderSpatial).toHaveBeenCalledWith(expect.any(Uint8Array), 'light')
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.any(Uint8Array), 'light', undefined)
     expect(d.source.loadMarkdown).not.toHaveBeenCalled()
   })
 
   it('carries the theme, so a dark row is not drawn in light ink', async () => {
     const d = deps({ theme: 'dark' })
     await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
-    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'dark')
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.anything(), 'dark', undefined)
   })
 
   // An empty body lays out to nothing; asking the pool for it spends a slot
@@ -176,6 +176,30 @@ describe('createRowRenderLoader', () => {
       source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }),
     })
     await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
-    expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light')
+    expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light', undefined)
+  })
+  // The persistent tier's gate, at the only place that decides it. A row the
+  // keeper stamped can be remembered on disk; one it did not must not be,
+  // because a re-read produces the identical key and the entry would answer
+  // for a document that has since changed — for as long as the file lives,
+  // which unlike the in-memory map is past the end of the tab.
+  it('passes a cache key only for a row its keeper stamped', async () => {
+    const stamped = deps()
+    await createRowRenderLoader(stamped)({
+      documentId: 'd3',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-09-03T00:00:00Z',
+    })
+    const key = vi.mocked(stamped.renderMarkdown)?.mock.calls[0]?.[2]
+    expect(typeof key).toBe('string')
+    // The render key's own path, so the file on disk is addressed by the same
+    // identity the in-memory map uses rather than a second spelling of it.
+    expect(key).toContain('/svg/markdown/')
+    expect(key).toContain('.json')
+
+    const unstamped = deps()
+    await createRowRenderLoader(unstamped)({ documentId: 'd4', path: 'b', kind: 'markdown' })
+    expect(vi.mocked(unstamped.renderMarkdown)?.mock.calls[0]?.[2]).toBeUndefined()
   })
 })

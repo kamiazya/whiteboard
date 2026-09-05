@@ -95,7 +95,7 @@ describe('createRowOutlineLoader', () => {
     const d = deps({ source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }) })
 
     await expect(createRowOutlineLoader(d)(spatial)).resolves.toEqual(RECTS)
-    expect(d.outlineSpatial).toHaveBeenCalledWith(snapshot)
+    expect(d.outlineSpatial).toHaveBeenCalledWith(snapshot, undefined)
   })
 
   // A corrupt snapshot now arrives as a refused outline rather than a throw

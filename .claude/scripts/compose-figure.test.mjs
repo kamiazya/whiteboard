@@ -18,17 +18,35 @@ import assert from 'node:assert/strict'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'compose-figure.mjs')
 
-// Not skipped when ImageMagick is absent, on purpose: these cover a guard
-// whose whole point is that a check which quietly does not run is worse than
-// no check. CI installs it; a developer without it gets told what to install.
-try {
-  execFileSync('convert', ['-version'], { stdio: 'ignore' })
-} catch {
+// The premise is PROBED, never inferred: the same binary compose-figure.mjs
+// shells out to, asked directly.
+const IMAGEMAGICK_ABSENT = (() => {
+  try {
+    execFileSync('convert', ['-version'], { stdio: 'ignore' })
+    return false
+  } catch {
+    return true
+  }
+})()
+
+// Guarded from both sides, the way every probed skip in this repo is. On CI
+// the premise MUST hold — ci.yml installs ImageMagick for exactly this file —
+// so absence there is the install step regressing, and a skip would let a
+// guard stop running while every summary line stayed green. Locally a
+// developer without it is told what to install and `pnpm check:local` still
+// completes; before this, one absent binary failed the whole local gate.
+if (IMAGEMAGICK_ABSENT && process.env.CI) {
   console.error(
-    'compose-figure.test.mjs needs ImageMagick (`convert`, `identify`) — the same tool ' +
-      'compose-figure.mjs shells out to. Install it (apt: imagemagick, brew: imagemagick) and re-run.',
+    'compose-figure.test.mjs needs ImageMagick (`convert`, `identify`) on CI — the same tool ' +
+      'compose-figure.mjs shells out to. ci.yml installs it; that step has regressed.',
   )
   process.exit(1)
+}
+
+const needsImageMagick = {
+  skip: IMAGEMAGICK_ABSENT
+    ? 'ImageMagick (`convert`) is absent — install it (apt: imagemagick, brew: imagemagick) to run these; CI does'
+    : false,
 }
 
 const scratchDirs = []
@@ -59,7 +77,7 @@ function run(args) {
   }
 }
 
-test('refuses two panels that are byte-identical', () => {
+test('refuses two panels that are byte-identical', needsImageMagick, () => {
   const dir = scratch()
   const before = join(dir, 'before.png')
   const after = join(dir, 'after.png')
@@ -72,7 +90,7 @@ test('refuses two panels that are byte-identical', () => {
   assert.equal(existsSync(out), false, 'must not leave a figure that shows one picture twice')
 })
 
-test('composes a figure when the panels differ, and reports both digests', () => {
+test('composes a figure when the panels differ, and reports both digests', needsImageMagick, () => {
   const dir = scratch()
   const before = join(dir, 'before.png')
   const after = join(dir, 'after.png')
@@ -88,7 +106,7 @@ test('composes a figure when the panels differ, and reports both digests', () =>
   assert.equal(new Set(digests).size >= 2, true, `expected two distinct digests, got ${stdout}`)
 })
 
-test('refuses two panels that differ only in metadata', () => {
+test('refuses two panels that differ only in metadata', needsImageMagick, () => {
   // A byte compare says these differ; they are the same picture. Whatever
   // wrote them stamped something incidental, and the refusal has to survive
   // that or it protects nothing.
@@ -105,7 +123,7 @@ test('refuses two panels that differ only in metadata', () => {
   assert.match(stderr, /same picture/i)
 })
 
-test('gives a wider panel a label band of its own width', () => {
+test('gives a wider panel a label band of its own width', needsImageMagick, () => {
   // A change can legitimately resize what it renders, so mismatched panels
   // are not an error — but a label band built at the OTHER panel's width
   // crops the text, silently, in the half of the figure that is the point.
@@ -143,7 +161,7 @@ test('gives a wider panel a label band of its own width', () => {
   assert.equal(mean < white, true, `expected label text past x=60, got mean ${mean} vs white ${white}`)
 })
 
-test('refuses a missing input rather than composing half a figure', () => {
+test('refuses a missing input rather than composing half a figure', needsImageMagick, () => {
   const dir = scratch()
   const before = join(dir, 'before.png')
   png(before, 'white')
@@ -159,7 +177,7 @@ test('refuses a missing input rather than composing half a figure', () => {
   assert.match(stderr, /nope\.png/)
 })
 
-test('carries the labels it was given into the figure', () => {
+test('carries the labels it was given into the figure', needsImageMagick, () => {
   const dir = scratch()
   const before = join(dir, 'before.png')
   const after = join(dir, 'after.png')
