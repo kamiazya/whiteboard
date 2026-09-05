@@ -65,7 +65,6 @@ import {
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
-  edgeLabelAnchor,
   outlineContentBox,
   placeCommentBubble,
   referenceSeamsFromWire,
@@ -134,6 +133,7 @@ import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
+import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
@@ -336,8 +336,6 @@ export interface SpatialEditorProps {
   readonly isImageFileRef?: (file: string) => boolean
 }
 
-const EDGE_LABEL_EDITOR_WIDTH_PX = 160
-const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
 /** The compose bubble sits where the saved comment's bubble will be drawn,
  * so committing reads as the draft settling rather than jumping. */
 const COMMENT_COMPOSE_WIDTH_PX = 216
@@ -393,20 +391,6 @@ function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
   }
 }
 
-/**
- * Opaque surface + label typography for the edge/group label editors. The
- * CSS reset makes form controls transparent, so without an explicit
- * background the object being edited (an edge line, the frame border)
- * shows through the draft.
- */
-function labelEditorStyle(theme: ResolvedTheme) {
-  return {
-    background: theme === 'dark' ? 'oklch(0.145 0 0)' : '#ffffff',
-    color: editorTextFill(theme),
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    fontSize: SPATIAL_THEME_GEOMETRY.labelFontSizePx,
-  }
-}
 /** Screen-space px within which a press/right-click counts as hitting an
  * edge line; divided by the zoom for the canvas-space comparison. */
 const EDGE_HIT_TOLERANCE_PX = 6
@@ -2576,66 +2560,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 applyResult={applyResult}
               />
             )}
-            {edgeLabelEditId !== null &&
-              (() => {
-                const edge = canvas.edges.find((entry) => entry.id === edgeLabelEditId)
-                const path = edgePaths.find((entry) => entry.id === edgeLabelEditId)?.path
-                if (edge === undefined || path === undefined) return null
-                // edgePaths is already the DRAWN (flattened) line, so the
-                // shared anchor needs no second rounding pass here.
-                const mid = edgeLabelAnchor(path)
-                if (mid === undefined) return null
-                return (
-                  <TextNodeEditor
-                    exitHintScale={1 / viewport.zoom}
-                    box={{
-                      x: mid.x - EDGE_LABEL_EDITOR_WIDTH_PX / 2,
-                      y: mid.y - EDGE_LABEL_EDITOR_HEIGHT_PX / 2,
-                      width: EDGE_LABEL_EDITOR_WIDTH_PX,
-                      height: EDGE_LABEL_EDITOR_HEIGHT_PX,
-                    }}
-                    initialText={edge.label ?? ''}
-                    testId="edge-label-editor"
-                    style={labelEditorStyle(theme)}
-                    onCommit={(label) => {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          { kind: 'set-edge-label', id: edge.id, label: label.trim() } as const,
-                        ],
-                      })
-                      setEdgeLabelEditId(null)
-                    }}
-                    onCancel={() => setEdgeLabelEditId(null)}
-                  />
-                )
-              })()}
-            {groupLabelEditId !== null &&
-              (() => {
-                const group = canvas.nodes.find((entry) => entry.id === groupLabelEditId)
-                if (group === undefined || group.type !== 'group') return null
-                return (
-                  <TextNodeEditor
-                    exitHintScale={1 / viewport.zoom}
-                    // The label renders OUTSIDE, above the frame (container
-                    // convention) — the editor sits on that band.
-                    box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
-                    initialText={group.label ?? ''}
-                    testId="group-label-editor"
-                    style={labelEditorStyle(theme)}
-                    onCommit={(label) => {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          { kind: 'set-group-label', id: group.id, label: label.trim() } as const,
-                        ],
-                      })
-                      setGroupLabelEditId(null)
-                    }}
-                    onCancel={() => setGroupLabelEditId(null)}
-                  />
-                )
-              })()}
+            {edgeLabelEditId !== null && (
+              <EdgeLabelEditorOverlay
+                editId={edgeLabelEditId}
+                canvas={canvas}
+                edgePaths={edgePaths}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setEdgeLabelEditId(null)}
+              />
+            )}
+            {groupLabelEditId !== null && (
+              <GroupLabelEditorOverlay
+                editId={groupLabelEditId}
+                canvas={canvas}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setGroupLabelEditId(null)}
+              />
+            )}
             {commentCompose !== null && (
               <TextNodeEditor
                 exitHintScale={1 / viewport.zoom}
