@@ -1,4 +1,5 @@
 import { type LoadedReference, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
 import { createRoot, type Root } from 'react-dom/client'
@@ -32,6 +33,13 @@ export interface MountCanvasViewerOptions {
    * `referenceSeams` every other surface uses.
    */
   references?: Readonly<Record<string, LoadedReference>>
+  /**
+   * The document's conversations, for what the scene's flat comments cannot
+   * carry: a passage's words, a node set's outline. Shaped as `canvas_view`'s
+   * `threads` payload — the model's own thread — so it crosses the widget
+   * boundary as data.
+   */
+  threads?: readonly CommentThread[]
 }
 
 export interface CanvasViewerHandle {
@@ -111,6 +119,7 @@ export function mountCanvasViewer(
         height: opts.height,
         testId: opts.testId,
         label: opts.label,
+        ...(opts.threads === undefined ? {} : { threads: opts.threads }),
         ...viewerReferences(opts.references),
       }),
     )

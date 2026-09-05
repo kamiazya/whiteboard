@@ -24,7 +24,7 @@
  */
 
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   canLayoutInWorker,
@@ -84,6 +84,8 @@ export function useWorkerScene(
     readonly suppressedBodyNodeIds?: readonly string[]
     /** Draw resolved comments too; view state, threaded to the worker as data. */
     readonly showResolved?: boolean
+    /** The document's conversations, for passage highlights (plain data, crosses to the worker). */
+    readonly threads?: readonly CommentThread[]
   },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
     /**
@@ -102,7 +104,14 @@ export function useWorkerScene(
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
-    [base.measure, base.theme, base.suppressedBodyNodeIds, base.showResolved, fileSeamOptions],
+    [
+      base.measure,
+      base.theme,
+      base.suppressedBodyNodeIds,
+      base.showResolved,
+      base.threads,
+      fileSeamOptions,
+    ],
   )
   const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
@@ -138,6 +147,7 @@ export function useWorkerScene(
       missingFileRefs,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
       showResolved: options.showResolved,
+      threads: options.threads,
     }),
     [
       canvas,
@@ -146,6 +156,7 @@ export function useWorkerScene(
       missingFileRefs,
       options.suppressedBodyNodeIds,
       options.showResolved,
+      options.threads,
     ],
   )
 
@@ -213,6 +224,7 @@ export function useWorkerScene(
       missingFileRefs: inputs.missingFileRefs,
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
       showResolved: inputs.showResolved,
+      threads: inputs.threads,
     }
     worker.postMessage(request)
     return () => {

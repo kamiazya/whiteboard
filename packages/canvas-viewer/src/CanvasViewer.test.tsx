@@ -1,8 +1,12 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { render } from '@testing-library/react'
-import { describe, expect, it } from 'vitest'
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
 import { CanvasViewer } from './CanvasViewer.js'
+
+// The returned queries are bound to document.body, so a render left mounted
+// by the previous test (or the previous REPEAT of this one) answers too.
+afterEach(cleanup)
 
 const fakeMeasure: MeasureText = (text) => ({
   advanceWidth: text.length * 8,
@@ -121,5 +125,35 @@ describe('CanvasViewer frames what it draws', () => {
     expect(svg?.getAttribute('width')).toBe('640')
     expect(svg?.getAttribute('height')).toBe('480')
     expect(svg?.getAttribute('viewBox')).not.toBeNull()
+  })
+})
+
+describe('CanvasViewer draws the conversations it is handed', () => {
+  it('outlines a node set from `threads`, which the flat comments in the canvas cannot carry', () => {
+    const two: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 200, y: 100, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [],
+    }
+    const { container } = render(
+      <CanvasViewer
+        canvas={two}
+        measure={fakeMeasure}
+        threads={[
+          {
+            id: 'set',
+            anchor: { kind: 'spatial', nodeIds: ['a', 'b'], x: 0, y: 0, width: 1, height: 1 },
+            status: 'open',
+            messages: [{ id: 'm', body: 'these' }],
+          },
+        ]}
+      />,
+    )
+    const svg = container.innerHTML
+    // The outline around the box both nodes occupy, dashed.
+    expect(svg).toContain('<rect x="0" y="0" width="300" height="140"')
+    expect(svg).toContain('stroke-dasharray="6 4"')
   })
 })

@@ -544,3 +544,35 @@ it('reaches a note thread from the body: its gutter marker opens the rail on tha
     timeout: 15_000,
   })
 })
+
+it('starts a conversation about the whole document from the rail, on a note', async () => {
+  // The one anchor with no place on any surface: nothing in the editor can
+  // open it, so the rail carries the opener, and the thread it writes is
+  // listed with the label that says what it is about.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingOneThread())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+  await userEvent.click(await screen.findByTestId('comment-on-document'))
+  expect(screen.getByTestId('comments-panel-compose-about')).toHaveTextContent(
+    'About the whole document',
+  )
+
+  await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'retire this note?')
+  await userEvent.click(screen.getByRole('button', { name: /^comment$/i }))
+
+  await waitFor(() => expect(screen.getByText('retire this note?')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+  expect(screen.getByText('whole document')).toBeInTheDocument()
+})

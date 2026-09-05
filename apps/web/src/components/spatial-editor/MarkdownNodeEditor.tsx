@@ -34,19 +34,29 @@ import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
 import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { GFM } from '@lezer/markdown'
-import { type CSSProperties, useLayoutEffect, useRef } from 'react'
+import { type CSSProperties, useEffect, useLayoutEffect, useRef } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
+import type { TextAnchor } from '../../lib/text-anchor.js'
+import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import { EditorExitHint } from '../EditorExitHint.js'
 import {
   type ActiveMarkdownEditor,
   clearActiveMarkdownEditor,
   setActiveMarkdownEditor,
 } from '../markdown-editor/active-markdown-editor.js'
+import {
+  annotationMarks,
+  setAnnotationProjection,
+} from '../markdown-editor/annotation-decorations.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+
+const isMenuTarget = (target: EventTarget | null): boolean =>
+  target instanceof Element && target.closest('[role="menu"]') !== null
 
 export interface MarkdownNodeEditorProps {
   readonly box: Box
@@ -77,6 +87,18 @@ export interface MarkdownNodeEditorProps {
   readonly onCommit: (text: string) => void
   readonly onCancel: () => void
   readonly onChange?: (text: string) => void
+  /**
+   * The catalog's Comment seam: the selection as a text anchor over this
+   * editor's document, for the host to attach to its node and open a
+   * composer for — the note editor's `onComposeThread`, for a node.
+   */
+  readonly onRequestComment?: (anchor: TextAnchor) => boolean
+  /**
+   * The conversations about passages of THIS node's text, drawn as
+   * highlights over the draft while it is edited (no gutter: the editor
+   * sits in the node's own box). Offsets are into the node's text.
+   */
+  readonly threads?: readonly CommentThread[]
 }
 
 export function MarkdownNodeEditor({
@@ -90,6 +112,8 @@ export function MarkdownNodeEditor({
   onCommit,
   onCancel,
   onChange,
+  onRequestComment,
+  threads,
 }: MarkdownNodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -97,6 +121,8 @@ export function MarkdownNodeEditor({
   const activeRef = useRef<ActiveMarkdownEditor | null>(null)
   const finishedRef = useRef(false)
   const mountedRef = useRef(false)
+  const onRequestCommentRef = useRef(onRequestComment)
+  onRequestCommentRef.current = onRequestComment
   // Latest callbacks without recreating the EditorView per parent render.
   const callbacksRef = useRef({ onCommit, onCancel, onChange })
   callbacksRef.current = { onCommit, onCancel, onChange }
@@ -151,6 +177,7 @@ export function MarkdownNodeEditor({
         history(),
         keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         EditorView.lineWrapping,
+        annotationMarks(),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
@@ -160,8 +187,13 @@ export function MarkdownNodeEditor({
             if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
             return false
           },
-          blur: (_event, view) => {
+          blur: (event, view) => {
             if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
+            // Focus moving INTO a menu is the editing catalog taking the
+            // keyboard for its rows, not the user leaving the node: the
+            // catalog acts on this editor and hands the caret back on
+            // close, so the edit stays open. Any other departure commits.
+            if (isMenuTarget(event.relatedTarget)) return false
             commit(view)
             return false
           },
@@ -196,6 +228,22 @@ export function MarkdownNodeEditor({
         view.focus()
       },
       headingLevel: () => headingLevelAt(view.state),
+      focus: () => view.focus(),
+      selectedRange: () => {
+        const { from, to } = view.state.selection.main
+        return from === to ? null : { from, to }
+      },
+      ...(onRequestCommentRef.current === undefined
+        ? {}
+        : {
+            composeThread: () => {
+              const { from, to } = view.state.selection.main
+              if (from === to) return false
+              const anchor = textAnchorForSelection(view.state.doc.toString(), from, to)
+              if (anchor === null) return false
+              return onRequestCommentRef.current?.(anchor) ?? false
+            },
+          }),
     }
     view.focus()
     // Continue typing where the text ends — programmatic focus leaves the
@@ -213,6 +261,11 @@ export function MarkdownNodeEditor({
     // Mount-once by design: initialText is the seed, later parent renders
     // must not reset the document under the caret.
   }, [])
+  useEffect(() => {
+    viewRef.current?.dispatch({
+      effects: setAnnotationProjection.of({ threads: threads ?? [], selectedThreadId: null }),
+    })
+  }, [threads])
 
   return (
     <>

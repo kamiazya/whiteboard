@@ -399,6 +399,43 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     )
   })
 
+  it("forwards canvas_view's threads to the viewer, dropping the ones that do not parse", async () => {
+    // The threads plane crosses the same two boundaries the references do,
+    // and gets the same treatment: per-entry validation, so one malformed
+    // conversation costs its highlight and never the scene.
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' }],
+    }
+    const thread = {
+      id: 't',
+      anchor: { kind: 'text', nodeId: 'a', quote: { exact: 'a' }, start: 0, end: 1 },
+      status: 'open',
+      messages: [{ id: 'm', body: 'about a' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: {
+        workspaceId: 'ws-1',
+        documentId: 'ws/path',
+        scene,
+        threads: [
+          thread,
+          { id: 'broken', anchor: { kind: 'nowhere' }, status: 'open', messages: [] },
+        ],
+      },
+    })
+
+    const { mountCanvasViewer } = await import('./mount.js')
+    const opts = vi.mocked(mountCanvasViewer).mock.calls.at(-1)?.[1]
+    expect(opts?.scene).toEqual(scene)
+    expect(opts?.threads).toEqual([thread])
+  })
+
   it('drops a reference that is not a loaded document, keeping the rest of the payload', async () => {
     // The host is not trusted: `references` is parsed as canvas-render's
     // LoadedReference. A pre-parsed body (the old wire shape) or a canvas

@@ -4,23 +4,24 @@
  * conversation and a second copy of this would drift from the first.
  */
 import type { CommentMessage } from '@kamiazya/whiteboard-model'
+import { formatRelative } from '../workspace-files/format-relative.js'
 
 /**
- * Locale- and clock-independent, deliberately: `toLocaleString` reads the
- * runner's timezone (so the same thread renders differently in CI than on a
- * laptop) and a relative "2 days ago" would make every rendering depend on
- * the wall clock. What a reader needs here is which message came first, and
- * an absolute stamp answers that without either dependency. The machine-
- * readable original rides along in `dateTime`.
+ * The app's one stamp: "5m ago" while it is fresh, and a local M/D HH:MM
+ * once its age stops being the interesting fact — `formatRelative`'s
+ * version-timeline variant, because a message and a saved version are the
+ * same kind of event to a reader. A UTC ISO slice sat here once, chosen for
+ * a deterministic render under CI; that bought the test its stability by
+ * showing every reader a clock that was not theirs. Determinism is the
+ * test's job (pin the clock, compute the local expectation), not the
+ * label's. The machine-readable original rides along in `dateTime`.
  */
 function stampOf(iso: string | undefined): {
   readonly text: string
   readonly dateTime: string
 } {
   if (iso === undefined) return { text: '', dateTime: '' }
-  const parsed = new Date(iso)
-  if (Number.isNaN(parsed.getTime())) return { text: '', dateTime: iso }
-  return { text: parsed.toISOString().slice(0, 16).replace('T', ' '), dateTime: iso }
+  return { text: formatRelative(iso, { pastDay: 'absolute' }), dateTime: iso }
 }
 
 /**

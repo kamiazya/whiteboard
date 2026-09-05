@@ -13,6 +13,7 @@
  * reader wants at document level is which ones are still open.
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
+import { MessageSquarePlus } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
@@ -81,6 +82,12 @@ export interface CommentsPanelProps {
   readonly onCreateThread?: (anchor: AnnotationAnchor, body: string) => void
   /** Abandons the passage without writing anything. */
   readonly onCancelCompose?: () => void
+  /**
+   * Opens a compose box about the document as a whole — the one anchor with
+   * no place on any surface, so this list is where it is started as well as
+   * read. Absent on a host with no write path, like `onCreateThread`.
+   */
+  readonly onComposeDocument?: () => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -95,6 +102,19 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
+/**
+ * What a thread is about, for the anchors that have no in-place projection
+ * to say it for them: the document, a node set, a region. A pin, a passage
+ * highlight or an edge comment is found by its place; these are found here.
+ */
+export function anchorLabel(anchor: AnnotationAnchor): string | undefined {
+  if (anchor.kind === 'document') return 'whole document'
+  if (anchor.kind !== 'spatial') return undefined
+  if (anchor.nodeIds !== undefined) return `${anchor.nodeIds.length} nodes`
+  if (anchor.width !== undefined) return 'region'
+  return undefined
+}
+
 export function CommentsPanel({
   threads,
   resolveAnchor,
@@ -104,6 +124,7 @@ export function CommentsPanel({
   composeAnchor = null,
   onCreateThread,
   onCancelCompose,
+  onComposeDocument,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -164,6 +185,17 @@ export function CommentsPanel({
 
   return (
     <section aria-label="Comments" data-testid="comments-panel" className="flex flex-col gap-2">
+      {composeAnchor === null && onComposeDocument !== undefined ? (
+        <button
+          type="button"
+          data-testid="comment-on-document"
+          onClick={onComposeDocument}
+          className="flex items-center gap-1 self-start rounded px-2 py-1 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <MessageSquarePlus aria-hidden="true" className="size-3.5" />
+          Comment on the document
+        </button>
+      ) : null}
       <fieldset aria-label="Filter comments" className="flex gap-1 border-0 p-0">
         {FILTERS.map(({ value, label }) => (
           <button
@@ -206,7 +238,11 @@ export function CommentsPanel({
             <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
               {composeAnchor.quote.exact}
             </p>
-          ) : null}
+          ) : anchorLabel(composeAnchor) === undefined ? null : (
+            <p data-testid="comments-panel-compose-about" className="text-xs text-neutral-500">
+              About the {anchorLabel(composeAnchor)}
+            </p>
+          )}
           <textarea
             aria-label="Comment"
             value={composeDraft}
@@ -262,6 +298,11 @@ export function CommentsPanel({
                     {excerptOf(thread)}
                   </span>
                   <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+                    {anchorLabel(thread.anchor) === undefined ? null : (
+                      <span data-testid={`thread-about-${thread.id}`}>
+                        {anchorLabel(thread.anchor)}
+                      </span>
+                    )}
                     <MessageBy message={thread.messages[0]} />
                     {thread.messages.length > 1 ? (
                       <span data-testid={`thread-message-count-${thread.id}`}>

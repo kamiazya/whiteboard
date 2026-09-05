@@ -1,6 +1,6 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
-import type { Extension, StateCommand } from '@codemirror/state'
+import type { Extension } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
@@ -10,7 +10,6 @@ import {
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { MessageSquarePlus } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -39,12 +38,6 @@ import {
 } from './annotation-decorations.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
-import {
-  levelCommand,
-  MARKDOWN_EDITOR_VERBS,
-  type MarkdownVerbBand,
-  selfContainedCommand,
-} from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
@@ -57,7 +50,7 @@ import {
 } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
-import { VERB_ICONS } from './verb-icons.js'
+import { verbCatalogItems } from './verb-catalog.js'
 import {
   wikiLinkCompletionSource,
   wikiLinkCompletionTheme,
@@ -740,67 +733,8 @@ export function MarkdownEditor({
   }, [openCatalogAt])
 
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
-    const level = sourceApiRef.current?.headingLevel() ?? 0
-    const run = (command: StateCommand) => () => {
-      sourceApiRef.current?.run(command)
-      setCatalog(null)
-    }
-    // Every row is derived from MARKDOWN_EDITOR_VERBS, so a verb added
-    // there reaches both the catalog and the source pane's keymap without a
-    // second edit — which is what the two hand-kept lists this replaced
-    // could not promise.
-    const items: ContextMenuItem[] = []
-    let band: MarkdownVerbBand | null = null
-    for (const spec of MARKDOWN_EDITOR_VERBS) {
-      if (band !== null && spec.band !== band) items.push({ kind: 'separator' })
-      band = spec.band
-
-      if (spec.action.kind === 'levels') {
-        items.push({
-          kind: 'options',
-          label: spec.label,
-          options: spec.action.levels.map((option) => ({
-            label: option.label,
-            selected: level === option.level,
-            onSelect: run(levelCommand(option.level)),
-          })),
-        })
-        continue
-      }
-
-      // The one verb that asks before it writes. With nothing to pick from
-      // there is nothing to ask, and it falls through to the wrap the table
-      // declares for exactly that case.
-      const icon = VERB_ICONS[spec.id]
-      if (
-        spec.action.kind === 'interactive' &&
-        linkTargets !== undefined &&
-        linkTargets.length > 0
-      ) {
-        items.push({
-          label: spec.label,
-          icon,
-          onSelect: () => {
-            const scope = sourceApiRef.current?.pinScope()
-            if (scope === undefined) return
-            setCatalog(null)
-            setLinkPicker({ query: scope.text, text: scope.text })
-          },
-        })
-        continue
-      }
-
-      const command = selfContainedCommand(spec)
-      // A verb with neither a dialog nor a self-contained command has no
-      // plain row to render. Only `levels` is that today, and it returned
-      // above; this is what keeps a future action kind from rendering a
-      // dead menu item.
-      if (command === null) continue
-      items.push({ label: spec.label, icon, onSelect: run(command) })
-    }
-
     // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
-    // things that write MARKUP into the body: this one writes nothing there
+    // things that write MARKUP into the body: Comment writes nothing there
     // at all, it opens a conversation in the layer beside it. Putting it in
     // that table would give the keymap a shortcut for it and the verb bar a
     // button, both of which would then have to resolve a scope the table
@@ -808,18 +742,25 @@ export function MarkdownEditor({
     const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
     const anchor =
       selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
-    if (onComposeThread !== undefined && anchor !== null) {
-      items.push({ kind: 'separator' })
-      items.push({
-        label: 'Comment on this',
-        icon: <MessageSquarePlus aria-hidden />,
-        onSelect: () => {
-          setCatalog(null)
-          onComposeThread(anchor)
-        },
-      })
-    }
-    return items
+    return verbCatalogItems({
+      headingLevel: sourceApiRef.current?.headingLevel() ?? 0,
+      run: (command) => sourceApiRef.current?.run(command),
+      close: () => setCatalog(null),
+      ...(linkTargets !== undefined && linkTargets.length > 0
+        ? {
+            openLinkPicker: () => {
+              const scope = sourceApiRef.current?.pinScope()
+              if (scope === undefined) return
+              setLinkPicker({ query: scope.text, text: scope.text })
+            },
+          }
+        : {}),
+      ...(onComposeThread !== undefined && anchor !== null
+        ? { composeThread: () => onComposeThread(anchor) }
+        : {}),
+    })
+    // `catalog` is read so the rows are rebuilt on each opening: the
+    // selection they describe is the one at THAT moment.
   }, [catalog, linkTargets, onComposeThread, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])

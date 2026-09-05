@@ -701,6 +701,47 @@ describe('createDocumentSyncSession', () => {
     unsubscribe()
   })
 
+  it('a thread on a passage of a node reaches the plane, and the canvas as a comment on the node', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const node: SpatialNode = {
+      id: 'n1',
+      type: 'text',
+      x: 100,
+      y: 200,
+      width: 50,
+      height: 30,
+      text: 'the plan',
+    }
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [node], edges: [] })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const command: EditorCommand = {
+      kind: 'create-thread',
+      thread: {
+        id: 't-passage',
+        anchor: { kind: 'text', nodeId: 'n1', quote: { exact: 'plan' }, start: 4, end: 8 },
+        status: 'open',
+        messages: [{ id: 't-passage-m1', body: 'right word?' }],
+      },
+    }
+    const next = applyCommand(session.getCanvas(), command)
+    // Optimistic: the reducer already shows a pin on the node.
+    expect(next['x-whiteboard']?.comments).toEqual([
+      { id: 't-passage', x: 150, y: 200, targetNodeId: 'n1', text: 'right word?' },
+    ])
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations()[0]?.anchor).toEqual(command.thread.anchor)
+    expect(session.getCanvas()['x-whiteboard']?.comments?.[0]).toMatchObject({
+      id: 't-passage',
+      targetNodeId: 'n1',
+    })
+  })
+
   it('a local reply reaches the thread, which no comment command could carry', async () => {
     // The gap this closes: every other comment command travels through the
     // CANVAS envelope (`x-whiteboard.comments`), and that shape holds one

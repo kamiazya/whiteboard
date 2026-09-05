@@ -321,6 +321,7 @@ self.onmessage = async (
       contentCache: contentCacheFor(request.theme),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,
+      threads: request.threads,
     })
     const response: LayoutResponse = {
       type: 'laid-out',

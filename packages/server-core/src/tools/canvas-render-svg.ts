@@ -6,7 +6,11 @@ import {
   selectMarkdownSection,
 } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
-import { readDocumentKind, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readAnnotations,
+  readDocumentKind,
+  readMarkdownBody,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
@@ -104,7 +108,13 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
         const references = input.embedReferences
           ? (await loadReferenceGraph(deps, input.workspaceId, { canvases: [part] })).seams
           : undefined
-        scene = composeCanvasScene(part, measure, { references })
+        scene = composeCanvasScene(part, measure, {
+          references,
+          // The export draws what the editor draws: a thread about a passage
+          // of a node's text is a highlight behind those words, a node set
+          // an outline around them.
+          threads: readAnnotations(doc),
+        })
       }
       const { width, height } = computeSceneDimensions(scene)
       return { svg: renderSceneToSvg(scene), width, height }

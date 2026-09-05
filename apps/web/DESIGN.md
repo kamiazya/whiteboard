@@ -467,6 +467,100 @@ destructive entry alone at the bottom. What is learned in one vessel
 must transfer to the other, so a new action is added to the catalog,
 never to a single vessel.
 
+## Comment surfaces: two hosts, one set of parts
+
+A conversation is read and answered in three places — the card the canvas
+opens on a bubble, the markdown editor's in-place projection
+(`markdown-editor/annotation-decorations.ts`: a mark over the passage and a
+gutter marker beside its line), and the document-level rail both editors
+share (ADR-0026 decision 5; `useCommentsRail` holds its state,
+`CommentsRailAside` is its vessel). The card composes shared parts:
+`annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
+Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
+`ThreadReplies` (the replies under the subject line).
+
+Three things every such surface needs are INTRINSIC to the canvas root, so a
+new one gets them without being wired — each was forgotten once, on the
+comment card, and shipped that way to a phone:
+
+- **Overlay recognition.** The root's pointer guard and its native
+  `touchstart` refuser ask one predicate, `isEditorOverlayTarget`, and it
+  recognises native controls, links and dialogs by what they are.
+  `data-editor-overlay` remains the opt-in for chrome that is not a control.
+  A control the root does not recognise works under a mouse and is dead to a
+  finger — a cancelled `touchstart` is also a cancelled click — which is how
+  the card's Close shipped unreachable on the one device with no Escape.
+- **Keyboard avoidance.** `useKeyboardAvoidance` follows FOCUS: whatever
+  text entry inside the root has it, the overlay that owns it is kept above
+  the keyboard and inside the root, by panning. Nothing is wired per editor.
+  The root is `overflow: clip`, never `hidden`: a hidden-overflow box is a
+  scroll container the browser scrolls to reveal a focused control, and it
+  did — 38px under a viewport state that knew nothing about it.
+- **Timestamps.** One formatter, `workspace-files/format-relative.ts`:
+  "5m ago" while fresh, the reader's local M/D HH:MM once age stops being the
+  fact. `time-format-discipline.test.ts` reads every source file for a
+  hand-rolled stamp, because the formatter's own comment said "one
+  formatter" and was forked anyway, into a UTC slice chosen for a
+  deterministic test. Determinism is the test's job (pin the clock).
+
+The card itself is a non-modal dialog: it slides inside the root's edge like
+the context menu, a press on the canvas dismisses it like a menu, and Escape
+does too. A press on comment chrome opens it under EITHER tool — the hand
+tool takes every plain press as a pan, but a comment is chrome, not content,
+and the release decides: a press that never travelled past the slop opens
+the card, one that travelled was the pan (hand) or the pin drag (select) it
+became on its first move. The press arms nothing visible until then, on
+purpose: arming the pin drag at the press took the committed copy out of the
+surface under a touch pointer implicitly captured on it, and its release
+then died on a detached node — every later tap replayed the stale press.
+
+**Where a conversation can be opened, and how.** Every place a reader can
+point at has one entry, and the entry belongs to the surface the place is
+on — a menu row where the place is an object, a catalog row where it is
+text:
+
+| place | entry | anchor |
+|---|---|---|
+| a spot on the canvas | canvas menu, "Comment here" | `spatial` point |
+| a node | node menu, "Comment on this" | `spatial` + `nodeId` |
+| an edge | edge menu, "Comment on this" | `spatial` + `edgeId` |
+| a passage of a text node | the editing catalog's "Comment on this" (right-click inside the node's editor, with a selection) | `text` + `nodeId` |
+| a passage of a note | the editing catalog's "Comment on this" (⋯ and right-click, with a selection) | `text` |
+| several nodes at once | node menu on a multi-selection, "Comment on selection" | `spatial` + `nodeIds` + the box they occupy |
+| a region of empty canvas | no entry yet in the editor — an agent names the rect through `wb_thread_edit` | `spatial` + `width`/`height` |
+| the document as a whole | the comments rail, "Comment on the document" — a note and a canvas alike | `document` |
+
+A node set is drawn as a dashed outline around the box its LIVE members
+occupy (`spatialAnchorRect`, model: the stored rect is only where an
+orphaned set is drawn from), with the pin at the box's top-right corner;
+the rail labels it "N nodes". A document-level thread is drawn nowhere —
+the container is on no surface — so the rail is both where it starts and
+where it is read, labelled "whole document".
+
+Comment is deliberately OUTSIDE `MARKDOWN_EDITOR_VERBS`: it writes nothing
+into the body, it opens a conversation beside it, and the table's keymap and
+verb bar cannot resolve a scope for it. The editing catalog is ONE builder
+(`verb-catalog.tsx`) for the note editor's ⋯ and right-click and for a
+right-click inside a node's editor, so the two editors cannot offer
+different verbs for the same text; the Comment row rides in as the host's
+seam, present only with a selection. The canvas answers it with its compose
+bubble at the node's corner; a note answers with the rail's compose box,
+quoting the passage. Both write the same thread shape. The menu takes focus
+for its rows, and the node editor — which commits on blur — reads a
+departure INTO a menu as the catalog's, not the user's; the menu hands the
+caret back on close (`ActiveMarkdownEditor.focus`), so the edit outlives the
+menu and still commits on the next real exit.
+
+A passage is drawn where its words are, on every surface that has them:
+the note's source pane and the node's editor as CodeMirror decorations (the
+node's editor takes the marks without the gutter, `annotationMarks`, since
+a gutter in the node's own box would shift the words away from where the
+committed render draws them), the static canvas as highlight shapes
+canvas-render composes behind the runs (from the `threads` it is handed;
+the pin still comes from the flat projection the optimistic state holds),
+the export through the same layout, and the MCP Apps widget from the
+`threads` `canvas_view` hands it.
+
 ## A toggle looks toggled, and says so once
 
 A control that switches something on — a rail, a popover, a tool, a filter —

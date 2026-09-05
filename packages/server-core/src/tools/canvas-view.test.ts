@@ -8,6 +8,7 @@
 // the payload.
 
 import {
+  writeCommentThread,
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -93,6 +94,35 @@ describe('canvas_view tool', () => {
     expect(result.scene.nodes.map((node) => node.id).sort()).toEqual(['f1', 't1'])
   })
 
+  test('carries the document threads beside the scene, so the widget can draw what pins cannot say', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const thread = {
+      id: 'set',
+      anchor: {
+        kind: 'spatial' as const,
+        nodeIds: ['t1', 'f1'],
+        x: 0,
+        y: 0,
+        width: 520,
+        height: 220,
+      },
+      status: 'open' as const,
+      messages: [{ id: 'm', body: 'both of these' }],
+    }
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeCommentThread(doc, thread))
+    const tool = createCanvasViewTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(canvasViewOutputSchema.parse(result).threads).toEqual([thread])
+    // The projection still rides in the scene: the widget's pins come from
+    // there, at the corner of the box the set occupies.
+    expect(result.scene['x-whiteboard']?.comments).toEqual([
+      expect.objectContaining({ id: 'set', x: 520, y: 0, text: 'both of these' }),
+    ])
+  })
+
   test('carries the referenced markdown document as its name and raw body', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store)
@@ -148,6 +178,7 @@ describe('canvas_view tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
+      threads: [],
       references: { [NOTE_ID]: { name: 'Weekly', body: '# Weekly' } },
     })
     expect(parsed.success).toBe(true)

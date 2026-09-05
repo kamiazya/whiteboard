@@ -12,9 +12,10 @@
  * stored correctly and readable by nothing.
  */
 
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { CommentTargetNode, CommentThread } from '@kamiazya/whiteboard-model'
 import {
   type CanvasComment,
+  canvasCommentFromThread,
   canvasCommentSchema,
   threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
@@ -62,13 +63,14 @@ export function readAnnotations(doc: DocumentContainers): CommentThread[] {
  * than something a caller does inline. It goes when the renderer takes
  * threads (ADR-0026 step 3).
  */
-export function readCanvasComments(doc: DocumentContainers): CanvasComment[] {
+export function readCanvasComments(
+  doc: DocumentContainers,
+  nodeById?: (id: string) => CommentTargetNode | undefined,
+): CanvasComment[] {
   const comments: CanvasComment[] = []
   for (const thread of readAnnotations(doc)) {
-    const projected = canvasCommentFromThread(thread)
+    const projected = canvasCommentFromThread(thread, nodeById)
     if (projected !== undefined) comments.push(projected)
   }
   return comments
 }
-
-import { canvasCommentFromThread } from './comment-threads.js'
