@@ -257,7 +257,7 @@ export function openWorkspaceDocumentPlane(
 ): LoroMap | null {
   const node = nodeById(doc, documentId)
   if (node === null) return null
-  return openMergeableMap(node.data, key)
+  return openMergeableMap(node.data, planeKey(key))
 }
 
 /** The plane as it stands, or null when the document or the plane is absent. Never writes. */
@@ -268,8 +268,41 @@ export function readWorkspaceDocumentPlane(
 ): LoroMap | null {
   const node = nodeById(doc, documentId)
   if (node === null) return null
-  const stored = node.data.get(key)
+  const stored = node.data.get(planeKey(key))
   return stored instanceof LoroMap ? stored : null
+}
+
+/**
+ * A plane is namespaced under this prefix, and that is what keeps it out of
+ * the document.
+ *
+ * A node's data map holds a document's CONTENT containers beside its meta,
+ * and `projectWorkspaceDocument` copies every container it finds there into
+ * the standalone document every reader, exporter and renderer sees. A plane
+ * living in that same flat namespace is therefore carried into the
+ * projection — and written back by the next content save, from whatever the
+ * projection held when it was taken.
+ *
+ * That is not a theoretical ordering: measured through the daemon's merge, a
+ * branch tip set to `AcbqreGZ2OWvNjQ=` read back as `""` after the reconcile
+ * saved a projection taken beforehand. No error, no conflict, and the suite
+ * green — the branch simply had the wrong tip.
+ *
+ * A prefix rather than a registry of plane names, because the two readers
+ * that must skip planes (`projectWorkspaceDocument` and
+ * `writeWorkspaceDocumentContent`) have no business knowing what any plane
+ * HOLDS. `:` cannot appear in a content root's name — those come from the
+ * bridge's own `CONTENT_CONTAINER_KEYS` and from a document's roots.
+ */
+const PLANE_KEY_PREFIX = 'plane:'
+
+function planeKey(key: string): string {
+  return `${PLANE_KEY_PREFIX}${key}`
+}
+
+/** Whether a node-data key names a plane rather than content or meta. */
+function isPlaneKey(key: string): boolean {
+  return key.startsWith(PLANE_KEY_PREFIX)
 }
 
 /**
@@ -705,6 +738,10 @@ export function writeWorkspaceDocumentContent(
   // commit as it — an identical write must keep committing no ops at all.
   let changed = false
   for (const [key, value] of Object.entries(projected)) {
+    // Belt to the projection's braces: a source that somehow carries a plane
+    // key (an import, a document written before the prefix) must not write it
+    // onto the node's plane namespace.
+    if (isPlaneKey(key)) continue
     if (typeof value === 'string') {
       const text = node.data.getOrCreateContainer(key, new LoroText())
       if (text.toString() !== value) {
@@ -969,6 +1006,9 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
   if (node === null) return null
   const out = new LoroDoc()
   for (const key of node.data.keys()) {
+    // A plane belongs to the document without being IN it: see
+    // PLANE_KEY_PREFIX for what carrying one into the projection costs.
+    if (isPlaneKey(key)) continue
     const value = node.data.get(key) as unknown
     const kind =
       typeof value === 'object' && value !== null && 'kind' in value

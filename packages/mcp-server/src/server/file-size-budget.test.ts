@@ -109,7 +109,15 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the node lookup for one caller. The prose is most of the 44 lines and is
   // the point of them — a plane opened the regular way loses one replica's
   // whole plane with both sides agreeing on the survivor.
-  'packages/loro-adapter/src/workspace-tree.ts': 1076,
+  // Raised again from 1076 by PLANE NAMESPACING — the `plane:` prefix, and
+  // the two readers that now skip it. Nearly all of it is the reason: a
+  // plane in the node's flat namespace is carried into
+  // `projectWorkspaceDocument` and written back by the next content save,
+  // from whatever the projection held when it was taken. Measured through
+  // the daemon's merge before the fix, a branch tip read back as "" with
+  // nothing red, which is precisely the comment's job to prevent a second
+  // time.
+  'packages/loro-adapter/src/workspace-tree.ts': 1116,
   'packages/canvas-render/src/svg/backend.ts': 991,
   // Raised from 921 when the page became a KEEPER — its wiring answers the
   // `DocumentKeeper` contract (the hook signature, the two terminal answers,

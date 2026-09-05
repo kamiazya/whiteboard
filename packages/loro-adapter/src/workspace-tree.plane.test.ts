@@ -15,12 +15,23 @@ import { describe, expect, it } from 'vitest'
 import {
   createWorkspaceDocument,
   openWorkspaceDocumentPlane,
+  projectWorkspaceDocument,
   readWorkspaceDocumentPlane,
   resolveWorkspaceDocumentById,
+  writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
 
 const DOCUMENT_ID = '01JZZZZZZZZZZZZZZZZZZZZZZZ'
 const PLANE = 'branches'
+
+/** A standalone document holding one content map — what a projection looks like. */
+function makeContent(nodes: Record<string, unknown>): LoroDoc {
+  const source = new LoroDoc()
+  const map = source.getMap('nodes')
+  for (const [key, value] of Object.entries(nodes)) map.set(key, value)
+  source.commit()
+  return source
+}
 
 function recordWithDocument(): LoroDoc {
   const doc = new LoroDoc()
@@ -78,6 +89,47 @@ describe('workspace document planes', () => {
         'from-b': 2,
       })
     }
+  })
+
+  it('survives a content save made from a projection taken before it', () => {
+    // The production sequence, and the one that makes a plane worth having
+    // rather than a trap: a page holds a PROJECTION of the document, then
+    // something records a branch tip on the plane, then the page saves its
+    // content. If the projection carried the plane, that save writes the
+    // plane back as it stood before the tip — reverting it with no error,
+    // no conflict, and a green suite.
+    //
+    // Measured before the fix, through the daemon's merge: a tip set to
+    // `AcbqreGZ2OWvNjQ=` read back as `""` after the reconcile's save.
+    const doc = recordWithDocument()
+    writeWorkspaceDocumentContent(doc, DOCUMENT_ID, makeContent({ a: 1 }))
+    // The plane already holds something when the projection is taken — the
+    // state production is always in, since a document acquires a plane the
+    // first time anything writes one and the projection is taken later.
+    openWorkspaceDocumentPlane(doc, DOCUMENT_ID, PLANE)?.set('draft', { tip: '' })
+    doc.commit()
+    const stale = projectWorkspaceDocument(doc, DOCUMENT_ID)
+    if (stale === null) throw new Error('no projection')
+
+    openWorkspaceDocumentPlane(doc, DOCUMENT_ID, PLANE)?.set('draft', { tip: 'AQID' })
+    doc.commit()
+    writeWorkspaceDocumentContent(doc, DOCUMENT_ID, stale)
+
+    expect(readWorkspaceDocumentPlane(doc, DOCUMENT_ID, PLANE)?.toJSON()).toEqual({
+      draft: { tip: 'AQID' },
+    })
+  })
+
+  it('stays out of a document’s projection, because a plane is not content', () => {
+    const doc = recordWithDocument()
+    openWorkspaceDocumentPlane(doc, DOCUMENT_ID, PLANE)?.set('draft', { tip: 'AQID' })
+    doc.commit()
+
+    const projected = projectWorkspaceDocument(doc, DOCUMENT_ID)
+
+    // Whatever a document exports, imports, renders or digests, it is this
+    // projection — so a plane appearing here would leak into all of them.
+    expect(Object.keys(projected?.toJSON() ?? {})).not.toContain(PLANE)
   })
 
   it('leaves the document reading as itself, and a meta field unreadable as a plane', () => {
