@@ -586,6 +586,15 @@ export function DaemonDocumentPage({
       createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
       replyToThread: (threadId, message) =>
         onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
+      setThreadStatus: (threadId, status) =>
+        onChange(canvasValueRef.current, { kind: 'set-thread-status', threadId, status }),
+      editMessage: (threadId, message, opening) =>
+        onChange(canvasValueRef.current, {
+          kind: 'edit-thread-message',
+          threadId,
+          message,
+          opening,
+        }),
     },
   })
 

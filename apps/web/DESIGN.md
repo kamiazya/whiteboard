@@ -474,7 +474,17 @@ opens on a bubble, the markdown editor's in-place projection
 (`markdown-editor/annotation-decorations.ts`: a mark over the passage and a
 gutter marker beside its line), and the document-level rail both editors
 share (ADR-0026 decision 5; `useCommentsRail` holds its state,
-`CommentsRailAside` is its vessel). The card composes shared parts:
+`CommentsRailAside` is its vessel — a column where there is width, a bottom
+sheet over the editor under 768px, since a 288px column beside a 412px phone
+screen left the editor a strip a finger could not write in). The rail carries
+the conversation's own verbs beside its reply box — Resolve/Reopen and Edit
+of the opening message — because a NOTE's thread has no card, and the rail
+is the only place it can be closed or corrected; both go through the threads
+plane (`set-thread-status`, `edit-thread-message`), which the flat comment
+path could never reach for a passage or a document-level thread. The preview
+(Read/Split) marks each conversation beside the block its passage starts in,
+so a reader who never opens the source can still find one. The card composes
+shared parts:
 `annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
 Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
 `ThreadReplies` (the replies under the subject line).
@@ -502,6 +512,15 @@ comment card, and shipped that way to a phone:
   hand-rolled stamp, because the formatter's own comment said "one
   formatter" and was forked anyway, into a UTC slice chosen for a
   deterministic test. Determinism is the test's job (pin the clock).
+
+A fourth thing is not intrinsic and is guarded instead: PARITY. What a reader
+can do with a conversation is the same set of verbs whichever surface shows
+it — open, reply, resolve, correct the subject — or the surface says why not.
+`apps/web/annotation-surface-parity.test.ts` is the matrix (capability ×
+surface), every cell either naming the test that pins it or the reason it is
+absent; the rule is `.claude/rules/coverage-ledger.md`'s last section. It
+exists because the rail shipped without Resolve beside a card that had it,
+and a note's thread has no card — nothing was red.
 
 The card itself is a non-modal dialog: it slides inside the root's edge like
 the context menu, a press on the canvas dismisses it like a menu, and Escape

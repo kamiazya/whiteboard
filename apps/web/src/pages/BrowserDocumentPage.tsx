@@ -738,6 +738,14 @@ export function BrowserDocumentPage({
         if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
         else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
       },
+      setThreadStatus: (threadId, status) => {
+        if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
+        else onChange(canvas, { kind: 'set-thread-status', threadId, status })
+      },
+      editMessage: (threadId, message, opening) => {
+        if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
+        else onChange(canvas, { kind: 'edit-thread-message', threadId, message, opening })
+      },
     },
   })
 

@@ -227,3 +227,33 @@ Each of these cost a real defect or a wrong conclusion.
   line by one, and re-using the same number silently walks onto the next
   line — which is what H1's first counterexample turned out to be, not a bug
   in the code under test.
+
+## The cross-surface cousin: a parity matrix
+
+A ledger asks whether member N+1 of ONE surface was noticed. A feature that
+lives on several surfaces — a conversation is read on the canvas card, the
+rail, the note's source and preview, the export, the widget, and through the
+MCP tool — fails in a different direction: a capability lands on one surface
+and nothing forces the others to answer. Measured on the annotation layer: a
+rail that could not resolve a conversation shipped beside a card that could,
+and the only surface a NOTE's thread has is the rail. Nothing was red, because
+no test had ever been asked to exist.
+
+`apps/web/annotation-surface-parity.test.ts` is the shape that closes it: a
+matrix of capability × surface where every cell is a decision. `pinnedBy`
+names the test file and title that exercise the capability on that surface,
+and the test reads that file and fails when the title is gone — so a deleted
+or renamed test cannot leave a cell pointing at nothing, which is exactly how
+two capabilities were lost in a merge. `absent` says why the surface does not
+have it, and the test refuses a deferral ("not yet", or fewer than a
+sentence). `gap` on a pinned cell records the missing part with its reason.
+Extending the matrix in one dimension only is a type error (`satisfies
+Record<Capability, Record<Surface, Cell>>`).
+
+It is NOT a coverage ledger, and the difference decides where each belongs:
+a ledger tallies what a run PRODUCED over one declared surface, and a matrix
+declares a cross-surface intent that no single run can produce. So a matrix
+is hand-kept, and its honesty rests on three rungs rather than a tally — the
+title check, the reason check, and the type. Write one when a feature has
+three or more surfaces and a reader would reasonably expect the same verbs
+on each; a two-surface feature is a `describe` block with both, not a matrix.

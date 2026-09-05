@@ -298,3 +298,57 @@ it('offers to start a conversation about the whole document, and says so on the 
     .toHaveTextContent('About the whole document')
   expect(page.getByTestId('comment-on-document').query()).toBeNull()
 })
+
+it('closes and reopens a conversation from the rail, which is where a note can do it at all', async () => {
+  const resolved: [string, boolean][] = []
+  const utils = render(
+    <CommentsPanel threads={[OPEN]} onResolve={(id, flag) => resolved.push([id, flag])} />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+  await userEvent.click(page.getByRole('button', { name: 'Resolve' }))
+  expect(resolved).toEqual([['t-open', true]])
+
+  // The document answers with the new status; the same row now offers Reopen.
+  utils.rerender(
+    <CommentsPanel
+      threads={[{ ...OPEN, status: 'resolved' }]}
+      revealThreadId="t-open"
+      onResolve={(id, flag) => resolved.push([id, flag])}
+    />,
+  )
+  await userEvent.click(page.getByRole('button', { name: 'Reopen' }))
+  expect(resolved).toEqual([
+    ['t-open', true],
+    ['t-open', false],
+  ])
+})
+
+it('rewrites the opening message from the rail, and an unchanged or emptied draft writes nothing', async () => {
+  const edits: [string, string, string][] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onEditMessage={(threadId, messageId, body) => edits.push([threadId, messageId, body])}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
+  const box = page.getByRole('textbox', { name: 'Edit comment text' })
+  await expect.element(box).toHaveValue('tighten the copy here')
+  await userEvent.fill(box, 'tighten the copy here, and the heading')
+  await userEvent.click(page.getByRole('button', { name: 'Save' }))
+  expect(edits).toEqual([['t-open', 'm1', 'tighten the copy here, and the heading']])
+
+  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
+  await userEvent.fill(page.getByRole('textbox', { name: 'Edit comment text' }), '   ')
+  await userEvent.click(page.getByRole('button', { name: 'Save' }))
+  expect(edits).toHaveLength(1)
+  expect(page.getByTestId('comment-edit').query()).toBeNull()
+})
+
+it('offers neither verb on a host with no write path', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+  expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
+  expect(page.getByRole('button', { name: 'Edit comment' }).query()).toBeNull()
+})

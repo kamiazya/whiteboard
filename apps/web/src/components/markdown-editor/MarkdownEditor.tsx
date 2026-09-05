@@ -10,6 +10,7 @@ import {
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
+import { MessageSquare } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -466,6 +467,18 @@ export function MarkdownEditor({
   // change, so unlike the anchors — read imperatively inside a scroll
   // handler — these have to be state.
   const [railBlocks, setRailBlocks] = useState<readonly RailBlock[]>([])
+  /**
+   * The annotation layer's projection onto the PREVIEW: one marker beside
+   * the laid-out block a thread's passage starts in, at the y the rail's
+   * own line-to-document mapping gives that line. A highlight over the
+   * exact words would need canvas-render to know about this document's
+   * threads; the block marker is what the layout already answers, and it
+   * is enough to find a conversation while reading.
+   */
+  const [previewMarkers, setPreviewMarkers] = useState<
+    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
+  >([])
+  const previewInnerRef = useRef<HTMLDivElement | null>(null)
   const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
   // Whether the pane the rail maps has anything to scroll. Read from the same
   // element on the same tick as the viewport above, for the same reason.
@@ -698,6 +711,48 @@ export function MarkdownEditor({
     // previous width produced.
   }, [effectiveMode, debouncedValue, previewWidth])
 
+  // Keyed on railBlocks because that is the state the preview's render
+  // updates: the anchors it maps through arrive in the same ref write.
+  // Placement goes through `placeThreads`, the same reader the source pane
+  // and the rail use, so a thread the rail calls lost gets no marker.
+  useEffect(() => {
+    if (effectiveMode === 'write' || projectedThreads.length === 0) {
+      setPreviewMarkers([])
+      return
+    }
+    const inner = previewInnerRef.current
+    const svg = inner?.querySelector('svg')
+    if (inner === null || inner === undefined || !(svg instanceof SVGElement)) {
+      setPreviewMarkers([])
+      return
+    }
+    const svgTop = svg.getBoundingClientRect().top - inner.getBoundingClientRect().top
+    const tail = {
+      totalLines: totalSourceLines(debouncedValue),
+      contentHeight: railContentHeight(blocksRef.current),
+    }
+    setPreviewMarkers(
+      placeThreads(debouncedValue, projectedThreads, projectedMarks).map((placed) => ({
+        threadId: placed.threadId,
+        top:
+          svgTop +
+          documentYForLine(
+            anchorsRef.current,
+            debouncedValue.slice(0, placed.from).split('\n').length,
+            tail,
+          ),
+        selected: placed.threadId === selectedThreadId,
+      })),
+    )
+  }, [
+    effectiveMode,
+    railBlocks,
+    projectedThreads,
+    projectedMarks,
+    debouncedValue,
+    selectedThreadId,
+  ])
+
   const openCatalogAt = useCallback(
     (clientX: number, clientY: number, variant: 'grid' | 'list') => {
       const rect = rootRef.current?.getBoundingClientRect()
@@ -863,9 +918,33 @@ export function MarkdownEditor({
             onClick={onPreviewClick}
           >
             <div
-              className="mx-auto px-6 py-8"
+              ref={previewInnerRef}
+              className="relative mx-auto px-6 py-8"
               style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
             >
+              {previewMarkers.map((marker) => (
+                <button
+                  key={marker.threadId}
+                  type="button"
+                  data-testid="comment-preview-marker"
+                  data-thread-id={marker.threadId}
+                  aria-label="Open comment"
+                  onClick={() => onSelectThread?.(marker.threadId)}
+                  // In the column's own left padding, on the block's top edge.
+                  style={{ top: marker.top }}
+                  className={cn(
+                    'absolute left-0 flex size-6 items-center justify-center rounded text-(--annotation) hover:bg-accent',
+                    marker.selected && 'bg-accent',
+                  )}
+                >
+                  <MessageSquare
+                    aria-hidden="true"
+                    className="size-3.5"
+                    fill={marker.selected ? 'currentColor' : 'none'}
+                    fillOpacity={0.35}
+                  />
+                </button>
+              ))}
               {effectiveMode === 'read' && meta !== undefined && (
                 <DocumentHeader title={title} meta={meta} />
               )}

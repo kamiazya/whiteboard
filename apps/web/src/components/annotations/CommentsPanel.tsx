@@ -13,7 +13,7 @@
  * reader wants at document level is which ones are still open.
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
-import { MessageSquarePlus } from 'lucide-react'
+import { CircleCheck, MessageSquarePlus, Pencil, RotateCcw } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { cn } from '../../lib/utils.js'
@@ -88,6 +88,14 @@ export interface CommentsPanelProps {
    * read. Absent on a host with no write path, like `onCreateThread`.
    */
   readonly onComposeDocument?: () => void
+  /**
+   * Closes or reopens a conversation. The canvas card carries the same verb
+   * on its top-right; here it is what lets a NOTE's thread be closed at all,
+   * since a note has no card. Absent hides the control, like `onReply`.
+   */
+  readonly onResolve?: (threadId: string, resolved: boolean) => void
+  /** Rewrites the opening message. Absent hides the control, like `onReply`. */
+  readonly onEditMessage?: (threadId: string, messageId: string, body: string) => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -125,6 +133,8 @@ export function CommentsPanel({
   onCreateThread,
   onCancelCompose,
   onComposeDocument,
+  onResolve,
+  onEditMessage,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -132,6 +142,12 @@ export function CommentsPanel({
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+  // The opening message under edit, with its draft: at most one, and it
+  // belongs to the row, so opening another conversation abandons it.
+  const [editing, setEditing] = useState<{
+    readonly threadId: string
+    readonly body: string
+  } | null>(null)
 
   // Adjusting state during render on a changed prop, rather than in an
   // effect: an effect would paint the list once without the thread the
@@ -322,6 +338,92 @@ export function CommentsPanel({
 
                 {expanded ? (
                   <div id={`thread-${thread.id}`} className="mt-1 flex flex-col gap-2 pl-2">
+                    {/* The conversation's own verbs, the ones the canvas card
+                        carries top-right: here so a note's thread has a place
+                        to be closed and its subject a place to be corrected. */}
+                    {onResolve === undefined && onEditMessage === undefined ? null : (
+                      <div className="flex items-center gap-1">
+                        {onEditMessage === undefined || editing?.threadId === thread.id ? null : (
+                          <button
+                            type="button"
+                            aria-label="Edit comment"
+                            onClick={() =>
+                              setEditing({
+                                threadId: thread.id,
+                                body: thread.messages[0]?.body ?? '',
+                              })
+                            }
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            <Pencil aria-hidden="true" className="size-3" />
+                            Edit
+                          </button>
+                        )}
+                        {onResolve === undefined ? null : thread.status === 'resolved' ? (
+                          <button
+                            type="button"
+                            aria-label="Reopen"
+                            onClick={() => onResolve(thread.id, false)}
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            <RotateCcw aria-hidden="true" className="size-3" />
+                            Reopen
+                          </button>
+                        ) : (
+                          <button
+                            type="button"
+                            aria-label="Resolve"
+                            onClick={() => onResolve(thread.id, true)}
+                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
+                          >
+                            <CircleCheck aria-hidden="true" className="size-3" />
+                            Resolve
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {onEditMessage !== undefined && editing?.threadId === thread.id ? (
+                      <form
+                        data-testid="comment-edit"
+                        className="flex flex-col gap-1"
+                        onSubmit={(event) => {
+                          event.preventDefault()
+                          const body = editing.body.trim()
+                          const opening = thread.messages[0]
+                          // An emptied subject is a cancel, not a blank
+                          // message: the schema refuses an empty body.
+                          if (body !== '' && opening !== undefined && body !== opening.body) {
+                            onEditMessage(thread.id, opening.id, body)
+                          }
+                          setEditing(null)
+                        }}
+                      >
+                        <textarea
+                          aria-label="Edit comment text"
+                          value={editing.body}
+                          onChange={(event) =>
+                            setEditing({ threadId: thread.id, body: event.target.value })
+                          }
+                          rows={2}
+                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+                        />
+                        <div className="flex justify-end gap-1">
+                          <button
+                            type="button"
+                            onClick={() => setEditing(null)}
+                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                          >
+                            Cancel
+                          </button>
+                          <button
+                            type="submit"
+                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                          >
+                            Save
+                          </button>
+                        </div>
+                      </form>
+                    ) : null}
                     {/* The REPLIES, not the whole conversation over again:
                         the row above already carries the opening message,
                         which is the conversation's subject. Repeating it here

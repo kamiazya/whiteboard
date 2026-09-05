@@ -7,10 +7,11 @@
  */
 
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { MessageSquare } from 'lucide-react'
-import type { JSX } from 'react'
+import { ChevronUp, MessageSquare, X } from 'lucide-react'
+import { type JSX, useState } from 'react'
 import { Button } from '../../components/ui/button.js'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
+import { cn } from '../../lib/utils.js'
 import { TOGGLE_STATE_CLASS } from '../ui/dock-button.js'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -52,20 +53,64 @@ export function CommentsRailAside({
    */
   readonly writable: boolean
 }): JSX.Element | null {
+  // A column where there is width for one, a bottom sheet over the editor
+  // under 768px — the same two shapes the history panel takes, because a
+  // 288px column beside a 412px phone screen left the editor a strip a
+  // finger could not write in. The sheet peeks at 45% and expands to the
+  // full height from its grab handle.
+  const [expanded, setExpanded] = useState(false)
   if (!rail.open) return null
   return (
-    <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-      <CommentsPanel
-        threads={threads}
-        resolveAnchor={rail.resolveAnchor}
-        revealThreadId={rail.selectedThreadId}
-        onSelect={(thread) => rail.selectThread(thread.id)}
-        onReply={writable ? rail.reply : undefined}
-        composeAnchor={writable ? rail.composeAnchor : null}
-        onCreateThread={writable ? rail.createThread : undefined}
-        onCancelCompose={rail.cancelCompose}
-        onComposeDocument={writable ? () => rail.composeThread({ kind: 'document' }) : undefined}
-      />
+    <aside
+      aria-label="Comments"
+      data-testid="comments-rail"
+      data-stage={expanded ? 'full' : 'peek'}
+      className={cn(
+        'absolute inset-x-0 bottom-0 z-20 flex min-h-0 flex-col border-t bg-background shadow-[0_-8px_24px_-12px_rgb(0_0_0/0.35)]',
+        expanded ? 'h-full' : 'h-[45%] rounded-t-2xl',
+        'md:static md:z-auto md:h-auto md:w-72 md:max-w-[calc(100vw-1.5rem)] md:shrink-0 md:rounded-none md:border-t-0 md:border-l md:shadow-none',
+      )}
+    >
+      <div className="flex shrink-0 items-center justify-between gap-2 px-2 pt-1.5 md:hidden">
+        <span className="text-xs font-medium text-muted-foreground">Comments</span>
+        <button
+          type="button"
+          data-testid="comments-stage-toggle"
+          aria-label={expanded ? 'Collapse comments' : 'Expand comments'}
+          aria-expanded={expanded}
+          onClick={() => setExpanded((v) => !v)}
+          // The sheet's grab handle: a wide, shallow target a thumb aims at
+          // the edge for, not an icon-sized one. One chevron, turned by the
+          // ARIA state rather than swapped for another glyph, so the
+          // announced state and the drawn one cannot disagree.
+          className="flex h-6 w-16 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:[&>svg]:rotate-180"
+        >
+          <ChevronUp aria-hidden="true" className="size-4 transition-transform" />
+        </button>
+        <button
+          type="button"
+          aria-label="Close comments"
+          onClick={rail.toggle}
+          className="ml-auto rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+      </div>
+      <div className="min-h-0 flex-1 overflow-y-auto p-2">
+        <CommentsPanel
+          threads={threads}
+          resolveAnchor={rail.resolveAnchor}
+          revealThreadId={rail.selectedThreadId}
+          onSelect={(thread) => rail.selectThread(thread.id)}
+          onReply={writable ? rail.reply : undefined}
+          composeAnchor={writable ? rail.composeAnchor : null}
+          onCreateThread={writable ? rail.createThread : undefined}
+          onCancelCompose={rail.cancelCompose}
+          onComposeDocument={writable ? () => rail.composeThread({ kind: 'document' }) : undefined}
+          onResolve={writable ? rail.resolve : undefined}
+          onEditMessage={writable ? rail.editMessage : undefined}
+        />
+      </div>
     </aside>
   )
 }
