@@ -268,8 +268,14 @@ Still open, and named rather than assumed:
 - **The fetch of a document's bytes is unmeasured** for the daemon keeper.
   For the browser keeper it is measured and `load-row-render.ts`'s claim that
   it dominates the wait is false — a near-constant 4-6ms against a render of
-  9-29ms that grows with the document. The worker pool's cap of 4 rests on
-  that claim and is worth revisiting.
+  9-29ms that grows with the document. The worker pool's cap of 4 used to
+  rest on that claim; it is now re-measured on what a list actually does
+  (forty rows at `background`, four cores: warm fill 284-304ms at size 1,
+  253-263 at 2, 160-167 at 3, 137-141 at 4, 127-165 at 6). A list is
+  render-bound and tracks the `size - 1` slots its band may use; past the
+  core count the curve is flat inside its noise, so the cap holds here and
+  an eight-core machine stays unmeasured. `defaultPoolSize`'s comment
+  carries the table.
 - **Safari and iOS are unmeasured.** SharedWorker is expected absent, OPFS
   expected present. iOS is best-effort by standing policy, and the fallback is
   the in-tab implementation this ADR ships first.
