@@ -17,9 +17,9 @@ carry the detail, loaded on demand rather than here:
 - **`testing-techniques`** — HOW to write one that stays green under the full parallel run,
   how to prove it is stable, and how a property or Stryker survivor is closed. Open the one
   `resources/*.md` for your situation (async/timers, browser mode, isolation, property and
-  mutation, stability checks, executable rungs, Vitest 5).
+  mutation, stability checks, naming and structure, executable rungs, Vitest 5).
 
-The ten write-time rules, so the skill is a lookup rather than a prerequisite:
+The write-time rules, so the skill is a lookup rather than a prerequisite:
 
 1. `await` every `.resolves` / `.rejects` / `toMatchFileSnapshot` / `expect.element` / `expect.poll`.
 2. No side effect inside `waitFor`; fire outside, assert inside.
@@ -30,9 +30,11 @@ The ten write-time rules, so the skill is a lookup rather than a prerequisite:
 7. Static imports unless the file mocks what it imports (`lazy-import: <reason>` otherwise).
 8. A count proves the subject is present beside every allowlist walk and every property.
 9. A skip is probed, never inferred, and impossible on CI.
-10. Before pushing: five fresh-process runs of the file, then one inside its whole project.
+10. A title is an identifier: behaviour, not chronology or a count/ordinal of something that grows; unique in its `describe`.
+11. Wait for a condition (`vi.waitFor`, `expect.poll`, fake timers), never for time; the sleep ledger only goes down.
+12. Before pushing: five fresh-process runs of the file, then one inside its whole project.
 
-Executable rungs already hold six of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
+Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —
 `testing-techniques/resources/executable-rungs.md` says how, fixture pair included.
 Browser `describe` + `it` titles stay under 155 characters combined; timeouts are ceilings

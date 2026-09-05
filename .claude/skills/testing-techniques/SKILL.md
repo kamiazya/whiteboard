@@ -17,7 +17,7 @@ mistake — strongest first:
 
 | Rung | Catches the mistake… | This repo's instruments |
 |---|---|---|
-| **executable** | at lint / typecheck / test time, mechanically | `tools/biome-plugins/test-flake-shapes.grit` (6 shapes), `tools/arch-lint`'s test scans, guard tests (`browser-test-name-length`, `vitest-data-dir`, `local-node-version`) |
+| **executable** | at lint / typecheck / test time, mechanically | `tools/biome-plugins/test-flake-shapes.grit` (rules read from the file by its guard), `tools/arch-lint`'s test scans (lazy imports, duplicate titles, the sleep ledger), guard tests (`browser-test-name-length`, `vitest-data-dir`, `local-node-version`) |
 | **setup guard** | at runtime, for every test in a project | `apps/web/vitest.setup.ts` (cleanup, fake-timer leak, localStorage), `browser-setup.ts` (stylesheet, async budget), `sharedBrowserTestConfig` (trace bounds) |
 | **review criteria** | when a reviewer reads the diff | `review-gate/resources/test-coverage.md` |
 | **prose** | only if someone remembers | `integrator-flow.md`'s CI-flakes section (the measurements), this skill |
@@ -29,6 +29,7 @@ A shape that costs a real defect twice earns a higher rung. How to move one up i
 
 | Situation | Resource |
 |---|---|
+| naming a test or a file, a duplicate title, a fixed sleep, a count or ordinal in a title | `resources/naming-and-structure.md` |
 | async assertions, `expect.poll`, `waitFor`, fake timers, clocks, scheduler teardown | `resources/async-and-timers.md` |
 | a `.browser.test.tsx`: focus, typing, locators, timeouts, titles, traces | `resources/browser-mode.md` |
 | mocks, module state, storage, data dirs, workers, `--project` filters | `resources/isolation-and-state.md` |
@@ -53,7 +54,11 @@ A shape that costs a real defect twice earns a higher rung. How to move one up i
 8. **A count proves the subject is present**: `expect(routes.length).toBeGreaterThan(N)` beside
    an allowlist walk, a reachability floor beside a property.
 9. **A skip is probed, never inferred**, and must be impossible on CI.
-10. **Before pushing**: run the file 5× in fresh processes, then once inside the whole project
+10. **A title is an identifier**: behaviour, not chronology (no PR/issue number, no
+    "pre-fix"), no count or ordinal of a registry that grows, unique within its `describe`.
+11. **Wait for a condition, never for time**: `vi.waitFor` / `expect.poll` / fake timers, not
+    `setTimeout(r, N)`. The per-file sleep ledger only goes down.
+12. **Before pushing**: run the file 5× in fresh processes, then once inside the whole project
     — isolation proves nothing about the run that flakes.
 
 ## Commands

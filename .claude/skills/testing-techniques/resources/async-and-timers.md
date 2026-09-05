@@ -25,7 +25,7 @@ error attributed to whatever test is running by then, or nowhere.
   pass it to any `fetch` or long wait so the abandoned attempt stops rather than piling up.
 - **No side effect inside `waitFor`.** A retried callback re-fires `fireEvent` / `userEvent`
   / `render`, so the action double-fires under load and the failure blames the assertion.
-  Fire outside, assert inside. Lint rejects it (the first GritQL shape).
+  Fire outside, assert inside. Lint rejects it (the `waitFor` side-effect rule).
 - Testing Library's `findBy*` / `waitFor` budget is 1000ms by default — a fast-machine number
   and far tighter than any per-test timeout. `apps/web`'s browser setup raises it to 5s
   (`configure({ asyncUtilTimeout })` in `src/test-utils/browser-setup.ts`); ten tests had

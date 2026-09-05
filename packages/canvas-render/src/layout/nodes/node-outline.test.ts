@@ -188,7 +188,7 @@ describe('outlineEntryPoint — where a segment entering the box first meets the
   })
 })
 
-describe('review regressions (CodeRabbit #953)', () => {
+describe('degenerate boxes and unsupported shapes', () => {
   it('a zero-area polygon outline contains ONLY its collapsed vertex, like the ellipse rule', () => {
     const collapsed = { x: 5, y: 5, w: 0, h: 0 }
     expect(outlineContains('visual.diamond', collapsed, { x: 5, y: 5 })).toBe(true)

@@ -8,9 +8,11 @@ justified it (how many occurrences today, what the false-positive rate would be)
 
 | Instrument | Rung | Catches |
 |---|---|---|
-| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot` |
+| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`; a PR/issue number or `pre-fix` in a title |
 | `tools/biome-plugins/logger-argument-order.grit` | lint | `log.warning('msg', x)` in `mcp-server/src/server/**` (pino drops `x`) |
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
+| `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
+| `tools/arch-lint/src/test-fixed-sleep-ledger.test.ts` | `arch-lint-node` | a file gaining a fixed-duration sleep (`setTimeout(r, N>0)` in a promise); per-file count pinned by equality, a ratchet |
 | `apps/web/src/browser-test-name-length.test.ts` | `web-jsdom` | browser titles past the 155-char budget (`?raw` source scan, no `node:fs`) |
 | `apps/web/src/App.lazy-coverage.test.ts` | `web-jsdom` | a `React.lazy` page neither mocked nor statically imported by `App.test.tsx` |
 | `apps/web/src/test-config/vitest-browser-optimize-deps.test.ts` | `web-jsdom` | `optimizeDeps.include` missing a package every browser test imports |
@@ -39,11 +41,16 @@ patterns with `$vars`, `as $name`, `where`, `<:`, `contains`, `within`, `not`, `
    bad AND the good form. Check the good form stays silent — `return expect(...).resolves`
    and `await expect(...)` both had to be excluded from the un-awaited rule.
 3. **Add the pattern to `test-flake-shapes.grit`** with the comment saying what fails and how
-   it reads (the message is what the author sees; name the fix, not just the sin).
-4. **Extend the fixture pair** in `.claude/scripts/fixtures/biome-plugin/{bad,good}.test.tsx`
-   and the assertions in `.claude/scripts/biome-plugin.test.mjs` — the bad fixture must trip
-   EVERY rule, the good none. A pattern edit that stops matching leaves `pnpm lint` green over
-   exactly the shapes it was built for; the fixture pair is what notices.
+   it reads (the message is what the author sees; name the fix, not just the sin). Every
+   regex group is `(?:...)`: a capturing group is a pattern VARIABLE to Biome's GritQL, and
+   one errored the whole plugin — silencing every other rule — until the fixture guard
+   noticed.
+4. **Extend the fixture pair** in `.claude/scripts/fixtures/biome-plugin/{bad,good}.test.tsx`.
+   `.claude/scripts/biome-plugin.test.mjs` reads every `register_diagnostic` message out of the
+   plugin and requires the bad fixture to reach each one and the good fixture to reach none —
+   no rule count lives in a title or an assertion, so a new rule with no fixture line fails by
+   itself. A pattern edit that stops matching leaves `pnpm lint` green over exactly the shapes
+   it was built for; the fixture pair is what notices.
 5. `pnpm test:scripts && pnpm lint`.
 
 A shape whose textual form has too many legitimate instances stays prose: the held-reference
@@ -61,7 +68,10 @@ timers still gets its trees torn down.
 ## Adding a source-scan test
 
 For a rule about test FILES rather than test behaviour (a title budget, an import shape, a
-count in a comment that would go stale). Two constraints:
+count in a comment that would go stale). Repo-wide scans live in `tools/arch-lint/src/` and
+share `test-scan-dirs.ts` (`TEST_SCAN_DIRS`, `listTestFiles`); app-local ones stay in the
+app. A scan that only STOPS growth pins today's count per file by equality and calls itself
+a ratchet (`test-fixed-sleep-ledger.test.ts`). Two constraints:
 
 - `apps/web` is browser-only, so read sources with `import.meta.glob(..., { query: '?raw' })`
   rather than `node:fs` (`web-app-boundary.test.ts` enforces the boundary).

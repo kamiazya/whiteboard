@@ -20,8 +20,9 @@ that run is never the isolated one.
    30–39s with all 115 browser files in flight. An isolated green proves nothing about the run
    that flakes, and neither does a mutation check that stays green in isolation.
 3. **Read the exit code, not the summary.** Two shapes report every test PASSED and exit 1:
-   an unhandled error in teardown (`NotFoundError: removeChild`, the ninth shape) and
-   `EnvironmentTeardownError` from a module still loading at teardown (the tenth). And a
+   an unhandled error in teardown (`NotFoundError: removeChild`, the raw-DOM-wipe shape) and
+   `EnvironmentTeardownError` from a module still loading at teardown (the module-scope
+   dynamic-import shape). And a
    smaller-than-expected total is never good news: a mis-filtered `--project`, an
    `ENAMETOOLONG` in teardown, or a disk that filled mid-run each drop tests silently.
 

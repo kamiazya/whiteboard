@@ -52,3 +52,8 @@ Check:
   measured cost).
 - Does a new property or allowlist walk assert the subject is PRESENT (a
   reachability floor, a count), not merely that what is present passes?
+- Is every new or changed title a stable identifier — the behaviour, with no
+  PR/issue number, no "pre-fix", and no count or ordinal of a registry that
+  grows (lint catches the chronology; the count is reader judgement)?
+- Does a new wait wait on a condition (`vi.waitFor`, `expect.poll`, fake
+  timers) rather than on time (`setTimeout(r, N)`)?

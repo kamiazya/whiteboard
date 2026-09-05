@@ -36,3 +36,7 @@ export async function goodAwaited() {
 export function goodReturned() {
   return expect(Promise.resolve(1)).resolves.toBe(1)
 }
+
+export const goodTitle = () => {
+  it('rejects a malformed prefix and keeps the issue count at zero', () => {})
+}

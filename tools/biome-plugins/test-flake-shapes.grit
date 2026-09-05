@@ -99,5 +99,34 @@ any {
       message = "Unawaited toMatchFileSnapshot: it reads and writes the snapshot file asynchronously, so an un-awaited call compares nothing. Vitest 5 fails the test for this; `await` it.",
       severity = "error"
     )
+  },
+  // A title is an identifier: flake-watch clusters failures by it, `-t`
+  // filters on it, and CI annotations carry it. A PR/issue number or a
+  // "pre-fix" in the title is chronology (AGENTS.md's Source Comment
+  // Discipline, applied to titles) — meaningless to the next reader and
+  // load-bearing for nothing. Name the behaviour instead. Measured 3
+  // occurrences when this was added, all retitled in the same change.
+  // Every group in the regex is `(?:...)`: a CAPTURING group is a pattern
+  // variable to Biome's GritQL, and one here errored the WHOLE plugin
+  // ("regex pattern matched 2 variables, but expected 0"), silencing every
+  // other rule in this file. The fixture guard is what noticed.
+  `$runner($title, $_)` where {
+    $runner <: or { `it`, `test`, `describe` },
+    $title <: r"(?s).*(?:\b(?:PR|CodeRabbit|CodeQL|Dependabot|issue|bug)\s*#?[0-9]+|\bpre-fix\b).*",
+    register_diagnostic(
+      span = $title,
+      message = "Chronology in a test title (a PR/issue number, or 'pre-fix'): the title is an identifier that outlives the review, so name the behaviour under test instead.",
+      severity = "error"
+    )
+  },
+  `$runner.$mode($title, $_)` where {
+    $runner <: or { `it`, `test`, `describe` },
+    $mode <: or { `skip`, `only`, `concurrent`, `sequential` },
+    $title <: r"(?s).*(?:\b(?:PR|CodeRabbit|CodeQL|Dependabot|issue|bug)\s*#?[0-9]+|\bpre-fix\b).*",
+    register_diagnostic(
+      span = $title,
+      message = "Chronology in a test title (a PR/issue number, or 'pre-fix'): the title is an identifier that outlives the review, so name the behaviour under test instead.",
+      severity = "error"
+    )
   }
 }
