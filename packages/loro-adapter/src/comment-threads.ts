@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
+import { openMergeableMap } from './mergeable-containers.js'
 
 /** The nested map of messages inside one thread's container. */
 const MESSAGES_KEY = 'messages'
@@ -52,13 +53,16 @@ function assertFiniteAnchor(thread: CommentThread): void {
 /**
  * Creates or replaces one thread's own fields and writes its messages.
  *
- * `getOrCreateContainer` and not `setContainer`: the latter REPLACES the
- * container, discarding whatever a peer put in it. Creating one is still the
- * only path allowed to open a thread container at all — measured on
- * loro-crdt 1.13.6, two replicas that create a container under the same key
- * with no common ancestor merge to ONE of them and the other side's entries
- * are gone. Creation mints its own id and cannot collide; every other write
- * below therefore refuses to open a container it did not find.
+ * `openMergeableMap` and not `setContainer`: the latter REPLACES the
+ * container, discarding whatever a peer put in it.
+ *
+ * Creating one is still the only path allowed to open a thread container at
+ * all, even though `openMergeableMap` now makes two replicas opening one key
+ * converge rather than hide one another. The reason is no longer convergence
+ * but INTENT: a reply to a thread this replica does not hold is a reply to
+ * something that was never created here, and materialising an anchorless,
+ * statusless thread around it would turn a lost import into a half-formed
+ * conversation. `writeThreadMessage` returns without writing instead.
  */
 export function writeCommentThread(doc: DocumentContainers, thread: CommentThread): void {
   writeThreadInto(doc, thread)
@@ -73,11 +77,11 @@ export function writeCommentThread(doc: DocumentContainers, thread: CommentThrea
  */
 export function writeThreadInto(doc: DocumentContainers, thread: CommentThread): void {
   assertFiniteAnchor(thread)
-  const container = doc.getMap(THREADS_KEY).getOrCreateContainer(thread.id, new LoroMap())
+  const container = openMergeableMap(doc.getMap(THREADS_KEY), thread.id)
   container.set(ANCHOR_FIELD, thread.anchor)
   container.set(STATUS_FIELD, thread.status)
   if (thread.createdAt !== undefined) container.set(CREATED_AT_FIELD, thread.createdAt)
-  const messages = container.getOrCreateContainer(MESSAGES_KEY, new LoroMap())
+  const messages = openMergeableMap(container, MESSAGES_KEY)
   for (const message of thread.messages) messages.set(message.id, messageToFields(message))
 }
 
@@ -96,9 +100,7 @@ export function writeThreadMessage(
 ): void {
   const container = threadContainer(doc, threadId)
   if (container === undefined) return
-  container
-    .getOrCreateContainer(MESSAGES_KEY, new LoroMap())
-    .set(message.id, messageToFields(message))
+  openMergeableMap(container, MESSAGES_KEY).set(message.id, messageToFields(message))
   doc.commit()
 }
 

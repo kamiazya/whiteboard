@@ -71,9 +71,16 @@ implementations live in the composition roots.
   a root of the document, or a key on a tree node's meta — so the bridge is
   written once and hosted twice. `LoroDoc` satisfies the interface
   structurally, which is why the move cost no call site a change.
-- A tree-node host uses `getOrCreateContainer`, never `setContainer`. The
-  latter REPLACES what is at the key: measured, a second `setContainer` on
-  an occupied key leaves `{}`, so writing a document twice would wipe it.
+- A tree-node host opens containers through `mergeable-containers.ts`, never
+  `setContainer`. The latter REPLACES what is at the key: measured, a second
+  `setContainer` on an occupied key leaves `{}`, so writing a document twice
+  would wipe it. The one place `setContainer` is right is `copyNodeData`,
+  whose target is a node `createNode()` just minted — replacing on an empty
+  node replaces nothing, and it is what copies a container by KIND without a
+  hardcoded list of keys. A document's own content containers stay REGULAR children
+  deliberately — pre-attached at creation, so no replica opens one first, and
+  mergeable would cost 18.6% of the delta log to close a hazard that is
+  already closed (`mergeable-containers.test.ts` carries the numbers).
 - LoroDoc spatial layout: `doc.getMap('nodes')` keyed by nodeId,
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT
@@ -110,11 +117,24 @@ implementations live in the composition roots.
   The price, measured on loro-crdt 1.13.6: when two replicas create a
   container under the same key with **no common ancestor for that key**, the
   merge keeps one of them and every entry the other side put in it is gone —
-  no conflict, no marker. So only the CREATION path may open a thread
-  container (its id is minted, and cannot collide); a reply or a status change
-  to a thread this replica has not received writes nothing rather than opening
-  a rival. `setContainer` is banned here for the reason it is banned on tree
-  nodes, and `getOrCreateContainer` alone is not enough.
+  no conflict, no marker.
+
+  A thread's key does NOT protect against that, and the claim here that it
+  did ("its id is minted, and cannot collide") was wrong: the key is the
+  CALLER's comment id, which `writeCommentInto` passes straight through and
+  `deleteCommentInto` looks the thread up by. Two keepers migrating the same
+  legacy comment, or each applying one `comment.add`, reach the same key
+  having never seen the other's. `openMergeableMap`
+  (`mergeable-containers.ts`) is what closes it — a deterministic child id,
+  so the two were editing one container all along — and
+  `comment-threads.convergence.test.ts` is the measurement. Which containers
+  are mergeable and what the choice costs in oplog bytes is the
+  `loro-crdt-usage` skill.
+
+  Creation is still the only path allowed to OPEN a thread container, now for
+  intent rather than convergence: a reply to a thread this replica does not
+  hold would otherwise materialise an anchorless, statusless thread around it.
+  `setContainer` is banned here for the reason it is banned on tree nodes.
 - A third map, `doc.getMap('canvas')`, holds the canvas ENVELOPE —
   properties of the canvas rather than of anything on it (today
   `x-whiteboard`, the rendering preferences). Separate because the merge

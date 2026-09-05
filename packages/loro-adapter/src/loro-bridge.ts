@@ -871,7 +871,8 @@ export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefi
  * an OP — a workspace tree node's meta map, unlike a doc's roots, which are
  * implicit. Such a host must pre-attach these when the document node is
  * created: otherwise the first READ of a missing container attaches it via
- * `getOrCreateContainer`, and that stray local op clears the UndoManager's
+ * `openMergeableMap`/`openMergeableText`, and that stray local op clears the
+ * UndoManager's
  * redo stack. Measured: create → undo → read → redo left the document empty,
  * while the same sequence without the read redid fine.
  *

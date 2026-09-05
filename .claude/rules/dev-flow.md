@@ -116,7 +116,7 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 ## Skills (load for detail)
 
-`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `testing-techniques`, `measured-change`, `diagnosis-evidence`, `visual-evidence`, `docs-sync`, `whiteboard-mcp-smoke`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`, `steward`, `react-best-practices`.
+`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `testing-techniques`, `measured-change`, `diagnosis-evidence`, `visual-evidence`, `docs-sync`, `whiteboard-mcp-smoke`, `loro-crdt-usage`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`, `steward`, `react-best-practices`.
 
 `steward` is the one with a load-bearing PATH: the harness reads `.claude/skills/steward/SKILL.md` on a PR event and lets it override the generic drive-to-green rules on conventions and on how proactive to be. Its `reference/failure-modes.md` is an INDEX into `integrator-flow.md`'s CI-flakes section — symptom to verdict — so the reasoning and the measurements stay there, in one place, and keep covering a flake that has no PR attached.
 
