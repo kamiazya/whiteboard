@@ -447,6 +447,49 @@ destructive entry alone at the bottom. What is learned in one vessel
 must transfer to the other, so a new action is added to the catalog,
 never to a single vessel.
 
+## Comment surfaces: two hosts, one set of parts
+
+A conversation is read and answered in two places — the card the canvas
+opens on a bubble, and the document-level panel both editors share
+(ADR-0026 decision 5) — and a third will come when markdown gets its
+in-place projection. The parts are shared, not the pattern:
+`annotations/message-meta.tsx` (who and when), `ReplyComposer` (the box,
+Cmd/Ctrl+Enter, the empty guard, the draft that belongs to one thread) and
+`ThreadReplies` (the replies under the subject line). A host composes
+them and decides only what a reply is TO and how its surface is sized. This
+exists because the two hosts each carried a copy of the reply form and had
+already drifted — the card answered Cmd/Ctrl+Enter and the panel swallowed
+it. A rule one host gains, the other must not be able to lack, so the rule
+lives in a part rather than in both hosts.
+
+Three things every such surface needs are INTRINSIC to the canvas root, so a
+new one gets them without being wired — each was forgotten once, on the
+comment card, and shipped that way to a phone:
+
+- **Overlay recognition.** The root's pointer guard and its native
+  `touchstart` refuser ask one predicate, `isEditorOverlayTarget`, and it
+  recognises native controls, links and dialogs by what they are.
+  `data-editor-overlay` remains the opt-in for chrome that is not a control.
+  A control the root does not recognise works under a mouse and is dead to a
+  finger — a cancelled `touchstart` is also a cancelled click — which is how
+  the card's Close shipped unreachable on the one device with no Escape.
+- **Keyboard avoidance.** `useKeyboardAvoidance` follows FOCUS: whatever
+  text entry inside the root has it, the overlay that owns it is kept above
+  the keyboard and inside the root, by panning. Nothing is wired per editor.
+  The root is `overflow: clip`, never `hidden`: a hidden-overflow box is a
+  scroll container the browser scrolls to reveal a focused control, and it
+  did — 38px under a viewport state that knew nothing about it.
+- **Timestamps.** One formatter, `workspace-files/format-relative.ts`:
+  "5m ago" while fresh, the reader's local M/D HH:MM once age stops being the
+  fact. `time-format-discipline.test.ts` reads every source file for a
+  hand-rolled stamp, because the formatter's own comment said "one
+  formatter" and was forked anyway, into a UTC slice chosen for a
+  deterministic test. Determinism is the test's job (pin the clock).
+
+The card itself is a non-modal dialog: it slides inside the root's edge like
+the context menu, a press on the canvas dismisses it like a menu, and Escape
+does too.
+
 ## A toggle looks toggled, and says so once
 
 A control that switches something on — a rail, a popover, a tool, a filter —

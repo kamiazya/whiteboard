@@ -234,6 +234,42 @@ it('Escape shuts the card straight after it opens, with no click in between', as
   await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
 })
 
+it('a press on the canvas away from the card shuts it, with no × to find', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  pressBubble(root, 14)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+  // Empty canvas, clear of every node and both bubbles.
+  pressAt(root, 15, 60, 560)
+
+  await vi.waitFor(() => expect(container.querySelector('[data-testid="comment-card"]')).toBeNull())
+})
+
+it('a card on a bubble near the edge opens fully inside the root, reply box reachable', async () => {
+  // The bubble at (600, 450) puts the card's natural place past the
+  // 800×600 root's right and bottom edges. Slid inside, not clipped.
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  pressBubble(root, 16)
+  const card = page.getByTestId('comment-card')
+  await expect.element(card).toBeInTheDocument()
+
+  const r = root.getBoundingClientRect()
+  await vi.waitFor(() => {
+    const c = card.element().getBoundingClientRect()
+    expect(c.right).toBeLessThanOrEqual(r.right)
+    expect(c.bottom).toBeLessThanOrEqual(r.bottom)
+  })
+  await userEvent.click(page.getByLabelText('Reply'))
+  expect(document.activeElement).toBe(page.getByLabelText('Reply').element())
+})
+
 it('a cancelled press on a comment opens nothing later', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)

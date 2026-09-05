@@ -20,9 +20,14 @@
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
-import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { MessageBy } from '../annotations/message-meta.js'
+import { ReplyComposer } from '../annotations/ReplyComposer.js'
+import { ThreadReplies } from '../annotations/ThreadReplies.js'
 import type { Box } from './geometry.js'
+
+/** Screen px kept between the card and the root's edge once slid inside. */
+const CARD_EDGE_MARGIN_PX = 8
 
 export interface CommentThreadCardProps {
   readonly thread: CommentThread
@@ -45,9 +50,32 @@ export function CommentThreadCard({
   onEdit,
   onClose,
 }: CommentThreadCardProps) {
-  const [draft, setDraft] = useState('')
   const cardRef = useRef<HTMLDivElement | null>(null)
   const resolved = thread.status === 'resolved'
+  // A card opened on a bubble near the root's right or bottom edge is slid
+  // back inside once its real size is measurable — the same nudge the
+  // context menu gets, for the same reason: the root clips, so a card
+  // hanging past the edge has its reply box where no finger can reach it.
+  // Sliding rather than panning the canvas keeps the surface still under a
+  // reader who only opened a conversation; the keyboard pan is what moves
+  // the canvas, and only once they type. useLayoutEffect corrects before
+  // paint, so there is no visible jump.
+  const [slide, setSlide] = useState({ x: 0, y: 0 })
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    const parent = el?.offsetParent
+    if (el == null || !(parent instanceof HTMLElement)) return
+    // Measured with the current slide applied, so the correction is taken
+    // from the card's natural place: subtract what is already applied.
+    const rect = el.getBoundingClientRect()
+    const naturalRight = box.x + Math.ceil(rect.width)
+    const naturalBottom = box.y + Math.ceil(rect.height)
+    const next = {
+      x: Math.min(0, parent.clientWidth - CARD_EDGE_MARGIN_PX - naturalRight),
+      y: Math.min(0, parent.clientHeight - CARD_EDGE_MARGIN_PX - naturalBottom),
+    }
+    setSlide((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
+  }, [box.x, box.y, box.width, thread])
 
   // Focus the CARD, not its reply box: a press that opens a conversation is
   // a request to read it, and pulling the caret into the box would send the
@@ -57,16 +85,6 @@ export function CommentThreadCard({
   useEffect(() => {
     cardRef.current?.focus()
   }, [])
-
-  function commit(): void {
-    const body = draft.trim()
-    // An empty reply is not a message. Guarded here rather than by disabling
-    // the button, so the keyboard path is covered by the same rule as the
-    // pointer one.
-    if (body === '') return
-    onReply(body)
-    setDraft('')
-  }
 
   return (
     <div
@@ -82,11 +100,13 @@ export function CommentThreadCard({
       // with interaction handlers is neither announced nor allowed.
       role="dialog"
       aria-label="Comment thread"
-      // The card sits exactly on the bubble it opens, so an unguarded
-      // pointerdown placing a caret would bubble to the editor root's
-      // hit-test, resolve to the same comment, and arm a pin drag —
-      // unmounting this card mid-sentence. Same reason TextNodeEditor does it.
-      onPointerDown={(event) => event.stopPropagation()}
+      // Chrome, not canvas: the root's gesture and touch guards recognise
+      // the dialog role and its controls on their own, and the attribute
+      // says so where a reader looks for it. Without either, a press on the
+      // card fell to the root's hit-test — which resolved to the bubble
+      // under it and armed a pin drag — and on a phone every tap on it was
+      // a cancelled touchstart, so the Close never received its click.
+      data-editor-overlay
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
           event.stopPropagation()
@@ -95,8 +115,10 @@ export function CommentThreadCard({
       }}
       style={{
         position: 'absolute',
-        left: box.x,
-        top: box.y,
+        // Never slid past the root's own origin: a card taller than the
+        // root keeps its top edge, where its actions are, in view.
+        left: Math.max(0, box.x + slide.x),
+        top: Math.max(0, box.y + slide.y),
         width: Math.max(box.width, 216),
         // Above the ambient chrome (minimap and dock are z-10), below the
         // dialogs (z-30). Measured, not guessed: a comment anchored near the
@@ -134,44 +156,8 @@ export function CommentThreadCard({
         </div>
       </div>
 
-      {thread.messages.length > 1 ? (
-        <ol className="flex flex-col gap-1.5 border-l pl-2">
-          {thread.messages.slice(1).map((message) => (
-            <li key={message.id} className="flex flex-col gap-0.5">
-              <MessageBy message={message} />
-              <p className="whitespace-pre-wrap break-words">{message.body}</p>
-            </li>
-          ))}
-        </ol>
-      ) : null}
-
-      <form
-        className="flex flex-col gap-1"
-        onSubmit={(event) => {
-          event.preventDefault()
-          commit()
-        }}
-      >
-        <textarea
-          aria-label="Reply"
-          placeholder="Reply…"
-          value={draft}
-          onChange={(event) => setDraft(event.target.value)}
-          onKeyDown={(event) => {
-            // Enter alone is a newline: a reply is prose, and a conversation
-            // that eats paragraph breaks is worse than one extra chord.
-            if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-              event.preventDefault()
-              commit()
-            }
-          }}
-          rows={2}
-          className="w-full resize-y rounded border bg-background px-2 py-1 text-inherit"
-        />
-        <button type="submit" className="self-end rounded border px-2 py-1 hover:bg-accent">
-          Reply
-        </button>
-      </form>
+      <ThreadReplies thread={thread} />
+      <ReplyComposer onReply={onReply} />
     </div>
   )
 }

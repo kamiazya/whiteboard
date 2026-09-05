@@ -128,3 +128,24 @@ it('offers no reply box when the host wired no reply handler', async () => {
 
   expect(page.getByRole('textbox', { name: /reply/i }).query()).toBeNull()
 })
+
+it('sends on Cmd/Ctrl+Enter here too — the chord the canvas card already answered', async () => {
+  // The two hosts share one composer, so a rule one of them gains the
+  // other cannot lack; this is the one they had already drifted on.
+  const replies: { threadId: string; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onReply={(threadId, body) => replies.push({ threadId, body })}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+  await userEvent.click(page.getByRole('textbox', { name: /reply/i }))
+  await userEvent.keyboard('on it')
+  await userEvent.keyboard('{Control>}{Enter}{/Control}')
+
+  expect(replies).toEqual([{ threadId: 't-open', body: 'on it' }])
+  expect(
+    (page.getByRole('textbox', { name: /reply/i }).element() as HTMLTextAreaElement).value,
+  ).toBe('')
+})

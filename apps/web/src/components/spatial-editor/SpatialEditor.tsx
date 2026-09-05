@@ -98,6 +98,7 @@ import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
+import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
@@ -575,15 +576,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
-    // While that edit is open, keep its node above the virtual keyboard —
-    // the keyboard overlays the page without resizing it, so this pan is
-    // the only thing standing between edit mode and an invisible subject.
-    useKeyboardAvoidance({
-      editingBox: editingTextNodeId === undefined ? undefined : selection?.box,
-      rootRef,
-      containerSizeOf,
-      setViewport,
-    })
+    // Whatever text entry has focus inside the root — a node's editor, the
+    // comment compose bubble, a label, the thread card's reply box — stays
+    // above the virtual keyboard: the keyboard overlays the page without
+    // resizing it, so this pan is the only thing standing between typing
+    // and an invisible subject. Focus-driven, so no editor has to be wired.
+    useKeyboardAvoidance({ rootRef, containerSizeOf, setViewport })
     const {
       showResolvedComments,
       setShowResolvedComments,
@@ -913,13 +911,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * canvas surface. The root's gesture handlers must ignore those:
      * capturing the pointer on such a press retargets the subsequent
      * `click` to the capturing root, so the control's own onClick never
-     * fires — a press on "Add note" silently did nothing. Overlay controls
-     * opt in via `data-editor-overlay`; a per-control stopPropagation is
-     * exactly the thing someone forgets (this bug), so the guard lives here
-     * where forgetting is impossible.
+     * fires — a press on "Add note" silently did nothing. The answer is
+     * `isEditorOverlayTarget`, shared with the native touch refuser so the
+     * two guards cannot disagree about what chrome is; a per-control
+     * stopPropagation is exactly the thing someone forgets (this bug), so
+     * the guard lives here where forgetting is impossible.
      */
-    const isOverlayEvent = (e: React.SyntheticEvent) =>
-      e.target instanceof Element && e.target.closest('[data-editor-overlay]') !== null
+    const isOverlayEvent = (e: React.SyntheticEvent) => isEditorOverlayTarget(e.target)
 
     /**
      * Add or remove one node from the multi-selection, shared by shift-click
@@ -965,6 +963,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const screenPoint = clientPointToRootLocal(e, root)
       const point = screenToCanvas(screenPoint, viewport)
       const hitId = hitTest(selectableBoxes, point)
+      // A press on the canvas surface shuts the open conversation, the way
+      // a pointerdown outside a menu shuts the menu. It is the one dismissal
+      // a phone has: there is no Escape, and the card covers the bubble
+      // whose second press would otherwise toggle it. A press on the open
+      // comment's own chrome (its pin, which the card leaves uncovered) is
+      // left to the release, which toggles it shut as before.
+      if (openCommentId !== null && hitTestComment(point) !== openCommentId) {
+        setOpenCommentId(null)
+      }
       // Navigation answers first, and answers for its own state. Everything
       // it owns — which finger is down, whether two of them are driving the
       // viewport, whether this press continues a gather — lives in one value
@@ -1786,7 +1793,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
             minHeight: 0,
-            overflow: 'hidden',
+            // `clip`, not `hidden`: a hidden-overflow box is still a scroll
+            // container, and the browser scrolls one silently to reveal a
+            // focused control — tapping a reply box on a card that overhung
+            // the bottom edge shifted the whole canvas 38px under a viewport
+            // state that knew nothing about it, and the keyboard pan then
+            // aimed at where the card had been. `clip` forbids that scroll
+            // outright; the viewport is the only thing that moves the canvas.
+            overflow: 'clip',
             touchAction: 'none',
             outline: 'none',
             cursor: tool === 'hand' ? 'grab' : undefined,
