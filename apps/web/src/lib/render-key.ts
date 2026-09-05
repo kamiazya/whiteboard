@@ -10,7 +10,7 @@
 
 import { type DocumentKind, documentKindSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import type { ResolvedTheme } from '../hooks/useThemeMode.js'
+import type { ResolvedTheme } from './theme.js'
 
 /**
  * Stamped into the bundle by every vite/vitest config (see

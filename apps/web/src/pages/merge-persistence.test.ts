@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { mergePersistence } from './merge-persistence.js'
-import type { BrowserPersistenceState } from './use-browser-document-controller.js'
 
 const saved = (at: string | null = null): BrowserPersistenceState => ({
   kind: 'saved',

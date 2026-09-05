@@ -23,7 +23,7 @@
 import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { renderCanvasToSvg } from './scene-render.js'
 import type { Point } from './viewport.js'
 

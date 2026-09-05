@@ -7,6 +7,7 @@
 // about whose state is authoritative.
 
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EditorTool } from '../../lib/editor-tool.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
 import {
@@ -19,7 +20,6 @@ import {
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { SelectionEvent } from './selection.js'
 import { findShortcut, type ShortcutId } from './shortcuts.js'
-import type { EditorTool } from './ToolPalette.js'
 
 /** One keyboard step of zoom — finer than the double press, which jumps. */
 const STEP_ZOOM_FACTOR = 1.25

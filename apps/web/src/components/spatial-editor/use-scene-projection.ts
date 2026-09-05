@@ -13,7 +13,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { type NodeBox, unionBox } from './geometry.js'
 import { buildMinimapNodes } from './minimap.js'
 import { renderedCanvasKeyed } from './scene-render-core.js'

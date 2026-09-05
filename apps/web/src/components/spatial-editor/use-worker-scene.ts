@@ -26,7 +26,6 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import {
   canLayoutInWorker,
   type FileRefLabel,
@@ -34,6 +33,7 @@ import {
   type LayoutRequest,
   type LayoutResponse,
 } from '../../lib/layout-worker-protocol.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { type RenderCanvasOptions, renderCanvasToSvg } from './scene-render.js'
 import type { RenderedCanvas } from './scene-render-core.js'
 
