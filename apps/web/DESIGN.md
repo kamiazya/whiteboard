@@ -107,10 +107,14 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
 
   Anything else stateful in chrome needs this list amended first, takes
   amber or nothing, and puts its word in the accessible name.
-- **The AppShell owns brand, connection and settings.** Every page mounts
-  `AppShell` (the signature mark, the ALPHA honesty chip, the settings gear +
-  attention dot) and never renders its own brand, connection or settings
-  chrome.
+- **The AppShell owns brand, connection, fullscreen and settings.** Every
+  page mounts `AppShell` (the signature mark, the ALPHA honesty chip, the
+  fullscreen toggle, the settings gear + attention dot) and never renders its
+  own brand, connection, fullscreen or settings chrome. Fullscreen is the
+  shell's because its subject is the app — how much of the screen it gets —
+  which does not change when a document opens; the target is the whole
+  document (`hooks/use-fullscreen.ts`), both chrome rows step aside in it,
+  and the shell floats the one way back out.
 
   The row reads in two halves, and the spacer is the divider: **left of it is
   what you are working IN** (the mark = this workspace), **right of it is the

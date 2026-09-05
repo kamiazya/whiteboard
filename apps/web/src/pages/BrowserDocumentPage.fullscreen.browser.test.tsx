@@ -14,6 +14,7 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { AppShell } from '../components/AppShell.js'
 import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
@@ -40,10 +41,15 @@ afterEach(async () => {
   await page.viewport(1280, 900)
 })
 
+// The shell above the page, the way App composes them: the toggle is the
+// shell's, and what fullscreen hides is both rows.
 function render(ui: ReactElement) {
   return rtlRender(
-    <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+    <div style={{ height: '100vh', display: 'flex', flexDirection: 'column' }}>
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell daemon={false} />
+        <div style={{ minHeight: 0, flex: 1 }}>{ui}</div>
+      </MemoryRouter>
     </div>,
   )
 }
@@ -74,10 +80,11 @@ it('really enters fullscreen on click, focuses the exit control, and restores fo
   await userEvent.click(screen.getByRole('button', { name: 'Fullscreen' }))
   await waitFor(() => expect(document.fullscreenElement).not.toBeNull(), { timeout: 10_000 })
 
-  // The chrome steps aside; the one way back out holds focus.
+  // Both chrome rows step aside; the one way back out holds focus.
   await waitFor(() =>
     expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull(),
   )
+  expect(screen.queryByTestId('shell-settings')).toBeNull()
   const exit = await screen.findByRole('button', { name: 'Exit fullscreen' })
   await waitFor(() => expect(document.activeElement).toBe(exit))
 
@@ -91,55 +98,50 @@ it('really enters fullscreen on click, focuses the exit control, and restores fo
   )
 })
 
-// Where a camera can be, and where it cannot. The web exposes the safe area
-// as a uniform band per edge — never the cutout's position along that edge —
-// so a control on the top edge either collides with a punch-hole or steps
-// back from the whole band on every device that has one, however far the
-// camera is from that corner. Neither is acceptable, and no API distinguishes
-// them (Android's own DisplayCutout.getBoundingRects has no web counterpart).
-// So the control lives on the edge no phone puts a camera on. Asserted as
-// geometry against the REAL fullscreened element rather than on class names:
-// the invariant is where the button ends up, not how it got there.
+// Where a camera can be, and where it cannot. The web exposes the safe area as
+// a uniform band per edge, never the cutout's position along that edge, so a
+// control on the top edge either collides with a punch-hole or steps back from
+// the whole band on every device that has one — however far the camera is from
+// that corner. Both were seen on a phone, and no API distinguishes them
+// (Android's own DisplayCutout.getBoundingRects has no web counterpart). The
+// bottom edge escapes the choice in every orientation: rotating puts the
+// device's camera edge on a SIDE of the screen, never its bottom. Asserted as
+// geometry, against the viewport the fullscreened ROOT fills — the invariant is
+// where the control ends up, not how its class list spells it.
 it('keeps the exit control off the edge a camera can occupy', async () => {
   await renderLoaded()
   await userEvent.click(screen.getByRole('button', { name: 'Fullscreen' }))
   await waitFor(() => expect(document.fullscreenElement).not.toBeNull(), { timeout: 10_000 })
 
-  const exit = await screen.findByRole('button', { name: 'Exit fullscreen' })
-  const surface = screen.getByRole('main').getBoundingClientRect()
-  const control = exit.getBoundingClientRect()
-
-  expect(control.top).toBeGreaterThan(surface.top + surface.height / 2)
-  expect(control.left).toBeLessThan(surface.left + surface.width / 2)
+  const control = (
+    await screen.findByRole('button', { name: 'Exit fullscreen' })
+  ).getBoundingClientRect()
+  expect(control.top).toBeGreaterThan(window.innerHeight / 2)
+  expect(control.left).toBeLessThan(window.innerWidth / 2)
 })
 
-// The bottom edge is the only one no camera can reach — in landscape the
-// device's camera edge becomes a SIDE of the screen, never its bottom — but
-// it is also where both surfaces keep their own strip: the canvas dock (a
-// fixed 295px island, centred) and, on a touch markdown editor, the
-// formatting bar. The dock is what collides: centred at a fixed width, its
-// left edge walks toward the corner as the viewport narrows, and at 360px
-// CSS — an ordinary Android portrait width — it reaches x=33 while a control
-// in the corner spans 12..48.
-//
-// Real fullscreen is not used here: it pins the viewport to the screen, and
-// the width IS the variable under test. The flag is stubbed the way the jsdom
+// The bottom edge is safe from the camera and NOT empty: the canvas keeps its
+// dock there, a content-sized island centred in the viewport, so its left edge
+// walks toward the corner as the viewport narrows. At 360px CSS — an ordinary
+// Android portrait width — it reaches x=33 while a control in the corner spans
+// 12..48. Real fullscreen is not used: it pins the viewport to the screen, and
+// the width IS the variable here, so the flag is stubbed the way the jsdom
 // suite stubs it, over real CSS and real layout.
 it('does not collide with the canvas dock at a phone width', async () => {
   await page.viewport(360, 780)
   await renderLoaded()
 
-  const main = screen.getByRole('main')
-  Object.defineProperty(document, 'fullscreenElement', { configurable: true, get: () => main })
+  Object.defineProperty(document, 'fullscreenElement', {
+    configurable: true,
+    get: () => document.documentElement,
+  })
   await act(async () => {
     document.dispatchEvent(new Event('fullscreenchange'))
   })
 
   const exit = await screen.findByRole('button', { name: 'Exit fullscreen' })
-  const dock = [...document.querySelectorAll('div')].find((el) =>
-    el.className.includes('absolute bottom-[calc(0.75rem+env(safe-area-inset-bottom))]'),
-  )
-  expect(dock, 'the canvas dock should be on screen for this to mean anything').toBeDefined()
+  const dock = document.querySelector('[data-testid="tool-palette"]')
+  expect(dock, 'the canvas dock must be on screen for this to mean anything').not.toBeNull()
 
   const a = exit.getBoundingClientRect()
   const b = (dock as HTMLElement).getBoundingClientRect()
