@@ -1,3 +1,4 @@
+import type { WorkspaceNames } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   readPinnedDocumentIds,
   readWorkspaceDocuments,
@@ -5,7 +6,6 @@ import {
   setWorkspaceDocumentName,
   setWorkspacePinned,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { WorkspaceNames } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'

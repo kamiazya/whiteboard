@@ -42,7 +42,10 @@ const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 // z.infer of the shared wire schema, not a hand-written twin: a separately
 // written interface beside a Zod schema is the drift recipe the Zod
 // discipline names, and this pair had three copies of one shape.
-import type { OperatorInfo, VersionEntry } from '../../shared/api-contracts/document.js'
+import type {
+  OperatorInfo,
+  VersionEntry,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { errorMessage } from '../../shared/error-message.js'
 
 export type { OperatorInfo, VersionEntry }

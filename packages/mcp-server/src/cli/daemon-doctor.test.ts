@@ -1,6 +1,6 @@
+import { roundtrip } from '@kamiazya/whiteboard-daemon-client/api-contracts/roundtrip.test-helper'
 import { describe, expect, it } from 'vitest'
 import { daemonDoctorResultSchema } from '../shared/api-contracts/daemon-doctor.js'
-import { roundtrip } from '../shared/api-contracts/roundtrip.test-helper.js'
 import { runDaemonDoctor } from './daemon-doctor.js'
 
 // All tests inject parseRecord and isPidAlive — no filesystem or process access.

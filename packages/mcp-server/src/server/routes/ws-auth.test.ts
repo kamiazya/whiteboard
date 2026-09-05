@@ -1,9 +1,9 @@
-import { describe, expect, it, vi } from 'vitest'
 import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
-} from '../../shared/ws-protocol.js'
+} from '@kamiazya/whiteboard-daemon-client/ws-protocol'
+import { describe, expect, it, vi } from 'vitest'
 import { ALL_AUTH_SCOPES } from '../security/auth-strategy.js'
 import * as timingSafe from '../security/timing-safe.js'
 import { createWsTicketStore } from '../security/ws-ticket-store.js'

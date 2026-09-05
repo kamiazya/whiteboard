@@ -17,7 +17,7 @@ import type {
   StorageBucket,
   StorageCategory,
   StorageReportPayload,
-} from '../../shared/api-contracts/document.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 
 // Derived from the wire schema rather than written alongside it. A
 // hand-written interface beside a Zod schema is the shape that shipped the

@@ -1,12 +1,12 @@
+import type {
+  DocumentExistsResponse,
+  UpdateDocumentResponse,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
-import type {
-  DocumentExistsResponse,
-  UpdateDocumentResponse,
-} from '../../../shared/api-contracts/document.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's

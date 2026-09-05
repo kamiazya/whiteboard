@@ -1,4 +1,7 @@
-import { type ClientTextMessage, clientTextMessageSchema } from '../../shared/ws-messages.js'
+import {
+  type ClientTextMessage,
+  clientTextMessageSchema,
+} from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { getLogger } from '../log.js'
 import { ValidationError, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 

@@ -16,7 +16,7 @@
 // and asserts each one has an entry here — the same "exhaustive Zod union
 // vs registry" guard shape used elsewhere in this codebase.
 
-import type { ClientTextMessage } from '../../shared/ws-messages.js'
+import type { ClientTextMessage } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { type AuthScope, hasRequiredScopes } from './auth-strategy.js'
 
 export { hasRequiredScopes }

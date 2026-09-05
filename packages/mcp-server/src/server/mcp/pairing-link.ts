@@ -1,11 +1,11 @@
-import type { McpServer } from '@modelcontextprotocol/server'
-import { z } from 'zod'
 import {
   daemonConnectionPayloadSchema,
   encodeBase64UrlText,
   isBareHttpOrigin,
   MIN_BOOTSTRAP_TOKEN_LENGTH,
-} from '../../shared/api-contracts/pairing-link.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/pairing-link'
+import type { McpServer } from '@modelcontextprotocol/server'
+import { z } from 'zod'
 import {
   type AllowedWebOrigins,
   DEFAULT_ALLOWED_WEB_ORIGINS,

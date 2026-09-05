@@ -1,5 +1,5 @@
+import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
-import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'

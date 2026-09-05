@@ -1,6 +1,7 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
+import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import {
   collectImageRefIds,
   projectWorkspaceDocument,
@@ -8,7 +9,6 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
-import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'

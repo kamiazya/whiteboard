@@ -3,7 +3,7 @@ import {
   DAEMON_TOKEN_WS_PROTOCOL_PREFIX,
   TICKET_WS_PROTOCOL_PREFIX,
   WHITEBOARD_WS_PROTOCOL,
-} from '../../shared/ws-protocol.js'
+} from '@kamiazya/whiteboard-daemon-client/ws-protocol'
 import { ALL_AUTH_SCOPES, type AuthScope } from '../security/auth-strategy.js'
 import {
   isLoopbackHostname,
