@@ -12,7 +12,9 @@ vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
+import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {
@@ -218,20 +220,22 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
 
-  it('hides HeaderBranchChip when capabilities.branches is false', () => {
+  it('hides HeaderBranchChip when the keeper answering has no branches', () => {
+    // It used to be `capabilities.branches: false`. That flag is gone — both
+    // keepers have variations — and whether to show the chip became the
+    // BACKEND's answer, which is per document: a browser page has no
+    // record-holding backend for a markdown body or before one loads.
     render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        onNavigateBack={() => {}}
-        capabilities={{ branches: false, merge: true }}
-      />,
+      <BranchesBackendContext.Provider value={createBrowserBranchesBackend({ backend: null })}>
+        <WorkspaceTopBar
+          workspaceId="ws_1"
+          path="canvas-a"
+          onNavigateBack={() => {}}
+          capabilities={{ merge: true }}
+        />
+      </BranchesBackendContext.Provider>,
       { container: document.body },
     )
-    // HeaderBranchChip is stubbed to render null, so absence is confirmed by
-    // the fact mounting never throws when the chip's props (workspaceId/path)
-    // would otherwise be required — the real assertion lives in the
-    // conditional render below via a spy-friendly mock override.
     expect(screen.queryByTestId('header-branch-chip')).toBeNull()
   })
 })

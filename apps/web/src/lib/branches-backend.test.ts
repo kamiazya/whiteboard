@@ -31,8 +31,7 @@ describe('the browser keeper answers for branches instead of reaching for a daem
    * what is left here is the one property that is about the seam rather than
    * about branches.
    */
-  const browserBackend = () =>
-    createBrowserBranchesBackend({ backend: new BrowserBackend(TARGET) })
+  const browserBackend = () => createBrowserBranchesBackend({ backend: new BrowserBackend(TARGET) })
 
   // The state the page is in for a markdown document, and before any document
   // loads. It must not be expressed as a `null` context value: that falls

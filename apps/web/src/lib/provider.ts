@@ -31,7 +31,12 @@ export type WhiteboardCapabilities = {
   // now, so both keepers answer true and the flag gates nothing. What the
   // daemon adds on top (automatic checkpoints, thumbnails) is a per-panel
   // fact the page states where it mounts the panel, not a keeper flag.
-  readonly branches: boolean
+  // `branches` left the same way, and for the same reason stated twice
+  // above: the browser keeps its variations on the workspace record now, so
+  // both keepers answer true and the flag gates nothing. WHERE the chip is
+  // shown became a per-document fact instead — a markdown document has no
+  // record-holding backend and so no branches — which the backend answers
+  // through `hasBranches`, in the one place that cannot forget it.
   readonly merge: boolean
 }
 
@@ -45,17 +50,13 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  // The browser keeper has variations now: a branch is a name and a frontier
-  // of the workspace record, and this keeper holds that record. `merge` stays
-  // false until the commit half lands — the chip separates them already
-  // (`mergeEnabled`), so the difference is a real one a person can see rather
-  // than a control that throws.
-  branches: true,
+  // `merge` stays false until the commit half lands. The chip separates it
+  // from having branches already (`mergeEnabled`), so this is a real
+  // difference a person can see rather than a control that throws.
   merge: false,
 }
 
 export const DAEMON_CAPABILITIES: WhiteboardCapabilities = {
-  branches: true,
   merge: true,
 }
 

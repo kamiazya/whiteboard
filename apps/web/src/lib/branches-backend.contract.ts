@@ -1,6 +1,6 @@
-import { BranchesUnsupportedError } from './branches-backend.js'
 import { expect, it } from 'vitest'
 import type { BranchesBackend } from './branches-backend.js'
+import { BranchesUnsupportedError } from './branches-backend.js'
 
 /**
  * The behavioural contract a `BranchesBackend` with branches must satisfy,

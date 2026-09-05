@@ -34,8 +34,8 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
-import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
+import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'

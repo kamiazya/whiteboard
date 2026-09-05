@@ -93,7 +93,6 @@ const { App } = await import('./App.js')
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
   capabilities: {
-    branches: false,
     merge: false,
   },
 }
