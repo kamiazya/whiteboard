@@ -238,8 +238,14 @@ export interface GlyphSceneNode {
 /** Semantic provenance for an inline link-like run. Never flattened away. */
 export type LinkProvenance =
   | { readonly kind: 'link'; readonly href: string; readonly title?: string }
-  | { readonly kind: 'wikiLink'; readonly documentId: string; readonly alias?: string }
-  | { readonly kind: 'embed'; readonly documentId: string }
+  | {
+      readonly kind: 'wikiLink'
+      readonly documentId: string
+      readonly alias?: string
+      /** The `#fragment` the reference was written with, unresolved. */
+      readonly fragment?: string
+    }
+  | { readonly kind: 'embed'; readonly documentId: string; readonly fragment?: string }
 
 /** A block-level heading. `level` is the semantic heading depth (1-6). */
 export interface HeadingBlockNode {

@@ -7,6 +7,7 @@ import type {
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
 import { LineBreaker } from 'css-line-break'
+import { selectCanvasFragment } from '../../canvas-fragment.js'
 import type { MeasureText } from '../../measure.js'
 import { clampAdvance } from '../../measure.js'
 import type {
@@ -36,6 +37,7 @@ import { escapeXmlText } from '../../svg/format.js'
 import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-theme.js'
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
+import { selectMarkdownSection } from './mdast-section.js'
 import { fitToWidth } from './truncate.js'
 
 /**
@@ -276,6 +278,16 @@ export interface EmbeddedCanvasMiniature {
 
 /** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
 const EMBED_DEPTH_CAP = 3
+
+/**
+ * How a reference reads when it carries a `#fragment`: the document's name,
+ * then the part inside it — `Roadmap › Launch` — the way a breadcrumb reads
+ * and Obsidian labels `[[note#heading]]`. An explicit `|label` always wins
+ * over this, at the call sites.
+ */
+function referenceLabel(title: string, fragment: string | undefined): string {
+  return fragment === undefined ? title : `${title} › ${fragment}`
+}
 
 /** `resolveTitle` guarded to the never-throw rule. */
 function tryResolveTitle(options: ResolvedMdastOptions, documentId: string): string | undefined {
@@ -755,12 +767,17 @@ function layoutPhrasing(
           break
         case 'wikiLink':
           emit(
-            child.alias ?? tryResolveTitle(options, child.documentId) ?? child.documentId,
+            child.alias ??
+              referenceLabel(
+                tryResolveTitle(options, child.documentId) ?? child.documentId,
+                child.fragment,
+              ),
             {
               link: {
                 kind: 'wikiLink',
                 documentId: child.documentId,
                 ...(child.alias ? { alias: child.alias } : {}),
+                ...(child.fragment ? { fragment: child.fragment } : {}),
               },
             },
             currentStyle,
@@ -770,8 +787,17 @@ function layoutPhrasing(
           // Inline (mixed into prose) an embed stays a link run; the
           // resolved title is a better label than the raw id when known.
           emit(
-            tryResolveEmbed(options, child.documentId)?.title ?? child.documentId,
-            { link: { kind: 'embed', documentId: child.documentId } },
+            referenceLabel(
+              tryResolveEmbed(options, child.documentId)?.title ?? child.documentId,
+              child.fragment,
+            ),
+            {
+              link: {
+                kind: 'embed',
+                documentId: child.documentId,
+                ...(child.fragment ? { fragment: child.fragment } : {}),
+              },
+            },
             currentStyle,
           )
           break
@@ -900,7 +926,7 @@ function layoutBlock(
       // body as a block; an embed mixed into prose stays an inline run.
       const only = node.children.length === 1 ? node.children[0] : undefined
       if (only?.type === 'embed' && options.resolveEmbed !== undefined) {
-        return layoutEmbedBlock(only.documentId, cursor, options, embedPath)
+        return layoutEmbedBlock(only.documentId, only.fragment, cursor, options, embedPath)
       }
       const { runs, lineCount, inkWidth } = layoutPhrasing(
         node.children,
@@ -1288,6 +1314,7 @@ function layoutListItem(
  */
 function layoutEmbedBlock(
   documentId: string,
+  fragment: string | undefined,
   cursor: Cursor,
   options: ResolvedMdastOptions,
   embedPath: readonly string[],
@@ -1299,7 +1326,7 @@ function layoutEmbedBlock(
       kind: 'embedPlaceholder',
       bbox: { x: 0, y: startY, w: options.maxWidth, h: options.theme.bodyFontSizePx },
       documentId,
-      title: resolved?.title ?? documentId,
+      title: referenceLabel(resolved?.title ?? documentId, fragment),
       reason,
     }
     cursor.y += options.theme.bodyFontSizePx + options.theme.blockGapPx
@@ -1309,13 +1336,20 @@ function layoutEmbedBlock(
   if (embedPath.length >= EMBED_DEPTH_CAP) return placeholder('depthCap')
   if (resolved === undefined) return placeholder('unresolvable')
   const nextPath = [...embedPath, documentId]
+  // A fragment narrows the document to the part it names. One the document
+  // does not hold is unresolvable in the same way a missing document is:
+  // the reader sees the address, linked, and nothing is invented.
   if ('canvas' in resolved) {
     if (options.layoutEmbeddedCanvas === undefined) return placeholder('unresolvable')
-    return layoutCanvasEmbedBlock(documentId, resolved.canvas, cursor, options, nextPath)
+    const canvas =
+      fragment === undefined ? resolved.canvas : selectCanvasFragment(resolved.canvas, fragment)
+    if (canvas === undefined) return placeholder('unresolvable')
+    return layoutCanvasEmbedBlock(documentId, fragment, canvas, cursor, options, nextPath)
   }
-  const children = resolved.root.children.map((child) =>
-    layoutBlock(child, cursor, options, 0, nextPath),
-  )
+  const root =
+    fragment === undefined ? resolved.root : selectMarkdownSection(resolved.root, fragment)
+  if (root === undefined) return placeholder('unresolvable')
+  const children = root.children.map((child) => layoutBlock(child, cursor, options, 0, nextPath))
   return {
     kind: 'embedResolved',
     bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY },
@@ -1343,6 +1377,7 @@ const CANVAS_EMBED_MAX_ASPECT = 3 / 4
  */
 function layoutCanvasEmbedBlock(
   documentId: string,
+  fragment: string | undefined,
   canvas: SpatialCanvas,
   cursor: Cursor,
   options: ResolvedMdastOptions,
@@ -1354,7 +1389,7 @@ function layoutCanvasEmbedBlock(
   cursor.x = startX + pad
   cursor.y = startY + pad
   const title = layoutPhrasing(
-    [{ type: 'embed', documentId }],
+    [{ type: 'embed', documentId, ...(fragment === undefined ? {} : { fragment }) }],
     cursor,
     options,
     options.theme.bodyFontSizePx,

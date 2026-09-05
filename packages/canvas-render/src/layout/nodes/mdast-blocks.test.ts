@@ -1058,6 +1058,101 @@ describe('layoutMdastBlocks — a block embed whose target is a canvas', () => {
   })
 })
 
+describe('layoutMdastBlocks — a #fragment narrows an embed to the part it names', () => {
+  const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  type Flow = import('@kamiazya/whiteboard-model/mdast').MdastFlowContent
+  const rootOf = (children: Flow[]): MdastRoot => ({ type: 'root', children })
+  const embedPara = (documentId: string, fragment?: string): Flow => ({
+    type: 'paragraph',
+    children: [{ type: 'embed', documentId, ...(fragment === undefined ? {} : { fragment }) }],
+  })
+  const canvas: SpatialCanvas = {
+    nodes: [
+      { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 200, label: 'Launch' },
+      { id: 'in', type: 'text', x: 10, y: 10, width: 100, height: 50, text: 'inside' },
+      { id: 'out', type: 'text', x: 900, y: 900, width: 100, height: 50, text: 'outside' },
+    ],
+    edges: [],
+  }
+  const note: MdastRoot = rootOf([
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Plan' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'plan body' }] },
+    { type: 'heading', depth: 2, children: [{ type: 'text', value: 'Launch' }] },
+    { type: 'paragraph', children: [{ type: 'text', value: 'launch body' }] },
+  ])
+  const textsOf = (nodes: readonly unknown[]): string[] => {
+    const out: string[] = []
+    const visit = (node: unknown) => {
+      const entry = node as { kind?: string; text?: string; runs?: unknown[]; children?: unknown[] }
+      if (entry.kind === 'textRun' && entry.text !== undefined) out.push(entry.text)
+      for (const run of entry.runs ?? []) visit(run)
+      for (const child of entry.children ?? []) visit(child)
+    }
+    for (const node of nodes) visit(node)
+    return out
+  }
+
+  it('a group label hands the composer only that group and its members, under a breadcrumb title', () => {
+    const seen: SpatialCanvas[] = []
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Launch')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
+      layoutEmbeddedCanvas: (c, box) => {
+        seen.push(c)
+        return { nodes: [], w: box.maxWidth, h: 0 }
+      },
+    })
+    expect(seen.map((c) => c.nodes.map((n) => n.id))).toEqual([['g', 'in']])
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected embedResolved')
+    const title = embed.children[1]
+    if (title?.kind !== 'textRun') throw new Error('expected the title run')
+    expect(title.text).toBe('Board › Launch')
+    expect(title.link).toEqual({ kind: 'embed', documentId: A, fragment: 'Launch' })
+  })
+
+  it('a fragment the canvas does not hold is an unresolvable placeholder that still names it', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Nope')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas } : undefined),
+      layoutEmbeddedCanvas: (_c, box) => ({ nodes: [], w: box.maxWidth, h: 0 }),
+    })
+    const node = scene.nodes[0]
+    if (node?.kind !== 'embedPlaceholder') throw new Error('expected placeholder')
+    expect(node.reason).toBe('unresolvable')
+    expect(node.title).toBe('Board › Nope')
+  })
+
+  it('a heading lays out that section of a note and nothing after it', () => {
+    const scene = layoutMdastBlocks(rootOf([embedPara(A, 'Plan')]), {
+      ...options,
+      resolveEmbed: (id) => (id === A ? { title: 'Note', root: note } : undefined),
+    })
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected embedResolved')
+    expect(textsOf(embed.children)).toEqual(['Plan', 'plan body'])
+  })
+
+  it('an inline reference with a fragment reads as a breadcrumb and carries it on the link', () => {
+    const scene = layoutMdastBlocks(
+      rootOf([
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'text', value: 'see ' },
+            { type: 'wikiLink', documentId: A, fragment: 'Launch' },
+          ],
+        },
+      ]),
+      { ...options, resolveTitle: (id) => (id === A ? 'Board' : undefined) },
+    )
+    const paragraph = scene.nodes[0]
+    if (paragraph?.kind !== 'paragraph') throw new Error('unreachable')
+    expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Board › Launch'])
+    expect(paragraph.runs[1]?.link).toEqual({ kind: 'wikiLink', documentId: A, fragment: 'Launch' })
+  })
+})
+
 describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
   // The fake measure is 0.6em per character, and code sets at 85% of the
   // 16px body, so a character is 8.16px wide.

@@ -9,7 +9,7 @@ import type {
   MdastTableRow,
 } from '@kamiazya/whiteboard-model/mdast'
 
-import { findNextReference } from './scan.js'
+import { findNextReference, type ReferenceMatch } from './scan.js'
 
 export type AliasResolver = (alias: string) => string | null
 
@@ -43,7 +43,7 @@ function splitTextReferences(
       result.push({ type: 'text', value: value.slice(lastIndex, match.index) })
     }
 
-    const resolved = resolveTarget(match.target, match.alias, resolver, match.isEmbed)
+    const resolved = resolveTarget(match, resolver)
     result.push(resolved ?? { type: 'text', value: match.full })
 
     lastIndex = match.index + match.full.length
@@ -55,28 +55,30 @@ function splitTextReferences(
 }
 
 function resolveTarget(
-  target: string,
-  alias: string | undefined,
+  { target, alias, isEmbed, fragment }: ReferenceMatch,
   resolver: AliasResolver | undefined,
-  isEmbed: boolean,
 ): MdastPhrasingContent | undefined {
+  const documentId = resolveDocumentId(target, resolver)
+  if (documentId === null) return undefined
+  // The fragment rides along unresolved: it names something INSIDE the
+  // document, which only a renderer holding that document can look up.
+  const withFragment = fragment === undefined ? {} : { fragment }
+  // Only an explicit |label becomes the alias. The written target is an
+  // address, and freezing it into the label slot would stop the renderer
+  // from showing the target's CURRENT display name for a bare [[path]].
+  return isEmbed
+    ? { type: 'embed', documentId, ...withFragment }
+    : { type: 'wikiLink', documentId, alias, ...withFragment }
+}
+
+function resolveDocumentId(target: string, resolver: AliasResolver | undefined): string | null {
   // A document id is a canonical ULID — 26 characters of Crockford base32
   // starting 0-7 — so it identifies itself without a scheme to announce it.
   // The id reading wins over the resolver: a document NAMED like a ULID would
   // be shadowed, which is the right trade for a shape no one types by hand.
-  if (documentIdSchema.safeParse(target).success) {
-    return isEmbed
-      ? { type: 'embed', documentId: target }
-      : { type: 'wikiLink', documentId: target, alias }
-  }
-
-  if (resolver === undefined) return undefined
-  const documentId = resolver(target)
-  if (documentId === null) return undefined
-  // Only an explicit |label becomes the alias. The written target is an
-  // address, and freezing it into the label slot would stop the renderer
-  // from showing the target's CURRENT display name for a bare [[path]].
-  return isEmbed ? { type: 'embed', documentId } : { type: 'wikiLink', documentId, alias }
+  if (documentIdSchema.safeParse(target).success) return target
+  if (resolver === undefined) return null
+  return resolver(target)
 }
 
 function resolvePhrasing(

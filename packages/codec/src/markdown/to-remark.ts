@@ -30,10 +30,14 @@ type RemarkNode = {
   [key: string]: unknown
 }
 
-function wikiLinkText(node: { documentId: string; alias?: string }): string {
-  return node.alias === undefined
-    ? `[[${node.documentId}]]`
-    : `[[${node.documentId}|${node.alias}]]`
+/** The address half of a reference: the id, plus `#fragment` when one is set. */
+function referenceAddress(node: { documentId: string; fragment?: string }): string {
+  return node.fragment === undefined ? node.documentId : `${node.documentId}#${node.fragment}`
+}
+
+function wikiLinkText(node: { documentId: string; alias?: string; fragment?: string }): string {
+  const address = referenceAddress(node)
+  return node.alias === undefined ? `[[${address}]]` : `[[${address}|${node.alias}]]`
 }
 
 function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
@@ -41,7 +45,7 @@ function toRemarkPhrasing(node: MdastPhrasingContent): RemarkNode {
     case 'wikiLink':
       return { type: 'text', value: wikiLinkText(node) }
     case 'embed':
-      return { type: 'text', value: `![[${node.documentId}]]` }
+      return { type: 'text', value: `![[${referenceAddress(node)}]]` }
     case 'emphasis':
     case 'strong':
     case 'delete':

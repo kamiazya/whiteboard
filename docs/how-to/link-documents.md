@@ -44,6 +44,22 @@ An `![[...]]` mixed into a sentence behaves like a `[[...]]` link labelled
 with the target's name. An embed counts as a link for the Connections chip
 below, so the embedded document lists this one as linking to it.
 
+### Embed part of a document
+
+Add `#` and a name to point inside the target:
+
+- `![[notes/plan#Launch]]` embeds the **section** under the heading
+  "Launch" — the heading and everything up to the next heading of the same
+  or a higher level.
+- `![[boards/roadmap#Launch]]` embeds the **group** labelled "Launch" on
+  that canvas: the group's frame, the nodes inside it, and the edges
+  between them. Give a group a label to make it addressable this way.
+
+The match is by text, exact first and then ignoring case; when two headings
+or groups share a name, the first one on the page wins. A part that does
+not exist shows the address as a link and nothing else. The same `#` works
+on a plain `[[path#Launch]]` link, which then reads as `Plan › Launch`.
+
 ## See what links back
 
 Every document's header carries a Connections chip (the waypoints icon)
