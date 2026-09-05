@@ -10,7 +10,10 @@
  * Measured before writing this: 21 upward edges, 15 of them `import type`;
  * the first burn-down moved four pure modules into `lib/` and retired six,
  * the second moved eight types down and retired eight more, the third moved
- * the spatial editor's pure core into `lib/spatial/` and retired four.
+ * the spatial editor's pure core into `lib/spatial/` and retired four, and
+ * the fourth moved the render glue the layout worker runs and retired the
+ * last three. The list is empty; it stays so a new edge has a place to be
+ * refused rather than a place to be written down.
  * They are allowlisted below rather than fixed here, because each is a
  * relocation with its own importers to carry, and the point of the guard is
  * that the count only ever goes down. The list is guarded from both sides —
@@ -130,13 +133,9 @@ function upwardEdges(): string[] {
  * `components/`), then delete the line and lower the ceiling. Never add to
  * it for new code — file the module where its importers can reach it.
  */
-const UPWARD_EDGES: readonly string[] = [
-  'hooks/useDocumentSync.ts -> components/spatial-editor/scene-render.ts',
-  'lib/layout-worker.ts -> components/markdown-editor/render-preview.ts',
-  'lib/layout-worker.ts -> components/spatial-editor/scene-render-core.ts',
-]
+const UPWARD_EDGES: readonly string[] = []
 
-const UPWARD_EDGES_CEILING = 3
+const UPWARD_EDGES_CEILING = 0
 
 describe('apps/web layer order', () => {
   const actual = upwardEdges()

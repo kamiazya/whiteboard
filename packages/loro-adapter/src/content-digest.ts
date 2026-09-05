@@ -29,6 +29,28 @@
  * document a non-event over any plausible history.
  */
 
+import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
+
+/**
+ * A container that holds nothing is the same as no container. The workspace
+ * tree pre-attaches every content container on a node (so an untouched
+ * document carries `{}` and `''` under every key), a fresh standalone document
+ * has only the containers something wrote, and a projection sits in between.
+ * Same content, three JSON shapes — measured, the tree and the projection
+ * agreed and the fresh document did not. Dropping empties at the CONTAINER
+ * level is what makes the three one statement; nested empties stay, because
+ * inside a container an empty object is content.
+ */
+function holdsNothing(value: unknown): boolean {
+  if (value === '') return true
+  return (
+    typeof value === 'object' &&
+    value !== null &&
+    !Array.isArray(value) &&
+    Object.keys(value as object).length === 0
+  )
+}
+
 function stableStringify(value: unknown): string {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
   if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`
@@ -59,5 +81,23 @@ function cyrb53(input: string): string {
  * answer; only the values are.
  */
 export function contentDigestOf(content: Record<string, unknown>): string {
-  return cyrb53(stableStringify(content))
+  const held: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(content)) {
+    if (!holdsNothing(value)) held[key] = value
+  }
+  return cyrb53(stableStringify(held))
+}
+
+/**
+ * The same digest for a document whose containers are ROOTS of a standalone
+ * Loro document — an editor session's, or a browser-kept markdown document's
+ * — rather than keys on a tree node. Reads `toJSON()`, which reflects the
+ * live state including edits not yet committed, so a key read at the moment
+ * a change is published already names the picture of it.
+ */
+export function contentDigestOfDocument(doc: { toJSON(): unknown }): string {
+  const raw = doc.toJSON() as Record<string, unknown>
+  const content: Record<string, unknown> = {}
+  for (const { key } of CONTENT_CONTAINER_KEYS) if (key in raw) content[key] = raw[key]
+  return contentDigestOf(content)
 }

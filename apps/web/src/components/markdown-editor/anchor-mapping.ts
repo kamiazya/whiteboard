@@ -12,7 +12,7 @@
  * eases toward the next block rather than jumping at its first line.
  */
 
-import type { PreviewBlockAnchor } from './render-preview.js'
+import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
 
 export interface AnchorTail {
   /** Lines in the source, so the last band has an end. */

@@ -18,14 +18,14 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
-import { renderMarkdownPreview } from '../components/markdown-editor/render-preview.js'
-import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import type {
   LayoutRequest,
   LayoutResponse,
   MarkdownRenderRequest,
   MarkdownRenderResponse,
 } from './layout-worker-protocol.js'
+import { renderMarkdownPreview } from './render-preview.js'
+import { renderCanvasToSvg } from './spatial/scene-render.js'
 
 // Text that wraps, punctuation that kerns, and a mix of scripts: measurement
 // differences show up in wrapped-line counts, not in a single short word.

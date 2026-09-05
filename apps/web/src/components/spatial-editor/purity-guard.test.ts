@@ -27,8 +27,8 @@ const modules = import.meta.glob(['./**/*.{ts,tsx}', '../../lib/**/*.{ts,tsx}'],
 // explicit-path assertion below, rather than the guard quietly covering
 // zero files.
 const SCANNED_PATHS = [
-  './editor-appearance.ts',
-  './scene-render.ts',
+  '../../lib/spatial/editor-appearance.ts',
+  '../../lib/spatial/scene-render.ts',
   '../../lib/spatial/viewport.ts',
   './node-factories.ts',
   // Pointer snapping serves preview AND commit from one call path, so it
@@ -78,7 +78,7 @@ describe('theme resolver purity (no ambient DOM read)', () => {
     // canvas-render's shared palette (theme/spatial-palette.ts) — this file
     // only re-projects that shared palette's values, so it should carry NO
     // hex literal at all, not even inside a palette record of its own.
-    const loader = modules['./editor-appearance.ts']
+    const loader = modules['../../lib/spatial/editor-appearance.ts']
     const source = loader as string
     expect(source).not.toMatch(/#[0-9a-fA-F]{3,8}\b/)
   })

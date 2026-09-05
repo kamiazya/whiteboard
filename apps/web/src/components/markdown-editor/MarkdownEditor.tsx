@@ -26,6 +26,7 @@ import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-mark
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import type { LinkTarget } from '../../lib/link-target.js'
 import type { RailBlock } from '../../lib/rail-geometry.js'
+import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
@@ -55,7 +56,6 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
-import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { VERB_ICONS } from './verb-icons.js'

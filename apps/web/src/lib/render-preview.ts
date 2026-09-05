@@ -13,8 +13,8 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import { outlineFromScene } from '../../lib/document-outline.js'
-import type { RailBlock } from '../../lib/rail-geometry.js'
+import { outlineFromScene } from './document-outline.js'
+import type { RailBlock } from './rail-geometry.js'
 
 export interface RenderMarkdownPreviewOptions {
   readonly measure: MeasureText

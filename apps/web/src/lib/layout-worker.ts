@@ -31,11 +31,6 @@ import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import {
-  layoutMarkdownOutline,
-  renderMarkdownPreview,
-} from '../components/markdown-editor/render-preview.js'
-import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
@@ -51,7 +46,9 @@ import {
   type OutlineRequest,
   type OutlineResponse,
 } from './layout-worker-protocol.js'
+import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, writeRenderEntry } from './render-store.js'
+import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
 import type { ResolvedTheme } from './theme.js'
 
 const measure = createBrowserMeasureText()

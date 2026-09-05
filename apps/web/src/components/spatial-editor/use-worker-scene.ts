@@ -33,9 +33,9 @@ import {
   type LayoutRequest,
   type LayoutResponse,
 } from '../../lib/layout-worker-protocol.js'
+import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
+import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
-import { type RenderCanvasOptions, renderCanvasToSvg } from './scene-render.js'
-import type { RenderedCanvas } from './scene-render-core.js'
 
 /**
  * Below this, layout is not worth a round trip.
