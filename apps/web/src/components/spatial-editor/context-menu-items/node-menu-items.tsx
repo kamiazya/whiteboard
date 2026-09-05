@@ -37,7 +37,7 @@ import {
   Trash2,
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
-import type { ResolvedTheme } from '../../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { AlignableBox } from '../align.js'
 import { alignBoxes, distributeBoxes } from '../align.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'

@@ -22,10 +22,10 @@ import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { SlidersHorizontal } from 'lucide-react'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import { applyCommand } from '../../lib/spatial/commands.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
-import type { EditorCommand } from './commands.js'
-import { applyCommand } from './commands.js'
 import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
 
 export interface CanvasDisplaySettingsProps {

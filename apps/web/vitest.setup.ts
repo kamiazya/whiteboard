@@ -34,6 +34,46 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   globalThis.ResizeObserver = NoopResizeObserver as unknown as typeof ResizeObserver
 }
 
+// jsdom implements `getClientRects` on Element but NOT on Range — measured:
+// `'getClientRects' in Range.prototype` is false, and `getBoundingClientRect`
+// is missing from it too. CodeMirror measures text by putting a Range around
+// it, so any mounted editor that SCROLLS reaches this: `EditorView.scrollIntoView`
+// (which the annotation rail's reveal dispatches) runs `DocView.measureTextSize`
+// inside a requestAnimationFrame callback and throws there.
+//
+// A throw in a rAF callback is not a test failure — it is an UNHANDLED error,
+// and vitest reports those while still counting every test as passed. Measured
+// on the run that caught this: `346 passed | 3648 passed`, `Errors 1 error`,
+// job exit 1. The green count is what makes it worth shimming rather than
+// leaving to whoever reads the next confusing stack.
+//
+// Empty geometry, for the ResizeObserver reason above: jsdom lays nothing out,
+// so a jsdom test asserting on a character's width would be asserting about
+// this shim. CodeMirror reads zero rects as "unknown" and keeps its defaults.
+// `typeof` first, like the ResizeObserver guard above and for the same
+// reason: this setup file is loaded for `// @vitest-environment node` files
+// too, where there is no DOM and a bare `Range` is a ReferenceError that
+// takes the whole FILE down rather than one test.
+//
+// The prototype is widened to `Partial<Range>` before either read, because
+// lib.dom declares both methods: `'getClientRects' in Range.prototype` then
+// narrows the negative branch to a Range that cannot have it, which is
+// `never`, and every assignment inside fails to typecheck. `tsc` catches
+// that and `vitest run` does not — the build job is a separate gate from the
+// test job, and running only the second is how this reached CI.
+if (typeof Range !== 'undefined') {
+  const rangeProto: Partial<Range> = Range.prototype
+  if (typeof rangeProto.getClientRects !== 'function') {
+    rangeProto.getClientRects = (): DOMRectList => {
+      const rects: DOMRect[] = []
+      return Object.assign(rects, {
+        item: (index: number): DOMRect | null => rects[index] ?? null,
+      }) as unknown as DOMRectList
+    }
+    rangeProto.getBoundingClientRect = (): DOMRect => new DOMRect(0, 0, 0, 0)
+  }
+}
+
 // Shared jsdom-project teardown hook. See src/test-utils/scheduler-drain.ts
 // for why this exists: React's scheduler can outlive a test's own cleanup,
 // so every test gets a bounded drain window before the next test (or the

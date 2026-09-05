@@ -1,6 +1,6 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useState } from 'react'
-import type { EditorCommand } from '../spatial-editor/commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { withNodeText } from './node-text.js'
 
 export interface NodeInEditor {

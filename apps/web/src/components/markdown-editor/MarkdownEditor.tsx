@@ -6,7 +6,12 @@ import { keymap } from '@codemirror/view'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
-import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import {
+  type CommentThread,
+  documentIdSchema,
+  type StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
+import { MessageSquarePlus } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
@@ -19,10 +24,20 @@ import {
 } from 'react'
 import { type FragmentLoaders, useMarkdownFragments } from '../../hooks/use-markdown-fragments.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { LinkTarget } from '../../lib/link-target.js'
+import type { RailBlock } from '../../lib/rail-geometry.js'
+import type { PreviewBlockAnchor } from '../../lib/render-preview.js'
+import type { TextAnchor } from '../../lib/text-anchor.js'
+import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
 import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu.js'
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
+import {
+  annotationDecorations,
+  placeThreads,
+  setAnnotationProjection,
+} from './annotation-decorations.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import {
@@ -32,7 +47,6 @@ import {
   selfContainedCommand,
 } from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
-import type { LinkTarget } from './link-target.js'
 import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
 import {
@@ -42,8 +56,6 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
-import type { RailBlock } from './rail-geometry.js'
-import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { VERB_ICONS } from './verb-icons.js'
@@ -131,7 +143,34 @@ export interface MarkdownEditorProps {
    * and `value` flows only outward (preview, word count).
    */
   sourceExtensions?: readonly Extension[]
+  /**
+   * The annotation layer's conversations, projected onto the body: the
+   * passage each one quotes is marked in the text and named by a gutter
+   * marker beside it (ADR-0026 step 3).
+   *
+   * Threads whose passage is gone are simply not drawn — there is nowhere
+   * left to draw them — and stay reachable through the document-level rail,
+   * which is what that surface is for.
+   */
+  threads?: readonly CommentThread[]
+  /** The conversation the host currently has open; scrolled to and lit up. */
+  selectedThreadId?: string | null
+  /** A gutter marker was pressed. */
+  onSelectThread?: (threadId: string) => void
+  /**
+   * The reader asked to open a conversation about the passage they have
+   * selected. The anchor is handed over; the THREAD is not, because there is
+   * no legal empty one — `commentThreadSchema` requires a first message, so
+   * the conversation is created by whatever surface collects it.
+   *
+   * Absent means this host has no annotation layer, and the catalog then
+   * offers no such row rather than an inert one.
+   */
+  onComposeThread?: (anchor: TextAnchor) => void
 }
+
+/** Stable identity, so the projection effect below does not fire per render. */
+const NO_THREADS: readonly CommentThread[] = []
 
 const DEFAULT_MAX_WIDTH = 720
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
@@ -279,6 +318,10 @@ export function MarkdownEditor({
   resolveEmbed,
   fragmentLoaders,
   sourceExtensions,
+  threads,
+  selectedThreadId = null,
+  onSelectThread,
+  onComposeThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
   // [[ completion reads targets through a ref: the source is installed once
@@ -318,9 +361,18 @@ export function MarkdownEditor({
     ],
     [],
   )
+  // Read through a ref for the same reason the completion source is: the
+  // extension is installed once at view creation, while the handler the host
+  // passes is a fresh closure on every render.
+  const onSelectThreadRef = useRef(onSelectThread)
+  onSelectThreadRef.current = onSelectThread
+  const annotationExtension = useMemo(
+    () => annotationDecorations({ onSelectThread: (id) => onSelectThreadRef.current?.(id) }),
+    [],
+  )
   const paneExtensions = useMemo(
-    () => [completionExtension, ...(sourceExtensions ?? [])],
-    [completionExtension, sourceExtensions],
+    () => [completionExtension, annotationExtension, ...(sourceExtensions ?? [])],
+    [annotationExtension, completionExtension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
@@ -372,6 +424,35 @@ export function MarkdownEditor({
   // The range itself lives in the editor state (see SourcePane's pinnedRange),
   // which maps it through any edit made while the dialog is open.
   const [linkPicker, setLinkPicker] = useState<{ query: string; text: string } | null>(null)
+
+  // The projection travels in as a STATE EFFECT rather than as an extension:
+  // the view is created once per mount (see SourcePane), so an extension
+  // array that changed with the thread list would never reach it.
+  const projectedThreads = threads ?? NO_THREADS
+  useEffect(() => {
+    sourceApiRef.current?.applyEffects([
+      setAnnotationProjection.of({ threads: projectedThreads, selectedThreadId }),
+    ])
+  }, [projectedThreads, selectedThreadId])
+
+  // Scroll to the passage when the SELECTION changes, and only then. `value`
+  // is a dependency because the passage's offset is derived from it, but a
+  // keystroke must not re-scroll the reader back to a conversation they
+  // selected a minute ago — which is what the remembered id guards.
+  const revealedThreadRef = useRef<string | null>(null)
+  useEffect(() => {
+    const previous = revealedThreadRef.current
+    revealedThreadRef.current = selectedThreadId
+    if (selectedThreadId === null || selectedThreadId === previous) return
+    const placed = placeThreads(value, projectedThreads).find(
+      (one) => one.threadId === selectedThreadId,
+    )
+    // Nothing to scroll to: the passage is gone. The rail still opens the
+    // conversation, which is the whole reason an orphan has a home there.
+    if (placed === undefined) return
+    const line = value.slice(0, placed.from).split('\n').length
+    sourceApiRef.current?.revealLine(line)
+  }, [selectedThreadId, projectedThreads, value])
   const [catalog, setCatalog] = useState<{
     x: number
     y: number
@@ -709,8 +790,29 @@ export function MarkdownEditor({
       if (command === null) continue
       items.push({ label: spec.label, icon, onSelect: run(command) })
     }
+
+    // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of
+    // things that write MARKUP into the body: this one writes nothing there
+    // at all, it opens a conversation in the layer beside it. Putting it in
+    // that table would give the keymap a shortcut for it and the verb bar a
+    // button, both of which would then have to resolve a scope the table
+    // cannot describe.
+    const selection = onComposeThread === undefined ? null : sourceApiRef.current?.selectedRange()
+    const anchor =
+      selection == null ? null : textAnchorForSelection(value, selection.from, selection.to)
+    if (onComposeThread !== undefined && anchor !== null) {
+      items.push({ kind: 'separator' })
+      items.push({
+        label: 'Comment on this',
+        icon: <MessageSquarePlus aria-hidden />,
+        onSelect: () => {
+          setCatalog(null)
+          onComposeThread(anchor)
+        },
+      })
+    }
     return items
-  }, [catalog, linkTargets])
+  }, [catalog, linkTargets, onComposeThread, value])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])
   const previewEmpty = debouncedValue.trim() === ''

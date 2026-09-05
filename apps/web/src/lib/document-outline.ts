@@ -34,8 +34,8 @@ import { resolveRectColor } from './favicon.js'
  * instead of boxes.
  */
 export type DocumentOutlineSource =
-  | { readonly frontier: string; readonly snapshot: Uint8Array; readonly body?: undefined }
-  | { readonly frontier: string; readonly body: string; readonly snapshot?: undefined }
+  | { readonly state: string; readonly snapshot: Uint8Array; readonly body?: undefined }
+  | { readonly state: string; readonly body: string; readonly snapshot?: undefined }
 
 export function outlineFromSpatial(canvas: SpatialCanvas): FaviconRect[] {
   return canvas.nodes.map((node) => ({

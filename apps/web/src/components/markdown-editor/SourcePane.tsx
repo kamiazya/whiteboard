@@ -113,6 +113,24 @@ export interface SourcePaneApi {
   replacePinned: (markup: string) => void
   /** Drops the pin without writing anything. */
   clearPin: () => void
+  /**
+   * The range the reader has actually selected, or null when the selection
+   * is empty.
+   *
+   * Deliberately NOT `rangeToActOn`: every formatting verb resolves its own
+   * scope from the caret's word, which is right for a wrap the reader can
+   * see and undo, and wrong for an anchor that gets STORED — the word under
+   * a caret is a guess about what they meant, kept forever as though they
+   * had said it.
+   */
+  selectedRange: () => { from: number; to: number } | null
+  /**
+   * Dispatches state effects into the live view, WITHOUT claiming focus —
+   * the seam for a host extension whose data changes while the view lives.
+   * `run` cannot serve that: it focuses the editor afterwards, which is
+   * right for a toolbar press and wrong for data arriving on its own.
+   */
+  applyEffects: (effects: readonly StateEffect<unknown>[]) => void
   focus: () => void
   /**
    * The 1-based document line at the top of the visible scroll area, plus
@@ -315,6 +333,13 @@ export function SourcePane({
         },
         clearPin: () => {
           view.dispatch({ effects: setPinnedRange.of(null) })
+        },
+        selectedRange: () => {
+          const { from, to } = view.state.selection.main
+          return from === to ? null : { from, to }
+        },
+        applyEffects: (effects) => {
+          if (effects.length > 0) view.dispatch({ effects: [...effects] })
         },
         focus: () => view.focus(),
         topVisibleLine: () => {

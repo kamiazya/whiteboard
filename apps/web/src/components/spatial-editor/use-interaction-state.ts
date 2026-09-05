@@ -8,6 +8,7 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useRef, useState } from 'react'
+import type { Point } from '../../lib/spatial/viewport.js'
 import { createIdleState, type GestureState } from './gestures.js'
 import { createIdleNavigation, type NavigationState } from './navigation.js'
 import {
@@ -16,7 +17,6 @@ import {
   type SelectionEvent,
   type SelectionState,
 } from './selection.js'
-import type { Point } from './viewport.js'
 
 export interface InteractionStateInputs {
   readonly canvas: SpatialCanvas

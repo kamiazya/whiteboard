@@ -16,11 +16,15 @@ import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 afterEach(cleanup)
 
 it('draws a document once, however many panes show it', async () => {
+  // The content digest is what lets the memo hold the row at all: a key with
+  // no content state is refused by `isMemoisableKey`, and both panes would
+  // then render for a reason that has nothing to do with the broker.
   const entry = {
     documentId: 'd1',
     path: 'note',
     kind: 'markdown' as const,
     updatedAt: '2026-09-03T00:00:00Z',
+    contentDigest: 'c0ffee0000000006',
   }
   const loadMarkdown = vi.fn(async () => '# Hello\n\nsome body to give it a shape')
   const source = fakeFilesSource({ listDocuments: async () => [entry], loadMarkdown })

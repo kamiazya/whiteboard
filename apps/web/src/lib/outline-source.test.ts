@@ -1,6 +1,6 @@
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
-import { frontierOf } from './document-frontier.js'
+import { contentStateOf } from './document-state.js'
 import { composeOutlineSource } from './outline-source.js'
 
 function docWith(text: string): LoroDoc {
@@ -23,28 +23,28 @@ describe('composeOutlineSource', () => {
 
     const source = composeOutlineSource('markdown', noSession, { doc, body: '# Heading' })
 
-    expect(source).toEqual({ frontier: frontierOf(doc), body: '# Heading' })
+    expect(source).toEqual({ state: contentStateOf(doc), body: '# Heading' })
   })
 
   // Where the session DOES hold it — the daemon page's shape — its answer is
   // the authoritative one, and the second owner must not shadow it.
   it('prefers the session when the session holds the document', () => {
-    const fromSession = vi.fn(() => ({ frontier: 'session-v1', body: 'from session' }))
+    const fromSession = vi.fn(() => ({ state: 'session-v1', body: 'from session' }))
 
     const source = composeOutlineSource('markdown', fromSession, {
       doc: docWith('other'),
       body: 'from the markdown owner',
     })
 
-    expect(source).toEqual({ frontier: 'session-v1', body: 'from session' })
+    expect(source).toEqual({ state: 'session-v1', body: 'from session' })
   })
 
   it('leaves a spatial document to the session entirely', () => {
     const snapshot = new Uint8Array([1, 2, 3])
-    const fromSession = vi.fn(() => ({ frontier: 'v1', snapshot }))
+    const fromSession = vi.fn(() => ({ state: 'v1', snapshot }))
 
     expect(composeOutlineSource('spatial', fromSession, { doc: null, body: null })).toEqual({
-      frontier: 'v1',
+      state: 'v1',
       snapshot,
     })
     expect(fromSession).toHaveBeenCalledWith('spatial')
@@ -72,6 +72,6 @@ describe('composeOutlineSource', () => {
     doc.commit()
     const after = composeOutlineSource('markdown', noSession, { doc, body: '# One more' })
 
-    expect(after?.frontier).not.toBe(before?.frontier)
+    expect(after?.state).not.toBe(before?.state)
   })
 })

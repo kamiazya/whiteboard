@@ -1,6 +1,6 @@
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
-import type { ConnectionState } from '../connection/ConnectionStatus.js'
+import type { ConnectionState } from '../../lib/connection-state.js'
 import { ShellMark } from './ShellMark.js'
 
 afterEach(cleanup)

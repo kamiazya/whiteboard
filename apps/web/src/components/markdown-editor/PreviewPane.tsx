@@ -1,11 +1,11 @@
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { RailBlock } from '../../lib/rail-geometry.js'
+import { type PreviewBlockAnchor, renderMarkdownPreview } from '../../lib/render-preview.js'
+import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
+import type { ResolvedTheme } from '../../lib/theme.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
-import { editorTextFill } from '../spatial-editor/editor-appearance.js'
-import type { RailBlock } from './rail-geometry.js'
-import { type PreviewBlockAnchor, renderMarkdownPreview } from './render-preview.js'
 
 export interface PreviewPaneProps {
   value: string

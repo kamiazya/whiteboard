@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { searchDocuments } from './search-documents.js'
 
 const docs: WorkspaceDocumentEntry[] = [

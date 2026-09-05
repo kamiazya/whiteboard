@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, FileText, Folder, LayoutGrid } from 'lucide-react'
 import { type ReactNode, useMemo, useState } from 'react'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { useLongPressMenu } from './use-long-press.js'
 
 export interface WorkspaceFileTreeProps {

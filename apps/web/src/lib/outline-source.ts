@@ -16,13 +16,13 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { frontierOf } from './document-frontier.js'
 import type { DocumentOutlineSource } from './document-outline.js'
+import { contentStateOf, type StateBearing } from './document-state.js'
 import { unhandledKind } from './exhaustive.js'
 
 /** Just the part of the markdown document state this needs. */
 export interface MarkdownOwner {
-  readonly doc: Parameters<typeof frontierOf>[0] | null
+  readonly doc: StateBearing | null
   readonly body: string | null
 }
 
@@ -41,8 +41,8 @@ export function composeOutlineSource(
       if (synced !== null) return synced
       if (markdown.doc === null || markdown.body === null) return null
       // Both out of the same doc, in one synchronous block — the pairing the
-      // version key depends on.
-      return { frontier: frontierOf(markdown.doc), body: markdown.body }
+      // key depends on.
+      return { state: contentStateOf(markdown.doc), body: markdown.body }
     }
     default:
       // A new kind has to name its owner HERE. Falling through to the

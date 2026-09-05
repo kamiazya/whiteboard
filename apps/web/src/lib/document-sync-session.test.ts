@@ -14,6 +14,7 @@ import {
   setNodeLock,
   writeCanvasComment,
   writeCommentThread,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -21,12 +22,17 @@ import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  CommentThread,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { applyCommand } from '../components/spatial-editor/commands.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import type { EditorCommand } from './spatial/commands.js'
+import { applyCommand } from './spatial/commands.js'
 
 // Spies on the module's logger so a fallback-to-full-resync (which always
 // logs a warning first, see commitToDoc's doc comment) is directly
@@ -204,35 +210,26 @@ describe('createDocumentSyncSession', () => {
     expect(nodes).toHaveLength(twoNodeCanvas().nodes.length)
   })
 
-  // The version key every derived picture of this document is memoised under
-  // (ADR-0027). Its whole job is to move when the document does and to stay
-  // put when it does not — a key that misses a change serves the previous
-  // picture, which is the worst failure a cache can have: wrong rather than
-  // missing.
-  //
-  // It names the COMMITTED state, which is not the same instant as the
-  // published canvas value: `onChange` publishes immediately and commits on
-  // a debounce, so between those two the doc has not moved yet. Measured
-  // rather than assumed — reading it straight after `onChange` returns the
-  // pre-edit value, canvas text 'hello' -> 'edited' with the frontier
-  // unchanged. That is why the surface driven by this key is driven by the
-  // doc's own change notification (which fires after the commit) and not by
-  // the React state the editor renders from.
-  it('answers no frontier before a snapshot, and one that moves when the doc does', () => {
+  // The key every rendition of the open document is memoised under is the
+  // digest of the document's content — the same function the workspace
+  // listing uses for a row, so a row and the document it lists name one state
+  // one way (`content-digest.hosts.test.ts` in loro-adapter holds the three
+  // hosts to that).
+  it('answers no state before a snapshot, and one that moves when the document does', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
 
-    // Nothing hydrated: the ABSENCE of a version, so nothing is remembered
+    // Nothing hydrated: the ABSENCE of a state, so nothing is remembered
     // under it rather than everything sharing one key.
-    expect(session.getFrontier()).toBeNull()
+    expect(session.getContentState()).toBeNull()
 
     const canvas = twoNodeCanvas()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(canvas))
-    const hydrated = session.getFrontier()
+    const hydrated = session.getContentState()
     expect(hydrated).not.toBeNull()
 
-    // A remote update imports synchronously, so this is a committed change.
+    // A remote update imports synchronously, so the document has moved.
     const doc = new LoroDoc()
     doc.import(makeSnapshot(canvas))
     writeSpatialCanvas(doc, {
@@ -241,16 +238,45 @@ describe('createDocumentSyncSession', () => {
     })
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
-    expect(session.getFrontier()).not.toBe(hydrated)
+    expect(session.getContentState()).not.toBe(hydrated)
   })
 
-  // The bytes and the frontier are read in one synchronous block on purpose,
-  // and this pins that they describe the same state. Nothing can commit
-  // between two synchronous reads, so the pairing holds by construction —
-  // but a later refactor that made either read async would break it
-  // silently, and a picture memoised under the wrong version is the failure
-  // this whole key exists to avoid.
-  it('exports bytes that decode to the state its frontier names', () => {
+  // The key names the DOCUMENT, and `onChange` does not write the document:
+  // it publishes the canvas at once and writes on a debounce. So straight
+  // after `onChange` the published canvas shows the edit and the key does
+  // not — measured here rather than assumed, because this is exactly why the
+  // surfaces keyed on it listen to the document's post-write notification
+  // rather than to the React state the editor renders from. Once the write
+  // lands, the key moves.
+  it('does not move on a published edit until the debounced write lands', async () => {
+    vi.useFakeTimers()
+    try {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps())
+      session.connect()
+      backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+      const hydrated = session.getContentState()
+
+      const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+      session.onChange(applyCommand(twoNodeCanvas(), move), move)
+
+      expect(session.getCanvas().nodes.find((n) => n.id === 'n-a')?.x).toBe(10)
+      expect(session.getContentState()).toBe(hydrated)
+
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(session.getContentState()).not.toBe(hydrated)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The bytes and the key are read in one synchronous block on purpose, and
+  // this pins that they describe the same state. Nothing can change the
+  // document between two synchronous reads, so the pairing holds by
+  // construction — but a later refactor that made either read async would
+  // break it silently, and a picture memoised under the wrong state is the
+  // failure this whole key exists to avoid.
+  it('exports bytes that decode to the state its key names', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
@@ -274,20 +300,20 @@ describe('createDocumentSyncSession', () => {
     expect(readSpatialCanvas(after)).toEqual(changed)
   })
 
-  it('exports nothing before a snapshot, like the frontier beside it', () => {
+  it('exports nothing before a snapshot, like the key beside it', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     expect(session.exportSnapshot()).toBeNull()
   })
 
-  it('answers the same frontier when nothing has changed', () => {
+  it('answers the same state when nothing has changed', () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
 
-    expect(session.getFrontier()).toBe(session.getFrontier())
+    expect(session.getContentState()).toBe(session.getContentState())
   })
 
   it('hydrates via readSpatialCanvas on snapshot and publishes it to subscribers', () => {
@@ -495,6 +521,81 @@ describe('createDocumentSyncSession', () => {
       'first reply',
       'second reply',
     ])
+  })
+
+  it('opens a thread on a markdown document, whose canvas has no comment to carry it', async () => {
+    // The create half of the same gap `reply-to-thread` closed. A markdown
+    // document's canvas holds no nodes at all, so there is no
+    // `x-whiteboard.comments` entry a new conversation could ride in on —
+    // the thread has to be written into the threads plane directly, and
+    // whole, because `commentThreadSchema` has no legal empty thread to
+    // create first and fill afterwards.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'the paragraph a reader wants to question')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const before = session.getCanvas()
+    const thread: CommentThread = {
+      id: 't-new',
+      anchor: {
+        kind: 'text',
+        quote: { prefix: 'the paragraph ', exact: 'a reader', suffix: ' wants to questi' },
+        start: 14,
+        end: 22,
+      },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'why this one?' }],
+    }
+    const command: EditorCommand = { kind: 'create-thread', thread }
+    session.onChange(applyCommand(before, command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Read back through the session's own annotations rather than the doc:
+    // that is what the rail and the body projection both render, so a write
+    // the read cannot see is the same defect as no write at all.
+    expect(session.getAnnotations()).toEqual([expect.objectContaining({ id: 't-new' })])
+    expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual(['why this one?'])
+    // The canvas is untouched, which is what stops the commit path falling
+    // back to a whole-canvas resync that would never write the thread.
+    expect(session.getCanvas()).toBe(before)
+  })
+
+  it('two threads opened inside one debounce window both survive', async () => {
+    // `create-thread` cannot share `reply-to-thread`'s message key, and a
+    // `thread:` key would be wrong for the same reason: two threads opened
+    // in one window are two conversations, not one target written twice.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeMarkdownBody(doc, 'first sentence. second sentence.')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const canvas = session.getCanvas()
+    for (const [id, exact, start] of [
+      ['t-a', 'first', 0],
+      ['t-b', 'second', 16],
+    ] as const) {
+      session.onChange(canvas, {
+        kind: 'create-thread',
+        thread: {
+          id,
+          anchor: { kind: 'text', quote: { exact }, start, end: start + exact.length },
+          status: 'open',
+          messages: [{ id: `${id}-m1`, body: `about ${exact}` }],
+        },
+      })
+    }
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations().map((thread) => thread.id)).toEqual(['t-a', 't-b'])
   })
 
   it('does not republish annotations for a commit that touched no conversation', async () => {

@@ -8,11 +8,8 @@
 import type { CoreFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import {
-  type DocumentFileAdapter,
-  toFacetCard,
-  useDocumentFileSeams,
-} from './use-document-file-seams.js'
+import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
+import { toFacetCard, useDocumentFileSeams } from './use-document-file-seams.js'
 
 const canvasWith = (...files: string[]): SpatialCanvas => ({
   nodes: files.map((file, i) => ({

@@ -16,10 +16,10 @@
  * tests.
  */
 import type { DocumentKind, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { Box } from './geometry.js'
-import { findFreeSpot } from './geometry.js'
+import type { Box } from '../../lib/spatial/geometry.js'
+import { findFreeSpot } from '../../lib/spatial/geometry.js'
+import type { Point } from '../../lib/spatial/viewport.js'
 import { NEW_NODE_HEIGHT, NEW_NODE_WIDTH } from './gestures.js'
-import type { Point } from './viewport.js'
 
 /** Link nodes are label-only chrome — a note-height box would be mostly
  * empty, so they (and file-reference cards) get a shorter default. */

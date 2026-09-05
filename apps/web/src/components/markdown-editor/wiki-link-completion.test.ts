@@ -3,7 +3,7 @@ import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { describe, expect, it } from 'vitest'
-import type { LinkTarget } from './link-target.js'
+import type { LinkTarget } from '../../lib/link-target.js'
 import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

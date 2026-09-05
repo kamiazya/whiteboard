@@ -117,7 +117,7 @@ string. The `~` prefix on each segment is what additionally makes `.` and
 `..` impossible as whole segments.
 
 ```
-render/~<buildId>/<pipeline>/<kind>/~<documentId>/~<versionKey>[-<theme>].json
+render/~<buildId>/<pipeline>/<kind>/~<documentId>/~<state>[-<theme>].json
 ```
 
 The pipeline is part of the identity, not decoration. The broker holds one
@@ -232,39 +232,50 @@ is stated per kind rather than applied uniformly.
 
 Still open, and named rather than assumed:
 
-- **The list surfaces' version key was measured, and it is weaker than this
-  ADR first claimed rather than absent.** `writeWorkspaceDocumentContent`
-  re-stamps a tree entry's `updatedAt` only when the projected content
-  actually differs, and that is what a list row reads. Measured directly in
-  `loro-adapter`: a content change moved the stamp (`...158` to `...168`) and
-  a no-op write did not move it — which is exactly the property a cache key
-  needs, and the opposite of what `documentEntrySchema`'s own comment ("when
-  the placement last changed") suggests.
+- **The list surfaces are keyed by a CONTENT digest, and the earlier reading
+  of this bullet was wrong twice.** It first said the list had no version key;
+  then, after measuring that `updatedAt` moves on a real content change and
+  not on a no-op, it said the stamp was good enough bar a one-millisecond
+  window. The window was never the problem. `updatedAt` is a REGISTER one
+  replica wrote, and a merge does not consult it — measured with two
+  replicas making disjoint edits (A adds a node at stamp 5000, B edits the
+  base node at stamp 2000) and exchanging updates: on B the content became
+  `n0:edited-by-B, n1:added-by-A`, a state neither replica had written, while
+  its `updatedAt` stayed 2000. A memo keyed on the stamp keeps answering B's
+  old picture under an unchanged key, and the OPFS tier keeps doing so past
+  the end of the tab. That is an identity error, not a resolution one, and
+  no finer clock fixes it.
 
-  Two real weaknesses remain, and only the second argues for a frontier:
-  the field is OPTIONAL, so a row without one keys `version: null` and
-  `isMemoisableKey` correctly refuses to remember it at all; and its
-  resolution is one millisecond of the writing client's wall clock. An
-  in-tab memo under a collided stamp dies with the tab. **A stored one does
-  not**, which is the one thing persistence genuinely raises the bar on.
-  Carrying a real frontier to `documentEntrySchema` / `documentSummarySchema`
-  would close it and change nothing else — a four-layer contract change for a
-  one-millisecond window, so it stays a named follow-up rather than a
-  prerequisite.
+  So `readWorkspaceDocuments` derives a `contentDigest` from each document's
+  projected content on the same read that builds the entry (`content-digest.ts`
+  in loro-adapter: keys canonicalised at every level, then cyrb53 — a Loro
+  map's JSON key order is op-arrival order and differs between converged
+  replicas, so without sorting "same content" and "same digest" are not one
+  statement). Being a function of the MERGED content is what makes it right
+  after a merge; being the same function on both keepers is what makes a row
+  one picture wherever it is kept. It travels through `documentEntrySchema`,
+  `documentSummarySchema` and `WorkspaceDocumentEntry`, and `RenderKeySubject`
+  names its field `state` because a timestamp is no longer what fills it.
+  The OPEN document keys the same way: `getContentState()` digests the
+  session's own document with the same function (`contentDigestOfDocument`),
+  and the browser-kept markdown document likewise — so a list row and the
+  document it lists share one entry rather than naming one content two ways,
+  which is what the state frontier used to do here. Measured before unifying:
+  a tree node, a projection and a fresh document digest identically once
+  empty containers are normalised away, which the tree pre-attaches and a
+  fresh document does not. The sync session still writes the document on a
+  debounce, so straight after `onChange` the published canvas is ahead of the
+  key; the key and the bytes are read from one document and always describe
+  one state, and the document's post-write notification stays the trigger.
+  Cost measured on a 200-document workspace: within noise of the listing
+  itself, because the walk already pays the `toJSON` the digest hashes.
 
-  The OPEN document is no longer in that position: `DocumentSyncSession`
-  answers `getFrontier()`, loro's own id for its committed state, and the
-  favicon is keyed by it. Two things that took measuring rather than
-  arguing, both recorded where the next reader will be:
+  Two properties hold it (`workspace-tree.content-digest.property.test.ts`):
+  the same content in two unrelated workspaces at two unrelated stamps has one
+  digest, and two replicas that cross-merged concurrent edits agree on it in
+  either merge order. Mutation-checked both ways — digesting the stamp fails
+  the merge case, dropping the key sort fails the convergence case.
 
-  - the STATE frontier, not the oplog's — a document checked out to an older
-    version shows that version, and the state frontier also does not move on
-    a commit that changed nothing;
-  - it names the COMMITTED state, which is deliberately not the instant the
-    canvas is published. `onChange` publishes immediately and commits on a
-    debounce, so a key read at render time files the new picture under the
-    old version. `whiteboard:doc_changed` fires after the commit, and is
-    therefore the trigger every surface keyed this way must use.
 - **The fetch of a document's bytes is unmeasured** for the daemon keeper.
   For the browser keeper it is measured and `load-row-render.ts`'s claim that
   it dominates the wait is false — a near-constant 4-6ms against a render of

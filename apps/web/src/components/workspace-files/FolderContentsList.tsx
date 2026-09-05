@@ -1,7 +1,7 @@
 import { ChevronRight, FileText, Folder, LayoutGrid, Pin } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { folderContents } from './folder-contents.js'
 import { formatRelative } from './format-relative.js'
 import { useLongPressMenu } from './use-long-press.js'

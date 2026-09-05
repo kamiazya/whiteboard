@@ -101,10 +101,10 @@ describe('the rail in write mode', () => {
 // whole project.
 function OutlineProbe({ body }: { body: string }) {
   const broker = useMemo(() => createInTabRenderBroker(), [])
-  // A version that moves with the text, which is what the real source's
-  // frontier does — without one the memo would answer the second body from
-  // the first body's entry, which is the case these tests are about.
-  const readSource = useCallback(() => ({ frontier: `len-${body.length}`, body }), [body])
+  // A state that moves with the text, which is what the real source's
+  // content digest does — without one the memo would answer the second body
+  // from the first body's entry, which is the case these tests are about.
+  const readSource = useCallback(() => ({ state: `len-${body.length}`, body }), [body])
   const rects = useDocumentOutline({
     documentId: 'outline-probe',
     kind: 'markdown',

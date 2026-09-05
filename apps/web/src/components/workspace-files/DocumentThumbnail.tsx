@@ -14,8 +14,8 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { fitSvgToBox } from './fit-svg.js'
 import type { DocumentRender } from './load-row-render.js'
 

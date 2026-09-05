@@ -4,7 +4,7 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -26,7 +26,6 @@ import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
-import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import {
@@ -75,6 +74,7 @@ import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provide
 import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
+import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -290,6 +290,9 @@ export function DaemonDocumentPage({
    * browser page took.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  // The conversation the reader is currently on, shared by the rail and the
+  // markdown body's own projection so the two always point at the same one.
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // The past state the person is LOOKING at, drawn in place of the editor.
@@ -545,10 +548,53 @@ export function DaemonDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
+    setSelectedThreadId(null)
+    // A passage inside the DEPARTED document's body: submitted after a
+    // switch it would open a conversation on the arrived document about a
+    // sentence nobody there wrote. (`scoped-screen-state.test.ts` does not
+    // scan this page — see its glob — so this reset is by hand.)
+    setComposeAnchor(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
+  /** Opens the rail on one conversation — what a gutter marker press means. */
+  const revealThread = useCallback((threadId: string) => {
+    setCommentsOpen(true)
+    setSelectedThreadId(threadId)
+  }, [])
+  /**
+   * A passage the reader asked to comment on, waiting for its first message.
+   * Held here rather than in the rail, which is unmounted until the gesture
+   * that produces the passage opens it.
+   */
+  const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
+  const composeThread = useCallback((anchor: AnnotationAnchor) => {
+    setCommentsOpen(true)
+    setSelectedThreadId(null)
+    setComposeAnchor(anchor)
+  }, [])
+  /**
+   * Opens the conversation the compose box collected, through `onChange`
+   * like every other edit here — one undo step, and it rides the annotation
+   * channel back. The canvas argument is the CURRENT one unchanged: opening
+   * a thread touches no node and no edge, which is why the command has its
+   * own write path at all.
+   */
+  const handleCreateThread = useCallback(
+    (anchor: AnnotationAnchor, body: string) => {
+      const thread: CommentThread = {
+        id: crypto.randomUUID(),
+        anchor,
+        status: 'open',
+        messages: [{ id: crypto.randomUUID(), body, createdAt: new Date().toISOString() }],
+      }
+      onChange(canvasValueRef.current, { kind: 'create-thread', thread })
+      setComposeAnchor(null)
+      setSelectedThreadId(thread.id)
+    },
+    [onChange],
+  )
   /**
    * Appends the reader's reply to a conversation.
    *
@@ -1160,6 +1206,10 @@ export function DaemonDocumentPage({
                     linkTargets,
                     onOpenDocument: (id) => controller.switchDocument(resolveRefPath(id) ?? id),
                     resolveEmbed,
+                    threads: annotations,
+                    selectedThreadId,
+                    onSelectThread: revealThread,
+                    onComposeThread: composeThread,
                   }}
                   spatial={() => (
                     <SpatialEditorPane
@@ -1215,12 +1265,21 @@ export function DaemonDocumentPage({
                 <CommentsPanel
                   threads={annotations}
                   resolveAnchor={resolveAnchor}
+                  revealThreadId={selectedThreadId}
+                  onSelect={(thread) => setSelectedThreadId(thread.id)}
                   // Not while a past version OR a variation preview is on
                   // screen: the editor is replaced by DocumentPreview but
                   // this rail is not, and a reply is a write to the LIVE
                   // document — sent from a surface showing something else
                   // entirely.
                   onReply={preview === null && variationPreview === null ? handleReply : undefined}
+                  composeAnchor={
+                    preview === null && variationPreview === null ? composeAnchor : null
+                  }
+                  onCreateThread={
+                    preview === null && variationPreview === null ? handleCreateThread : undefined
+                  }
+                  onCancelCompose={() => setComposeAnchor(null)}
                 />
               </aside>
             ) : null}

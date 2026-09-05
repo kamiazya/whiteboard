@@ -14,8 +14,8 @@
 
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { fitSvgToBox } from './fit-svg.js'
 import { formatRelative } from './format-relative.js'
 import type { DocumentRender } from './load-row-render.js'

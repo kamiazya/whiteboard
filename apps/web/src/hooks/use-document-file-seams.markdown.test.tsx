@@ -10,7 +10,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import { type DocumentFileAdapter, useDocumentFileSeams } from './use-document-file-seams.js'
+import type { DocumentFileAdapter } from '../lib/document-file-contract.js'
+import { useDocumentFileSeams } from './use-document-file-seams.js'
 
 const BODY = '# Weekly notes\n\nShipped the markdown file node.'
 

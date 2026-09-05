@@ -88,7 +88,7 @@ function relativeToRepo(absolutePath: string): string {
  * it is not.
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/components/spatial-editor/commands.ts': 872,
+  'apps/web/src/lib/spatial/commands.ts': 872,
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 887,
   'packages/loro-adapter/src/loro-bridge.ts': 887,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,

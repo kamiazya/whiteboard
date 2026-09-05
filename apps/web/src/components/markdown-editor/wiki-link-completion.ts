@@ -6,7 +6,7 @@ import {
   setSelectedCompletion,
 } from '@codemirror/autocomplete'
 import { EditorView, ViewPlugin } from '@codemirror/view'
-import { type LinkTarget, linkMarkupFor, rankLinkTargets } from './link-target.js'
+import { type LinkTarget, linkMarkupFor, rankLinkTargets } from '../../lib/link-target.js'
 
 /**
  * The popup in the app's popover clothes. An EditorView.theme rather than

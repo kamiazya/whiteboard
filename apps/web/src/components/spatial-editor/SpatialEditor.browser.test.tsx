@@ -11,9 +11,10 @@ import { page, userEvent } from 'vitest/browser'
 // getComputedStyle assertions reflect the actual shipped CSS, not
 // unstyled-DOM defaults.
 import '../../index.css'
-import type { EditorCommand } from './commands.js'
+import type { EditorCommand } from '../../lib/spatial/commands.js'
+import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import { fillNodeEditor, nodeEditorContent } from './node-editor-test-utils.js'
-import { SpatialEditor, type SpatialEditorHandle } from './SpatialEditor.js'
+import { SpatialEditor } from './SpatialEditor.js'
 
 function fakeMeasure() {
   return { advanceWidth: 30, ascent: 10, descent: 2, lineGap: 0 }

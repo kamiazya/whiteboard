@@ -12,7 +12,7 @@
  * "show resolved" answers whether resolved comments are drawn when what a
  * reader wants at document level is which ones are still open.
  */
-import type { CommentThread } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { useMemo, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { cn } from '@/lib/utils'
@@ -49,6 +49,38 @@ export interface CommentsPanelProps {
    * offer, and saying so by omission is the honest form.
    */
   readonly onReply?: (threadId: string, body: string) => void
+  /**
+   * A conversation the HOST wants shown — the other end of `onSelect`, for
+   * when the reader reached a thread through the surface instead of through
+   * this list (pressing its gutter marker in a markdown body).
+   *
+   * It expands the thread and, when the current filter would have hidden it,
+   * widens the filter: a resolved conversation the reader explicitly asked
+   * for must not open into an empty list, which reads as the press doing
+   * nothing.
+   */
+  readonly revealThreadId?: string | null
+  /**
+   * A passage the reader asked to comment on, waiting for its first message.
+   *
+   * The ANCHOR and not a thread, because `commentThreadSchema` has no legal
+   * empty thread: a conversation with nothing said in it cannot be written,
+   * so the passage stays UI state here until there is a message to create it
+   * with. That is also why this surface owns the draft — an unsubmitted one
+   * must not reach the document.
+   *
+   * Typed as the whole anchor union rather than the text arm: what a passage
+   * IS belongs to the host, and this panel only quotes it back and hands it
+   * over.
+   */
+  readonly composeAnchor?: AnnotationAnchor | null
+  /**
+   * Opens a conversation about `composeAnchor`. Absent hides the compose box
+   * for the same reason `onReply`'s absence hides the reply box.
+   */
+  readonly onCreateThread?: (anchor: AnnotationAnchor, body: string) => void
+  /** Abandons the passage without writing anything. */
+  readonly onCancelCompose?: () => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -63,13 +95,63 @@ function excerptOf(thread: CommentThread): string {
   return thread.messages[0]?.body ?? ''
 }
 
-export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: CommentsPanelProps) {
+export function CommentsPanel({
+  threads,
+  resolveAnchor,
+  onSelect,
+  onReply,
+  revealThreadId = null,
+  composeAnchor = null,
+  onCreateThread,
+  onCancelCompose,
+}: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
   const [draft, setDraft] = useState('')
+
+  // Adjusting state during render on a changed prop, rather than in an
+  // effect: an effect would paint the list once without the thread the
+  // reader just asked for.
+  //
+  // Seeded `null`, never `revealThreadId`. The rail is MOUNTED by the same
+  // press that names the thread — the host opens the panel and selects in
+  // one go — so seeding it with the incoming id makes the first render
+  // "already seen", and the panel arrives with the conversation collapsed.
+  // Measured: the rail opened and stopped exactly there.
+  const [lastRevealed, setLastRevealed] = useState<string | null>(null)
+  if (revealThreadId !== lastRevealed) {
+    setLastRevealed(revealThreadId)
+    if (revealThreadId !== null) {
+      setOpenThreadId(revealThreadId)
+      setDraft('')
+      const revealed = threads.find((t) => t.id === revealThreadId)
+      if (revealed !== undefined && !matches(revealed, filter)) setFilter('all')
+    }
+  }
+
+  // Same render-time adjustment as the reveal above, and the same reason:
+  // the passage arrives with the press that opens this panel, so an effect
+  // would paint the rail once without the box the reader just asked for.
+  const [composeDraft, setComposeDraft] = useState('')
+  const [lastCompose, setLastCompose] = useState<AnnotationAnchor | null>(null)
+  if (composeAnchor !== lastCompose) {
+    setLastCompose(composeAnchor)
+    if (composeAnchor !== null) {
+      setComposeDraft('')
+      // One thing at a time: an expanded conversation beside a new draft box
+      // is two reply fields on screen, and the reader has to work out which
+      // one they are typing into.
+      setOpenThreadId(null)
+      // A new conversation is `open`, so Resolved is the one filter that
+      // would hide it — and a create whose result never appears reads as a
+      // create that failed.
+      if (filter === 'resolved') setFilter('open')
+    }
+  }
+
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
 
   function toggle(thread: CommentThread): void {
@@ -101,6 +183,53 @@ export function CommentsPanel({ threads, resolveAnchor, onSelect, onReply }: Com
           </button>
         ))}
       </fieldset>
+
+      {composeAnchor !== null && onCreateThread !== undefined ? (
+        <form
+          data-testid="comments-panel-compose"
+          className="flex flex-col gap-1 rounded border p-2"
+          onSubmit={(event) => {
+            event.preventDefault()
+            const body = composeDraft.trim()
+            // Same rule as the reply box, in the same place: guarded on
+            // submit rather than by disabling the button, so pressing Enter
+            // in the field is covered by it too.
+            if (body === '') return
+            onCreateThread(composeAnchor, body)
+            setComposeDraft('')
+          }}
+        >
+          {composeAnchor.kind === 'text' ? (
+            // Quoted back because by the time the reader is typing here,
+            // their selection in the body is no longer what they are looking
+            // at — and a comment about the wrong passage is worse than none.
+            <p className="line-clamp-2 border-l-2 pl-2 text-xs text-neutral-500 italic">
+              {composeAnchor.quote.exact}
+            </p>
+          ) : null}
+          <textarea
+            aria-label="Comment"
+            value={composeDraft}
+            onChange={(event) => setComposeDraft(event.target.value)}
+            rows={2}
+            className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+          />
+          <div className="flex justify-end gap-1">
+            {onCancelCompose === undefined ? null : (
+              <button
+                type="button"
+                onClick={onCancelCompose}
+                className="rounded border px-2 py-1 text-xs hover:bg-accent"
+              >
+                Cancel
+              </button>
+            )}
+            <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-accent">
+              Comment
+            </button>
+          </div>
+        </form>
+      ) : null}
 
       {shown.length === 0 ? (
         <p data-testid="comments-panel-empty" className="px-2 py-4 text-xs text-neutral-500">

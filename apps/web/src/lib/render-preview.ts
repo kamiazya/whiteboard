@@ -13,7 +13,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import { outlineFromScene } from '../../lib/document-outline.js'
+import { outlineFromScene } from './document-outline.js'
 import type { RailBlock } from './rail-geometry.js'
 
 export interface RenderMarkdownPreviewOptions {

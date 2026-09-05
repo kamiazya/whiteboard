@@ -33,6 +33,7 @@ import {
   readMarkdownBody,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  writeCommentThread,
   writeCoreFacets,
   writeMarkdownBody,
   writeThreadMessage,
@@ -43,13 +44,14 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
 import { sameAnnotations } from '../lib/annotations-equal.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import type { BrowserPersistenceState } from '../lib/browser-persistence-state.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
 import { titleFromMarkdownBody } from '../lib/title-from-body.js'
 import { createSaveScheduler, type SaveScheduler } from './save-scheduler.js'
-import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
 
@@ -186,6 +188,17 @@ export interface MarkdownDocumentState {
    * either by hand.
    */
   readonly replyToThread: (threadId: string, message: CommentMessage) => void
+  /**
+   * Opens a conversation on this document, whole.
+   *
+   * The counterpart of `replyToThread` and the one write allowed to CREATE a
+   * thread container — which is why the two are separate calls rather than
+   * one upsert: a reply that opened a container would let two replicas mint
+   * the same thread and lose one side's messages on merge.
+   *
+   * A no-op while the document is still loading, like every other write here.
+   */
+  readonly createThread: (thread: CommentThread) => void
 }
 
 /**
@@ -511,6 +524,12 @@ export function useMarkdownDocument(
     writeThreadMessage(host.containers, threadId, message)
   }, [])
 
+  const createThread = useCallback((thread: CommentThread) => {
+    const host = hostRef.current
+    if (host === null) return
+    writeCommentThread(host.containers, thread)
+  }, [])
+
   const bodyTextOf = useCallback(
     (target: Loro): LoroText => {
       const host = hostRef.current
@@ -532,5 +551,6 @@ export function useMarkdownDocument(
     bodyTextOf,
     annotations,
     replyToThread,
+    createThread,
   }
 }

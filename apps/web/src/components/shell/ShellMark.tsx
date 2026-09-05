@@ -23,7 +23,7 @@
  */
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
-import type { ConnectionState, SessionHealth } from '../connection/ConnectionStatus.js'
+import type { ConnectionState, SessionHealth } from '../../lib/connection-state.js'
 import type { StateDotTone } from '../StateDot.js'
 
 /** The signature path, shared verbatim with `home-mark.svg` and `loader-mark.svg`. */

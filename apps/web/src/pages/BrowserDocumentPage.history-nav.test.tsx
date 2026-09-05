@@ -26,7 +26,6 @@ import {
 } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
@@ -34,6 +33,7 @@ import {
   listLocalDocuments,
 } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
+import type { EditorCommand } from '../lib/spatial/commands.js'
 import {
   clearWhiteboardDb,
   persistedNodeIds,

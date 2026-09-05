@@ -13,7 +13,7 @@
  */
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from '../spatial-editor/editor-appearance.js'
+import { EDITOR_DARK_PALETTE, EDITOR_LIGHT_PALETTE } from '../../lib/spatial/editor-appearance.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 /** A real browser normalizes an inline `fill: '#RRGGBB'` style to `rgb(r, g, b)`. */

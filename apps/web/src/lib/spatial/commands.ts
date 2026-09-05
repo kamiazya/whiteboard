@@ -25,6 +25,7 @@ import type {
   CanvasEdge,
   ClipboardFragment,
   CommentMessage,
+  CommentThread,
   EdgeRoutingStyle,
   LineJumps,
   SpatialCanvas,
@@ -32,7 +33,7 @@ import type {
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
-import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
+import { remintClipboardFragment } from '../clipboard-fragment.js'
 import type { Point } from './viewport.js'
 
 export type EditorLeafCommand =
@@ -210,6 +211,24 @@ export type EditorLeafCommand =
       readonly kind: 'reply-to-thread'
       readonly threadId: string
       readonly message: CommentMessage
+    }
+  | {
+      /**
+       * Opens a new conversation (ADR-0026 decision 5's create half).
+       *
+       * Beside `reply-to-thread` for the same reason and with the same
+       * consequence: it leaves the CANVAS untouched, so it cannot travel
+       * through the `x-whiteboard.comments` envelope, and it is committed by
+       * writing the threads plane directly.
+       *
+       * The thread arrives whole rather than as an anchor plus a first
+       * message, because `commentThreadSchema` requires at least one message
+       * — there is no legal empty thread to create and then fill, and a
+       * compose surface that has not been submitted yet is UI state, not a
+       * half-written document.
+       */
+      readonly kind: 'create-thread'
+      readonly thread: CommentThread
     }
 
 /**
@@ -698,10 +717,11 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
     case 'set-comment-text':
       return patchComment(canvas, command.id, { text: command.text })
     case 'reply-to-thread':
+    case 'create-thread':
       // Identity, and deliberately: the conversation is a plane beside the
-      // canvas, so a reply has no canvas effect to compute. Returning the
-      // same reference keeps the union-wide "nothing changed → same object"
-      // contract that callers memoise on.
+      // canvas, so neither opening one nor replying to one has a canvas
+      // effect to compute. Returning the same reference keeps the union-wide
+      // "nothing changed → same object" contract that callers memoise on.
       return canvas
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,

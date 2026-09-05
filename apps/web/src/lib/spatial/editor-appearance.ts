@@ -19,8 +19,7 @@ import {
   SPATIAL_LIGHT_PALETTE,
   type SpatialAppearanceResolver,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-
+import type { ResolvedTheme } from '../theme.js'
 // Backward-compatible view of the shared palettes in the shape this
 // package's own tests already assert (`chromeStroke`/`textFill`). The
 // shared palette differentiates node FILL per type, but stroke and label

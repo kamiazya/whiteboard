@@ -411,6 +411,7 @@ function entryOf(found: {
   shadowed?: true
   createdAt?: number
   updatedAt?: number
+  contentDigest: string
 }): DocumentEntry {
   // Every tree write stamps updatedAt (falling back to createdAt for a
   // record written before timestamps landed in the node meta); absent for
@@ -424,5 +425,8 @@ function entryOf(found: {
     ...(found.name === undefined ? {} : { name: found.name }),
     ...(found.shadowed === undefined ? {} : { shadowed: found.shadowed }),
     ...(stamp === undefined ? {} : { updatedAt: new Date(stamp).toISOString() }),
+    // Always present from a tree-backed index: the tree holds the content, so
+    // the digest is derived on the same read as the rest of the entry.
+    contentDigest: found.contentDigest,
   }
 }

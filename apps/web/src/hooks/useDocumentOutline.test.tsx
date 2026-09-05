@@ -48,8 +48,8 @@ function Probe({
   )
 }
 
-const spatialAt = (frontier: string): DocumentOutlineSource => ({
-  frontier,
+const spatialAt = (state: string): DocumentOutlineSource => ({
+  state,
   snapshot: new Uint8Array([1, 2, 3]),
 })
 
@@ -65,9 +65,9 @@ describe('useDocumentOutline', () => {
   // The trigger the whole hook is built around. Without it the outline is
   // computed in the render path on every edit, most of them thrown away.
   it('recomputes when the document changes, and not otherwise', async () => {
-    let frontier = 'v1'
+    let state = 'v1'
     const outline = vi.fn(async () => RECTS)
-    const source = () => spatialAt(frontier)
+    const source = () => spatialAt(state)
     const { getByTestId } = render(<Probe source={source} outline={outline} />)
     await waitFor(() => expect(getByTestId('count').textContent).toBe('2'))
 
@@ -77,7 +77,7 @@ describe('useDocumentOutline', () => {
     await Promise.resolve()
     expect(outline).toHaveBeenCalledTimes(1)
 
-    frontier = 'v2'
+    state = 'v2'
     window.dispatchEvent(new CustomEvent(DOCUMENT_SYNC_CHANGED_EVENT))
     await waitFor(() => expect(outline).toHaveBeenCalledTimes(2))
   })
@@ -87,17 +87,17 @@ describe('useDocumentOutline', () => {
   // each has its own version, so each is its own key.
   it('does not answer a later state from an earlier state’s entry', async () => {
     const seen: string[] = []
-    let frontier = 'v1'
+    let state = 'v1'
     const outline = vi.fn(async (s: DocumentOutlineSource) => {
-      seen.push(s.frontier)
+      seen.push(s.state)
       return RECTS
     })
-    render(<Probe source={() => spatialAt(frontier)} outline={outline} />)
+    render(<Probe source={() => spatialAt(state)} outline={outline} />)
     await waitFor(() => expect(seen).toEqual(['v1']))
 
-    frontier = 'v2'
+    state = 'v2'
     window.dispatchEvent(new CustomEvent(DOCUMENT_SYNC_CHANGED_EVENT))
-    frontier = 'v3'
+    state = 'v3'
     window.dispatchEvent(new CustomEvent(DOCUMENT_SYNC_CHANGED_EVENT))
 
     await waitFor(() => expect(seen).toEqual(['v1', 'v2', 'v3']))
@@ -117,7 +117,7 @@ describe('useDocumentOutline', () => {
   it('lays nothing out for a markdown document with nothing in it', async () => {
     const outline = vi.fn(async () => RECTS)
     const { getByTestId } = render(
-      <Probe kind="markdown" source={() => ({ frontier: 'v1', body: '   ' })} outline={outline} />,
+      <Probe kind="markdown" source={() => ({ state: 'v1', body: '   ' })} outline={outline} />,
     )
 
     await Promise.resolve()
@@ -128,13 +128,13 @@ describe('useDocumentOutline', () => {
   // Total by contract: the tab keeps the shape it had rather than throwing.
   it('keeps the last shape when the outline refuses', async () => {
     let answer: readonly FaviconRect[] | null = RECTS
-    let frontier = 'v1'
+    let state = 'v1'
     const outline = vi.fn(async () => answer)
-    const { getByTestId } = render(<Probe source={() => spatialAt(frontier)} outline={outline} />)
+    const { getByTestId } = render(<Probe source={() => spatialAt(state)} outline={outline} />)
     await waitFor(() => expect(getByTestId('count').textContent).toBe('2'))
 
     answer = null
-    frontier = 'v2'
+    state = 'v2'
     window.dispatchEvent(new CustomEvent(DOCUMENT_SYNC_CHANGED_EVENT))
     await waitFor(() => expect(outline).toHaveBeenCalledTimes(2))
     expect(getByTestId('count').textContent).toBe('2')
@@ -144,15 +144,15 @@ describe('useDocumentOutline', () => {
   // `whiteboard:doc_changed` at all, so an outline driven by the event alone
   // never updates. Re-rendering with a new published value asks again.
   it('asks again when the page re-renders with a changed document', async () => {
-    let frontier = 'v1'
+    let state = 'v1'
     const outline = vi.fn(async () => RECTS)
-    const source = () => spatialAt(frontier)
+    const source = () => spatialAt(state)
     const { rerender, getByTestId } = render(
       <Probe source={source} outline={outline} revision="r0" />,
     )
     await waitFor(() => expect(getByTestId('count').textContent).toBe('2'))
 
-    frontier = 'v2'
+    state = 'v2'
     rerender(<Probe source={source} outline={outline} revision="r1" />)
     await waitFor(() => expect(outline).toHaveBeenCalledTimes(2))
   })

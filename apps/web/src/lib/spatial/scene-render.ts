@@ -12,7 +12,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 import { type RenderedCanvas, renderCanvasToSvgWith } from './scene-render-core.js'
 
