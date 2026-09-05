@@ -7,7 +7,7 @@
  */
 
 import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { ChevronDown, ChevronUp, MessageSquare, X } from 'lucide-react'
+import { ChevronUp, MessageSquare, X } from 'lucide-react'
 import { type JSX, useState } from 'react'
 import { Button } from '../../components/ui/button.js'
 import type { CommentsRail } from '../../hooks/use-comments-rail.js'
@@ -80,14 +80,12 @@ export function CommentsRailAside({
           aria-expanded={expanded}
           onClick={() => setExpanded((v) => !v)}
           // The sheet's grab handle: a wide, shallow target a thumb aims at
-          // the edge for, not an icon-sized one.
-          className="flex h-6 w-16 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground"
+          // the edge for, not an icon-sized one. One chevron, turned by the
+          // ARIA state rather than swapped for another glyph, so the
+          // announced state and the drawn one cannot disagree.
+          className="flex h-6 w-16 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground aria-expanded:[&>svg]:rotate-180"
         >
-          {expanded ? (
-            <ChevronDown aria-hidden="true" className="size-4" />
-          ) : (
-            <ChevronUp aria-hidden="true" className="size-4" />
-          )}
+          <ChevronUp aria-hidden="true" className="size-4 transition-transform" />
         </button>
         <button
           type="button"

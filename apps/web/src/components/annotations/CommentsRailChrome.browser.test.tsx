@@ -64,6 +64,17 @@ it('is a sheet over the editor on a phone, and can be closed from it', async () 
   expect(getComputedStyle(rail).position).toBe('absolute')
   // Over the editor, not beside it: the editor keeps the whole width.
   expect(editor.getBoundingClientRect().width).toBe(412)
+  // The grab handle SHOWS its state: the one chevron turns with aria-expanded
+  // rather than being swapped, so what is announced and what is drawn are
+  // one value.
+  const handle = page.getByTestId('comments-stage-toggle').element()
+  const chevron = handle.querySelector('svg') as SVGElement
+  expect(getComputedStyle(chevron).rotate).toBe('none')
+  await userEvent.click(page.getByRole('button', { name: 'Expand comments' }))
+  expect(handle.getAttribute('aria-expanded')).toBe('true')
+  // Polled: the turn is a transition, so right after the click the computed
+  // rotation is a few degrees along the way rather than the destination.
+  await expect.poll(() => getComputedStyle(chevron).rotate).toBe('180deg')
   await userEvent.click(page.getByRole('button', { name: 'Close comments' }))
   expect(toggle).toHaveBeenCalledTimes(1)
 })
