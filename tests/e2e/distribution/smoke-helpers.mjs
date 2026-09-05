@@ -72,6 +72,31 @@ export function scrubDevEnv(processEnv) {
 }
 
 /**
+ * A failing smoke's captured output, safe to print.
+ *
+ * The smokes deliberately report byte COUNTS rather than text, because their
+ * last scenario asserts that no JWT, Authorization header or absolute dataDir
+ * path reaches a log. That discipline is right and it makes a CI-only failure
+ * undiagnosable: `stderrBytes: 62` says something went wrong and nothing about
+ * what. This redacts through the SAME BASE_LEAK_PATTERNS the assertion uses,
+ * so the two cannot disagree about what counts as a secret.
+ *
+ * @param {string} text
+ * @param {string[]} extraLiterals values to blank out verbatim (temp dirs, tokens)
+ * @returns {string}
+ */
+export function redactForDiagnostics(text, extraLiterals = []) {
+  let out = text
+  for (const pattern of BASE_LEAK_PATTERNS) {
+    const flags = pattern.flags.includes('g') ? pattern.flags : `${pattern.flags}g`
+    out = out.replace(new RegExp(pattern.source, flags), '[redacted]')
+  }
+  for (const literal of extraLiterals) {
+    if (literal) out = out.split(literal).join('[redacted]')
+  }
+  return out
+}
+/**
  * `docker build` arguments for Dockerfile.server, `.node-version` included.
  *
  * Dockerfile.server declares `ARG NODE_VERSION` with no default, so a build

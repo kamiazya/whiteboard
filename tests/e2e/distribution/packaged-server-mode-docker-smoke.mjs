@@ -33,7 +33,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
-import { assertNoLeak, resolveServerImage } from './smoke-helpers.mjs'
+import { assertNoLeak, redactForDiagnostics, resolveServerImage } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = resolve(__dirname, '../../..')
@@ -312,6 +312,9 @@ try {
       const logs = docker(['logs', 'wb-smoke-valid'], { timeout: 5_000 })
       fail('scenario 3: server did not emit ready JSON within timeout', {
         stderrBytes: logs.stderr.length,
+        // Redacted rather than counted: this smoke runs on CI now, where a
+        // byte count is the only thing anyone gets and it diagnoses nothing.
+        stderr: redactForDiagnostics(logs.stderr.slice(-2000), [dataDir, certsDir, jwksUri]),
       })
     }
     assertNoLeak('scenario 3 ready JSON', JSON.stringify(ready))
