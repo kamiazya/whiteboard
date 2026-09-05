@@ -9,6 +9,7 @@ import { bundledPlugins, type VisualEdgesFacet } from '@kamiazya/whiteboard-plug
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { userEvent } from 'vitest/browser'
 import { z } from 'zod'
 import { DocumentMenu } from '../workspace-top-bar/DocumentMenu.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
@@ -49,12 +50,19 @@ const option = (label: string) =>
     | undefined
 
 /**
- * Open the panel the way a person does: the kebab, then its leading row.
- * Radix's DropdownMenuTrigger opens on pointerDown and its Item selects on
- * pointerUp, so a plain click on either would be a no-op.
+ * Open the panel the way a person does: REAL clicks on the kebab and its
+ * leading row, through the browser's own event and focus sequence.
+ *
+ * Synthetic `fireEvent.pointerDown`/`pointerUp` drive Radix's menu fine and
+ * are what this file used to do — but they skip the focus movement, which
+ * is where the defect lived: the closing menu returned focus to the trigger
+ * and the popover, having just opened, read that as an outside interaction
+ * and dismissed itself. Measured in a real browser: popover present at
+ * 50ms and 150ms, gone by 400ms, while every synthetic-event test stayed
+ * green.
  */
 async function openPanel(container: HTMLElement) {
-  fireEvent.pointerDown(kebab(container), { button: 0, ctrlKey: false })
+  await userEvent.click(kebab(container))
   const row = await vi.waitFor(() => {
     const found = [...document.querySelectorAll('[role="menuitem"]')].find(
       (item) => item.textContent?.trim() === 'Display…',
@@ -62,8 +70,20 @@ async function openPanel(container: HTMLElement) {
     expect(found).toBeDefined()
     return found as HTMLElement
   })
-  fireEvent.pointerUp(row)
-  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  await userEvent.click(row)
+  // Wait for where focus COMES TO REST, not merely for the panel to appear.
+  // A `waitFor(panel exists)` is satisfied by the transient open and reads
+  // exactly like a pass; the two builds differ in the end state — focus in
+  // the panel, or back on the kebab with the panel gone with it.
+  await vi.waitFor(() => {
+    expect(document.querySelector('[role="menu"]'), 'the menu is still closing').toBeNull()
+    const panel = menu()
+    expect(panel, 'the panel closed again as the menu finished closing').toBeTruthy()
+    expect(
+      panel?.contains(document.activeElement),
+      'focus went somewhere other than the panel',
+    ).toBe(true)
+  })
 }
 
 it('the Display row opens the popover with both option rows', async () => {

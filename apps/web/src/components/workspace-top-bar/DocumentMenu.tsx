@@ -1,5 +1,5 @@
 import { BookmarkPlus, Download, EllipsisVertical, SlidersHorizontal } from 'lucide-react'
-import { type ReactNode, type RefObject, useState } from 'react'
+import { type ReactNode, type RefObject, useRef, useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -85,7 +85,24 @@ export function DocumentMenu({
   // are segmented controls a person adjusts several times in a row, and a
   // menu closes on the first select. Opened from a row that unmounts with
   // the menu, so it hangs off the trigger below instead.
+  //
+  // It opens on the menu's CLOSE, not in the row's own handler, and the
+  // difference is the whole thing working: a menu returns focus to its
+  // trigger when it finishes closing, and a popover that opened in the
+  // meantime reads that as an interaction outside itself and dismisses.
+  // Measured in a real browser — popover present at 50ms and 150ms, gone by
+  // 400ms, focus back on the kebab. Synthetic pointer events skip the focus
+  // move, so every test stayed green over it.
   const [displayOpen, setDisplayOpen] = useState(false)
+  const openDisplayOnClose = useRef(false)
+  // The panel has an ANCHOR rather than a trigger, and Radix returns focus
+  // to a trigger — so without this a keyboard user who dismisses the panel
+  // falls to <body>. The kebab is what opened it, so the kebab takes it back.
+  const kebabRef = useRef<HTMLButtonElement | null>(null)
+  const setKebab = (node: HTMLButtonElement | null) => {
+    kebabRef.current = node
+    if (triggerRef !== undefined) triggerRef.current = node
+  }
   return (
     <Popover open={displayOpen} onOpenChange={setDisplayOpen}>
       <DropdownMenu>
@@ -94,7 +111,7 @@ export function DocumentMenu({
             <PopoverAnchor asChild>
               <DropdownMenuTrigger asChild>
                 <button
-                  ref={triggerRef}
+                  ref={setKebab}
                   type="button"
                   aria-label="More actions"
                   className={HEADER_BUTTON_CLASS}
@@ -106,10 +123,25 @@ export function DocumentMenu({
           </TooltipTrigger>
           <TooltipContent>More actions</TooltipContent>
         </Tooltip>
-        <DropdownMenuContent align="end">
+        <DropdownMenuContent
+          align="end"
+          onCloseAutoFocus={(event) => {
+            if (!openDisplayOnClose.current) return
+            openDisplayOnClose.current = false
+            // The panel takes focus itself; letting it go to the trigger
+            // first is exactly what dismissed the panel.
+            event.preventDefault()
+            setDisplayOpen(true)
+          }}
+        >
           {display !== undefined && (
             <>
-              <DropdownMenuItem onSelect={() => setDisplayOpen(true)} className="gap-2">
+              <DropdownMenuItem
+                onSelect={() => {
+                  openDisplayOnClose.current = true
+                }}
+                className="gap-2"
+              >
                 <SlidersHorizontal aria-hidden="true" className="size-3.5" />
                 Display…
               </DropdownMenuItem>
@@ -138,7 +170,14 @@ export function DocumentMenu({
         </DropdownMenuContent>
       </DropdownMenu>
       {display !== undefined && (
-        <PopoverContent data-testid="canvas-settings-menu" className="w-auto min-w-52 p-2">
+        <PopoverContent
+          data-testid="canvas-settings-menu"
+          className="w-auto min-w-52 p-2"
+          onCloseAutoFocus={(event) => {
+            event.preventDefault()
+            kebabRef.current?.focus()
+          }}
+        >
           {display}
         </PopoverContent>
       )}
