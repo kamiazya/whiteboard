@@ -472,10 +472,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       viewportCenterScreen,
       containerSizeOf,
     })
-    // The file-reference seam — the LOD gate, label/missing resolution and
-    // the content cache — built once in useFileSeamScene and spread into
-    // every scene-building call below (committed scene, drag ghost,
-    // drag-static backdrop, resize preview).
     // What THIS canvas can read of the host's wire, by identity — the host's
     // is wider (it carries a draft's references for the overlay's preview),
     // and rows the canvas cannot read must not re-lay it out.
@@ -484,6 +480,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (canvasWire === undefined ? undefined : referenceSeamsFromWire(canvasWire)),
       [canvasWire],
     )
+    // The file-reference seam — the LOD gate, label/missing resolution and
+    // the content cache — built once in useFileSeamScene and spread into
+    // every scene-building call below (committed scene, drag ghost,
+    // drag-static backdrop, resize preview).
     const { fileSeamOptions, missingFileRefs, expandedFileIds } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
