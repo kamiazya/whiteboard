@@ -6,7 +6,7 @@ export default defineProject({
   plugins: [react()],
   test: {
     name: 'canvas-viewer-browser',
-    include: ['src/**/*.browser.test.tsx'],
+    include: ['src/**/*.browser.test.tsx', 'src/**/*.browser.test.ts'],
     browser: sharedBrowserTestConfig({ projectRoot: import.meta.dirname }),
   },
 })
