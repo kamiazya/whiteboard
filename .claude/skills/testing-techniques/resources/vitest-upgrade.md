@@ -38,11 +38,11 @@ Vite ≥ 6.4 and Node ≥ 22.12; the catalog holds Vite 8.2 and `.node-version` 
 |---|---|---|
 | module-scope `bench` import removed; bench mode runs a `<project> (bench)` sibling | 3 files; `pnpm bench` filtered on the bare name | rewritten to the context fixture with `{ timeout: 0 }` and `bench.compare`; `pnpm bench` filters on `"canvas-render-node (bench)"`; getter warning suppressed with the reason (`configuration.md` › Benchmarks) |
 | `toHaveTextContent(RegExp)` exact-only | 2 (`CommentsPanel.browser.test.tsx`) | `toMatchTextContent` |
-| locators strict by default (`exact ??= true` at runtime) | ~1389 `getBy*` sites | browser suites re-run; fallout recorded below |
+| locators strict by default (`exact ??= true` at runtime); `toHaveTextContent` exact | ~1389 `getBy*` sites | all three browser projects re-run on Node 24: ONE failure in 1085 browser tests, a `toHaveTextContent('2')` on an element reading `2 messages` — made exact (`'2 messages'`, which is what the test's own comment says it checks) |
 | un-awaited `.resolves` / `.rejects` / `toMatchFileSnapshot` fail | 0 (lint rule) | — |
 | `expect.poll` rejects on timeout | 14 sites | green |
 | `clearMocks` default `true` | — | green without pre-adoption |
-| artifacts under `.vitest/` | `.gitignore` | `.vitest-attachments/` → `.vitest/` |
+| artifacts under `.vitest/` (repo root, for every project) | `.gitignore`, AGENTS.md, the title-budget guard's header | `.vitest-attachments/` → `.vitest/`; the attachment name shape re-measured, budget unchanged (`configuration.md` › Artifacts) |
 | `--repeats` | CI `stress-changed-tests` | a `--repeats=3` pass added beside the five fresh-process runs |
 | `sequential`, worker ids, `Assertion<R, T>`, inline projects, `browser.api`, removed entrypoints, `-t` chain, `toThrow('')` | 0 | — |
 | nested `projects` | — | **still not adopted**: `vitest-projects.mjs` regex-scans the root config |

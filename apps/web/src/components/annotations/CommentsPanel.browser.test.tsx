@@ -43,7 +43,7 @@ it('opens on the conversations that are still open, and says how many messages e
   expect(page.getByText('this one is done').query()).toBeNull()
   // Two messages is a conversation; saying so is what distinguishes it from
   // a lone remark without opening it.
-  await expect.element(page.getByTestId('thread-message-count-t-open')).toHaveTextContent('2')
+  await expect.element(page.getByTestId('thread-message-count-t-open')).toHaveTextContent('2 messages')
 })
 
 it('shows the resolved ones when asked, and everything under All', async () => {

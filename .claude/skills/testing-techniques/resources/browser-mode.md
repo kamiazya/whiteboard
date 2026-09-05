@@ -99,8 +99,9 @@ test's trace is copied under a name flattened from its path, and past the filesy
 255-byte limit the copy throws `ENAMETOOLONG` in teardown — so vitest abandons the REST OF THE
 FILE and the summary reports a smaller total that reads like good news (measured: `1 failed |
 2 passed (6)` against `1 failed | 5 passed (6)`). Non-alphanumeric characters each become one
-ASCII `-`, so `導線` costs two. `apps/web/src/browser-test-name-length.test.ts` enforces it;
-Vitest 5 moves attachments to `.vitest/attachments/`, so the budget is re-measured at upgrade.
+ASCII `-`, so `導線` costs two. `apps/web/src/browser-test-name-length.test.ts` enforces it,
+and its arithmetic was re-measured against a real 5.0.0 attachment name (repo-root
+`.vitest/attachments/`, 186 characters for an 86-character title).
 
 ## Traces
 

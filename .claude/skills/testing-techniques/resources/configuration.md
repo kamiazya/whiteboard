@@ -103,10 +103,12 @@ Nothing on this tree reads them.
 
 One `.gitignore` entry (`.vitest/`). Third-party reporters get the same convention through
 `vitest.createReport(scope)`. `toMatchScreenshot` has its own
-`browser.expect.toMatchScreenshot.screenshotDirectory`. The 155-char browser title budget
-(`browser-test-name-length.test.ts`) is measured against the flattened attachment name; the
-directory moved here from `.vitest-attachments/` at the Vitest 5 upgrade and the budget's
-measurement is re-taken by that test's forced-failure recipe.
+`browser.expect.toMatchScreenshot.screenshotDirectory`. The directory is at the REPO ROOT
+even for a package's project: a `web-browser` failure's trace copy landed in
+`<root>/.vitest/attachments/`, not under `apps/web`. The 155-char browser title budget
+(`browser-test-name-length.test.ts`) is measured against that flattened name, and the shape
+was re-measured at the 5.0.0 upgrade: 186 characters for an 86-character sanitized title,
+which is the guard's fixed overhead plus the title, unchanged.
 
 ### Single-file HTML report
 
