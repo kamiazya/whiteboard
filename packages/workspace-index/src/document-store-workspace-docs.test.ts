@@ -64,6 +64,15 @@ class FakeDocumentStore implements DocumentStore {
    */
   refusals = 0
 
+  /**
+   * Runs at the TOP of `loadDeltas` — the read-side twin of `beforeCompact`.
+   * `open()` reads the snapshot and the log in two calls, and this is the one
+   * place a rival fold can be made to land between them. Without it the
+   * straddle is unreachable from a test, and a reader that quietly answers a
+   * stale document is a reader nobody knows is stale.
+   */
+  beforeLoadDeltas: (() => Promise<void>) | undefined
+
   async loadSnapshot({ docRef }: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const stored = this.docs.get(docRefKey(docRef))
     if (stored === undefined || stored.manifest === null) return null
@@ -127,7 +136,8 @@ class FakeDocumentStore implements DocumentStore {
     return { frontier: stored.frontier }
   }
 
-  loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
+  async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
+    if (this.beforeLoadDeltas !== undefined) await this.beforeLoadDeltas()
     return this.loadDeltasReal(input)
   }
 
@@ -289,6 +299,54 @@ it('keeps its ops when another writer wins the race to fold the log', async () =
   expect((reopened?.getMap('meta').get('bulk') as string | undefined)?.length).toBe(80 * 1024)
 })
 
+it('open() does not answer a stale document when a fold lands between its two reads', async () => {
+  const store = new FakeDocumentStore()
+  const docs = new DocumentStoreWorkspaceDocs(store)
+  const doc = new LoroDoc()
+  doc.getMap('meta').set('title', 'first')
+  doc.commit()
+  await docs.save('ws-a', doc)
+  // A small edit: appended to the log, never folded. It is ON DISK before
+  // open() below begins, which is what makes losing it a stale read rather
+  // than a race the reader could not have won.
+  doc.getMap('meta').set('e1', 'kept')
+  doc.commit()
+  await docs.save('ws-a', doc)
+  expect(store.docs.get('workspace-tree:ws-a')?.deltas).toHaveLength(1)
+
+  // A rival whose edit is big enough to FOLD, armed to land exactly between
+  // open()'s snapshot read and its log read. The fold absorbs e1 into the
+  // new snapshot and empties the log — so a reader holding the OLD snapshot
+  // and the NEW (empty) log has e1 nowhere. Loro does not throw on that: the
+  // ops the log used to carry simply never arrive.
+  const rival = new LoroDoc()
+  rival.import(store.docs.get('workspace-tree:ws-a')!.chunks[0]!.bytes)
+  for (const update of store.docs.get('workspace-tree:ws-a')!.deltas) rival.import(update)
+  rival.getMap('meta').set('bulk', 'y'.repeat(80 * 1024))
+  rival.commit()
+  let folds = 0
+  store.beforeLoadDeltas = async () => {
+    store.beforeLoadDeltas = undefined
+    await new DocumentStoreWorkspaceDocs(store).save('ws-a', rival)
+    folds += 1
+  }
+
+  const opened = await docs.open('ws-a')
+
+  // The trigger fired, and the fold was a real one: generation moved and the
+  // log is empty. Asserted so this cannot pass by the straddle never happening.
+  expect(folds).toBe(1)
+  expect(store.refusals).toBe(0)
+  expect(store.docs.get('workspace-tree:ws-a')?.generation).toBe(2)
+  expect(store.docs.get('workspace-tree:ws-a')?.deltas).toHaveLength(0)
+
+  expect(opened?.getMap('meta').get('title')).toBe('first')
+  // The edit that was on disk before the read began.
+  expect(opened?.getMap('meta').get('e1')).toBe('kept')
+  // And the fold's own edit, since the reader re-read past the generation move.
+  expect((opened?.getMap('meta').get('bulk') as string | undefined)?.length).toBe(80 * 1024)
+})
+
 /**
  * The shrunk counterexample from the multi-instance convergence property
  * (`mcp-server/src/server/store/multi-instance-convergence.test.ts`), pinned.
@@ -439,6 +497,65 @@ it('after a reload it still carries the deltas appended since the fold', async (
   await reader.catchUp('ws-a', held, cursor)
   expect(held.getMap('meta').get('after-fold')).toBe('1')
   expect((held.getMap('meta').get('folded') as string | undefined)?.length).toBe(80 * 1024)
+})
+
+it('catchUp does not answer a stale document when a fold lands inside its reload', async () => {
+  // The reload branch re-reads the snapshot and then the log, which is the
+  // same two-call window open() has — and its own comment already names the
+  // hazard ("a fold landing in between would leave the log half-applied")
+  // while covering only the fold that landed BEFORE the snapshot read.
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+
+  // A fold moves the generation, so catchUp below takes the reload branch...
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('bulk', 'x'.repeat(80 * 1024))
+  other.commit()
+  await writer.save('ws-a', other)
+  // ...and a small edit sits in the post-fold log, ON DISK before catchUp
+  // begins. Losing it is a stale read, not a race the reader could not win.
+  other.getMap('meta').set('e1', 'kept')
+  other.commit()
+  await writer.save('ws-a', other)
+  expect(store.docs.get('workspace-tree:ws-a')?.generation).toBe(2)
+  expect(store.docs.get('workspace-tree:ws-a')?.deltas).toHaveLength(1)
+
+  // Armed for the reload branch's log read — the SECOND loadDeltas of this
+  // catchUp (the first is the tail read that notices the generation moved).
+  // The rival folds e1 into a new snapshot and empties the log.
+  const rival = (await writer.open('ws-a')) as LoroDoc
+  rival.getMap('meta').set('bulk2', 'y'.repeat(80 * 1024))
+  rival.commit()
+  let reads = 0
+  let folds = 0
+  store.beforeLoadDeltas = async () => {
+    reads += 1
+    if (reads !== 2) return
+    store.beforeLoadDeltas = undefined
+    await writer.save('ws-a', rival)
+    folds += 1
+  }
+
+  await reader.catchUp('ws-a', held, cursor)
+
+  expect(folds).toBe(1)
+  expect(store.refusals).toBe(0)
+  expect(store.docs.get('workspace-tree:ws-a')?.generation).toBe(3)
+  expect(store.docs.get('workspace-tree:ws-a')?.deltas).toHaveLength(0)
+
+  expect(held.getMap('meta').get('seed')).toBe('1')
+  expect((held.getMap('meta').get('bulk') as string | undefined)?.length).toBe(80 * 1024)
+  // The edit that was on disk before the reload began.
+  expect(held.getMap('meta').get('e1')).toBe('kept')
+  expect((held.getMap('meta').get('bulk2') as string | undefined)?.length).toBe(80 * 1024)
 })
 
 it('keeps a caught-up instance able to write, with both sides surviving the save', async () => {
