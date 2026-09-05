@@ -17,6 +17,7 @@ import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
+import { readRecentIds, recordRecentDocument } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
@@ -29,6 +30,7 @@ import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import { PeekDialog } from './PeekDialog.js'
+import { RecentLane } from './RecentLane.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
@@ -128,6 +130,13 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
+  /**
+   * What this device opened most recently in THIS workspace, newest first.
+   *
+   * Held as ids and resolved against `documents` at render, so a deleted or
+   * renamed document leaves the lane on its own.
+   */
+  const [recentIds, setRecentIds] = useState<readonly string[]>([])
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -253,6 +262,10 @@ export function WorkspaceFilesPanel({
   // list so an inline arrow from the page above cannot re-create it.
   const onOpenDocumentRef = useRef(onOpenDocument)
   onOpenDocumentRef.current = onOpenDocument
+  // Read through a ref for the same reason `onOpenDocument` is: `openEntry`
+  // is handed to four children and its identity has to stay stable.
+  const workspaceRef = useRef(workspace)
+  workspaceRef.current = workspace
   const lastReadListRef = useRef(readList)
 
   /**
@@ -269,8 +282,20 @@ export function WorkspaceFilesPanel({
    */
   const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
   const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
+    const scope = workspaceRef.current
+    if (scope !== undefined) {
+      recordRecentDocument(scope, entry.documentId)
+      setRecentIds(readRecentIds(scope))
+    }
     onOpenDocumentRef.current?.(entry.path)
   }, [])
+
+  // Keyed on the handle rather than folded into the SCOPE RESET below,
+  // because the handle is the scope this is filed under and it can arrive
+  // after the source (a page still resolving its address passes undefined).
+  useEffect(() => {
+    setRecentIds(workspace === undefined ? [] : readRecentIds(workspace))
+  }, [workspace])
 
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
@@ -287,6 +312,15 @@ export function WorkspaceFilesPanel({
     setSelected(null)
     setCardMenu(null)
     setPeek(null)
+    // The departed workspace's lane names its documents, so it is emptied
+    // here like everything else — and refilled in the same effect, from the
+    // ref rather than a dependency. Both halves together, because splitting
+    // them across two effects made the ORDER load-bearing and it was wrong:
+    // the handle-keyed effect below loaded first and this one blanked it, so
+    // the lane never survived a remount. Each effect now ends on the same
+    // value whichever runs last.
+    setRecentIds([])
+    if (workspaceRef.current !== undefined) setRecentIds(readRecentIds(workspaceRef.current))
     setRenaming(null)
     setRenameError(null)
     setRenameBusy(false)
@@ -810,6 +844,26 @@ export function WorkspaceFilesPanel({
             </button>
           ))}
         </fieldset>
+      )}
+      {/* Above the columns, and only in the browse view: a search has its
+          own answer to "which one did you mean", and a lane beside it
+          would compete with the results the person asked for. Absent on a
+          host that cannot open a document, since every tile would be
+          inert. */}
+      {documents !== null && query.trim() === '' && onOpenDocument !== undefined && (
+        <RecentLane
+          documents={documents}
+          recentIds={recentIds}
+          onOpen={openEntry}
+          renderThumbnail={(entry) => (
+            <DocumentThumbnail
+              key={entry.documentId}
+              document={entry}
+              loadRender={loadRender}
+              className="size-full"
+            />
+          )}
+        />
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         {documents === null ? (
