@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, render, screen, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { FolderContentsList } from './FolderContentsList.js'
 
 // The card's visual language (slice 2 of the 2026-09-05 picker redesign):

@@ -12,9 +12,9 @@
  */
 
 import { useEffect, useState } from 'react'
-import type { RailBlock } from '../components/markdown-editor/rail-geometry.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../lib/layout-worker-pool.js'
 import type { MarkdownRailResponse } from '../lib/layout-worker-protocol.js'
+import type { RailBlock } from '../lib/rail-geometry.js'
 
 export interface MarkdownOutline {
   readonly blocks: readonly RailBlock[]

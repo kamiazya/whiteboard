@@ -1,7 +1,7 @@
 import { vi } from 'vitest'
-import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
-import type { WorkspaceFilesSource } from '../components/workspace-files/files-source.js'
 import { searchDocuments as matchLoadedDocuments } from '../components/workspace-files/search-documents.js'
+import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
+import type { WorkspaceFilesSource } from '../lib/files-source.js'
 
 /** Every method a `vi.fn`, so call assertions need no casts. */
 export interface FakeFilesSource extends WorkspaceFilesSource {

@@ -1,9 +1,4 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
-import {
-  type WorkspaceFilesSource,
-  WorkspaceMissingError,
-} from '../components/workspace-files/files-source.js'
 import {
   createDocument,
   DaemonApiError,
@@ -19,6 +14,8 @@ import {
   setDocumentDisplayName,
   setDocumentPinned,
 } from './daemon-api-client.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 
 /**
  * `WorkspaceFilesSource` over the daemon's HTTP API — the same five client
