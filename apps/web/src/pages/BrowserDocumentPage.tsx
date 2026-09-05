@@ -45,11 +45,10 @@ import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
+import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
-import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
-import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import {
@@ -70,14 +69,13 @@ import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
-import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { browserFaviconStatus } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
-import { createInTabRenderBroker } from '../lib/render-broker.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -815,11 +813,6 @@ export function BrowserDocumentPage({
 
   // Tab favicon: persistence state as the status dot (degraded reads as
   // offline — data is at risk either way), scene content as the minimap.
-  // Read once at mount for the same remount-re-reads reason as webMcpEnabled
-  // above — the style picker now lives on the routed /settings page.
-  const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
-  // One shape for whichever kind this document is — the favicon draws
-  // it today, and a tree row's icon draws the same one.
   // Which owner holds THIS document — see `composeOutlineSource`, which is
   // where the two of them and the reason are written down.
   const readDocumentOutlineSource = useCallback(
@@ -827,25 +820,13 @@ export function BrowserDocumentPage({
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
     [readOutlineSource, markdownDoc],
   )
-
-  // One broker per page mount, for the tab icon's outline. It is the same
-  // seam the list surfaces ask through (ADR-0027); what it buys HERE is that
-  // a re-render, a sync-status change or a remount does not recompute a
-  // shape the document already has — the version key is what makes that safe.
-  const outlineBroker = useMemo(() => createInTabRenderBroker(), [])
-
-  const documentOutline = useDocumentOutline({
+  useDocumentFavicon({
+    settingsStore,
     documentId,
     kind: documentKind,
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
-    broker: outlineBroker,
-  })
-
-  useFavicon({
-    style: faviconStyle,
     status: browserFaviconStatus(persistence.kind),
-    rects: documentOutline,
   })
 
   // The option list refreshes asynchronously (see the effect above) while the
