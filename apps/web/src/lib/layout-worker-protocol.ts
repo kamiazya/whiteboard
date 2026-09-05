@@ -2,13 +2,20 @@
  * The wire between the editor and the layout worker.
  *
  * Everything here is structured-cloneable BY CONSTRUCTION, which is the
- * constraint that shapes it: `renderCanvasToSvg` takes FUNCTION seams
- * (`resolveReference`, `expandFileNode`) and a function cannot cross a
- * `postMessage`. Only the parts whose input is plain data — the
- * file-reference label table and the dangling-ref list — are carried here
- * and rebuilt worker-side by `composeReferenceSeam`; a canvas whose host
- * resolves reference CONTENT falls back to main-thread layout rather than
- * silently rendering without it (see `canLayoutInWorker`).
+ * constraint that shapes it: a layout reads FUNCTION seams, and a function
+ * cannot cross a `postMessage`. So what crosses is what the seams are a
+ * function OF — the reference graph and its tables as `ReferenceWire`, the
+ * label table, the dangling-ref list, the ids the LOD gate expanded — and
+ * the worker rebuilds the same seams from the same bytes
+ * (`referenceSeamsFromWire`, `overlayReferences`). The main thread builds
+ * its canvas seams from that wire too, which is what makes the two renders
+ * agree by construction; `layout-worker-parity.browser.test.tsx` asserts it
+ * anyway.
+ *
+ * It used to be narrower — only labels and dangling marks crossed, and a
+ * canvas whose host resolved reference CONTENT fell back to main-thread
+ * layout — which left every text-node embed a placeholder in the worker
+ * and, for parity, on the main thread too.
  *
  * Markdown text crosses as part of the canvas and the WORKER parses it, so
  * parse and layout leave the main thread together. The old blocker was never
@@ -24,7 +31,12 @@
  * Dates that a JSON round trip would quietly drop.
  */
 
-import type { BoundingBox, EdgeAnchorPair, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  BoundingBox,
+  EdgeAnchorPair,
+  ReferenceWire,
+  Scene,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
@@ -69,6 +81,19 @@ export type LayoutRequest = LayoutSubject & {
   readonly id: number
   readonly theme: ResolvedTheme
   readonly fileRefLabels?: readonly FileRefLabel[]
+  /**
+   * What the canvas points at, as data: the loaded graph and the alias,
+   * title and extras tables evaluated over it. The worker rebuilds the
+   * reference bundle from this, so a text node's `![[note]]` and a file
+   * node's content draw here exactly as on the main thread.
+   */
+  readonly references?: ReferenceWire
+  /**
+   * File nodes the editor's LOD gate expanded THIS render — the gate reads
+   * the viewport, which the worker does not have, so its decision crosses as
+   * ids and the worker's `expandFileNode` is a lookup.
+   */
+  readonly expandedFileIds?: readonly string[]
   /** File refs the host resolved as dangling — the plain-data form of the
    * seam's `missing` field, precomputed against THIS canvas's file nodes
    * (a function cannot cross the wire; a small ref list can). */
@@ -258,32 +283,3 @@ export type LayoutResponse =
  * the caller must stop asking rather than retry.
  */
 export const FONT_DEGRADED = 'font-degraded'
-
-/**
- * Whether a canvas's render options can cross the wire at all.
- *
- * The CONTENT seam is supplied by a host page and cannot be serialized, so
- * a canvas that could call it has to be laid out on the main thread —
- * shipping a scene rendered WITHOUT a seam the caller wired would be a
- * silent content regression, worse than the jank this worker exists to
- * remove. Labels and dangling refs are exempt because they already cross as
- * data and the worker rebuilds them through `composeReferenceSeam`.
- */
-export function canLayoutInWorker(
-  options: {
-    readonly resolveReferenceContent?: unknown
-    readonly expandFileNode?: unknown
-  },
-  canvas: SpatialCanvas,
-): boolean {
-  // The seam only disqualifies a canvas that could actually CALL it: it is
-  // keyed on a file reference, so a canvas without a file node lays out
-  // identically with or without it. This is judged per canvas rather than
-  // per host because the real pages supply the seam UNCONDITIONALLY
-  // (useDocumentFileSeams returns it whether or not any file node exists) — a
-  // presence check reads as "this host has file support" and silently turns
-  // the worker off for every production canvas.
-  const hasFileNode = canvas.nodes.some((node) => node.type === 'file')
-  if (!hasFileNode) return true
-  return options.resolveReferenceContent === undefined && options.expandFileNode === undefined
-}

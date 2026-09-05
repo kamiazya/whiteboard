@@ -1,4 +1,4 @@
-import { referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import { referenceWire } from '@kamiazya/whiteboard-canvas-render'
 // LOD auto-expansion for canvas embeds (embed spec v2): a file node whose
 // on-screen box is large enough renders the referenced canvas as an inline
 // miniature; smaller ones stay cards. The decision follows zoom — zooming
@@ -32,8 +32,8 @@ function makeHost(initial: SpatialCanvas) {
           onChange={(next) => setCanvas(next)}
           theme="light"
           fileRefOptions={[{ file: 'ref-1', label: 'Referenced canvas' }]}
-          references={referenceSeams(new Map(), {
-            extra: (ref) => (ref === 'ref-1' ? { canvas: referenced } : undefined),
+          references={referenceWire(new Map(), {
+            extras: new Map([['ref-1', { canvas: referenced }]]),
           })}
         />
       </div>

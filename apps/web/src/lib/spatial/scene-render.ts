@@ -8,6 +8,7 @@
 import type {
   BoundingBox,
   MeasureText,
+  ReferenceSeams,
   ResolvedReference,
 } from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
@@ -23,6 +24,8 @@ export interface RenderCanvasOptions {
   /** Defaults to 'light' so existing call sites render the pre-existing chrome unchanged. */
   readonly theme?: ResolvedTheme
   /** Passed through to layout: what the host resolved for one reference. */
+  /** Passed through to layout: the reference bundle text-node bodies read. */
+  readonly references?: ReferenceSeams
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean

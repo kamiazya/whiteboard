@@ -58,7 +58,7 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type { BoundingBox, MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
@@ -68,6 +68,7 @@ import {
   edgeLabelAnchor,
   outlineContentBox,
   placeCommentBubble,
+  referenceSeamsFromWire,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
@@ -312,16 +313,15 @@ export interface SpatialEditorProps {
    * synchronous: hosts pre-fetch and cache, and an unresolved reference
    * returns undefined and the card renders. Absent → embeds never expand.
    *
-   * Content only. The readable LABEL comes from `fileRefOptions` and the
-   * dangling state from `missingFileRef`, both of which this component
-   * layers on top — they are plain data, so they can cross to the layout
-   * worker while this cannot, and keeping them apart is what lets a canvas
-   * with labelled references still lay out off the main thread.
-   *
-   * A markdown body arrives parsed rather than raw so layout never runs a
-   * markdown parse per file node per frame.
+   * Content only, as DATA: the loaded reference graph with its alias,
+   * title and extras tables. The readable LABEL comes from `fileRefOptions`
+   * and the dangling state from `missingFileRef`, layered on top. This
+   * component builds the reference bundle from the wire for its own
+   * thread and posts the wire to the layout worker, which builds the same
+   * bundle from the same bytes — so what a text node embeds and what a file
+   * node shows cannot differ between the two.
    */
-  readonly references?: ReferenceSeams
+  readonly references?: ReferenceWire
   /**
    * Stores a picked/dropped/pasted image and returns the reference to put
    * in the created file node, or undefined on failure (nothing is
@@ -559,10 +559,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // the content cache — built once in useFileSeamScene and spread into
     // every scene-building call below (committed scene, drag ghost,
     // drag-static backdrop, resize preview).
-    const { fileSeamOptions, missingFileRefs } = useFileSeamScene({
+    const seams = useMemo(
+      () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
+      [references],
+    )
+    const { fileSeamOptions, missingFileRefs, expandedFileIds } = useFileSeamScene({
       canvas,
       zoom: viewport.zoom,
-      references,
+      references: seams,
       fileRefOptions,
       missingFileRef,
       resolvedMeasure,
@@ -615,8 +619,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         threads,
       },
       fileSeamOptions,
-      fileRefOptions,
-      missingFileRefs,
+      { fileRefLabels: fileRefOptions, missingFileRefs, references, expandedFileIds },
     )
     const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
       useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })

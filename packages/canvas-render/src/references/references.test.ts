@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import type { LoadedReference, ReferenceGraph } from './loaded-reference.js'
 import { overlayReferences, referenceSeams } from './seams.js'
 import { REFERENCE_BUDGET, referenceTargets } from './targets.js'
+import { referenceSeamsFromWire, referenceWire } from './wire.js'
 
 const NOTE_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const BOARD_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -45,6 +46,23 @@ describe('referenceTargets', () => {
       loaded: graphOf({ 'boards/a': { documentId: BOARD_ID, canvas: nested } }),
     })
     expect(targets).toEqual(['boards/a', 'boards/b'])
+  })
+
+  it("names what a canvas's text nodes embed and link, as a seed and once loaded", () => {
+    // A text node's body is markdown like any note's, and the composer lays
+    // it out with the same seams — so what it points at has to load too.
+    const withText: SpatialCanvas = {
+      nodes: [
+        { id: 't', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'see ![[notes/a]]' },
+      ],
+      edges: [],
+    }
+    expect(referenceTargets({ canvases: [withText] })).toEqual(['notes/a'])
+    const targets = referenceTargets({
+      bodies: ['![[boards/b]]'],
+      loaded: graphOf({ 'boards/b': { documentId: BOARD_ID, canvas: withText } }),
+    })
+    expect(targets).toEqual(['boards/b', 'notes/a'])
   })
 
   it("stops at the layout's embed depth, so a link graph is never loaded whole", () => {
@@ -148,6 +166,42 @@ describe('referenceSeams', () => {
     const seams = referenceSeams(graphOf({ bad: { documentId: 'B', name: 'Bad', body: ' ' } }))
     expect(() => seams.resolveEmbed('B')).not.toThrow()
     expect(seams.resolveReference('bad')).toEqual({ label: 'Bad' })
+  })
+})
+
+describe('referenceWire', () => {
+  it('carries a graph, the tables the caller answers over it, and data extras, so the rebuilt seams answer as the originals', () => {
+    // The wire is what crosses postMessage: every field is plain data, and
+    // the alias/title tables hold exactly the answers the caller's functions
+    // gave for what this graph names — so a worker building seams from the
+    // wire answers what the main thread's bundle would have.
+    const graph = graphOf({
+      'notes/plan': { documentId: NOTE_ID, body: 'see [[boards/roadmap]]' },
+      'boards/roadmap': { canvas: board },
+      'notes/missing': null,
+    })
+    const wire = referenceWire(graph, {
+      resolveAlias: (alias) => (alias === 'boards/roadmap' ? BOARD_ID : null),
+      resolveTitle: (id) => (id === BOARD_ID ? 'Roadmap' : id === NOTE_ID ? 'Plan' : undefined),
+      extras: new Map([['boards/roadmap', { label: 'Board card' }]]),
+    })
+    expect(structuredClone(wire)).toEqual(wire)
+    expect(wire.aliases).toEqual([['boards/roadmap', BOARD_ID]])
+    expect(wire.titles).toEqual(
+      expect.arrayContaining([
+        [NOTE_ID, 'Plan'],
+        [BOARD_ID, 'Roadmap'],
+      ]),
+    )
+
+    const seams = referenceSeamsFromWire(wire)
+    expect(seams.resolveAlias('boards/roadmap')).toBe(BOARD_ID)
+    expect(seams.resolveAlias('notes/plan')).toBe(NOTE_ID)
+    expect(seams.resolveTitle(BOARD_ID)).toBe('Roadmap')
+    expect(seams.resolveTitle(NOTE_ID)).toBe('Plan')
+    expect(seams.resolveEmbed(NOTE_ID)?.title).toBe('Plan')
+    expect(seams.resolveReference('boards/roadmap')).toEqual({ label: 'Board card', canvas: board })
+    expect(seams.resolveReference('notes/missing')).toBeUndefined()
   })
 })
 

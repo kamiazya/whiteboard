@@ -18,11 +18,17 @@
 import {
   type FacetCardData,
   type LoadedReference,
-  type ReferenceSeams,
-  referenceSeams,
+  type ReferenceExtra,
+  type ReferenceWire,
+  referenceTargets,
+  referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  type SpatialCanvas,
+  type StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { collectFileRefs } from '../lib/document-embed-content.js'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../lib/document-file-contract.js'
@@ -43,12 +49,16 @@ export interface UseDocumentFileSeamsOptions {
 
 export interface DocumentFileSeams {
   /**
-   * Every reference seam over what this hook has loaded, built by
-   * canvas-render's `referenceSeams` — the layout ranks the fields, this
-   * hook only reaches the keeper and adds what a file reference carries
-   * beyond its document (an image asset, a facet card).
+   * Everything the canvas points at, as DATA: what this hook loaded, the
+   * page's alias and title tables evaluated over it, and what a file
+   * reference carries beyond its document (an image asset, a facet card).
+   * The editor builds the reference bundle from it on both threads — the
+   * layout worker cannot take a function — so the two renders cannot
+   * disagree; a surface beside the canvas builds its own with
+   * `referenceSeamsFromWire`. The shape is the editor's prop set, so a page
+   * hands the object over and spreads it once.
    */
-  references: ReferenceSeams
+  references: ReferenceWire
   onAddImage: (file: File) => Promise<string | undefined>
   isImageFileRef: (file: string) => boolean
 }
@@ -89,8 +99,39 @@ export function useDocumentFileSeams({
     [],
   )
 
+  // The shared record per reference: what this keeper loaded, minus the
+  // facets, which are a surface extra below. `null` keeps the terminal
+  // "nothing here" slot so the seams answer without the layout retrying.
+  // The id the page's table resolved a written path to rides on the record,
+  // so a body's `![[path]]` finds it by id.
+  const graph = useMemo(() => {
+    const entries = new Map<string, LoadedReference | null>()
+    for (const [ref, document] of embedContent) {
+      const documentId = documentIdSchema.safeParse(ref).success
+        ? ref
+        : (resolveAlias?.(ref) ?? undefined)
+      entries.set(
+        ref,
+        document === null
+          ? null
+          : {
+              ...(documentId !== undefined ? { documentId } : {}),
+              ...(document.name !== undefined ? { name: document.name } : {}),
+              ...(document.body !== undefined ? { body: document.body } : {}),
+              ...(document.canvas !== undefined ? { canvas: document.canvas } : {}),
+            },
+      )
+    }
+    return entries
+  }, [embedContent, resolveAlias])
+
   useEffect(() => {
-    const refs = collectFileRefs(canvas).filter((ref) => !adapterRef.current.isImageRef(ref))
+    // Everything the canvas points at — its file nodes AND what its text
+    // nodes embed or link, transitively through what has loaded — minus
+    // image assets, which are not documents.
+    const refs = referenceTargets({ canvases: [canvas], loaded: graph }).filter(
+      (ref) => !adapterRef.current.isImageRef(ref),
+    )
     if (refs.length === 0) return
     // Normalised on BOTH sides: the write below stores `?? ''`, so comparing
     // against a raw `undefined` left a reference with no stamp entry (a
@@ -121,7 +162,7 @@ export function useDocumentFileSeams({
     return () => {
       cancelled = true
     }
-  }, [canvas, embedContent, stampOf])
+  }, [canvas, embedContent, graph, stampOf])
 
   useEffect(() => {
     const refs = collectFileRefs(canvas).filter(
@@ -153,44 +194,29 @@ export function useDocumentFileSeams({
     }
   }, [canvas, imageUrls])
 
-  // The shared record per reference: what this keeper loaded, minus the
-  // facets, which are a surface extra below. `null` keeps the terminal
-  // "nothing here" slot so the seams answer without the layout retrying.
-  const graph = useMemo(() => {
-    const entries = new Map<string, LoadedReference | null>()
+  // What this surface adds beside the content, as data so it rides the
+  // wire as-is. An image reference is never loaded as a document, so its
+  // href stands alone, and the layout ranks an image above everything
+  // anyway; a document with readable facets carries its card.
+  const extras = useMemo(() => {
+    const out = new Map<string, ReferenceExtra>()
+    for (const [ref, href] of imageUrls) out.set(ref, { image: { href } })
     for (const [ref, document] of embedContent) {
-      entries.set(
-        ref,
-        document === null
-          ? null
-          : {
-              ...(document.name !== undefined ? { name: document.name } : {}),
-              ...(document.body !== undefined ? { body: document.body } : {}),
-              ...(document.canvas !== undefined ? { canvas: document.canvas } : {}),
-            },
-      )
+      if (document === null || out.has(ref)) continue
+      const facets = toFacetCard(ref, document.facets, document.name)
+      if (facets !== undefined) out.set(ref, { facets })
     }
-    return entries
-  }, [embedContent])
+    return out
+  }, [embedContent, imageUrls])
 
   const references = useMemo(
     () =>
-      referenceSeams(graph, {
+      referenceWire(graph, {
         ...(resolveAlias !== undefined ? { resolveAlias } : {}),
         ...(resolveTitle !== undefined ? { resolveTitle } : {}),
-        extra: (ref) => {
-          // Checked first and returned alone: an image reference is never
-          // loaded as a document, so there is nothing else to carry, and the
-          // layout ranks an image above everything anyway.
-          const href = imageUrls.get(ref)
-          if (href !== undefined) return { image: { href } }
-          const document = embedContent.get(ref)
-          if (document === undefined || document === null) return undefined
-          const facets = toFacetCard(ref, document.facets, document.name)
-          return facets === undefined ? undefined : { facets }
-        },
+        extras,
       }),
-    [graph, embedContent, imageUrls, resolveAlias, resolveTitle],
+    [graph, extras, resolveAlias, resolveTitle],
   )
   const onAddImage = useCallback((file: File) => adapterRef.current.storeImage(file), [])
   const isImageFileRef = useCallback((file: string) => adapterRef.current.isImageRef(file), [])
