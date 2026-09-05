@@ -11,7 +11,7 @@
  * here would put that decision in two places.
  */
 
-import { compareDocumentEntries, type WorkspaceDocumentEntry } from './document-entry.js'
+import { compareDocumentEntries, type WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 
 /**
  * Whether one document answers a query. Lived beside the editor header's

@@ -316,6 +316,7 @@ export function BrowserDocumentPage({
     setHistoryOpen(false)
     setBookmarkArmed(0)
     setPreview(null)
+    setSelectedThreadId(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -716,6 +717,15 @@ export function BrowserDocumentPage({
    * not a rail that takes a third of the surface from everyone.
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
+  // The conversation the reader is currently on, shared by the rail and the
+  // body's own projection so the two always point at the same one: pressing
+  // a gutter marker opens the thread in the rail, and pressing a rail row
+  // scrolls the body to its passage.
+  const [selectedThreadId, setSelectedThreadId] = useState<string | null>(null)
+  const revealThread = useCallback((threadId: string) => {
+    setCommentsOpen(true)
+    setSelectedThreadId(threadId)
+  }, [])
   /**
    * This document's conversations, whichever half of the page holds them.
    *
@@ -1251,6 +1261,9 @@ export function BrowserDocumentPage({
                           linkTargets,
                           onOpenDocument: (id) => navigateToDocument(id),
                           resolveEmbed,
+                          threads: annotations,
+                          selectedThreadId,
+                          onSelectThread: revealThread,
                         }
                   }
                   spatial={() => (
@@ -1307,6 +1320,8 @@ export function BrowserDocumentPage({
                 <CommentsPanel
                   threads={annotations}
                   resolveAnchor={resolveAnchor}
+                  revealThreadId={selectedThreadId}
+                  onSelect={(thread) => setSelectedThreadId(thread.id)}
                   // Not while a past version is on screen: the editor is
                   // replaced by DocumentPreview but this rail is not, and a
                   // reply is a write to the LIVE document — sent from a

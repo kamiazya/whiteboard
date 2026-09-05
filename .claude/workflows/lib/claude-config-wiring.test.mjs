@@ -105,11 +105,12 @@ test('the Simplify phase runs a repo-owned agent, not a foreign plugin agent', (
 // into every session regardless of what was being touched. This is that prose made executable.
 // A rule for something under `tools/` is named `tool-<name>.md` and scoped there, for the same
 // reason and by the same check: `package-arch-lint.md` scoped to `tools/arch-lint/**` failed this
-// guard, and the name was the thing that was wrong — arch-lint is not a package.
-test('every package-/tool-<name>.md rule is path-scoped to its own directory', () => {
+// guard, and the name was the thing that was wrong — arch-lint is not a package. `apps/` gets
+// the same treatment as `app-<name>.md`, so a composition root's rule is scoped the same way.
+test('every package-/tool-/app-<name>.md rule is path-scoped to its own directory', () => {
   const rulesDir = path.join(repoRoot, '.claude', 'rules')
   const unscoped = []
-  const prefixes = { 'package-': 'packages', 'tool-': 'tools' }
+  const prefixes = { 'package-': 'packages', 'tool-': 'tools', 'app-': 'apps' }
   for (const file of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {
     const prefix = Object.keys(prefixes).find((p) => file.startsWith(p))
     if (prefix === undefined) continue

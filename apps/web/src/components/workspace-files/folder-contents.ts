@@ -21,7 +21,7 @@ export interface FolderChild {
   readonly count: number
 }
 
-import { compareDocumentEntries } from './document-entry.js'
+import { compareDocumentEntries } from '../../lib/document-entry.js'
 
 interface PathBearing {
   readonly path: string

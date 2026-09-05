@@ -40,6 +40,9 @@ export interface MarkdownDocumentSession
     | 'resolveEmbed'
     | 'autoFocus'
     | 'title'
+    | 'threads'
+    | 'selectedThreadId'
+    | 'onSelectThread'
   > {
   /** Null until the document has hydrated — nothing editable renders before. */
   readonly body: string | null

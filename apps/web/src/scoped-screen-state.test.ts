@@ -335,6 +335,11 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
+  // Unlike `commentsOpen`, this one names a THREAD, and a thread id belongs
+  // to the document that holds it: left standing across a switch it would
+  // scroll the arrived body to a passage the departed document quoted, or
+  // expand a conversation that is not on this document at all.
+  selectedThreadId: 'cleared on switch',
   commentsOpen:
     'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
   documents:

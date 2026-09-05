@@ -29,9 +29,9 @@ import type { LoroDoc } from 'loro-crdt'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { MarkdownEditor } from '../components/markdown-editor/MarkdownEditor.js'
 import { SpatialEditor } from '../components/spatial-editor/SpatialEditor.js'
-import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */

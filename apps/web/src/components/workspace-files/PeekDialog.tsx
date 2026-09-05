@@ -1,6 +1,6 @@
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { DocumentPreview } from './DocumentPreview.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { DocumentRender } from './load-row-render.js'
 
 /**

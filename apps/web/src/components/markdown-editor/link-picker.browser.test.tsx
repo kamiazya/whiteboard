@@ -5,8 +5,8 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import type { LinkTarget } from '../../lib/link-target.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
-import type { LinkTarget } from './link-target.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {

@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Folder } from 'lucide-react'
 import { useMemo, useState } from 'react'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 export interface WorkspaceFolderTreeProps {
   documents: readonly WorkspaceDocumentEntry[]

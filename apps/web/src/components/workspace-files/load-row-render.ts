@@ -31,13 +31,13 @@
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
+import type { WorkspaceFilesSource } from '../../lib/files-source.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
-import type { WorkspaceFilesSource } from './files-source.js'
 
 export interface DocumentRender {
   readonly svg: string

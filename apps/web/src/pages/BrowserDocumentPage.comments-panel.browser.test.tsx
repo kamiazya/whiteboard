@@ -352,3 +352,63 @@ it('replies from the rail, and the reply joins the conversation it was typed int
     timeout: 15_000,
   })
 })
+
+/** The same note, but with a body the stored quote can actually be found in. */
+function noteHoldingAPlacedThread(): Uint8Array {
+  const doc = new LoroDoc()
+  doc.getText('body').insert(0, 'A first line.\nThen the second paragraph, which is disputed.')
+  writeCommentThread(doc, {
+    id: 't-placed',
+    anchor: { kind: 'text', quote: { exact: 'the second paragraph' }, start: 19, end: 39 },
+    status: 'open',
+    // Two, so the assertion below can tell an OPENED conversation from a
+    // list that merely shows its first line as an excerpt.
+    messages: [
+      { id: 'm1', body: 'disputed by whom?' },
+      { id: 'm2', body: 'by the reviewer' },
+    ],
+  })
+  return doc.export({ mode: 'snapshot' })
+}
+
+it('reaches a note thread from the body: its gutter marker opens the rail on that conversation', async () => {
+  // The round trip the rail alone could not close. A conversation about a
+  // PASSAGE was reachable only by scanning a list that says nothing about
+  // where in the document it points.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingAPlacedThread())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  const marker = await waitFor(
+    () => {
+      const found = document.querySelector<HTMLElement>(
+        '.cm-annotation-gutter-marker[data-thread-id="t-placed"]',
+      )
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    },
+    { timeout: 15_000 },
+  )
+  // The passage itself is marked in the text, not only named in the margin.
+  expect(document.querySelector('[data-thread-id="t-placed"].cm-annotation')?.textContent).toBe(
+    'the second paragraph',
+  )
+
+  // The rail is shut until now: this press is what opens it.
+  expect(screen.queryByTestId('comments-panel')).toBeNull()
+  marker.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+
+  await waitFor(() => expect(screen.getByText('by the reviewer')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+})

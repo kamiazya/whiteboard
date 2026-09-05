@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { DocumentSearchHit, WorkspaceFilesSource } from './files-source.js'
+import type { DocumentSearchHit, WorkspaceFilesSource } from '../../lib/files-source.js'
 
 /** One screenful of results; the ranking makes a longer list noise. */
 const SEARCH_LIMIT = 20

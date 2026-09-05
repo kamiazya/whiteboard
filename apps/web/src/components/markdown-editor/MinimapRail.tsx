@@ -14,14 +14,14 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { cn } from '../../lib/utils.js'
-import { RAIL_WIDTH_PX } from './preview-width.js'
 import {
   type RailBlock,
   railGeometry,
   railOffsetToDocumentY,
   viewportFrame,
-} from './rail-geometry.js'
+} from '../../lib/rail-geometry.js'
+import { cn } from '../../lib/utils.js'
+import { RAIL_WIDTH_PX } from './preview-width.js'
 
 export interface MinimapRailProps {
   readonly blocks: readonly RailBlock[]
