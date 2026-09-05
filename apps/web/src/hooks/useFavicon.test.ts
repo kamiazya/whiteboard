@@ -16,7 +16,7 @@ describe('useFavicon lifecycle', () => {
   })
 
   it('restores the static favicon on unmount (navigation away from the canvas)', () => {
-    const { unmount } = renderHook(() => useFavicon({ style: 'dot', status: 'saved', rects: [] }))
+    const { unmount } = renderHook(() => useFavicon({ style: 'dot', status: 'quiet', rects: [] }))
     vi.advanceTimersByTime(500)
     unmount()
     const links = document.head.querySelectorAll('link[rel="icon"]')
@@ -25,7 +25,7 @@ describe('useFavicon lifecycle', () => {
   })
 
   it('does not install a broken icon where canvas 2D is unavailable (jsdom)', () => {
-    renderHook(() => useFavicon({ style: 'minimap', status: 'saved', rects: [] }))
+    renderHook(() => useFavicon({ style: 'minimap', status: 'quiet', rects: [] }))
     vi.advanceTimersByTime(500)
     // renderFavicon returns null here, so the hook must leave the head alone.
     expect(document.head.querySelector('link[data-wb-favicon]')).toBeNull()
@@ -33,7 +33,7 @@ describe('useFavicon lifecycle', () => {
 
   it('cancels the pending debounce on unmount: renderFavicon never fires post-unmount', () => {
     const renderFaviconSpy = vi.spyOn(favicon, 'renderFavicon')
-    const { unmount } = renderHook(() => useFavicon({ style: 'dot', status: 'saved', rects: [] }))
+    const { unmount } = renderHook(() => useFavicon({ style: 'dot', status: 'quiet', rects: [] }))
     unmount()
     vi.runAllTimers()
     expect(renderFaviconSpy).not.toHaveBeenCalled()

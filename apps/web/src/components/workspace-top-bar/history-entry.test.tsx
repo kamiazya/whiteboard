@@ -17,7 +17,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('../HeaderBranchChip', () => ({
   HeaderBranchChip: () => <div data-testid="header-branch-chip" />,
 }))
-vi.mock('@/hooks/useDirtyState', () => ({ useDirtyState: () => ({ isDirty: false }) }))
 vi.mock('@kamiazya/whiteboard-mcp/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'

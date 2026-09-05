@@ -1,9 +1,12 @@
 /**
  * Waiting until a markdown body has actually been written to the store.
  *
- * `SaveStatusChip` publishes `data-save-state` and `data-last-saved-at`; the
- * accessible name says "Saved" for a document that has never been written
- * too, which is right for a reader and useless as proof for a test.
+ * `BrowserDocumentPage` publishes the persistence FACTS on a hidden element
+ * (`data-testid="persistence-state"`, with `data-save-state` and
+ * `data-last-saved-at`) — hidden because the row shows no save state to a
+ * person; the shell mark answers for the keeper, and only on a condition. A
+ * `saved` kind alone is true of a document that has never been written too,
+ * which is useless as proof for a test.
  *
  * The subtlety this helper exists for is one step past that. A settled
  * `saved` plus a present `data-last-saved-at` proves SOME write landed — not
@@ -32,7 +35,7 @@ import { SAVE_DEBOUNCE_MS } from '../pages/use-markdown-document.js'
 const SETTLE_MS = SAVE_DEBOUNCE_MS * 2
 
 function expectSettled(): string {
-  const chip = document.querySelector('[data-testid="save-status-chip"]')
+  const chip = document.querySelector('[data-testid="persistence-state"]')
   expect(chip?.getAttribute('data-save-state')).toBe('saved')
   const at = chip?.getAttribute('data-last-saved-at')
   expect(at).toBeTruthy()

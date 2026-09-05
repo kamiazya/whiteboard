@@ -63,11 +63,16 @@ describe('initial tool follows the canvas shape (real browser)', () => {
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Note' }))
     // The new node's inline editor opens focused; commit it by clicking away.
     await userEvent.click(screen.getByTestId('spatial-editor-container'))
+    // A landed write, from the facts the page publishes hidden: `saved` alone
+    // is true of a never-written document too, so the timestamp is what
+    // proves the node reached the store before the next mount reads it.
     await waitFor(
-      () => expect(screen.getByTestId('save-status-chip').getAttribute('aria-label')).toBe('Saved'),
-      {
-        timeout: 5000,
+      () => {
+        const fact = screen.getByTestId('persistence-state')
+        expect(fact.getAttribute('data-save-state')).toBe('saved')
+        expect(fact.getAttribute('data-last-saved-at')).toBeTruthy()
       },
+      { timeout: 5000 },
     )
 
     cleanup()
