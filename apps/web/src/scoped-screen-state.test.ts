@@ -98,6 +98,11 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   selected: 'cleared on switch',
   cardMenu: 'cleared on switch',
   peek: 'cleared on switch',
+  // Reloaded from storage on every `workspace` change rather than emptied,
+  // which is the same guarantee: what is on screen always belongs to the
+  // workspace on screen. Its own effect, since the handle can arrive after
+  // the source.
+  recentIds: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
@@ -114,6 +119,7 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   rootRef: 'no subject: the panel’s own DOM node',
   onFolderChangeRef: 'no subject: mirrors the callback prop, reassigned every render',
   onOpenDocumentRef: 'no subject: mirrors the callback prop, reassigned every render',
+  workspaceRef: 'no subject: mirrors the workspace prop, reassigned every render',
   moveDocumentRef: 'no subject: mirrors the current handler, reassigned every render',
   lastReadListRef:
     'no subject: holds the PREVIOUS source’s identity so the reset block can tell a real switch from a StrictMode replay — clearing it would make every replay read as a switch, which is the trap the effect’s own note describes',
