@@ -333,6 +333,77 @@ describe('DaemonDocumentPage comments panel', () => {
     )
   })
 
+  it('Connections takes the same slot: opening it closes the rail, and its list is a column, not a band', async () => {
+    mockGetDocumentBacklinks.mockResolvedValue({
+      backlinks: [
+        {
+          documentId: 'id-source',
+          path: 'source',
+          name: 'Source board',
+          kind: 'spatial',
+          contexts: ['embedded on this canvas'],
+        },
+      ],
+      unlinkedMentions: [],
+    })
+    await renderSpatial()
+    fireEvent.click(await screen.findByRole('button', { name: /^comments/i }))
+    await screen.findByTestId('comments-panel')
+
+    fireEvent.click(await screen.findByRole('button', { name: /connections \(1\)/i }))
+    const panel = await screen.findByTestId('connections-panel')
+    expect(within(panel).getByText('Source board')).toBeTruthy()
+    expect(screen.queryByTestId('comments-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /^comments/i }).getAttribute('aria-pressed')).toBe(
+      'false',
+    )
+    // A column in the editor row — the shell's inspector slot — rather than
+    // a strip overlaid under the header.
+    expect(panel.closest('main')).not.toBeNull()
+    expect(panel.className).not.toContain('top-full')
+  })
+
+  it('Properties takes the slot on a markdown document: opening it closes History', async () => {
+    mockListDocuments.mockResolvedValue({
+      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+    })
+    const fakeVersionsBackend: VersionsBackend = {
+      list: async () => [],
+      loadPast: async () => ({ kind: 'markdown', body: '' }),
+      save: async () => {
+        throw new Error('not exercised by this test')
+      },
+      restore: async () => {},
+      putThumbnail: async () => {},
+      loadThumbnail: async () => null,
+    }
+    await act(async () => {
+      render(
+        <VersionsBackendContext.Provider value={fakeVersionsBackend}>
+          <DaemonDocumentPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            workspaceId="w1"
+            path="note"
+            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
+          />
+        </VersionsBackendContext.Provider>,
+        { container: document.body },
+      )
+    })
+    fireEvent.click(await screen.findByRole('button', { name: /history/i }))
+    await screen.findByTestId('history-panel')
+
+    fireEvent.click(await screen.findByRole('button', { name: 'Properties' }))
+    const panel = await screen.findByTestId('properties-panel')
+    expect(within(panel).getByRole('combobox', { name: /type/i })).toBeTruthy()
+    expect(screen.queryByTestId('history-panel')).toBeNull()
+    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-expanded')).toBe(
+      'false',
+    )
+    // And no second copy of the editor overlaid under the header.
+    expect(screen.getAllByRole('combobox', { name: /type/i })).toHaveLength(1)
+  })
+
   it('opens the rail under a variation preview, but withholds the reply box', async () => {
     // A VERSION preview cannot host the rail any more: it is entered from the
     // History column, which holds the one inspector slot, and the preview

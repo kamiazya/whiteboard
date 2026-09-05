@@ -1,6 +1,5 @@
 import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { FileText, LayoutDashboard, Waypoints } from 'lucide-react'
-import { useId, useState } from 'react'
 import { HEADER_WIDE_TOGGLE_CLASS } from '../../components/ui/header-button.js'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
@@ -10,6 +9,45 @@ export type ConnectionsBacklink = DocumentBacklinksResponse['backlinks'][number]
 export interface ConnectionsChipProps {
   /** `null` while the fetch is in flight or unavailable — the chip waits. */
   readonly backlinks: readonly ConnectionsBacklink[] | null
+  /** Whether the inspector slot is showing the connections panel. */
+  readonly open: boolean
+  readonly onToggle: () => void
+}
+
+/**
+ * The opener for the "linked from" half of the incentive loop: a link
+ * someone writes elsewhere permanently shows up HERE, on the document it
+ * points at. Renders beside DocumentProperties in the merged header row;
+ * what it opens is `ConnectionsPanel`, in the page's one inspector slot.
+ *
+ * A zero count still renders. The empty chip is the affordance that says
+ * links land somewhere, which is the reason to write one; hiding it until
+ * content exists would hide the loop exactly where it needs starting.
+ */
+export function ConnectionsChip({ backlinks, open, onToggle }: ConnectionsChipProps) {
+  const loaded = backlinks !== null
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={`Connections${loaded ? ` (${backlinks.length})` : ''}`}
+          aria-expanded={open}
+          disabled={!loaded}
+          onClick={onToggle}
+          className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
+        >
+          <Waypoints aria-hidden="true" className="size-4" />
+          {loaded && backlinks.length}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>Connections — documents linking here</TooltipContent>
+    </Tooltip>
+  )
+}
+
+export interface ConnectionsPanelProps {
+  readonly backlinks: readonly ConnectionsBacklink[]
   /**
    * Sources naming this document in prose without a link — the panel's
    * seeding section. Absent hides it (a backend that answers no mentions).
@@ -25,84 +63,42 @@ export interface ConnectionsChipProps {
   readonly onLinkify?: (mention: ConnectionsBacklink) => void
 }
 
-/**
- * The "linked from" half of the incentive loop: a link someone writes
- * elsewhere permanently shows up HERE, on the document it points at. Renders
- * beside DocumentProperties in the merged header row, and — like its
- * Type/Tags disclosure — overlays below the header instead of growing it.
- *
- * A zero count still renders. The empty chip is the affordance that says
- * links land somewhere, which is the reason to write one; hiding it until
- * content exists would hide the loop exactly where it needs starting.
- */
-export function ConnectionsChip({ backlinks, mentions, onOpen, onLinkify }: ConnectionsChipProps) {
-  const [open, setOpen] = useState(false)
-  const panelId = useId()
-  const loaded = backlinks !== null
-
+/** The documents linking here, and the ones naming this document without a link. */
+export function ConnectionsPanel({
+  backlinks,
+  mentions,
+  onOpen,
+  onLinkify,
+}: ConnectionsPanelProps) {
   return (
-    <>
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <button
-            type="button"
-            aria-label={`Connections${loaded ? ` (${backlinks.length})` : ''}`}
-            aria-expanded={open}
-            aria-controls={panelId}
-            disabled={!loaded}
-            onClick={() => setOpen((current) => !current)}
-            className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
-          >
-            <Waypoints aria-hidden="true" className="size-4" />
-            {loaded && backlinks.length}
-          </button>
-        </TooltipTrigger>
-        <TooltipContent>Connections — documents linking here</TooltipContent>
-      </Tooltip>
-      {open && loaded && (
-        <section
-          id={panelId}
-          aria-label="Connections"
-          className="border-border bg-background absolute left-0 right-0 top-full z-20 max-h-80 overflow-y-auto border-b px-3 py-2 shadow-md"
-        >
-          <p className="text-muted-foreground mb-1 text-[11px] font-semibold uppercase tracking-wide">
-            Linked from {backlinks.length}
-          </p>
-          {backlinks.length === 0 ? (
-            <p className="text-muted-foreground py-2 text-sm">
-              No links yet — a [[link]] written in any document lands here.
-            </p>
-          ) : (
-            <SourceList
-              entries={backlinks}
-              onPick={(entry) => {
-                setOpen(false)
-                onOpen(entry)
-              }}
-            />
-          )}
-          {(mentions?.length ?? 0) > 0 && (
-            <>
-              <p className="text-muted-foreground mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide">
-                Mentioned, not linked {mentions?.length}
-              </p>
-              <SourceList
-                entries={mentions ?? []}
-                onPick={(entry) => {
-                  setOpen(false)
-                  onOpen(entry)
-                }}
-                action={
-                  onLinkify === undefined
-                    ? undefined
-                    : { label: 'Link it', onPick: (entry) => onLinkify(entry) }
-                }
-              />
-            </>
-          )}
-        </section>
+    <section aria-label="Connections" className="px-3 py-2">
+      <p className="text-muted-foreground mb-1 text-[11px] font-semibold uppercase tracking-wide">
+        Linked from {backlinks.length}
+      </p>
+      {backlinks.length === 0 ? (
+        <p className="text-muted-foreground py-2 text-sm">
+          No links yet — a [[link]] written in any document lands here.
+        </p>
+      ) : (
+        <SourceList entries={backlinks} onPick={onOpen} />
       )}
-    </>
+      {(mentions?.length ?? 0) > 0 && (
+        <>
+          <p className="text-muted-foreground mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide">
+            Mentioned, not linked {mentions?.length}
+          </p>
+          <SourceList
+            entries={mentions ?? []}
+            onPick={onOpen}
+            action={
+              onLinkify === undefined
+                ? undefined
+                : { label: 'Link it', onPick: (entry) => onLinkify(entry) }
+            }
+          />
+        </>
+      )}
+    </section>
   )
 }
 

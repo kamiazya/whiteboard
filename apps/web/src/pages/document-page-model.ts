@@ -3,9 +3,9 @@
  *
  * ADR-0004 decided one page with capability-gated chrome and a controller
  * selected per keeper. What the two pages had in common — the shell, the
- * history column, the comments rail, the file and reference seams, the
- * editor surface, the document actions row — is rendered once, in
- * `DocumentPage`. What differs is not the chrome but its SUPPLY: where the
+ * inspector beside the editor (properties, comments, connections, history),
+ * the file and reference seams, the editor surface, the document actions
+ * row — is rendered once, in `DocumentPage`. What differs is not the chrome but its SUPPLY: where the
  * document's facts come from, how a write travels, which store keeps the
  * versions. This model is that supply, so a keeper answers it and the page
  * never asks which keeper it is talking to.
@@ -15,6 +15,7 @@
  */
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { ComponentProps, ReactNode, Ref, RefObject } from 'react'
+import type { ConnectionsPanelProps } from '../components/connections/ConnectionsChip.js'
 import type { MarkdownDocumentSession } from '../components/document-editor/DocumentEditorSurface.js'
 import type { SpatialEditorPaneProps } from '../components/document-editor/SpatialEditorPane.js'
 import type { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
@@ -69,6 +70,14 @@ export interface DocumentPageModel {
     readonly onFacetsChange?: (next: StoredCoreFacets) => void
     /** Hidden persistence facts for tests; the row shows no save state. */
     readonly status?: ReactNode
+  }
+  /**
+   * The documents linking here, for the inspector's Connections panel and
+   * its opener. Absent for a keeper that answers no backlinks (the browser);
+   * `backlinks: null` while the daemon's answer is in flight.
+   */
+  readonly connections?: Omit<ConnectionsPanelProps, 'backlinks'> & {
+    readonly backlinks: ConnectionsPanelProps['backlinks'] | null
   }
   readonly threads: {
     readonly annotations: UseDocumentSyncResult['annotations']
@@ -126,8 +135,6 @@ export interface DocumentPageModel {
   readonly readOnlyPast: PastDocument | null
   readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>
   readonly slots: {
-    /** After the title row, inside the top bar's title slot. */
-    readonly afterTitle?: ReactNode
     /** Alerts in the document actions row, before the ⋯ menu. */
     readonly rowAlerts?: ReactNode
     /** Items inside the document ⋯ menu, after Export. */

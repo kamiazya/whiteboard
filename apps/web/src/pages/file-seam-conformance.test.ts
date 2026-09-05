@@ -103,10 +103,6 @@ const MODE_SPECIFIC_CHROME = {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',
   },
-  ConnectionsChip: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'backlinks come from the daemon index',
-  },
   CapabilityTeaser: { page: './DaemonDocumentPage.tsx', why: 'it teases daemon capabilities' },
 } satisfies Record<string, { page: (typeof KEEPER_PAGES)[number]; why: string }>
 
@@ -248,6 +244,18 @@ describe('the spatial-editor-container hook means one thing', () => {
  */
 const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
 
+/**
+ * The inspector beside the editor (`lib/inspector.ts`): one vessel and the
+ * panels the shared page puts in it. Rendered by the SHARED page even where
+ * only one keeper can fill it — the Connections opener and panel are fed by
+ * the daemon's backlinks through `model.connections`, and a keeper that
+ * answers none gets no opener. That is the gating the model does with DATA
+ * rather than with a keeper page rendering its own copy: `ConnectionsChip`
+ * used to be daemon-page chrome in `MODE_SPECIFIC_CHROME`, overlaid under the
+ * header as its own band, and moved here when the inspector slot took it.
+ */
+const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'ConnectionsChip', 'ConnectionsPanel'] as const
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
     expect(
@@ -319,6 +327,29 @@ describe('document page document-level chrome', () => {
     expect(loader, 'no source loader for CommentsRailChrome').toBeDefined()
     const source = (await loader?.()) as string
     expect(renders(source, 'CommentsPanel')).toBe(true)
+  })
+})
+
+describe('document page inspector chrome', () => {
+  it.each(SHARED_INSPECTOR_CHROME)('the shared page renders %s', async (chrome) => {
+    expect(
+      renders(await read(SHARED_PAGE), chrome),
+      `${chrome} is placed by the PAGE in its one inspector slot; a page that ` +
+        'omits it leaves a keeper with the opener and no panel, or the panel ' +
+        'overlaid somewhere else.',
+    ).toBe(true)
+  })
+
+  it.each(SHARED_INSPECTOR_CHROME)('no keeper page renders %s of its own', async (chrome) => {
+    const renderedBy: string[] = []
+    for (const page of KEEPER_PAGES) {
+      if (renders(await read(page), chrome)) renderedBy.push(page)
+    }
+    expect(
+      renderedBy,
+      `${chrome} rendered by a keeper page is a second inspector growing back ` +
+        'beside the shared one — two slots, which is what the retune ended.',
+    ).toEqual([])
   })
 })
 

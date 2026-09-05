@@ -365,15 +365,15 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
-  // Which panel the one inspector slot shows — the history column or the
-  // comments rail. How the reader looks rather than what at: everything a
-  // panel SAYS is document-scoped and cleared on its own (`preview` and
-  // `bookmarkArmed` below, `selectedThreadId` and `composeAnchor` above),
-  // and both panels refetch on the path, so a column left open across a
-  // switch shows the arrived document — as the rail always did, and as the
-  // threads themselves are republished per document.
+  // Which panel the one inspector slot shows — properties, comments,
+  // connections or history. How the reader looks rather than what at:
+  // everything a panel SAYS is document-scoped and cleared on its own
+  // (`preview` and `bookmarkArmed` below, `selectedThreadId` and
+  // `composeAnchor` above, the facets and backlinks the keeper republishes
+  // per document), so a panel left open across a switch shows the arrived
+  // document — as the rail always did.
   inspector:
-    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries, and the panels refetch on the path',
+    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries or republished per document by the keeper',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
   preview: 'cleared on switch',
