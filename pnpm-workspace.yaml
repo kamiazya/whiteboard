@@ -61,6 +61,9 @@ minimumReleaseAgeExclude:
   - js-yaml
   - fast-uri
   - ip-address
+  # qs@6.16.0 closes GHSA-x5fp-wj9c-mxmx / GHSA-4mjr-xmp4-gh2g (published
+  # 2026-08-29; prune once it ages past the window).
+  - qs
   # NOT a security patch: a deliberate feature exception for the Vitest 5
   # major (published 2026-09-03, SLSA provenance attested on the registry),
   # taken so the test-stability work could land on it rather than wait the
@@ -84,7 +87,12 @@ overrides:
   "@grpc/grpc-js@<1.14.4": ^1.14.4
   shell-quote@<1.9.0: ^1.9.0
   uuid@<11.1.1: ^11.1.1
-  qs@>=6.11.1 <6.15.2: ^6.15.2
+  # GHSA-x5fp-wj9c-mxmx + GHSA-4mjr-xmp4-gh2g: both cleared at 6.16.0 (reaches
+  # the published runtime via express <- @modelcontextprotocol/sdk).
+  qs@<6.16.0: ^6.16.0
+  # GHSA-c83g-rgw3-j3cx + GHSA-73wf-gq98-2v4g (high): cleared at 4.28.7
+  # (dev path via babel <- stryker; the alert pair still shows in the tab).
+  browserslist@<4.28.7: ^4.28.7
   ip-address@<=10.3.0: '>=10.3.1'
   js-yaml@>=4.0.0 <4.3.1: ^4.3.1
   ip-address@<=10.1.0: ^10.1.1
