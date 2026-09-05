@@ -18,9 +18,7 @@ import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
-import { readRecentIds, recordRecentDocument } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
-import { readSeenDigest, recordSeenDocument } from '../../lib/seen-documents.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -40,6 +38,7 @@ import { searchDocuments, withNameMatches } from './search-documents.js'
 import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
+import { useDeviceMemory } from './use-device-memory.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -144,32 +143,7 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  /**
-   * What this device opened most recently in THIS workspace, newest first.
-   *
-   * Held as ids and resolved against `documents` at render, so a deleted or
-   * renamed document leaves the lane on its own.
-   */
-  const [recentIds, setRecentIds] = useState<readonly string[]>([])
-  /**
-   * The live selection's paths, or null when there is no selection.
-   *
-   * null rather than an empty set, because the two mean different things to
-   * the grid: null is the ordinary mode where a card is not a toggle at all,
-   * and a set is the mode where every card carries `aria-pressed`. Emptying
-   * the set is therefore how the mode ENDS, not a state it rests in.
-   *
-   * Not folded into `selected`: that one names the document the preview is
-   * showing, which is a different question with a different answer, and a
-   * preview that followed a multi-selection would have to pick one.
-   */
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
-  /**
-   * Bumped when this panel records a baseline, so the derived `changed` set
-   * below recomputes. Storage is not reactive and this is the only writer in
-   * the tab, so a counter is the whole subscription.
-   */
-  const [seenRevision, setSeenRevision] = useState(0)
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
    * hold the layout it is about to replace.
@@ -186,6 +160,12 @@ export function WorkspaceFilesPanel({
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
   const { columns, chooseColumns } = useBrowserColumns()
+  const {
+    recentIds,
+    changed,
+    remember: rememberOpen,
+    reset: resetDeviceMemory,
+  } = useDeviceMemory(workspace, documents)
   /**
    * A write that LANDED, whose list refresh or open failed after the fact.
    * Separate from the refusal states because the two need opposite things:
@@ -315,28 +295,9 @@ export function WorkspaceFilesPanel({
    */
   const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
   const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
-    const scope = workspaceRef.current
-    if (scope !== undefined) {
-      recordRecentDocument(scope, entry.documentId)
-      setRecentIds(readRecentIds(scope))
-      // The baseline for the changed dot: what this device is about to SEE.
-      // Only when the keeper derived one — a row with no digest has nothing
-      // to compare later, and a missing baseline must read as "no dot", not
-      // as "changed".
-      if (entry.contentDigest !== undefined) {
-        recordSeenDocument(scope, entry.documentId, entry.contentDigest)
-        setSeenRevision((revision) => revision + 1)
-      }
-    }
+    rememberOpen(entry)
     onOpenDocumentRef.current?.(entry.path)
   }, [])
-
-  // Keyed on the handle rather than folded into the SCOPE RESET below,
-  // because the handle is the scope this is filed under and it can arrive
-  // after the source (a page still resolving its address passes undefined).
-  useEffect(() => {
-    setRecentIds(workspace === undefined ? [] : readRecentIds(workspace))
-  }, [workspace])
 
   const toggleSelected = useCallback((entry: WorkspaceDocumentEntry) => {
     setSelection((current) => {
@@ -390,31 +351,6 @@ export function WorkspaceFilesPanel({
     onRequestDeleteMany?.(paths)
   }
 
-  /**
-   * The documents whose content differs from what this device last opened.
-   *
-   * Compared on `contentDigest`, never `updatedAt`: `document-entry.ts`
-   * records the measurement that a merge does not consult the stamp, so a
-   * signal built on it can call a document unchanged in the one case this
-   * dot exists for — something rewriting it while the person was elsewhere.
-   *
-   * A document with no recorded baseline is absent from the set, so an
-   * unopened document is silent rather than announced as changed.
-   */
-  const changed = useMemo(() => {
-    if (documents === null || workspace === undefined) return undefined
-    const marked = new Set<string>()
-    for (const entry of documents) {
-      if (entry.contentDigest === undefined) continue
-      const seen = readSeenDigest(workspace, entry.documentId)
-      if (seen !== undefined && seen !== entry.contentDigest) marked.add(entry.documentId)
-    }
-    return marked
-    // `seenRevision` is not read by the body — it is the signal that this
-    // panel wrote a baseline, which is the only way the answer changes
-    // without `documents` changing too.
-  }, [documents, workspace, seenRevision])
-
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     let cancelled = false
@@ -434,15 +370,8 @@ export function WorkspaceFilesPanel({
     // bulk delete carried across a switch would address the departed
     // workspace's names into the store now on screen.
     setSelection(null)
-    // The departed workspace's lane names its documents, so it is emptied
-    // here like everything else — and refilled in the same effect, from the
-    // ref rather than a dependency. Both halves together, because splitting
-    // them across two effects made the ORDER load-bearing and it was wrong:
-    // the handle-keyed effect below loaded first and this one blanked it, so
-    // the lane never survived a remount. Each effect now ends on the same
-    // value whichever runs last.
-    setRecentIds([])
-    if (workspaceRef.current !== undefined) setRecentIds(readRecentIds(workspaceRef.current))
+    // The departed workspace's memory names its documents.
+    resetDeviceMemory()
     setRenaming(null)
     setRenameError(null)
     setRenameBusy(false)
