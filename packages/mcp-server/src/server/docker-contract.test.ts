@@ -90,10 +90,26 @@ describe('Dockerfile.server contracts', () => {
   })
 
   it('configures a non-root user', () => {
-    // Must add a group and user, and switch to it with USER directive.
-    expect(dockerfile).toMatch(/addgroup/)
-    expect(dockerfile).toMatch(/adduser/)
+    // The PROPERTY is a system user at uid/gid 1001 that the image switches
+    // to. Asserted by uid rather than by the tool's name: this was
+    // `addgroup`/`adduser` (BusyBox) while the base was Alpine, and matching
+    // the spelling would have made a libc change look like a security
+    // regression.
+    expect(dockerfile).toMatch(/^RUN\s+groupadd\b.*\b1001\b/m)
+    expect(dockerfile).toMatch(/useradd\b.*\b1001\b/m)
     expect(dockerfile).toMatch(/^USER\s+whiteboard/m)
+  })
+
+  // Alpine is the obvious "make the image smaller" edit, and it produces an
+  // image that BUILDS and cannot start: the musl libsql prebuild this
+  // dependency graph resolves fails with `fcntl64: symbol not found`. Measured
+  // on CI once the docker smokes started running there. Going back means first
+  // checking the resolved libsql has a musl prebuild that loads.
+  it('runs on a glibc base, which libsql needs', () => {
+    expect(dockerfile).toContain('FROM node:${NODE_VERSION}-slim')
+    expect(dockerfile, 'a musl base needs a libsql musl prebuild that loads').not.toMatch(
+      /^FROM node:\$\{NODE_VERSION\}-alpine/m,
+    )
   })
 
   it('declares /data as a VOLUME and sets WHITEBOARD_DATA_DIR=/data', () => {
@@ -274,7 +290,7 @@ describe('docs/how-to/self-host-with-docker.md contracts', () => {
 // Every place that builds Dockerfile.server has to supply NODE_VERSION.
 //
 // The ARG has no default on purpose, so a build that omits it resolves
-// `FROM node:${NODE_VERSION}-alpine` to `node:-alpine` and fails on an
+// `FROM node:${NODE_VERSION}-slim` to `node:-slim` and fails on an
 // invalid reference. Three of the four call sites omitted it and nothing was
 // red: the two Docker smokes run only on the release path, and the
 // build-push-action step runs only on a release tag — so the first execution
@@ -367,7 +383,7 @@ describe('every Dockerfile.server build supplies NODE_VERSION', () => {
 
   it('the ARG has no default, which is what makes omitting it fatal', () => {
     expect(dockerfile).toMatch(/^ARG NODE_VERSION$/m)
-    expect(dockerfile).toContain('FROM node:${NODE_VERSION}-alpine')
+    expect(dockerfile).toContain('FROM node:${NODE_VERSION}-slim')
   })
 
   it('found a plausible number of files reaching the image build', () => {
@@ -408,7 +424,7 @@ describe('every Dockerfile.server build supplies NODE_VERSION', () => {
       const text = readText(file)
       expect(
         PASSES_BUILD_ARG.some((re) => re.test(text)),
-        `${file} builds Dockerfile.server without passing NODE_VERSION — the build resolves node:-alpine and fails`,
+        `${file} builds Dockerfile.server without passing NODE_VERSION — the build resolves node:-slim and fails`,
       ).toBe(true)
     }
   })

@@ -29,11 +29,27 @@
 #
 # NODE_VERSION: single source of truth is `.node-version`. Callers pass the
 # value via --build-arg (no default — fails explicitly if unset).
+#
+# BASE IS DEBIAN (-slim), NOT ALPINE, and that is load-bearing. libsql ships
+# prebuilt native bindings per libc; the musl one this image resolved
+# (@libsql/linux-x64-musl@0.3.19, pulled transitively by
+# @libsql/kysely-libsql -> @libsql/client@0.8.x) fails to load on the musl in
+# current Alpine:
+#
+#     Error relocating .../@libsql/linux-x64-musl/index.node:
+#     fcntl64: symbol not found     (ERR_DLOPEN_FAILED)
+#
+# The image built and could not start. It went unseen because nothing ran the
+# container until the docker smokes were promoted to CI — the build-only
+# dry-run said "green" about a proposition the runtime does not share.
+# The glibc prebuild has no such gap. Moving back to Alpine means first
+# checking that whatever libsql version the lockfile resolves has a musl
+# prebuild that loads on that Alpine.
 
 
 # ── base — common foundation ───────────────────────────────────────────────
 ARG NODE_VERSION
-FROM node:${NODE_VERSION}-alpine AS base
+FROM node:${NODE_VERSION}-slim AS base
 
 # corepack reads the pnpm version from root package.json's packageManager
 # field — no hardcoded version here.
@@ -82,10 +98,10 @@ RUN pnpm --filter @kamiazya/whiteboard-mcp deploy --legacy /deploy
 
 
 # ── runtime — final server image ──────────────────────────────────────────
-FROM node:${NODE_VERSION}-alpine AS runtime
+FROM node:${NODE_VERSION}-slim AS runtime
 
-RUN addgroup -S -g 1001 whiteboard \
- && adduser  -S -u 1001 -G whiteboard -H whiteboard
+RUN groupadd --system --gid 1001 whiteboard \
+ && useradd  --system --uid 1001 --gid whiteboard --no-create-home whiteboard
 
 WORKDIR /app
 

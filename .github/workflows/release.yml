@@ -233,7 +233,7 @@ jobs:
           password: ${{ secrets.GITHUB_TOKEN }}
 
       # Dockerfile.server's ARG NODE_VERSION has no default, so a build that
-      # omits it resolves `FROM node:${NODE_VERSION}-alpine` to `node:-alpine`
+      # omits it resolves `FROM node:${NODE_VERSION}-slim` to `node:-slim`
       # and fails. Read from .node-version, with the same inline fallback and
       # for the same reason as the setup-pnpm pin above: this job checks out a
       # release tag, and an old enough tag predates that file. A build-arg the
