@@ -20,9 +20,8 @@ import { describe } from 'vitest'
 import {
   type BranchesBackendHarness,
   branchesBackendContract,
-  branchlessBackendContract,
 } from './branches-backend.contract.js'
-import { createBrowserBranchesBackend, createDaemonBranchesBackend } from './branches-backend.js'
+import { createDaemonBranchesBackend } from './branches-backend.js'
 
 function daemonHarness(): BranchesBackendHarness {
   const main: BranchMeta = {
@@ -137,7 +136,6 @@ describe('branches contract', () => {
     branchesBackendContract(daemonHarness)
   })
 
-  describe('browser keeper (no branches yet)', () => {
-    branchlessBackendContract(createBrowserBranchesBackend)
-  })
+  // The browser keeper's run is `branches-backend.contract.browser.test.tsx`:
+  // it IS its storage, so it needs a real record rather than a stand-in.
 })
