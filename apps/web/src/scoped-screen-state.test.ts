@@ -51,6 +51,7 @@ const sources = import.meta.glob(
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
     './pages/use-version-save-flow.ts',
+    './hooks/use-comments-rail.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -87,6 +88,8 @@ const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 // SCREEN by the same rule the panel's search/columns hooks are — its state
 // moved there, not away.
 const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
+// The comments rail's screen state, extracted the same way — same rule.
+const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
@@ -335,18 +338,19 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
-  // Unlike `commentsOpen`, this one names a THREAD, and a thread id belongs
+  // Unlike `open`, this one names a THREAD, and a thread id belongs
   // to the document that holds it: left standing across a switch it would
   // scroll the arrived body to a passage the departed document quoted, or
-  // expand a conversation that is not on this document at all.
+  // expand a conversation that is not on this document at all. Cleared by
+  // useCommentsRail's own scope reset.
   selectedThreadId: 'cleared on switch',
   // A passage inside the DEPARTED document's body. Left standing it would
   // hand the arrived document an anchor quoting text it does not contain —
   // and a submitted one would open a conversation on the wrong document
-  // about a sentence nobody there wrote.
+  // about a sentence nobody there wrote. Cleared by useCommentsRail.
   composeAnchor: 'cleared on switch',
-  commentsOpen:
-    'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
+  open: 'no subject: whether the rail is open, not what is in it — the threads themselves are republished per document (on the session\u2019s annotation channel for a spatial document, off the markdown hook\u2019s own host for a note), so a switch changes the LIST while leaving the reader where they chose to be',
+  writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
@@ -389,7 +393,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK],
+    files: [BROWSER_DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
