@@ -44,6 +44,16 @@ re-export shims and mcp-server's published client subpaths are retired
 only). tsup's `noExternal` MUST list this package or the published tarball
 carries a bare specifier for an unpublished workspace dep.
 
+## The exports map is explicit, and that is the dead-export gate
+
+`package.json` lists each consumed subpath individually — never a `"./*"`
+wildcard. The wildcard made every module a knip entry point, so the package
+was structurally blind to dead exports: browser-tracing.ts shipped an entire
+unused SDK half (and browser-shared-index.ts a dead barrel) under a green
+knip. With the explicit map, an unconsumed module fails `pnpm knip` as an
+unused file, and a NEW subpath is added here in the same diff that first
+imports it — the resolve error is loud if forgotten.
+
 ## Tests
 
 Vitest project `daemon-client-node`. Contract round-trips use the package's
