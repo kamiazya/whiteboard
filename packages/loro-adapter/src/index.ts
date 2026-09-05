@@ -7,6 +7,7 @@ export {
   writeThreadMessage,
 } from './comment-threads.js'
 export type { DocumentContainers } from './containers.js'
+export { contentDigestOfDocument } from './content-digest.js'
 export { collectImageRefIds } from './image-refs.js'
 export {
   CONTENT_CONTAINER_KEYS,

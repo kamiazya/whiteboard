@@ -344,11 +344,11 @@ export function useDocumentSync(
     (documentKind: DocumentKind): DocumentOutlineSource | null => {
       const session = sessionRef.current
       if (session === null) return null
-      const frontier = session.getFrontier()
-      if (frontier === null) return null
-      if (documentKind === 'markdown') return { frontier, body: session.getMarkdownBody() }
+      const state = session.getContentState()
+      if (state === null) return null
+      if (documentKind === 'markdown') return { state, body: session.getMarkdownBody() }
       const snapshot = session.exportSnapshot()
-      return snapshot === null ? null : { frontier, snapshot }
+      return snapshot === null ? null : { state, snapshot }
     },
     [],
   )

@@ -33,7 +33,7 @@ import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/w
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { sameAnnotations } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
-import { frontierOf } from './document-frontier.js'
+import { contentStateOf } from './document-state.js'
 import {
   type ExportRequestHandlerDeps,
   handleIncomingExportRequest,
@@ -225,24 +225,23 @@ export interface DocumentSyncSession {
    * A stable id for the document's CURRENT state — what a picture drawn from
    * it right now would be a picture OF. `null` before the first snapshot.
    *
-   * This is the version key every derived rendition of the document is
-   * memoised under (ADR-0027). `updatedAt` cannot serve: it is stamped per
-   * push, so between two pushes it names one value for a document that has
-   * changed many times, and a memo under it would serve the picture from
-   * before the edit — wrong rather than missing, the worst failure a cache
-   * has.
+   * This is the key every derived rendition of the document is memoised
+   * under (ADR-0027): the digest of its content — the same one the workspace
+   * listing reports for the row, so a row and this open document name one
+   * state one way and share what either drew. A stamp cannot serve: it is
+   * one replica's word and a merge does not consult it.
    *
-   * The STATE frontier, not the oplog's. A document checked out to an older
-   * version SHOWS that version, and an oplog-derived key would claim the
-   * newest one. Measured before choosing: the state frontier moves on every
-   * edit and does not move on a commit that changed nothing, which is
-   * exactly the invalidation a derived picture wants.
-   *
-   * Loro's own encoding, base64'd, rather than a digest of the content: the
-   * value is loro's answer to "which state is this", not a second opinion
-   * that could disagree with it.
+   * It names the DOCUMENT's state, which is deliberately not the instant a
+   * canvas is published. `onChange` publishes immediately and writes the
+   * document on a debounce (write and commit together), so a key read
+   * straight after `onChange` still names the pre-edit document — measured:
+   * `getCanvas()` already shows the edit while this does not move. That is
+   * not a defect in the key: the key and `exportSnapshot()` are read from the
+   * same document and always describe one state. It is why a surface keyed
+   * here is driven by the document's change notification, which fires after
+   * the write, and not by the React state the editor renders from.
    */
-  getFrontier(): string | null
+  getContentState(): string | null
   /**
    * The committed document as snapshot bytes, or null before the first
    * snapshot.
@@ -254,12 +253,12 @@ export interface DocumentSyncSession {
    * with the document, which is what makes moving the work a release rather
    * than a relocation.
    *
-   * Read it in the same synchronous block as `getFrontier()` and the two
-   * describe the same state: nothing can commit between two synchronous
-   * reads. `exports bytes that decode to the state its frontier names` pins
-   * that, because a refactor making either read async would break the
-   * pairing silently — and a picture memoised under the wrong version is the
-   * failure the version key exists to avoid.
+   * Read it in the same synchronous block as `getContentState()` and the two
+   * describe the same state: nothing can change the document between two
+   * synchronous reads. `exports bytes that decode to the state its key names`
+   * pins that, because a refactor making either read async would break the
+   * pairing silently — and a picture memoised under the wrong state is the
+   * failure the key exists to avoid.
    */
   exportSnapshot(): Uint8Array | null
   // Current published canvas value (empty canvas before the first snapshot).
@@ -554,8 +553,8 @@ export function createDocumentSyncSession(
     return doc === null ? null : doc.export({ mode: 'snapshot' })
   }
 
-  function getFrontier(): string | null {
-    return doc === null ? null : frontierOf(doc)
+  function getContentState(): string | null {
+    return doc === null ? null : contentStateOf(doc)
   }
 
   function getAnnotations(): readonly CommentThread[] {
@@ -1087,7 +1086,7 @@ export function createDocumentSyncSession(
     canRedo,
     getAnnotations,
     getCanvas,
-    getFrontier,
+    getContentState,
     exportSnapshot,
     subscribeAnnotations,
     subscribe,
