@@ -40,6 +40,13 @@ export interface FolderContentsListProps {
    */
   selection?: ReadonlySet<string>
   /**
+   * The documentIds whose content has changed since this device last opened
+   * them. Absent means the caller has no baseline to compare against, which
+   * is not the same as "nothing changed" — a fresh device shows no dots
+   * rather than dots on everything.
+   */
+  changed?: ReadonlySet<string>
+  /**
    * A card's picture. This component neither fetches nor renders, so a
    * caller with no daemon to read from still gets a working list — with the
    * kind label the list already carries.
@@ -75,6 +82,7 @@ export function FolderContentsList({
   onDocumentContextMenu,
   selectedPath,
   selection,
+  changed,
   renderThumbnail,
   className,
 }: FolderContentsListProps) {
@@ -180,6 +188,19 @@ export function FolderContentsList({
                   cannot disagree with what is announced. Presence is gated on
                   the MODE, which is a different question from the state.
                   `aria-hidden` because the button already says it. */}
+              {changed?.has(entry.documentId) && (
+                /* Binary, and in the corner opposite the selection check so
+                   the two never collide. `role="img"` with a name rather
+                   than a bare colour: a dot nobody can see or hear is not a
+                   signal, and this one contributes to the card's own
+                   accessible name the way the kind badge already does. */
+                <span
+                  role="img"
+                  aria-label="Changed since you last opened it"
+                  data-testid="card-changed-dot"
+                  className="bg-primary absolute top-1 right-1 size-2.5 rounded-full"
+                />
+              )}
               {selection !== undefined && (
                 <>
                   <Circle

@@ -8,14 +8,18 @@
 import { randomUUID } from 'node:crypto'
 import { accessSync, constants as fsConstants } from 'node:fs'
 import { serve } from '@hono/node-server'
+import { createContainer, resolveServerDeps } from '../di/container.js'
+import { createStoreLocalModule } from '../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
+import { ensureWorkspaceId } from './current-workspace.js'
 import type { AutoVersionTrigger } from './routes/document.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
+import { getDb } from './store/db/index.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 
@@ -90,11 +94,27 @@ export async function startServerModeHttp(
     await autoVersionTrigger?.flush()
   }
 
+  // The same explicit production wiring the local daemon builds
+  // (http-server.ts), minus its WS-only clientNotifier — server mode
+  // installs no upgrade handler, so there is no live-socket audience to
+  // notify. Without this, createApp mounted no /api/v1 surface at all and
+  // a self-hosted deployment 404'd on search/backlinks/tags/okf and the v1
+  // document CRUD while /api/workspaces/* worked
+  // (server-mode-route-parity.test.ts pins both the option and the route
+  // set now). ensureWorkspaceId first, as the sibling root does: a fresh
+  // data dir must not answer an empty workspace list.
+  const dataDir = getDataDir()
+  await ensureWorkspaceId(dataDir)
+  const serverDeps = resolveServerDeps(
+    createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
+  )
+
   // Filled synchronously by createApp below, and read only by the
   // auto-checkpoint declaration's stop() — which runs long after.
   let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'server-mode',
+    serverDeps,
     onAutoVersionTrigger: (trigger) => {
       autoVersionTrigger = trigger
     },

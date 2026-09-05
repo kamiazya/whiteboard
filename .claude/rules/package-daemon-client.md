@@ -14,9 +14,9 @@ paths:
 - The document backends the browser drives a daemon with: `daemon-backend`
   (WS), `sse-backend` + `sse-stream-hub` (SSE), `select-document-transport`,
   and the `document-backend-contract` types they implement.
-- `api-client` (authorized fetch wrapper), `token-store`, `browser-tracing`
-  (lazy OpenTelemetry web SDK), `upload-files`, the ws message/protocol
-  contracts.
+- `api-client` (authorized fetch wrapper — injects a `traceparent` header
+  through @opentelemetry/api's no-op surface, no SDK shipped), `token-store`,
+  `upload-files`, the ws message/protocol contracts.
 - `test-utils/`: the backend contract suites apps/web runs against its own
   implementations (`document-backend-contract`, `sse-stream-source-contract`).
 
@@ -43,6 +43,16 @@ re-export shims and mcp-server's published client subpaths are retired
 (`publish-contract.test.ts` pins the exports map — `.` and `./package.json`
 only). tsup's `noExternal` MUST list this package or the published tarball
 carries a bare specifier for an unpublished workspace dep.
+
+## The exports map is explicit, and that is the dead-export gate
+
+`package.json` lists each consumed subpath individually — never a `"./*"`
+wildcard. The wildcard made every module a knip entry point, so the package
+was structurally blind to dead exports: browser-tracing.ts shipped an entire
+unused SDK half (and browser-shared-index.ts a dead barrel) under a green
+knip. With the explicit map, an unconsumed module fails `pnpm knip` as an
+unused file, and a NEW subpath is added here in the same diff that first
+imports it — the resolve error is loud if forgotten.
 
 ## Tests
 

@@ -18,7 +18,6 @@ import { useThemeMode } from '../../hooks/useThemeMode.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { type WorkspaceFilesSource, WorkspaceMissingError } from '../../lib/files-source.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
-import { readRecentIds, recordRecentDocument } from '../../lib/recent-documents.js'
 import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
@@ -39,6 +38,7 @@ import { searchDocuments, withNameMatches } from './search-documents.js'
 import { TrashSection } from './TrashSection.js'
 import { useBrowserColumns } from './use-browser-columns.js'
 import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
+import { useDeviceMemory } from './use-device-memory.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -143,25 +143,6 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  /**
-   * What this device opened most recently in THIS workspace, newest first.
-   *
-   * Held as ids and resolved against `documents` at render, so a deleted or
-   * renamed document leaves the lane on its own.
-   */
-  const [recentIds, setRecentIds] = useState<readonly string[]>([])
-  /**
-   * The live selection's paths, or null when there is no selection.
-   *
-   * null rather than an empty set, because the two mean different things to
-   * the grid: null is the ordinary mode where a card is not a toggle at all,
-   * and a set is the mode where every card carries `aria-pressed`. Emptying
-   * the set is therefore how the mode ENDS, not a state it rests in.
-   *
-   * Not folded into `selected`: that one names the document the preview is
-   * showing, which is a different question with a different answer, and a
-   * preview that followed a multi-selection would have to pick one.
-   */
   const [selection, setSelection] = useState<ReadonlySet<string> | null>(null)
   /**
    * How many cards the last successful listing drew, kept so a RE-READ can
@@ -179,6 +160,12 @@ export function WorkspaceFilesPanel({
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
   const { columns, chooseColumns } = useBrowserColumns()
+  const {
+    recentIds,
+    changed,
+    remember: rememberOpen,
+    reset: resetDeviceMemory,
+  } = useDeviceMemory(workspace, documents)
   /**
    * A write that LANDED, whose list refresh or open failed after the fact.
    * Separate from the refusal states because the two need opposite things:
@@ -308,20 +295,9 @@ export function WorkspaceFilesPanel({
    */
   const tapOpens = hasCoarsePointer() && onOpenDocument !== undefined
   const openEntry = useCallback((entry: WorkspaceDocumentEntry) => {
-    const scope = workspaceRef.current
-    if (scope !== undefined) {
-      recordRecentDocument(scope, entry.documentId)
-      setRecentIds(readRecentIds(scope))
-    }
+    rememberOpen(entry)
     onOpenDocumentRef.current?.(entry.path)
   }, [])
-
-  // Keyed on the handle rather than folded into the SCOPE RESET below,
-  // because the handle is the scope this is filed under and it can arrive
-  // after the source (a page still resolving its address passes undefined).
-  useEffect(() => {
-    setRecentIds(workspace === undefined ? [] : readRecentIds(workspace))
-  }, [workspace])
 
   const toggleSelected = useCallback((entry: WorkspaceDocumentEntry) => {
     setSelection((current) => {
@@ -394,15 +370,8 @@ export function WorkspaceFilesPanel({
     // bulk delete carried across a switch would address the departed
     // workspace's names into the store now on screen.
     setSelection(null)
-    // The departed workspace's lane names its documents, so it is emptied
-    // here like everything else — and refilled in the same effect, from the
-    // ref rather than a dependency. Both halves together, because splitting
-    // them across two effects made the ORDER load-bearing and it was wrong:
-    // the handle-keyed effect below loaded first and this one blanked it, so
-    // the lane never survived a remount. Each effect now ends on the same
-    // value whichever runs last.
-    setRecentIds([])
-    if (workspaceRef.current !== undefined) setRecentIds(readRecentIds(workspaceRef.current))
+    // The departed workspace's memory names its documents.
+    resetDeviceMemory()
     setRenaming(null)
     setRenameError(null)
     setRenameBusy(false)
@@ -1092,6 +1061,7 @@ export function WorkspaceFilesPanel({
                           : setSelected(target.document)
                   }
                   {...(selection === null ? { selection: undefined } : { selection })}
+                  {...(changed === undefined ? {} : { changed })}
                   {...(onOpenDocument === undefined || selection !== null
                     ? {}
                     : { onActivateDocument: openEntry })}
