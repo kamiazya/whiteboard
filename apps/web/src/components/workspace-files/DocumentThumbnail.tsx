@@ -49,37 +49,52 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
     }
   }, [onScreen, document, loadRender])
 
+  const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
+
   return (
     <span
       ref={ref}
       data-testid="document-thumbnail"
       aria-hidden="true"
-      className={cn('inline-flex shrink-0 items-center justify-center overflow-hidden', className)}
+      className={cn(
+        'relative inline-flex shrink-0 items-center justify-center overflow-hidden',
+        className,
+      )}
     >
       {drawn === null ? (
-        document.kind === 'spatial' ? (
-          <LayoutGrid data-kind="spatial" className="text-muted-foreground size-full" />
-        ) : (
-          <FileText
-            data-kind={document.kind ?? 'markdown'}
-            className="text-muted-foreground size-full"
-          />
-        )
-      ) : (
-        // The SVG is produced by this app's own renderer from the document's
-        // own content, never by a remote party.
-        // The rule lives on the span that actually PARENTS the svg. jsdom has
-        // no layout, so a selector aimed one level too high still passes every
-        // test and draws a 2000px canvas inside a 24px row in a real browser.
-        <span
-          // The render lands well after the card (measured on a switch: 430ms
-          // later), so it arrives as a pop over a placeholder icon. A fade
-          // makes it read as the picture developing; the global
-          // prefers-reduced-motion floor collapses it.
-          className="size-full animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out) [&>svg]:size-full"
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
-          dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
+        // Sole content, and the only place `data-kind` appears: its ABSENCE
+        // is how a test knows the render landed, so the copy that stays
+        // behind during the cross-fade below must not carry it.
+        <KindIcon
+          data-kind={document.kind ?? 'markdown'}
+          className="text-muted-foreground size-full"
         />
+      ) : (
+        <>
+          {/* The icon LEAVES rather than vanishing. Measured on the real app
+              before this: it unmounted in the same frame the render mounted
+              at opacity 0 (1913ms icon=1.00 -> 1929ms icon gone, render=0.00),
+              so the box was empty for a frame and the picture arrived over
+              nothing. */}
+          <KindIcon className="text-muted-foreground animate-out fade-out-0 fill-mode-forwards absolute inset-0 size-full duration-(--motion-duration-normal) ease-linear" />
+          {/* The SVG is produced by this app's own renderer from the
+              document's own content, never by a remote party.
+              The rule lives on the span that actually PARENTS the svg. jsdom
+              has no layout, so a selector aimed one level too high still
+              passes every test and draws a 2000px canvas inside a 24px row in
+              a real browser.
+
+              Linear, not the shared ease-out: that curve is built for
+              movement and front-loads opacity — measured, it reached 0.80 in
+              51ms of its nominal 220ms, which is what read as a pop. A
+              dissolve wants the two halves to trade evenly, and they now do:
+              their opacities sum to 1.00 across the whole 220ms. */}
+          <span
+            className="animate-in fade-in-0 relative size-full duration-(--motion-duration-normal) ease-linear [&>svg]:size-full"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
+            dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
+          />
+        </>
       )}
     </span>
   )
