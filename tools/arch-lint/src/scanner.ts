@@ -149,7 +149,11 @@ function collectBannedGlobalIdentifierUsages(
         node.parent.name === node
       ) &&
       !(ts.isImportSpecifier(node.parent) && node.parent.name === node) &&
-      !(ts.isPropertyAssignment(node.parent) && node.parent.name === node)
+      !(ts.isPropertyAssignment(node.parent) && node.parent.name === node) &&
+      // `declare global { … }` — the TypeScript ambient-augmentation
+      // keyword, a type-level construct — is not a read of Node's `global`
+      // object. The identifier is the ModuleDeclaration's NAME there.
+      !(ts.isModuleDeclaration(node.parent) && node.parent.name === node)
     ) {
       const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart(sourceFile))
       violations.push({ kind, name: node.text, line: line + 1 })

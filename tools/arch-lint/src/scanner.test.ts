@@ -76,6 +76,14 @@ describe('scanSourceForBoundaryViolations', () => {
     expect(violationKinds('const x = { window: 1 }; const y = x.window')).toHaveLength(0)
   })
 
+  it("does not flag `declare global`'s keyword, while a real global read still fires", () => {
+    // The ambient-augmentation block is a type-level construct whose
+    // identifier is the ModuleDeclaration's NAME — reading Node's `global`
+    // object is a different AST position and must keep firing.
+    expect(violationKinds('declare global { interface Window { x?: string } }')).toHaveLength(0)
+    expect(violationKinds('const g = global')).toContain('node-ambient-global')
+  })
+
   it('flags a banned global used as the object of a member access', () => {
     expect(violationKinds('const y = window.location.href')).toContain('dom-global')
     expect(violationKinds('const t = document.title')).toContain('dom-global')
