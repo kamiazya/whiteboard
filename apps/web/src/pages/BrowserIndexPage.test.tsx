@@ -21,11 +21,9 @@ async function seededStore(snapshots: DocumentSnapshot[]) {
   return store
 }
 
-function renderPage(store: LocalStoreDouble) {
+function renderPage(store: LocalStoreDouble, revision?: unknown) {
   const onOpenDocument = vi.fn()
-  // React delegates events to the root; Radix portals render into
-  // document.body, so the body must be the React root for portal events.
-  const utils = render(
+  const page = (rev?: unknown) => (
     <MemoryRouter initialEntries={['/']}>
       <BrowserIndexPage
         index={store.index}
@@ -33,13 +31,16 @@ function renderPage(store: LocalStoreDouble) {
         pointer={store.pointer}
         clock={store.clock}
         onOpenDocument={onOpenDocument}
+        {...(rev === undefined ? {} : { revision: rev })}
       />
-    </MemoryRouter>,
-    {
-      container: document.body,
-    },
+    </MemoryRouter>
   )
-  return { onOpenDocument, ...utils }
+  // React delegates events to the root; Radix portals render into
+  // document.body, so the body must be the React root for portal events.
+  const utils = render(page(revision), {
+    container: document.body,
+  })
+  return { onOpenDocument, page, ...utils }
 }
 
 // The folder pane selects on click; opening goes through the preview pane's
@@ -52,6 +53,93 @@ async function selectCard(title: string) {
 }
 
 describe('BrowserIndexPage', () => {
+  it('a load that failed once stops claiming so after a retry succeeds', async () => {
+    // The load effect re-runs on ordinary Backs now (`revision`), so a
+    // transient failure's alert must not outlive the successful retry.
+    const store = await seededStore([])
+    const failingOnce = vi
+      .spyOn(store.index, 'listDocuments')
+      .mockRejectedValueOnce(new Error('transient'))
+    const { page, rerender } = renderPage(store, 'route-a')
+    await screen.findByRole('alert')
+    failingOnce.mockRestore()
+
+    rerender(page('route-b'))
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+    expect(screen.getByText('What will you make first?')).toBeTruthy()
+  })
+
+  it('re-lists when the revision moves — the route came back to a page that never left', async () => {
+    // react-router v7 wraps navigations in startTransition, so a Back during
+    // a lazy destination's chunk load ABORTS the transition and this page is
+    // never unmounted — its load effect does not re-run, and the list shows
+    // the state from before whatever the navigation was about (measured:
+    // onboarding create -> immediate Back rendered onboarding again over a
+    // workspace holding the document). App passes the location OBJECT as
+    // `revision` (its identity moves on every navigation; location.key is
+    // per-entry and a Back restores the same one); any change must re-read.
+    const store = await seededStore([])
+    const { page, rerender } = renderPage(store, 'route-a')
+    await screen.findByText('What will you make first?')
+
+    // The create that happened before the aborted navigation.
+    await store.save({
+      documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'untitled',
+      name: 'Untitled',
+      updatedAt: '2026-09-05T00:00:00Z',
+      kind: 'spatial',
+    })
+
+    rerender(page('route-b'))
+    const titles = await screen.findAllByTestId('card-title')
+    expect(titles.some((el) => el.textContent === 'Untitled')).toBe(true)
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
+  it('an older in-flight load resolving after a newer one must not win', async () => {
+    // `revision` re-reads on every Back, so two loads can be in flight at
+    // once: a Back that fires a second Back before the first's response
+    // lands would let the OLDER (route-a) response arrive after the NEWER
+    // (route-b) one already rendered. The load effect's per-instance
+    // `cancelled` flag is what stops that — this pins it directly rather
+    // than trusting the invariant is never exercised by a test above.
+    const store = await seededStore([])
+    await store.save({
+      documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'untitled',
+      name: 'Untitled',
+      updatedAt: '2026-09-05T00:00:00Z',
+      kind: 'spatial',
+    })
+    const real = store.index.listDocuments.bind(store.index)
+    const gates: Array<(rows: Awaited<ReturnType<typeof real>>) => void> = []
+    vi.spyOn(store.index, 'listDocuments').mockImplementation(
+      () => new Promise((resolve) => gates.push(resolve)),
+    )
+
+    const { page, rerender } = renderPage(store, 'route-a')
+    await waitFor(() => expect(gates.length).toBe(1))
+
+    rerender(page('route-b'))
+    await waitFor(() => expect(gates.length).toBe(2))
+
+    const rows = await real({ workspaceId: getBrowserWorkspaceId() })
+    // Newer (route-b) resolves first, with the document. Assert on the
+    // onboarding decision directly (`snapshots`), not on the files panel's
+    // card — the panel runs its own independent `listDocuments` call
+    // through the same mock, which this test never resolves.
+    gates[1](rows)
+    await waitFor(() => expect(screen.queryByText('What will you make first?')).toBeNull())
+
+    // Older (route-a) resolves after, empty — must not overwrite the newer list.
+    gates[0]([])
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
   it('re-lists when the active workspace changes under it', async () => {
     // ADR-0019's switch is an in-SPA route change, so this page stays mounted
     // across one. Its load effect keyed on the index and the clock, neither of
@@ -212,6 +300,22 @@ describe('BrowserIndexPage', () => {
     // The default pointer is by id, the callback is by path — the two
     // addresses have to agree on one document.
     expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
+  })
+
+  it('a create this page performed reaches its own list without an unmount', async () => {
+    // react-router wraps navigation in startTransition, so while the lazy
+    // editor chunk loads this page STAYS MOUNTED — and a Back landing in
+    // that window returns to this same mount. The list it renders must
+    // therefore include what it just created, or the onboarding empty state
+    // sticks over a store that has a document (the back-from-editor bug).
+    const store = new LocalStoreDouble()
+    renderPage(store)
+
+    fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
+
+    const titles = await screen.findAllByTestId('card-title')
+    expect(titles).toHaveLength(1)
+    expect(screen.queryByText('What will you make first?')).toBeNull()
   })
 
   it('empty store also offers a markdown note, creating and opening one', async () => {

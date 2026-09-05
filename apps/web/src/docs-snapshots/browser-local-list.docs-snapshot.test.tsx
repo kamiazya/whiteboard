@@ -2,6 +2,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
@@ -33,6 +34,12 @@ afterEach(() => {
 describe('docs snapshot: browser document list', () => {
   it('captures the list with a markdown note and a spatial pair', async () => {
     const store = new LocalStoreDouble()
+    // Named so the page's h1 (visible since #1129) reads as a workspace a
+    // person named, not the raw ULID the seeded double falls back to.
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      displayName: 'Main workspace',
+    })
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
     await store.save({
       documentId: '0RVY147ADGKPSWZ258BEHMQTX0',
@@ -75,6 +82,9 @@ describe('docs snapshot: browser document list', () => {
     await waitFor(() => {
       if (document.querySelectorAll('[data-testid="card-title"]').length !== 3) {
         throw new Error('cards not settled')
+      }
+      if (document.querySelector('h1')?.textContent !== 'Main workspace') {
+        throw new Error('workspace name not yet rendered')
       }
     })
 

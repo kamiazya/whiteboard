@@ -1,4 +1,3 @@
-import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import type { BranchMeta } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -105,13 +104,20 @@ describe('HeaderBranchChip', () => {
   })
 })
 
-describe('HeaderBranchChip daemon context wiring', () => {
-  it('passes the same-origin apiFetch into useBranches when no provider is mounted', () => {
-    renderChip()
-    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1', apiFetch)
-  })
-
-  it('passes the daemon-context fetchFn into useBranches when a provider is mounted', () => {
+describe('HeaderBranchChip keeper wiring', () => {
+  /**
+   * This used to assert that the chip threaded a fetch into `useBranches` —
+   * once for the same-origin default and once for a mounted daemon provider.
+   * That coupling is gone on purpose: WHICH keeper answers now comes from
+   * `BranchesBackendContext`, so a component passes only the document it is
+   * about and cannot get the keeper decision wrong.
+   *
+   * The property those two cases protected — that a mounted daemon fetch is
+   * the one the branch calls actually go through — did not vanish with them.
+   * It moved to `useBranches.test.ts`, which drives it through the provider
+   * the hook now reads.
+   */
+  it('passes the document only, leaving the keeper to the context', () => {
     const daemonFetch = vi.fn() as unknown as typeof fetch
     render(
       <TooltipProvider>
@@ -120,7 +126,11 @@ describe('HeaderBranchChip daemon context wiring', () => {
         </DaemonApiContext.Provider>
       </TooltipProvider>,
     )
-    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1', daemonFetch)
+    // Exactly two arguments, in both the provider and no-provider cases: a
+    // third would mean a caller had a say in the keeper again.
+    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1')
+    renderChip()
+    expect(useBranchesMock).toHaveBeenLastCalledWith('s1', 'c1')
   })
 })
 

@@ -39,7 +39,6 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
@@ -110,7 +109,6 @@ export function HeaderBranchChip({
   mergeEnabled = true,
   onPreviewVariation,
 }: HeaderBranchChipProps): JSX.Element {
-  const fetchFn = useDaemonApi()
   const {
     state,
     refetch,
@@ -120,7 +118,7 @@ export function HeaderBranchChip({
     renameBranch,
     setHead,
     merge: runMerge,
-  } = useBranches(workspaceId, path, fetchFn)
+  } = useBranches(workspaceId, path)
 
   // Skip the initial mount (refetch already runs internally via useBranches'
   // own effect) — only react to a refreshSignal value that actually changes

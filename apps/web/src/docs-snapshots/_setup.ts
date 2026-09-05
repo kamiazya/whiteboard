@@ -5,8 +5,20 @@
 // each test remembering to call seedMathRandom() in beforeEach, which is
 // easy to forget when adding new scenes.
 
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach } from 'vitest'
+import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
+import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 import { seedMathRandom } from './_helpers.js'
+
+// No snapshot test runs the boot chain that resolves the browser workspace
+// id (see browser-workspace-id.ts), so anything that reads it — LocalStoreDouble,
+// BrowserIndexPage — throws unless a fixed id is seeded up front. Same seam
+// and rationale as test-utils/browser-setup.ts, which every non-docs browser
+// test already relies on for this. The id itself never renders — a page
+// that shows a workspace name gives its seeded workspace a displayName —
+// so a freshly minted one (rather than a fixed literal) is fine here.
+setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
 
 let restoreMathRandom: (() => void) | null = null
 

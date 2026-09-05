@@ -34,6 +34,18 @@ export interface BrowserIndexPageProps {
   pointer?: DefaultDocumentPointer
   clock?: ContentClock
   onOpenDocument: (path: string) => void
+  /**
+   * Any value that changes when the route has RETURNED to this page without
+   * remounting it. react-router v7 wraps navigations in startTransition, so
+   * a Back issued while a lazy destination's chunk is still loading aborts
+   * the transition and this page is never unmounted — its load effect does
+   * not re-run, and the list shows the state from before the navigation
+   * (measured: onboarding create → immediate Back rendered onboarding again
+   * over a workspace holding the document). App passes the LOCATION OBJECT —
+   * not `location.key`, which is per-history-entry and comes back UNCHANGED
+   * from a Back (measured: keyed on it, the stale list survived).
+   */
+  revision?: unknown
 }
 
 // The browser keeper's landing surface: the same three-pane document browser
@@ -61,6 +73,7 @@ export function BrowserIndexPage({
   pointer = defaultPointer,
   clock = defaultClock,
   onOpenDocument,
+  revision,
 }: BrowserIndexPageProps) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   // Consulted only for the onboarding decision below: a workspace whose list
@@ -110,6 +123,11 @@ export function BrowserIndexPage({
     // the right trade: the handle is what the address already carries, and it
     // is true about the workspace on screen.
     setWorkspaceName(null)
+    // Cleared on every re-load, not only set on failure: this effect now
+    // re-runs on ordinary Backs (`revision`), so a transient failure's alert
+    // would otherwise outlive the successful retry indefinitely (measured:
+    // fail-once-then-succeed left the alert over a correct list).
+    setError(null)
     // Its own chain, deliberately not folded into the documents load below: a
     // name that will not load leaves the heading on the handle, which is still
     // true, and must not surface as "Failed to load documents from this
@@ -144,8 +162,13 @@ export function BrowserIndexPage({
     // `activeWorkspace` is not read in the body — the helpers below read the
     // accessor themselves — but it IS what this effect follows. Depending on
     // the value rather than calling it is the difference between a list that
-    // re-reads on a switch and one that does not.
-  }, [index, clock, filesSource, activeWorkspace])
+    // re-reads on a switch and one that does not. Two more triggers for the
+    // same aborted-startTransition mount (a Back while a lazy chunk loads
+    // returns to THIS mount, never remounting): `filesRevision` follows this
+    // page's OWN writes (create below, delete dialog — #1325's fix), and
+    // `revision` follows the ROUTE returning here (see the prop's doc) so a
+    // return re-reads even when the write was not this page's own.
+  }, [index, clock, filesSource, activeWorkspace, revision, filesRevision])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -213,6 +236,10 @@ export function BrowserIndexPage({
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
         await pointer.set(created.documentId)
+        // This page's own list must see the create even if it never
+        // unmounts (Back before the editor chunk mounts) — see the load
+        // effect's dependency note.
+        setFilesRevision((n) => n + 1)
         onOpenDocument(created.path)
       } catch {
         setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
