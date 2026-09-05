@@ -139,6 +139,44 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   such facts, so the mark is the shell's; the document's own title, actions
   and history are the page's. The dividing question is not importance, it is
   whether the answer survives navigation.
+- **Every control in the two chrome rows serves one of four roles, and its
+  ROLE follows from its subject.** The roles are:
+
+  | role | asks | where it lives |
+  |---|---|---|
+  | **identity** | where am I? | the mark (workspace), the document's title, the way back |
+  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties, comments, connections, history |
+  | **act** | what do I do to this document? | ONE `⋯`, in ADR-0006's band order |
+  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display…` inside the `⋯` (subject: this canvas) |
+
+  Two things follow, and both were violations before this rule existed:
+
+  - **Inspect is one slot, not N toggles.** Properties, comments,
+    connections and history each owned their own open state, and nothing
+    said they were alternatives. Captured on a phone before the retune: the
+    display popover, the comments rail and the history sheet all up at
+    once, over an editor with room for one. `lib/inspector.ts` declares the
+    union and `InspectorPanel` is the single vessel — a fifth panel joins
+    them rather than opening beside them.
+  - **A view control's ROW follows its subject, not its convenience.**
+    Fullscreen asks how much screen the app gets, which does not change
+    when a document opens, so it is the shell's. Display settings ask how
+    THIS canvas is drawn, so they are the document's — and being one
+    plugin's worth of edge routing, they earn a menu row rather than an
+    icon in a row the title wants.
+
+  What this rule refuses is the control with no answer: an affordance added
+  to whichever row its implementing file already rendered. That is how the
+  rows came to hold five button spellings, a second `⋯` a header above the
+  first, and a fullscreen toggle whose subject was a `<main>` element.
+  `header-button-surface.test.ts` is the mechanical half — one class set,
+  and the count per file pinned by equality from both sides, so a new
+  control cannot arrive without changing a number there. Which role it
+  serves stays a reader's judgement: the controls are written per-file and
+  are not declared anywhere one scan could enumerate, and until they are (a
+  registry every header control registers with is the upgrade path) a
+  per-item table here would be the hand-kept list this file exists to
+  replace.
 - **The mark IS the switcher, and the row does not name the workspace.** The
   strip is `[mark] ALPHA <spacer> gear` and nothing else. The mark states
   which workspace you are in through its ACCESSIBLE name
