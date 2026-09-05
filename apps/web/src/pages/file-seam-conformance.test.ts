@@ -235,7 +235,7 @@ describe('the spatial-editor-container hook means one thing', () => {
  * Kept as its own group so a reader does not have to infer the distinction
  * from where an entry happens to sit.
  */
-const SHARED_DOCUMENT_CHROME = ['CommentsPanel'] as const
+const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
@@ -299,6 +299,15 @@ describe('document page document-level chrome', () => {
         'omits it leaves that document kind with no way to reach its ' +
         'conversations at all.',
     ).toEqual([])
+  })
+
+  // The aside moved into shared chrome (CommentsRailChrome), so the pages
+  // render the RAIL and the rail renders the panel — this keeps the
+  // guarantee transitive rather than trusting the indirection.
+  it('the shared rail chrome itself renders CommentsPanel', async () => {
+    const source = (await import('../components/annotations/CommentsRailChrome.tsx?raw'))
+      .default as string
+    expect(renders(source, 'CommentsPanel')).toBe(true)
   })
 })
 
