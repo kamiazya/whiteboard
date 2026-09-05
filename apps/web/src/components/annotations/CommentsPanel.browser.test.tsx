@@ -179,8 +179,12 @@ it('composes a new conversation about the passage the host handed it', async () 
 
   // The passage is quoted back, because by the time the reader is typing in
   // the rail their selection in the body is no longer the thing they are
-  // looking at.
-  await expect.element(page.getByTestId('comments-panel-compose')).toHaveTextContent('report')
+  // looking at. Scoped to the compose box and asserted on the QUOTE, not on
+  // the box's concatenated text — which also carries the submit button's
+  // label, so the old whole-box assertion only passed on a substring match.
+  await expect
+    .element(page.getByTestId('comments-panel-compose').getByText('report'))
+    .toBeInTheDocument()
   await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), 'is this still true?')
   await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
 

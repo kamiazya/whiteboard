@@ -67,14 +67,24 @@ measurement the pool choice should rest on.
 
 ### `fsModuleCache`
 
-```ts
-export default defineConfig({ test: { fsModuleCache: true } })
+```bash
+vitest run --fsModuleCache            # or test: { fsModuleCache: true }
+vitest --clearCache                   # drop it (and every other vitest cache)
 ```
 
-Persists transformed modules on disk across reruns AND across separate processes (the five
-fresh-process stress runs included). Plugins whose output depends on more than the source
-declare it through `defineCacheKeyGenerator`. Candidate for the import-cost timeout class;
-verify with the duration breakdown before and after, on a quiet tree.
+Persists transformed modules under `node_modules/.vitest-cache` (`--fsModuleCachePath` moves
+it) across reruns AND across separate processes. Plugins whose output depends on more than
+the source declare it through `defineCacheKeyGenerator`.
+
+**It pays where the same graph is transformed more than once, and only there.** Adopted in
+CI's `stress-changed-tests` job, which runs the changed files five times in fresh processes
+plus one `--repeats=3` pass; every other CI job runs its project once and gains nothing.
+Measured on that exact shape (four changed `web-jsdom` files, five fresh processes,
+interleaved rounds): faster in both paired rounds, 48.2s/47.0s plain against 39.7s/40.0s
+cached — median 47.6s → 39.8s. Vitest's own performance hint is what named it, printed
+under the duration line on CI with the number behind it (`transforming modules took 5.91s ·
+46% of tracked time, re-done on every run`). Read the hint; it is a measurement of the run
+that just happened.
 
 ### `injectCjsGlobals: false`
 

@@ -205,10 +205,22 @@ jobs:
         # Fresh vitest process per iteration on purpose: module state, test
         # order and process env all reset, which is closer to the conditions
         # a flake needs than one long in-process repeat.
+        #
+        # `--fsModuleCache` persists transformed modules on disk, so the four
+        # reruns after the first do not re-transform the same graph. This job
+        # is the one place in CI where that pays: every other job runs its
+        # project once. Vitest's own performance hint named it here, with the
+        # number — `transforming modules took 5.91s · 46% of tracked time,
+        # re-done on every run`. Measured locally on this shape (four changed
+        # web-jsdom files, five fresh processes, interleaved rounds): faster
+        # in both paired rounds, 48.2s/47.0s plain against 39.7s/40.0s
+        # cached, median 47.6s -> 39.8s. The cache lives under
+        # node_modules/.vitest-cache and is not carried between CI runs, so
+        # the first process of each job still pays full transform cost.
         run: |
           for i in 1 2 3 4 5; do
             echo "=== stress run $i/5 ==="
-            pnpm exec vitest run --passWithNoTests ${{ steps.changed.outputs.files }}
+            pnpm exec vitest run --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
           done
 
       - name: Repeat changed tests in-process (3x)
@@ -217,7 +229,7 @@ jobs:
         # SAME test in one process (a leaked timer, a module-level cache, a
         # handle that was "most recent" last time). `--repeats` runs the
         # passes too, which is what separates it from `retry`.
-        run: pnpm exec vitest run --repeats=3 --passWithNoTests ${{ steps.changed.outputs.files }}
+        run: pnpm exec vitest run --repeats=3 --fsModuleCache --passWithNoTests ${{ steps.changed.outputs.files }}
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before

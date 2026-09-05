@@ -61,6 +61,26 @@ comment still says `false`; the runtime wins). Why it matters here: the held-`/t
 shape bound to the OUTGOING page's title because a loose match had two candidates; a strict
 match has one.
 
+**Strictness moves an assertion onto the element it is actually about.** All three failures
+the upgrade produced were the same shape — a whole-CONTAINER text assertion that had been
+passing on a substring:
+
+```ts
+// was: the compose box's text is the quote PLUS the textarea and the button label,
+// so this only ever passed because 'report' is a substring of 'reportComment'
+await expect.element(page.getByTestId('comments-panel-compose')).toHaveTextContent('report')
+
+// now: scoped to the quote, which is what the test's own comment says it checks
+await expect
+  .element(page.getByTestId('comments-panel-compose').getByText('report'))
+  .toBeInTheDocument()
+```
+
+Locators chain (`getByTestId(...).getByText(...)`), and testing-library's `within(el)` does
+the same for a `screen`-based test. Reach for `toMatchTextContent(/…/)` only when the
+element genuinely holds a longer string you are matching part of — not to restore a
+container assertion that was never about the container.
+
 ### Locator failure output as an ARIA tree
 
 ```ts
