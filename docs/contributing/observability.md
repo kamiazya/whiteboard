@@ -56,52 +56,29 @@ Outbound calls from the MCP daemon-client (`client.request(...)` inside
 each tool) inject `traceparent` automatically, so an `mcp.tool.call` span
 parents the HTTP request span on the daemon side.
 
-## Browser tracing (opt-in)
-
-The UI ships with a lazy SDK loader, so the default bundle does not pay
-the cost. Open the dev console on the canvas page and:
-
-```js
-localStorage.setItem('whiteboard:otel', '1')
-// optional: forward to a local collector
-localStorage.setItem('whiteboard:otel-otlp', 'http://localhost:4318')
-location.reload()
-```
-
-After reload, every `apiFetch` carries a `traceparent` header. With no
-collector, the SDK uses the console exporter so spans appear in DevTools.
-With an OTLP HTTP endpoint, spans land in your collector alongside the
-matching server-side span.
-
-Programmatic alternative inside the page:
-
-```js
-await window.__whiteboardEnableTracing({ otlpEndpoint: '…' })
-```
-
 ## WS instrumentation
 
 Each binary Loro update opens an `ws.message.binary` span on the server
 with `whiteboard.workspace_id` / `whiteboard.path` / `whiteboard.update_bytes`
 attributes.
 
-If the client sends a `ws_trace` text frame (shape:
+If a client sends a `ws_trace` text frame (shape:
 `{type: 'ws_trace', traceparent, tracestate?}`) immediately before a
 binary update, the server adopts that traceparent as the parent of the
-next `ws.message.binary` span — letting a UI-driven edit stitch
-end-to-end. `buildWsTracePayload()` in `app/lib/browser-tracing.ts`
-builds the payload from the active OTel context; the WS layer hooked to
-useWhiteboardSync should call it before each binary send. When no
-`ws_trace` precedes the frame, the span runs parentless and still gives
-a per-update timeline.
+next `ws.message.binary` span — letting an edit stitch end-to-end. No
+first-party client currently sends one (the bundled web app ships no
+OTel SDK), so today every span runs parentless and still gives a
+per-update timeline; the frame stays in the protocol for external
+clients that do trace.
 
-## Browser fetch instrumentation
+## Browser side
 
-`enableBrowserTracing()` registers `@opentelemetry/instrumentation-fetch`
-so user-initiated `fetch()` calls open a client span and the OTel
-propagator attaches `traceparent` automatically. Same-origin requests and
-`http://127.0.0.1:*` / `http://localhost:*` are CORS-allowed for trace
-header propagation by default.
+The web app ships `@opentelemetry/api`'s no-op propagation surface only:
+`apiFetch` injects a `traceparent` header when — and only when — the
+embedding page has registered a real OTel SDK of its own. There is no
+bundled SDK, no opt-in flag, and no `window` hook; an earlier lazy-SDK
+half (`enableBrowserTracing`) was deleted as dead code after shipping
+with zero production callers.
 
 ## Disabling
 
