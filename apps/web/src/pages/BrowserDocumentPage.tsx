@@ -1,5 +1,5 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { CommentThread, DocumentKind } from '@kamiazya/whiteboard-model'
+import type { AnnotationAnchor, CommentThread, DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -727,6 +727,21 @@ export function BrowserDocumentPage({
     setSelectedThreadId(threadId)
   }, [])
   /**
+   * A passage the reader asked to comment on, waiting for its first message.
+   *
+   * Held here rather than in the rail because the rail is UNMOUNTED until it
+   * is opened, and the gesture that produces this passage is what opens it —
+   * state inside a component that does not exist yet cannot receive it.
+   */
+  const [composeAnchor, setComposeAnchor] = useState<AnnotationAnchor | null>(null)
+  const composeThread = useCallback((anchor: AnnotationAnchor) => {
+    setCommentsOpen(true)
+    // Nothing else expanded: the reader asked for a new conversation, and an
+    // already-open one beside the draft box is two reply fields on screen.
+    setSelectedThreadId(null)
+    setComposeAnchor(anchor)
+  }, [])
+  /**
    * This document's conversations, whichever half of the page holds them.
    *
    * A markdown document is given no BrowserBackend on purpose (see the
@@ -801,6 +816,48 @@ export function BrowserDocumentPage({
       onChange(canvas, { kind: 'reply-to-thread', threadId, message })
     },
     [canvas, documentKind, markdownDoc.replyToThread, onChange],
+  )
+
+  /**
+   * Opens the conversation the compose box collected, whole.
+   *
+   * The thread is built HERE rather than in the rail because minting an id
+   * and stamping a time are keeper concerns, and because the two hosts below
+   * take different routes to the same plane — the markdown branch for the
+   * same reason `handleReply` has one: a note is given no BrowserBackend, so
+   * there is no session for a command to travel through.
+   *
+   * Only the markdown surface produces a passage today (the canvas has its
+   * own compose bubble, which writes a comment its own way), so the spatial
+   * arm is the one a spatial gesture would arrive on rather than one this
+   * page reaches now. It is written rather than omitted because the rail is
+   * kind-agnostic: whatever hands this a passage next must not find the
+   * handler silently doing nothing.
+   */
+  const handleCreateThread = useCallback(
+    (anchor: AnnotationAnchor, body: string) => {
+      const thread: CommentThread = {
+        id: crypto.randomUUID(),
+        anchor,
+        status: 'open',
+        messages: [
+          {
+            id: crypto.randomUUID(),
+            body,
+            // No author, like every message this app writes: there are no
+            // accounts, so any name here would be invented.
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      }
+      if (documentKind === 'markdown') markdownDoc.createThread(thread)
+      else onChange(canvas, { kind: 'create-thread', thread })
+      setComposeAnchor(null)
+      // Straight into the conversation just opened, so the reader can keep
+      // going rather than hunting their own new row in the list.
+      setSelectedThreadId(thread.id)
+    },
+    [canvas, documentKind, markdownDoc.createThread, onChange],
   )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
@@ -1264,6 +1321,7 @@ export function BrowserDocumentPage({
                           threads: annotations,
                           selectedThreadId,
                           onSelectThread: revealThread,
+                          onComposeThread: composeThread,
                         }
                   }
                   spatial={() => (
@@ -1327,6 +1385,12 @@ export function BrowserDocumentPage({
                   // reply is a write to the LIVE document — sent from a
                   // surface showing something else entirely.
                   onReply={preview === null ? handleReply : undefined}
+                  // Same rule as the reply above, and for the same reason: a
+                  // new conversation is a write to the LIVE document, and the
+                  // surface behind this rail is showing a past version.
+                  composeAnchor={preview === null ? composeAnchor : null}
+                  onCreateThread={preview === null ? handleCreateThread : undefined}
+                  onCancelCompose={() => setComposeAnchor(null)}
                 />
               </aside>
             ) : null}
