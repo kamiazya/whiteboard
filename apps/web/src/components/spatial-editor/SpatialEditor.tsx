@@ -58,22 +58,8 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type { BoundingBox, MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import {
-  BODY_FONT_SIZE_PX,
-  BODY_LINE_HEIGHT_PX,
-  COMMENT_BUBBLE_PADDING_PX,
-  COMMENT_BUBBLE_RADIUS_PX,
-  commentAnchor,
-  edgeLabelAnchor,
-  outlineContentBox,
-  placeCommentBubble,
-  referenceSeamsFromWire,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
-  SPATIAL_THEME_FONT_FAMILY,
-  SPATIAL_THEME_GEOMETRY,
-} from '@kamiazya/whiteboard-canvas-render'
+import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import { referenceSeamsFromWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -93,7 +79,7 @@ import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
-import { createEditorAppearance, editorTextFill } from '../../lib/spatial/editor-appearance.js'
+import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import {
   distanceToPolyline,
@@ -119,6 +105,7 @@ import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
+import { CommentComposeOverlay, commentComposeStyle } from './comment-compose-overlay.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -134,10 +121,11 @@ import { carriedByGesture } from './gesture-view.js'
 import { defaultCreateId, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
-import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
+import { EdgeLabelEditorOverlay, GroupLabelEditorOverlay } from './label-editor-overlays.js'
 import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
+import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 import {
   createIdleNavigation,
   DOUBLE_PRESS_WINDOW_MS,
@@ -151,7 +139,6 @@ import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
 import { isTextEntryEvent } from './shortcuts.js'
-import { TextNodeEditor } from './TextNodeEditor.js'
 import { type DraggableCreation, draggedCreation, ToolPalette } from './ToolPalette.js'
 import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useCanvasWire } from './use-canvas-wire.js'
@@ -337,77 +324,6 @@ export interface SpatialEditorProps {
   readonly isImageFileRef?: (file: string) => boolean
 }
 
-const EDGE_LABEL_EDITOR_WIDTH_PX = 160
-const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
-/** The compose bubble sits where the saved comment's bubble will be drawn,
- * so committing reads as the draft settling rather than jumping. */
-const COMMENT_COMPOSE_WIDTH_PX = 216
-const COMMENT_COMPOSE_HEIGHT_PX = 64
-/**
- * Where the draft opens: placed by canvas-render's own bubble placer over
- * the same obstacles, so it opens in the quadrant the settled bubble will
- * take rather than over the node the comment is about.
- */
-function commentDraftBox(
-  anchor: Point,
-  obstacles: readonly BoundingBox[],
-): { x: number; y: number; width: number; height: number } {
-  const placed = placeCommentBubble(
-    anchor,
-    { w: COMMENT_COMPOSE_WIDTH_PX, h: COMMENT_COMPOSE_HEIGHT_PX },
-    obstacles,
-  )
-  return { x: placed.x, y: placed.y, width: placed.w, height: placed.h }
-}
-
-/**
- * The compose bubble wears the theme's comment chrome — the same palette
- * entry, padding and corner the renderer draws the settled bubble with —
- * so the draft and the saved comment read as one object rather than a
- * plain editor a card replaces on commit. The shadow mirrors the SVG
- * drop-shadow filter (dy 1, blur ~3px at 30% black) that lifts the
- * settled chrome off the canvas plane.
- */
-function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
-  const { bubble } = (theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE).comment
-  return {
-    background: bubble.fill,
-    color: editorTextFill(theme),
-    border: `1px solid ${bubble.stroke}`,
-    borderRadius: COMMENT_BUBBLE_RADIUS_PX,
-    padding: COMMENT_BUBBLE_PADDING_PX,
-    // Focus is shown as a soft halo in the bubble's own stroke colour
-    // rather than the UA's dark outline ring, which read as a second,
-    // heavier border around the card. The bubble is only ever mounted
-    // focused, so the halo is always the focus indicator.
-    outline: 'none',
-    boxShadow: `0 0 0 2px ${bubble.stroke}55, 0 1px 3px rgba(0, 0, 0, 0.3)`,
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    fontSize: BODY_FONT_SIZE_PX,
-    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-    // Size to the draft like the settled bubble sizes to its text: one
-    // line to start, growing as lines are added (`field-sizing`; browsers
-    // without it keep the one-line minimum and scroll).
-    height: 'auto',
-    minHeight: BODY_LINE_HEIGHT_PX + 2 * COMMENT_BUBBLE_PADDING_PX + 2,
-    ...({ fieldSizing: 'content' } as React.CSSProperties),
-  }
-}
-
-/**
- * Opaque surface + label typography for the edge/group label editors. The
- * CSS reset makes form controls transparent, so without an explicit
- * background the object being edited (an edge line, the frame border)
- * shows through the draft.
- */
-function labelEditorStyle(theme: ResolvedTheme) {
-  return {
-    background: theme === 'dark' ? 'oklch(0.145 0 0)' : '#ffffff',
-    color: editorTextFill(theme),
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-    fontSize: SPATIAL_THEME_GEOMETRY.labelFontSizePx,
-  }
-}
 /** Screen-space px within which a press/right-click counts as hitting an
  * edge line; divided by the zoom for the canvas-space comparison. */
 const EDGE_HIT_TOLERANCE_PX = 6
@@ -2581,194 +2497,49 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 applyResult={applyResult}
               />
             )}
-            {edgeLabelEditId !== null &&
-              (() => {
-                const edge = canvas.edges.find((entry) => entry.id === edgeLabelEditId)
-                const path = edgePaths.find((entry) => entry.id === edgeLabelEditId)?.path
-                if (edge === undefined || path === undefined) return null
-                // edgePaths is already the DRAWN (flattened) line, so the
-                // shared anchor needs no second rounding pass here.
-                const mid = edgeLabelAnchor(path)
-                if (mid === undefined) return null
-                return (
-                  <TextNodeEditor
-                    exitHintScale={1 / viewport.zoom}
-                    box={{
-                      x: mid.x - EDGE_LABEL_EDITOR_WIDTH_PX / 2,
-                      y: mid.y - EDGE_LABEL_EDITOR_HEIGHT_PX / 2,
-                      width: EDGE_LABEL_EDITOR_WIDTH_PX,
-                      height: EDGE_LABEL_EDITOR_HEIGHT_PX,
-                    }}
-                    initialText={edge.label ?? ''}
-                    testId="edge-label-editor"
-                    style={labelEditorStyle(theme)}
-                    onCommit={(label) => {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          { kind: 'set-edge-label', id: edge.id, label: label.trim() } as const,
-                        ],
-                      })
-                      setEdgeLabelEditId(null)
-                    }}
-                    onCancel={() => setEdgeLabelEditId(null)}
-                  />
-                )
-              })()}
-            {groupLabelEditId !== null &&
-              (() => {
-                const group = canvas.nodes.find((entry) => entry.id === groupLabelEditId)
-                if (group === undefined || group.type !== 'group') return null
-                return (
-                  <TextNodeEditor
-                    exitHintScale={1 / viewport.zoom}
-                    // The label renders OUTSIDE, above the frame (container
-                    // convention) — the editor sits on that band.
-                    box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
-                    initialText={group.label ?? ''}
-                    testId="group-label-editor"
-                    style={labelEditorStyle(theme)}
-                    onCommit={(label) => {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          { kind: 'set-group-label', id: group.id, label: label.trim() } as const,
-                        ],
-                      })
-                      setGroupLabelEditId(null)
-                    }}
-                    onCancel={() => setGroupLabelEditId(null)}
-                  />
-                )
-              })()}
+            {edgeLabelEditId !== null && (
+              <EdgeLabelEditorOverlay
+                editId={edgeLabelEditId}
+                canvas={canvas}
+                edgePaths={edgePaths}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setEdgeLabelEditId(null)}
+              />
+            )}
+            {groupLabelEditId !== null && (
+              <GroupLabelEditorOverlay
+                editId={groupLabelEditId}
+                canvas={canvas}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setGroupLabelEditId(null)}
+              />
+            )}
             {commentCompose !== null && (
-              <TextNodeEditor
-                exitHintScale={1 / viewport.zoom}
-                box={commentDraftBox(
-                  // An edge comment opens ON the routed path, where the layer
-                  // will pin it — one producer for the geometry.
-                  commentCompose.targetEdgeId === undefined
-                    ? commentCompose.point
-                    : commentAnchor(
-                        {
-                          id: '',
-                          text: ' ',
-                          x: commentCompose.point.x,
-                          y: commentCompose.point.y,
-                          targetEdgeId: commentCompose.targetEdgeId,
-                        },
-                        canvas,
-                        edgePathOf,
-                      ),
-                  commentPlacementObstacles(commentCompose.editing?.id),
-                )}
-                initialText={commentCompose.editing?.initialText ?? ''}
-                testId="comment-compose"
-                style={commentComposeStyle(theme)}
-                onCommit={(draft) => {
-                  const text = draft.trim()
-                  // A blank commit is a cancel: an empty comment says nothing
-                  // and would still ask the reader to resolve it. Editing an
-                  // existing comment to blank likewise keeps its stored text —
-                  // removal stays MCP-only in v1 (ADR-0025).
-                  if (commentCompose.editing !== undefined) {
-                    if (text.length > 0 && text !== commentCompose.editing.initialText) {
-                      applyResult({
-                        state: { kind: 'idle' },
-                        commands: [
-                          {
-                            kind: 'set-comment-text',
-                            id: commentCompose.editing.id,
-                            text,
-                          } as const,
-                        ],
-                      })
-                    }
-                  } else if (text.length > 0 && commentCompose.threadAnchor !== undefined) {
-                    // A passage of a node's text, or a node set: a THREAD,
-                    // since a flat comment cannot carry either anchor.
-                    const id = (createId ?? defaultCreateId)()
-                    const createdAt = new Date().toISOString()
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        {
-                          kind: 'create-thread',
-                          thread: {
-                            id,
-                            anchor: commentCompose.threadAnchor,
-                            status: 'open',
-                            createdAt,
-                            messages: [{ id: `${id}-m1`, body: text, createdAt }],
-                          },
-                        } as const,
-                      ],
-                    })
-                  } else if (text.length > 0) {
-                    const { point, targetNodeId, targetEdgeId } = commentCompose
-                    applyResult({
-                      state: { kind: 'idle' },
-                      commands: [
-                        {
-                          kind: 'create-comment',
-                          comment: {
-                            id: (createId ?? defaultCreateId)(),
-                            // Rounded for the same reason the pin drag rounds:
-                            // an integer by schema, and a fractional anchor
-                            // is dropped on read rather than rejected here.
-                            x: Math.round(point.x),
-                            y: Math.round(point.y),
-                            text,
-                            createdAt: new Date().toISOString(),
-                            ...(targetNodeId === undefined ? {} : { targetNodeId }),
-                            ...(targetEdgeId === undefined ? {} : { targetEdgeId }),
-                          },
-                        } as const,
-                      ],
-                    })
-                  }
-                  setCommentCompose(null)
-                }}
-                onCancel={() => setCommentCompose(null)}
+              <CommentComposeOverlay
+                compose={commentCompose}
+                canvas={canvas}
+                edgePathOf={edgePathOf}
+                obstacles={commentPlacementObstacles(commentCompose.editing?.id)}
+                createId={createId}
+                zoom={viewport.zoom}
+                theme={theme}
+                applyResult={applyResult}
+                onClose={() => setCommentCompose(null)}
               />
             )}
             {gestureState.kind === 'editing-text' &&
               selectedNode?.type === 'text' &&
               selection !== undefined && (
-                <MarkdownNodeEditor
-                  // The scene keeps drawing this node's chrome (its body is
-                  // suppressed while this editor is open), so the editor is
-                  // TRANSPARENT and sits in the same box the committed text
-                  // uses: the silhouette's inscribed content box. A shaped
-                  // node therefore keeps its silhouette for the whole edit,
-                  // and the text does not jump on entering edit mode.
-                  box={(() => {
-                    const chrome = scene.nodes.find(
-                      (entry) => entry.kind === 'shape' && entry.id === selectedNode.id,
-                    )
-                    const shapeId =
-                      chrome !== undefined && chrome.kind === 'shape' ? chrome.shape : undefined
-                    const bbox = {
-                      x: selection.box.x,
-                      y: selection.box.y,
-                      w: selection.box.width,
-                      h: selection.box.height,
-                    }
-                    const inner = outlineContentBox(shapeId, bbox)
-                    return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
-                  })()}
-                  initialText={selectedNode.text}
-                  // The conversations about passages of this node's text,
-                  // highlighted over the draft; and the comment verb's seam,
-                  // which attaches the caret's scope to this node and opens
-                  // the compose bubble at the node's corner, where a node
-                  // comment opens. The editor commits on the blur the bubble
-                  // causes, so the passage the anchor quotes is the text
-                  // that gets committed.
-                  threads={threads?.filter(
-                    (thread) =>
-                      thread.anchor.kind === 'text' && thread.anchor.nodeId === selectedNode.id,
-                  )}
+                <MarkdownBodyEditorOverlay
+                  node={selectedNode}
+                  selectionBox={selection.box}
+                  sceneNodes={scene.nodes}
+                  sceneCurrent={sceneCurrent}
+                  threads={threads}
                   onRequestComment={(anchor) => {
                     setCommentCompose({
                       point: { x: selectedNode.x + selectedNode.width, y: selectedNode.y },
@@ -2777,55 +2548,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     })
                     return true
                   }}
-                  exitHintTop={selection.box.y + selection.box.height + 6}
-                  exitHintScale={1 / viewport.zoom}
-                  centerContent={scene.nodes.some(
-                    (entry) =>
-                      entry.kind === 'shape' &&
-                      entry.id === selectedNode.id &&
-                      entry.shape !== undefined,
-                  )}
-                  style={{
-                    // Transparent once the scene below has stopped drawing
-                    // this node's text. An offloaded canvas lags one worker
-                    // round trip behind the suppression change, so for that
-                    // gap the overlay keeps the old opaque cover — otherwise
-                    // the committed text shows doubled under the draft.
-                    background: sceneCurrent
-                      ? 'transparent'
-                      : (() => {
-                          const fill =
-                            createEditorAppearance(theme).resolveNode(selectedNode).appearance?.fill
-                          return fill !== undefined && fill !== 'none'
-                            ? fill
-                            : theme === 'dark'
-                              ? 'oklch(0.145 0 0)'
-                              : '#ffffff'
-                        })(),
-                    color: editorTextFill(theme),
-                    fontFamily: SPATIAL_THEME_FONT_FAMILY,
-                    fontSize: BODY_FONT_SIZE_PX,
-                    // The overlay must advance by the SAME line box the
-                    // committed render uses, or the text moves under the
-                    // cursor on entering edit mode. Shared constant, not a
-                    // second copy of the number — these were equal until the
-                    // markdown theme took body line height to 1.5.
-                    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-                    padding: SPATIAL_THEME_GEOMETRY.paddingPx,
-                  }}
-                  onCommit={(text) => {
-                    applyResult(
-                      reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }),
-                    )
-                  }}
-                  onCancel={() => {
-                    applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
-                  }}
-                  onChange={(text) => {
-                    applyResult(
-                      reduceGesture(gestureState, canvas, { type: 'update-text-edit', text }),
-                    )
-                  }}
+                  zoom={viewport.zoom}
+                  theme={theme}
+                  canvas={canvas}
+                  gestureState={gestureState}
+                  applyResult={applyResult}
                 />
               )}
           </div>

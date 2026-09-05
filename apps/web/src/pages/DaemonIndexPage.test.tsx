@@ -1951,4 +1951,159 @@ describe('the workspace names the page', () => {
 
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('marketing-team')
   })
+
+  // Bulk delete on THIS keeper. The browser page has its own end-to-end test
+  // for the same capability; without one here, a regression in the daemon's
+  // loop — a wrong path, a dialog that never closes, a list that never
+  // refreshes — would pass every test in the repo.
+  async function enterSelectionOn(name: string) {
+    const card = (await screen.findByText(name)).closest('button') as HTMLElement
+    fireEvent.contextMenu(card, { clientX: 20, clientY: 20 })
+    const menu = await screen.findByRole('menu', { name: 'Document actions' })
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Select' }))
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
+  }
+
+  async function addToSelection(name: string) {
+    fireEvent.click((await screen.findByText(name)).closest('button') as HTMLElement)
+  }
+
+  it('a bulk delete sends one DELETE per selected path and refreshes the list', async () => {
+    const deleted: string[] = []
+    let rows = [
+      { path: 'alpha', updatedAt: new Date().toISOString() },
+      { path: 'beta', updatedAt: new Date().toISOString() },
+      { path: 'gamma', updatedAt: new Date().toISOString() },
+    ]
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        get 'ws-a'() {
+          return rows
+        },
+      },
+      onDeleteCanvas: (_ws, path) => {
+        deleted.push(path)
+        rows = rows.filter((r) => r.path !== path)
+        return undefined
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    await enterSelectionOn('alpha')
+    await addToSelection('beta')
+    const bar = await screen.findByTestId('selection-bar')
+    await waitFor(() => expect(bar.textContent).toContain('2 selected'))
+    fireEvent.click(within(bar).getByRole('button', { name: 'Delete' }))
+
+    const dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText('Delete 2 documents?')).toBeTruthy()
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['delete-documents-daemon']('documents')),
+    ).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(deleted.sort()).toEqual(['alpha', 'beta'])
+    await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
+    expect(screen.getByText('gamma')).toBeTruthy()
+  })
+
+  it('a partial bulk failure reports the count, refreshes, and retries only what failed', async () => {
+    const attempts: string[] = []
+    let rows = [
+      { path: 'alpha', updatedAt: new Date().toISOString() },
+      { path: 'beta', updatedAt: new Date().toISOString() },
+    ]
+    let betaFails = true
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        get 'ws-a'() {
+          return rows
+        },
+      },
+      onDeleteCanvas: (_ws, path) => {
+        attempts.push(path)
+        if (path === 'beta' && betaFails) return jsonResponse({ title: 'nope' }, 500)
+        rows = rows.filter((r) => r.path !== path)
+        return undefined
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    await enterSelectionOn('alpha')
+    await addToSelection('beta')
+    fireEvent.click(
+      within(await screen.findByTestId('selection-bar')).getByRole('button', { name: 'Delete' }),
+    )
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    )
+
+    const dialog = await screen.findByRole('alertdialog')
+    await waitFor(() =>
+      expect(within(dialog).getByText('1 of 2 could not be deleted.')).toBeTruthy(),
+    )
+    // The list behind the dialog must already say so — the one that went is
+    // gone. The comment on this branch used to claim this without doing it.
+    await waitFor(() => expect(screen.queryByText('alpha')).toBeNull())
+
+    // Retry: only the failure is attempted again, so the operation converges
+    // instead of re-issuing DELETE for a path the daemon has already removed.
+    betaFails = false
+    attempts.length = 0
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+    expect(attempts).toEqual(['beta'])
+  })
+
+  it('reports a 404 inside a bulk as a failure, the same as a single delete does', async () => {
+    // NOT treated as "already gone". A single delete that 404s shows the
+    // daemon's message (its own test above), and a bulk delete making the
+    // opposite choice would be the same operation meaning two things. Retry
+    // converges through NARROWING instead: only what failed is sent again,
+    // so a path the first attempt deleted is never re-sent.
+    let rows = [
+      { path: 'alpha', updatedAt: new Date().toISOString() },
+      { path: 'beta', updatedAt: new Date().toISOString() },
+    ]
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        get 'ws-a'() {
+          return rows
+        },
+      },
+      onDeleteCanvas: (_ws, path) => {
+        if (path === 'beta') return jsonResponse({ title: 'not found' }, 404)
+        rows = rows.filter((r) => r.path !== path)
+        return undefined
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+    await screen.findByText('alpha')
+
+    await enterSelectionOn('alpha')
+    await addToSelection('beta')
+    fireEvent.click(
+      within(await screen.findByTestId('selection-bar')).getByRole('button', { name: 'Delete' }),
+    )
+    fireEvent.click(
+      within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
+    )
+
+    const dialog = await screen.findByRole('alertdialog')
+    await waitFor(() =>
+      expect(within(dialog).getByText('1 of 2 could not be deleted.')).toBeTruthy(),
+    )
+  })
 })

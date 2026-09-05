@@ -45,6 +45,7 @@ const sources = import.meta.glob(
     './components/workspace-files/WorkspaceFilesPanel.tsx',
     './components/workspace-files/use-browser-columns.ts',
     './components/workspace-files/use-debounced-document-search.ts',
+    './components/workspace-files/use-device-memory.ts',
     './pages/DaemonIndexPage.tsx',
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
@@ -81,6 +82,10 @@ const PANEL = './components/workspace-files/WorkspaceFilesPanel.tsx'
 // there, not away, so the scan surface is the concatenation of all three.
 const PANEL_COLUMNS_HOOK = './components/workspace-files/use-browser-columns.ts'
 const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-search.ts'
+// What this device remembers about the workspace — the recently-opened
+// lane and the changed-dot baselines. Extracted from the panel when its
+// file-size budget said so; same SCREEN by the same rule as the two above.
+const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
@@ -108,6 +113,17 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   // workspace on screen. Its own effect, since the handle can arrive after
   // the source.
   recentIds: 'cleared on switch',
+  // A COUNTER, not a subject: it names no document and no path, and its
+  // only job is to tell the derived `changed` memo that this panel wrote a
+  // baseline. Surviving a switch is harmless — the memo also keys on
+  // `documents` and `workspace`, both of which change with the scope.
+  seenRevision:
+    'no subject: a bump counter for the changed-dot memo, naming nothing that belongs to a workspace',
+  // Paths, and paths collide across workspaces — `untitled` is the first
+  // document in most. A selection carried across a switch would address the
+  // departed workspace's names into the store now on screen, in a BULK
+  // delete, which is the worst place for that class of mistake.
+  selection: 'cleared on switch',
   renaming: 'cleared on switch',
   renameError: 'cleared on switch',
   renameBusy: 'cleared on switch',
@@ -365,15 +381,15 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   ...DOCUMENT_PAGE_HOOK_STATE,
-  // Which panel the one inspector slot shows — the history column or the
-  // comments rail. How the reader looks rather than what at: everything a
-  // panel SAYS is document-scoped and cleared on its own (`preview` and
-  // `bookmarkArmed` below, `selectedThreadId` and `composeAnchor` above),
-  // and both panels refetch on the path, so a column left open across a
-  // switch shows the arrived document — as the rail always did, and as the
-  // threads themselves are republished per document.
+  // Which panel the one inspector slot shows — properties, comments,
+  // connections or history. How the reader looks rather than what at:
+  // everything a panel SAYS is document-scoped and cleared on its own
+  // (`preview` and `bookmarkArmed` below, `selectedThreadId` and
+  // `composeAnchor` above, the facets and backlinks the keeper republishes
+  // per document), so a panel left open across a switch shows the arrived
+  // document — as the rail always did.
   inspector:
-    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries, and the panels refetch on the path',
+    'no subject: which inspector panel is open, not what is in it — what each panel shows is cleared by its own entries or republished per document by the keeper',
   // The past state being looked at. Restoring one the person opened on the
   // DEPARTED document would apply that version id to the arrived one.
   preview: 'cleared on switch',
@@ -454,7 +470,7 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
 const CASES = [
   {
-    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK],
+    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK, PANEL_DEVICE_MEMORY_HOOK],
     ledger: PANEL_STATE,
     label: 'WorkspaceFilesPanel',
     scanRefs: true,
