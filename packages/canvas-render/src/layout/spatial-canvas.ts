@@ -211,6 +211,7 @@ export interface SpatialLayoutOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly resolveTitle?: MdastLayoutOptions['resolveTitle']
   /**
    * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
    * implementation, for the same reason `parseBody` defaults to codec's
@@ -447,6 +448,7 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
+    ...(options.resolveTitle !== undefined ? { resolveTitle: options.resolveTitle } : {}),
     embedPath: [...options.activeEmbedPath],
     layoutEmbeddedCanvas: (canvas, box) => layoutCanvasMiniature(canvas, box, options),
   }

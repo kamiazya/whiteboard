@@ -161,8 +161,14 @@ wb_canvas_edit({ workspaceId, documentId, ops: [ /* ...adds... */, { op: "tidy" 
 wb_canvas_edit({ workspaceId, documentId, ops: [{ op: "tidy", scope: ["client", "server"] }] })
 
 wb_scene_render({ workspaceId, documentId })
-// Resolve `file` node references (e.g. a node that embeds another document) inline:
+// Draw what the document references: a `file` node's target inside the node (a
+// markdown document as its body, a canvas as a miniature), and any `![[path]]`
+// embed inside a markdown body — including the `#Heading` / `#Group label` part
+// it names. Off, an embed renders as its address.
 wb_scene_render({ workspaceId, documentId, embedReferences: true })
+// One part only: a group by its label on a canvas, or a heading's section of a
+// markdown document — the same names `[[path#...]]` addresses.
+wb_scene_render({ workspaceId, documentId, fragment: "Launch" })
 ```
 
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
@@ -170,8 +176,9 @@ parameters — it is a one-shot auto-arrange, not a configurable layout engine. 
 document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it moved
 comes back under `geometry`.
 
-`wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format, and
-there is no way to render only one section of the document; the whole canvas renders every time.
+`wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format. It
+renders a markdown document too, as a page. `fragment` is the only way to render less than the
+whole document, and it addresses a group by label or a heading by text, never a region.
 Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
 - is text overflowing out of boxes? (there is no auto-wrap, so this is a real risk)

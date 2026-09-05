@@ -622,6 +622,42 @@ async function main() {
   }
   console.log('[e2e] wb_scene_render(embedReferences:true) → schema-valid svg')
 
+  // A MARKDOWN document renders too, as a page, and `embedReferences` there
+  // draws the canvas a `![[path]]` embed names as a miniature — the third
+  // composition through the same output schema (layoutMdastBlocks with the
+  // spatial composer behind it), reachable from no spatial call above.
+  await callTool('wb_document_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    markdown: '---\ntype: note\n---\nSee the board:\n\n![[e2e-src]]\n\nand more.',
+  })
+  const renderedMarkdown = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    embedReferences: true,
+  })
+  if (
+    typeof renderedMarkdown.svg !== 'string' ||
+    !renderedMarkdown.svg.includes('See the board') ||
+    !renderedMarkdown.svg.includes('<rect')
+  ) {
+    throw new Error(
+      `wb_scene_render(markdown, embedReferences) returned unexpected shape: ${JSON.stringify(renderedMarkdown).slice(0, 400)}`,
+    )
+  }
+  console.log(
+    '[e2e] wb_scene_render(markdown, embedReferences:true) → page with the embedded canvas',
+  )
+
+  // `fragment` names a part the document must hold; an unknown one is a
+  // tool error naming it, not a silent whole-document render.
+  await expectToolError(
+    'wb_scene_render',
+    { workspaceId: WORKSPACE_ID, documentId: withBody.documentId, fragment: 'Nowhere' },
+    'with a fragment the document does not hold',
+    'Nowhere',
+  )
+
   // canvas_view is the MCP Apps UI tool: its payload is consumed by the
   // widget rather than by a model, and it is the only tool whose result
   // carries a `references` map. The SDK validates that map against
