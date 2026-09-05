@@ -23,6 +23,7 @@ import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserBackend } from './browser-backend.js'
 import { createBrowserBranchesBackend } from './browser-branches-backend.js'
+import { BrowserVersionStore } from './browser-version-store.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
@@ -107,5 +108,65 @@ describe('the browser keeper merges by adopting the source tip', () => {
     expect(after?.branches.find((b) => b.name === 'main')?.tipFrontiers).toBe(tip)
     // The source is cleaned up, as it is on the daemon: it has been absorbed.
     expect(after?.branches.map((b) => b.name)).not.toContain('idea')
+  })
+
+  it('records the pre-merge point as automatic and on the target variation', async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const index = new FoldingBrowserIndex()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'canvas-b',
+      kind: 'spatial',
+    })
+
+    const docs = new BrowserWorkspaceDocs()
+    const record = await docs.open(workspaceId)
+    if (record === null) throw new Error('no record')
+    writeWorkspaceDocumentContent(record, documentId, canvasWith('before'))
+    // HEAD is a NON-default variation, and so is the merge target. Both
+    // matter: `branchName` falls back to `main` for a row that carries none,
+    // so a point taken on `main` cannot tell a recorded branch from a missing
+    // one, and the assertion below would hold over either.
+    writeBranchesToRecord(record, documentId, {
+      branches: [
+        { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-01-01T00:00:00.000Z' },
+        { name: 'idea', tipFrontiers: '', color: '#9333ea', createdAt: '2026-01-02T00:00:00.000Z' },
+        {
+          name: 'extra',
+          tipFrontiers: frontiersToBase64(record.frontiers()),
+          color: '#e8590c',
+          createdAt: '2026-01-03T00:00:00.000Z',
+        },
+      ],
+      head: 'idea',
+    })
+    await docs.save(workspaceId, record)
+
+    backend = new BrowserBackend({ documentId, path: 'canvas-b', kind: 'spatial' }, docs)
+    backend.connect(NO_OP_HANDLERS)
+    await vi.waitFor(() => expect(backend.readRecord(() => true)).toBe(true))
+
+    // The REAL store, not a stub: what this pins is that the two fields the
+    // merge already passes survive as far as the row the History panel lists.
+    // They did not — the store accepted them and wrote neither, so the point
+    // a merge can be rewound past claimed to be a person's manual save on the
+    // default variation. A stub asserting the call arguments would have shown
+    // the same green over that.
+    const store = new BrowserVersionStore({ docs, index })
+    const branches = createBrowserBranchesBackend({
+      backend,
+      versions: { save: (w, p, o) => store.save(w, p, o) },
+    })
+    await branches.merge(workspaceId, 'canvas-b', 'extra', { into: 'idea', dryRun: false })
+
+    const rows = await store.list(workspaceId, 'canvas-b')
+    expect(rows).toEqual([
+      expect.objectContaining({
+        auto: true,
+        branchName: 'idea',
+        label: 'before merge: extra \u2192 idea',
+      }),
+    ])
   })
 })

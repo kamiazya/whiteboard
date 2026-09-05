@@ -40,21 +40,23 @@ import { getAppLogger } from './app-logger.js'
 import type { BranchesBackend } from './branches-backend.js'
 import { BranchesUnsupportedError } from './branches-backend.js'
 import type { BrowserBackend } from './browser-backend.js'
+import type { BrowserVersionStore } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 
 const log = getAppLogger('browser-branches')
 
-/** The one method of the version store a merge needs — narrowed so this module takes no store. */
-type BrowserVersionSave = (
-  workspaceId: string,
-  path: string,
-  options: {
-    auto?: boolean
-    label?: string
-    branchName?: string
-    operator?: { kind: 'system'; peerId: string; displayName: string }
-  },
-) => Promise<{ id: string }>
+/**
+ * The one method of the version store a merge needs, taken FROM the store so
+ * the two cannot drift.
+ *
+ * It was hand-written here, and the drift it allowed is the reason it is not
+ * any more: this module passed `auto` and `branchName`, the store's own
+ * options had neither, and the assignment was accepted — so the point a merge
+ * can be rewound past was written as a person's manual save on the default
+ * variation, with nothing red anywhere. `import type` keeps this module free
+ * of the store at runtime, which is all the narrowing was ever for.
+ */
+type BrowserVersionSave = BrowserVersionStore['save']
 
 /** The state a document has when its record has not been delivered yet. */
 const RESTING: DocumentBranchesState = {
