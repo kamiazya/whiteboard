@@ -5,7 +5,12 @@
 // CI's check job via `pnpm test:scripts`.
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { judgeQuarantine, parseQuarantineMarkers, scanRepoQuarantine } from './lib/quarantine.mjs'
+import {
+  findUndeclaredSkips,
+  judgeQuarantine,
+  parseQuarantineMarkers,
+  scanRepoQuarantine,
+} from './lib/quarantine.mjs'
 
 const NOW = Date.parse('2026-09-05T00:00:00Z')
 
@@ -74,4 +79,38 @@ test('live repo scan: reaches the real test surface, and the budget holds', () =
   assert.ok(scannedFiles > 300, `scanned only ${scannedFiles} test files — the glob missed the surface`)
   const verdict = judgeQuarantine(markers, Date.now())
   assert.equal(verdict.ok, true, verdict.problems.join('\n'))
+})
+
+// The budget above counts what DECLARED itself. A skip with no marker was
+// invisible to all of it — not capped, never aged out — so the cheapest way
+// to park a test forever was to skip the marker too, which is exactly the
+// graveyard the cap exists to prevent.
+test('an undeclared skip is found, and a declared one is not', () => {
+  const src = [
+    "// QUARANTINE(2026-09-01 wb:issues/x): parked on purpose",
+    "it.skip('declared', () => {})",
+    "test.skip('undeclared', () => {})",
+    "describe.skip('also undeclared', () => {})",
+  ].join('\n')
+  const found = findUndeclaredSkips(src, 'a.test.ts')
+  assert.deepEqual(
+    found.map((s) => s.line),
+    [3, 4],
+  )
+})
+
+test('skipIf is a probed premise, not a park, and is left alone', () => {
+  // A test whose premise this environment cannot establish SHOULD skip and
+  // say so — AGENTS.md asks for exactly that, probed rather than inferred.
+  const src = "it.skipIf(!CAN_DENY_FILE_READ)('needs a deniable path', () => {})\n"
+  assert.deepEqual(findUndeclaredSkips(src, 'b.test.ts'), [])
+})
+
+test('live repo scan: no undeclared skip is parked outside the budget', () => {
+  const { undeclaredSkips } = scanRepoQuarantine()
+  assert.deepEqual(
+    undeclaredSkips.map((s) => `${s.file}:${s.line}`),
+    [],
+    'a skipped test with no QUARANTINE marker is invisible to the cap and never ages out',
+  )
 })

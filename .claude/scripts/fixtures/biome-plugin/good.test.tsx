@@ -21,3 +21,9 @@ export async function goodKeystrokes() {
 export function goodTimers() {
   vi.useFakeTimers()
 }
+
+import { it } from "vitest"
+
+export const goodFocus = () => {
+  it('plain, so every sibling still runs', () => {})
+}
