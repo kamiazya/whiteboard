@@ -127,12 +127,20 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * 22 = 88991 characters at a 4000-char grain. Was 88 at the 1000-char grain,
  * reached by two rounds of the cross-PR crossing described on `totalBucket`.
  *
+ * 23 since `vocabulary.md` gained the **Proposal** row (ADR-0029). The corpus
+ * stood at 91762 and one table row of 296 characters crossed the grain, which
+ * is what the grain is for: the row is not what the budget is really about,
+ * the 2771 characters that accumulated under it since 88991 are. Raised
+ * rather than trimmed — compressing a standing vocabulary entry below what it
+ * has to say, to sit under a bucket, is the trade this test exists to make
+ * visible rather than to force.
+ *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 22
+const ALWAYS_ON_TOTAL_BUDGET = 23
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by

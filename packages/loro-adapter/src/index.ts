@@ -41,6 +41,11 @@ export {
 } from './loro-bridge.js'
 export { type MinimalChange, minimalChange } from './minimal-change.js'
 export {
+  readProposals,
+  setProposedChangeStatus,
+  writeProposal,
+} from './proposals.js'
+export {
   markThreadPassages,
   type PassageRange,
   readThreadMarks,
