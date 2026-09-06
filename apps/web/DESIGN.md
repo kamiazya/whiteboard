@@ -682,6 +682,40 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**Opening a conversation moves the reader into it, and Escape brings them
+back.** Reading a conversation and writing the body are two modes, and the
+press that opens one has to land somewhere: a revealed thread takes focus on
+its row — the conversation's heading, and the place Tab continues from into
+its verbs, its replies and its reply box — while a new one takes it on the
+draft box, which is the whole of what was asked for. Left as it was, the
+rail opened beside an editor that still held the caret, so the keyboard kept
+typing into the document, the conversation was unreachable without the
+pointer, and on a phone the virtual keyboard stayed up over the rail that had
+just opened — which reads as the press having done nothing.
+
+Moving focus is only safe with a way back, so the two are one decision.
+Escape unwinds a layer at a time: an edit in progress first, then the panel,
+and `useCommentsRail.returnFocus` hands focus to whatever held it when the
+rail was opened. That is read from `activeElement` inside `revealThread` /
+`composeThread` rather than named by each caller, because four surfaces open
+this rail — a gutter marker, a preview marker, the toolbar button, a canvas
+pin — and every one of them is already holding focus when it calls in; a
+parameter would be the same answer written out four times, and the fourth
+surface is the one that would forget. `selectThread` deliberately does NOT
+capture: picking another conversation from inside the rail is not an entry,
+and re-capturing there would make the way out a row of the list the reader is
+standing in.
+
+Two cases need no guard, which was measured rather than assumed after guards
+for both proved impossible to fail: `focus()` is a no-op on `document.body`
+(what `activeElement` answers when nothing holds focus) and on a node the
+surface has since unmounted, so the reader stays put in exactly the cases a
+guard would have arranged. What DOES need code is the catalog path — its menu
+row unmounts on close, so `useAnnotationEntry.open` puts the caret back in
+the body before telling the host. Two things depend on that and neither is
+visible from the press: the caret IS the scope, and the way back out is
+whatever held focus at that moment.
+
 **Where that entry lives on a phone is the toolbar the docked bar makes
 redundant.** With the caret in the body a phone shows two bars, and five of
 their verbs were the same five — Heading, Bold, Italic, Bullet list, Task.

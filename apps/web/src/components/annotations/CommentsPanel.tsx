@@ -14,7 +14,7 @@
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, MessageSquarePlus, Pencil, RotateCcw } from 'lucide-react'
-import { useMemo, useState } from 'react'
+import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { cn } from '../../lib/utils.js'
 import { MessageBy } from './message-meta.js'
@@ -96,6 +96,13 @@ export interface CommentsPanelProps {
   readonly onResolve?: (threadId: string, resolved: boolean) => void
   /** Rewrites the opening message. Absent hides the control, like `onReply`. */
   readonly onEditMessage?: (threadId: string, messageId: string, body: string) => void
+  /**
+   * Hands focus back to the surface this panel was opened from — what
+   * Escape means here. Absent leaves Escape alone rather than dropping the
+   * reader somewhere unnamed: a host that cannot say where they came from
+   * has nowhere to send them.
+   */
+  readonly onReturnFocus?: () => void
 }
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
@@ -135,6 +142,7 @@ export function CommentsPanel({
   onComposeDocument,
   onResolve,
   onEditMessage,
+  onReturnFocus,
 }: CommentsPanelProps) {
   const [filter, setFilter] = useState<ThreadFilter>('open')
   // At most one conversation is open at a time. A panel of simultaneously
@@ -189,6 +197,62 @@ export function CommentsPanel({
     }
   }
 
+  /**
+   * Where the reader is put when a conversation is opened from outside this
+   * panel. Reading a conversation and writing the body are two modes, and a
+   * press that opens one has to move the reader into it — otherwise the
+   * caret stays in the document, the keyboard keeps typing into it, and on a
+   * phone the virtual keyboard stays up over the rail that just opened.
+   */
+  const rowRefs = useRef(new Map<string, HTMLButtonElement>())
+  const composeRef = useRef<HTMLTextAreaElement | null>(null)
+  const editRef = useRef<HTMLTextAreaElement | null>(null)
+
+  // The ROW's toggle rather than its reply box: it is the conversation's
+  // heading, and Tab continues from it into the verbs, the replies and the
+  // reply box in the order they are read.
+  useEffect(() => {
+    if (revealThreadId === null) return
+    rowRefs.current.get(revealThreadId)?.focus()
+  }, [revealThreadId])
+
+  // A new conversation has nothing to read, so the draft box is the whole
+  // of what was asked for.
+  useEffect(() => {
+    if (composeAnchor === null) return
+    composeRef.current?.focus()
+  }, [composeAnchor])
+
+  // Keyed on the thread rather than on `editing`, which changes on every
+  // keystroke — the focus belongs to opening the editor, not to typing in it.
+  const editingThreadId = editing?.threadId ?? null
+  useEffect(() => {
+    if (editingThreadId === null) return
+    editRef.current?.focus()
+  }, [editingThreadId])
+
+  /**
+   * Escape is the way back out, and it unwinds one layer at a time: an edit
+   * in progress first (leaving the panel would discard it without the reader
+   * having asked to leave), then the panel itself.
+   */
+  function onEscape(event: KeyboardEvent<HTMLElement>): void {
+    if (event.key !== 'Escape') return
+    if (editing !== null) {
+      const row = rowRefs.current.get(editing.threadId)
+      setEditing(null)
+      // Taken before React unmounts the textarea: focus on a removed node
+      // falls to the body, and the next Escape would then never reach this
+      // handler at all.
+      row?.focus()
+      event.stopPropagation()
+      return
+    }
+    if (onReturnFocus === undefined) return
+    event.stopPropagation()
+    onReturnFocus()
+  }
+
   const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
 
   function toggle(thread: CommentThread): void {
@@ -200,7 +264,13 @@ export function CommentsPanel({
   }
 
   return (
-    <section aria-label="Comments" data-testid="comments-panel" className="flex flex-col gap-2">
+    // biome-ignore lint/a11y/noStaticElementInteractions: a container-level Escape handler, not a control — the interactive elements inside keep their own roles and keyboard behaviour, and this only listens for the one key that means "put me back where I was"
+    <section
+      aria-label="Comments"
+      data-testid="comments-panel"
+      onKeyDown={onEscape}
+      className="flex flex-col gap-2"
+    >
       {composeAnchor === null && onComposeDocument !== undefined ? (
         <button
           type="button"
@@ -260,6 +330,7 @@ export function CommentsPanel({
             </p>
           )}
           <textarea
+            ref={composeRef}
             aria-label="Comment"
             value={composeDraft}
             onChange={(event) => setComposeDraft(event.target.value)}
@@ -302,6 +373,10 @@ export function CommentsPanel({
               <li key={thread.id}>
                 <button
                   type="button"
+                  ref={(node) => {
+                    if (node === null) rowRefs.current.delete(thread.id)
+                    else rowRefs.current.set(thread.id, node)
+                  }}
                   aria-expanded={expanded}
                   aria-controls={`thread-${thread.id}`}
                   onClick={() => toggle(thread)}
@@ -399,6 +474,7 @@ export function CommentsPanel({
                         }}
                       >
                         <textarea
+                          ref={editRef}
                           aria-label="Edit comment text"
                           value={editing.body}
                           onChange={(event) =>

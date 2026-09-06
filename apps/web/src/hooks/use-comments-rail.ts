@@ -22,7 +22,7 @@ import type {
   DocumentKind,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type MutableRefObject, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { anchorResolverFor } from '../lib/anchor-resolver.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
 
@@ -49,6 +49,12 @@ export interface CommentsRail {
   /** Opens the rail with the compose box on a passage. */
   readonly composeThread: (anchor: AnnotationAnchor) => void
   readonly cancelCompose: () => void
+  /**
+   * Hands focus back to the surface the rail was opened from — what Escape
+   * in the rail means. See `captureFocusInto` for why the two entries that
+   * OPEN it are the ones that remember.
+   */
+  readonly returnFocus: () => void
   readonly openThreadCount: number
   /** ADR-0026 decision 4 — whether an anchor still finds its place. */
   readonly resolveAnchor: ((thread: CommentThread) => 'placed' | 'orphaned') | undefined
@@ -58,6 +64,24 @@ export interface CommentsRail {
   readonly resolve: (threadId: string, resolved: boolean) => void
   /** Rewrites a message's body, stamping `editedAt`; a message the rail does not hold is ignored. */
   readonly editMessage: (threadId: string, messageId: string, body: string) => void
+}
+
+/**
+ * Remembers whatever holds focus right now, as the place to hand it back to.
+ *
+ * Read from `activeElement` rather than named by each caller because four
+ * different surfaces open this rail — a gutter marker, a preview marker, the
+ * editor toolbar, a canvas pin — and every one of them already holds focus
+ * at the moment it calls in. A parameter would be the same answer written
+ * out four times, and the fourth surface is the one that would forget.
+ */
+function captureFocusInto(ref: MutableRefObject<HTMLElement | null>): void {
+  const active = document.activeElement
+  // `document.body` needs no special case: it is what `activeElement`
+  // answers when nothing is focused, and `focus()` on it is a no-op —
+  // measured in Chromium, not assumed, after a guard against it turned out
+  // to be unfalsifiable.
+  ref.current = active instanceof HTMLElement ? active : null
 }
 
 export function useCommentsRail(args: {
@@ -114,8 +138,23 @@ export function useCommentsRail(args: {
   const selectThread = useCallback((threadId: string | null) => {
     setSelectedThreadId(threadId)
   }, [])
+  // Deliberately not written by `selectThread`: choosing another
+  // conversation from inside the rail is not an entry, and re-capturing
+  // there would make the way out a row of the list the reader is standing
+  // in.
+  const returnTargetRef = useRef<HTMLElement | null>(null)
+  const returnFocus = useCallback(() => {
+    // Two cases need no guard of their own, which was measured rather than
+    // assumed after guards for both proved impossible to fail: `focus()` is
+    // a no-op on `document.body` (what `activeElement` answers when nothing
+    // holds focus) and on a node the surface has since unmounted, because
+    // neither is a focusable area. The reader stays where they are, which is
+    // what either guard was there to arrange.
+    returnTargetRef.current?.focus()
+  }, [])
   const revealThread = useCallback(
     (threadId: string) => {
+      captureFocusInto(returnTargetRef)
       onOpenChange(true)
       setSelectedThreadId(threadId)
     },
@@ -123,6 +162,7 @@ export function useCommentsRail(args: {
   )
   const composeThread = useCallback(
     (anchor: AnnotationAnchor) => {
+      captureFocusInto(returnTargetRef)
       onOpenChange(true)
       // Nothing else expanded: the reader asked for a new conversation, and an
       // already-open one beside the draft box is two reply fields on screen.
@@ -222,6 +262,7 @@ export function useCommentsRail(args: {
     revealThread,
     composeThread,
     cancelCompose,
+    returnFocus,
     openThreadCount,
     resolveAnchor,
     createThread,

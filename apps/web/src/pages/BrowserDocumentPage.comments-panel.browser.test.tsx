@@ -328,6 +328,53 @@ it('opens a conversation from the markdown body, end to end', async () => {
   })
 })
 
+const sourceEditable = () =>
+  document
+    .querySelector('[data-testid="markdown-source-pane"]')
+    ?.querySelector('[contenteditable="true"]') ?? null
+
+it('moves the reader into the conversation it opens, and Escape puts them back in the body', async () => {
+  // The two halves are one decision and only this layer can show it: the
+  // press crosses the editor, the entry door, the rail hook and the panel,
+  // and each of those has its own test that cannot see the next one. What
+  // was wrong before is that the rail opened beside an editor still holding
+  // the caret — the keyboard kept typing into the document, and on a phone
+  // the virtual keyboard stayed up over the rail that had just opened.
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+  await store.loro.save(note.documentId, noteHoldingABody())
+
+  render(
+    <BrowserDocumentPage
+      store={store.index}
+      pointer={store.pointer}
+      clock={store.clock}
+      loro={store.loro}
+    />,
+  )
+
+  await focusEditable(sourceEditable)
+  await userEvent.keyboard('{Control>}{Home}{/Control}')
+  for (let i = 0; i < 4; i++) await userEvent.keyboard('{Shift>}{ArrowRight}{/Shift}')
+
+  await userEvent.click(await screen.findByRole('button', { name: 'Editing actions' }))
+  await userEvent.click(await screen.findByRole('menuitem', { name: 'Comment on this' }))
+
+  // Queried inside the assertion rather than held: the rail mounts around
+  // this box, and a node grabbed before that is a node the commit replaces.
+  await waitFor(
+    () => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: /^comment$/i })),
+    { timeout: 15_000 },
+  )
+
+  await userEvent.keyboard('{Escape}')
+  // Back in the body. Opening a conversation is not an edit, so the caret is
+  // still where it was — which is also why the anchor above quotes what it
+  // does.
+  await waitFor(() => expect(document.activeElement).toBe(sourceEditable()), { timeout: 15_000 })
+})
+
 /**
  * A note whose one conversation is about a passage of its body, with no mark
  * on it — which is every document that arrived through a markdown file, and
