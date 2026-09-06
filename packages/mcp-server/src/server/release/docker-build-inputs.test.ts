@@ -18,20 +18,20 @@ const ROOT = join(__dirname, '../../../../..')
 
 const MODULE_PATH = join(ROOT, 'tools/checks/src/docker-build-inputs.mjs')
 
-const { dockerBuildTargets, workspaceClosure, indexManifests, affectsDockerBuild } = (await import(
-  pathToFileURL(MODULE_PATH).href
-)) as {
-  dockerBuildTargets: (dockerfileText: string) => string[]
-  workspaceClosure: (
-    roots: string[],
-    byName: Map<string, { dir: string; manifest: Record<string, unknown> }>,
-  ) => string[]
-  indexManifests: (
-    repoRoot: string,
-    manifestPaths: string[],
-  ) => Map<string, { dir: string; manifest: Record<string, unknown> }>
-  affectsDockerBuild: (changedPaths: string[], closureDirs: string[]) => boolean
-}
+const { dockerBuildTargets, workspaceClosure, indexManifests, affectsDockerBuild, inertChange } =
+  (await import(pathToFileURL(MODULE_PATH).href)) as {
+    dockerBuildTargets: (dockerfileText: string) => string[]
+    workspaceClosure: (
+      roots: string[],
+      byName: Map<string, { dir: string; manifest: Record<string, unknown> }>,
+    ) => string[]
+    indexManifests: (
+      repoRoot: string,
+      manifestPaths: string[],
+    ) => Map<string, { dir: string; manifest: Record<string, unknown> }>
+    affectsDockerBuild: (changedPaths: string[], closureDirs: string[]) => boolean
+    inertChange: (path: string, before: string | null, after: string | null) => boolean
+  }
 
 const dockerfile = readFileSync(join(ROOT, 'Dockerfile.server'), 'utf-8')
 // Manifest discovery mirrors the CLI's `git ls-files`, without shelling out:
@@ -163,5 +163,123 @@ describe('ci.yml gates the expensive steps on the detection output', () => {
       header,
       'a job-level if: would make this a skipped check, not a reporting one',
     ).not.toMatch(/^\s{4}if:/m)
+  })
+})
+
+// The release-please branch is open continuously and rewritten on every push
+// to main, so its CI runs are a standing cost rather than an occasional one:
+// measured over the last 40 pull_request runs of ci.yml, 7 of the 31 image
+// builds — 23% — were that branch.
+//
+// What it changes, measured from the live branch rather than assumed: version
+// strings and changelog entries, in `package.json`, `CHANGELOG.md`,
+// `server.json`, `gemini-extension.json`, `.release-please-manifest.json` and
+// the plugin manifests. Neither can change the one question the job answers,
+// "does Dockerfile.server still build" — verified on both halves it could
+// have: `pnpm-lock.yaml` records no workspace package's OWN version, so a bump
+// cannot fail `--frozen-lockfile`, and the image build is tsup plus the widget
+// build, which read no changelog.
+//
+// The comparison has to be on PARSED JSON, not text. release-please rewrites
+// these files with different array formatting, so the textual diff of a
+// version bump also carries reflowed `keywords` and `args` arrays — noise that
+// a line-based rule would read as a real change.
+describe('a change that cannot alter whether the image builds', () => {
+  it('treats a version-only manifest rewrite as inert, formatting and all', () => {
+    const before = '{"name":"x","version":"0.0.19","keywords":["a","b"]}'
+    const after = `{
+  "name": "x",
+  "version": "0.1.0",
+  "keywords": [
+    "a",
+    "b"
+  ]
+}`
+    expect(inertChange('package.json', before, after)).toBe(true)
+  })
+
+  it('reads release-please’s own manifest, whose keys are paths not "version"', () => {
+    const before = '{".":"0.0.19","packages/mcp-server":"0.0.19"}'
+    const after = '{".":"0.1.0","packages/mcp-server":"0.1.0"}'
+    expect(inertChange('.release-please-manifest.json', before, after)).toBe(true)
+  })
+
+  it('is NOT inert when a dependency range moves', () => {
+    // The case the whole rule must not swallow: a dependency bump is also a
+    // semver string moving, and it can fail `pnpm install --frozen-lockfile`
+    // inside the build — which is exactly what this job exists to catch.
+    const before = '{"version":"1.0.0","dependencies":{"zod":"3.0.0"}}'
+    const after = '{"version":"1.0.1","dependencies":{"zod":"4.0.0"}}'
+    expect(inertChange('package.json', before, after)).toBe(false)
+  })
+
+  it('is NOT inert when anything else in the manifest moves', () => {
+    const before = '{"version":"1.0.0","scripts":{"build":"tsup"}}'
+    const after = '{"version":"1.0.1","scripts":{"build":"tsc"}}'
+    expect(inertChange('package.json', before, after)).toBe(false)
+  })
+
+  it('treats a changelog as inert wherever it lives', () => {
+    expect(inertChange('CHANGELOG.md', '# 0.0.19\n', '# 0.1.0\n')).toBe(true)
+    expect(inertChange('packages/mcp-server/CHANGELOG.md', 'a', 'b')).toBe(true)
+  })
+
+  it('is NOT inert for a file it cannot read both sides of', () => {
+    // An added or deleted file has no before side. Failing open here keeps the
+    // module's existing posture: a needless build costs minutes, a skipped one
+    // costs a broken Dockerfile reaching a release tag.
+    expect(inertChange('package.json', null, '{"version":"0.1.0"}')).toBe(false)
+    expect(inertChange('src/index.ts', 'a', 'b')).toBe(false)
+    expect(inertChange('package.json', '{not json', '{"a":1}')).toBe(false)
+  })
+
+  it('lets the whole measured release diff skip the build', () => {
+    const releaseDiff = [
+      'package.json',
+      'CHANGELOG.md',
+      'server.json',
+      'gemini-extension.json',
+      '.release-please-manifest.json',
+      'packages/mcp-server/package.json',
+      'packages/mcp-server/CHANGELOG.md',
+    ]
+    const bump = (p: string) =>
+      p.endsWith('.md')
+        ? (['x', 'y'] as const)
+        : p === '.release-please-manifest.json'
+          ? (['{".":"0.0.19"}', '{".":"0.1.0"}'] as const)
+          : (['{"version":"0.0.19"}', '{"version":"0.1.0"}'] as const)
+    const remaining = releaseDiff.filter((p) => {
+      const [before, after] = bump(p)
+      return !inertChange(p, before, after)
+    })
+    expect(remaining).toEqual([])
+    expect(affectsDockerBuild(remaining, ['packages/mcp-server'])).toBe(false)
+  })
+})
+
+describe('a version nested inside an array element', () => {
+  // Ran against the live release-please branch before believing the unit
+  // cases: 8 of its 10 files came back inert and two did not. Both carry the
+  // bumped version inside an ARRAY — `server.json`'s `packages[0].version` and
+  // `.claude-plugin/marketplace.json`'s `plugins[0].version` — which the
+  // comparison was treating as one opaque differing leaf. Every hand-written
+  // case had the version at an object key, so all of them passed.
+  it('descends into arrays rather than calling the whole array one difference', () => {
+    const before = '{"version":"0.0.19","packages":[{"registryType":"npm","version":"0.0.19"}]}'
+    const after = '{"version":"0.1.0","packages":[{"registryType":"npm","version":"0.1.0"}]}'
+    expect(inertChange('server.json', before, after)).toBe(true)
+  })
+
+  it('is NOT inert when an array element changes anything else', () => {
+    const before = '{"packages":[{"registryType":"npm","version":"0.0.19"}]}'
+    const after = '{"packages":[{"registryType":"oci","version":"0.1.0"}]}'
+    expect(inertChange('server.json', before, after)).toBe(false)
+  })
+
+  it('is NOT inert when an array gains or loses an element', () => {
+    const before = '{"packages":[{"version":"0.0.19"}]}'
+    const after = '{"packages":[{"version":"0.1.0"},{"version":"0.1.0"}]}'
+    expect(inertChange('server.json', before, after)).toBe(false)
   })
 })

@@ -99,6 +99,121 @@ export function indexManifests(repoRoot, manifestPaths) {
   return byName
 }
 
+// Keys whose subtree decides what gets INSTALLED or RUN inside the image. A
+// version string moving under any of these is a real change to the build, and
+// is exactly what this job exists to catch — a dependency bump can fail
+// `pnpm install --frozen-lockfile` in the `build` stage.
+const BUILD_DECIDING_KEYS = new Set([
+  'dependencies',
+  'devDependencies',
+  'peerDependencies',
+  'optionalDependencies',
+  'overrides',
+  'resolutions',
+  'pnpm',
+  'scripts',
+  'engines',
+  'packageManager',
+])
+
+/**
+ * Every JSON leaf path where two documents differ, as `a/b/c` strings.
+ *
+ * @param {unknown} before
+ * @param {unknown} after
+ * @param {string[]} trail
+ * @returns {string[][]}
+ */
+function differingLeaves(before, after, trail = []) {
+  if (JSON.stringify(before) === JSON.stringify(after)) return []
+  // Arrays are descended into as well as objects, by index. Treating an array
+  // as one opaque leaf is what made `server.json` and the marketplace manifest
+  // look material: both carry the bumped version INSIDE an array element, and
+  // every hand-written case had it at an object key.
+  if (Array.isArray(before) && Array.isArray(after)) {
+    // A different length is a real change, not a moved value.
+    if (before.length !== after.length) return [trail]
+    return before.flatMap((item, index) =>
+      differingLeaves(item, after[index], [...trail, String(index)]),
+    )
+  }
+  const bothObjects =
+    typeof before === 'object' &&
+    before !== null &&
+    !Array.isArray(before) &&
+    typeof after === 'object' &&
+    after !== null &&
+    !Array.isArray(after)
+  if (!bothObjects) return [trail]
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+  return [...keys].flatMap((key) =>
+    differingLeaves(
+      /** @type {Record<string, unknown>} */ (before)[key],
+      /** @type {Record<string, unknown>} */ (after)[key],
+      [...trail, key],
+    ),
+  )
+}
+
+/**
+ * Is this path worth reading both sides of at all?
+ *
+ * Exported so the CLI can skip spawning `git show` twice for every source
+ * file in a diff; everything else is decided by path alone.
+ *
+ * @param {string} path repo-relative path
+ */
+export function couldBeInert(path) {
+  return /(^|\/)CHANGELOG\.md$/.test(path) || path.endsWith('.json')
+}
+
+/**
+ * Can this path's change be ignored outright?
+ *
+ * The release-please branch is open continuously and rewritten on every push
+ * to main, and its diff is version strings plus changelog entries — measured
+ * at 7 of the last 31 image builds. Neither can change whether
+ * Dockerfile.server compiles: `pnpm-lock.yaml` records no workspace package's
+ * OWN version, so a bump cannot fail `--frozen-lockfile`, and the build is
+ * tsup plus the widget build, neither of which reads a changelog.
+ *
+ * PARSED JSON, never text: release-please rewrites these files with different
+ * array formatting, so a version bump's textual diff also carries reflowed
+ * `keywords` and `args` arrays. A line-based rule would read that as a real
+ * change and never skip anything.
+ *
+ * Fails OPEN like the rest of this module — an unreadable or unparseable side
+ * is not inert.
+ *
+ * @param {string} path repo-relative path
+ * @param {string | null} before content at the base ref, or null
+ * @param {string | null} after content at HEAD, or null
+ * @returns {boolean}
+ */
+export function inertChange(path, before, after) {
+  if (!couldBeInert(path)) return false
+  if (/(^|\/)CHANGELOG\.md$/.test(path)) return true
+  if (before === null || after === null) return false
+  let parsedBefore
+  let parsedAfter
+  try {
+    parsedBefore = JSON.parse(before)
+    parsedAfter = JSON.parse(after)
+  } catch {
+    return false
+  }
+  const leaves = differingLeaves(parsedBefore, parsedAfter)
+  if (leaves.length === 0) return true
+  return leaves.every(
+    (trail) =>
+      trail.length > 0 &&
+      !trail.some((key) => BUILD_DECIDING_KEYS.has(key)) &&
+      // release-please's own manifest keys are package paths, not `version`;
+      // nothing but release-please reads that file.
+      (trail[trail.length - 1] === 'version' || path === '.release-please-manifest.json'),
+  )
+}
+
 /**
  * @param {string[]} changedPaths repo-relative paths changed by the diff
  * @param {string[]} closureDirs from workspaceClosure()
@@ -142,14 +257,32 @@ if (process.argv[1]?.endsWith('docker-build-inputs.mjs')) {
     const changed = git(['diff', '--name-only', `${baseRef}...HEAD`])
       .split('\n')
       .filter(Boolean)
+    // `A...HEAD` diffs from the merge base, so that is the side to read.
+    const mergeBase = git(['merge-base', baseRef, 'HEAD'])
+    /** @param {string} ref @param {string} path */
+    const show = (ref, path) => {
+      try {
+        return execFileSync('git', ['show', `${ref}:${path}`], { encoding: 'utf-8' })
+      } catch {
+        // Added or deleted on one side; inertChange treats that as material.
+        return null
+      }
+    }
+    const material = changed.filter(
+      (path) =>
+        !couldBeInert(path) || !inertChange(path, show(mergeBase, path), show('HEAD', path)),
+    )
     const manifests = git(['ls-files', 'package.json', '*/package.json'])
       .split('\n')
       .filter((p) => p.length > 0 && !p.includes('node_modules/'))
     const targets = dockerBuildTargets(readFileSync(join(repoRoot, 'Dockerfile.server'), 'utf-8'))
     if (targets.length === 0) throw new Error('Dockerfile.server declares no pnpm --filter build')
     const closure = workspaceClosure(targets, indexManifests(repoRoot, manifests))
-    answer = affectsDockerBuild(changed, closure)
-    why = `${changed.length} changed path(s) against ${closure.length} closure package(s)`
+    answer = affectsDockerBuild(material, closure)
+    const inert = changed.length - material.length
+    why =
+      `${material.length} material path(s) against ${closure.length} closure package(s)` +
+      (inert > 0 ? `; ${inert} inert (version bump / changelog)` : '')
   } catch (error) {
     if (!(typeof error === 'object' && error !== null && 'handled' in error)) {
       answer = true
