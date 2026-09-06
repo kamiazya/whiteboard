@@ -44,6 +44,16 @@ export interface DocumentPropertiesProps {
    * the canvas row's layout, not the operations themselves.
    */
   readonly actions?: ReactNode
+  /**
+   * Beside the name: what else says WHICH document this is — today the
+   * variation chip.
+   *
+   * A slot of its own rather than a leading item in `actions`, because the
+   * row's one divide is identity from act, and putting the two in one bag
+   * is what let identity drift to the right of the act menu. This one is
+   * anchored to the title; `actions` is anchored to the right edge.
+   */
+  readonly identity?: ReactNode
 }
 
 /**
@@ -64,6 +74,7 @@ export function DocumentProperties({
   onTitleChange,
   status,
   actions,
+  identity,
 }: DocumentPropertiesProps) {
   // Null means "not being edited" — the box then shows the canonical name.
   // While it is a string the box shows that instead, because the name comes
@@ -144,6 +155,7 @@ export function DocumentProperties({
             inline ? 'text-sm' : 'text-base'
           }`}
         />
+        {identity}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}

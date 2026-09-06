@@ -70,6 +70,36 @@ describe('BrowserDocumentPage variations (browser)', () => {
     cleanup()
   })
 
+  it('the chip is identity: it sits with the title, left of the act menu', async () => {
+    await seedDocument()
+    render(<BrowserDocumentPage initialPath="canvas-a" />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
+    const chip = await screen.findByRole('button', { name: /^Switch variation/ })
+    const kebab = await screen.findByRole('button', { name: 'More actions' })
+    const segment = screen.getByTestId('inspector-segment')
+
+    // Reading order, taken from the row itself rather than from x
+    // coordinates: what a screen reader and the tab sequence follow is the
+    // DOM, and `DOCUMENT_POSITION_FOLLOWING` says one node comes after
+    // another in it.
+    const follows = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+
+    // Which variation you are on is WHICH DOCUMENT you are looking at — the
+    // same question the title answers — so it belongs beside the title, not
+    // after the things that act on it. Measured before this increment at
+    // 1280px: `Comments@1022, History@1056, More actions@1108, Switch
+    // variation@1165`, identity pushed to the far right of the row by
+    // `HeaderBranchChip` rendering after the slot the act controls moved into.
+    expect(follows(chip, segment)).toBe(true)
+    expect(follows(chip, kebab)).toBe(true)
+  })
+
   it('creates a variation from the chip and keeps it on the record', async () => {
     const documentId = await seedDocument()
     render(<BrowserDocumentPage initialPath="canvas-a" />)

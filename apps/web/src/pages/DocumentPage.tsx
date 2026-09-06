@@ -22,6 +22,7 @@ import {
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
@@ -31,6 +32,7 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
+import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
@@ -326,6 +328,37 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
+  // Per DOCUMENT rather than per keeper: a document with no record-holding
+  // backend has no variations to name, which no provider-level flag can say.
+  const branchesEnabled = useBranchesBackend().hasBranches
+
+  // Identity, not act: which variation you are on is WHICH document you are
+  // looking at, the same question the title answers. It renders in
+  // `DocumentProperties`'s identity slot — beside the name — rather than in
+  // `WorkspaceTopBar`, where it sat after `titleSlot` and so ended up to the
+  // RIGHT of the act menu once P4 moved the row's actions INTO that slot.
+  //
+  // Whether to draw it at all is the BACKEND's answer rather than a keeper
+  // flag, for the reason the bar used to state: both keepers have variations,
+  // and a document with no record-holding backend (a markdown body, or one
+  // still loading) has none.
+  const branchIdentity =
+    topBar === null || !branchesEnabled ? null : (
+      <>
+        <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:inline-block" aria-hidden />
+        <HeaderBranchChip
+          workspaceId={topBar.workspaceId}
+          path={topBar.path}
+          {...(topBar.branchRefreshSignal === undefined
+            ? {}
+            : { refreshSignal: topBar.branchRefreshSignal })}
+          {...(topBar.onPreviewVariation === undefined
+            ? {}
+            : { onPreviewVariation: topBar.onPreviewVariation })}
+        />
+      </>
+    )
+
   // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
   // back, title, menus — steps aside with the shell's row above it, which
   // owns the control and floats the way back out. The dock stays because
@@ -432,6 +465,7 @@ function DocumentPageBody({
                           ? {}
                           : { status: model.properties.status })}
                         actions={rowActions}
+                        {...(branchIdentity === null ? {} : { identity: branchIdentity })}
                       />
                     ) : null}
                   </>
@@ -442,12 +476,6 @@ function DocumentPageBody({
                 {...(topBar.onNavigateBack === undefined
                   ? {}
                   : { onNavigateBack: topBar.onNavigateBack })}
-                {...(topBar.branchRefreshSignal === undefined
-                  ? {}
-                  : { branchRefreshSignal: topBar.branchRefreshSignal })}
-                {...(topBar.onPreviewVariation === undefined
-                  ? {}
-                  : { onPreviewVariation: topBar.onPreviewVariation })}
                 {...(preview === null ? {} : { preview })}
               />
             </Suspense>

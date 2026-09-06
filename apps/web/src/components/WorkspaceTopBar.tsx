@@ -2,10 +2,8 @@ import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
-import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { cn } from '../lib/utils.js'
-import { HeaderBranchChip } from './HeaderBranchChip'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
@@ -48,9 +46,6 @@ interface Props {
    * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
    */
   dataMode?: 'daemon' | 'local'
-  // Passed through to HeaderBranchChip: preview a variation without
-  // switching. The page owns the address, so it owns the handler.
-  onPreviewVariation?: (name: string) => void
   /**
    * Opens and closes the document's history. The PAGE owns both the state and
    * the panel: history is a column of the editor row, not a popover hanging
@@ -74,13 +69,6 @@ interface Props {
    * is not currently drawn.
    */
   preview?: TopBarPreview
-  // Bumped by the host page on an externally observed HEAD/version change
-  // (another client, an MCP tool call) so the chip/timeline refetch without
-  // waiting for their own poll interval.
-  // Bumped by the host page on an externally observed HEAD/version change
-  // (another client, an MCP tool call) so the chip/timeline refetch without
-  // waiting for their own poll interval.
-  branchRefreshSignal?: number
   /**
    * The merged canvas row's flexible middle (title + properties triggers),
    * provided by the page — the header is one row, so pages inject their
@@ -114,17 +102,10 @@ export default function WorkspaceTopBar({
   path,
   onNavigateBack,
   dataMode = 'daemon',
-  onPreviewVariation,
   preview,
-  branchRefreshSignal,
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
-  // Whether to show the chip at all is the BACKEND's answer, not a keeper
-  // flag: both keepers have variations now, but a document with no
-  // record-holding backend (a markdown body, or one still loading) has none.
-  // That is per document, which no provider-level flag can say.
-  const branchesEnabled = useBranchesBackend().hasBranches
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -207,22 +188,6 @@ export default function WorkspaceTopBar({
           name: canvasCustomName ?? path,
           ...(isLocalMode ? {} : { onRename: (next: string) => void renameDocument(path, next) }),
         })}
-
-        {/* Branch chip with switch, create, rename, delete, and merge actions.
-            This is the top bar's only destructive control (branch delete,
-            confirmed via AlertDialog inside HeaderBranchChip); it stays in
-            this left-side group and is not part of the <400px collapse. */}
-        {branchesEnabled && (
-          <>
-            <span className="mx-1 hidden h-4 w-px bg-border sm:inline-block" aria-hidden />
-            <HeaderBranchChip
-              workspaceId={workspaceId}
-              path={path}
-              refreshSignal={branchRefreshSignal}
-              onPreviewVariation={onPreviewVariation}
-            />
-          </>
-        )}
       </div>
     </header>
   )
