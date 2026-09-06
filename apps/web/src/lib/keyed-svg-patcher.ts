@@ -55,16 +55,32 @@ const MOVE_ANIMATION: KeyframeAnimationOptions = {
 const MIN_MOVE_PX = 0.5
 
 /**
- * The ANNOTATION layer's arrive/leave ramp, matching the rail's
- * `--motion-duration-normal` / `--motion-ease-out` so one resolve reads as
- * one gesture wherever the reader is watching it.
+ * The ANNOTATION layer's arrive/leave ramp, at the rail's
+ * `--motion-duration-normal` so one resolve reads as one gesture wherever
+ * the reader is watching it.
  *
  * Opacity only: a compositor property, and the one DESIGN.md names as the
  * exception where the value IS the state.
+ *
+ * The EASING is not `--motion-ease-out`, and that is measured rather than
+ * chosen. That token is `cubic-bezier(0.16, 1, 0.3, 1)`, which is shaped
+ * for a MOVE — nearly all of its travel is spent in the first fifth so the
+ * object settles gently. Applied to opacity it hides the event: captured in
+ * a real browser, the pin was 65% faded 40ms in and invisible by 110ms, so
+ * a declared 220ms ramp spent its remaining half on the last hundredth of
+ * a percent nobody can see. Opacity's perceived moment is the middle, so
+ * these are the standard accelerate/decelerate pair instead.
  */
-const FADE_ANIMATION: KeyframeAnimationOptions = {
-  duration: 220,
-  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+const FADE_DURATION_MS = 220
+/** Leaving accelerates: it lingers long enough to be read, then goes. */
+const FADE_OUT: KeyframeAnimationOptions = {
+  duration: FADE_DURATION_MS,
+  easing: 'cubic-bezier(0.4, 0, 1, 1)',
+}
+/** Arriving decelerates, the mirror of it. */
+const FADE_IN: KeyframeAnimationOptions = {
+  duration: FADE_DURATION_MS,
+  easing: 'cubic-bezier(0, 0, 0.2, 1)',
 }
 
 function prefersReducedMotion(): boolean {
@@ -151,7 +167,7 @@ export function mountKeyedSvg(
       element.remove()
       return
     }
-    const animation = element.animate([{ opacity: 1 }, { opacity: 0 }], FADE_ANIMATION)
+    const animation = element.animate([{ opacity: 1 }, { opacity: 0 }], FADE_OUT)
     // A rejection means a later update already removed it, which is the
     // outcome this wanted — not an error to surface.
     animation.finished.then(
@@ -267,7 +283,7 @@ export function mountKeyedSvg(
     for (const key of arriving) {
       const element = nextElements.get(key)
       if (element === undefined || typeof element.animate !== 'function') continue
-      element.animate([{ opacity: 0 }, { opacity: 1 }], FADE_ANIMATION)
+      element.animate([{ opacity: 0 }, { opacity: 1 }], FADE_IN)
     }
 
     if (firstRects !== undefined && firstRects.size > 0) {
