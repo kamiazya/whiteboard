@@ -134,7 +134,16 @@ class ThreadGutterMarker extends GutterMarker {
     // The count is the whole reason this is a label and not a bare dot: two
     // conversations about the same line are one marker, and a reader who is
     // not told so would think the second one had vanished.
-    dot.textContent = this.count > 1 ? String(this.count) : ''
+    // The dot is an INNER element and the button is the press area. A 12px
+    // dot is right beside prose and half of WCAG 2.5.8's 24x24 minimum in
+    // each dimension, a quarter of its area; growing the button keeps the picture and
+    // fixes the target. Measured first: a `::after` overhanging an 18px
+    // gutter did not work — `.cm-gutterElement` clips it, and where it did
+    // reach, the toolbar above and the content beside it won the hit test.
+    const inner = document.createElement('span')
+    inner.className = 'cm-annotation-gutter-dot'
+    inner.textContent = this.count > 1 ? String(this.count) : ''
+    dot.append(inner)
     dot.setAttribute(
       'aria-label',
       this.count > 1 ? `${this.count} conversations on this line` : 'A conversation on this line',

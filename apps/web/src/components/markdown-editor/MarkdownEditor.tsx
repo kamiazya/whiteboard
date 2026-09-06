@@ -787,7 +787,12 @@ export function MarkdownEditor({
     return () => host.removeEventListener('contextmenu', onContextMenu)
   }, [openCatalogAt])
 
-  const annotation = useAnnotationEntry(value, sourceApiRef, onComposeThread)
+  const annotation = useAnnotationEntry(value, sourceApiRef, {
+    threads: projectedThreads,
+    marks: projectedMarks,
+    onComposeThread,
+    onSelectThread,
+  })
 
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
     // Deliberately outside MARKDOWN_EDITOR_VERBS, which is the closed set of

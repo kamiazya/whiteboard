@@ -94,9 +94,15 @@ function relativeToRepo(absolutePath: string): string {
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/spatial/commands.ts': 926,
-  // +1: the annotation entry's scope resolver moved to `annotation-scope.ts`
-  // rather than landing here, so a 42-line feature costs this file one line.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1016,
+  // The annotation entry's scope resolver lives in `annotation-scope.ts`
+  // rather than here, so what this file spends on it is the hook call — now
+  // five lines because the entry also has to know the document's threads,
+  // to open the one a paragraph already has. The two document pages paid
+  // more than that back in the same change (942 -> 934, 926 -> 925), their
+  // hand-built thread writes replaced by one shared door.
+  // +1: the annotation entry also has to be handed the LIVE passage marks,
+  // so the toolbar resolves a thread the way the gutter beside it does.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1021,
   'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,
@@ -172,7 +178,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // pathname replaces the location, so the query a reader arrived with is
   // dropped by a repair they never asked for, and nothing about the call says
   // so.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1031,
+  // +2 for the shared thread-write door: this page still chooses between the
+  // markdown host and the spatial write per verb, so what it saves is the
+  // command building rather than the branch.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

@@ -44,6 +44,16 @@ export interface DocumentPropertiesProps {
    * the canvas row's layout, not the operations themselves.
    */
   readonly actions?: ReactNode
+  /**
+   * Beside the name: what else says WHICH document this is — today the
+   * variation chip.
+   *
+   * A slot of its own rather than a leading item in `actions`, because the
+   * row's one divide is identity from act, and putting the two in one bag
+   * is what let identity drift to the right of the act menu. This one is
+   * anchored to the title; `actions` is anchored to the right edge.
+   */
+  readonly identity?: ReactNode
 }
 
 /**
@@ -64,6 +74,7 @@ export function DocumentProperties({
   onTitleChange,
   status,
   actions,
+  identity,
 }: DocumentPropertiesProps) {
   // Null means "not being edited" — the box then shows the canonical name.
   // While it is a string the box shows that instead, because the name comes
@@ -96,6 +107,21 @@ export function DocumentProperties({
           id={`${suggestionsId}-title`}
           enterKeyHint="done"
           value={draftTitle ?? title}
+          // Sized to the NAME, not to the row.
+          //
+          // What follows a document's name — today the variation chip — says
+          // WHICH document this is, so it has to read as attached to the
+          // name. A `flex-1` box made the title the row's spacer instead, and
+          // the chip landed a third of the width away: measured at 1280px,
+          // `Untitled` at x=48 and `main` at x=1036. `size` is in average
+          // character widths, so a proportional face lands a little wide —
+          // slack after the name, which is what a title bar wants anyway.
+          //
+          // The floor keeps an empty or one-word name a comfortable rename
+          // target now that the box no longer fills the row; the ceiling
+          // stops a long name pushing the chip off the end, and past it the
+          // name ellipsises the way any title does.
+          size={Math.min(Math.max((draftTitle ?? title).length + 2, 14), 44)}
           onChange={(event) => {
             if (onTitleChange === undefined) return
             setDraftTitle(event.target.value)
@@ -140,10 +166,11 @@ export function DocumentProperties({
           // canonical name, which is already trimmed.
           onBlur={() => setDraftTitle(null)}
           placeholder="Untitled"
-          className={`text-foreground placeholder:text-muted-foreground min-w-0 flex-1 bg-transparent font-medium outline-none ${
+          className={`text-foreground placeholder:text-muted-foreground min-w-0 shrink truncate bg-transparent font-medium outline-none ${
             inline ? 'text-sm' : 'text-base'
           }`}
         />
+        {identity}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}

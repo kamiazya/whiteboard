@@ -22,6 +22,7 @@ import {
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
 import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
@@ -348,6 +349,32 @@ function DocumentPageBody({
   // the same slot a version preview uses, and the only thing that ever put
   // one there.
   const readOnlyPast = variation.preview?.past ?? null
+
+  // Identity, not act: which variation you are on is WHICH document you are
+  // looking at, the same question the title answers. It renders in
+  // `DocumentProperties`'s identity slot — beside the name — rather than in
+  // `WorkspaceTopBar`, where it sat after `titleSlot` and so ended up to the
+  // RIGHT of the act menu once P4 moved the row's actions INTO that slot.
+  //
+  // Whether to draw it at all is the BACKEND's answer rather than a keeper
+  // flag: both keepers have variations, and a document with no
+  // record-holding backend (a markdown body, or one still loading) has none.
+  // `previewVariation` comes from the same hook that owns `?v=`, so the chip
+  // and the address cannot disagree about what is being previewed.
+  const branchIdentity =
+    topBar === null || !branchesBackend.hasBranches ? null : (
+      <>
+        <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:inline-block" aria-hidden />
+        <HeaderBranchChip
+          workspaceId={topBar.workspaceId}
+          path={topBar.path}
+          {...(topBar.branchRefreshSignal === undefined
+            ? {}
+            : { refreshSignal: topBar.branchRefreshSignal })}
+          onPreviewVariation={variation.previewVariation}
+        />
+      </>
+    )
   // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
   // back, title, menus — steps aside with the shell's row above it, which
   // owns the control and floats the way back out. The dock stays because
@@ -454,6 +481,7 @@ function DocumentPageBody({
                           ? {}
                           : { status: model.properties.status })}
                         actions={rowActions}
+                        {...(branchIdentity === null ? {} : { identity: branchIdentity })}
                       />
                     ) : null}
                   </>
@@ -464,10 +492,6 @@ function DocumentPageBody({
                 {...(topBar.onNavigateBack === undefined
                   ? {}
                   : { onNavigateBack: topBar.onNavigateBack })}
-                {...(topBar.branchRefreshSignal === undefined
-                  ? {}
-                  : { branchRefreshSignal: topBar.branchRefreshSignal })}
-                onPreviewVariation={variation.previewVariation}
                 {...(preview === null ? {} : { preview })}
               />
             </Suspense>
