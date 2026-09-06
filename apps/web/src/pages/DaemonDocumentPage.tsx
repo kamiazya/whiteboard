@@ -9,12 +9,10 @@ import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/sele
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { Button } from '../components/ui/button.js'
 import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
@@ -27,7 +25,7 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { type BranchMeta, createDaemonBranchesBackend } from '../lib/branches-backend.js'
+import { createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -44,7 +42,6 @@ import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
-import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
@@ -163,101 +160,6 @@ function useDaemonDocument(
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
-  // ── ?v=<name>: a non-default variation, addressable (ADR-0022) ──
-  // The address names a READ-ONLY view of that variation's tip; HEAD does
-  // not move. Decision 1 holds on both edges: `?v=main` and a `?v` naming
-  // the current HEAD strip back to the plain address, so the default
-  // variation is never decorated.
-  const [searchParams, setSearchParams] = useSearchParams()
-  const variationParam = searchParams.get('v')
-  const [variationPreview, setVariationPreview] = useState<{
-    name: string
-    head: string
-    branches: readonly BranchMeta[]
-    past: PastDocument
-  } | null>(null)
-  const [variationNotice, setVariationNotice] = useState<string | null>(null)
-  const clearVariationParam = useCallback(() => {
-    setSearchParams(
-      (prev) => {
-        const next = new URLSearchParams(prev)
-        next.delete('v')
-        return next
-      },
-      { replace: true },
-    )
-  }, [setSearchParams])
-
-  useEffect(() => {
-    if (!canvas || variationParam === null) {
-      setVariationPreview(null)
-      return
-    }
-    const { workspaceId: wsId, path: docPath } = canvas
-    let cancelled = false
-    void (async () => {
-      try {
-        const state = await branches.list(wsId, docPath)
-        if (cancelled) return
-        if (variationParam === 'main' || variationParam === state.head) {
-          clearVariationParam()
-          return
-        }
-        if (!state.branches.some((b) => b.name === variationParam)) {
-          setVariationNotice(`Variation «${variationParam}» was not found`)
-          clearVariationParam()
-          return
-        }
-        const past = await branches.loadDocument(wsId, docPath, variationParam)
-        if (cancelled) return
-        if (past === null) {
-          setVariationNotice(`Variation «${variationParam}» could not be read`)
-          clearVariationParam()
-          return
-        }
-        setVariationNotice(null)
-        setVariationPreview({
-          name: variationParam,
-          head: state.head,
-          branches: state.branches,
-          past,
-        })
-      } catch {
-        if (!cancelled) {
-          setVariationNotice('Variation preview failed to load')
-          clearVariationParam()
-        }
-      }
-    })()
-    return () => {
-      cancelled = true
-    }
-    // branchRefreshSignal: an external HEAD change can make the previewed
-    // name the HEAD, which must strip the param rather than keep a stale
-    // "read-only" claim over what is now the live document.
-  }, [
-    canvas?.workspaceId,
-    canvas?.path,
-    variationParam,
-    branches,
-    clearVariationParam,
-    branchRefreshSignal,
-  ])
-
-  const switchToVariation = useCallback(() => {
-    if (!canvas || variationPreview === null) return
-    const { workspaceId: wsId, path: docPath } = canvas
-    void (async () => {
-      try {
-        await branches.setHead(wsId, docPath, variationPreview.name)
-        setBranchRefreshSignal((n) => n + 1)
-        clearVariationParam()
-      } catch {
-        setVariationNotice('Switching to this variation failed')
-      }
-    })()
-  }, [canvas, variationPreview, branches, clearVariationParam])
-
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
   // workspace record. Derived as a plain string so a summary refresh that
@@ -467,15 +369,10 @@ function useDaemonDocument(
   // save outcome and the comments rail clear themselves inside DocumentPage,
   // keyed on the same document this effect watches.
   useEffect(() => {
-    // The variation view and its message are about the DEPARTED document.
-    // `?v` is not stripped by a switch — `switchDocument` sets the path and
-    // nothing else — so the effect below re-resolves the same name against
-    // the ARRIVED document, and until it answers the previous document's
-    // preview is on screen under the new one's name. The notice is worse: no
-    // branch of that effect clears it, so `Variation «x» was not found`
-    // about one document outlives it onto the next.
-    setVariationPreview(null)
-    setVariationNotice(null)
+    // The `?v=` view and its notice clear themselves inside DocumentPage,
+    // which owns them for both keepers and strips the param a switch leaves
+    // naming nothing.
+    //
     // Backlinks OF this document. The fetch below nulls them itself, but only
     // once it knows the arrived document's id — which comes from a list that
     // may still be refreshing, so the departed document's connections would
@@ -795,17 +692,10 @@ function useDaemonDocument(
           workspaceId: canvas.workspaceId,
           path: canvas.path,
           branchRefreshSignal,
-          onPreviewVariation: (name) => {
-            setSearchParams((prev) => {
-              const next = new URLSearchParams(prev)
-              next.set('v', name)
-              return next
-            })
-          },
+          onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
           ...(onNavigateBack === undefined ? {} : { onNavigateBack }),
         }
       : null,
-    readOnlyPast: variationPreview?.past ?? null,
     spatial: {
       editorRef: spatialEditorRef,
       agentTouchedNodeIds: agentActivity.touchedNodeIds,
@@ -836,44 +726,6 @@ function useDaemonDocument(
         }
       : {}),
     slots: {
-      headerExtras: (
-        <>
-          {canvas && variationPreview !== null && (
-            <HeaderVariationBanner
-              workspaceId={canvas.workspaceId}
-              path={canvas.path}
-              name={variationPreview.name}
-              head={variationPreview.head}
-              branches={variationPreview.branches}
-              onSwitch={switchToVariation}
-              onExit={clearVariationParam}
-              runMerge={(src, args) => branches.merge(canvas.workspaceId, canvas.path, src, args)}
-            />
-          )}
-          {variationNotice !== null && (
-            // role="alert", not "status": every notice here reports a
-            // failure (unknown name, unreadable tip, failed switch), and
-            // an alert injected with its content is the supported pattern
-            // — a conditionally-mounted status region is not
-            // (polite-live-region.test.ts).
-            <div
-              role="alert"
-              data-testid="variation-preview-notice"
-              className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              <span className="min-w-0 flex-1 truncate">{variationNotice}</span>
-              <button
-                type="button"
-                aria-label="Dismiss"
-                className="shrink-0 rounded-md p-1 hover:bg-accent"
-                onClick={() => setVariationNotice(null)}
-              >
-                ×
-              </button>
-            </div>
-          )}
-        </>
-      ),
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
     },
   }

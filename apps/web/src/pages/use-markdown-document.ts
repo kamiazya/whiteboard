@@ -41,6 +41,7 @@ import {
   writeCoreFacets,
   writeMarkdownBody,
   writeThreadMessage,
+  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CommentMessage,
@@ -49,7 +50,7 @@ import type {
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
 import { sameAnnotations, sameThreadMarks } from '../lib/annotations-equal.js'
 import { getAppLogger } from '../lib/app-logger.js'
@@ -132,6 +133,29 @@ export const DEFAULT_MARKDOWN_CORE_FACETS: StoredCoreFacets = { type: 'markdown'
  */
 const INITIAL_SAVE_STATE: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
 
+/**
+ * What a keeper has to answer for a note's HISTORY, and the two things a
+ * markdown note has no `BrowserBackend` to answer them with.
+ *
+ * A version is a frontier of the WORKSPACE RECORD — the same record a
+ * canvas's versions point into — so a note's history was never missing for
+ * want of rows. It was missing because the seam that reads and restores one
+ * was built from the spatial backend, and a markdown note deliberately has
+ * none (the sync layer would clobber the body this hook writes). This is
+ * that pair, supplied by the hook that DOES hold the record.
+ */
+export interface MarkdownRecordSeam {
+  /** Read the live workspace record, or `null` before it is loaded. */
+  readonly readRecord: <T>(read: (doc: Loro, documentId: string) => T) => T | null
+  /**
+   * Reconcile a past state onto the live note. A diff and never a rewrite,
+   * exactly as `BrowserBackend.applyRestore` is — the doc subscription this
+   * hook holds is what then carries it into `body` state and schedules the
+   * save, the same path a CRDT binding's own commit takes.
+   */
+  readonly applyRestore: (past: Loro) => Promise<void>
+}
+
 export interface MarkdownDocumentState {
   /** Null until the initial load resolves — render nothing editable before. */
   readonly body: string | null
@@ -165,6 +189,14 @@ export interface MarkdownDocumentState {
    * across a move.
    */
   readonly bodyTextOf: (doc: Loro) => LoroText
+  /**
+   * How this note's history is read and put back. Null until the load
+   * resolves, and null in LEGACY mode: a legacy host's doc is a
+   * per-document snapshot rather than the workspace record a version's
+   * frontier points into, so there is no history to reach and answering
+   * would be a lie the History panel would render as an empty list.
+   */
+  readonly records: MarkdownRecordSeam | null
   /**
    * Every conversation on this document (ADR-0026 step 3).
    *
@@ -652,6 +684,34 @@ export function useMarkdownDocument(
     writeThreadMessage(host.containers, threadId, message)
   }, [])
 
+  /**
+   * Built from the same `hostRef` every writer here uses, so it cannot point
+   * at a document the hook has moved on from. `mode` gates it rather than
+   * `documentId`, for the reason `MarkdownRecordSeam` states.
+   */
+  const records = useMemo((): MarkdownRecordSeam | null => {
+    if (documentId === null) return null
+    return {
+      readRecord: (read) => {
+        const host = hostRef.current
+        if (host === null || host.mode !== 'workspace') return null
+        return read(host.doc, documentId)
+      },
+      applyRestore: async (past) => {
+        const host = hostRef.current
+        if (host === null || host.mode !== 'workspace') {
+          throw new Error('restore before the note was loaded')
+        }
+        writeWorkspaceDocumentContent(host.doc, documentId, past)
+        // The subscription refreshed `body` and armed the debounce; this
+        // lands it, so a restore is durable by the time it resolves rather
+        // than 500ms later — a page a person closes on the confirmation
+        // would otherwise keep the state it restored FROM.
+        await queueSave(documentId, () => host.save())
+      },
+    }
+  }, [documentId])
+
   const createThread = useCallback((thread: CommentThread) => {
     const host = hostRef.current
     if (host === null) return
@@ -688,6 +748,7 @@ export function useMarkdownDocument(
     setCoreFacets,
     doc,
     bodyTextOf,
+    records,
     annotations,
     threadMarks,
     replyToThread,

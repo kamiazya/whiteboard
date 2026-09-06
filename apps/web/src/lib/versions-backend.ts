@@ -1,4 +1,5 @@
 import {
+  apiErrorReason,
   documentsApiUrl,
   listVersionsResponseSchema,
   saveVersionResponseSchema,
@@ -53,16 +54,41 @@ export interface VersionsBackend {
   loadThumbnail(workspaceId: string, path: string, versionId: string): Promise<Blob | null>
 }
 
-/** A refusal the daemon answered with a status, kept so a caller can log it. */
+/**
+ * A refusal the daemon answered with a status, kept so a caller can log it.
+ *
+ * `reason` is the daemon's OWN display copy, read through `apiErrorReason` —
+ * the only thing that tells a reader why a restore did not happen (`a document
+ * already exists there`, and the rest of the route's { error, message }
+ * family). It has to travel on the error because `safeErrorCopy` answers the
+ * fallback for every `Error` by contract: a UI handed only this class would
+ * say "try again" to a refusal that will never succeed.
+ */
 export class VersionsRequestError extends Error {
+  readonly reason: string | undefined
   constructor(
     readonly status: number,
     what: string,
+    reason?: string,
   ) {
     super(`${what} failed: ${status}`)
     this.name = 'VersionsRequestError'
+    this.reason = reason
   }
 }
+
+/** The refusal the daemon authored for this response, if it authored one. */
+async function refusalReason(res: Response): Promise<string | undefined> {
+  return apiErrorReason(await res.json().catch(() => undefined))
+}
+
+// `documentsApiUrl` encodes the workspace and the path, and leaves the suffix
+// to its caller — so the version id has to be encoded HERE, in the one place
+// that builds it. It was encoded at exactly one call site before (the merge
+// toast's own restore) and raw in all five of these, which is the shape a
+// per-caller responsibility takes right before it is missed.
+const versionUrl = (workspaceId: string, path: string, versionId: string, leaf: string): string =>
+  documentsApiUrl(workspaceId, path, `versions/${encodeURIComponent(versionId)}/${leaf}`)
 
 /** The daemon's history, over its documents routes. */
 export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): VersionsBackend {
@@ -75,9 +101,7 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       return parsed.data.versions
     },
     async loadPast(workspaceId, path, versionId) {
-      const res = await fetchFn(
-        documentsApiUrl(workspaceId, path, `versions/${versionId}/document`),
-      )
+      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'document'))
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'version document request')
       const parsed = versionDocumentResponseSchema.safeParse(await res.json())
@@ -96,18 +120,15 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       return parsed.data.version
     },
     async restore(workspaceId, path, versionId) {
-      const res = await fetchFn(
-        documentsApiUrl(workspaceId, path, `versions/${versionId}/restore`),
-        {
-          method: 'POST',
-        },
-      )
-      if (!res.ok) throw new VersionsRequestError(res.status, 'restore request')
+      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'restore'), {
+        method: 'POST',
+      })
+      if (!res.ok) {
+        throw new VersionsRequestError(res.status, 'restore request', await refusalReason(res))
+      }
     },
     async loadThumbnail(workspaceId, path, versionId) {
-      const res = await fetchFn(
-        documentsApiUrl(workspaceId, path, `versions/${versionId}/thumbnail`),
-      )
+      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'thumbnail'))
       // 404 is "not this document's, or no such point".
       if (res.status === 404) return null
       if (!res.ok) throw new VersionsRequestError(res.status, 'thumbnail request')
@@ -122,14 +143,11 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       return blob.size === 0 ? null : blob
     },
     async putThumbnail(workspaceId, path, versionId, blob) {
-      const res = await fetchFn(
-        documentsApiUrl(workspaceId, path, `versions/${versionId}/thumbnail`),
-        {
-          method: 'PUT',
-          headers: { 'Content-Type': 'image/png' },
-          body: blob,
-        },
-      )
+      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'thumbnail'), {
+        method: 'PUT',
+        headers: { 'Content-Type': 'image/png' },
+        body: blob,
+      })
       // A fetch RESOLVES for 4xx and 5xx, so without this the daemon
       // refusing the upload is indistinguishable from it accepting one, and
       // the caller's failure path is unreachable by anything but a network
