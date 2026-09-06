@@ -101,16 +101,22 @@ any {
   // Measured 0 un-awaited occurrences across all 163 call sites when this was
   // added, so it costs nothing today and only refuses the next one.
   //
-  // Two patterns because `.not` re-parents the call: in
-  // `expect.element(x).not.toBeVisible()` the matcher's object is
-  // `expect.element(x).not`, which the plain shape cannot see. Six sites use
-  // it today.
+  // FOUR rules rather than one with `or { \`element\`, \`poll\` }` and a shared
+  // message, because the fixture guard keys on the SET of messages: any shape
+  // that cannot produce a message of its own is a shape the guard cannot
+  // notice losing. Measured both halves of that:
   //
-  // Their messages differ ON PURPOSE, unlike the chronology pair above. The
-  // fixture guard keys on the SET of messages, so two patterns sharing one
-  // message leave the second unverified — a `.not` pattern that stopped
-  // matching would keep the guard green. Distinct messages make the bad
-  // fixture prove each shape separately.
+  //   - two patterns sharing one message, `.not` pattern broken -> 279 pass
+  //   - one pattern covering both kinds, `poll` dropped from the or{} -> 279 pass
+  //
+  // Adding fixture LINES does not help either case; the message set is what
+  // the guard compares. Split, each of the four fails the guard by itself,
+  // and the diagnostic gains the form it is talking about.
+  //
+  // `.not` needs its own pattern in each kind because it re-parents the call:
+  // in `expect.element(x).not.toBeVisible()` the matcher's object is
+  // `expect.element(x).not`, which the plain shape cannot see. Six sites use
+  // that form today.
   //
   // Two things review will raise about these patterns, both checked here so
   // the answer is not re-derived: a single `$args` metavariable DOES cover a
@@ -122,23 +128,39 @@ any {
   // which consumes its promises correctly, into a false positive, to catch a
   // wrapper that awaits and DISCARDS one. That wrapper appears nowhere in
   // this repo; the Promise.all shape is ordinary.
-  `expect.$kind($x).$m($args)` as $call where {
-    $kind <: or { `element`, `poll` },
+  `expect.element($x).$m($args)` as $call where {
     not $call <: within `await $_`,
     not $call <: within `return $_`,
     register_diagnostic(
       span = $call,
-      message = "Unawaited retrying assertion: `expect.element`/`expect.poll` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      message = "Unawaited element assertion: `expect.element(…)` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
       severity = "error"
     )
   },
-  `expect.$kind($x).not.$m($args)` as $call where {
-    $kind <: or { `element`, `poll` },
+  `expect.element($x).not.$m($args)` as $call where {
     not $call <: within `await $_`,
     not $call <: within `return $_`,
     register_diagnostic(
       span = $call,
-      message = "Unawaited negated retrying assertion: the `.not` form of `expect.element`/`expect.poll` returns a promise too, so without `await` it checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      message = "Unawaited negated element assertion: `expect.element(…).not` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
+  `expect.poll($x).$m($args)` as $call where {
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited poll assertion: `expect.poll(…)` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
+  `expect.poll($x).not.$m($args)` as $call where {
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited negated poll assertion: `expect.poll(…).not` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
       severity = "error"
     )
   },

@@ -30,6 +30,7 @@ export async function goodAwaited() {
   await expect.element(page.getByRole('button')).toBeInTheDocument()
   await expect.element(page.getByRole('menu')).not.toBeInTheDocument()
   await expect.poll(() => 1).toBe(1)
+  await expect.poll(() => 1).not.toBe(2)
 }
 
 export function goodReturned() {

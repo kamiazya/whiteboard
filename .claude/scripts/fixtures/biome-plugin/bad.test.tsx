@@ -27,6 +27,7 @@ export async function badUnawaited() {
   expect.element(page.getByRole('button')).toBeInTheDocument()
   expect.element(page.getByRole('menu')).not.toBeInTheDocument()
   expect.poll(() => 1).toBe(1)
+  expect.poll(() => 1).not.toBe(2)
 }
 
 // biome-ignore lint/suspicious/noExportsInTest: fixture, never executed

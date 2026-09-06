@@ -46,11 +46,14 @@ patterns with `$vars`, `as $name`, `where`, `<:`, `contains`, `within`, `not`, `
    regex group is `(?:...)`: a capturing group is a pattern VARIABLE to Biome's GritQL, and
    one errored the whole plugin — silencing every other rule — until the fixture guard
    noticed.
-4. **Give each PATTERN its own message when a shape needs several.** The guard keys on the
-   SET of messages, so two patterns sharing one leave the second unverified — verified by
-   making the `expect.element` pair's messages identical and breaking the `.not` pattern:
-   `pnpm test:scripts` stayed green (279 pass). Distinct messages catch each shape
-   separately, which is how that pair is mutation-checked today.
+4. **Give every SHAPE its own message — each pattern, and each `or { }` alternative.** The
+   guard compares the SET of messages, so any shape that cannot produce a message of its own
+   is a shape it cannot notice losing. Both halves measured on the `expect.element`/
+   `expect.poll` rules: two patterns sharing one message with the `.not` pattern broken →
+   `pnpm test:scripts` **279 pass**; one pattern covering both kinds with `poll` dropped from
+   the `or { }` → **279 pass** again. Adding fixture LINES closes neither; the message set is
+   what the guard compares. Split into four, each fails the guard by itself, and the
+   diagnostic gains the form it is naming.
 5. **Extend the fixture pair** in `.claude/scripts/fixtures/biome-plugin/{bad,good}.test.tsx`.
    `.claude/scripts/biome-plugin.test.mjs` reads every `register_diagnostic` message out of the
    plugin and requires the bad fixture to reach each one and the good fixture to reach none —
