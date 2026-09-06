@@ -205,10 +205,38 @@ passage is the same shape, and gets the same icon-verb card the canvas
 proposal card uses. The proposal card itself stays canvas chrome: it is
 positioned on a bubble the renderer drew, and prose has no such bubble.
 
-Still open: the propose mode on `wb_body_edit`, the in-place adopt surface,
-and retiring `wb_body_patch` in favour of `wb_canvas_edit`'s `node.patch` for
-the text-node case it actually serves — a published-surface break, so its own
-increment.
+**Its default is `propose`**, the same rule decision 7 gives `wb_canvas_edit`
+— and it resolves trivially, since every op this tool takes is a change to
+the body and there is no non-content half for a batch to be mixed with. Three
+refusals fall out of the decisions above rather than being invented for the
+tool:
+
+- **A passage that resolves nowhere is refused in either mode.** Decision 1
+  says a proposal is drawn in place; an anchor matching nothing has no place
+  to be drawn, so storing it would put a change on the document that no
+  surface could ever show.
+- **A passage that has CHANGED since the edit was written is refused when
+  applying and KEPT when proposing.** That asymmetry is decision 5: a
+  proposal follows the document, and a passage that now reads something else
+  is exactly the collision the deciding person needs shown. Refusing it at
+  the door would throw the proposal away rather than surface the
+  disagreement.
+- **Two passages that overlap are refused in either mode.** Applying both
+  writes text neither proposed (`'abc'→'X'` and `'bcd'→'Y'` over `abcdef`
+  give `Xf`), and a whole-proposal Adopt applies exactly that set — later,
+  and further from the call that caused it.
+
+Still open: the in-place adopt surface, and what becomes of `wb_body_patch`.
+
+**`wb_body_patch` cannot simply be retired into `wb_canvas_edit`.** The plan
+said its text-node job would move to `node.patch`, and that destination does
+not exist: `nodePatchFieldsSchema` carries geometry, colour and the shared
+label — deliberately "not the per-type content fields", since the per-type
+node schemas are non-strict and an unrecognised key is stripped rather than
+rejected, so a `text` in a patch would be a silent no-op. Retiring the tool
+today would remove the only way to edit a text node's text through MCP.
+Closing it needs a decision first: teach `node.patch` (and therefore the
+proposal vocabulary) about a node's content, or keep a separate verb for it.
 
 ### 7. `wb_canvas_edit` gains a mode, and its default is *propose*
 

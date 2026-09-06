@@ -1,7 +1,9 @@
 import {
   readDocumentKind,
   readMarkdownBody,
+  readProposals,
   writeMarkdownBody,
+  writeProposal,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
   applyBodyChange,
@@ -9,10 +11,13 @@ import {
   bodyChangeConflicts,
   bodyReplaceChangeSchema,
   documentIdSchema,
+  type Proposal,
+  proposalSchema,
   type ResolvedPassage,
   resolveTextAnchor,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -33,12 +38,19 @@ export const bodyEditInputSchema = z
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     /**
-     * `apply` only for now. The word is here rather than added later because
-     * it is the SAME word `wb_canvas_edit` spends on apply-vs-propose, and a
-     * tool that shipped without it would have to change meaning to gain it.
-     * Prose gets the content-proposes default in its own increment.
+     * `propose` by default, the same rule decision 7 gives `wb_canvas_edit`:
+     * a batch of CONTENT changes is stored for a person to adopt rather than
+     * changing the document, because nobody watches an agent type. It
+     * resolves trivially here — every op this tool takes is a change to the
+     * body, so there is no non-content half for a batch to be mixed with.
      */
-    mode: z.literal('apply'),
+    mode: z.enum(['apply', 'propose']).optional(),
+    /**
+     * Keeps several calls in one proposal (decision 8: the batch is one
+     * REQUEST, which often takes more than one call). Absent, a proposing
+     * call opens its own.
+     */
+    proposalId: z.string().min(1).optional(),
     ops: z.array(bodyEditOpSchema).min(1, 'a body edit carries at least one passage'),
   })
   .strict()
@@ -47,7 +59,16 @@ export type BodyEditInput = z.infer<typeof bodyEditInputSchema>
 export const bodyEditOutputSchema = z
   .object({
     documentId: documentIdSchema,
+    /** How many passages the body now holds differently. Zero when proposing. */
     applied: z.number().int().nonnegative(),
+    /**
+     * The proposal these passages went into, when they were not applied —
+     * read back from the document rather than recomputed, so a call
+     * continuing an existing proposal answers with everything a person will
+     * be shown, not only what this call contributed. Same schema the
+     * document stores, so there is no second shape to keep in step.
+     */
+    proposed: proposalSchema.optional(),
     body: z.string(),
   })
   .strict()
@@ -60,29 +81,37 @@ interface PlacedChange {
 }
 
 /**
- * Every op placed against `body`, or the first one that cannot be.
+ * Every op placed against `body`, or a refusal naming the first that cannot
+ * be placed.
  *
  * Placement happens for the WHOLE batch before anything is written, and one
- * unplaceable op refuses all of them. A partial apply would leave the caller
+ * unplaceable op refuses all of them. A partial result would leave the caller
  * holding a document that is neither what it had nor what it asked for, and
  * nothing in the result could say which passages landed in a way the next
  * call could act on — the same reason `wb_canvas_edit` is all-or-nothing.
+ *
+ * A passage that resolves NOWHERE is refused in both modes, not only when
+ * applying. Decision 1 says a proposal is drawn in place; an anchor matching
+ * nothing has no place to be drawn, so storing it would put a change on the
+ * document that no surface could ever show. Whether the passage still READS
+ * what the caller assumed is a different question, and belongs to the mode.
  */
 function placeAll(body: string, ops: readonly BodyEditOp[]): PlacedChange[] {
+  const seen = new Set<string>()
   const placed: PlacedChange[] = []
   for (const op of ops) {
-    const change: BodyProposedChange = { ...op, status: 'open' }
-    const resolved = resolveTextAnchor(body, op.anchor)
-    const at = resolved.kind === 'placed' ? resolved : undefined
-    if (bodyChangeConflicts(change, body, at)) {
+    if (seen.has(op.id)) {
       throw new PassageNotApplicableError(
         op.id,
-        at === undefined
-          ? 'its passage is no longer in the body'
-          : `the body now reads ${JSON.stringify(body.slice(at.start, at.end))} there, not ${JSON.stringify(op.assumed)}`,
+        'two passages in this call share that change id, and an Adopt naming it could not tell them apart',
       )
     }
-    placed.push({ change, at: at as ResolvedPassage })
+    seen.add(op.id)
+    const resolved = resolveTextAnchor(body, op.anchor)
+    if (resolved.kind !== 'placed') {
+      throw new PassageNotApplicableError(op.id, 'its passage is no longer in the body')
+    }
+    placed.push({ change: { ...op, status: 'open' }, at: resolved })
   }
   assertDisjoint(placed)
   return placed
@@ -97,6 +126,10 @@ function placeAll(body: string, ops: readonly BodyEditOp[]): PlacedChange[] {
  * caller saw and produce, together, a result that is neither: 'abc'→'X' and
  * 'bcd'→'Y' over `abcdef` persist `Xf`, not `Xdef` and not `aYef`. Nothing
  * downstream could tell that apart from an edit somebody meant.
+ *
+ * Checked when proposing too, since a whole-proposal Adopt applies exactly
+ * this set and would corrupt the body the same way — later, and further from
+ * the call that caused it.
  *
  * Ranges that merely TOUCH are fine — `[0,3)` and `[3,6)` share no character,
  * so neither rewrites text the other was placed on. Hence a strict overlap
@@ -121,11 +154,79 @@ function assertDisjoint(placed: readonly PlacedChange[]): void {
   }
 }
 
+/**
+ * Refuses a batch that would rewrite words the caller did not see — the
+ * APPLY-side half of decision 5.
+ *
+ * Not asked when proposing. A proposal follows the document, and a passage
+ * that has changed since it was written is precisely the collision the person
+ * deciding needs to be shown; refusing it at the door would throw away the
+ * proposal rather than surface the disagreement.
+ */
+function assertAssumptionsHold(placed: readonly PlacedChange[], body: string): void {
+  for (const { change, at } of placed) {
+    if (!bodyChangeConflicts(change, body, at)) continue
+    throw new PassageNotApplicableError(
+      change.id,
+      `the body now reads ${JSON.stringify(body.slice(at.start, at.end))} there, not ${JSON.stringify(change.assumed)}`,
+    )
+  }
+}
+
+/** The first `p<n>` no proposal on this document already holds. */
+function mintProposalId(taken: ReadonlySet<string>): string {
+  for (let i = 1; ; i++) {
+    const candidate = `p${i}`
+    if (!taken.has(candidate)) return candidate
+  }
+}
+
+/**
+ * Stores the passages as a proposal INSTEAD of writing them: the body is left
+ * exactly as it was and only the proposals plane grows.
+ *
+ * Unlike the canvas side there is no diff to take. `wb_canvas_edit` resolves
+ * a batch and reads the changes off the difference, because a proposed node
+ * has to be stored with an id and geometry the caller never sent. A passage
+ * arrives already in the stored shape — decision 6's replacement passage IS
+ * `body.replace` — so carrying it through is not a shortcut, it is the
+ * absence of a translation that could disagree with itself.
+ */
+async function storeBodyProposal(args: {
+  readonly deps: ServerDeps
+  readonly workspaceId: string
+  readonly documentId: string
+  readonly proposalId?: string
+  readonly doc: LoroDoc
+  readonly changes: readonly BodyProposedChange[]
+}): Promise<Proposal> {
+  const open = readProposals(args.doc)
+  const continuing = open.find((existing) => existing.id === args.proposalId)
+  const proposal: Proposal = {
+    id: args.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
+    // No author: server-core carries no operator identity, and a
+    // browser-kept workspace has nobody signed in to record.
+    //
+    // A continuation keeps the time the proposal was OPENED — decision 8's
+    // batch is one request across several calls, so re-stamping here would
+    // make `createdAt` name the last call rather than the proposal.
+    createdAt: continuing?.createdAt ?? new Date().toISOString(),
+    changes: [...args.changes],
+  }
+  writeProposal(args.doc, proposal)
+  await saveDocumentSnapshot(args.deps, args.workspaceId, args.documentId, args.doc)
+  // Read back rather than answering with the changes this call contributed.
+  // The result is typed as a whole proposal, so it has to be one — and the
+  // merge that produced it belongs to the container, so recomputing it here
+  // would be a second implementation free to disagree with the first.
+  return readProposals(args.doc).find((stored) => stored.id === proposal.id) ?? proposal
+}
+
 export function createBodyEditTool(deps: ServerDeps) {
   return {
     name: 'wb_body_edit' as const,
     description:
-      "Replace passages of a markdown document's body. Each op quotes the passage it means and declares what that passage said when the edit was written, so a passage that has since moved is still found and one that has since changed is refused by name rather than overwritten. Either every passage applies or none does.",
+      'Replace passages of a markdown document\'s body. Each op quotes the passage it means and declares what that passage said when the edit was written, so a passage that has since moved is still found and one that has since changed is refused by name rather than overwritten. Passages are stored as a PROPOSAL for a person to adopt or dismiss rather than changing the document — that is the default, since nobody watches an agent type; `mode: "apply"` changes the body directly, which is what a surface a person is looking at passes. `proposalId` keeps several calls in one proposal. Either every passage in a call is accepted or none is.',
     inputSchema: bodyEditInputSchema,
     outputSchema: bodyEditOutputSchema,
     execute: async (input: BodyEditInput): Promise<BodyEditOutput> => {
@@ -143,6 +244,20 @@ export function createBodyEditTool(deps: ServerDeps) {
 
       const body = readMarkdownBody(doc)
       const placed = placeAll(body, input.ops)
+
+      if (input.mode !== 'apply') {
+        const proposed = await storeBodyProposal({
+          deps,
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+          proposalId: input.proposalId,
+          doc,
+          changes: placed.map((entry) => entry.change),
+        })
+        return { documentId: input.documentId, applied: 0, proposed, body }
+      }
+
+      assertAssumptionsHold(placed, body)
 
       // Applied from the LAST passage backwards, so an earlier op's
       // replacement never shifts the offsets a later one was placed at.

@@ -1,5 +1,6 @@
 import {
   readMarkdownBody,
+  readProposals,
   writeDocumentKind,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -61,6 +62,15 @@ async function storedBody(store: FakeDocumentStore): Promise<string> {
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(saved.manifest, saved.chunks))
   return readMarkdownBody(doc)
+}
+
+/** The proposals plane as the store actually holds it. */
+async function storedProposals(store: FakeDocumentStore) {
+  const saved = await store.loadSnapshot({ docRef })
+  if (saved === null) throw new Error('nothing saved')
+  const doc = new LoroDoc()
+  doc.import(reassembleSnapshot(saved.manifest, saved.chunks))
+  return readProposals(doc)
 }
 
 function makeDeps(store: FakeDocumentStore): ServerDeps {
@@ -318,16 +328,217 @@ describe('wb_body_edit', () => {
   })
 })
 
-// Kept honest about what this increment does NOT do: the schema names a
-// mode so the wire shape is settled, but only `apply` exists until prose
-// gets the content-proposes default `wb_canvas_edit` already has.
-//
-// Asserted on the SCHEMA, not through `execute`: the MCP SDK validates
-// arguments at registration, so `execute` receives input that has already
-// parsed. Calling it with an unparsed object proves nothing about what the
-// tool accepts.
-describe('the mode this increment ships', () => {
-  test('accepts apply and refuses propose', () => {
+describe('the mode (ADR-0029 decision 7, applied to prose)', () => {
+  test('proposes by default, leaving the body exactly as it was', async () => {
+    const store = new FakeDocumentStore()
+    const body = 'The plan is to ship on Thursday.\n'
+    await seedMarkdown(store, body)
+
+    const result = await createBodyEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: passage(body, 'Thursday'),
+          text: 'Friday',
+          assumed: 'Thursday',
+        },
+      ],
+    })
+
+    expect(result.applied).toBe(0)
+    expect(result.proposed?.id).toBeDefined()
+    expect(await storedBody(store)).toBe(body)
+
+    const proposals = await storedProposals(store)
+    expect(proposals).toHaveLength(1)
+    expect(proposals[0]?.changes).toEqual([
+      {
+        id: 'c1',
+        status: 'open',
+        op: 'body.replace',
+        anchor: passage(body, 'Thursday'),
+        text: 'Friday',
+        assumed: 'Thursday',
+      },
+    ])
+  })
+
+  test('an explicit apply still changes the document and stores no proposal', async () => {
+    const store = new FakeDocumentStore()
+    const body = 'The plan is to ship on Thursday.\n'
+    await seedMarkdown(store, body)
+
+    await createBodyEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: passage(body, 'Thursday'),
+          text: 'Friday',
+          assumed: 'Thursday',
+        },
+      ],
+    })
+
+    expect(await storedBody(store)).toBe('The plan is to ship on Friday.\n')
+    expect(await storedProposals(store)).toHaveLength(0)
+  })
+
+  test('a proposal keeps a stale assumption instead of refusing it', async () => {
+    const store = new FakeDocumentStore()
+    // Decision 5: a proposal FOLLOWS the document. The passage is still
+    // there, so the proposal can be drawn; that it now reads something else
+    // is a collision for the PERSON to see when they adopt, not a reason to
+    // refuse the proposal at the door. `apply` is the path that refuses.
+    const body = 'The plan is to ship on Thursday.\n'
+    await seedMarkdown(store, body)
+
+    await createBodyEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: passage(body, 'Thursday'),
+          text: 'Friday',
+          assumed: 'Wednesday',
+        },
+      ],
+    })
+
+    const proposals = await storedProposals(store)
+    expect(proposals[0]?.changes[0]).toMatchObject({ assumed: 'Wednesday', status: 'open' })
+  })
+
+  test('refuses a proposal whose passage is nowhere in the body', async () => {
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store, 'The plan is to ship on Thursday.\n')
+
+    await expect(
+      createBodyEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            id: 'c1',
+            op: 'body.replace',
+            anchor: { kind: 'text', quote: { exact: 'nowhere in this body' }, start: 0, end: 20 },
+            text: 'x',
+            assumed: 'nowhere in this body',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/c1/)
+
+    expect(await storedProposals(store)).toHaveLength(0)
+  })
+
+  test('refuses overlapping passages when proposing, not only when applying', async () => {
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store, 'abcdef')
+
+    await expect(
+      createBodyEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            id: 'c1',
+            op: 'body.replace',
+            anchor: { kind: 'text', quote: { exact: 'abc' }, start: 0, end: 3 },
+            text: 'X',
+            assumed: 'abc',
+          },
+          {
+            id: 'c2',
+            op: 'body.replace',
+            anchor: { kind: 'text', quote: { exact: 'bcd' }, start: 1, end: 4 },
+            text: 'Y',
+            assumed: 'bcd',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/overlaps/)
+
+    expect(await storedProposals(store)).toHaveLength(0)
+  })
+
+  test('refuses two ops sharing one change id, which an Adopt could not tell apart', async () => {
+    const store = new FakeDocumentStore()
+    const body = 'Ship on Thursday. Review on Friday.\n'
+    await seedMarkdown(store, body)
+
+    await expect(
+      createBodyEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            id: 'same',
+            op: 'body.replace',
+            anchor: passage(body, 'Thursday'),
+            text: 'Monday',
+            assumed: 'Thursday',
+          },
+          {
+            id: 'same',
+            op: 'body.replace',
+            anchor: passage(body, 'Friday'),
+            text: 'Tuesday',
+            assumed: 'Friday',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/same/)
+  })
+
+  test('a second call under one proposalId adds to that proposal', async () => {
+    const store = new FakeDocumentStore()
+    const body = 'Ship on Thursday. Review on Friday.\n'
+    await seedMarkdown(store, body)
+    const tool = createBodyEditTool(makeDeps(store))
+
+    const first = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: passage(body, 'Thursday'),
+          text: 'Monday',
+          assumed: 'Thursday',
+        },
+      ],
+    })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      proposalId: first.proposed?.id,
+      ops: [
+        {
+          id: 'c2',
+          op: 'body.replace',
+          anchor: passage(body, 'Friday'),
+          text: 'Tuesday',
+          assumed: 'Friday',
+        },
+      ],
+    })
+
+    const proposals = await storedProposals(store)
+    expect(proposals).toHaveLength(1)
+    expect(proposals[0]?.changes.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+  })
+
+  test('refuses a mode the schema does not name', () => {
     const ops = [
       {
         id: 'c1',
@@ -340,7 +551,9 @@ describe('the mode this increment ships', () => {
     const base = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops }
 
     expect(bodyEditInputSchema.safeParse({ ...base, mode: 'apply' }).success).toBe(true)
-    expect(bodyEditInputSchema.safeParse({ ...base, mode: 'propose' }).success).toBe(false)
+    expect(bodyEditInputSchema.safeParse({ ...base, mode: 'propose' }).success).toBe(true)
+    expect(bodyEditInputSchema.safeParse(base).success).toBe(true)
+    expect(bodyEditInputSchema.safeParse({ ...base, mode: 'draft' }).success).toBe(false)
   })
 
   test("refuses an op carrying a status, which is the document's verdict to keep", () => {
