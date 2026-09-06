@@ -207,16 +207,24 @@ export async function storeCanvasProposal(args: {
 }): Promise<Proposal | undefined> {
   const changes = proposedChangesFromDiff(args.before, args.after)
   if (changes.length === 0) return undefined
+  const open = readProposals(args.doc)
+  const continuing = open.find((existing) => existing.id === args.proposalId)
   const proposal: Proposal = {
-    id:
-      args.proposalId ??
-      mintProposalId(new Set(readProposals(args.doc).map((existing) => existing.id))),
+    id: args.proposalId ?? mintProposalId(new Set(open.map((existing) => existing.id))),
     // No author: server-core carries no operator identity, and a
     // browser-kept workspace has nobody signed in to record.
-    createdAt: new Date().toISOString(),
+    //
+    // A continuation keeps the time the proposal was OPENED. Decision 8's
+    // batch is one request across several calls, so re-stamping here would
+    // make `createdAt` name the last call rather than the proposal.
+    createdAt: continuing?.createdAt ?? new Date().toISOString(),
     changes,
   }
   writeProposal(args.doc, proposal)
   await saveDocumentSnapshot(args.deps, args.workspaceId, args.documentId, args.doc)
-  return proposal
+  // Read back rather than answering with the changes this call contributed.
+  // The result is typed as a whole proposal, so it has to be one — and the
+  // merge that produced it belongs to the container, so recomputing it here
+  // would be a second implementation free to disagree with the first.
+  return readProposals(args.doc).find((stored) => stored.id === proposal.id) ?? proposal
 }

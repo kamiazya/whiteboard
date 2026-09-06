@@ -177,6 +177,64 @@ describe('wb_canvas_edit in propose mode', () => {
     expect(proposals[0]?.changes.map((change) => change.id)).toEqual(['node:a', 'node:b'])
   })
 
+  // `proposed` is typed as a whole proposal, so it has to BE one. Answering
+  // with only the call's own delta would make a continuation's result read as
+  // a proposal that lost everything proposed before it.
+  test('answers a continuation with the whole proposal, not the part it just added', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    const tool = createCanvasEditTool(deps)
+
+    const first = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [{ op: 'node.patch', id: 'a', patch: { x: 400 } }],
+    })
+    const second = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      proposalId: first.proposed?.id,
+      ops: [{ op: 'node.patch', id: 'b', patch: { y: 300 } }],
+    })
+
+    expect(second.proposed?.changes.map((change) => change.id)).toEqual(['node:a', 'node:b'])
+    expect(second.proposed).toEqual((await storedProposals(deps))[0])
+  })
+
+  // A proposal is created once, and `createdAt` says when. A continuation
+  // stamping its own time would make the field name a lie — and the whole
+  // point of decision 8's batch is that several calls are ONE proposal.
+  test('keeps the time the proposal was opened when a later call adds to it', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    const tool = createCanvasEditTool(deps)
+
+    const first = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      ops: [{ op: 'node.patch', id: 'a', patch: { x: 400 } }],
+    })
+    const opened = first.proposed?.createdAt
+    // A real gap, so a re-stamp cannot pass by landing in the same
+    // millisecond as the call that opened the proposal.
+    await new Promise((resolve) => setTimeout(resolve, 5))
+    const second = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'propose',
+      proposalId: first.proposed?.id,
+      ops: [{ op: 'node.patch', id: 'b', patch: { y: 300 } }],
+    })
+
+    expect(opened).toEqual(expect.any(String))
+    expect(second.proposed?.createdAt).toBe(opened)
+  })
+
   // Nothing changed for a watching browser, so telling it "changed 1" would
   // be a lie. The surface that shows a proposal is a later increment.
   test('does not announce an edit nobody made', async () => {
