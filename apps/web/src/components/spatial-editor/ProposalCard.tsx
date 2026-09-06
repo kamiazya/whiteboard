@@ -37,6 +37,7 @@ import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
 /** Screen px kept between the card and the root's edge once slid inside. */
 const CARD_EDGE_MARGIN_PX = 8
@@ -140,10 +141,11 @@ export function ProposalCard({
         already teaches — a ring means a verb that writes something, a bare
         mark means chrome.
 
-        Their own row, at a coarse pointer's 44px, rather than tucked in
+        Their own row, at `ICON_VERB_CLASS`'s 44px, rather than tucked in
         beside Close: Dismiss is the one verb on this surface that no Undo
-        reaches, so it gets a target sized for a thumb rather than one sized
-        for a mouse.
+        reaches, so it gets the same thumb-sized target the rail's verbs
+        get, from the same constant rather than from a second set of
+        numbers.
       */}
       <div className="flex items-center justify-end gap-1">
         <DecideButton label="Dismiss" onSelect={() => onDecide('dismissed')}>
@@ -172,7 +174,7 @@ function DecideButton({
       aria-label={label}
       title={label}
       onClick={onSelect}
-      className="flex size-9 items-center justify-center rounded hover:bg-accent hover:text-foreground pointer-coarse:size-11"
+      className={ICON_VERB_CLASS}
     >
       <span aria-hidden="true">{children}</span>
     </button>

@@ -20,6 +20,7 @@ import type {
 import { Check, MessageSquarePlus, Pencil, SendHorizontal } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
+import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
 
@@ -108,16 +109,6 @@ export interface CommentsPanelProps {
    */
   readonly onReturnFocus?: () => void
 }
-
-/**
- * The object-verb target DESIGN.md's "Object-action surfaces are icon-first"
- * specifies: 44px, no drawn label, the name carried by `aria-label` and a
- * `title` for the desktop hover. The size half is load-bearing — dropping
- * the labels while keeping the old padding would take the width the label
- * was giving the target and give nothing back.
- */
-const ICON_VERB_CLASS =
-  'grid size-11 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground'
 
 /**
  * How long a resolved row stays on screen after it has crossed, before it
