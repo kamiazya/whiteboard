@@ -1,6 +1,6 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
-import type { Extension } from '@codemirror/state'
+import type { Extension, StateEffect } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
@@ -52,13 +52,9 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
-import {
-  placePassages,
-  proposalDecorations,
-  setProposalProjection,
-} from './proposal-decorations.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
 import {
   wikiLinkCompletionSource,
@@ -413,27 +409,18 @@ export function MarkdownEditor({
   // passes is a fresh closure on every render.
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
-  const [openPassage, setOpenPassage] = useState<{
-    proposalId: string
-    changeId: string
-    x: number
-    y: number
-  } | null>(null)
-  const proposalExtension = useMemo(
-    () =>
-      proposalDecorations({
-        onSelectPassage: (proposalId, changeId, at) => {
-          const rect = rootRef.current?.getBoundingClientRect()
-          setOpenPassage({
-            proposalId,
-            changeId,
-            x: at.clientX - (rect?.left ?? 0),
-            y: at.clientY - (rect?.top ?? 0),
-          })
-        },
-      }),
-    [],
-  )
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  const applyProposalEffects = useCallback((effects: readonly StateEffect<unknown>[]) => {
+    sourceApiRef.current?.applyEffects(effects)
+  }, [])
+  const passageProposals = usePassageProposals({
+    value,
+    proposals: proposals ?? NO_PROPOSALS,
+    applyEffects: applyProposalEffects,
+    rootRef,
+  })
+
   const annotationExtension = useMemo(
     () => annotationDecorations({ onSelectThread: (id) => onSelectThreadRef.current?.(id) }),
     [],
@@ -442,10 +429,10 @@ export function MarkdownEditor({
     () => [
       completionExtension,
       annotationExtension,
-      proposalExtension,
+      passageProposals.extension,
       ...(sourceExtensions ?? []),
     ],
-    [annotationExtension, completionExtension, proposalExtension, sourceExtensions],
+    [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
@@ -486,7 +473,7 @@ export function MarkdownEditor({
 
   // Source-pane share of the split, clamped so neither pane can vanish.
   const [splitRatio, setSplitRatio] = useState(0.5)
-  const rootRef = useRef<HTMLDivElement | null>(null)
+
   const sourceWrapRef = useRef<HTMLDivElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const sourceApiRef = useRef<SourcePaneApi | null>(null)
@@ -512,33 +499,6 @@ export function MarkdownEditor({
       }),
     ])
   }, [projectedThreads, projectedMarks, selectedThreadId])
-
-  const projectedProposals = proposals ?? NO_PROPOSALS
-  useEffect(() => {
-    sourceApiRef.current?.applyEffects([
-      setProposalProjection.of({
-        proposals: projectedProposals,
-        selectedChangeId: openPassage?.changeId ?? null,
-      }),
-    ])
-  }, [projectedProposals, openPassage])
-
-  // The card follows the DOCUMENT, not the press: once the passage it is
-  // about stops resolving — the person adopted it, dismissed it, or edited
-  // the words out from under it — there is nothing left to decide, and a
-  // card still offering the verbs would write against a passage that is
-  // gone.
-  const openPlacedPassage = useMemo(() => {
-    if (openPassage === null) return null
-    return (
-      placePassages(value, projectedProposals).find(
-        (one) => one.changeId === openPassage.changeId,
-      ) ?? null
-    )
-  }, [openPassage, projectedProposals, value])
-  useEffect(() => {
-    if (openPassage !== null && openPlacedPassage === null) setOpenPassage(null)
-  }, [openPassage, openPlacedPassage])
 
   // Scroll to the passage when the SELECTION changes, and only then. `value`
   // is a dependency because the passage's offset is derived from it, but a
@@ -1125,19 +1085,25 @@ export function MarkdownEditor({
           />
         )}
       </div>
-      {openPassage !== null && openPlacedPassage !== null && onDecidePassage !== undefined && (
-        <PassageProposalCard
-          current={value.slice(openPlacedPassage.from, openPlacedPassage.to)}
-          proposed={openPlacedPassage.text}
-          conflicted={openPlacedPassage.conflicted}
-          at={{ x: openPassage.x, y: openPassage.y }}
-          onDecide={(decision) => {
-            onDecidePassage(openPassage.proposalId, openPassage.changeId, decision)
-            setOpenPassage(null)
-          }}
-          onClose={() => setOpenPassage(null)}
-        />
-      )}
+      {passageProposals.open !== null &&
+        passageProposals.placed !== null &&
+        onDecidePassage !== undefined && (
+          <PassageProposalCard
+            current={value.slice(passageProposals.placed.from, passageProposals.placed.to)}
+            proposed={passageProposals.placed.text}
+            conflicted={passageProposals.placed.conflicted}
+            at={{ x: passageProposals.open.x, y: passageProposals.open.y }}
+            onDecide={(decision) => {
+              onDecidePassage(
+                passageProposals.open?.proposalId as string,
+                passageProposals.open?.changeId as string,
+                decision,
+              )
+              passageProposals.close()
+            }}
+            onClose={passageProposals.close}
+          />
+        )}
       {linkPicker !== null && linkTargets !== undefined && (
         <LinkPickerDialog
           targets={linkTargets}

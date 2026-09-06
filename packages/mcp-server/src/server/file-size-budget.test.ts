@@ -119,7 +119,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // nothing about resolved before, so a closed conversation's marker was
   // drawn exactly like an open one — and with the state present the marker
   // crosses to it rather than staying put.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1073,
+  // +64: the proposal layer's in-place surface (ADR-0029 decision 1, for
+  // prose) — two props with the doc comments that say what they are for,
+  // and the card render. The cohesive half is already out: everything with
+  // a seam (the open passage, its extension, the projection effect, where
+  // the passage currently sits) is `use-passage-proposals.ts`, and what is
+  // left is the component's own prop surface and one conditional render.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1137,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -165,7 +171,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +70 for the proposal plane: the publish channel beside annotations, and
   // the two-plane write a decision is — statuses where the proposal lives,
   // plus the canvas when it was adopted.
-  'apps/web/src/lib/document-sync-session.ts': 1461,
+  // +10: adopting a proposed passage writes the BODY, not only the status
+  // (ADR-0029 decision 6). The write itself is `apply-adopted-passages.ts`;
+  // these ten lines are its import, its call, and the comment saying why a
+  // decision has to reach two planes here.
+  'apps/web/src/lib/document-sync-session.ts': 1471,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
