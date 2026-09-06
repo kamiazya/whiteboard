@@ -3,7 +3,8 @@
  * card the canvas opens on a comment, because the two surfaces show the same
  * conversation and a second copy of this would drift from the first.
  */
-import type { CommentMessage } from '@kamiazya/whiteboard-model'
+import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
+import { threadLastActivityAt } from '../../lib/thread-activity.js'
 import { formatRelative } from '../workspace-files/format-relative.js'
 
 /**
@@ -40,6 +41,40 @@ export function MessageBy({ message }: { readonly message: CommentMessage | unde
     <span className="flex items-center gap-2 text-[11px] text-muted-foreground">
       {message.author !== undefined ? <span>{message.author}</span> : null}
       {stamp.text !== '' ? <time dateTime={stamp.dateTime}>{stamp.text}</time> : null}
+    </span>
+  )
+}
+
+/**
+ * How much a conversation holds and when it last moved — the two facts a
+ * reader needs BEFORE opening one, and the two the subject line cannot give.
+ *
+ * The row beside this already carries the opening message and its stamp,
+ * which answers "who started this, and when". For a conversation that has
+ * been running a week those are the wrong facts: what decides whether to
+ * open it is how much is in there and whether anything happened lately.
+ *
+ * Nothing for a lone remark. Its one stamp IS the opening message's, already
+ * on the row, and "1 message" beside it is the same fact written twice.
+ */
+export function ThreadActivity({ thread }: { readonly thread: CommentThread }) {
+  if (thread.messages.length <= 1) return null
+  const stamp = stampOf(threadLastActivityAt(thread))
+  return (
+    <span
+      data-testid={`thread-message-count-${thread.id}`}
+      className="flex items-center text-[11px] text-muted-foreground"
+    >
+      <span>{thread.messages.length} messages</span>
+      {stamp.text === '' ? null : (
+        <>
+          {/* The spaces are inside the separator rather than a flex `gap`,
+              which draws them without putting them in the text: read aloud,
+              a gap between two spans is "2 messages9/3 01:00". */}
+          <span aria-hidden="true"> &middot; </span>
+          <time dateTime={stamp.dateTime}>{stamp.text}</time>
+        </>
+      )}
     </span>
   )
 }

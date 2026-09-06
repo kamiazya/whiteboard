@@ -476,7 +476,12 @@ export function MarkdownEditor({
    * is enough to find a conversation while reading.
    */
   const [previewMarkers, setPreviewMarkers] = useState<
-    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
+    readonly {
+      readonly threadId: string
+      readonly top: number
+      readonly selected: boolean
+      readonly messages: number
+    }[]
   >([])
   const previewInnerRef = useRef<HTMLDivElement | null>(null)
   const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
@@ -731,9 +736,13 @@ export function MarkdownEditor({
       totalLines: totalSourceLines(debouncedValue),
       contentHeight: railContentHeight(blocksRef.current),
     }
+    // Read from the projection by id: `PlacedThread` answers WHERE a passage
+    // is, and how many messages it holds is not a property of that.
+    const messageCounts = new Map(projectedThreads.map((one) => [one.id, one.messages.length]))
     setPreviewMarkers(
       placeThreads(debouncedValue, projectedThreads, projectedMarks).map((placed) => ({
         threadId: placed.threadId,
+        messages: messageCounts.get(placed.threadId) ?? 1,
         top:
           svgTop +
           documentYForLine(
@@ -934,7 +943,11 @@ export function MarkdownEditor({
                   type="button"
                   data-testid="comment-preview-marker"
                   data-thread-id={marker.threadId}
-                  aria-label="Open comment"
+                  aria-label={
+                    marker.messages > 1
+                      ? `Open comment, ${marker.messages} messages`
+                      : 'Open comment'
+                  }
                   onClick={() => onSelectThread?.(marker.threadId)}
                   // In the column's own left padding, on the block's top edge.
                   style={{ top: marker.top }}
@@ -949,6 +962,18 @@ export function MarkdownEditor({
                     fill={marker.selected ? 'currentColor' : 'none'}
                     fillOpacity={0.35}
                   />
+                  {/* Only past one. Read mode never shows the source, so this
+                      marker is all a reader has to judge a conversation by —
+                      but a digit beside every lone remark is noise, and the
+                      badge only says something once there is more than one.
+                      Corner-set rather than beside the icon: the column's
+                      left padding is exactly this button's width, so growing
+                      it sideways would run under the prose. */}
+                  {marker.messages > 1 ? (
+                    <span className="pointer-events-none absolute -top-0.5 -right-0.5 rounded-full bg-(--annotation) px-1 text-[9px] leading-[12px] text-background">
+                      {marker.messages}
+                    </span>
+                  ) : null}
                 </button>
               ))}
               {effectiveMode === 'read' && meta !== undefined && (

@@ -17,7 +17,7 @@ import { CircleCheck, MessageSquarePlus, Pencil, RotateCcw } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { cn } from '../../lib/utils.js'
-import { MessageBy } from './message-meta.js'
+import { MessageBy, ThreadActivity } from './message-meta.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -264,7 +264,6 @@ export function CommentsPanel({
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: a container-level Escape handler, not a control — the interactive elements inside keep their own roles and keyboard behaviour, and this only listens for the one key that means "put me back where I was"
     <section
       aria-label="Comments"
       data-testid="comments-panel"
@@ -395,11 +394,7 @@ export function CommentsPanel({
                       </span>
                     )}
                     <MessageBy message={thread.messages[0]} />
-                    {thread.messages.length > 1 ? (
-                      <span data-testid={`thread-message-count-${thread.id}`}>
-                        {thread.messages.length} messages
-                      </span>
-                    ) : null}
+                    <ThreadActivity thread={thread} />
                     {resolveAnchor?.(thread) === 'orphaned' ? (
                       <span data-testid={`thread-orphaned-${thread.id}`}>
                         {/* Said, not hidden: the conversation outlived what it

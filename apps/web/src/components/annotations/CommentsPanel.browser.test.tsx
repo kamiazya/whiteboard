@@ -43,9 +43,25 @@ it('opens on the conversations that are still open, and says how many messages e
   expect(page.getByText('this one is done').query()).toBeNull()
   // Two messages is a conversation; saying so is what distinguishes it from
   // a lone remark without opening it.
-  await expect
-    .element(page.getByTestId('thread-message-count-t-open'))
-    .toHaveTextContent('2 messages')
+  const meta = page.getByTestId('thread-message-count-t-open')
+  await expect.element(meta).toBeInTheDocument()
+  expect(meta.element().textContent).toContain('2 messages')
+})
+
+it('dates a conversation by its LAST message, not the one that started it', async () => {
+  // OPEN was started on the 3rd and replied to an hour later. The stamp
+  // beside the subject answers "who started this and when"; the row also
+  // has to answer "has anything happened", and for a conversation running
+  // over days those are different questions with different answers.
+  render(<CommentsPanel threads={[OPEN]} />)
+  const meta = page.getByTestId('thread-message-count-t-open')
+  await expect.element(meta).toBeInTheDocument()
+  // The count and a stamp, with the STAMP's identity asserted below rather
+  // than its rendering: the label is the reader's local clock, so pinning
+  // its text here would pin this runner's timezone.
+  expect(meta.element().textContent).toContain('2 messages · ')
+  const stamp = meta.element().querySelector('time')
+  expect(stamp?.getAttribute('datetime')).toBe('2026-09-03T01:00:00.000Z')
 })
 
 it('shows the resolved ones when asked, and everything under All', async () => {

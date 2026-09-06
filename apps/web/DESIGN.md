@@ -682,6 +682,46 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**A marker says how much is in the conversation it stands for.** Before
+this, every in-place marker said only "somebody is talking about this", so
+deciding whether to open one meant opening it. The gutter dot and the
+preview marker now carry the conversation's message count past one — past
+one, because a digit beside every lone remark is noise and the count only
+says something once there is more than one — and the rail's row carries the
+count with the stamp of when the conversation LAST moved
+(`lib/thread-activity.ts`).
+
+That stamp is deliberately not the one already beside the subject. The row
+carries the opening message, so its stamp answers "who started this, and
+when"; for a conversation running over days the question a scanning reader
+is actually asking is "has anything happened", and those have different
+answers. An edit counts as movement — a rewritten subject is news to whoever
+already read it, and `editedAt` is the only record that it happened. The
+comparison is by INSTANT, not by text: `okfTimestampSchema` accepts `Z` and
+an explicit `±HH:MM` alike, and midnight in Tokyo is the earlier instant
+while being the later string, so a lexical max reports a conversation as
+fresher than it is. (The model's `compareMessages` does compare as text,
+deliberately — what it needs is one order two peers agree on, and agreement
+is not chronology.)
+
+The gutter dot holds ONE digit and it now belongs to the conversation
+rather than to the line. The line's own count — more than one conversation
+on it — is the rarer fact and keeps its own channel, `data-threads`, drawn
+as a second ring behind the dot and said in words in the label, so the
+second conversation is still never silently dropped.
+
+The canvas PIN is deliberately not in this: it is composed by
+`canvas-render` from the flat projection, so a count there changes exported
+SVG, the MCP Apps widget and the scene digest — a cross-package increment
+with its own review rather than a drive-by.
+
+Read status is a separate question and NOT answered here. `commentThreadSchema`
+carries no `readAt`/`readBy`, and adding one needs an answer to "whose read"
+that this app cannot give — `commentMessageSchema.author` is optional
+because a browser-kept workspace has no signed-in author. Last-activity is
+what can be said honestly today, and it is what both a per-device read
+marker and a shared one would be built beside rather than instead of.
+
 **Opening a conversation moves the reader into it, and Escape brings them
 back.** Reading a conversation and writing the body are two modes, and the
 press that opens one has to land somewhere: a revealed thread takes focus on

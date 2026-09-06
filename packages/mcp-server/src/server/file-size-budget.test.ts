@@ -102,7 +102,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // hand-built thread writes replaced by one shared door.
   // +1: the annotation entry also has to be handed the LIVE passage marks,
   // so the toolbar resolves a thread the way the gutter beside it does.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1021,
+  // +25: the preview marker now says how many messages its conversation
+  // holds — a count in the marker's state, a lookup beside the placement
+  // that produces it, and a corner badge with the reasoning for why it
+  // appears only past one. Read mode never shows the source, so this marker
+  // is the whole of what a reader there has to judge a conversation by.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1046,
   'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,

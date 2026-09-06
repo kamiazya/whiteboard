@@ -277,6 +277,30 @@
     background: var(--annotation);
     color: var(--background);
   }
+  /*
+   * A line carrying more than one conversation, drawn as a second dot
+   * behind the first. The dot's own digit belongs to the conversation a
+   * press opens, so the line's count needs a channel of its own that does
+   * not compete for those 12px — and the reader still has to be told, or
+   * they would think the second conversation had vanished. The label says
+   * it in words for anyone who cannot see the stack.
+   */
+  .cm-annotation-gutter-marker[data-threads] {
+    position: relative;
+  }
+  .cm-annotation-gutter-marker[data-threads]::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: var(--background);
+    /* Behind and up-left of the dot the press opens, so both read as one
+       object seen edge-on rather than as two markers on one line. */
+    transform: translate(-3px, -3px);
+    opacity: 0.55;
+  }
 
   /*
    * Chromium repaints an SVG <a>'s fill with its UA :visited color, and in
