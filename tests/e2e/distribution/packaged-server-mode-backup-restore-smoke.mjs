@@ -13,14 +13,14 @@
 //         - workspace + canvas (Loro snapshot via canvas POST)
 //         - file blob  (PUT /api/w/:ws/document/:path/file/:fileId)
 //         - manual version + thumbnail
-//         - palette entry  (PUT /api/workspaces/:ws/palette, no auth needed)
+//         - workspace display name (PUT /api/workspaces/:ws/name)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
 //   6.  Stop container A.
 //   7.  backupServerModeDataDir → restoreServerModeDataDir via dist helper.
 //   8.  Verify server-mode.json is absent from restored dir.
 //   9.  Start container B with the restored data volume.
 //  10.  Verify all seeded data via HTTP API (canvas list, snapshot bytes,
-//       file bytes, version list + thumbnail bytes, palette entry).
+//       file bytes, version list + thumbnail bytes, workspace name).
 //  11.  Verify 401 (no auth) and 403 (wrong scope) contracts still hold.
 //  12.  Scan docker logs for JWT / credential / path leaks.
 //  13.  Cleanup containers, JWKS server, temp dirs.
@@ -54,6 +54,7 @@ const READINESS_TIMEOUT_MS = 60_000
 const WORKSPACE_ID = 'sess-smoke-br'
 const CANVAS_PATH = 'canvas-smoke-br'
 const FILE_ID = 'filesmokebr001' // must match validateFileId: [A-Za-z0-9_-]{1,64}
+const WORKSPACE_DISPLAY_NAME = 'Backup Restore Smoke'
 
 const BACKUP_RESTORE_ENTRY = resolve(
   REPO_ROOT,
@@ -452,18 +453,20 @@ try {
     )
     if (!thumbRes.ok) fail(`scenario 3: thumbnail upload failed with ${thumbRes.status}`)
 
-    // Save palette entry.
-    const paletteRes = await authedFetch(
+    // The workspace's own display name — a workspaces-table row rather than
+    // anything inside a document, which is a category of state the backup has
+    // to carry and no other step here touches.
+    const nameRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/name`,
       jwt,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: { '#smoke-red': '#FF0000' } }),
+        body: JSON.stringify({ name: WORKSPACE_DISPLAY_NAME }),
       },
     )
-    if (!paletteRes.ok) fail(`scenario 3: palette save failed with ${paletteRes.status}`)
+    if (!nameRes.ok) fail(`scenario 3: workspace name save failed with ${nameRes.status}`)
 
     console.log(
       `[docker-br-smoke] scenario 3 PASS: seeded workspace=${WORKSPACE_ID}, canvas=${CANVAS_PATH}, snapshot=${seededSnapshotBytes.byteLength} bytes, versionId=${seededVersionId}`,
@@ -643,18 +646,19 @@ try {
       fail('scenario 7: restored thumbnail byte length mismatch')
     }
 
-    // Palette entry.
-    const paletteRes = await authedFetch(
+    // Workspace display name.
+    const namesRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/names`,
       jwt,
     )
-    if (!paletteRes.ok)
-      fail(`scenario 7: palette GET on restored server failed with ${paletteRes.status}`)
-    const palette = await paletteRes.json()
-    if (palette?.palette?.['#smoke-red'] !== '#FF0000') {
-      fail('scenario 7: palette entry missing from restored server', {
-        paletteKeyCount: Object.keys(palette?.palette ?? {}).length,
+    if (!namesRes.ok)
+      fail(`scenario 7: names GET on restored server failed with ${namesRes.status}`)
+    const names = await namesRes.json()
+    if (names?.workspace !== WORKSPACE_DISPLAY_NAME) {
+      fail('scenario 7: workspace display name missing from restored server', {
+        got: names?.workspace,
+        want: WORKSPACE_DISPLAY_NAME,
       })
     }
 

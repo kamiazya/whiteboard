@@ -207,8 +207,12 @@
       "requiresNetwork": false,
       "expectedRuntimeBucket": "slow",
       "prCoverage": {
-        "kind": "exception",
-        "reason": "the smoke cannot pass as written, found by running it: scenario 3 saves a workspace palette via PUT /api/workspaces/:ws/palette, and no route registers /palette anywhere in the server \u2014 the endpoint is gone. Its remaining scenarios are unverified against the current API for the same reason, since running only on the release path meant none of them had ever executed. A separate defect it also surfaced IS fixed here: dist/server/server-mode-backup-restore.js was not a tsup entry, so no build produced the module the smoke imports. Restoring PR coverage needs the smoke rewritten against the current API, which is its own change; smoke:docker (ten scenarios) does run on every affecting pull request"
+        "kind": "conditional-workflow-step",
+        "workflow": "ci.yml",
+        "jobId": "dry-run-docker",
+        "stepName": "Server-mode backup/restore docker smoke",
+        "condition": "steps.detect.outputs.docker == 'true'",
+        "conditionReason": "the job skips its docker steps on a pull request that cannot reach the image build (derived by tools/checks/src/docker-build-inputs.mjs), which was 21 of the last 40 main commits. A change that CAN affect the image runs this smoke; one that cannot leaves an image nothing in the diff could have altered."
       }
     },
     {

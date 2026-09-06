@@ -548,10 +548,24 @@ jobs:
           WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
         run: pnpm smoke:docker
 
-      # smoke:docker-backup-restore is NOT here, and its matrix exception says
-      # why: running it revealed that it asserts against an API surface the
-      # product no longer has. Adding it needs the smoke rewritten against the
-      # current API first, which is its own change.
+      # The backup/restore smoke joins it now that its one dead assertion is
+      # gone. It imports one built module — dist/server/server-mode-backup-
+      # restore.js — which the image dry-run does not leave behind, so it gets
+      # its own build step. The image itself is still the dry-run's.
+      #
+      # build:server, not build: the full `build` also copies canvas-viewer's
+      # widget into dist, and that package is not built in this job, so it
+      # fails on a missing dist/widget/canvas-viewer.html. tsup produces the
+      # module the smoke needs on its own.
+      - name: Build mcp-server dist for the backup/restore smoke
+        if: steps.detect.outputs.docker == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-mcp build:server
+
+      - name: Server-mode backup/restore docker smoke
+        if: steps.detect.outputs.docker == 'true'
+        env:
+          WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
+        run: pnpm smoke:docker-backup-restore
 
       - name: Upload docker dry-run metadata
         if: steps.detect.outputs.docker == 'true'
