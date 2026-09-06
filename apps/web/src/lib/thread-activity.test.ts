@@ -83,6 +83,12 @@ const stamp = fc
     instant: fc.date({
       min: new Date('2000-01-01T00:00:00Z'),
       max: new Date('2100-01-01T00:00:00Z'),
+      // `fc.date` emits `Invalid Date` even inside a min/max range unless this
+      // is set — measured at 2 in 500 runs — and `toISOString()` throws on one,
+      // which fails the run from the GENERATOR rather than from the property.
+      // The subject here is a stamp `okfTimestampSchema` would accept, and
+      // there is no such thing as an invalid one.
+      noInvalidDate: true,
     }),
     offsetMinutes: fc.constantFrom(0, 60, 330, 540, -300, -480),
   })
