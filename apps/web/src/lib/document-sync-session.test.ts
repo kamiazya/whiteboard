@@ -18,6 +18,7 @@ import {
   setNodeLock,
   writeCanvasComment,
   writeCommentThread,
+  writeDocumentKind,
   writeMarkdownBody,
   writeProposal,
   writeSpatialCanvas,
@@ -2521,5 +2522,165 @@ describe('deciding ONE change of a proposal', () => {
     const stored = session.getProposals()[0]?.changes ?? []
     expect(stored.find((c) => c.id === 'node:n1')?.status).toBe('dismissed')
     expect(stored.find((c) => c.id === 'node:n2')?.status).toBe('open')
+  })
+})
+
+describe('adopting a proposed passage (ADR-0029 decision 6)', () => {
+  // The half a canvas card cannot reach: `body.replace`'s subject is a
+  // markdown body, so adopting one has to WRITE that body. Stamping the
+  // status alone leaves the person looking at an "adopted" change and an
+  // unchanged document, which is the worst of the three possible states.
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const BODY = '# Plan\n\nThe plan is to ship on Thursday.\n'
+
+  function passageChange(
+    id: string,
+    exact: string,
+    text: string,
+    assumed = exact,
+    body = BODY,
+  ): ProposedChange {
+    const start = body.indexOf(exact)
+    return {
+      id,
+      op: 'body.replace',
+      status: 'open',
+      anchor: { kind: 'text', quote: { exact }, start, end: start + exact.length },
+      text,
+      assumed,
+    }
+  }
+
+  function seededNote(changes: readonly ProposedChange[], body = BODY): Uint8Array {
+    const doc = new LoroDoc()
+    writeDocumentKind(doc, 'markdown')
+    writeMarkdownBody(doc, body)
+    writeProposal(doc, { id: 'p1', createdAt: '2026-09-06T00:00:00.000Z', changes: [...changes] })
+    return doc.export({ mode: 'snapshot' })
+  }
+
+  it('rewrites the passage and closes the change', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seededNote([passageChange('c1', 'Thursday', 'Friday')]))
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: [passageChange('c1', 'Thursday', 'Friday')],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getMarkdownBody()).toBe('# Plan\n\nThe plan is to ship on Friday.\n')
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
+  })
+
+  it('leaves the body alone when the passage is dismissed', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seededNote([passageChange('c1', 'Thursday', 'Friday')]))
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'dismissed',
+      changes: [passageChange('c1', 'Thursday', 'Friday')],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getMarkdownBody()).toBe(BODY)
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('dismissed')
+  })
+
+  it('finds the passage by its quote when an edit has moved it', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    // The change was written against BODY; the document now carries a note
+    // above it, so every offset is stale by that prefix. The quote is what
+    // still finds the passage.
+    const edited = `> Added since.\n\n${BODY}`
+    backend._ctrl.handlers?.onSnapshot(
+      seededNote([passageChange('c1', 'Thursday', 'Friday')], edited),
+    )
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: [passageChange('c1', 'Thursday', 'Friday')],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getMarkdownBody()).toBe(
+      '> Added since.\n\n# Plan\n\nThe plan is to ship on Friday.\n',
+    )
+  })
+
+  it('applies several passages without the earlier one shifting the later', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const body = 'Ship on Thursday. Review on Thursday too.\n'
+    const first = passageChange(
+      'c1',
+      'Ship on Thursday',
+      'Ship on Monday',
+      'Ship on Thursday',
+      body,
+    )
+    const second = passageChange(
+      'c2',
+      'Review on Thursday',
+      'Review on Wednesday',
+      'Review on Thursday',
+      body,
+    )
+    backend._ctrl.handlers?.onSnapshot(seededNote([first, second], body))
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: [first, second],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getMarkdownBody()).toBe('Ship on Monday. Review on Wednesday too.\n')
+  })
+
+  it('leaves a passage that is gone alone rather than writing it somewhere', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const gone = passageChange('c1', 'Thursday', 'Friday')
+    backend._ctrl.handlers?.onSnapshot(seededNote([gone], 'The plan changed entirely.\n'))
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: [gone],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // The status still closes: the person answered, and an orphaned passage
+    // that stayed open would ask them again every time they opened the note.
+    expect(session.getMarkdownBody()).toBe('The plan changed entirely.\n')
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
   })
 })
