@@ -9,6 +9,7 @@
  * `web-browser` concern — see DaemonDocumentPage.comments-panel.browser.test.tsx.
  */
 
+import { EditorView } from '@codemirror/view'
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
@@ -196,6 +197,54 @@ function panel() {
   return within(screen.getByTestId('comments-panel'))
 }
 
+/**
+ * Puts text in the rail's reply box.
+ *
+ * NOT `fireEvent.change`: the box is a CodeMirror view rather than a form
+ * control, so it has no value setter and testing-library throws. And not
+ * user-event either — that is browser-mode's, and this suite is jsdom.
+ *
+ * `EditorView.findFromDOM` is CodeMirror's own public way from an element
+ * to its view, so this drives the real editor through its real API rather
+ * than faking one. What a KEYSTROKE does to that editor is the browser
+ * tests' subject (`CommentComposer.browser.test.tsx`); what this suite is
+ * about is where a reply travels once it exists.
+ */
+/**
+ * The replies under the open conversation, as DRAWN — scoped to the replies
+ * list so it cannot answer with the composer's own draft, which is inside
+ * the panel and which a plain `getByText` finds just as happily as a sent
+ * reply does.
+ *
+ * Whitespace is squashed on both sides of the comparison because a comment
+ * body is laid out by canvas-render: the space between two words is an x
+ * offset on the next run, not a character, so the concatenated `<text>`
+ * content of `no, we changed it` reads `no,wechangedit`.
+ */
+function repliesText(): string {
+  return [...document.querySelectorAll('ol [data-comment-body]')]
+    .map((node) => node.textContent ?? '')
+    .join('')
+    .replace(/\s+/g, '')
+}
+
+const squashed = (text: string) => text.replace(/\s+/g, '')
+
+function typeReply(body: string): void {
+  const box = panel().getByRole('textbox', { name: /reply/i })
+  const view = EditorView.findFromDOM(box as HTMLElement)
+  if (view === null) throw new Error('the reply box is not a mounted CodeMirror view')
+  // Inside `act`: the dispatch runs CodeMirror's update listener, which is
+  // what calls React's `setState` for the draft. Without it the Send click
+  // that follows still sees the empty draft and commits nothing — and the
+  // test would not obviously fail, because the text IS on screen: it is in
+  // the composer's own line, which `getByText` finds just as happily as a
+  // sent reply.
+  act(() => {
+    view.dispatch({ changes: { from: 0, to: view.state.doc.length, insert: body } })
+  })
+}
+
 describe('DaemonDocumentPage comments panel', () => {
   beforeEach(() => {
     window.localStorage.clear()
@@ -233,12 +282,15 @@ describe('DaemonDocumentPage comments panel', () => {
     fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
     fireEvent.click(panel().getByText('still needs a decision'))
 
-    fireEvent.change(panel().getByRole('textbox', { name: /reply/i }), {
-      target: { value: 'decided: ship it' },
-    })
+    typeReply('decided: ship it')
     fireEvent.click(panel().getByRole('button', { name: /send reply/i }))
 
-    await waitFor(() => expect(panel().getByText('decided: ship it')).toBeTruthy())
+    // Waited for in the REPLIES, not anywhere in the panel: the composer is
+    // inside the panel too, so a plain `getByText` answers with the draft
+    // and passes whether or not anything was sent. (The composer emptying
+    // is not the signal either — that happens the moment the click handler
+    // runs, before the write has gone anywhere.)
+    await waitFor(() => expect(repliesText()).toContain(squashed('decided: ship it')))
 
     // The write travelled the session's own path — replaying every update
     // the FakeBackend recorded onto a copy of the seed reproduces the same
@@ -278,11 +330,9 @@ describe('DaemonDocumentPage comments panel', () => {
     await waitFor(() => expect(panel().getByText('is this still true?')).toBeTruthy())
 
     fireEvent.click(panel().getByText('is this still true?'))
-    fireEvent.change(panel().getByRole('textbox', { name: /reply/i }), {
-      target: { value: 'no, we changed it' },
-    })
+    typeReply('no, we changed it')
     fireEvent.click(panel().getByRole('button', { name: /send reply/i }))
-    await waitFor(() => expect(panel().getByText('no, we changed it')).toBeTruthy())
+    await waitFor(() => expect(repliesText()).toContain(squashed('no, we changed it')))
   })
 
   it('shares one slot with History: opening either closes the other', async () => {

@@ -8,6 +8,7 @@
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { cn } from '../../lib/utils.js'
+import { CommentBody } from './CommentBody.js'
 import { MessageBy } from './message-meta.js'
 
 export interface ThreadRepliesProps {
@@ -23,14 +24,11 @@ export function ThreadReplies({ thread, compact = false }: ThreadRepliesProps) {
       {thread.messages.slice(1).map((message) => (
         <li key={message.id} className="flex flex-col gap-0.5">
           <MessageBy message={message} />
-          <p
-            className={cn(
-              'whitespace-pre-wrap break-words',
-              compact && 'text-xs text-neutral-800 dark:text-neutral-200',
-            )}
-          >
-            {message.body}
-          </p>
+          <CommentBody
+            body={message.body}
+            compact={compact}
+            className={cn(compact && 'text-neutral-800 dark:text-neutral-200')}
+          />
         </li>
       ))}
     </ol>

@@ -157,10 +157,26 @@ export interface SourcePaneApi {
   revealLine: (line: number) => void
 }
 
+/**
+ * How the host is SIZED and spaced. Only presentation — the grammar, the
+ * highlighting, the verb keymap and the active-editor registration are the
+ * same in both, which is the whole reason a comment composer reuses this
+ * host instead of standing up a second CodeMirror beside it.
+ *
+ * - `document`: the note's writing surface. Fills its pane, centres a
+ *   ~70ch column, and leaves a scroll runway under the last line.
+ * - `compact`: a box inside other chrome — a reply, a comment draft. Sizes
+ *   to its content up to a ceiling, then scrolls; inherits the surrounding
+ *   type instead of setting its own.
+ */
+export type SourcePaneVariant = 'document' | 'compact'
+
 export interface SourcePaneProps {
   value: string
   onChange: (next: string) => void
   className?: string
+  /** Defaults to `document`, which is what every existing host wants. */
+  variant?: SourcePaneVariant
   /** Focus the editor as soon as it mounts (fresh-note flows). */
   autoFocus?: boolean
   /** Shown while the document is empty. */
@@ -200,6 +216,7 @@ export function SourcePane({
   value,
   onChange,
   className,
+  variant = 'document',
   autoFocus = false,
   placeholderText,
   apiRef,
@@ -269,16 +286,34 @@ export function SourcePane({
         // column (~70ch) like every serious writing surface, instead of
         // lines that stretch across a widescreen pane.
         EditorView.theme({
-          '&': { height: '100%', width: '100%', fontSize: '15px' },
+          ...(variant === 'compact'
+            ? {
+                // Grows with the draft and then scrolls, rather than
+                // filling a pane it does not have: this box lives inside a
+                // card or a rail row, and a fixed height would either clip
+                // one line or reserve space for ten.
+                '&': { width: '100%', fontSize: 'inherit' },
+                '.cm-scroller': {
+                  overflow: 'auto',
+                  fontFamily: 'inherit',
+                  lineHeight: '1.5',
+                  maxHeight: '40vh',
+                },
+                '.cm-content': { padding: '4px 0', caretColor: 'var(--foreground)' },
+                '.cm-line': { padding: '0 8px' },
+              }
+            : {
+                '&': { height: '100%', width: '100%', fontSize: '15px' },
+                '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.7' },
+                '.cm-content': {
+                  maxWidth: '70ch',
+                  margin: '0 auto',
+                  padding: '24px 0 120px',
+                  caretColor: 'var(--foreground)',
+                },
+                '.cm-line': { padding: '0 24px' },
+              }),
           '&.cm-focused': { outline: 'none' },
-          '.cm-scroller': { overflow: 'auto', fontFamily: 'inherit', lineHeight: '1.7' },
-          '.cm-content': {
-            maxWidth: '70ch',
-            margin: '0 auto',
-            padding: '24px 0 120px',
-            caretColor: 'var(--foreground)',
-          },
-          '.cm-line': { padding: '0 24px' },
           // CodeMirror's base theme fills the gutters light grey and rules a
           // light line down their right edge. Unoverridden, that painted a
           // near-white band down the left of the body on the dark theme —

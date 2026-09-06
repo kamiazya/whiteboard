@@ -203,7 +203,9 @@ it('the comment compose bubble rises above the keyboard too', async () => {
   fireEvent.contextMenu(root, { clientX: r.left + 200, clientY: r.top + 450, button: 2 })
   await userEvent.click(page.getByRole('menuitem', { name: 'Comment on this' }))
   const compose = page.getByTestId('comment-compose')
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
+  // Inside, not equal: the bubble is a CodeMirror view, so the caret is on
+  // its contenteditable rather than on the element the testid names.
+  await vi.waitFor(() => expect(compose.element().contains(document.activeElement)).toBe(true))
   // Anchored at the node's top-right corner, the bubble opens below the strip.
   expect(bottomInRoot(root, compose.element())).toBeGreaterThan(200)
 
@@ -298,7 +300,13 @@ it('focusing a reply box that overhangs the root never scrolls the root under th
   // Opening focuses the card, and focusing its box (past the edge, where a
   // click cannot land) is the second chance for the browser to scroll a
   // hidden-overflow container on its own.
-  ;(page.getByLabelText('Reply').element() as HTMLTextAreaElement).focus()
+  const reply = page.getByLabelText('Reply').element() as HTMLElement
+  reply.focus()
+  // Asserted, not assumed: the box is CodeMirror's contenteditable rather
+  // than a textarea now, and `focus()` on something unfocusable does
+  // nothing at all — which would leave this test passing while never
+  // giving the browser the scroll it is here to refuse.
+  expect(document.activeElement).toBe(reply)
 
   expect(root.scrollTop).toBe(0)
   const layer = container.querySelector('[data-testid="viewport-transform"]') as HTMLElement

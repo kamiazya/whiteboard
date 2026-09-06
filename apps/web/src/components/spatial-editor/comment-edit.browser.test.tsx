@@ -93,8 +93,10 @@ it('the card Edit opens the compose bubble pre-filled; Ctrl+Enter commits set-co
   await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
-  expect((compose.element() as HTMLTextAreaElement).value).toBe('free note')
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
+  expect(compose.element().textContent).toBe('free note')
+  // The caret lands on CodeMirror's own contenteditable INSIDE the bubble,
+  // not on the bubble element the testid names.
+  await vi.waitFor(() => expect(compose.element().contains(document.activeElement)).toBe(true))
   await userEvent.keyboard(' revised')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
@@ -146,5 +148,5 @@ it('the context menu on a comment offers Edit comment, which opens the same pre-
   await userEvent.click(page.getByRole('menuitem', { name: 'Edit comment' }))
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
-  expect((compose.element() as HTMLTextAreaElement).value).toBe('free note')
+  expect(compose.element().textContent).toBe('free note')
 })

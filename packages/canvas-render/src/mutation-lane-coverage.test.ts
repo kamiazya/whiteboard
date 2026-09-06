@@ -60,9 +60,16 @@ describe('the mutation lane covers what it says it covers', () => {
   })
 
   it('names exactly the modules it mutates, out of exactly this many', () => {
+    // 57 rather than 56 since `layout/comment-body.ts`, and the lane
+    // deliberately does NOT cover it: what that module decides is which
+    // markdown theme a comment takes and what a body that will not parse
+    // degrades to, and both are pinned by named tests that were
+    // mutation-checked by hand (swapping in the document theme fails them
+    // with `expected 30 to be 24`). The rest is delegation to
+    // `layoutMdastBlocks`, which the lane already mutates.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 10,
-      production: 56,
+      production: 57,
     })
   })
 

@@ -46,6 +46,24 @@ fallback). `apps/web` is a composition root, so this is an allowed forward depen
 `architecture-map.md`; it is not source-scanned by `tools/arch-lint` (only the reverse-direction
 guard applies to composition roots), so this note is the boundary's only documentation.
 
+The "one renderer" half of that has a second caller now, and it is worth naming because the
+obvious reuse was the wrong one. A COMMENT's body is markdown too (ADR-0026's 2026-09-06
+supplement), so `apps/web`'s comment card and rail draw it through canvas-render as well — but
+through `layoutCommentBody`, NOT through the preview renderer. The two differ in the markdown
+THEME: the preview passes `MARKDOWN_THEME_DOCUMENT` (30px h1, 16px block gap) and a comment
+takes the NODE theme the canvas bubble takes (24px, 12px). Reaching for "the markdown renderer"
+would have given a comment document typography and read as a design choice. There is still no
+markdown-to-HTML fallback anywhere, and adding one for comments was considered and refused for
+the reason above: a second renderer is how a surface comes to disagree with the export.
+
+What that costs, recorded here rather than discovered later: a body drawn this way is `<text>`
+elements, so it carries no heading or list semantics into the accessibility tree. It is the same
+trade the preview pane already makes, and making a different one for comments would leave the
+app with two conventions for one question. A LIST ROW is the documented exception — the rail's
+row is a clamped button, so it shows a plain-text projection (`commentExcerpt`), which walks the
+PARSED body rather than the laid-out one: layout puts the space between two words in an x offset
+rather than in a string, so joining its runs yields `tightenthis`.
+
 ## Conventions
 
 - Every exported type is `z.infer`-derived (`OkfMarkdownDocument`, `OkfMarkdownFrontmatter`) or

@@ -16,7 +16,7 @@ import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import type { CommentComposeState } from './CanvasContextMenu.js'
 import { defaultCreateId, type reduceGesture } from './gestures.js'
-import { TextNodeEditor } from './TextNodeEditor.js'
+import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 
 /** The compose bubble sits where the saved comment's bubble will be drawn,
  * so committing reads as the draft settling rather than jumping. */
@@ -66,17 +66,26 @@ export function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
     fontFamily: SPATIAL_THEME_FONT_FAMILY,
     fontSize: BODY_FONT_SIZE_PX,
     lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-    // Size to the draft like the settled bubble sizes to its text: one
-    // line to start, growing as lines are added (`field-sizing`; browsers
-    // without it keep the one-line minimum and scroll).
+    // Size to the draft like the settled bubble sizes to its text: one line
+    // to start, growing as lines are added. `field-sizing` was how the
+    // textarea did that; the editor is a CodeMirror view now, whose content
+    // sizes the box on its own, so `auto` plus the one-line floor is the
+    // whole of it.
     height: 'auto',
     minHeight: BODY_LINE_HEIGHT_PX + 2 * COMMENT_BUBBLE_PADDING_PX + 2,
-    ...({ fieldSizing: 'content' } as React.CSSProperties),
   }
 }
 
 /**
- * The comment draft bubble: rewriting an existing comment's text, opening a
+ * The comment draft bubble — a markdown editor, because a comment's body IS
+ * markdown and this is where most comments are first written. It is the
+ * same overlay a text node's body is edited in (`MarkdownNodeEditor`),
+ * which already answers the traps a CodeMirror view over a canvas has: a
+ * caret press that must not bubble into the root's hit-test, a commit on
+ * losing focus, and `EditorView.destroy()`'s own blur arriving after the
+ * gesture reducer has already committed.
+ *
+ * Rewriting an existing comment's text, opening a
  * THREAD when a passage/node-set anchor is attached (a flat comment cannot
  * carry either), or creating a flat comment at a point. A blank commit is a
  * cancel — an empty comment says nothing and would still ask the reader to
@@ -106,7 +115,7 @@ export function CommentComposeOverlay({
   readonly onClose: () => void
 }) {
   return (
-    <TextNodeEditor
+    <MarkdownNodeEditor
       exitHintScale={1 / zoom}
       box={commentDraftBox(
         // An edge comment opens ON the routed path, where the layer
