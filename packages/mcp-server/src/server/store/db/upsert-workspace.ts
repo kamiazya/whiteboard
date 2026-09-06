@@ -20,6 +20,14 @@ import type { Database } from './index.js'
  * through to a 500 instead of the 409 the route promises — caught by
  * workspaces.test.ts and mint-daemon.test.ts when the client was deduped,
  * which is the only reason it was not shipped.
+ *
+ * Only ONE of those arms can be raised by the driver the tree is pinned to
+ * (`one-libsql-stack.test.ts`), so the end-to-end tests above exercise the
+ * `extendedCode` arm and cannot reach the other — measured: deleting the
+ * `code` arm left all 54 of them passing. `upsert-workspace.test.ts` drives
+ * both shapes synthetically, which is what keeps the unreachable arm from
+ * being dead code that reads as covered. It stays rather than being deleted
+ * because this shape has moved once already, silently.
  */
 function isSegmentUniqueViolation(err: unknown): err is Error {
   if (!(err instanceof Error)) return false
