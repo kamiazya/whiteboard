@@ -80,6 +80,10 @@ const SHARED_CANVAS_CHROME = [
   // grid template and the same sr-only <h1> landmark by hand; the shell owns
   // them once, so a layout or a11y drift between modes cannot happen quietly.
   'DocumentPageShell',
+  // Merge confirmation and its Undo. Daemon-only until the toast stopped
+  // naming a route: it restores through the versions seam, which both keepers
+  // implement, so the shared page can draw it for either one.
+  'MergeToast',
 ] as const
 
 /**
@@ -105,10 +109,6 @@ const MODE_SPECIFIC_CHROME = {
   HeaderBranchBanner: {
     page: './DaemonDocumentPage.tsx',
     why: 'gap: the browser keeper has branches now and no banner; the chrome has not been moved yet',
-  },
-  MergeToast: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'gap: the browser keeper commits merges now and shows no toast; the chrome has not been moved yet',
   },
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',

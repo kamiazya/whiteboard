@@ -23,6 +23,7 @@ import {
   DocumentFacetsEditor,
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
+import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -532,6 +533,20 @@ function DocumentPageBody({
             />
           )}
         </div>
+      )}
+      {/*
+        Merge confirmation belongs to the shared page, not to a keeper: both
+        keepers commit merges and both save the pre-merge point the Undo
+        restores. It lived on the daemon page alone, so a browser-keeper merge
+        landed with no confirmation, no counts and no way back — the one
+        operation where "did that work, and can I take it back" matters most.
+      */}
+      {versions.enabled && (
+        <MergeToast
+          workspaceId={versions.workspaceId}
+          path={versions.path}
+          onRestored={sync.clearLocalUndo}
+        />
       )}
       {model.slots.footer}
     </DocumentPageShell>

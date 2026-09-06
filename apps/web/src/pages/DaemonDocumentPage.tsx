@@ -16,7 +16,6 @@ import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
-import { MergeToast } from '../components/MergeToast.js'
 import { Button } from '../components/ui/button.js'
 import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
@@ -386,7 +385,6 @@ function useDaemonDocument(
     canvas: canvasValue,
     loaded: canvasLoaded,
     onChange,
-    clearLocalUndo,
     markdownBody: syncedMarkdownBody,
     coreFacets,
     setCoreFacets,
@@ -887,13 +885,6 @@ function useDaemonDocument(
         </>
       ),
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
-      footer: canvas && (
-        <MergeToast
-          workspaceId={canvas.workspaceId}
-          path={canvas.path}
-          onRestored={clearLocalUndo}
-        />
-      ),
     },
   }
 
