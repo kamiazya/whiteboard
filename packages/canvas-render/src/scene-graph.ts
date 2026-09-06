@@ -446,6 +446,15 @@ export interface ResolvedEdgeNode {
    * (see its `<path>` construction), which is what makes that safe.
    */
   readonly rounded?: true
+  /**
+   * This edge is comment-layer chrome (a leader from a pin to its bubble),
+   * never a document edge — the same marker `ShapeSceneNode` carries and for
+   * the same reason: a stored comment id may contain a `/` exactly like a
+   * document node id can, so the id's SHAPE cannot tell them apart.
+   * `sceneDigest` does not read it (it takes shapes for its identified set
+   * and no edges at all for its fallback), and the keyed projection does.
+   */
+  readonly commentChrome?: true
   readonly appearance?: Appearance
 }
 
