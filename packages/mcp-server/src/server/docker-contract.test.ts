@@ -352,6 +352,10 @@ const DOCKERFILE_USES = {
     builds: false,
     reason: 'covers the diff-affects-build derivation',
   },
+  'packages/mcp-server/src/server/release/dockerfile-cache-mounts.test.ts': {
+    builds: false,
+    reason: 'asserts the file declares no cache mount a cached layer would empty',
+  },
   'packages/mcp-server/src/server/release/smoke-image-reuse.test.ts': {
     builds: false,
     reason: 'covers the reuse contract with an injected docker, never a real build',
