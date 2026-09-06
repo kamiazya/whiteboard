@@ -106,6 +106,30 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
     resolveSyntax: () => palette.syntax,
     // Floating chrome, not content: shadow + neutral card + surface-ringed
     // pin are what separate a comment from an authored amber node.
+    /**
+     * The comment layer's grammar in indigo (ADR-0029 decision 1): one
+     * dashed outline for every arm, a card, and a dotted leader. The dash
+     * is what says "not yet" — an outline in a solid stroke would read as
+     * something already on the board.
+     */
+    resolveProposal: () => ({
+      outline: {
+        fill: 'none',
+        stroke: palette.proposal.edge,
+        strokeWidth: 2,
+        strokeDasharray: '6 4',
+      },
+      bubble: {
+        fill: palette.proposal.bubbleFill,
+        stroke: palette.proposal.edge,
+        dropShadow: true,
+      },
+      leader: {
+        stroke: palette.proposal.edge,
+        strokeWidth: 1,
+        strokeDasharray: COMMENT_LEADER_DASH,
+      },
+    }),
     resolveComment: () => {
       const pin: Appearance = {
         fill: palette.comment.pin.fill,

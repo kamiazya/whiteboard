@@ -45,6 +45,32 @@ export interface SpatialAppearanceResolver {
    * lays comments out; they simply carry no appearance.
    */
   resolveComment?(): SpatialCommentAppearance
+  /**
+   * The proposal layer's chrome (ADR-0029 decision 1). Optional for the same
+   * reason `resolveComment` is: a resolver that predates the layer still lays
+   * proposals out, bare.
+   */
+  resolveProposal?(): SpatialProposalAppearance
+}
+
+/**
+ * What a proposal draws. Deliberately the annotation layer's grammar in a
+ * different hue — a card with a coloured edge and a dotted leader — so a
+ * reader who has used a comment has already learned how to read a proposal
+ * (ADR-0029 decision 1).
+ *
+ * One `outline` for every arm rather than one per verb: an addition, a move
+ * and a removal are all "this is what would change", and giving each its own
+ * paint would ask a reader to learn three treatments before they can read
+ * one. What each MEANS is said by the bubble, in words.
+ */
+export interface SpatialProposalAppearance {
+  /** Around the box a change concerns, or along the route of an edge one. */
+  readonly outline: Appearance
+  /** The card counting what the proposal would do. */
+  readonly bubble: Appearance
+  /** The dotted line tying the card to the change it is about. */
+  readonly leader: Appearance
 }
 
 /**

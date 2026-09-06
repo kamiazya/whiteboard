@@ -188,6 +188,19 @@ export interface ShapeSceneNode {
    * an ordinary document node id and must not be used as one.
    */
   readonly commentChrome?: true
+  /**
+   * The same marker for the PROPOSAL layer's chrome (ADR-0029 decision 1):
+   * an outline where a change would land, and the bubble that counts them.
+   * Ids are `${change.id}/outline` and `${proposalId}/bubble`.
+   *
+   * A second boolean rather than a value on one field, because the editor
+   * hit-tests the two SEPARATELY — a comment's chrome answers to the comment
+   * verbs and a proposal's to Adopt/Dismiss — so they have to be tellable
+   * apart wherever they are read, not merely excluded together. A third kind
+   * is the point to collapse the pair into one `chrome` discriminator; two
+   * did not earn the rename across the ten call sites `commentChrome` has.
+   */
+  readonly proposalChrome?: true
   /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely.
    * Applies to the rect form only — ignored when `shape` is set. */
   readonly radius?: number

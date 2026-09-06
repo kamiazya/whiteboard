@@ -36,10 +36,12 @@ import type {
   CanvasEdge,
   CommentThread,
   EdgeRoutingStyle,
+  Proposal,
   SpatialCanvas,
   SpatialNode,
+  SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
-import { spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
@@ -359,6 +361,15 @@ export interface SpatialLayoutOptions {
    * says the conversation exists.
    */
   readonly threads?: readonly CommentThread[]
+  /**
+   * This document's open proposals (ADR-0029), handed over beside the canvas
+   * the way the annotation layer is and for the same reason: they are stored
+   * one level above content, so there is nowhere in a canvas key to put them.
+   *
+   * Absent or empty, nothing is drawn — which keeps every existing caller's
+   * output byte-identical.
+   */
+  readonly proposals?: readonly Proposal[]
 }
 
 /**
@@ -1503,8 +1514,11 @@ function layoutSpatialCanvasInternal(
   // Region outlines go under the pins, over everything they enclose.
   const regionContent = composeRegionOutlines(resolved)
   const commentContent = composeComments(canvas, resolved, (id) => edgePaths.get(id))
+  const proposalContent = composeProposals(canvas, resolved, (id) => edgePaths.get(id))
   return {
-    scene: { nodes: [...nodeContent, ...content, ...regionContent, ...commentContent] },
+    scene: {
+      nodes: [...nodeContent, ...content, ...regionContent, ...commentContent, ...proposalContent],
+    },
     anchors,
   }
 }
@@ -1732,6 +1746,199 @@ function composeComments(
     )
   }
   return out
+}
+
+/**
+ * The proposal layer (ADR-0029 decision 1): every OPEN change outlined where
+ * it would land, and one bubble per proposal saying what it would do.
+ *
+ * Drawn on the live document rather than in a preview of a second one — that
+ * is the decision, and the reason the whole variation surface was retired.
+ * The bubble reuses the comment layer's constants and grammar deliberately:
+ * a reader who has used a comment has already learned how to read this, and
+ * two sets of numbers for one visual language would drift.
+ *
+ * A DECIDED change draws nothing. It stays in the record because what closed
+ * it is part of what happened to the document, but it is no longer asking
+ * for anything, and a proposal whose changes are all decided has no bubble.
+ *
+ * The verbs live in the editor's context menu on this chrome, the way a
+ * comment is resolved — the bubble says how many and whether any needs a
+ * look, and the menu is where the deciding happens.
+ */
+function composeProposals(
+  canvas: SpatialCanvas,
+  options: ResolvedLayoutOptions,
+  edgePathOf: EdgePathLookup,
+): readonly SceneNode[] {
+  const proposals = options.proposals
+  if (proposals === undefined || proposals.length === 0) return []
+  const chrome = options.appearance.resolveProposal?.()
+  const paint = chrome === undefined ? {} : { appearance: chrome.outline }
+  const obstacles: BoundingBox[] = canvas.nodes
+    .filter((node) => node.type !== 'group')
+    .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
+  const out: SceneNode[] = []
+
+  for (const proposal of proposals) {
+    const open = proposal.changes.filter((change) => change.status === 'open')
+    if (open.length === 0) continue
+    let anchor: { x: number; y: number } | undefined
+    let conflicts = 0
+
+    for (const change of open) {
+      if (change.op === 'body.replace') continue
+      if (canvasChangeConflicts(change, canvas)) conflicts += 1
+      const box = proposedBox(change, canvas)
+      if (box !== undefined) {
+        out.push({
+          kind: 'shape',
+          id: `${change.id}/outline`,
+          proposalChrome: true,
+          bbox: box,
+          radius: COMMENT_BUBBLE_RADIUS_PX,
+          ...paint,
+        })
+        obstacles.push(box)
+        anchor ??= { x: box.x + box.w, y: box.y }
+        continue
+      }
+      const path = proposedEdgePath(change, canvas, edgePathOf)
+      if (path === undefined) continue
+      out.push({
+        kind: 'edge',
+        id: `${change.id}/outline`,
+        path,
+        fromSide: 'right',
+        toSide: 'left',
+        fromEnd: 'none',
+        toEnd: 'none',
+        ...paint,
+      })
+      anchor ??= path[Math.floor(path.length / 2)]
+    }
+    if (anchor === undefined) continue
+
+    const changed = `${open.length} proposed change${open.length === 1 ? '' : 's'}`
+    const label = conflicts === 0 ? changed : `${changed}, ${conflicts} needs a look`
+    // Through the same mdast pipeline a comment's text takes, so the label
+    // WRAPS instead of being truncated at the bubble's width — "2 proposed
+    // changes - 1 needs a look" does not fit on one line, and a truncated
+    // count is worse than no count.
+    let laid: Scene
+    try {
+      laid = layoutMdastBlocks(
+        options.parseBody(label),
+        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      )
+    } catch (err) {
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err })
+      laid = { nodes: [labelRun(label, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
+    }
+    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
+    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
+    const bubble = placeCommentBubble(
+      anchor,
+      {
+        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
+        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
+      },
+      obstacles,
+    )
+    obstacles.push(bubble)
+
+    out.push({
+      kind: 'edge',
+      id: `${proposal.id}/leader`,
+      path: [
+        { x: anchor.x, y: anchor.y },
+        commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
+      ],
+      fromSide: 'right',
+      toSide: 'left',
+      fromEnd: 'none',
+      toEnd: 'none',
+      ...(chrome === undefined ? {} : { appearance: chrome.leader }),
+    })
+    out.push({
+      kind: 'shape',
+      id: `${proposal.id}/bubble`,
+      proposalChrome: true,
+      bbox: bubble,
+      radius: COMMENT_BUBBLE_RADIUS_PX,
+      ...(chrome === undefined ? {} : { appearance: chrome.bubble }),
+    })
+    out.push(
+      ...translateScene(
+        laid,
+        bubble.x + COMMENT_BUBBLE_PADDING_PX,
+        bubble.y + COMMENT_BUBBLE_PADDING_PX,
+      ).nodes,
+    )
+  }
+  return out
+}
+
+/**
+ * The box a change concerns: where an addition would appear, where a patch
+ * would leave the element, and where a removal would take it from. A patch
+ * is drawn at its DESTINATION and the element stays where it is — the
+ * outline is what says "there", and moving the node would be applying the
+ * proposal rather than showing it.
+ *
+ * `undefined` for an edge arm, which has a route rather than a box.
+ */
+function proposedBox(
+  change: SpatialProposedChange,
+  canvas: SpatialCanvas,
+): BoundingBox | undefined {
+  const boxOf = (node: SpatialNode): BoundingBox => ({
+    x: node.x,
+    y: node.y,
+    w: node.width,
+    h: node.height,
+  })
+  switch (change.op) {
+    case 'node.add':
+      return boxOf(change.node)
+    case 'node.patch': {
+      const node = canvas.nodes.find((candidate) => candidate.id === change.nodeId)
+      return node === undefined ? undefined : boxOf({ ...node, ...change.patch })
+    }
+    case 'node.remove': {
+      const node = canvas.nodes.find((candidate) => candidate.id === change.nodeId)
+      return node === undefined ? undefined : boxOf(node)
+    }
+    default:
+      return undefined
+  }
+}
+
+/**
+ * The route a proposed edge change traces. An edge already on the board is
+ * traced along the route it was ROUTED to, so the chrome sits on the line a
+ * reader can see; one that does not exist yet has no route, so it is drawn
+ * straight between the centres of the nodes it would join — honest as a
+ * preview, and visibly not the finished routing.
+ */
+function proposedEdgePath(
+  change: SpatialProposedChange,
+  canvas: SpatialCanvas,
+  edgePathOf: EdgePathLookup,
+): readonly { x: number; y: number }[] | undefined {
+  if (change.op === 'edge.patch' || change.op === 'edge.remove') {
+    return edgePathOf(change.edgeId)
+  }
+  if (change.op !== 'edge.add') return undefined
+  const centre = (id: string) => {
+    const node = canvas.nodes.find((candidate) => candidate.id === id)
+    return node === undefined
+      ? undefined
+      : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
+  }
+  const from = centre(change.edge.fromNode)
+  const to = centre(change.edge.toNode)
+  return from === undefined || to === undefined ? undefined : [from, to]
 }
 
 /** Right/bottom extents of a laid-out block at origin, for sizing a bubble. */

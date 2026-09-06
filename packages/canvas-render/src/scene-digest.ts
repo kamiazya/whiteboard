@@ -279,7 +279,10 @@ function collectEntries(scene: Scene): {
   readonly overflows?: true
 }[] {
   const identified = scene.nodes.flatMap((node) =>
-    node.kind === 'shape' && node.id !== undefined && node.commentChrome !== true
+    node.kind === 'shape' &&
+    node.id !== undefined &&
+    node.commentChrome !== true &&
+    node.proposalChrome !== true
       ? [
           {
             id: node.id,
