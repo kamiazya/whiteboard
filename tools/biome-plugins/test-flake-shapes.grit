@@ -111,6 +111,17 @@ any {
   // message leave the second unverified — a `.not` pattern that stopped
   // matching would keep the guard green. Distinct messages make the bad
   // fixture prove each shape separately.
+  //
+  // Two things review will raise about these patterns, both checked here so
+  // the answer is not re-derived: a single `$args` metavariable DOES cover a
+  // multi-argument call in Biome's implementation — `toHaveAttribute('href',
+  // '/x')` and `expect.poll(fn, { timeout: 500 })` are both flagged when
+  // un-awaited, verified against a prototype — and the `within await`
+  // exclusion is deliberately loose. Narrowing it to a direct operand would
+  // turn `await Promise.all([expect.element(a)..., expect.element(b)...])`,
+  // which consumes its promises correctly, into a false positive, to catch a
+  // wrapper that awaits and DISCARDS one. That wrapper appears nowhere in
+  // this repo; the Promise.all shape is ordinary.
   `expect.$kind($x).$m($args)` as $call where {
     $kind <: or { `element`, `poll` },
     not $call <: within `await $_`,
