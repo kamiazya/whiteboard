@@ -1,10 +1,21 @@
 import { mkdir } from 'node:fs/promises'
 // @libsql/client is not imported directly anywhere in src — LibsqlDialect
-// pulls it in transitively — but package.json still declares it as a direct
-// dependency pinned newer (^0.17.3) than @libsql/kysely-libsql's own range
-// (^0.8.0). Keep the direct pin: it is what forces the whole workspace onto
-// the patched client version rather than whatever kysely-libsql's own
-// (older) range would otherwise resolve to.
+// pulls it in transitively — and the direct `^0.17.3` in package.json does
+// NOT by itself decide which one that is. It used to say it did, and the
+// lockfile disagreed: @libsql/kysely-libsql@0.4.1 (still the latest) asks for
+// ^0.8.0, so pnpm resolved BOTH 0.17.3 and 0.8.1, and the dialect below ran on
+// 0.8.1 — which drags libsql@0.3.19 and its native bindings.
+//
+// That is not academic. 0.3.19's musl prebuild fails to load on current
+// Alpine (`fcntl64: symbol not found`), so the server image built and could
+// not start; the base moved to Debian to get past it. The dedupe that removes
+// the cause is a pnpm override, `@libsql/client@<0.17.3`, in
+// pnpm-workspace.yaml — the mechanism this repo already uses for CVE bumps.
+// With it the tree resolves one client (0.17.3) and one native package
+// (libsql@0.5.29), which is what the devDependency already named.
+//
+// `one-libsql-stack.test.ts` keeps it that way; the direct pin stays because
+// it is what the override's range is written against.
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'

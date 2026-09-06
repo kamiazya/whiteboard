@@ -8,6 +8,25 @@ import type { Database } from './index.js'
  * createWorkspace: true` call, for one) never touches them, so a name or
  * segment set elsewhere is never clobbered by a follow-up child write.
  */
+
+/**
+ * Did this write violate the `workspaces_segment_unique` index (migration
+ * 0018) rather than fail for some other reason?
+ *
+ * Both spellings are accepted because the driver's error SHAPE moved under
+ * us: libsql 0.3.19 reported `code: 'SQLITE_CONSTRAINT_UNIQUE'`, while
+ * 0.5.29 reports `code: 'SQLITE_CONSTRAINT'` with the detail in
+ * `extendedCode`. Keying on `code` alone made a segment collision fall
+ * through to a 500 instead of the 409 the route promises — caught by
+ * workspaces.test.ts and mint-daemon.test.ts when the client was deduped,
+ * which is the only reason it was not shipped.
+ */
+function isSegmentUniqueViolation(err: unknown): err is Error {
+  if (!(err instanceof Error)) return false
+  const { code, extendedCode } = err as { code?: unknown; extendedCode?: unknown }
+  const unique = code === 'SQLITE_CONSTRAINT_UNIQUE' || extendedCode === 'SQLITE_CONSTRAINT_UNIQUE'
+  return unique && err.message.includes('workspaces.segment')
+}
 export interface WorkspaceIdentity {
   segment?: string
   displayName?: string
@@ -40,13 +59,7 @@ export async function upsertWorkspaceRow(
     // still raises normally and is translated here into the named port
     // error, so a caller sees a segment collision distinctly from any other
     // write failure.
-    if (
-      identity.segment !== undefined &&
-      err instanceof Error &&
-      'code' in err &&
-      (err as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE' &&
-      err.message.includes('workspaces.segment')
-    ) {
+    if (identity.segment !== undefined && isSegmentUniqueViolation(err)) {
       throw new WorkspaceSegmentTakenError(identity.segment)
     }
     throw err
@@ -87,13 +100,7 @@ export async function renameWorkspaceRow(
       .executeTakeFirst()
     return updated ?? null
   } catch (err) {
-    if (
-      identity.segment !== undefined &&
-      err instanceof Error &&
-      'code' in err &&
-      (err as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE' &&
-      err.message.includes('workspaces.segment')
-    ) {
+    if (identity.segment !== undefined && isSegmentUniqueViolation(err)) {
       throw new WorkspaceSegmentTakenError(identity.segment)
     }
     throw err
