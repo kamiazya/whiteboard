@@ -585,16 +585,30 @@ try {
       fail(`scenario 7: snapshot fetch on restored server failed with ${snapshotRes.status}`)
     const restoredSnapshot = new Uint8Array(await snapshotRes.arrayBuffer())
     if (restoredSnapshot.byteLength === 0) fail('scenario 7: restored snapshot is empty')
-    if (restoredSnapshot.byteLength !== seededSnapshotBytes.byteLength) {
-      fail('scenario 7: snapshot byte length mismatch', {
-        seeded: seededSnapshotBytes.byteLength,
-        restored: restoredSnapshot.byteLength,
-      })
+    // A Loro snapshot opens with a magic ("loro"), padding, and a CHECKSUM, so
+    // ANY difference anywhere in the document surfaces first at index 16.
+    // Reporting that index alone says nothing about the cause and sends the
+    // reader to the header. Report what actually differs instead.
+    const diffs = []
+    const common = Math.min(restoredSnapshot.byteLength, seededSnapshotBytes.byteLength)
+    for (let i = 0; i < common && diffs.length < 24; i++) {
+      if (restoredSnapshot[i] !== seededSnapshotBytes[i]) diffs.push(i)
     }
-    for (let i = 0; i < seededSnapshotBytes.byteLength; i++) {
-      if (restoredSnapshot[i] !== seededSnapshotBytes[i]) {
-        fail(`scenario 7: snapshot byte mismatch at index ${i}`)
-      }
+    if (diffs.length > 0 || restoredSnapshot.byteLength !== seededSnapshotBytes.byteLength) {
+      const hex = (bytes, at) =>
+        Buffer.from(bytes.subarray(Math.max(0, at - 8), at + 24)).toString('hex')
+      const at = diffs[0] ?? common
+      fail('scenario 7: restored snapshot differs from the seeded one', {
+        seededLength: seededSnapshotBytes.byteLength,
+        restoredLength: restoredSnapshot.byteLength,
+        differingIndices: diffs.join(','),
+        differingCount: diffs.length,
+        // Only bytes 16-19 differing means the payload matched and the header
+        // checksum did not, which is a different fault from a content change.
+        onlyChecksumRegion: diffs.length > 0 && diffs.every((i) => i >= 16 && i < 20),
+        seededWindow: hex(seededSnapshotBytes, at),
+        restoredWindow: hex(restoredSnapshot, at),
+      })
     }
 
     // File blob (files:read).
