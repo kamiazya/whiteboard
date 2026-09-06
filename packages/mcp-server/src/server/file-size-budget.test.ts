@@ -207,7 +207,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // layout derives from `threads`. The canvas was the last surface that did
   // not say it, so a reader crossing between it and the rail met the same
   // conversation described two ways.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1889,
+  // +1: the leader edge carries `commentChrome`, so the keyed projection can
+  // mark a conversation's whole chrome as the annotation layer. Without it the
+  // leader is the one piece that cuts while the pin and bubble ramp.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1890,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2592,
 }
