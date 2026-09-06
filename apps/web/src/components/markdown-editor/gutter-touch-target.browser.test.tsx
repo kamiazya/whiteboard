@@ -1,9 +1,9 @@
 /**
  * The gutter marker has to be pressable by a thumb.
  *
- * Measured on a 412px phone before this: a 12x12 dot at x=3 — a quarter of
- * WCAG 2.5.8's 24x24 minimum in each dimension, and inside the strip the OS
- * keeps for its own back gesture. A synthetic tap aimed at its exact centre
+ * Measured on a 412px phone before this: a 12x12 dot at x=3 — half of WCAG
+ * 2.5.8's 24x24 minimum in each dimension, a quarter of its area, and inside
+ * the strip the OS keeps for its own back gesture. A synthetic tap aimed at its exact centre
  * always hit it, which is why no test had ever said otherwise.
  *
  * The dot stays 12px because it is chrome beside prose; what grows is the

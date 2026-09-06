@@ -234,8 +234,8 @@
   }
   /*
    * The button is the PRESS AREA and the span inside it is the picture. A
-   * 12px dot is the right size beside prose and a quarter of WCAG 2.5.8's
-   * 24x24 minimum in each dimension, so the two had to stop being one
+   * 12px dot is the right size beside prose and half of WCAG 2.5.8's 24x24
+   * minimum in each dimension (a quarter of its area), so the two had to stop being one
    * element. Measured before settling on this: a `::after` overhanging the
    * 18px gutter reaches nothing — `.cm-gutterElement` clips it, and where
    * it did extend, the toolbar above and the content beside won the hit

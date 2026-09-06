@@ -670,8 +670,9 @@ case the entry is inert for.
 The same press READS as well as writes: a paragraph a conversation is
 already about opens that conversation instead of starting a second one.
 That is what makes the layer reachable on a phone at all. The gutter marker
-was measured at 12x12 px starting 3px from the screen edge — a quarter of
-WCAG 2.5.8's 24x24 minimum in each dimension, and inside the strip a phone
+was measured at 12x12 px starting 3px from the screen edge — half of WCAG
+2.5.8's 24x24 minimum in each dimension, a quarter of its area, and inside
+the strip a phone
 OS keeps for its own back gesture — so it cannot be the only way in. Its
 own press area is 26x24 now (the button is the target and the 12px dot
 inside it is the picture, since a bigger dot beside prose reads as content;

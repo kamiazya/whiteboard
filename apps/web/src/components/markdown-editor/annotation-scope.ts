@@ -25,7 +25,7 @@
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useCallback } from 'react'
 import { blockRangeNear } from '../../lib/block-range-at.js'
-import type { TextAnchor } from '../../lib/text-anchor.js'
+import type { LivePassage, TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
 import { placeThreads } from './annotation-decorations.js'
 
@@ -53,6 +53,16 @@ export interface AnnotationEntry {
 
 export interface AnnotationEntryHost {
   readonly threads: readonly CommentThread[]
+  /**
+   * Each thread's LIVE range, where the editor is tracking one. Passed for
+   * the same reason the gutter and the preview pass it: `resolveTextAnchor`
+   * prefers a live range over matching the stored quote, so a body that has
+   * grown a second copy of the quoted words places the thread by the mark
+   * rather than on the first occurrence. Without it this lookup and the
+   * marker beside the line would disagree about which thread a paragraph
+   * has.
+   */
+  readonly marks: ReadonlyMap<string, LivePassage>
   readonly onComposeThread: ((anchor: TextAnchor) => void) | undefined
   readonly onSelectThread: ((threadId: string) => void) | undefined
 }
@@ -63,9 +73,10 @@ export interface AnnotationEntryHost {
  * about opens that conversation; a block with none starts one.
  *
  * The first half is what makes the layer reachable on a phone at all. The
- * gutter marker is a 12px dot three pixels from the screen edge — a quarter
- * of WCAG 2.5.8's minimum in each dimension, and inside the strip the OS
- * keeps for its own back gesture — so it cannot be the only way in. A caret
+ * gutter marker is a 12px dot three pixels from the screen edge — half of
+ * WCAG 2.5.8's minimum in each dimension, a quarter of its area, and inside
+ * the strip the OS keeps for its own back gesture — so it cannot be the only
+ * way in. A caret
  * in the paragraph plus a toolbar button is the same act with a target the
  * size of the paragraph.
  */
@@ -74,7 +85,7 @@ export function useAnnotationEntry(
   sourceRef: MutableRefObject<AnnotationScopeSource | null>,
   host: AnnotationEntryHost,
 ): AnnotationEntry {
-  const { threads, onComposeThread, onSelectThread } = host
+  const { threads, marks, onComposeThread, onSelectThread } = host
   const anchor = useCallback(() => annotationAnchorFrom(body, sourceRef.current), [body, sourceRef])
   const open = useCallback(() => {
     const found = anchor()
@@ -82,7 +93,7 @@ export function useAnnotationEntry(
     // Overlap, not equality: the stored quote is whatever passage the thread
     // was opened on, which is usually a phrase inside the block rather than
     // the block itself.
-    const covering = placeThreads(body, threads).find(
+    const covering = placeThreads(body, threads, marks).find(
       (placed) => placed.from < found.end && placed.to > found.start,
     )
     if (covering !== undefined && onSelectThread !== undefined) {
@@ -90,6 +101,12 @@ export function useAnnotationEntry(
       return
     }
     onComposeThread?.(found)
-  }, [anchor, body, threads, onComposeThread, onSelectThread])
-  return { anchor, open: onComposeThread === undefined ? undefined : open }
+  }, [anchor, body, threads, marks, onComposeThread, onSelectThread])
+  // Selection alone is enough to have something to press for: a host that
+  // can reveal a conversation but not start one still wants the paragraph's
+  // conversation opened.
+  return {
+    anchor,
+    open: onComposeThread === undefined && onSelectThread === undefined ? undefined : open,
+  }
 }

@@ -100,7 +100,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // to open the one a paragraph already has. The two document pages paid
   // more than that back in the same change (942 -> 934, 926 -> 925), their
   // hand-built thread writes replaced by one shared door.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1020,
+  // +1: the annotation entry also has to be handed the LIVE passage marks,
+  // so the toolbar resolves a thread the way the gutter beside it does.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1021,
   'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,
@@ -130,7 +132,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // supplier built here, mounted for every consumer under it, in place of
   // four call sites building their own. Both are paid once; the keeper
   // conversion also took the browser page below from 981 to 926.
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
+  // Lowered from 942: the rail's four thread writes are no longer built here
+  // by hand — `hooks/spatial-thread-write.ts` is the door both pages call.
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 900,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -169,7 +173,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // arrived and a document opened ON a variation kept naming the default one.
   // Most of the added lines is that reason — the bug is invisible in the
   // three lines of state that fix it.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1011,
+  // +2 for the same door: this page still chooses between the markdown host
+  // and the spatial write per verb, so what it saves is the command building
+  // rather than the branch.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1013,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

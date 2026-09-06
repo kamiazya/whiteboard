@@ -789,6 +789,7 @@ export function MarkdownEditor({
 
   const annotation = useAnnotationEntry(value, sourceApiRef, {
     threads: projectedThreads,
+    marks: projectedMarks,
     onComposeThread,
     onSelectThread,
   })

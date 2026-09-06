@@ -135,8 +135,8 @@ class ThreadGutterMarker extends GutterMarker {
     // conversations about the same line are one marker, and a reader who is
     // not told so would think the second one had vanished.
     // The dot is an INNER element and the button is the press area. A 12px
-    // dot is right beside prose and a quarter of WCAG 2.5.8's 24x24 minimum
-    // in each dimension; growing the button instead keeps the picture and
+    // dot is right beside prose and half of WCAG 2.5.8's 24x24 minimum in
+    // each dimension, a quarter of its area; growing the button keeps the picture and
     // fixes the target. Measured first: a `::after` overhanging an 18px
     // gutter did not work — `.cm-gutterElement` clips it, and where it did
     // reach, the toolbar above and the content beside it won the hit test.
