@@ -276,6 +276,7 @@ async function main() {
   const edited = await callTool('wb_body_edit', {
     workspaceId: WORKSPACE_ID,
     documentId: withBody.documentId,
+    // Explicit, because the DEFAULT proposes — the step below pins that.
     mode: 'apply',
     ops: [
       {
@@ -331,6 +332,42 @@ async function main() {
     'e2e-passage-stale',
   )
   console.log('[e2e] wb_body_edit → passage replaced by quote, stale assumption refused by name')
+
+  // The flipped default (ADR-0029 decision 7, applied to prose): a call that
+  // names no mode PROPOSES, and the body does not move. Asserted in both
+  // directions in one place, because a default is exactly the kind of
+  // behaviour a unit test can pin while the registered schema disagrees.
+  const proposedPassage = await callTool('wb_body_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    ops: [
+      {
+        id: 'e2e-passage-proposed',
+        op: 'body.replace',
+        anchor: { kind: 'text', quote: { exact: 'the smoke' }, start: 0, end: 9 },
+        text: 'a proposal nobody adopted',
+        assumed: 'the smoke',
+      },
+    ],
+  })
+  if (proposedPassage.applied !== 0 || proposedPassage.proposed?.changes?.length !== 1) {
+    throw new Error(`the default did not propose a passage: ${JSON.stringify(proposedPassage)}`)
+  }
+  const proposedChange = proposedPassage.proposed.changes[0]
+  if (proposedChange.op !== 'body.replace' || proposedChange.status !== 'open') {
+    throw new Error(`proposed change has an unexpected shape: ${JSON.stringify(proposedChange)}`)
+  }
+  const bodyAfterPropose = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+  })
+  if (bodyAfterPropose.content.includes('a proposal nobody adopted')) {
+    throw new Error(`a proposed passage reached the body: ${bodyAfterPropose.content}`)
+  }
+  if (!bodyAfterPropose.content.includes('Written at the smoke.')) {
+    throw new Error(`proposing changed the body: ${bodyAfterPropose.content}`)
+  }
+  console.log('[e2e] wb_body_edit(no mode) → passage proposed, body untouched')
 
   // The union's other side: a spatial document takes no markdown, and the
   // refusal must reach the client rather than the content being dropped.
