@@ -97,13 +97,16 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // charged to a step it did not take — a coarse instrument bills the whole
   // bucket to whoever crosses it.
   '.claude/rules/architecture-map.md': 16,
-  // 26 since the design checkpoints gained `benefit` — the column a change's
-  // worth is claimed in, which decides how it gets verified. The entry sits
-  // beside `blastRadius` and `userReach` because it is a peer required field,
-  // and the file had 277 characters of headroom, so the bucket is bought by
-  // one bullet rather than by drift. The three worked cases live in the
-  // `measured-change` skill, which is not always-on and costs nothing here.
-  '.claude/rules/dev-flow.md': 26,
+  // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
+  // It belongs here rather than in a skill because it changes what a session
+  // must do when it shards a job: nothing, where before it had to ask a human
+  // to rename a required check. The sentence also carries the two ways an
+  // aggregate gate goes quietly wrong (a job missing from `needs`, a blanket
+  // `skipped`), since the reader who adds a job is not the reader who opens
+  // ci-gate.mjs. The file had 117 characters of headroom, so this bucket is
+  // bought by about 480 characters of prose, not by drift — a coarse
+  // instrument charges the whole step to whoever crosses it.
+  '.claude/rules/dev-flow.md': 27,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat

@@ -356,10 +356,13 @@ jobs:
     # 1+2, widget-smoke — verified via the branch-protection API; the Actions
     # token cannot read it, so no test can pin this and the settings page is
     # the source of truth). SHARDING A REQUIRED JOB RENAMES ITS CHECK — a
-    # matrix reports `test-jsdom (1)`, and the bare `test-jsdom` that branch
-    # protection asks for then never reports at all, so every PR waits on a
-    # check that cannot arrive. Update the required list in the same change
-    # that adds or removes a shard. What unchaining costs is only compute on a red
+    # matrix reports `test-jsdom (1)`, and a bare `test-jsdom` in the required
+    # list then never reports at all, so every PR waits on a check that cannot
+    # arrive. That is what `ci-gate` at the bottom of this file is for: it is
+    # one stable check name over every job here, so a shard count becomes an
+    # implementation detail rather than a settings change. Until the required
+    # list is narrowed to `ci-gate` alone, both lists have to stay in step.
+    # What unchaining costs is only compute on a red
     # run: verify's smokes run even when a test job fails, which on a free
     # public repo is minutes, not money.
     runs-on: ubuntu-latest
@@ -574,3 +577,37 @@ jobs:
           name: docker-image-dry-run-${{ github.run_id }}
           path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
           if-no-files-found: warn
+
+  # The single required status check for this workflow. See
+  # tools/checks/src/ci-gate.mjs for why it exists and what it refuses.
+  #
+  # `if: always()` is load-bearing: without it a failed dependency SKIPS this
+  # job, so the one check branch protection waits on never reports and the
+  # merge blocks on an absent check rather than on the real failure.
+  #
+  # Every ci.yml job must appear in `needs` — a forgotten entry is invisible,
+  # since nothing goes red, a job simply stops being gated. ci-gate.test.ts
+  # is what fails instead.
+  ci-gate:
+    if: always()
+    needs:
+      - check
+      - test-unit
+      - test-jsdom
+      - test-browser
+      - stress-changed-tests
+      - sbom-npm
+      - packaged-smoke
+      - widget-smoke
+      - verify
+      - dry-run-npm
+      - dry-run-docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Every gated job succeeded
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+        run: node tools/checks/src/ci-gate.mjs
