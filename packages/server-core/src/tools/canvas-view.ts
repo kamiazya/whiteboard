@@ -1,3 +1,4 @@
+import { referenceTargets } from '@kamiazya/whiteboard-canvas-render'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
@@ -103,17 +104,22 @@ export function createCanvasViewTool(deps: ServerDeps) {
         documentId: input.documentId,
         scene: canvas,
         threads: readAnnotations(doc),
-        // Only the file references themselves, not what their bodies go on to
-        // name: the widget lays out one canvas, and a body's own embeds are
-        // resolved on whichever side reads that body.
+        // Everything THIS canvas names, through the one definition of a
+        // reference rather than a node-kind filter: its file nodes AND what
+        // its text nodes embed or link. Seeded without `loaded`, so it stops
+        // at what the canvas itself says — not the transitive closure the
+        // graph also holds, since the widget lays out one canvas and what a
+        // REFERENCED body goes on to name is resolved by whoever reads that
+        // body. Filtering by node kind instead is what left a text node's
+        // `![[note]]` a bracket literal here while the same canvas resolved
+        // it through `wb_scene_render`, which passes the whole bundle.
         references: Object.fromEntries(
-          canvas.nodes.flatMap((node) => {
-            if (node.type !== 'file') return []
-            const loaded = graph.get(node.file)
+          referenceTargets({ canvases: [canvas] }).flatMap((target) => {
+            const loaded = graph.get(target)
             if (loaded === undefined || loaded === null) return []
             return [
               [
-                node.file,
+                target,
                 {
                   ...(loaded.documentId !== undefined ? { documentId: loaded.documentId } : {}),
                   ...(loaded.name !== undefined ? { name: loaded.name } : {}),
