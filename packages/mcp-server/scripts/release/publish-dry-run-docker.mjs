@@ -7,11 +7,11 @@
 // stderr and exit 1 on failure. Full build logs never reach stdout.
 //
 // A CACHE REPORT does reach stderr, and its counts reach stdout. The build is
-// the longest step in ci.yml's dry-run-docker job — 198s of a 270s job,
-// measured — and runs with `--cache-from/--cache-to type=gha`. Whether that
-// cache was doing anything used to be unanswerable, because the output below
-// was captured and then printed only on FAILURE: every green run threw the
-// evidence away, so a warm cache and a cold one looked identical from outside.
+// the longest step in ci.yml's dry-run-docker job — around 200s of it — and
+// what that time buys was unanswerable until this report existed, because the
+// output below was captured and printed only on FAILURE: every green run threw
+// the evidence away. It is what measured the layer cache into and back out of
+// this file; see the note above the build arguments.
 
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
@@ -45,62 +45,40 @@ mkdirSync(OUT_DIR, { recursive: true })
 // Step 1: docker build (no push). Build logs go to the pipe but are not
 // forwarded to stdout — only the safe JSON summary is printed.
 //
-// In GitHub Actions, build through buildx with the GHA cache backend so the
-// dependency-install and compile layers survive between runs (the plain
-// `docker build` engine and the ACTIONS_CACHE_URL credentials it needs are
-// only available inside a runner, not on a local dev machine).
+// NO LAYER CACHE, and that is a measured decision rather than an omission.
+// `--cache-from/--cache-to type=gha` was configured here, found to be doing
+// nothing (the runner gives a `run:` step none of the variables the backend
+// falls back to), given those variables through a local action, and then
+// removed — because with the cache actually working the job got slower:
+//
+//   no cache            203.0s
+//   cold, exporting     406.1s   (export 208.6s)
+//   5/15 cached         482.7s   (export 273.6s)
+//
+// The export grew as the cache filled, and `[build 1/5] COPY . .` puts every
+// expensive stage behind the build context, which any source change
+// invalidates — and a source change in the compile closure is the only reason
+// this job runs at all. What stays cacheable across real runs is the base
+// stage and `pnpm fetch`, measured together at about 25s, against an export
+// measured at 208-274s.
+//
+// Re-adding it needs a new measurement, not this comment reversed: the thing
+// to change first is the 90s `--load` and the size of what mode=max exports,
+// not the credentials.
 // Read NODE_VERSION from .node-version (single source of truth).
 const nodeVersion = readFileSync(join(REPO_ROOT, '.node-version'), 'utf-8').trim()
 
-const isGitHubActions = process.env.GITHUB_ACTIONS === 'true'
-const buildArgs = isGitHubActions
-  ? [
-      'buildx',
-      'build',
-      '--cache-from',
-      'type=gha',
-      '--cache-to',
-      'type=gha,mode=max',
-      '--load',
-      '--build-arg',
-      `NODE_VERSION=${nodeVersion}`,
-      '-f',
-      DOCKERFILE,
-      '-t',
-      IMAGE_TAG,
-      '--progress=plain',
-      '.',
-    ]
-  : [
-      'build',
-      '--build-arg',
-      `NODE_VERSION=${nodeVersion}`,
-      '-f',
-      DOCKERFILE,
-      '-t',
-      IMAGE_TAG,
-      '--progress=plain',
-      '.',
-    ]
-
-// What `type=gha` falls back to when `--cache-from`/`--cache-to` name no url
-// or token of their own. Docker's documentation for the backend says an inline
-// `docker buildx` invocation — which this is, from a `run:` step — must expose
-// them manually, so their absence is the difference between a cache that never
-// ran and one that ran and missed. Read by NAME and reported as present or
-// absent; the values are credentials and never leave this process.
-const GHA_CACHE_ENV = [
-  'ACTIONS_RUNTIME_TOKEN',
-  'ACTIONS_CACHE_URL',
-  'ACTIONS_RESULTS_URL',
-  'ACTIONS_CACHE_SERVICE_V2',
+const buildArgs = [
+  'build',
+  '--build-arg',
+  `NODE_VERSION=${nodeVersion}`,
+  '-f',
+  DOCKERFILE,
+  '-t',
+  IMAGE_TAG,
+  '--progress=plain',
+  '.',
 ]
-
-/** @returns {{ present: string[], absent: string[] }} */
-function readCacheCredentials() {
-  const present = GHA_CACHE_ENV.filter((name) => (process.env[name] ?? '') !== '')
-  return { present, absent: GHA_CACHE_ENV.filter((name) => !present.includes(name)) }
-}
 
 const buildStartedAt = Date.now()
 const buildResult = spawnSync('docker', buildArgs, {
@@ -123,8 +101,7 @@ if (buildResult.status !== 0 || buildResult.error) {
 // first real report, 214.4s of step time inside a 200s build.
 const elapsedSeconds = Number(((Date.now() - buildStartedAt) / 1000).toFixed(1))
 const cacheReport = parseBuildxProgress(buildResult.stderr ?? '')
-const cacheCredentials = isGitHubActions ? readCacheCredentials() : undefined
-for (const line of formatCacheReport(cacheReport, { elapsedSeconds, cacheCredentials })) {
+for (const line of formatCacheReport(cacheReport, { elapsedSeconds, cacheBackend: 'none' })) {
   process.stderr.write(`${line}\n`)
 }
 // The raw output stays available for the case the report cannot explain, but
@@ -161,7 +138,7 @@ const metadata = {
   // Full report, step names included: this file is an artifact of the same run
   // whose log already names them, and trending the slowest steps across runs is
   // what turns "the build is slow" into a specific layer.
-  cache: { ...cacheReport, elapsedSeconds, cacheCredentials },
+  cache: { ...cacheReport, elapsedSeconds },
 }
 writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metadata, null, 2))
 
@@ -185,8 +162,6 @@ process.stdout.write(
         ranCount: cacheReport.ranCount,
         cacheHitRatio: cacheReport.cacheHitRatio,
         executedStepSeconds: cacheReport.executedStepSeconds,
-        importSeen: cacheReport.importSeen,
-        exportSeen: cacheReport.exportSeen,
         elapsedSeconds,
       },
       sbomStatus: 'deferred',
