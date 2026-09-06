@@ -155,8 +155,9 @@ process.stdout.write(
       artifactId: 'docker-image',
       imageTag: IMAGE_TAG,
       imageIdLength: imageId.length,
-      // Counts only. Step names stay out of stdout, which this script promises
-      // carries no build log.
+      // Counts and flags only. Step names and buildx's own diagnostics stay
+      // out of stdout, which this script promises carries no build log; both
+      // are in the stderr report and the metadata artifact instead.
       cache: {
         parsed: cacheReport.parsed,
         stepCount: cacheReport.stepCount,
@@ -164,6 +165,8 @@ process.stdout.write(
         ranCount: cacheReport.ranCount,
         cacheHitRatio: cacheReport.cacheHitRatio,
         executedStepSeconds: cacheReport.executedStepSeconds,
+        importSeen: cacheReport.importSeen,
+        exportSeen: cacheReport.exportSeen,
         elapsedSeconds,
       },
       sbomStatus: 'deferred',
