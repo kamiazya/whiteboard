@@ -119,14 +119,6 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // time.
   'packages/loro-adapter/src/workspace-tree.ts': 1116,
   'packages/canvas-render/src/svg/backend.ts': 991,
-  // Raised from 921 when the page became a KEEPER — its wiring answers the
-  // `DocumentKeeper` contract (the hook signature, the two terminal answers,
-  // the provider `wrap`, the bound component) instead of rendering the page
-  // itself — and from 938 when its branches moved behind the seam: one
-  // supplier built here, mounted for every consumer under it, in place of
-  // four call sites building their own. Both are paid once; the keeper
-  // conversion also took the browser page below from 981 to 926.
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -165,7 +157,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // arrived and a document opened ON a variation kept naming the default one.
   // Most of the added lines is that reason — the bug is invisible in the
   // three lines of state that fix it.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1011,
+  // Raised again to 1028 by kind parity on the versions seam. Two lines pick
+  // the record seam by kind and supply the document's kind to it; the rest is
+  // the two findings behind them, neither recoverable from the code. A note's
+  // version ROWS were always written — a version is a frontier of the
+  // workspace record — and only the seam that reads and restores one was
+  // built from a backend a note never has. And `loadPast` asked the past
+  // STATE its kind, which a tree-hosted document keeps in its node meta, so
+  // the answer was always "not markdown": the fallback saved a canvas and
+  // drew a note an empty viewer.
+  // Raised again to 1031 by the SEARCH the URL sync now carries: one line of
+  // wiring so a HEAD moved from the shared `?v=` banner refreshes the chip,
+  // and three of reason. The reason is the whole entry — a `navigate` given a
+  // pathname replaces the location, so the query a reader arrived with is
+  // dropped by a repair they never asked for, and nothing about the call says
+  // so.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1031,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
