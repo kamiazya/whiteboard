@@ -120,6 +120,15 @@ twenty decisions. It exists because "nine of these are right and one is not"
 is the common case, and without it the only reply is to dismiss everything and
 ask again.
 
+**Whole-proposal ships first; the expansion is a later increment** (project
+owner's decision, 2026-09-06). The card the editor draws offers Adopt and
+Dismiss for the proposal and nothing finer. This is an ORDER, not a
+retraction: the record already carries a status per change, and adopting the
+whole proposal is that write applied to each open one, so the expansion adds
+a control over a shape that is already there rather than changing it. Stated
+here for the same reason decision 7's order is: a reader comparing the ADR to
+the code would otherwise read the gap as drift.
+
 ### 5. A proposal follows the document; only a real collision is flagged
 
 When a person edits underneath a pending proposal, the proposal stays. It is
