@@ -115,7 +115,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and the definition carries why — inside the preview column that query
   // answers with a comment MARKER's own icon, so the placement was reading
   // its own previous output.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1066,
+  // +7: the preview marker carries the conversation's STATUS. It said
+  // nothing about resolved before, so a closed conversation's marker was
+  // drawn exactly like an open one — and with the state present the marker
+  // crosses to it rather than staying put.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1073,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first

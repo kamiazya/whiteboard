@@ -29,7 +29,14 @@ import {
   StateEffect,
   StateField,
 } from '@codemirror/state'
-import { Decoration, type DecorationSet, EditorView, GutterMarker, gutter } from '@codemirror/view'
+import {
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  GutterMarker,
+  gutter,
+  gutterLineClass,
+} from '@codemirror/view'
 import type { CommentThread, CommentThreadStatus } from '@kamiazya/whiteboard-model'
 import { type LivePassage, resolveTextAnchor } from '../../lib/text-anchor.js'
 
@@ -122,7 +129,6 @@ function gutterLabel(messages: number, threads: number): string {
 class ThreadGutterMarker extends GutterMarker {
   constructor(
     private readonly threadId: string,
-    private readonly status: CommentThreadStatus,
     private readonly selected: boolean,
     private readonly messages: number,
     private readonly threads: number,
@@ -130,10 +136,19 @@ class ThreadGutterMarker extends GutterMarker {
     super()
   }
 
+  /**
+   * Status is deliberately absent, and `elementClass` below is why.
+   *
+   * CodeMirror REPLACES a marker's DOM when `eq` is false — measured across
+   * one resolve, the dot came back as a different element — and a fresh
+   * element has no value to transition from, so the colour cut however the
+   * CSS was written. The `.cm-gutterElement` wrapper is the same element
+   * throughout (measured in the same run), so the state rides there and the
+   * dot, now reused, crosses.
+   */
   override eq(other: ThreadGutterMarker): boolean {
     return (
       other.threadId === this.threadId &&
-      other.status === this.status &&
       other.selected === this.selected &&
       other.messages === this.messages &&
       other.threads === this.threads
@@ -145,7 +160,6 @@ class ThreadGutterMarker extends GutterMarker {
     dot.type = 'button'
     dot.className = 'cm-annotation-gutter-marker'
     dot.dataset.threadId = this.threadId
-    if (this.status === 'resolved') dot.dataset.threadStatus = 'resolved'
     if (this.selected) dot.dataset.selected = 'true'
     // The one digit this dot can hold belongs to the CONVERSATION, not to
     // the line: a reader scanning a body is deciding whether to open this
@@ -170,6 +184,23 @@ class ThreadGutterMarker extends GutterMarker {
     return dot
   }
 }
+
+/**
+ * The RESOLVED state of the line, carried by a marker of its own.
+ *
+ * It cannot ride `ThreadGutterMarker`: CodeMirror only re-reads
+ * `elementClass` when a line's marker set actually differs, and it decides
+ * that with the same `eq` that governs whether the dot's DOM is reused. One
+ * marker cannot both keep its element and announce a new class — measured,
+ * an `elementClass` getter on the dot's own marker never reached the wrapper.
+ * `gutterLineClass` is the facet CodeMirror provides for exactly this, and
+ * its contract is what this class satisfies: an `elementClass`, no `toDOM`.
+ */
+class ResolvedLineMarker extends GutterMarker {
+  override elementClass = 'cm-annotation-resolved-line'
+}
+
+const RESOLVED_LINE_MARKER = new ResolvedLineMarker()
 
 function project(doc: string, projection: AnnotationProjection): AnnotationState {
   const placed = placeThreads(doc, projection.threads, projection.marks)
@@ -238,6 +269,21 @@ export function annotationMarks(): Extension {
 export function annotationDecorations(handlers: AnnotationHandlers = {}): Extension {
   return [
     annotationField,
+    // The line's state, separate from the dot that sits on it — see
+    // `ResolvedLineMarker`.
+    gutterLineClass.compute([annotationField], (state) => {
+      const { placed } = state.field(annotationField)
+      const builder = new RangeSetBuilder<GutterMarker>()
+      const lines = new Set<number>()
+      for (const one of placed) {
+        if (one.status !== 'resolved') continue
+        lines.add(state.doc.lineAt(one.from).from)
+      }
+      for (const lineStart of [...lines].sort((a, b) => a - b)) {
+        builder.add(lineStart, lineStart, RESOLVED_LINE_MARKER)
+      }
+      return builder.finish()
+    }),
     gutter({
       class: 'cm-annotation-gutter',
       markers: (view) => {
@@ -268,7 +314,6 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
             lineStart,
             new ThreadGutterMarker(
               lead.threadId,
-              lead.status,
               lead.threadId === selectedThreadId,
               messageCounts.get(lead.threadId) ?? 1,
               bucket.length,

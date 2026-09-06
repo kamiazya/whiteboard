@@ -810,6 +810,34 @@ Two things measurement corrected after the mechanism worked:
   patch — the viewBox is the union of everything in the scene, so a ghost is
   the only thing that can ever be outside it.
 
+**The markdown markers cross rather than leave, and that is the opposite of
+the canvas for a measured reason.** This editor is handed EVERY thread,
+resolved ones included, so nothing goes: the gutter dot, the passage
+underline and the preview marker all stay and change. A leave animation
+would be wrong here for the same reason a cross would be wrong there.
+
+Three markers, and DOM identity did not agree across them — measured over
+one resolve, not assumed:
+
+- **The CodeMirror gutter dot was REPLACED** (`same-element=false`), so
+  nothing could transition on it. Its `.cm-gutterElement` wrapper was the
+  same element throughout, and that is where the state moved. It cannot ride
+  the dot's own marker: CodeMirror re-reads `elementClass` only when a
+  line's marker set differs, and decides that with the same `eq` that
+  governs whether the dot's DOM is reused — so one marker cannot both keep
+  its element and announce a new class. An `elementClass` getter on it never
+  reached the wrapper at all. `gutterLineClass` is the facet provided for
+  exactly this, and `ResolvedLineMarker` satisfies its contract: a class, no
+  `toDOM`.
+- **The passage highlight is replaced too**, and is left cutting. Its state
+  is carried by a `Decoration.mark` class, which has no wrapper to move to;
+  the same trick would need a second decoration layer for a span that is
+  already legible from the dot beside it.
+- **The preview marker was reused** by React key and said nothing about
+  resolved at all — a closed conversation's marker was drawn exactly like an
+  open one, which is a gap rather than a motion problem. With `data-status`
+  present the crossing needs nothing but a class.
+
 **The rail's verbs are icon-first, and the status dot IS the Resolve
 toggle.** "Object-action surfaces are icon-first" below was written, the
 canvas card followed it (`CardAction`), and the rail never got held to it:

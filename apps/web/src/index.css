@@ -269,9 +269,37 @@
     line-height: 8px;
     text-align: center;
   }
-  .cm-annotation-gutter-marker[data-thread-status='resolved'] .cm-annotation-gutter-dot {
+  /*
+   * Resolved rides the LINE's gutter element rather than the dot, because
+   * CodeMirror replaces a marker's DOM when its identity changes and a
+   * fresh element has nothing to cross from — measured across one resolve.
+   * The wrapper is the same element throughout, so the dot is reused and
+   * this reads as the state moving rather than as a swap.
+   */
+  .cm-annotation-resolved-line .cm-annotation-gutter-dot {
     border-style: dotted;
     background: transparent;
+  }
+  /*
+   * The preview's marker crosses the same way, and it needs no wrapper
+   * trick: React keys it by thread id, so the element survives the change
+   * and the class is enough. It said nothing about resolved before this —
+   * a closed conversation's marker was drawn exactly like an open one.
+   */
+  .comment-preview-marker {
+    transition:
+      opacity var(--motion-duration-normal) var(--motion-ease-out),
+      background-color var(--motion-duration-normal) var(--motion-ease-out);
+  }
+  .comment-preview-marker[data-status='resolved'] {
+    opacity: 0.45;
+  }
+
+  .cm-annotation-gutter-dot {
+    transition:
+      background-color var(--motion-duration-normal) var(--motion-ease-out),
+      border-color var(--motion-duration-normal) var(--motion-ease-out),
+      color var(--motion-duration-normal) var(--motion-ease-out);
   }
   .cm-annotation-gutter-marker[data-selected='true'] .cm-annotation-gutter-dot {
     background: var(--annotation);
