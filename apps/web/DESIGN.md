@@ -682,6 +682,28 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**Four places measure their origin from the preview document's SVG, and
+they ask for it through one definition.** `previewDocumentSvg` exists
+because a bare `querySelector('svg')` inside the preview column answers with
+a comment MARKER's icon the moment a document has a conversation on it — the
+markers live in that column, each carries one, and they render before the
+pane. The marker placement was therefore reading its own previous output as
+its origin.
+
+Measured before it was named: markers stood a constant **+62px** below the
+blocks they quote — identical for the first block and the last, which is
+what ruled out a scale error and a stale-anchors error and left a pure
+translation. The query returned `viewBox="0 0 24 24"`, and the `svgTop` it
+produced was **165** where the document's is **32**. The residual after the
+fix is 5px, which is a `<text>`'s box starting at the cap height.
+
+The other three call sites had the same defect and nobody had reported it:
+the scroll sync, the seek, and the minimap rail's viewport box were all
+wrong on any document with a comment. Scoped by the pane's own class rather
+than by DOM order, so the next element added to this column cannot bring it
+back, and a source scan in `preview-marker-placement.browser.test.ts`
+refuses a bare query returning.
+
 **Resolving a conversation MOVES it, rather than making it disappear.** The
 row crosses to the resolved look, holds 200ms so the change can be read,
 then fades and slides out while the rows below glide into the gap by
