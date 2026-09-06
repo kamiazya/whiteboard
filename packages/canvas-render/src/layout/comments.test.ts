@@ -33,6 +33,7 @@ const fakeAppearance: SpatialAppearanceResolver = {
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
     passage: { fill: '#d97706', fillOpacity: 0.22 },
     region: { fill: 'none', stroke: '#d97706', strokeWidth: 1.5, strokeDasharray: '6 4' },
+    pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif' },
     resolvedOverlay: {
       pin: { fill: '#d97706', fillOpacity: 0.45 },
       bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
@@ -45,6 +46,7 @@ const fakeAppearance: SpatialAppearanceResolver = {
         strokeDasharray: '6 4',
         strokeOpacity: 0.45,
       },
+      pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif', fillOpacity: 0.45 },
     },
   }),
 }
@@ -702,5 +704,99 @@ describe('node sets and regions (the spatial arm with nodeIds or a rect)', () =>
       }),
     )
     expect(shapesOf(scene.nodes).some((shape) => shape.id?.endsWith('/region'))).toBe(false)
+  })
+})
+
+/**
+ * How much is in a conversation, on the PIN.
+ *
+ * Every other surface that lists or marks one says this — the rail's row,
+ * the markdown gutter, the preview marker — and the canvas was the last one
+ * that did not, so a reader crossing between them met the same conversation
+ * described two ways. It comes from `threads`, which the layout already
+ * takes for regions and passage highlights; the flat `comments` projection
+ * carries one text and cannot know.
+ *
+ * Composed into the SCENE rather than drawn by a host, so the widget, the
+ * export and `wb_scene_render` get it for the same reason they get the pin.
+ */
+function pinCountRun(nodes: readonly SceneNode[], commentId: string): TextRunNode | undefined {
+  const pin = pinOf(nodes, commentId)
+  if (pin === undefined) return undefined
+  // Found by sitting ON the pin rather than by an id: `TextRunNode` carries
+  // none, and "is on the pin" is the claim in any case.
+  return runsOf(nodes).find(
+    (run) =>
+      /^\d+$/.test(run.text) &&
+      run.bbox.x >= pin.bbox.x &&
+      run.bbox.x + run.bbox.w <= pin.bbox.x + pin.bbox.w &&
+      run.bbox.y >= pin.bbox.y &&
+      run.bbox.y + run.bbox.h <= pin.bbox.y + pin.bbox.h,
+  )
+}
+
+function pinCountOf(nodes: readonly SceneNode[], commentId: string): string | undefined {
+  return pinCountRun(nodes, commentId)?.text
+}
+
+function threadOf(id: string, messages: number, status: 'open' | 'resolved' = 'open') {
+  return {
+    id,
+    anchor: { kind: 'spatial', x: 40, y: 40 } as const,
+    status,
+    messages: Array.from({ length: messages }, (_, i) => ({ id: `${id}-m${i}`, body: `m${i}` })),
+  } satisfies CommentThread
+}
+
+describe('the count a pin carries', () => {
+  it('draws how many messages the conversation holds, once there is more than one', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
+      baseOptions({ threads: [threadOf('c1', 3)] }),
+    )
+    expect(pinCountOf(scene.nodes, 'c1')).toBe('3')
+  })
+
+  it('draws none for a lone remark, where a digit beside prose is noise', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
+      baseOptions({ threads: [threadOf('c1', 1)] }),
+    )
+    expect(pinCountOf(scene.nodes, 'c1')).toBeUndefined()
+    expect(pinOf(scene.nodes, 'c1')).toBeDefined()
+  })
+
+  it('draws none for a comment no thread was handed for, rather than inventing one', () => {
+    // The flat projection carries one text and no conversation. A host that
+    // passes no `threads` — an old export, a caller that has not wired them
+    // — gets the pin it always got.
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
+      baseOptions(),
+    )
+    expect(pinCountOf(scene.nodes, 'c1')).toBeUndefined()
+    expect(pinOf(scene.nodes, 'c1')).toBeDefined()
+  })
+
+  it('sits on the pin, not beside it', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'is that right?' }]),
+      baseOptions({ threads: [threadOf('c1', 12)] }),
+    )
+    // Two digits is the widest a count gets before it stops fitting, so it
+    // is the case that decides the font size. `pinCountRun` only matches a
+    // run wholly inside the pin's box, so finding one IS the claim: a
+    // number that drifts off reads as a stray glyph on the canvas.
+    expect(pinCountOf(scene.nodes, 'c1')).toBe('12')
+  })
+
+  it('is muted with its pin once the conversation is resolved', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 40, y: 40, text: 'settled', resolved: true }]),
+      baseOptions({ threads: [threadOf('c1', 4, 'resolved')], showResolved: true }),
+    )
+    // Assigned from the theme's resolved overlay, never an opacity literal
+    // here — the same rule the pin under it follows.
+    expect(pinCountRun(scene.nodes, 'c1')?.appearance?.fillOpacity).toBe(0.45)
   })
 })

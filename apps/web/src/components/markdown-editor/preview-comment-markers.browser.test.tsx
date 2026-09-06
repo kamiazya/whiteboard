@@ -54,6 +54,39 @@ it('a press on a preview marker opens that conversation', async () => {
   expect(onSelectThread).toHaveBeenCalledWith('t1')
 })
 
+it('says how many messages a conversation holds, the way its gutter marker does', async () => {
+  // Read mode never shows the source, so a reader here has only this marker
+  // to judge a conversation by. Left silent it says a conversation exists
+  // and nothing about whether it is a remark or an argument.
+  const busy: CommentThread = {
+    ...thread('t1', 'by Friday'),
+    messages: [
+      { id: 'a', body: 'why Friday?' },
+      { id: 'b', body: 'the review is Monday' },
+      { id: 'c', body: 'moved' },
+    ],
+  }
+  render(
+    <MarkdownEditor
+      value={BODY}
+      onChange={vi.fn()}
+      initialViewMode="read"
+      previewDebounceMs={0}
+      threads={[busy, thread('t2', 'Nothing else')]}
+    />,
+  )
+  const busyMarker = page
+    .getByTestId('comment-preview-marker')
+    .and(page.getByLabelText(/3 messages/))
+  await expect.element(busyMarker).toBeInTheDocument()
+  expect(busyMarker.element().textContent).toContain('3')
+  // A lone remark stays a bare mark: a digit beside every one of them is
+  // noise, and the count only says something once there is more than one.
+  const lone = page.getByRole('button', { name: 'Open comment' })
+  await expect.element(lone).toBeInTheDocument()
+  expect(lone.element().textContent).toBe('')
+})
+
 it('an orphaned conversation gets no preview marker', async () => {
   render(
     <MarkdownEditor

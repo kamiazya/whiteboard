@@ -138,18 +138,28 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
         strokeWidth: 1.5,
         strokeDasharray: '6 4',
       }
+      // The digits on the pin take the BUBBLE's fill, which is the surface
+      // this chrome already uses to sit legibly on the pin's amber — the
+      // pale card the comment's own text is read on. A second colour here
+      // would be a third amber nobody chose.
+      const pinCount: Appearance = {
+        fill: palette.comment.bubble.fill,
+        fontFamily: SPATIAL_THEME_FONT_FAMILY,
+      }
       return {
         pin,
         bubble,
         leader,
         passage,
         region,
+        pinCount,
         resolvedOverlay: {
           pin: muteForResolved(pin),
           bubble: muteForResolved(bubble),
           leader: muteForResolved(leader),
           passage: { ...passage, fillOpacity: 0.1 },
           region: { ...region, strokeOpacity: 0.45 },
+          pinCount: { ...pinCount, fillOpacity: 0.45 },
         },
       }
     },

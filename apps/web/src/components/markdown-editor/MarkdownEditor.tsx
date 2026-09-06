@@ -258,6 +258,26 @@ function totalSourceLines(value: string): number {
 }
 
 /**
+ * The preview DOCUMENT's own SVG — the laid-out markdown — and not merely
+ * the first SVG inside the preview column.
+ *
+ * Four places measure their origin from it, and a bare `querySelector('svg')`
+ * answers all four wrongly the moment a document has a conversation on it:
+ * the comment markers live in that same column, each carries an icon, and
+ * they are rendered BEFORE the pane. Measured — the query returned a marker's
+ * own `viewBox="0 0 24 24"` icon, so the marker placement was reading its own
+ * previous output as its origin and computed a `svgTop` of 165 where the
+ * document's is 32.
+ *
+ * Scoped by the pane's own class rather than by DOM order, so the next
+ * element added to this column cannot bring it back.
+ */
+function previewDocumentSvg(within: Element | null | undefined): SVGElement | null {
+  const found = within?.querySelector('.markdown-preview-pane svg') ?? null
+  return found instanceof SVGElement ? found : null
+}
+
+/**
  * Maps the top visible source line onto a preview scrollTop through the
  * per-block anchors, interpolating linearly inside the band between two
  * consecutive blocks (blank separator lines belong to the band above, so
@@ -276,8 +296,8 @@ function anchoredPreviewTop(
   if (first === undefined || api === null || typeof api.topVisibleLine !== 'function') {
     return undefined
   }
-  const svg = preview.querySelector('svg')
-  if (!(svg instanceof SVGElement)) return undefined
+  const svg = previewDocumentSvg(preview)
+  if (svg === null) return undefined
   const line = api.topVisibleLine()
   // The SVG's own offset inside the scroll content (the document column
   // wrapper adds padding above it), measured live so pane resizes and
@@ -476,7 +496,12 @@ export function MarkdownEditor({
    * is enough to find a conversation while reading.
    */
   const [previewMarkers, setPreviewMarkers] = useState<
-    readonly { readonly threadId: string; readonly top: number; readonly selected: boolean }[]
+    readonly {
+      readonly threadId: string
+      readonly top: number
+      readonly selected: boolean
+      readonly messages: number
+    }[]
   >([])
   const previewInnerRef = useRef<HTMLDivElement | null>(null)
   const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
@@ -588,11 +613,11 @@ export function MarkdownEditor({
   const seekPreview = useCallback((documentY: number) => {
     const preview = previewScrollRef.current
     if (preview === null) return
-    const svg = preview.querySelector('svg')
+    const svg = previewDocumentSvg(preview)
     const svgTop =
-      svg instanceof SVGElement
-        ? svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
-        : 0
+      svg === null
+        ? 0
+        : svg.getBoundingClientRect().top - preview.getBoundingClientRect().top + preview.scrollTop
     // Centre what was pointed at, the way a minimap press does — landing it
     // at the very top would hide the context just above it.
     preview.scrollTop = svgTop + documentY - preview.clientHeight / 2
@@ -686,13 +711,13 @@ export function MarkdownEditor({
     const preview = previewScrollRef.current
     if (preview === null) return
     const sync = () => {
-      const svg = preview.querySelector('svg')
+      const svg = previewDocumentSvg(preview)
       const svgTop =
-        svg instanceof SVGElement
-          ? svg.getBoundingClientRect().top -
+        svg === null
+          ? 0
+          : svg.getBoundingClientRect().top -
             preview.getBoundingClientRect().top +
             preview.scrollTop
-          : 0
       setRailViewport({ top: preview.scrollTop - svgTop, height: preview.clientHeight })
       setRailHasScroll(
         railScrollable({
@@ -721,8 +746,8 @@ export function MarkdownEditor({
       return
     }
     const inner = previewInnerRef.current
-    const svg = inner?.querySelector('svg')
-    if (inner === null || inner === undefined || !(svg instanceof SVGElement)) {
+    const svg = previewDocumentSvg(inner)
+    if (inner === null || svg === null) {
       setPreviewMarkers([])
       return
     }
@@ -731,9 +756,13 @@ export function MarkdownEditor({
       totalLines: totalSourceLines(debouncedValue),
       contentHeight: railContentHeight(blocksRef.current),
     }
+    // Read from the projection by id: `PlacedThread` answers WHERE a passage
+    // is, and how many messages it holds is not a property of that.
+    const messageCounts = new Map(projectedThreads.map((one) => [one.id, one.messages.length]))
     setPreviewMarkers(
       placeThreads(debouncedValue, projectedThreads, projectedMarks).map((placed) => ({
         threadId: placed.threadId,
+        messages: messageCounts.get(placed.threadId) ?? 1,
         top:
           svgTop +
           documentYForLine(
@@ -934,7 +963,11 @@ export function MarkdownEditor({
                   type="button"
                   data-testid="comment-preview-marker"
                   data-thread-id={marker.threadId}
-                  aria-label="Open comment"
+                  aria-label={
+                    marker.messages > 1
+                      ? `Open comment, ${marker.messages} messages`
+                      : 'Open comment'
+                  }
                   onClick={() => onSelectThread?.(marker.threadId)}
                   // In the column's own left padding, on the block's top edge.
                   style={{ top: marker.top }}
@@ -949,6 +982,18 @@ export function MarkdownEditor({
                     fill={marker.selected ? 'currentColor' : 'none'}
                     fillOpacity={0.35}
                   />
+                  {/* Only past one. Read mode never shows the source, so this
+                      marker is all a reader has to judge a conversation by —
+                      but a digit beside every lone remark is noise, and the
+                      badge only says something once there is more than one.
+                      Corner-set rather than beside the icon: the column's
+                      left padding is exactly this button's width, so growing
+                      it sideways would run under the prose. */}
+                  {marker.messages > 1 ? (
+                    <span className="pointer-events-none absolute -top-0.5 -right-0.5 rounded-full bg-(--annotation) px-1 text-[9px] leading-[12px] text-background">
+                      {marker.messages}
+                    </span>
+                  ) : null}
                 </button>
               ))}
               {effectiveMode === 'read' && meta !== undefined && (

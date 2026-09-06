@@ -32,6 +32,12 @@ import { placeThreads } from './annotation-decorations.js'
 export interface AnnotationScopeSource {
   readonly selectedRange: () => { from: number; to: number } | null
   readonly caretOffset: () => number
+  /**
+   * Puts the caret back in the body. Called on the way OUT of `open`, so the
+   * editor is holding focus at the moment the host is told — see the note
+   * there.
+   */
+  readonly focus: () => void
 }
 
 export function annotationAnchorFrom(
@@ -90,6 +96,14 @@ export function useAnnotationEntry(
   const open = useCallback(() => {
     const found = anchor()
     if (found === null) return
+    // The editor takes the caret back before the host is told, whatever
+    // pressed this. Two things depend on it and neither is visible from the
+    // press: the caret IS the scope, and the rail's way back out is whatever
+    // held focus when it was opened. Pressed from the catalog that is a menu
+    // row about to unmount, which would leave the reader nowhere to return
+    // to; the toolbar button gets here already holding it, so this is a
+    // no-op there.
+    sourceRef.current?.focus()
     // Overlap, not equality: the stored quote is whatever passage the thread
     // was opened on, which is usually a phrase inside the block rather than
     // the block itself.
@@ -101,7 +115,7 @@ export function useAnnotationEntry(
       return
     }
     onComposeThread?.(found)
-  }, [anchor, body, threads, marks, onComposeThread, onSelectThread])
+  }, [anchor, body, sourceRef, threads, marks, onComposeThread, onSelectThread])
   // Selection alone is enough to have something to press for: a host that
   // can reveal a conversation but not start one still wants the paragraph's
   // conversation opened.

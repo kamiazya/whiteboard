@@ -30,6 +30,7 @@ function railOpen(toggle = vi.fn()): CommentsRail {
     revealThread: vi.fn(),
     composeThread: vi.fn(),
     cancelCompose: vi.fn(),
+    returnFocus: vi.fn(),
     openThreadCount: 1,
     resolveAnchor: undefined,
     createThread: vi.fn(),

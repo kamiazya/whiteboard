@@ -102,7 +102,17 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // hand-built thread writes replaced by one shared door.
   // +1: the annotation entry also has to be handed the LIVE passage marks,
   // so the toolbar resolves a thread the way the gutter beside it does.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1021,
+  // +25: the preview marker now says how many messages its conversation
+  // holds — a count in the marker's state, a lookup beside the placement
+  // that produces it, and a corner badge with the reasoning for why it
+  // appears only past one. Read mode never shows the source, so this marker
+  // is the whole of what a reader there has to judge a conversation by.
+  // +20: the preview marker's origin is asked for through one
+  // `previewDocumentSvg` instead of four bare `querySelector('svg')` calls,
+  // and the definition carries why — inside the preview column that query
+  // answers with a comment MARKER's own icon, so the placement was reading
+  // its own previous output.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1066,
   // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
@@ -192,7 +202,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // command building rather than the branch.
   'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
+  // +49: the comment pin carries how many messages its conversation holds —
+  // the count run, its placement on the pin, and the `messagesByThread` the
+  // layout derives from `threads`. The canvas was the last surface that did
+  // not say it, so a reader crossing between it and the rail met the same
+  // conversation described two ways.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1889,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2592,
 }

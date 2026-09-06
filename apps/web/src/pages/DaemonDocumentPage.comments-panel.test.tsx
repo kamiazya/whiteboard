@@ -236,7 +236,7 @@ describe('DaemonDocumentPage comments panel', () => {
     fireEvent.change(panel().getByRole('textbox', { name: /reply/i }), {
       target: { value: 'decided: ship it' },
     })
-    fireEvent.click(panel().getByRole('button', { name: /^reply$/i }))
+    fireEvent.click(panel().getByRole('button', { name: /send reply/i }))
 
     await waitFor(() => expect(panel().getByText('decided: ship it')).toBeTruthy())
 
@@ -281,7 +281,7 @@ describe('DaemonDocumentPage comments panel', () => {
     fireEvent.change(panel().getByRole('textbox', { name: /reply/i }), {
       target: { value: 'no, we changed it' },
     })
-    fireEvent.click(panel().getByRole('button', { name: /^reply$/i }))
+    fireEvent.click(panel().getByRole('button', { name: /send reply/i }))
     await waitFor(() => expect(panel().getByText('no, we changed it')).toBeTruthy())
   })
 
