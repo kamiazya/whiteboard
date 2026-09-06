@@ -8,7 +8,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 
 | Instrument | Rung | Catches |
 |---|---|---|
-| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`; a PR/issue number or `pre-fix` in a title |
+| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`); a PR/issue number or `pre-fix` in a title |
 | `tools/biome-plugins/logger-argument-order.grit` | lint | `log.warning('msg', x)` in `mcp-server/src/server/**` (pino drops `x`) |
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
 | `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
@@ -35,7 +35,8 @@ patterns with `$vars`, `as $name`, `where`, `<:`, `contains`, `within`, `not`, `
 1. **Measure first.** Count occurrences on the current tree (`biome lint --config-path <tmp
    dir with only the new plugin> $(git ls-files '*.test.ts' '*.test.tsx')`). Zero is the
    cheapest rule to add; many means the rule needs a narrower shape or a migration in the
-   same PR. The un-awaited-assertion rule measured 0; `.only` measured 0.
+   same PR. The un-awaited-assertion rule measured 0; `.only` measured 0; the
+   `expect.element`/`expect.poll` pair measured 0 across 163 call sites.
 2. **Prototype outside the repo**: a scratch `biome.json` whose `plugins` names the `.grit`
    by absolute path and whose linter has `recommended: false`, plus a sample file carrying the
    bad AND the good form. Check the good form stays silent — `return expect(...).resolves`
@@ -45,13 +46,21 @@ patterns with `$vars`, `as $name`, `where`, `<:`, `contains`, `within`, `not`, `
    regex group is `(?:...)`: a capturing group is a pattern VARIABLE to Biome's GritQL, and
    one errored the whole plugin — silencing every other rule — until the fixture guard
    noticed.
-4. **Extend the fixture pair** in `.claude/scripts/fixtures/biome-plugin/{bad,good}.test.tsx`.
+4. **Give every SHAPE its own message — each pattern, and each `or { }` alternative.** The
+   guard compares the SET of messages, so any shape that cannot produce a message of its own
+   is a shape it cannot notice losing. Both halves measured on the `expect.element`/
+   `expect.poll` rules: two patterns sharing one message with the `.not` pattern broken →
+   `pnpm test:scripts` **279 pass**; one pattern covering both kinds with `poll` dropped from
+   the `or { }` → **279 pass** again. Adding fixture LINES closes neither; the message set is
+   what the guard compares. Split into four, each fails the guard by itself, and the
+   diagnostic gains the form it is naming.
+5. **Extend the fixture pair** in `.claude/scripts/fixtures/biome-plugin/{bad,good}.test.tsx`.
    `.claude/scripts/biome-plugin.test.mjs` reads every `register_diagnostic` message out of the
    plugin and requires the bad fixture to reach each one and the good fixture to reach none —
    no rule count lives in a title or an assertion, so a new rule with no fixture line fails by
    itself. A pattern edit that stops matching leaves `pnpm lint` green over exactly the shapes
    it was built for; the fixture pair is what notices.
-5. `pnpm test:scripts && pnpm lint`.
+6. `pnpm test:scripts && pnpm lint`.
 
 A shape whose textual form has too many legitimate instances stays prose: the held-reference
 shape flags ~90% false positives as a scan (audit-triage 2026-08-21), so it is reader judgement

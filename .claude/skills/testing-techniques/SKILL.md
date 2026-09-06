@@ -48,7 +48,7 @@ in a file named after a version, which only a reader who already knows the featu
 ## Write-time checklist (the shapes that cost the most, in one screen)
 
 1. **`await` every `.resolves` / `.rejects` / `toMatchFileSnapshot` / `expect.element` /
-   `expect.poll`.** Lint rejects the first three; Vitest 5 fails the test.
+   `expect.poll`.** Lint rejects all five (the `.not` form too); Vitest 5 fails the test.
 2. **Nothing with a side effect inside `waitFor`.** A retried callback re-fires the action.
 3. **Query inside the assertion**, never hold an element across an action that can remount it.
 4. **Type ASCII** in browser tests; a keycode-less character is the one that drops under load.
