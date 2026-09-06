@@ -1,6 +1,6 @@
 {
   "name": "@kamiazya/whiteboard-plugin",
-  "version": "0.0.19",
+  "version": "0.1.0",
   "description": "Claude Code and Codex plugin wrapper surfaces for the whiteboard MCP server and shared skills.",
   "private": true,
   "license": "Apache-2.0",

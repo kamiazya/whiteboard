@@ -6,7 +6,7 @@
   },
   "metadata": {
     "description": "Claude Code plugin distribution for the @kamiazya/whiteboard collaborative diagramming MCP.",
-    "version": "0.0.19"
+    "version": "0.1.0"
   },
   "plugins": [
     {
@@ -17,7 +17,7 @@
         "ref": "stable"
       },
       "description": "Collaborative whiteboard for Claude Code. Wraps the @kamiazya/whiteboard-mcp server and exposes the bundled /drawing-visuals, /coauthoring-visuals, and /auditing-workspaces skills.",
-      "version": "0.0.19",
+      "version": "0.1.0",
       "author": {
         "name": "kamiazya",
         "url": "https://github.com/kamiazya"
@@ -25,9 +25,21 @@
       "homepage": "https://github.com/kamiazya/whiteboard",
       "repository": "https://github.com/kamiazya/whiteboard",
       "license": "MIT",
-      "keywords": ["json-canvas", "diagramming", "mcp", "whiteboard", "claude-code", "codex"],
+      "keywords": [
+        "json-canvas",
+        "diagramming",
+        "mcp",
+        "whiteboard",
+        "claude-code",
+        "codex"
+      ],
       "category": "productivity",
-      "tags": ["diagramming", "mcp", "json-canvas", "visualization"]
+      "tags": [
+        "diagramming",
+        "mcp",
+        "json-canvas",
+        "visualization"
+      ]
     }
   ]
 }
