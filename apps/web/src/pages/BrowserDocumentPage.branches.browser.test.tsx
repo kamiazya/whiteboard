@@ -70,6 +70,51 @@ describe('BrowserDocumentPage variations (browser)', () => {
     cleanup()
   })
 
+  it('the chip is identity: it sits with the title, left of the act menu', async () => {
+    await seedDocument()
+    render(<BrowserDocumentPage initialPath="canvas-a" />)
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
+    const chip = await screen.findByRole('button', { name: /^Switch variation/ })
+    const kebab = await screen.findByRole('button', { name: 'More actions' })
+    const segment = screen.getByTestId('inspector-segment')
+
+    // Reading order, taken from the row itself rather than from x
+    // coordinates: what a screen reader and the tab sequence follow is the
+    // DOM, and `DOCUMENT_POSITION_FOLLOWING` says one node comes after
+    // another in it.
+    const follows = (a: Element, b: Element) =>
+      (a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0
+
+    // Which variation you are on is WHICH DOCUMENT you are looking at — the
+    // same question the title answers — so it belongs beside the title, not
+    // after the things that act on it. Measured before this increment at
+    // 1280px: `Comments@1022, History@1056, More actions@1108, Switch
+    // variation@1165`, identity pushed to the far right of the row by
+    // `HeaderBranchChip` rendering after the slot the act controls moved into.
+    expect(follows(chip, segment)).toBe(true)
+    expect(follows(chip, kebab)).toBe(true)
+
+    // …and ADJACENT to the NAME, which reading order alone cannot say.
+    //
+    // Asserted on the title's BOX, not on the gap to it. The gap is the wrong
+    // instrument and measured so: the chip is glued to the input's right
+    // edge, so when the input grows the chip travels with it and the gap
+    // reads 25px either way. The first version of this guard asserted on that
+    // gap, PASSED its own mutation check, and had to be rewritten. What
+    // actually differs is the box — 132px sized to the name against 959px
+    // filling the row, same 1280px viewport — so that is what this reads. The
+    // ceiling sits far from both readings: a shape check, not a measurement.
+    const title = screen.getByRole('textbox', { name: /title/i })
+    const row = title.closest('header') as HTMLElement
+    const share = title.getBoundingClientRect().width / row.getBoundingClientRect().width
+    expect(share).toBeLessThan(0.45)
+  })
+
   it('creates a variation from the chip and keeps it on the record', async () => {
     const documentId = await seedDocument()
     render(<BrowserDocumentPage initialPath="canvas-a" />)
