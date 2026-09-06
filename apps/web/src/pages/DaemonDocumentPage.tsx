@@ -23,6 +23,7 @@ import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
+import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
@@ -510,22 +511,13 @@ function useDaemonDocument(
 
   // The rail's write door: both writes ride `onChange` like every other
   // edit here — one undo step, and they travel the annotation channel back.
-  // The canvas argument is the CURRENT one unchanged: neither write touches
-  // a node or an edge, which is why the commands have their own write path.
-  const threadWrite: CommentsRailWrite = {
-    createThread: (thread) => onChange(canvasValueRef.current, { kind: 'create-thread', thread }),
-    replyToThread: (threadId, message) =>
-      onChange(canvasValueRef.current, { kind: 'reply-to-thread', threadId, message }),
-    setThreadStatus: (threadId, status) =>
-      onChange(canvasValueRef.current, { kind: 'set-thread-status', threadId, status }),
-    editMessage: (threadId, message, opening) =>
-      onChange(canvasValueRef.current, {
-        kind: 'edit-thread-message',
-        threadId,
-        message,
-        opening,
-      }),
-  }
+  // Through the reducer, not past it. This read "the CURRENT one unchanged:
+  // neither write touches a node or an edge" — true of nodes and edges and
+  // false of the picture: a status projects onto the flat comment's
+  // `resolved` and a new thread projects a pin, so handing the canvas back
+  // unchanged left a resolved bubble drawn until a reload and a reopened
+  // one invisible for good.
+  const threadWrite: CommentsRailWrite = spatialThreadWrite(() => canvasValueRef.current, onChange)
 
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.

@@ -14,6 +14,7 @@
  * the active-editor registry, and the second is only populated by a real
  * focus event from a real CodeMirror view.
  */
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
@@ -159,4 +160,69 @@ it('is inert on a body with no prose at all, the one case with nothing to be abo
   expect(button.getAttribute('aria-disabled')).toBe('true')
   button.click()
   expect(onComposeThread).not.toHaveBeenCalled()
+})
+
+// A 12x12 dot three pixels from the screen edge is what a reader was asked
+// to hit to read a conversation — a quarter of WCAG 2.5.8's minimum in each
+// dimension, and inside the strip the OS keeps for its own back gesture. So
+// the same press has a thumb-sized path that does not depend on hitting it:
+// put the caret in the paragraph, press Comment, and the conversation the
+// paragraph already has opens instead of a new one starting.
+const EXISTING: CommentThread = {
+  id: 'thread-1',
+  anchor: { kind: 'text', quote: { exact: 'Intro line.' }, start: 0, end: 11 },
+  status: 'open',
+  messages: [{ id: 'm1', body: 'Is that right?' }],
+}
+
+it("opens the conversation the caret's paragraph already has, instead of starting a second one", async () => {
+  const onSelectThread = vi.fn()
+  const onComposeThread = vi.fn()
+  const { container } = render(
+    <MarkdownEditor
+      value={`Intro line.\n\n${BODY}`}
+      onChange={vi.fn()}
+      threads={[EXISTING]}
+      onSelectThread={onSelectThread}
+      onComposeThread={onComposeThread}
+    />,
+  )
+  await focusSource(container)
+  const button = await vi.waitFor(() => {
+    const found = [...container.querySelectorAll('button')].find(
+      (one) => one.getAttribute('aria-label') === 'Comment',
+    )
+    if (found === undefined) throw new Error('no Comment button')
+    return found
+  })
+  button.click()
+  expect(onSelectThread).toHaveBeenCalledWith('thread-1')
+  expect(onComposeThread).not.toHaveBeenCalled()
+})
+
+it('still composes from a paragraph no conversation is about', async () => {
+  const onSelectThread = vi.fn()
+  const onComposeThread = vi.fn()
+  const { container } = render(
+    <MarkdownEditor
+      value={`Intro line.\n\n${BODY}`}
+      onChange={vi.fn()}
+      threads={[EXISTING]}
+      onSelectThread={onSelectThread}
+      onComposeThread={onComposeThread}
+    />,
+  )
+  await focusSource(container)
+  await userEvent.keyboard('{Control>}{End}{/Control}')
+  const button = await vi.waitFor(() => {
+    const found = [...container.querySelectorAll('button')].find(
+      (one) => one.getAttribute('aria-label') === 'Comment',
+    )
+    if (found === undefined) throw new Error('no Comment button')
+    return found
+  })
+  button.click()
+  expect(onComposeThread).toHaveBeenCalledTimes(1)
+  expect(onComposeThread.mock.calls[0]?.[0]).toMatchObject({ quote: { exact: BODY } })
+  expect(onSelectThread).not.toHaveBeenCalled()
 })

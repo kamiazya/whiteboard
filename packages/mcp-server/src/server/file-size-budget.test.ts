@@ -94,9 +94,13 @@ function relativeToRepo(absolutePath: string): string {
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'apps/web/src/lib/spatial/commands.ts': 926,
-  // +1: the annotation entry's scope resolver moved to `annotation-scope.ts`
-  // rather than landing here, so a 42-line feature costs this file one line.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1016,
+  // The annotation entry's scope resolver lives in `annotation-scope.ts`
+  // rather than here, so what this file spends on it is the hook call — now
+  // five lines because the entry also has to know the document's threads,
+  // to open the one a paragraph already has. The two document pages paid
+  // more than that back in the same change (942 -> 934, 926 -> 925), their
+  // hand-built thread writes replaced by one shared door.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1020,
   'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,
@@ -111,10 +115,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // supplier built here, mounted for every consumer under it, in place of
   // four call sites building their own. Both are paid once; the keeper
   // conversion also took the browser page below from 981 to 926.
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 934,
   'apps/web/src/lib/document-sync-session.ts': 1366,
   'packages/mcp-server/src/server/store/document-store.ts': 1131,
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 926,
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 925,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

@@ -22,10 +22,12 @@
  * MOVE re-renders nothing, so anything derived from it and held would be
  * stale exactly when a reader had just moved.
  */
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useCallback } from 'react'
 import { blockRangeNear } from '../../lib/block-range-at.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import { textAnchorForSelection } from '../../lib/text-anchor-for-selection.js'
+import { placeThreads } from './annotation-decorations.js'
 
 export interface AnnotationScopeSource {
   readonly selectedRange: () => { from: number; to: number } | null
@@ -49,15 +51,45 @@ export interface AnnotationEntry {
   readonly open: (() => void) | undefined
 }
 
+export interface AnnotationEntryHost {
+  readonly threads: readonly CommentThread[]
+  readonly onComposeThread: ((anchor: TextAnchor) => void) | undefined
+  readonly onSelectThread: ((threadId: string) => void) | undefined
+}
+
+/**
+ * One press, two meanings, and the reader is asking for the same thing
+ * either way: talk about this block. A block a conversation is ALREADY
+ * about opens that conversation; a block with none starts one.
+ *
+ * The first half is what makes the layer reachable on a phone at all. The
+ * gutter marker is a 12px dot three pixels from the screen edge — a quarter
+ * of WCAG 2.5.8's minimum in each dimension, and inside the strip the OS
+ * keeps for its own back gesture — so it cannot be the only way in. A caret
+ * in the paragraph plus a toolbar button is the same act with a target the
+ * size of the paragraph.
+ */
 export function useAnnotationEntry(
   body: string,
   sourceRef: MutableRefObject<AnnotationScopeSource | null>,
-  onComposeThread: ((anchor: TextAnchor) => void) | undefined,
+  host: AnnotationEntryHost,
 ): AnnotationEntry {
+  const { threads, onComposeThread, onSelectThread } = host
   const anchor = useCallback(() => annotationAnchorFrom(body, sourceRef.current), [body, sourceRef])
   const open = useCallback(() => {
     const found = anchor()
-    if (found !== null) onComposeThread?.(found)
-  }, [anchor, onComposeThread])
+    if (found === null) return
+    // Overlap, not equality: the stored quote is whatever passage the thread
+    // was opened on, which is usually a phrase inside the block rather than
+    // the block itself.
+    const covering = placeThreads(body, threads).find(
+      (placed) => placed.from < found.end && placed.to > found.start,
+    )
+    if (covering !== undefined && onSelectThread !== undefined) {
+      onSelectThread(covering.threadId)
+      return
+    }
+    onComposeThread?.(found)
+  }, [anchor, body, threads, onComposeThread, onSelectThread])
   return { anchor, open: onComposeThread === undefined ? undefined : open }
 }
