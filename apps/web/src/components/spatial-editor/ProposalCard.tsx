@@ -6,10 +6,15 @@
  * whether any of them needs a look. This card is the proposal itself: what
  * each change would do, and the two verbs that decide it.
  *
- * Whole-proposal only, which is decision 4's default and, for now, all of
- * it: a batch arrived together because it was meant to be judged together
- * (decision 8), and per-change expansion is a later increment rather than a
- * missing half of this one (user decision, 2026-09-06).
+ * Whole-proposal is the DEFAULT control and expanding gives one verb pair
+ * per change (decision 4). Twenty proposed changes must not arrive as twenty
+ * decisions — a batch came together because it was meant to be judged
+ * together (decision 8) — but "nine of these are right and one is not" is
+ * the common case, and without the expansion the only reply to it is to
+ * dismiss everything and ask again.
+ *
+ * Both roads are the SAME write, applied to a different set of changes, so
+ * the two can never disagree about what adopting means.
  *
  * Positioned in SCREEN coordinates beside the minimap, and wearing the
  * bubble's own chrome, for the reasons CommentThreadCard states at length:
@@ -32,11 +37,12 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts } from '@kamiazya/whiteboard-model'
-import { CircleCheck, CircleX, X } from 'lucide-react'
+import { CircleCheck, CircleX, ListChecks, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Box } from '../../lib/spatial/geometry.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { cn } from '../../lib/utils.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
 /** Screen px kept between the card and the root's edge once slid inside. */
@@ -52,7 +58,12 @@ export interface ProposalCardProps {
   /** Where the bubble is drawn, in SCREEN coordinates (root-relative). */
   readonly box: Box
   readonly theme: ResolvedTheme
-  readonly onDecide: (decision: 'adopted' | 'dismissed') => void
+  /**
+   * Decides `changes` — the whole open set, or the one row that was pressed.
+   * The card passes what it decided rather than an id the caller re-resolves,
+   * so what gets applied is exactly what this render showed.
+   */
+  readonly onDecide: (decision: 'adopted' | 'dismissed', changes: readonly ProposedChange[]) => void
   readonly onClose: () => void
 }
 
@@ -66,6 +77,14 @@ export function ProposalCard({
 }: ProposalCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const open = proposal.changes.filter((change) => change.status === 'open')
+  /**
+   * Collapsed by default, and offered at all only when there is more than
+   * one change to separate: with one, the whole-proposal pair already IS the
+   * per-change pair, so a disclosure there would be a control that does
+   * nothing a reader can see.
+   */
+  const [perChange, setPerChange] = useState(false)
+  const separable = open.length > 1
   // Slid back inside a root it would otherwise hang past, like the comment
   // card and for the same reason: the root clips, so a card at the edge
   // puts its verbs where no finger can reach them.
@@ -117,17 +136,38 @@ export function ProposalCard({
     >
       <div className="flex items-start gap-2">
         <ul className="min-w-0 flex-1 list-none space-y-1">
-          {open.map((change) => (
-            <li key={change.id} className="break-words">
-              {describeChange(change, canvas)}
-              {canConflict(change) && canvasChangeConflicts(change, canvas) ? (
-                // Said, never enforced: decision 5 flags a collision and
-                // leaves the choice to the person, so this is a note beside
-                // the line rather than a disabled Adopt.
-                <span className="opacity-70"> — needs a look</span>
-              ) : null}
-            </li>
-          ))}
+          {open.map((change) => {
+            const described = describeChange(change, canvas)
+            return (
+              <li key={change.id} className="flex items-center gap-2">
+                <span className="min-w-0 flex-1 break-words">
+                  {described}
+                  {canConflict(change) && canvasChangeConflicts(change, canvas) ? (
+                    // Said, never enforced: decision 5 flags a collision and
+                    // leaves the choice to the person, so this is a note beside
+                    // the line rather than a disabled Adopt.
+                    <span className="opacity-70"> — needs a look</span>
+                  ) : null}
+                </span>
+                {perChange && separable ? (
+                  <span className="flex shrink-0 items-center gap-1">
+                    <DecideButton
+                      label={`Dismiss: ${described}`}
+                      onSelect={() => onDecide('dismissed', [change])}
+                    >
+                      <CircleX className="size-5" />
+                    </DecideButton>
+                    <DecideButton
+                      label={`Adopt: ${described}`}
+                      onSelect={() => onDecide('adopted', [change])}
+                    >
+                      <CircleCheck className="size-5" />
+                    </DecideButton>
+                  </span>
+                ) : null}
+              </li>
+            )
+          })}
         </ul>
         <CardAction label="Close" onSelect={onClose}>
           <X className="size-3.5" />
@@ -147,11 +187,40 @@ export function ProposalCard({
         get, from the same constant rather than from a second set of
         numbers.
       */}
-      <div className="flex items-center justify-end gap-1">
-        <DecideButton label="Dismiss" onSelect={() => onDecide('dismissed')}>
+      {/* Expanded, the card holds two pairs of the same two glyphs, and only
+          their NAMES say which is which — which is nothing to a reader
+          looking at it. A rule above this row is what says the pair below
+          belongs to the whole proposal rather than to the change beside it. */}
+      <div
+        className={cn(
+          'flex items-center justify-end gap-1',
+          perChange && separable ? 'border-current/20 border-t pt-1' : '',
+        )}
+      >
+        {separable ? (
+          // The name stays put and `aria-expanded` carries the state, so a
+          // screen reader is not told the control renamed itself.
+          <DecideButton
+            label="Decide each change"
+            expanded={perChange}
+            onSelect={() => setPerChange((current) => !current)}
+          >
+            <ListChecks className="size-5" />
+          </DecideButton>
+        ) : null}
+        {/* Named by COUNT once there is more than one, which is decision 4's
+            own wording for the default control ("Adopt 2 changes") — and what
+            stops it reading as "adopt the one you can see". */}
+        <DecideButton
+          label={wholeLabel('Dismiss', open.length)}
+          onSelect={() => onDecide('dismissed', open)}
+        >
           <CircleX className="size-5" />
         </DecideButton>
-        <DecideButton label="Adopt" onSelect={() => onDecide('adopted')}>
+        <DecideButton
+          label={wholeLabel('Adopt', open.length)}
+          onSelect={() => onDecide('adopted', open)}
+        >
           <CircleCheck className="size-5" />
         </DecideButton>
       </div>
@@ -159,13 +228,19 @@ export function ProposalCard({
   )
 }
 
+function wholeLabel(verb: string, count: number): string {
+  return count > 1 ? `${verb} ${count} changes` : verb
+}
+
 function DecideButton({
   label,
   onSelect,
+  expanded,
   children,
 }: {
   readonly label: string
   readonly onSelect: () => void
+  readonly expanded?: boolean
   readonly children: React.ReactNode
 }) {
   return (
@@ -173,6 +248,7 @@ function DecideButton({
       type="button"
       aria-label={label}
       title={label}
+      {...(expanded === undefined ? {} : { 'aria-expanded': expanded })}
       onClick={onSelect}
       className={ICON_VERB_CLASS}
     >
