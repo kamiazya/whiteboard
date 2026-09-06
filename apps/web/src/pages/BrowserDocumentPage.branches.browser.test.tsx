@@ -98,6 +98,21 @@ describe('BrowserDocumentPage variations (browser)', () => {
     // `HeaderBranchChip` rendering after the slot the act controls moved into.
     expect(follows(chip, segment)).toBe(true)
     expect(follows(chip, kebab)).toBe(true)
+
+    // …and ADJACENT to the NAME, which reading order alone cannot say.
+    //
+    // Asserted on the title's BOX, not on the gap to it. The gap is the wrong
+    // instrument and measured so: the chip is glued to the input's right
+    // edge, so when the input grows the chip travels with it and the gap
+    // reads 25px either way. The first version of this guard asserted on that
+    // gap, PASSED its own mutation check, and had to be rewritten. What
+    // actually differs is the box — 132px sized to the name against 959px
+    // filling the row, same 1280px viewport — so that is what this reads. The
+    // ceiling sits far from both readings: a shape check, not a measurement.
+    const title = screen.getByRole('textbox', { name: /title/i })
+    const row = title.closest('header') as HTMLElement
+    const share = title.getBoundingClientRect().width / row.getBoundingClientRect().width
+    expect(share).toBeLessThan(0.45)
   })
 
   it('creates a variation from the chip and keeps it on the record', async () => {
