@@ -682,6 +682,46 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**Resolving a conversation MOVES it, rather than making it disappear.** The
+row crosses to the resolved look, holds 200ms so the change can be read,
+then fades and slides out while the rows below glide into the gap by
+transform (FLIP in `CommentsPanel`, so the list never animates its own
+height). Durations are the motion tokens; the hold is the one number that
+is not a token yet, because there is none for "long enough to read a state
+change".
+
+**The subject of the transition is the ROW, and that was measured rather
+than chosen.** The first version crossed the marker and let everything else
+cut; frames from a real browser at 130ms showed the row already fully muted
+with its verb already reading "Reopen" while a 12px dot in the corner was
+still animating. Every duration ran correctly and the result was
+indistinguishable from no animation at all. A word swapping is a hard cut
+no easing can soften, so the verb's LABEL waits for the crossing to finish
+and never swaps at all on a row that is leaving.
+
+Two things the beat must not do, both of which it would do naively:
+
+- **It must not delay the WRITE.** `onResolve` fires on the press, so a peer
+  sees the change at once and a reader who navigates away mid-beat loses
+  nothing. Only the presentation waits.
+- **It must not show the OLD state while it waits.** The status arrives from
+  the host a render later, so the panel holds the status it just asked for
+  (`pending`) and the row wears that. Measured: with a host that had not
+  answered yet, the held row still read `open` — a beat spent showing
+  nothing, which is the cut with a pause in front of it.
+
+Not collapsed under `prefers-reduced-motion`, deliberately: the global floor
+in `index.css` already flattens the movement, and a reader who asked for
+less motion still has to see what their press did.
+
+**The canvas PIN is not in this, and the reason changed after measuring.**
+The plan was that its transition could live in the web app without touching
+the renderer. It cannot: `canvas-render`'s SVG backend emits no `id` or
+`class` for a scene node, so the pin (`${'{'}comment.id{'}'}/pin` in the scene) has
+nothing `apps/web` CSS can select. Giving it one changes exported SVG bytes,
+the MCP Apps widget and the scene digest — the same boundary that kept the
+message count out of it, so it is its own increment with its own review.
+
 **The rail's verbs are icon-first, and the status dot IS the Resolve
 toggle.** "Object-action surfaces are icon-first" below was written, the
 canvas card followed it (`CardAction`), and the rail never got held to it:

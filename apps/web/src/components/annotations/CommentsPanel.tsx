@@ -12,9 +12,13 @@
  * "show resolved" answers whether resolved comments are drawn when what a
  * reader wants at document level is which ones are still open.
  */
-import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
+import type {
+  AnnotationAnchor,
+  CommentThread,
+  CommentThreadStatus,
+} from '@kamiazya/whiteboard-model'
 import { Check, MessageSquarePlus, Pencil, SendHorizontal } from 'lucide-react'
-import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
+import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { cn } from '../../lib/utils.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
@@ -114,6 +118,22 @@ export interface CommentsPanelProps {
  */
 const ICON_VERB_CLASS =
   'grid size-11 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground'
+
+/**
+ * How long a resolved row stays on screen after it has crossed, before it
+ * leaves the list it no longer belongs in.
+ *
+ * The crossing carries the meaning and the hold is what makes it readable;
+ * without one the row changes and vanishes inside the same gesture, which is
+ * the cut this replaces. Not collapsed under `prefers-reduced-motion`: the
+ * global floor in `index.css` already flattens the MOVEMENT, and a reader who
+ * asked for less motion still has to see what their press did.
+ *
+ * The two durations beside it are the motion tokens; this one is a number
+ * because there is no token for "long enough to read a state change" yet.
+ */
+const RESOLVE_HOLD_MS = 200
+const RESOLVE_LEAVE_MS = 220
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
   return filter === 'all' || thread.status === filter
@@ -277,7 +297,86 @@ export function CommentsPanel({
     onReturnFocus()
   }
 
-  const shown = useMemo(() => threads.filter((t) => matches(t, filter)), [threads, filter])
+  /**
+   * The status the reader just ASKED for, per conversation, held for one
+   * beat — long enough for the change to be read before the row acts on it.
+   *
+   * Optimistic on purpose, and it is the beat's whole point: the row has to
+   * wear its new state while it is being held, and the state otherwise
+   * arrives from the host a render later. Without it the row sits unchanged
+   * for the hold and then vanishes, which is the cut this replaces with an
+   * extra pause in front of it. Measured: with a host that had not answered
+   * yet, the held row still read `open`.
+   *
+   * The WRITE is never delayed — `onResolve` fires on the press, so a peer
+   * sees it at once and a reader who navigates away mid-beat loses nothing.
+   * Only the presentation waits, and only until the host answers.
+   */
+  const [pending, setPending] = useState<ReadonlyMap<string, CommentThreadStatus>>(() => new Map())
+  const listRef = useRef<HTMLUListElement | null>(null)
+  const rowTops = useRef(new Map<string, number>())
+  const lastFilter = useRef(filter)
+
+  /** What a row should SAY it is: what was just asked for, else the document. */
+  const statusOf = (thread: CommentThread): CommentThreadStatus =>
+    pending.get(thread.id) ?? thread.status
+
+  function resolveWithBeat(thread: CommentThread): void {
+    if (onResolve === undefined) return
+    const next: CommentThreadStatus = statusOf(thread) === 'resolved' ? 'open' : 'resolved'
+    onResolve(thread.id, next === 'resolved')
+    setPending((prev) => new Map(prev).set(thread.id, next))
+    window.setTimeout(() => {
+      setPending((prev) => {
+        if (!prev.has(thread.id)) return prev
+        const rest = new Map(prev)
+        rest.delete(thread.id)
+        return rest
+      })
+    }, RESOLVE_HOLD_MS + RESOLVE_LEAVE_MS)
+  }
+
+  // A conversation being held stays listed whatever the filter says, which
+  // is what gives the beat somewhere to happen.
+  const shown = useMemo(
+    () => threads.filter((t) => matches(t, filter) || pending.has(t.id)),
+    [threads, filter, pending],
+  )
+
+  /**
+   * FLIP: the rows below a departing one glide into the gap instead of
+   * snapping up. Compositor-only, which is what DESIGN.md's motion rule
+   * asks for — the list never animates its own height.
+   *
+   * Skipped on a filter change, which is a different list rather than a
+   * move: gliding there would animate rows between positions they never
+   * travelled between.
+   */
+  useLayoutEffect(() => {
+    const list = listRef.current
+    const filterChanged = lastFilter.current !== filter
+    lastFilter.current = filter
+    if (list === null) {
+      rowTops.current.clear()
+      return
+    }
+    const seen = new Set<string>()
+    for (const child of list.children) {
+      const row = child as HTMLElement
+      const id = row.dataset.threadId
+      if (id === undefined) continue
+      seen.add(id)
+      const top = row.getBoundingClientRect().top
+      const was = rowTops.current.get(id)
+      rowTops.current.set(id, top)
+      if (filterChanged || was === undefined || Math.abs(was - top) < 0.5) continue
+      row.animate([{ transform: `translateY(${was - top}px)` }, { transform: 'none' }], {
+        duration: RESOLVE_LEAVE_MS,
+        easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+      })
+    }
+    for (const id of [...rowTops.current.keys()]) if (!seen.has(id)) rowTops.current.delete(id)
+  })
 
   function toggle(thread: CommentThread): void {
     setOpenThreadId((current) => (current === thread.id ? null : thread.id))
@@ -389,11 +488,23 @@ export function CommentsPanel({
               : 'No resolved conversations.'}
         </p>
       ) : (
-        <ul className="flex flex-col gap-1">
+        <ul ref={listRef} className="flex flex-col gap-1">
           {shown.map((thread) => {
             const expanded = thread.id === openThreadId
+            // What the ROW says, which during a beat is what was just asked
+            // for rather than what the document has answered yet.
+            const status = statusOf(thread)
+            // Held, and no longer belonging in this list: the row that gets
+            // the leave animation. Under `all` nothing leaves, so the
+            // crossing is the whole transition and this stays false.
+            const leaving = pending.has(thread.id) && filter !== 'all' && status !== filter
             return (
-              <li key={thread.id}>
+              <li
+                key={thread.id}
+                data-thread-id={thread.id}
+                data-status={status}
+                className={cn(leaving && 'comment-row-leaving')}
+              >
                 <div className="flex items-start gap-0.5">
                   {/* The status dot IS the Resolve toggle. One object holds
                       the state and changes it, so the press lands on the
@@ -407,21 +518,17 @@ export function CommentsPanel({
                       restructured the row rather than adding a class. */}
                   {onResolve === undefined ? (
                     <span className="grid size-11 shrink-0 place-items-center">
-                      <span
-                        className="annotation-dot"
-                        data-status={thread.status}
-                        aria-hidden="true"
-                      />
+                      <span className="annotation-dot" data-status={status} aria-hidden="true" />
                     </span>
                   ) : (
                     <button
                       type="button"
-                      aria-label={thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
-                      title={thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
-                      onClick={() => onResolve(thread.id, thread.status !== 'resolved')}
+                      aria-label={status === 'resolved' ? 'Reopen' : 'Resolve'}
+                      title={status === 'resolved' ? 'Reopen' : 'Resolve'}
+                      onClick={() => resolveWithBeat(thread)}
                       className={ICON_VERB_CLASS}
                     >
-                      <span className="annotation-dot" data-status={thread.status}>
+                      <span className="annotation-dot" data-status={status}>
                         <Check aria-hidden="true" />
                       </span>
                     </button>
@@ -440,10 +547,10 @@ export function CommentsPanel({
                       TOGGLE_STATE_CLASS,
                     )}
                   >
-                    <span className="line-clamp-2 text-neutral-800 dark:text-neutral-200">
+                    <span className="comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200">
                       {excerptOf(thread)}
                     </span>
-                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+                    <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
                       {anchorLabel(thread.anchor) === undefined ? null : (
                         <span data-testid={`thread-about-${thread.id}`}>
                           {anchorLabel(thread.anchor)}
