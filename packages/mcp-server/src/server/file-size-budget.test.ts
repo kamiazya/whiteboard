@@ -109,7 +109,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // READ instead clears the UndoManager's redo stack.
   'packages/loro-adapter/src/loro-bridge.ts': 943,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
-  'packages/server-core/src/tools/canvas-edit.ts': 948,
+  // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
+  // field, and the branch that stores a proposal instead of the board. Most
+  // of it is the prose those three fields carry, which IS this tool's
+  // published contract: an agent reads the schema, not this repo. The
+  // mechanics went to `canvas-propose.ts` rather than here.
+  'packages/server-core/src/tools/canvas-edit.ts': 997,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child

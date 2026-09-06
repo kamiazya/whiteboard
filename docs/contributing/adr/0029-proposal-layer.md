@@ -149,6 +149,14 @@ Two tools were rejected because the same operation union would then be
 declared in two places, which is the drift `zod-schema-discipline` exists to
 prevent.
 
+**The default flip is the LAST increment, not the first.** The mode landed
+with `apply` as its default, because a tool whose proposals no surface shows
+and no verb accepts is a tool that cannot change a document at all. Flipping
+it is what finishes this ADR, and it is gated on decision 1 (a person can see
+a proposal) and decision 4 (a person can adopt one) being reachable. The end
+state above is unchanged; only the order is stated here, where a reader
+comparing the ADR to the code would otherwise read the gap as drift.
+
 ### 8. A proposal is bounded by one request
 
 The batch is what the agent produced in answer to one request — the unit at

@@ -433,6 +433,37 @@ async function main() {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 
+  // Propose mode (ADR-0029). Through a real MCP client, so the SDK validates
+  // the `proposed` payload against `proposalSchema` at runtime — the drift
+  // the type system cannot see, and the reason this step is here rather than
+  // only in a unit test.
+  const proposed = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'propose',
+    ops: [{ op: 'node.patch', id: 'target', patch: { x: 900 } }],
+  })
+  const change = proposed.proposed?.changes?.[0]
+  if (proposed.applied !== 0 || change?.op !== 'node.patch' || change?.assumed?.x !== 10) {
+    throw new Error(`propose returned unexpected shape: ${JSON.stringify(proposed)}`)
+  }
+  // The board itself must be untouched: a proposal that quietly applied
+  // would pass every assertion above.
+  const afterPropose = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  if (afterPropose.nodes.find((node) => node.id === 'target')?.x !== 10) {
+    throw new Error(`propose moved the board: ${JSON.stringify(afterPropose.nodes)}`)
+  }
+  await expectToolError(
+    'wb_canvas_edit',
+    { workspaceId: WORKSPACE_ID, documentId, mode: 'propose', ops: [{ op: 'tidy' }] },
+    'proposing a verb with no anchor',
+    'a proposal cannot carry this verb',
+  )
+  console.log('[e2e] wb_canvas_edit(mode:propose) → stored, board untouched, tidy refused')
+
   // Facet discovery: an agent learns the exact keys and payload contracts
   // rather than guessing them, which is what the writes below rely on.
   const registered = await callTool('wb_facet_list', {})
