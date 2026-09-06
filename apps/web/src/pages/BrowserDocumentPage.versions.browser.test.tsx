@@ -1,8 +1,10 @@
 import {
   documentContainers,
   projectWorkspaceDocument,
+  readMarkdownBody,
   readSpatialCanvas,
   writeCommentThread,
+  writeMarkdownBody,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -70,6 +72,29 @@ async function storedText(documentId: string): Promise<string | undefined> {
   const projected = record === null ? null : projectWorkspaceDocument(record, documentId)
   const node = projected === null ? undefined : readSpatialCanvas(projected).nodes[0]
   return node?.type === 'text' ? node.text : undefined
+}
+
+async function writeBody(documentId: string, body: string): Promise<void> {
+  const docs = new BrowserWorkspaceDocs()
+  const record = await docs.open(getBrowserWorkspaceId())
+  if (record === null) throw new Error('no record')
+  writeMarkdownBody(documentContainers(record, documentId), body)
+  await docs.save(getBrowserWorkspaceId(), record)
+}
+
+async function storedBody(documentId: string): Promise<string> {
+  const record = await new BrowserWorkspaceDocs().open(getBrowserWorkspaceId())
+  if (record === null) throw new Error('no record')
+  return readMarkdownBody(documentContainers(record, documentId))
+}
+
+async function openNotePage() {
+  const view = render(<BrowserDocumentPage initialPath="note-a" />)
+  await waitFor(() => expect(document.querySelector('.cm-content')).not.toBeNull(), {
+    timeout: 10_000,
+  })
+  await screen.findByRole('button', { name: 'Back to documents' }, { timeout: 5000 })
+  return view
 }
 
 async function openPage() {
@@ -232,6 +257,61 @@ describe('BrowserDocumentPage version history (browser)', () => {
       timeout: 5000,
     })
   })
+  it('a markdown note bookmarks a point and restores its body', async () => {
+    const index = new FoldingBrowserIndex()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'note-a',
+      kind: 'markdown',
+    })
+    await writeBody(documentId, '# first')
+
+    const view = await openNotePage()
+    // The same opener a canvas has, in the same segment: a version is a
+    // frontier of the workspace record, and a note lives in that record too.
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const panel = await screen.findByTestId('history-panel')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Bookmark this point' }))
+    await userEvent.fill(
+      await within(panel).findByRole('textbox', { name: 'Name this point' }),
+      'first draft',
+    )
+    await userEvent.keyboard('{Enter}')
+    await waitFor(() => expect(within(panel).getAllByTestId('version-row').length).toBe(1), {
+      timeout: 5000,
+    })
+
+    // The note moves on behind the page's back, then is reopened — a reload,
+    // so the page holds the later state.
+    view.unmount()
+    await writeBody(documentId, '# second')
+    expect(await storedBody(documentId)).toBe('# second')
+    await openNotePage()
+
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const reopened = await screen.findByTestId('history-panel')
+    await waitFor(() => expect(within(reopened).getAllByTestId('version-row').length).toBe(1), {
+      timeout: 5000,
+    })
+    const row = within(reopened).getAllByTestId('version-row')[0]
+    const restoreTarget = row?.querySelector('button')
+    if (!restoreTarget) throw new Error('the version row is not restorable')
+    await userEvent.click(restoreTarget)
+
+    // Look before applying, exactly as on a canvas.
+    const preview = await screen.findByTestId('document-preview')
+    await waitFor(() => expect(preview.textContent ?? '').toContain('first'))
+    expect(await storedBody(documentId)).toBe('# second')
+
+    const chrome = screen.getByRole('banner')
+    await userEvent.click(within(chrome).getByRole('button', { name: 'Restore this version' }))
+    await waitFor(async () => expect(await storedBody(documentId)).toBe('# first'), {
+      timeout: 5000,
+    })
+  })
+
   it('shows the picture the bookmark carries, without waiting for a reload', async () => {
     const index = new FoldingBrowserIndex()
     const workspaceId = getBrowserWorkspaceId()

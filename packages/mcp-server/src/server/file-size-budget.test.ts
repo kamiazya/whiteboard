@@ -157,13 +157,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // arrived and a document opened ON a variation kept naming the default one.
   // Most of the added lines is that reason — the bug is invisible in the
   // three lines of state that fix it.
-  // Raised again to 1014 by the SEARCH the URL sync now carries: one line of
+  // Raised again to 1028 by kind parity on the versions seam. Two lines pick
+  // the record seam by kind and supply the document's kind to it; the rest is
+  // the two findings behind them, neither recoverable from the code. A note's
+  // version ROWS were always written — a version is a frontier of the
+  // workspace record — and only the seam that reads and restores one was
+  // built from a backend a note never has. And `loadPast` asked the past
+  // STATE its kind, which a tree-hosted document keeps in its node meta, so
+  // the answer was always "not markdown": the fallback saved a canvas and
+  // drew a note an empty viewer.
+  // Raised again to 1031 by the SEARCH the URL sync now carries: one line of
   // wiring so a HEAD moved from the shared `?v=` banner refreshes the chip,
   // and three of reason. The reason is the whole entry — a `navigate` given a
   // pathname replaces the location, so the query a reader arrived with is
   // dropped by a repair they never asked for, and nothing about the call says
   // so.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1014,
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1031,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

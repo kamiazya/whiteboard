@@ -570,14 +570,26 @@ function useBrowserDocument(
   }, [sync.loaded])
 
   // The browser's version history for this document: rows in IndexedDB,
-  // restores through the backend holding the live record. Null while there
-  // is no spatial backend (a markdown document, or nothing loaded yet), in
-  // which case the save control is hidden rather than left to fall back onto
-  // the daemon's routes.
+  // restores through whichever seam holds the live workspace record.
+  //
+  // Which seam that is follows the KIND, and this is the one line the
+  // parity turned on. A version is a frontier of the workspace record, and
+  // both kinds live in the same record — but this was built from `backend`
+  // alone, which a markdown note deliberately never has, so a note's rows
+  // were written by the checkpoint scheduler and reachable by nothing. Null
+  // only while nothing is loaded, and then the control is hidden rather
+  // than left to fall back onto the daemon's routes.
+  const versionsRecord = backend ?? markdownDoc.records
   const versionsBackend = useMemo(
     () =>
-      backend === null ? null : createBrowserVersionsBackend({ backend, store: versionStore }),
-    [backend, versionStore],
+      versionsRecord === null
+        ? null
+        : createBrowserVersionsBackend({
+            record: versionsRecord,
+            store: versionStore,
+            kind: documentKind,
+          }),
+    [versionsRecord, versionStore, documentKind],
   )
   const versionsEnabled = versionsBackend !== null
 
@@ -933,19 +945,24 @@ function useBrowserDocument(
       menuTriggerRef: canvasOpsButtonRef,
       menuItems: (
         <>
-          <DropdownMenuItem
-            onSelect={() => {
-              // Text on the clipboard survives any chat/paste channel intact,
-              // which a binary download cannot — the phone-friendly way to
-              // hand the exact canvas (coordinates included) to a debugger.
-              void navigator.clipboard
-                ?.writeText(serializeSpatial(canvas, 'extended'))
-                .catch(() => {})
-            }}
-          >
-            <Braces aria-hidden="true" className="size-3.5" />
-            Copy as JSON Canvas
-          </DropdownMenuItem>
+          {/* Spatial only: `canvas` falls back to an empty document on a
+              markdown note, so this row would hand back a well-formed file
+              whose content is not the note's — under a verb saying it is. */}
+          {documentKind === 'spatial' && (
+            <DropdownMenuItem
+              onSelect={() => {
+                // Text on the clipboard survives any chat/paste channel intact,
+                // which a binary download cannot — the phone-friendly way to
+                // hand the exact canvas (coordinates included) to a debugger.
+                void navigator.clipboard
+                  ?.writeText(serializeSpatial(canvas, 'extended'))
+                  .catch(() => {})
+              }}
+            >
+              <Braces aria-hidden="true" className="size-3.5" />
+              Copy as JSON Canvas
+            </DropdownMenuItem>
+          )}
           <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
             <Copy aria-hidden="true" className="size-3.5" />
             Duplicate

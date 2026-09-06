@@ -138,10 +138,12 @@ async function openDocumentMenu(): Promise<void> {
   )
 }
 
-const displayRow = () =>
+const menuRow = (label: string) =>
   [...document.querySelectorAll('[role="menuitem"]')].find(
-    (item) => item.textContent?.trim() === 'Display…',
+    (item) => item.textContent?.trim() === label,
   )
+
+const displayRow = () => menuRow('Display…')
 
 describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   beforeEach(async () => {
@@ -283,6 +285,48 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     // The rest of the row does carry over: the hidden persistence fact rides
     // the same slot the spatial row uses.
     expect(document.querySelector('[data-testid="persistence-state"]')).toBeTruthy()
+  })
+
+  it('a markdown note offers no Copy as JSON Canvas - it holds no canvas', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+    render(<BrowserDocumentPage store={store} />)
+    await waitFor(() => {
+      expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
+    })
+
+    await openDocumentMenu()
+    await waitFor(() => {
+      expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    })
+    // Serialising a markdown note as JSON Canvas hands back the empty
+    // extended document the page's `canvas` fallback holds — a file whose
+    // content is not this note's, offered under a verb that says it is.
+    expect(menuRow('Copy as JSON Canvas')).toBeUndefined()
+    // The kind-agnostic rows do carry over, so this is a gate rather than an
+    // empty menu.
+    expect(menuRow('Duplicate')).toBeDefined()
+    expect(menuRow('Delete')).toBeDefined()
+  })
+
+  it('a markdown note reaches its own history, and can bookmark a point', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+    render(<BrowserDocumentPage store={store} />)
+    await waitFor(() => {
+      expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
+    })
+
+    // History is the DOCUMENT's, not the spatial editor's: a markdown note's
+    // versions are frontiers of the same workspace record a canvas's are.
+    const history = await screen.findByRole('button', { name: 'History' })
+    expect(history.closest('[data-testid="inspector-segment"]')).toBeTruthy()
+
+    await openDocumentMenu()
+    await waitFor(() => {
+      expect(document.querySelector('[role="menu"]')).not.toBeNull()
+    })
+    expect(menuRow('Bookmark this point…')).toBeDefined()
   })
 
   it("the title survives a remount and is the document's one name", async () => {
