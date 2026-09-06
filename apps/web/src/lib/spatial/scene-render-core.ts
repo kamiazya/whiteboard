@@ -30,7 +30,12 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  Proposal,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../theme.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
@@ -76,6 +81,12 @@ export interface RenderCanvasCoreOptions {
    * optimistic state holds.
    */
   readonly threads?: readonly CommentThread[]
+  /**
+   * This document's open proposals (ADR-0029 decision 1), drawn in place on
+   * the live canvas: an outline where each change would land and one bubble
+   * per proposal. Plain data, so it crosses to the layout worker unchanged.
+   */
+  readonly proposals?: readonly Proposal[]
 }
 
 export interface RenderedCanvas {
@@ -106,6 +117,7 @@ export function renderCanvasToSvgWith(
     commentObstacles: options.commentObstacles,
     showResolved: options.showResolved,
     threads: options.threads,
+    proposals: options.proposals,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

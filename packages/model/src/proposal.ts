@@ -191,6 +191,15 @@ export const proposedChangeSchema = z.discriminatedUnion('op', [
 export type ProposedChange = z.infer<typeof proposedChangeSchema>
 
 /**
+ * The arms whose subject is the CANVAS. `body.replace` is about a passage of
+ * prose, so anything judging or applying a change against a canvas takes this
+ * narrower type — the prose arm gets its own judge with the markdown surface,
+ * and until then its absence is visible in the types rather than hidden
+ * behind a verdict nobody computed.
+ */
+export type SpatialProposedChange = Exclude<ProposedChange, { op: 'body.replace' }>
+
+/**
  * The verbs the union carries, read off the schema so a new one cannot be
  * added without the tests that enumerate them noticing.
  */

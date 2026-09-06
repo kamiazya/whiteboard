@@ -80,6 +80,14 @@ export interface SpatialPalette {
    * distinct from every content node at a glance.
    */
   readonly comment: { readonly pin: SpatialNodeStyle; readonly bubble: SpatialNodeStyle }
+  /**
+   * The proposal layer's chrome (ADR-0029 decision 1). INDIGO on both modes,
+   * against the comment layer's amber: the two share a visual grammar on
+   * purpose, so hue is the whole of what separates "somebody said something
+   * about this" from "somebody wants this changed". Deliberately not red —
+   * a proposal is a suggestion awaiting a person, not an error.
+   */
+  readonly proposal: { readonly edge: string; readonly bubbleFill: string }
 }
 
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
@@ -129,6 +137,7 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
     pin: { fill: '#d97706', stroke: '#ffffff' },
     bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
+  proposal: { edge: '#4f46e5', bubbleFill: '#ffffff' },
 }
 
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a
@@ -177,4 +186,5 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
     pin: { fill: '#fbbf24', stroke: '#0a0a0a' },
     bubble: { fill: '#262626', stroke: '#fbbf24' },
   },
+  proposal: { edge: '#818cf8', bubbleFill: '#262626' },
 }

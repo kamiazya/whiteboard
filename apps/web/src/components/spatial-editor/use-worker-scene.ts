@@ -24,7 +24,7 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
   type FileRefLabel,
@@ -85,6 +85,8 @@ export function useWorkerScene(
     readonly showResolved?: boolean
     /** The document's conversations, for passage highlights (plain data, crosses to the worker). */
     readonly threads?: readonly CommentThread[]
+    /** This document's open proposals, drawn in place (ADR-0029 decision 1). */
+    readonly proposals?: readonly Proposal[]
   },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
   /**
@@ -113,6 +115,7 @@ export function useWorkerScene(
       base.suppressedBodyNodeIds,
       base.showResolved,
       base.threads,
+      base.proposals,
       fileSeamOptions,
     ],
   )
@@ -153,6 +156,7 @@ export function useWorkerScene(
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
       showResolved: options.showResolved,
       threads: options.threads,
+      proposals: options.proposals,
     }),
     [
       canvas,
@@ -164,6 +168,7 @@ export function useWorkerScene(
       options.suppressedBodyNodeIds,
       options.showResolved,
       options.threads,
+      options.proposals,
     ],
   )
 
@@ -234,6 +239,7 @@ export function useWorkerScene(
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
       showResolved: inputs.showResolved,
       threads: inputs.threads,
+      proposals: inputs.proposals,
     }
     worker.postMessage(request)
     return () => {

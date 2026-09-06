@@ -1,5 +1,10 @@
 // @vitest-environment node
-import type { CanvasComment, ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  ClipboardFragment,
+  ProposedChange,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
@@ -1086,5 +1091,71 @@ describe('set-node-facet', () => {
         payload: { kind: 'hexagon' },
       }),
     ).toEqual(base)
+  })
+})
+
+describe('decide-proposal', () => {
+  const canvas: SpatialCanvas = {
+    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' }],
+    edges: [],
+  }
+  const changes: readonly ProposedChange[] = [
+    {
+      id: 'node:a',
+      op: 'node.patch',
+      status: 'open',
+      nodeId: 'a',
+      patch: { x: 40 },
+      assumed: { x: 0 },
+    },
+    {
+      id: 'node:new',
+      op: 'node.add',
+      status: 'open',
+      node: { id: 'new', type: 'text', x: 300, y: 0, width: 60, height: 40, text: 'added' },
+    },
+  ]
+
+  it('adopting applies every change the card showed, as one value', () => {
+    const next = applyCommand(canvas, {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes,
+    })
+    expect(next.nodes[0]?.x).toBe(40)
+    expect(next.nodes.map((node) => node.id)).toEqual(['a', 'new'])
+    expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
+  })
+
+  it('dismissing leaves the board exactly as it was', () => {
+    expect(
+      applyCommand(canvas, {
+        kind: 'decide-proposal',
+        proposalId: 'p1',
+        decision: 'dismissed',
+        changes,
+      }),
+    ).toBe(canvas)
+  })
+
+  it('a passage change has no canvas meaning and is skipped rather than refused', () => {
+    const next = applyCommand(canvas, {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: [
+        {
+          id: 'body',
+          op: 'body.replace',
+          status: 'open',
+          anchor: { kind: 'text', quote: { exact: 'hello' }, start: 0, end: 5 },
+          text: 'goodbye',
+          assumed: 'hello',
+        },
+        ...changes,
+      ],
+    })
+    expect(next.nodes[0]?.x).toBe(40)
   })
 })

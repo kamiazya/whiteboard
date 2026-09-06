@@ -93,7 +93,10 @@ function relativeToRepo(absolutePath: string): string {
  * it is not.
  */
 const FILE_SIZE_GRANDFATHER: Record<string, number> = {
-  'apps/web/src/lib/spatial/commands.ts': 926,
+  // +34 for `decide-proposal` (ADR-0029 decision 4): the union arm with the
+  // reason its changes travel with the command, and a two-line fold over
+  // `applyCanvasChange` — what adopting MEANS lives in model, not here.
+  'apps/web/src/lib/spatial/commands.ts': 960,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -151,7 +154,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // here rather than as the page's own listener — its order against the edit
   // flush is load-bearing, and two independent listeners would leave that to
   // registration timing.
-  'apps/web/src/lib/document-sync-session.ts': 1391,
+  // +70 for the proposal plane: the publish channel beside annotations, and
+  // the two-plane write a decision is — statuses where the proposal lives,
+  // plus the canvas when it was adopted.
+  'apps/web/src/lib/document-sync-session.ts': 1461,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -202,14 +208,25 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // command building rather than the branch.
   'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
+  // Two layers grew this file, and the ceiling is the MEASURED total after
+  // both, not either branch's number:
+  //
   // +49: the comment pin carries how many messages its conversation holds —
   // the count run, its placement on the pin, and the `messagesByThread` the
   // layout derives from `threads`. The canvas was the last surface that did
   // not say it, so a reader crossing between it and the rail met the same
   // conversation described two ways.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1889,
+  //
+  // +207 for `composeProposals` and its two geometry helpers (ADR-0029
+  // decision 1): where a change would land, and the bubble saying how many
+  // are waiting. It reuses the comment layer's constants and placer rather
+  // than growing a second set.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2096,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2592,
+  // +131 for the proposal card's press discipline and its render: the
+  // bubble hit-test, the press remembered for the release, and the card
+  // itself — which is its own file, so what lands here is the wiring.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2723,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

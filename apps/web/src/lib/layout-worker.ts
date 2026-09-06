@@ -334,6 +334,7 @@ self.onmessage = async (
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
       showResolved: request.showResolved,
       threads: request.threads,
+      proposals: request.proposals,
     })
     const response: LayoutResponse = {
       type: 'laid-out',
