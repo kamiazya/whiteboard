@@ -578,16 +578,17 @@ jobs:
           path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
           if-no-files-found: warn
 
-  # The single required status check for this workflow. See
-  # tools/checks/src/ci-gate.mjs for why it exists and what it refuses.
+  # The single required status check for this workflow — require THIS and
+  # nothing else from ci.yml, and a shard count stops being a settings change.
+  # See tools/checks/src/ci-gate.mjs for what it refuses and why it judges the
+  # run's per-leg conclusions rather than `needs.<job>.result`.
   #
   # `if: always()` is load-bearing: without it a failed dependency SKIPS this
   # job, so the one check branch protection waits on never reports and the
   # merge blocks on an absent check rather than on the real failure.
   #
-  # Every ci.yml job must appear in `needs` — a forgotten entry is invisible,
-  # since nothing goes red, a job simply stops being gated. ci-gate.test.ts
-  # is what fails instead.
+  # Every ci.yml job must appear in `needs` — for ordering, and as the list the
+  # gate cross-checks the run against. ci-gate.test.ts fails on a missing one.
   ci-gate:
     if: always()
     needs:
@@ -604,10 +605,16 @@ jobs:
       - dry-run-docker
     runs-on: ubuntu-latest
     timeout-minutes: 5
+    # A job-level block REPLACES the workflow's `contents: read` rather than
+    # adding to it, so checkout's own permission is restated here.
+    permissions:
+      contents: read
+      actions: read
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
-      - name: Every gated job succeeded
+      - name: Every job in this run succeeded
         env:
           NEEDS_JSON: ${{ toJSON(needs) }}
+          GITHUB_TOKEN: ${{ github.token }}
         run: node tools/checks/src/ci-gate.mjs

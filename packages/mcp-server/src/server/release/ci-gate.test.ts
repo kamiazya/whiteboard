@@ -26,11 +26,24 @@ const { extractWorkflowJobs } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/ci-workflow-steps.mjs')).href
 )) as { extractWorkflowJobs: (yaml: string) => WorkflowJob[] }
 
-const { gateFailures, SKIPPABLE_JOBS } = (await import(
+interface RunJob {
+  name: string
+  status: string
+  conclusion: string | null
+}
+
+const { gateFailures, SKIPPABLE_JOBS, baseJobName } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/ci-gate.mjs')).href
 )) as {
-  gateFailures: (needs: unknown) => string[]
+  gateFailures: (input: { jobs: unknown; needed: string[]; gateJobName: string }) => string[]
   SKIPPABLE_JOBS: Record<string, string>
+  baseJobName: (name: string) => string
+}
+
+function fixture(which: 'red' | 'green'): RunJob[] {
+  return JSON.parse(
+    readFileSync(join(__dirname, '__fixtures__', `ci-run-jobs-${which}.json`), 'utf-8'),
+  ) as RunJob[]
 }
 
 const GATE_ID = 'ci-gate'
@@ -99,40 +112,79 @@ describe('the gate allows a skip only where the workflow can produce one', () =>
   })
 })
 
-describe('the gate refuses everything but success', () => {
-  const ok = { check: { result: 'success' }, 'test-jsdom': { result: 'success' } }
+describe('the gate judges the run, and refuses everything but success', () => {
+  const needed = () => gate?.needs ?? []
+  const run = (jobs: unknown) => gateFailures({ jobs, needed: needed(), gateJobName: 'ci-gate' })
 
-  it('passes when every job succeeded', () => {
-    expect(gateFailures(ok)).toEqual([])
+  it('reads a leg back to the job it belongs to', () => {
+    expect(baseJobName('test-jsdom (1)')).toBe('test-jsdom')
+    expect(baseJobName('verify')).toBe('verify')
   })
 
-  it('fails on a failed job', () => {
-    expect(gateFailures({ ...ok, verify: { result: 'failure' } })).toEqual(['verify: failure'])
+  it('passes a real green run of this workflow', () => {
+    // Captured from an actual run, so the fixture cannot drift into a shape
+    // the gate happens to like.
+    expect(run(fixture('green'))).toEqual([])
   })
 
-  it('fails on a cancelled job', () => {
-    expect(gateFailures({ ...ok, verify: { result: 'cancelled' } })).toEqual(['verify: cancelled'])
+  it('fails a real red run of this workflow', () => {
+    // The same capture from the run whose dry-run-docker job really failed.
+    // This is what settles the question the `needs` form could not: the gate
+    // sees per-leg conclusions, so whether a matrix job's single `needs`
+    // result turns to `failure` never arises.
+    expect(run(fixture('red'))).toEqual(['dry-run-docker: failure'])
   })
 
-  it('fails on a skip it was not told to expect', () => {
+  it('ignores its own job, which is still running when it looks', () => {
+    const jobs = fixture('green').map((job) =>
+      job.name === 'ci-gate' ? { ...job, status: 'in_progress', conclusion: null } : job,
+    )
+    expect(run(jobs)).toEqual([])
+  })
+
+  it('fails a job that had not finished', () => {
+    const jobs = fixture('green').map((job) =>
+      job.name === 'verify' ? { ...job, status: 'in_progress', conclusion: null } : job,
+    )
+    expect(run(jobs)).toEqual(['verify: still in_progress when the gate ran'])
+  })
+
+  it('fails a cancelled job', () => {
+    const jobs = fixture('green').map((job) =>
+      job.name === 'verify' ? { ...job, conclusion: 'cancelled' } : job,
+    )
+    expect(run(jobs)).toEqual(['verify: cancelled'])
+  })
+
+  it('fails a skip it was not told to expect', () => {
     // The one that matters: a job that fails to start reports `skipped`, so a
     // blanket allowance is a gate that passes when the workflow is broken.
-    expect(gateFailures({ ...ok, verify: { result: 'skipped' } })).toHaveLength(1)
+    const jobs = fixture('green').map((job) =>
+      job.name === 'verify' ? { ...job, conclusion: 'skipped' } : job,
+    )
+    expect(run(jobs)).toHaveLength(1)
   })
 
-  it('passes a skip that is declared', () => {
+  it('passes a skip that is declared, including on a leg', () => {
     const declared = Object.keys(SKIPPABLE_JOBS)[0] as string
-    expect(gateFailures({ ...ok, [declared]: { result: 'skipped' } })).toEqual([])
+    const jobs = fixture('green').map((job) =>
+      baseJobName(job.name) === declared ? { ...job, conclusion: 'skipped' } : job,
+    )
+    expect(run(jobs)).toEqual([])
   })
 
-  it('fails on a payload that carried no results at all', () => {
+  it('fails when a declared job is missing from the run entirely', () => {
+    // A job that silently stopped running would otherwise leave the gate green
+    // over a shrinking set.
+    const jobs = fixture('green').filter((job) => baseJobName(job.name) !== 'verify')
+    expect(run(jobs)).toEqual(['verify: declared in `needs` but absent from the run'])
+  })
+
+  it('fails on a run list that carried nothing to check', () => {
     // "No problems found" over nothing reads exactly like a pass.
-    expect(gateFailures({})).toHaveLength(1)
-    expect(gateFailures(null)).toHaveLength(1)
-    expect(gateFailures('{}')).toHaveLength(1)
-  })
-
-  it('fails on a job whose result key is missing', () => {
-    expect(gateFailures({ ...ok, verify: {} })).toEqual(['verify: no result'])
+    expect(run([])).toHaveLength(1)
+    expect(run([{ name: 'ci-gate', status: 'in_progress', conclusion: null }])).toHaveLength(1)
+    expect(run(null)).toHaveLength(1)
+    expect(run('[]')).toHaveLength(1)
   })
 })

@@ -104,7 +104,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // aggregate gate goes quietly wrong (a job missing from `needs`, a blanket
   // `skipped`), since the reader who adds a job is not the reader who opens
   // ci-gate.mjs. The file had 117 characters of headroom, so this bucket is
-  // bought by about 480 characters of prose, not by drift — a coarse
+  // bought by about 515 characters of prose, not by drift — a coarse
   // instrument charges the whole step to whoever crosses it.
   '.claude/rules/dev-flow.md': 27,
   // 14 since the CI-flakes section gained flake-watch's pointer — the

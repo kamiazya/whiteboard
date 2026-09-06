@@ -1,0 +1,72 @@
+[
+  {
+    "name": "check",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "sbom-npm",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "packaged-smoke",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "stress-changed-tests",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "test-jsdom (1)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "dry-run-docker",
+    "status": "completed",
+    "conclusion": "failure"
+  },
+  {
+    "name": "test-jsdom (2)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "test-unit (1)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "test-browser (1)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "test-unit (2)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "widget-smoke",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "test-browser (2)",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "verify",
+    "status": "completed",
+    "conclusion": "success"
+  },
+  {
+    "name": "dry-run-npm",
+    "status": "completed",
+    "conclusion": "success"
+  }
+]
