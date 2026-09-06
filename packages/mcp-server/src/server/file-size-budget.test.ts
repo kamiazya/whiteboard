@@ -178,7 +178,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // pathname replaces the location, so the query a reader arrived with is
   // dropped by a repair they never asked for, and nothing about the call says
   // so.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1031,
+  // +2 for the shared thread-write door: this page still chooses between the
+  // markdown host and the spatial write per verb, so what it saves is the
+  // command building rather than the branch.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
