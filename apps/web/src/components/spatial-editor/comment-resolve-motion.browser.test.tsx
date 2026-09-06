@@ -69,3 +69,59 @@ it('holds the pin on screen ramping out when a conversation resolves, then lets 
   // around.
   await vi.waitFor(() => expect(pinIn(container)).toBeNull(), { timeout: 4000 })
 })
+
+/**
+ * The ramp has to survive the canvas re-fitting around what is left.
+ *
+ * The editor's SVG document IS the scene's bounds — `documentEnvelope` sets
+ * `viewBox`, `width` and `height` from `sceneBounds`, and the container is
+ * placed at its origin. So a conversation sitting on the OUTER edge takes
+ * the envelope with it when it leaves: measured, `40 60 490 170` became
+ * `40 150 200 80` on one resolve, putting the departing chrome outside the
+ * new viewport and under the UA's default `overflow: hidden`.
+ *
+ * That clipped the ramp precisely where a comment usually sits — off to the
+ * side of everything — while every unit test stayed green, because they
+ * assert that the animation EXISTS and not that anything is painted.
+ *
+ * Letting the surface overflow is sound rather than a patch over it: the
+ * viewBox is `sceneBounds`, the union of everything in the scene, so no
+ * scene content is ever outside it. A ghost is the only thing that can be.
+ */
+it('keeps a conversation on the outer edge painting while it ramps, past the re-fitted viewport', async () => {
+  const outer: SpatialCanvas = {
+    nodes: [{ id: 'n1', type: 'text', x: 40, y: 150, width: 200, height: 80, text: 'The plan' }],
+    edges: [],
+    'x-whiteboard': { comments: [{ ...COMMENT, x: 300, y: 70, resolved: false }] },
+  }
+  const view = (resolved: boolean) => (
+    <div style={{ width: 520, height: 300 }}>
+      <SpatialEditor
+        defaultTool="select"
+        canvas={{
+          ...outer,
+          'x-whiteboard': { comments: [{ ...COMMENT, x: 300, y: 70, resolved }] },
+        }}
+        createId={() => 'id-1'}
+        onChange={vi.fn()}
+        theme="light"
+      />
+    </div>
+  )
+  const { container, rerender } = render(view(false))
+  await vi.waitFor(() => expect(pinIn(container)).not.toBeNull(), { timeout: 4000 })
+  const root = container.querySelector('[data-testid="canvas-content"] svg')
+  if (!(root instanceof SVGSVGElement)) throw new Error('no mounted root')
+
+  rerender(view(true))
+  const leaving = pinIn(container)
+  if (leaving === null) throw new Error('the pin left without a ramp')
+
+  // The two halves of the claim. The pin really is outside the re-fitted
+  // viewport — so this is the clipped case and not a fixture that avoids
+  // it — and the surface is set to draw past its viewport anyway.
+  const pinBox = leaving.getBoundingClientRect()
+  const rootBox = root.getBoundingClientRect()
+  expect(pinBox.bottom).toBeLessThanOrEqual(rootBox.top)
+  expect(getComputedStyle(root).overflow).toBe('visible')
+})

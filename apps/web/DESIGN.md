@@ -736,20 +736,62 @@ Not collapsed under `prefers-reduced-motion`, deliberately: the global floor
 in `index.css` already flattens the movement, and a reader who asked for
 less motion still has to see what their press did.
 
-**The canvas PIN's transition is not in this, and the reason took two
-corrections to get right.** The first answer — that it could live in the web
-app without touching the renderer — was wrong. The second, that
-`canvas-render` emits no handle for a scene node, was also wrong: that was
-true of the plain serializer, and both the editor and the preview mount the
-KEYED projection, whose groups are `<g data-wb-key="…">` keyed by the scene
-node's own id. The pin IS selectable, as `[data-wb-key$="/pin"]`.
+**The canvas PIN ramps too, and getting there took three corrections.** The
+first answer — that it could live in the web app without touching the
+renderer — was wrong. The second, that `canvas-render` emits no handle for a
+scene node, was also wrong: that was true of the plain serializer, and both
+the editor and the preview mount the KEYED projection, whose groups are
+`<g data-wb-key="…">` keyed by the scene node's own id.
 
-What actually blocks it is `keyed-svg-patcher`: a group whose bytes change
-is REPLACED, which is the continuity break it already animates position
-across. A resolve changes the pin's appearance, so the element is swapped
-and a CSS transition on it never runs. Cross-fading a replaced group is a
-change to machinery every canvas node and the markdown preview share, so it
-is its own increment rather than a rider on this one.
+The third correction is the one that changed the design. This paragraph used
+to say the blocker was `keyed-svg-patcher` REPLACING a group whose bytes
+change, and that a resolve is an appearance change. It is not, under the
+default `showResolved`: measured on a real layout, resolving a conversation
+reports its pin, count, leader and whole bubble as **GONE**, not changed —
+`layoutSpatialCanvas` stops composing them. Only with the toggle ON is it a
+recolour. Both were cuts, and the fix had to cover both.
+
+So the patcher ramps opacity for the groups `canvas-render` marks as the
+annotation layer, on arrival, on departure and on a replace in place.
+Three things that scoping and that scoping alone buy:
+
+- **The mark comes from the producer, never from the key's shape.** A stored
+  comment id may contain a `/` exactly like a document node id can — the
+  same trap `ShapeSceneNode.commentChrome` exists to avoid in `sceneDigest`.
+  `sceneEntries` answers it in the walk that already assigns keys, so
+  ownership carries it to the count on a pin and the body in a bubble,
+  neither of which has an id to be marked by.
+- **Everything else keeps cutting.** A document group replaced in place is a
+  keystroke inside a node; ramping those would ghost while somebody types.
+- **A LAYER swap is not an edit.** The editor patches one container from two
+  producers, and both swaps reach the patcher as a removal. The drag
+  backdrop is the obvious one; the second is not — a dragged comment is
+  taken out of the COMMITTED render by `keyedWithoutPrefix`, so grabbing a
+  pin left a fading copy at the anchor the pointer had just left, under the
+  preview carrying it. `update(next, { animate: false })` says which, and
+  `comment-move.browser.test.tsx` is what caught the miss.
+
+Two things measurement corrected after the mechanism worked:
+
+- **The easing.** `--motion-ease-out` is shaped for a MOVE — nearly all its
+  travel is in the first fifth so an object settles gently — and on opacity
+  that hides the event: captured in a real browser, the pin was 65% faded
+  40ms in and invisible by 110ms, so a declared 220ms ramp spent its second
+  half on a hundredth of a percent. Leaving accelerates and arriving
+  decelerates instead; the scrub now reads 1.00 / 0.88 / 0.57 / 0.14 at
+  0 / 60 / 130 / 200ms. Photographing motion needs the animation PAUSED and
+  scrubbed — `page.screenshot` is asynchronous, and a frame taken by
+  sleeping 40ms was really taken after the ramp had finished, which produced
+  a figure showing an empty canvas while `getComputedStyle` read 0.96.
+- **The clip.** The editor's SVG document IS `sceneBounds`, so resolving the
+  OUTERMOST conversation re-fits the element around what is left — measured,
+  `40 60 490 170` became `40 150 200 80` — and the departing chrome landed
+  outside it under the UA's default `overflow: hidden`. That clipped the
+  ramp exactly where a comment usually sits, while every unit test stayed
+  green: they assert the animation EXISTS, not that anything is painted.
+  `.canvas-surface > svg { overflow: visible }` is sound rather than a
+  patch — the viewBox is the union of everything in the scene, so a ghost is
+  the only thing that can ever be outside it.
 
 **The rail's verbs are icon-first, and the status dot IS the Resolve
 toggle.** "Object-action surfaces are icon-first" below was written, the

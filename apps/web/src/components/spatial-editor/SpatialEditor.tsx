@@ -2269,6 +2269,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           >
             <div
               data-testid="canvas-content"
+              className="canvas-surface"
               style={{
                 position: 'absolute',
                 left: (dragStatic?.bounds ?? bounds).x,

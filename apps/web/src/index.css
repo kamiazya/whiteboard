@@ -352,6 +352,26 @@
    * Resolve toggle, so hovering or focusing its button previews what the
    * press does, and a resolved conversation keeps it shown.
    */
+  /**
+   * The surface draws PAST its own viewport, which is what lets a
+   * conversation ramp out from the outer edge of the canvas.
+   *
+   * The mounted document IS the scene's bounds (`documentEnvelope` sets
+   * viewBox/width/height from `sceneBounds`, and the container sits at its
+   * origin), so resolving a comment that was the outermost thing re-fits
+   * the whole element around what is left — measured, `40 60 490 170`
+   * became `40 150 200 80` — and the departing chrome lands outside it.
+   * Under the UA's default `overflow: hidden` the ramp is then clipped
+   * away in exactly the place a comment usually sits.
+   *
+   * Sound rather than a workaround: the viewBox is the union of everything
+   * in the scene, so no scene content is ever outside it. What the patcher
+   * keeps alive for the length of a ramp is the only thing that can be.
+   */
+  .canvas-surface > svg {
+    overflow: visible;
+  }
+
   .annotation-dot {
     display: grid;
     place-items: center;
