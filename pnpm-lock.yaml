@@ -179,6 +179,9 @@ importers:
       '@kamiazya/whiteboard-facet-ui':
         specifier: workspace:*
         version: link:../../packages/facet-ui
+      '@kamiazya/whiteboard-history':
+        specifier: workspace:*
+        version: link:../../packages/history
       '@kamiazya/whiteboard-loro-adapter':
         specifier: workspace:*
         version: link:../../packages/loro-adapter
@@ -492,6 +495,9 @@ importers:
 
   packages/daemon-client:
     dependencies:
+      '@kamiazya/whiteboard-history':
+        specifier: workspace:*
+        version: link:../history
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
@@ -573,6 +579,34 @@ importers:
       zod:
         specifier: 'catalog:'
         version: 4.4.3
+
+  packages/history:
+    dependencies:
+      '@kamiazya/whiteboard-loro-adapter':
+        specifier: workspace:*
+        version: link:../loro-adapter
+      '@kamiazya/whiteboard-model':
+        specifier: workspace:*
+        version: link:../model
+      loro-crdt:
+        specifier: 'catalog:'
+        version: 1.13.6
+      zod:
+        specifier: 'catalog:'
+        version: 4.4.3
+    devDependencies:
+      '@fast-check/vitest':
+        specifier: ^0.4.1
+        version: 0.4.1(vitest@5.0.0)
+      fast-check:
+        specifier: ^4.7.0
+        version: 4.8.0
+      typescript:
+        specifier: 'catalog:'
+        version: 6.0.3
+      vitest:
+        specifier: 'catalog:'
+        version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(happy-dom@20.9.0)(jsdom@30.0.1(canvas@3.2.3))(msw@2.15.0(@types/node@24.13.1)(typescript@6.0.3))(vite@8.2.0(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
 
   packages/loro-adapter:
     dependencies:
@@ -704,6 +738,9 @@ importers:
       '@kamiazya/whiteboard-daemon-client':
         specifier: workspace:*
         version: link:../daemon-client
+      '@kamiazya/whiteboard-history':
+        specifier: workspace:*
+        version: link:../history
       '@kamiazya/whiteboard-loro-adapter':
         specifier: workspace:*
         version: link:../loro-adapter

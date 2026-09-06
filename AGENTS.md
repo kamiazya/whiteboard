@@ -222,8 +222,8 @@ Before closing a change:
 - Run the suites for the AREA you touched. **Full suites are CI's job, not a
   local step** (user decision, 2026-09-05): CI runs everything on every push
   at ~6min wall, so a local full run is the same work twice — push, then
-  watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for an
-  offline or pre-release check-job answer, and `pnpm test:browser` when the
+  watch the run (Monitor / `steward`). Exceptions: `pnpm check:local` for a
+  pre-release check-job answer, and `pnpm test:browser` when the
   change touches real-browser behavior.
 - Resolve any `pnpm knip` finding one of three ways before closing: delete the dead code, drop the unused `export`, or register it in `knip.jsonc` as an intentional public surface with a reason comment.
 - If the change can affect typing or packaging, also run:

@@ -398,11 +398,11 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   bookmarkArmed: 'cleared on switch',
   currentScopeRef:
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
+  versionRefreshSignal:
+    'no subject: a counter that nudges the History column to refetch; the list it refreshes is the column’s own, and the column remounts per document',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
-  versionRefreshSignal:
-    'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
   // whatever document the controller currently holds. Confirmed after a
   // switch, it deleted the document that had arrived.
@@ -447,8 +447,6 @@ const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   creating: 'no subject: an in-flight flag for this screen’s own create submit',
   branchRefreshSignal:
     'no subject: a counter that nudges HeaderBranchChip to refetch on an externally observed HEAD change; the chip is keyed on the document itself and refetches on a switch without this',
-  versionRefreshSignal:
-    'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   connectionsRefresh:
     'no subject: a counter that re-runs the backlinks fetch; that fetch is keyed on the document id and nulls the value first, so the counter decides WHEN to refetch, never WHAT is shown',
 

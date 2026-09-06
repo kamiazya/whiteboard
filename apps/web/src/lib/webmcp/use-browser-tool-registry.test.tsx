@@ -2,7 +2,6 @@ import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createWhiteboardCommands } from '../commands/create-commands.js'
 import type { WhiteboardCommands } from '../commands/index.js'
-import { BROWSER_CAPABILITIES } from '../provider.js'
 import { webMcpTools } from './tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from './use-browser-tool-registry.js'
 import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
@@ -259,7 +258,7 @@ describe('useBrowserToolRegistry', () => {
     // real command layer via fakeCommands()'s sibling, createWhiteboardCommands.
     const realCommands = createWhiteboardCommands({
       current: {
-        provider: { kind: 'browser', capabilities: BROWSER_CAPABILITIES },
+        provider: { kind: 'browser' },
         canvas: { documentId: 'c1', name: 'c1' },
       },
     })

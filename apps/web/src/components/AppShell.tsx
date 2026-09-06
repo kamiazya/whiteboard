@@ -219,6 +219,22 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   if (fullscreen.isFullscreen) {
     // Both chrome rows are gone — the extra space is what fullscreen is
     // FOR — so the way back has to float. Escape still works natively.
+    //
+    // It floats at the BOTTOM, because rotating puts the device's camera edge
+    // on a SIDE of the screen and never its bottom. The web exposes the safe
+    // area only as a uniform band per edge, never the cutout's position along
+    // it, so a control on the top edge must either collide with the punch-hole
+    // or step back from the whole band on every device that has one — both
+    // were seen on a phone. What is left down here is the home indicator, a
+    // band that genuinely IS the full width. Left, since the canvas keeps its
+    // overview at bottom-right.
+    //
+    // Lifted 70px because the bottom edge is where the editing surfaces keep a
+    // strip: the canvas dock's own 0.75rem offset, its 46px, and the gap
+    // again. That dock is content-sized and centred, so its left edge walks
+    // toward the corner as the viewport narrows — x=33 at 360px CSS, against
+    // this control's 12..48. One offset also clears the markdown formatting
+    // bar (44px), so no page has to say anything about it.
     return (
       <button
         ref={exitFullscreenRef}
@@ -228,7 +244,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         onClick={fullscreen.toggle}
         className={cn(
           HEADER_BUTTON_CLASS,
-          'fixed top-3 right-3 z-50 border bg-background/80 shadow-sm backdrop-blur',
+          'fixed bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
         )}
       >
         <Minimize2 aria-hidden="true" className="size-4" />
@@ -237,7 +253,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   }
 
   return (
-    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3 pointer-coarse:h-12">
+    <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-chrome pointer-coarse:h-12">
       {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
           Switcher"): it names the workspace in its accessible name, opens the
           popover that lists the others, and carries the session state when a

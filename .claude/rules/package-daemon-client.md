@@ -32,7 +32,9 @@ paths:
 ## Dependency rules
 
 model + server-core (the version-entry/operator contracts published by the
-routes), zod, and the OpenTelemetry browser SDK set. DOM globals are this
+routes), history (the branch schema the `/branches` contract re-exports —
+what a branch IS is the mechanic's, not the wire's), zod, and the
+OpenTelemetry browser SDK set. DOM globals are this
 package's normal job (`WebSocket`/`EventSource`/`fetch`) — exempted as
 `dom-global` in `architecture-map.ts`, the same carve-out canvas-viewer has.
 

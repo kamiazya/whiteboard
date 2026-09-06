@@ -169,9 +169,65 @@ shared page, keeper-only chrome is rendered by its keeper page and no other.
 The `spatial-pane-conformance` scan is deleted — with one render site there
 is no second prop set to drift.
 
-Named follow-up: the keeper pages themselves become two implementations of
-one `DocumentKeeper` contract behind a single `DocumentPage` entry, with one
-contract suite run against both, so App selects a keeper rather than a page.
-The markdown body's two write paths (the browser hook's own scheduler versus
-the sync session) are a separate increment: unifying them changes when a
-save lands, and that is judged by measurement, not by refactor.
+The keeper pages are two implementations of one `DocumentKeeper` contract
+(`pages/document-keeper.ts`): a hook that runs the keeper's controller, sync
+backend, body and versions and answers either the model or a terminal screen
+of its own (its skeleton, a degraded read, an empty workspace). `DocumentPage`
+is the single entry — it takes a keeper and that keeper's props, owns the
+history column's refresh signal, and renders the body from the answer.
+`BrowserDocumentPage` / `DaemonDocumentPage` remain as the keeper modules,
+each exporting its keeper and the page bound to it, so `App`'s lazy chunks,
+the bundle-size gate's `daemon-document-*` name and every guard that names
+the two files by path are unchanged.
+
+One contract suite, `test-utils/document-page.contract.tsx`, runs the scenarios
+the body owns against both keepers from a fixture each supplies (how to mount
+open on a set of documents, what its picker labels a document, how an open is
+observed). Scenarios that were written twice — theme threading, WebMCP
+registration, file-reference identity — run from there; what stays in a
+keeper's own test file is where the keepers deliberately differ (an unknown
+reference is a no-op on the browser and a legacy path on the daemon; a daemon
+workspace can resolve to zero documents).
+
+Named follow-up: the markdown body's two write paths (the browser hook's own
+scheduler versus the sync session) are a separate increment — unifying them
+changes when a save lands, and that is judged by measurement, not by refactor.
+
+## Addendum (2026-09-05): the capability gate dissolved, and what replaced it
+
+Decision 1's "capability-gated chrome" no longer describes what ships. The
+gate is gone — not loosened, removed — because the map it read became empty.
+
+Each flag left for the same reason, and the sequence is the argument:
+`workspaces` when the browser keeper stopped being definitionally
+single-workspace ([ADR-0019](0019-workspace-identity.md)), `versions` when it
+kept its own history, `branches` when it kept its variations on the workspace
+record, and `merge` when it committed one. A flag both keepers set the same
+way gates nothing, and the copy built on it promises a difference that is not
+there. With the last one gone `WhiteboardCapabilities` had no members, so the
+map went with it rather than standing as a shape waiting for a difference to
+appear. `ProviderState` now says which keeper answers and nothing else.
+
+This does not retract the decision — it records that the decision's own
+premise expired. The premise was Context's first bullet: "Branches, the
+version-history timeline, and the branch banner / merge toast are daemon-only
+concepts; browser-local has no equivalent state." That is false now. Every one
+of them is state the browser keeper keeps, and the ADR's real subject — ONE
+page rather than two — is what survived and is now unconditional.
+
+What replaced the flags is the part worth carrying forward: **where the
+keepers still differ, the difference is a fact about a DOCUMENT or a PANEL,
+not about a keeper**, answered where it is known rather than at the provider.
+`BranchesBackend`'s `hasBranches` says a markdown body has no record-holding
+backend and therefore no variations — which is per document, and no
+provider-level flag could ever have said it. `VersionTimelineCapabilities`
+says the browser's version rows carry no branch to lane by. Each is answered
+by something that cannot forget to mention it, which a flag threaded through
+four components as an optional prop defaulting to `true` structurally could.
+
+Deleted with the map: `CapabilityTeaser` (chrome that existed to explain an
+absence there is no longer one of) and `provider.capability-reach.test.ts`
+(the guard that refused a flag both keepers agree on — it had nothing left to
+judge, and an empty map kept "for later" is the one thing it could never have
+refused). `keeper-parity.test.ts` loses its `capability` answer for the same
+reason; a real declared difference would bring both back together.

@@ -67,6 +67,7 @@ describe('docs/ contract', () => {
       'packages/search': 'search node',
       'packages/server-core': 'server-core',
       'packages/workspace-index': 'workspace-index',
+      'packages/history': 'history',
       'packages/canvas-viewer': 'canvas-viewer',
       'packages/daemon-client': 'daemon-client',
       'apps/web': 'web',
@@ -276,6 +277,7 @@ describe('docs/ contract', () => {
       'twenty-one',
       'twenty-two',
       'twenty-three',
+      'twenty-four',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]

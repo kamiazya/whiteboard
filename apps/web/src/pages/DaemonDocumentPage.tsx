@@ -8,10 +8,9 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -20,6 +19,7 @@ import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { Button } from '../components/ui/button.js'
 import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
+import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
@@ -28,7 +28,7 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { type BranchMeta, branchesApi } from '../lib/branches-backend.js'
+import { type BranchMeta, createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -40,7 +40,6 @@ import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
-import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { scheduleReplicaPush, scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
@@ -50,6 +49,11 @@ import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { DocumentPage } from './DocumentPage.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
+import type {
+  DocumentKeeper,
+  DocumentKeeperAnswer,
+  DocumentKeeperEvents,
+} from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
@@ -65,7 +69,6 @@ export interface DaemonDocumentPageProps {
   // (DaemonBackend's wsToken); when the #wb= flow also seeded
   // window.__WHITEBOARD_DAEMON_TOKEN__, that global wins for the WS.
   token?: string
-  capabilities?: WhiteboardCapabilities
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
@@ -76,24 +79,31 @@ export interface DaemonDocumentPageProps {
 }
 
 /**
- * The daemon keeper's document page: the controller over the daemon's REST
- * routes, the sync session over a WebSocket or SSE backend, the markdown
- * body off that same session, and the daemon's version rows — supplied to
- * the shared `DocumentPage` as one model (ADR-0004 decision 2: the
- * controller layer stays capability-selected, the page does not).
+ * The daemon keeper: the controller over the daemon's REST routes, the sync
+ * session over a WebSocket or SSE backend, the markdown body off that same
+ * session, and the daemon's version rows — answered to the shared
+ * `DocumentPage` as one model (ADR-0004 decision 2: the controller layer
+ * stays capability-selected, the page does not).
  */
-export function DaemonDocumentPage({
-  daemonBaseUrl,
-  workspaceId,
-  path,
-  token,
-  capabilities = DAEMON_CAPABILITIES,
-  createBackend,
-  onNavigateBack,
-}: DaemonDocumentPageProps) {
+function useDaemonDocument(
+  {
+    daemonBaseUrl,
+    workspaceId,
+    path,
+    token,
+    createBackend,
+    onNavigateBack,
+  }: DaemonDocumentPageProps,
+  events: DocumentKeeperEvents,
+): DocumentKeeperAnswer {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
   // pairing payload, so this never needs to change once mounted.
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
+  // This keeper's branches, over the same authorized fetch: the one supplier
+  // for the `?v=` preview below and for every consumer under the provider
+  // (chip, banner, dialog), so a hosted page paired to a loopback daemon
+  // cannot have half of them fall back to its own origin.
+  const branches = useMemo(() => createDaemonBranchesBackend(daemonFetch), [daemonFetch])
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -180,16 +190,15 @@ export function DaemonDocumentPage({
   }, [setSearchParams])
 
   useEffect(() => {
-    if (!canvas || variationParam === null || !capabilities.branches) {
+    if (!canvas || variationParam === null) {
       setVariationPreview(null)
       return
     }
     const { workspaceId: wsId, path: docPath } = canvas
     let cancelled = false
-    const api = branchesApi(wsId, docPath, daemonFetch)
     void (async () => {
       try {
-        const state = await api.list()
+        const state = await branches.list(wsId, docPath)
         if (cancelled) return
         if (variationParam === 'main' || variationParam === state.head) {
           clearVariationParam()
@@ -200,7 +209,7 @@ export function DaemonDocumentPage({
           clearVariationParam()
           return
         }
-        const past = await api.loadDocument(variationParam)
+        const past = await branches.loadDocument(wsId, docPath, variationParam)
         if (cancelled) return
         if (past === null) {
           setVariationNotice(`Variation «${variationParam}» could not be read`)
@@ -231,8 +240,7 @@ export function DaemonDocumentPage({
     canvas?.workspaceId,
     canvas?.path,
     variationParam,
-    capabilities.branches,
-    daemonFetch,
+    branches,
     clearVariationParam,
     branchRefreshSignal,
   ])
@@ -242,18 +250,14 @@ export function DaemonDocumentPage({
     const { workspaceId: wsId, path: docPath } = canvas
     void (async () => {
       try {
-        await branchesApi(wsId, docPath, daemonFetch).setHead(variationPreview.name)
+        await branches.setHead(wsId, docPath, variationPreview.name)
         setBranchRefreshSignal((n) => n + 1)
         clearVariationParam()
       } catch {
         setVariationNotice('Switching to this variation failed')
       }
     })()
-  }, [canvas, variationPreview, daemonFetch, clearVariationParam])
-  // Bumped on any version_created broadcast (covers this button's own save,
-  // MCP tool saves, and other peers) so an open VersionTimeline updates
-  // without waiting for its 15s poll.
-  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  }, [canvas, variationPreview, branches, clearVariationParam])
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -371,7 +375,9 @@ export function DaemonDocumentPage({
       : { contentDocumentId: backendState.contentDocumentId }),
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
-    onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
+    // Any version_created broadcast — this page's own save, MCP tool saves,
+    // other peers — re-reads the page's history column.
+    onVersionCreated: events.onVersionCreated,
     onViewportRequest: (payload) => applyViewportRequest(payload, spatialEditorRef.current),
     onAgentActivity: (payload) => reportAgentActivity(payload),
     identity: canvas ?? undefined,
@@ -628,11 +634,11 @@ export function DaemonDocumentPage({
   })
 
   if (pageState.kind === 'loading') {
-    return <DocumentPageSkeleton label="Connecting to daemon" />
+    return { kind: 'terminal', node: <DocumentPageSkeleton label="Connecting to daemon" /> }
   }
 
   if (pageState.kind === 'load-degraded') {
-    return <LoadDegradedView message={pageState.message} />
+    return { kind: 'terminal', node: <LoadDegradedView message={pageState.message} /> }
   }
 
   const documentKey = canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'
@@ -713,7 +719,6 @@ export function DaemonDocumentPage({
     documentKey,
     documentKind,
     srTitle: 'Whiteboard (daemon)',
-    capabilities,
     sync,
     markdown: {
       body: markdownBody,
@@ -747,7 +752,7 @@ export function DaemonDocumentPage({
     overlayTitle: canvas?.path ?? 'Untitled',
     exportFilenameBase: canvas?.path ?? 'canvas',
     commands: {
-      provider: { kind: 'daemon', daemonBaseUrl, capabilities },
+      provider: { kind: 'daemon', daemonBaseUrl },
       // The daemon canvas summary carries no display name yet (only
       // path/updatedAt) — the path doubles as `name` until that changes.
       canvas:
@@ -788,8 +793,7 @@ export function DaemonDocumentPage({
           versionId: parsed.data.version.id,
         }
       },
-      refreshSignal: versionRefreshSignal,
-      announceRefresh: () => setVersionRefreshSignal((n) => n + 1),
+      announceRefresh: events.onVersionCreated,
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this save must dispatch the same
@@ -845,7 +849,7 @@ export function DaemonDocumentPage({
     slots: {
       headerExtras: (
         <>
-          {capabilities.branches && canvas && variationPreview !== null && (
+          {canvas && variationPreview !== null && (
             <HeaderVariationBanner
               workspaceId={canvas.workspaceId}
               path={canvas.path}
@@ -854,9 +858,7 @@ export function DaemonDocumentPage({
               branches={variationPreview.branches}
               onSwitch={switchToVariation}
               onExit={clearVariationParam}
-              runMerge={(src, args) =>
-                branchesApi(canvas.workspaceId, canvas.path, daemonFetch).merge(src, args)
-              }
+              runMerge={(src, args) => branches.merge(canvas.workspaceId, canvas.path, src, args)}
             />
           )}
           {variationNotice !== null && (
@@ -881,28 +883,11 @@ export function DaemonDocumentPage({
               </button>
             </div>
           )}
-          {capabilities.branches && canvas && (
-            <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
-          )}
-          {/* This row only exists when it carries something meaningful: a
-              capability this keeper does not have. A daemon with full
-              capabilities — the common local case — gets no extra header row
-              at all (every header row costs canvas height on a phone). The
-              shell switcher names the workspace on every page, so it is the
-              one carrier of that; raw identifiers are not chrome (ADR-0019). */}
-          {(!capabilities.branches || !capabilities.merge) && (
-            <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-              {/* WorkspaceTopBar owns the real History/HeaderBranchChip
-                  affordances once a canvas is selected; these page-level teasers
-                  only surface guidance while the capability itself is unavailable. */}
-              {!capabilities.branches && <CapabilityTeaser label="Variations" />}
-              {!capabilities.merge && <CapabilityTeaser label="Combine" />}
-            </div>
-          )}
+          {canvas && <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />}
         </>
       ),
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),
-      footer: capabilities.merge && canvas && (
+      footer: canvas && (
         <MergeToast
           workspaceId={canvas.workspaceId}
           path={canvas.path}
@@ -912,9 +897,23 @@ export function DaemonDocumentPage({
     },
   }
 
-  return (
-    <DaemonApiContext.Provider value={daemonFetch}>
-      <DocumentPage model={model} />
-    </DaemonApiContext.Provider>
-  )
+  return {
+    kind: 'render',
+    model,
+    wrap: (page: ReactNode) => (
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <BranchesBackendContext.Provider value={branches}>{page}</BranchesBackendContext.Provider>
+      </DaemonApiContext.Provider>
+    ),
+  }
+}
+
+export const daemonKeeper: DocumentKeeper<DaemonDocumentPageProps> = {
+  kind: 'daemon',
+  useDocument: useDaemonDocument,
+}
+
+/** The shared page, bound to the daemon keeper — what App mounts under a daemon's routes. */
+export function DaemonDocumentPage(props: DaemonDocumentPageProps) {
+  return <DocumentPage keeper={daemonKeeper} props={props} />
 }

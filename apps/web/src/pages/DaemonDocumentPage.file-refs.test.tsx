@@ -1,10 +1,11 @@
 /**
- * File-reference identity on the daemon page: new file nodes reference the
- * target canvas's immutable id (rename-safe, ADR-0008), while everything
- * user-facing stays on paths. These tests pin the page-level wiring — the
- * options handed to the editor carry ids labeled with paths, and opening a
- * ref resolves the id back to the CURRENT path by lookup, with unknown refs
- * passing through as legacy path references.
+ * The daemon keeper's own file-reference case. The shared scenarios (other
+ * documents offered as id refs under their label, an id ref opening its
+ * current path, the missing-ref rule) run against both keepers in
+ * `document-page.contract.tsx`. What is left here is where the keepers
+ * deliberately differ: a ref the daemon's list does not know as an id is
+ * taken as a LEGACY PATH reference and opened as one — the browser page
+ * instead leaves the address bar alone (its own file has that case).
  */
 import type {
   DocumentBackend,
@@ -14,8 +15,11 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import type { ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import {
+  latestEditorProps,
+  resetCapturedEditorProps,
+} from '../test-utils/capturing-spatial-editor.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
@@ -27,18 +31,10 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   }
 })
 
-// Captures the editor's file-ref props without mounting the real canvas —
-// what this file tests is the page's wiring, not the editor's rendering.
-let capturedEditorProps: SpatialEditorProps | null = null
 vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../components/spatial-editor/index.js')>()
-  return {
-    ...actual,
-    SpatialEditor: (props: SpatialEditorProps) => {
-      capturedEditorProps = props
-      return <div data-testid="stub-spatial-editor" />
-    },
-  }
+  const { CapturingSpatialEditor } = await import('../test-utils/capturing-spatial-editor.js')
+  return { ...actual, SpatialEditor: CapturingSpatialEditor }
 })
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
@@ -87,13 +83,13 @@ async function renderPage() {
     )
   })
   await waitFor(() => expect(screen.getByTestId('stub-spatial-editor')).toBeTruthy())
-  await waitFor(() => expect(capturedEditorProps?.fileRefOptions?.length).toBeGreaterThan(0))
+  await waitFor(() => expect(latestEditorProps()?.fileRefOptions?.length ?? 0).toBeGreaterThan(0))
 }
 
 describe('DaemonDocumentPage file refs', () => {
   beforeEach(() => {
     window.localStorage.clear()
-    capturedEditorProps = null
+    resetCapturedEditorProps()
     createdBackends.length = 0
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
@@ -109,47 +105,13 @@ describe('DaemonDocumentPage file refs', () => {
     vi.clearAllMocks()
   })
 
-  it('offers other documents as id-valued refs labeled with their path', async () => {
-    await renderPage()
-    // The open canvas (main) is excluded; the ref stored into the document
-    // is the id, the label the user sees is the path. `kind` rides along
-    // because it decides the geometry of the node the picker creates — a
-    // markdown reference renders prose and needs room a card does not.
-    expect(capturedEditorProps?.fileRefOptions).toEqual([
-      { file: 'id-second', label: 'second', kind: 'spatial' },
-    ])
-  })
-
-  it('opens an id ref on the target canvas current path', async () => {
-    await renderPage()
-    await act(async () => {
-      capturedEditorProps?.onOpenFileRef?.('id-second')
-    })
-    await waitFor(() =>
-      expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path: 'second' }),
-    )
-  })
-
   it('passes an unknown ref through unchanged as a legacy path reference', async () => {
     await renderPage()
     await act(async () => {
-      capturedEditorProps?.onOpenFileRef?.('second')
+      latestEditorProps()?.onOpenFileRef?.('second')
     })
     await waitFor(() =>
       expect(createdBackends.at(-1)).toMatchObject({ workspaceId: 'w1', path: 'second' }),
     )
-  })
-
-  it('marks refs matching neither a live id nor a live path as missing, sparing image refs', async () => {
-    await renderPage()
-    const missing = capturedEditorProps?.missingFileRef
-    expect(missing).toBeDefined()
-    // Live id and live path (a legacy ref) are both known; a ref matching
-    // neither points at a deleted canvas. Image refs live in the file
-    // store, not the documents list, so they are never "missing" here.
-    expect(missing?.('id-second')).toBe(false)
-    expect(missing?.('second')).toBe(false)
-    expect(missing?.('deleted-canvas-id')).toBe(true)
-    expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
   })
 })

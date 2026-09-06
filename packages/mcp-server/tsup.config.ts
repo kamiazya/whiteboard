@@ -49,6 +49,7 @@ export default defineConfig({
   external: ['yaml'],
   noExternal: [
     '@kamiazya/whiteboard-daemon-client',
+    '@kamiazya/whiteboard-history',
     '@kamiazya/whiteboard-model',
     '@kamiazya/whiteboard-codec',
     '@kamiazya/whiteboard-canvas-render',

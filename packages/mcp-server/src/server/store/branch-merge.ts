@@ -1,12 +1,5 @@
-import {
-  projectWorkspaceDocument,
-  reconcileDocContent,
-  resolveWorkspaceDocument,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { LoroDoc } from 'loro-crdt'
-import type { MergeBadge } from '../../shared/merge-engine.js'
-import { detectMergeBadges, meetVersion, toElementMap } from '../../shared/merge-engine.js'
-import { checkoutCloneOrThrow, decodeBranchTipOrThrow } from '../app-helpers.js'
+import { type MergeBadge, planMerge, UnreadableBranchTipError } from '@kamiazya/whiteboard-history'
+import { reconcileDocContent, resolveWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { getLogger } from '../log.js'
 import {
   BranchNotFoundError,
@@ -69,10 +62,10 @@ export interface PerformBranchMergeResult extends PerformMergeHookResult {
 }
 
 // Merge source into target.
-// (1) clone the live snapshot
-// (2) build a preview checked out to the target tipFrontiers
-// (3) detect LWW edge cases with detectMergeBadges
-// (4) on commit, update target tipFrontiers to source and, if target is HEAD,
+// (1) plan: `planMerge` projects target, source and their common ancestor
+//     off a clone of the workspace record and answers the preview, the
+//     advisory badges and the element diff — pure, in @kamiazya/whiteboard-history
+// (2) on commit, update target tipFrontiers to source and, if target is HEAD,
 //     reconcile the live doc to the preview and broadcast the change
 // The whole read-modify-write (branch lookup, live-doc read via
 // getDoc, the pre-merge snapshot, the tip/HEAD writes, and their doc
@@ -102,137 +95,59 @@ export function performBranchMerge(
     }
 
     const sourceTip = sourceBranch.tipFrontiers
-    const intoTip = intoBranch.tipFrontiers
     const liveDoc = await getDoc(sid, path)
 
     // A tree-served document's branch tips are recorded against the
-    // WORKSPACE record's oplog (see app.ts's getCurrentFrontiers): they are
-    // checked out on a clone of that record and the document is PROJECTED at
-    // that point. The per-document fallback below survives only for the
+    // WORKSPACE record's oplog (see app.ts's getCurrentFrontiers). The
+    // per-document fallback inside `planMerge` survives only for the
     // damaged-content remnant the fold could not move.
     const wsClone = await cloneStoredWorkspaceDoc(sid)
     const wsEntry = wsClone === null ? null : resolveWorkspaceDocument(wsClone, path)
-    const projectAtWorkspaceFrontiers = (
-      branchLabel: string,
-      frontiers: ReturnType<typeof decodeBranchTipOrThrow>,
-    ): LoroDoc => {
-      const at = LoroDoc.fromSnapshot(wsClone!.export({ mode: 'snapshot' }))
-      try {
-        at.checkout(frontiers)
-      } catch (err) {
+
+    let plan: ReturnType<typeof planMerge>
+    try {
+      plan = planMerge({
+        workspaceRecord: wsEntry === null ? null : wsClone,
+        documentId: wsEntry?.documentId ?? null,
+        liveDoc,
+        into: { name: into, tipFrontiers: intoBranch.tipFrontiers ?? '' },
+        source: { name: source, tipFrontiers: sourceTip ?? '' },
+      })
+    } catch (err) {
+      // A tip this store recorded that the record it points into cannot
+      // read: stored data, not a merge, is what failed.
+      if (err instanceof UnreadableBranchTipError) {
         throw corruptStoredData(
-          `${sid}/branches/${path}.json#${branchLabel}.tipFrontiers`,
-          `branch "${branchLabel}" tipFrontiers could not be checked out against the workspace record (${err instanceof Error ? err.message : 'unknown error'})`,
+          `${sid}/branches/${path}.json#${err.branchLabel}.tipFrontiers`,
+          err.detail,
         )
       }
-      // A projection that answers null means the document did not exist at
-      // that point of history — an empty doc is the honest value there.
-      return projectWorkspaceDocument(at, wsEntry!.documentId) ?? new LoroDoc()
+      throw err
     }
-
-    const cloneAt = (branchName: string, tipBase64: string): LoroDoc => {
-      if (tipBase64.length === 0) {
-        return LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
-      }
-      const frontiers = decodeBranchTipOrThrow(sid, path, branchName, tipBase64)
-      if (wsClone !== null && wsEntry !== null) {
-        return projectAtWorkspaceFrontiers(branchName, frontiers)
-      }
-      return checkoutCloneOrThrow(
-        liveDoc,
-        frontiers,
-        `${sid}/branches/${path}.json#${branchName}.tipFrontiers`,
-        `branch "${branchName}" tipFrontiers could not be checked out against the live document`,
-      )
-    }
-
-    const targetDoc = cloneAt(into, intoTip ?? '')
-    const sourceDoc = cloneAt(source, sourceTip ?? '')
-    // Use sourceDoc as the preview representation. Building a fully merged preview
-    // safely would require a snapshot containing the full op-log after combining
-    // target and source frontiers. In practice, sourceDoc closely matches the merge
-    // result for the current "source wins" flow, and detectMergeBadges only needs a
-    // stable target/source/preview triple to surface LWW differences.
-    const previewDoc = sourceDoc
-
-    // The merge base is the common ancestor: the per-peer minimum ("meet")
-    // of target's and source's version vectors. For a tree-served document
-    // the only lineage the tips share is the WORKSPACE record's — the
-    // projections above each mint their own — so the meet is computed there
-    // and the base is projected at it. An all-omitted (empty) meet checks
-    // out to genesis, which correctly classifies every source element as
-    // new rather than resurrected.
-    let baseDoc: LoroDoc
-    if (wsClone !== null && wsEntry !== null) {
-      const tipVV = (tipBase64: string | undefined, branchLabel: string) =>
-        tipBase64 !== undefined && tipBase64.length > 0
-          ? wsClone.frontiersToVV(decodeBranchTipOrThrow(sid, path, branchLabel, tipBase64))
-          : wsClone.version()
-      const baseFrontiers = wsClone.vvToFrontiers(
-        meetVersion(tipVV(intoTip, into), tipVV(sourceTip, source)),
-      )
-      baseDoc = projectAtWorkspaceFrontiers('merge-base', baseFrontiers)
-    } else {
-      const baseFrontiers = liveDoc.vvToFrontiers(
-        meetVersion(targetDoc.version(), sourceDoc.version()),
-      )
-      baseDoc = checkoutCloneOrThrow(
-        liveDoc,
-        baseFrontiers,
-        `${sid}/branches/${path}.json#merge-base`,
-        'merge base could not be checked out against the live document',
-      )
-    }
-
-    const badges = detectMergeBadges({
-      base: baseDoc,
-      target: targetDoc,
-      source: sourceDoc,
-      preview: previewDoc,
-    })
-
-    // Diff elements between target and preview so the UI can highlight
-    // new / changed / conflict elements after commit.
-    const tMap = toElementMap(targetDoc)
-    const pMap = toElementMap(previewDoc)
-    const newElementIds: string[] = []
-    const changedElementIds: string[] = []
-    for (const [id, pEl] of pMap) {
-      const tEl = tMap.get(id)
-      if (!tEl) {
-        newElementIds.push(id)
-      } else if (JSON.stringify(pEl) !== JSON.stringify(tEl)) {
-        changedElementIds.push(id)
-      }
-    }
-    const conflictElementIds = Array.from(new Set(badges.map((b) => b.elementId)))
-
-    // Counts come from the same nodes+edges map toElementMap builds for
-    // previewElements/newElementIds/changedElementIds above, so
-    // previewElementCount stays equal to previewElements.length (and the
-    // other counts stay consistent) for a canvas containing edges.
-    // countAliveNodes is deliberately not used here: it is a nodes-only
-    // reader written for an unrelated advisory-count consumer.
-    const previewElementCount = pMap.size
-    const targetElementCount = tMap.size
-    // previewDoc is sourceDoc (see above), so this mirrors previewElementCount exactly.
-    const sourceElementCount = pMap.size
+    const {
+      badges,
+      newElementIds,
+      changedElementIds,
+      conflictElementIds,
+      previewElementCount,
+      targetElementCount,
+      sourceElementCount,
+      previewDoc,
+    } = plan
 
     if (dryRun) {
       // For dry runs, return every current node + edge so MergeDialog can
-      // render a read-only preview. Payload shape is deliberately the
-      // nodes-model equivalent of the retired Excalidraw-style elements
-      // list; the field stays untyped (z.array(z.unknown())) because no
-      // consumer reads element field contents today — MergeDialog only
-      // reads .length, kept available for a future static renderer.
-      const previewElements = [...pMap.values()]
+      // render a read-only preview. The field stays untyped
+      // (z.array(z.unknown())) because no consumer reads element field
+      // contents today — MergeDialog only reads .length, kept available for
+      // a future static renderer.
       return {
         previewElementCount,
         targetElementCount,
         sourceElementCount,
         badges,
         committed: false,
-        previewElements,
+        previewElements: plan.previewElements,
       }
     }
 

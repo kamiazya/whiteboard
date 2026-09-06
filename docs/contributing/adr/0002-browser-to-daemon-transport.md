@@ -147,7 +147,7 @@ The remaining unknown from the addendum above — whether Chromium's LNA
 gating had been extended to the WebSocket upgrade — has been re-measured
 with a committed, reusable harness
 (`packages/mcp-server/scripts/smoke/mcp-lna-transport-smoke.mjs`, run via
-`pnpm smoke:lna-transport`). It drives all three engines against the same
+`pnpm --filter @kamiazya/whiteboard-mcp smoke:lna-transport`). It drives all three engines against the same
 real `https://kamiazya-whiteboard.pages.dev` origin, this time probing both
 a `fetch` (baseline re-confirmation) and a `new WebSocket(...)` upgrade to a
 throwaway, fully CORS-permissive loopback probe server — not this repo's own
