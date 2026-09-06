@@ -620,6 +620,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         scene,
         anchors,
         keyed: surfaceKeyed,
+        commentInFlight: draggedCommentId !== undefined,
         showResolved: showResolvedComments,
         boxes,
         selectableBoxes,

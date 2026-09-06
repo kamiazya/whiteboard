@@ -19,10 +19,26 @@ import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 
 const SVG_NS = 'http://www.w3.org/2000/svg'
 
+export interface KeyedSvgUpdateOptions {
+  /**
+   * `false` says this update is NOT a change to the document — the host
+   * swapped which pipeline produces the render, and the same content is
+   * arriving through a different door.
+   *
+   * It exists because the editor patches this one container to the drag
+   * BACKDROP for the length of a gesture, and that backdrop excludes
+   * whatever the drag layer draws live. Grabbing a comment pin therefore
+   * reaches this layer as a removal and dropping it as an insertion, so
+   * without this the pin would fade out under the preview that is carrying
+   * it and fade back in where it landed.
+   */
+  readonly animate?: boolean
+}
+
 export interface KeyedSvgPatcher {
   /** The mounted `<svg>` root — stable for the patcher's whole lifetime. */
   readonly root: SVGSVGElement
-  update(next: KeyedSvgRender): void
+  update(next: KeyedSvgRender, options?: KeyedSvgUpdateOptions): void
 }
 
 export interface KeyedSvgPatcherOptions {
@@ -37,6 +53,19 @@ const MOVE_ANIMATION: KeyframeAnimationOptions = {
 }
 /** Screen-px deltas below this are layout noise, not a move. */
 const MIN_MOVE_PX = 0.5
+
+/**
+ * The ANNOTATION layer's arrive/leave ramp, matching the rail's
+ * `--motion-duration-normal` / `--motion-ease-out` so one resolve reads as
+ * one gesture wherever the reader is watching it.
+ *
+ * Opacity only: a compositor property, and the one DESIGN.md names as the
+ * exception where the value IS the state.
+ */
+const FADE_ANIMATION: KeyframeAnimationOptions = {
+  duration: 220,
+  easing: 'cubic-bezier(0.16, 1, 0.3, 1)',
+}
 
 function prefersReducedMotion(): boolean {
   return typeof window.matchMedia === 'function'
@@ -108,12 +137,35 @@ export function mountKeyedSvg(
   // `groups` — the producer pins `svg === rootOpen + groups + close`.
   let prev = initial
   const elements = new Map<string, Element>()
+  /**
+   * Fades a departing annotation element out and drops it when the ramp
+   * ends. It needs no bookkeeping of its own: the reconciliation moves
+   * every surviving group ahead of it, so a ghost is always past the group
+   * count and the cleanup below takes it if another update lands first —
+   * the mounted DOM converges to exactly the groups either way. A version
+   * that also tracked ghosts and swept them at the top of `update` was
+   * written, and its guard could not be made to fail.
+   */
+  const fadeOut = (element: Element): void => {
+    if (typeof element.animate !== 'function') {
+      element.remove()
+      return
+    }
+    const animation = element.animate([{ opacity: 1 }, { opacity: 0 }], FADE_ANIMATION)
+    // A rejection means a later update already removed it, which is the
+    // outcome this wanted — not an error to surface.
+    animation.finished.then(
+      () => element.remove(),
+      () => {},
+    )
+  }
+
   initial.groups.forEach((group, index) => {
     const child = root.children[index]
     if (child !== undefined) elements.set(group.key, child)
   })
 
-  const update = (next: KeyedSvgRender): void => {
+  const update = (next: KeyedSvgRender, updateOptions?: KeyedSvgUpdateOptions): void => {
     // Root envelope: attribute maps are compared, not order — DOM
     // attribute order is not semantically meaningful, and setAttribute
     // keeps the existing position on value changes.
@@ -133,7 +185,8 @@ export function mountKeyedSvg(
     // node, so its drop commit arrives as an insertion, and animating that
     // would double-move a node the user just placed. Rects are captured
     // BEFORE the reconciliation loop displaces anything.
-    const animate = options?.motion !== false && !prefersReducedMotion()
+    const animate =
+      options?.motion !== false && updateOptions?.animate !== false && !prefersReducedMotion()
     const firstRects = animate ? new Map<string, DOMRect>() : undefined
     if (firstRects !== undefined) {
       for (const group of next.groups) {
@@ -143,6 +196,36 @@ export function mountKeyedSvg(
         }
       }
     }
+    // The annotation layer (canvas-render's `annotation` mark, never this
+    // layer's own reading of a key) is the one set whose groups arrive and
+    // leave as a unit, so it is the one set worth ramping. Everything else
+    // keeps cutting: a document group replaced in place is a keystroke
+    // inside a node, and cross-fading those ghosts while somebody types.
+    const nextKeys = new Set(next.groups.map((group) => group.key))
+    // A REPLACED annotation group is on both lists: the pair of ramps is
+    // what makes the `showResolved` case a cross-fade rather than a swap of
+    // two nearly identical shapes.
+    const arriving = new Set<string>()
+    const departing: Element[] = []
+    if (animate) {
+      for (const group of next.groups) {
+        if (group.annotation !== true) continue
+        const existing = elements.get(group.key)
+        if (existing === undefined) {
+          arriving.add(group.key)
+        } else if (prevSvgByKey.get(group.key) !== group.svg) {
+          arriving.add(group.key)
+          departing.push(existing)
+        }
+      }
+      for (const group of prev.groups) {
+        if (group.annotation !== true || nextKeys.has(group.key)) continue
+        const gone = elements.get(group.key)
+        if (gone !== undefined) departing.push(gone)
+      }
+    }
+    const leaving = new Set(departing)
+
     next.groups.forEach((group, index) => {
       const existing = elements.get(group.key)
       const element =
@@ -157,8 +240,34 @@ export function mountKeyedSvg(
       if (anchor !== element) root.insertBefore(element, anchor)
     })
 
-    while (root.children.length > next.groups.length) {
-      root.children[next.groups.length]?.remove()
+    // A replaced key that also MOVED belongs to FLIP, not to the ramp: the
+    // incoming element is already flying from where its predecessor sat, and
+    // a ghost fading at that same spot is the double image FLIP exists to
+    // avoid.
+    for (const [key, first] of firstRects ?? []) {
+      const element = nextElements.get(key)
+      if (element === undefined) continue
+      const last = element.getBoundingClientRect()
+      if (
+        Math.abs(first.left - last.left) < MIN_MOVE_PX &&
+        Math.abs(first.top - last.top) < MIN_MOVE_PX
+      ) {
+        continue
+      }
+      arriving.delete(key)
+      const stale = elements.get(key)
+      if (stale !== undefined) leaving.delete(stale)
+    }
+
+    for (const child of [...root.children].slice(next.groups.length)) {
+      if (leaving.has(child)) fadeOut(child)
+      else child.remove()
+    }
+
+    for (const key of arriving) {
+      const element = nextElements.get(key)
+      if (element === undefined || typeof element.animate !== 'function') continue
+      element.animate([{ opacity: 0 }, { opacity: 1 }], FADE_ANIMATION)
     }
 
     if (firstRects !== undefined && firstRects.size > 0) {

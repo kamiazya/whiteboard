@@ -12,9 +12,23 @@ import type { KeyedSvgRender } from '@kamiazya/whiteboard-canvas-render'
 import { useCallback, useLayoutEffect, useRef } from 'react'
 import { type KeyedSvgPatcher, mountKeyedSvg } from './keyed-svg-patcher'
 
-export function useKeyedSvg(keyed: KeyedSvgRender): (container: HTMLElement | null) => void {
+export function useKeyedSvg(
+  keyed: KeyedSvgRender,
+  /**
+   * Which pipeline produced `keyed`. A host that swaps between two of them
+   * — the editor patches this same container to the drag BACKDROP for the
+   * length of a gesture — passes a different token for each, and the update
+   * that crosses the boundary is then told it is not a document change.
+   *
+   * Without it a grabbed comment pin reaches the patcher as a removal and
+   * fades out at the anchor the pointer just left, under the preview that
+   * is carrying it.
+   */
+  source?: string,
+): (container: HTMLElement | null) => void {
   const containerRef = useRef<HTMLElement | null>(null)
   const patcherRef = useRef<KeyedSvgPatcher | null>(null)
+  const sourceRef = useRef(source)
 
   // Layout-effect timing: the patch lands before paint, in the same frame
   // as the React commit that carried the new render — the innerHTML swap
@@ -22,12 +36,14 @@ export function useKeyedSvg(keyed: KeyedSvgRender): (container: HTMLElement | nu
   useLayoutEffect(() => {
     const container = containerRef.current
     if (container === null) return
+    const swapped = sourceRef.current !== source
+    sourceRef.current = source
     if (patcherRef.current === null) {
       patcherRef.current = mountKeyedSvg(container, keyed)
     } else {
-      patcherRef.current.update(keyed)
+      patcherRef.current.update(keyed, swapped ? { animate: false } : undefined)
     }
-  }, [keyed])
+  }, [keyed, source])
 
   return useCallback((container: HTMLElement | null) => {
     if (container === containerRef.current) return
