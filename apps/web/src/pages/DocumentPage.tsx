@@ -8,15 +8,13 @@ import {
   useRef,
   useState,
 } from 'react'
-import {
-  CommentsRailAside,
-  CommentsRailToggle,
-} from '../components/annotations/CommentsRailChrome.js'
-import { ConnectionsChip, ConnectionsPanel } from '../components/connections/ConnectionsChip.js'
+import { CommentsRailAside } from '../components/annotations/CommentsRailChrome.js'
+import { ConnectionsPanel } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { InspectorPanel } from '../components/document-editor/InspectorPanel.js'
+import { InspectorSegment } from '../components/document-editor/InspectorSegment.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import {
@@ -275,9 +273,34 @@ function DocumentPageBody({
   // measured, a control absolutely positioned in the surface's top-right
   // corner sat on top of the markdown editor's catalog trigger and
   // intercepted every click meant for it.
+  // The four ways to look at this document, as ONE control — see
+  // `InspectorSegment`. What a KIND decides is which members it offers;
+  // never their order, which is why a canvas and a note read the same now.
+  const inspectorSegment = (
+    <InspectorSegment
+      open={inspector}
+      onToggle={toggleInspector}
+      tabs={{
+        // Facets are OKF frontmatter, so only a markdown document has any
+        // (ADR-0009 decision 3); the keeper answers none for a spatial one.
+        ...(model.properties.facets === undefined ? {} : { properties: {} }),
+        comments: { count: commentsRail.openThreadCount },
+        // `null` until the backlinks fetch answers: the member waits rather
+        // than claiming zero, which is what the chip did before it moved.
+        ...(model.connections === undefined
+          ? {}
+          : { connections: { count: model.connections.backlinks?.length ?? null } }),
+        ...(versions.enabled ? { history: {} } : {}),
+      }}
+    />
+  )
+
   const rowActions = (
     <>
-      <CommentsRailToggle rail={commentsRail} />
+      {inspectorSegment}
+      {/* The one divider in the row: inspect on the left of it, act on the
+          right. Before this the act menu sat BETWEEN two inspect toggles. */}
+      <span aria-hidden="true" className="bg-border mx-0.5 h-4 w-px shrink-0" />
       {model.slots.rowAlerts}
       {exportError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">
@@ -425,14 +448,6 @@ function DocumentPageBody({
                         onTitleChange={
                           model.title === 'top-bar' ? identity.onRename : model.title.onChange
                         }
-                        // Facets are OKF frontmatter, so only a markdown
-                        // document has any (ADR-0009 decision 3); the keeper
-                        // answers none for a spatial one.
-                        {...(model.properties.facets === undefined
-                          ? {}
-                          : { facets: model.properties.facets })}
-                        propertiesOpen={inspector === 'properties'}
-                        onToggleProperties={() => toggleInspector('properties')}
                         // No save state in the row: the shell mark answers
                         // for the keeper, and only when there is a condition.
                         {...(model.properties.status === undefined
@@ -441,13 +456,6 @@ function DocumentPageBody({
                         actions={rowActions}
                       />
                     ) : null}
-                    {model.connections !== undefined && (
-                      <ConnectionsChip
-                        backlinks={model.connections.backlinks}
-                        open={inspector === 'connections'}
-                        onToggle={() => toggleInspector('connections')}
-                      />
-                    )}
                   </>
                 )}
                 workspaceId={topBar.workspaceId}
@@ -460,11 +468,6 @@ function DocumentPageBody({
                   ? {}
                   : { branchRefreshSignal: topBar.branchRefreshSignal })}
                 onPreviewVariation={variation.previewVariation}
-                // Whatever the document holds: a keeper writes a history for
-                // every kind, and gating this on the editor is what left a
-                // markdown document's checkpoints unreachable.
-                onToggleHistory={versions.enabled ? () => toggleInspector('history') : undefined}
-                historyOpen={inspector === 'history'}
                 {...(preview === null ? {} : { preview })}
               />
             </Suspense>

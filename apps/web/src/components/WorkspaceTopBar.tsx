@@ -1,6 +1,6 @@
-import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
+import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { HEADER_BUTTON_CLASS, HEADER_TOGGLE_CLASS } from '../components/ui/header-button.js'
+import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
 import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
@@ -61,8 +61,6 @@ interface Props {
    * document's kind — a markdown document's history is its keeper's business,
    * and gating it here is what left one unreachable.
    */
-  onToggleHistory?: () => void
-  historyOpen?: boolean
   /**
    * A past version on screen in place of the document, and the two things to
    * do about it.
@@ -117,8 +115,6 @@ export default function WorkspaceTopBar({
   onNavigateBack,
   dataMode = 'daemon',
   onPreviewVariation,
-  onToggleHistory,
-  historyOpen = false,
   preview,
   branchRefreshSignal,
   titleSlot,
@@ -226,24 +222,6 @@ export default function WorkspaceTopBar({
               onPreviewVariation={onPreviewVariation}
             />
           </>
-        )}
-
-        {/* The document's history. Kind-agnostic on purpose — see the prop. */}
-        {onToggleHistory && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="History"
-                aria-expanded={historyOpen}
-                onClick={onToggleHistory}
-                className={HEADER_TOGGLE_CLASS}
-              >
-                <History aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>History</TooltipContent>
-          </Tooltip>
         )}
       </div>
     </header>

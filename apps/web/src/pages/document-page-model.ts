@@ -15,7 +15,7 @@
  */
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { ComponentProps, ReactNode, RefObject } from 'react'
-import type { ConnectionsPanelProps } from '../components/connections/ConnectionsChip.js'
+import type { ConnectionsPanelProps } from '../components/connections/ConnectionsPanel.js'
 import type { MarkdownDocumentSession } from '../components/document-editor/DocumentEditorSurface.js'
 import type { SpatialEditorPaneProps } from '../components/document-editor/SpatialEditorPane.js'
 import type { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'

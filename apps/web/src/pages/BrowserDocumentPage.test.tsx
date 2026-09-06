@@ -490,6 +490,11 @@ describe('BrowserDocumentPage', () => {
     // A spatial canvas offers its display settings from the row's ⋯, not
     // from a gear of its own — see DocumentMenu's leading band.
     expect(screen.queryByRole('button', { name: 'Display settings' })).toBeNull()
+    // And it offers no Properties member: a facet is OKF frontmatter and a
+    // JSON Canvas document has none to hold one (ADR-0009 decision 3). The
+    // kind gate is the PAGE's — `InspectorSegment` draws what it is given.
+    expect(screen.queryByRole('button', { name: 'Properties' })).toBeNull()
+    expect(screen.getByRole('group', { name: 'Inspect this document' })).toBeTruthy()
     // The whole cluster lives inside the canvas row (DocumentProperties) —
     // the dot LEFT of the title, the rare operations behind one kebab at
     // the right edge — not in a second header strip of its own.
