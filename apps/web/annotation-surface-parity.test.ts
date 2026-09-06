@@ -53,6 +53,8 @@ type Capability =
   | 'passage-drawn-in-place'
   | 'set-outline-drawn'
   | 'pin-drawn'
+  /** How many messages the conversation holds, said before it is opened. */
+  | 'message-count'
   | 'orphan-marked'
   | 'reveal-from-surface'
   | 'touch-reachable'
@@ -233,6 +235,39 @@ const PARITY = {
     widget: {
       pinnedBy:
         'packages/canvas-viewer/src/CanvasViewer.test.tsx#outlines a node set from `threads`, which the flat comments in the canvas cannot carry',
+    },
+    mcp: { absent: WRITES_ONLY },
+  },
+  /**
+   * The count is what makes a marker worth pressing: without it a reader
+   * decides whether to open a conversation by opening it. Four surfaces
+   * carry it now and the canvas was the last to get one, which is exactly
+   * the drift this matrix exists to make visible.
+   */
+  'message-count': {
+    canvas: {
+      pinnedBy:
+        'apps/web/src/components/spatial-editor/comment-pin-count.browser.test.tsx#draws the message count on a busy conversation pin, and none on a lone remark',
+    },
+    rail: {
+      pinnedBy:
+        'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx#dates a conversation by its LAST message, not the one that started it',
+    },
+    'markdown-source': {
+      pinnedBy:
+        'apps/web/src/components/markdown-editor/annotation-projection.browser.test.tsx#carries the conversation message count, so its weight is readable before opening',
+    },
+    'markdown-preview': {
+      pinnedBy:
+        'apps/web/src/components/markdown-editor/preview-comment-markers.browser.test.tsx#says how many messages a conversation holds, the way its gutter marker does',
+    },
+    'static-scene': {
+      pinnedBy:
+        'packages/canvas-render/src/layout/comments.test.ts#draws how many messages the conversation holds, once there is more than one',
+    },
+    widget: {
+      absent:
+        'the widget draws canvas-render’s scene, so it has the count the static-scene column pins rather than a control of its own',
     },
     mcp: { absent: WRITES_ONLY },
   },

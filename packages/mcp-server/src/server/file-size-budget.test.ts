@@ -107,7 +107,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // that produces it, and a corner badge with the reasoning for why it
   // appears only past one. Read mode never shows the source, so this marker
   // is the whole of what a reader there has to judge a conversation by.
-  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1046,
+  // +20: the preview marker's origin is asked for through one
+  // `previewDocumentSvg` instead of four bare `querySelector('svg')` calls,
+  // and the definition carries why — inside the preview column that query
+  // answers with a comment MARKER's own icon, so the placement was reading
+  // its own previous output.
+  'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1066,
   'packages/loro-adapter/src/loro-bridge.ts': 942,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   'packages/server-core/src/tools/canvas-edit.ts': 948,
@@ -188,7 +193,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // command building rather than the branch.
   'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
+  // +49: the comment pin carries how many messages its conversation holds —
+  // the count run, its placement on the pin, and the `messagesByThread` the
+  // layout derives from `threads`. The canvas was the last surface that did
+  // not say it, so a reader crossing between it and the rail met the same
+  // conversation described two ways.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 1889,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2592,
 }

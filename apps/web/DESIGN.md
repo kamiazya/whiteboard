@@ -736,13 +736,20 @@ Not collapsed under `prefers-reduced-motion`, deliberately: the global floor
 in `index.css` already flattens the movement, and a reader who asked for
 less motion still has to see what their press did.
 
-**The canvas PIN is not in this, and the reason changed after measuring.**
-The plan was that its transition could live in the web app without touching
-the renderer. It cannot: `canvas-render`'s SVG backend emits no `id` or
-`class` for a scene node, so the pin (`${'{'}comment.id{'}'}/pin` in the scene) has
-nothing `apps/web` CSS can select. Giving it one changes exported SVG bytes,
-the MCP Apps widget and the scene digest — the same boundary that kept the
-message count out of it, so it is its own increment with its own review.
+**The canvas PIN's transition is not in this, and the reason took two
+corrections to get right.** The first answer — that it could live in the web
+app without touching the renderer — was wrong. The second, that
+`canvas-render` emits no handle for a scene node, was also wrong: that was
+true of the plain serializer, and both the editor and the preview mount the
+KEYED projection, whose groups are `<g data-wb-key="…">` keyed by the scene
+node's own id. The pin IS selectable, as `[data-wb-key$="/pin"]`.
+
+What actually blocks it is `keyed-svg-patcher`: a group whose bytes change
+is REPLACED, which is the continuity break it already animates position
+across. A resolve changes the pin's appearance, so the element is swapped
+and a CSS transition on it never runs. Cross-fading a replaced group is a
+change to machinery every canvas node and the markdown preview share, so it
+is its own increment rather than a rider on this one.
 
 **The rail's verbs are icon-first, and the status dot IS the Resolve
 toggle.** "Object-action surfaces are icon-first" below was written, the
@@ -814,10 +821,20 @@ on it — is the rarer fact and keeps its own channel, `data-threads`, drawn
 as a second ring behind the dot and said in words in the label, so the
 second conversation is still never silently dropped.
 
-The canvas PIN is deliberately not in this: it is composed by
-`canvas-render` from the flat projection, so a count there changes exported
-SVG, the MCP Apps widget and the scene digest — a cross-package increment
-with its own review rather than a drive-by.
+The canvas PIN carries it too, composed into the SCENE by `canvas-render`
+rather than drawn by this app, so the widget, the export and
+`wb_scene_render` get it for the same reason they get the pin. The count
+comes from `threads` — the flat `comments` projection carries one text and
+cannot know — which makes a count on the canvas a claim about the WIRING as
+much as about the renderer, and `comment-pin-count.browser.test.tsx` is what
+holds the editor to handing the layout its threads. The digits take the
+bubble's fill from the theme, because layout assigns paint and never invents
+it; a resolver that predates the slot lays the count out unpainted, the way
+`passage` and `region` already work.
+
+`message-count` is a row in the annotation parity matrix now. The canvas
+being the last surface to carry it is exactly the drift that matrix exists
+to make visible, and it had no row to be visible in.
 
 Read status is a separate question and NOT answered here. `commentThreadSchema`
 carries no `readAt`/`readBy`, and adding one needs an answer to "whose read"
