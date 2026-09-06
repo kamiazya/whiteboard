@@ -19,6 +19,7 @@ import {
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   setCommentThreadStatus,
+  setProposedChangeStatus,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
@@ -128,6 +129,11 @@ function commandTargetKey(command: EditorCommand): string {
       return 'body'
     case 'set-facets':
       return 'facets'
+    case 'decide-proposal':
+      // Keyed by PROPOSAL: a decision is the whole proposal answered once,
+      // so two presses inside one window really are one target written
+      // twice — while two proposals decided in a burst keep separate keys.
+      return `proposal:${command.proposalId}`
     case 'batch':
       // Mapped in writeCommandTarget (unlike the default arm), but each
       // batch is one distinct user action — never deduped against another.
@@ -428,6 +434,18 @@ function writeCommandTarget(
       // write a reply is, aimed at a message the thread already holds.
       writeThreadMessage(doc, command.threadId, command.message)
       return true
+    case 'decide-proposal': {
+      // Two planes in one commit, because a decision is one act: the
+      // changes are stamped where the proposal lives, and an ADOPTED one
+      // also rewrites the board. The canvas write is the full resync
+      // deliberately — a proposal reaches whatever elements it names, and
+      // there is no single target to write fine-grained.
+      for (const change of command.changes) {
+        setProposedChangeStatus(doc, command.proposalId, change.id, command.decision)
+      }
+      if (command.decision === 'adopted') writeSpatialCanvas(doc, next)
+      return true
+    }
     case 'create-thread':
       // Always "handled", for `reply-to-thread`'s reason: the fallback writes
       // the whole SpatialCanvas, and a markdown document's canvas holds
