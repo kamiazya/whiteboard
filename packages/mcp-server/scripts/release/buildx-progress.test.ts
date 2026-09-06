@@ -178,7 +178,7 @@ describe('the buildx cache report', () => {
 // `[`, which every Dockerfile layer does and no export step does. So the one
 // question the report exists to answer — is the cache backend working? — was
 // the one question its own output could not be read for.
-const CACHE_BACKEND_TAIL = `#4 importing cache manifest from gha:11
+const CACHE_BACKEND_TAIL = `#4 importing cache manifest from gha:3702480389601081481
 #4 DONE 0.4s
 #13 [fetched 3/3] RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
 #13 0.234 Progress: resolved 1, reused 0, downloaded 0
@@ -186,7 +186,7 @@ const CACHE_BACKEND_TAIL = `#4 importing cache manifest from gha:11
 #21 exporting to image
 #21 exporting layers
 #21 DONE 67.5s
-#22 exporting cache to GitHub Actions Cache
+#22 exporting to GitHub Actions Cache
 #22 preparing build cache for export
 #22 DONE 26.4s
 `
@@ -196,8 +196,8 @@ describe('the cache backend the report exists to judge', () => {
     const report = parseBuildxProgress(CACHE_BACKEND_TAIL)
     const named = Object.fromEntries(report.steps.map((s) => [s.id, s.name]))
     expect(named['21']).toBe('exporting to image')
-    expect(named['22']).toBe('exporting cache to GitHub Actions Cache')
-    expect(named['4']).toBe('importing cache manifest from gha:11')
+    expect(named['22']).toBe('exporting to GitHub Actions Cache')
+    expect(named['4']).toBe('importing cache manifest from gha:3702480389601081481')
   })
 
   it('never mistakes a RUN step’s streamed output for its name', () => {
@@ -231,11 +231,11 @@ describe('the cache backend the report exists to judge', () => {
     // A cache export that ERRORs has no DONE line, so the resolution filter
     // discarded it — turning the loudest possible evidence into silence.
     const report = parseBuildxProgress(
-      '#22 exporting cache to GitHub Actions Cache\n#22 ERROR: failed to configure gha cache exporter\n',
+      '#22 exporting to GitHub Actions Cache\n#22 ERROR: failed to configure gha cache exporter\n',
     )
     const step = report.steps.find((s) => s.id === '22')
     expect(step?.error).toBe(true)
-    expect(step?.name).toBe('exporting cache to GitHub Actions Cache')
+    expect(step?.name).toBe('exporting to GitHub Actions Cache')
   })
 
   it('collects the warnings and errors buildx wrote outside any step', () => {
@@ -293,5 +293,35 @@ describe('the credentials the GitHub Actions cache backend falls back to', () =>
     // inventing "absent" would report a problem that does not exist there.
     const lines = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join('\n')
     expect(lines).not.toContain('cache credentials')
+  })
+})
+
+describe('recognising the cache steps by their REAL names', () => {
+  // The fixture above used to say `exporting cache to GitHub Actions Cache`,
+  // written from memory when no run had ever produced a cache step to copy.
+  // buildx actually writes `exporting to GitHub Actions Cache` — the word
+  // order differs — so the first build that genuinely exported cache reported
+  // `export NOT seen` while a 208.6s step named `exporting to GitHub Actions
+  // Cache` sat in its own slowest list. A detector that reads the thing it is
+  // detecting and still says no is worse than none: it is a measurement that
+  // argues against the evidence beside it.
+  //
+  // Both spellings are matched now, and the names below are copied verbatim
+  // from a run's uploaded metadata rather than recalled.
+  it('sees the export whichever way buildx words it', () => {
+    for (const name of ['exporting to GitHub Actions Cache', 'exporting cache to registry']) {
+      const report = parseBuildxProgress(`#22 ${name}\n#22 DONE 26.4s\n`)
+      expect(report.exportSeen, name).toBe(true)
+    }
+  })
+
+  it('does not count the image export as a cache export', () => {
+    // `exporting to docker image format` is the --load, and it is 64.4s of
+    // every build. Counting it would report a working cache on every run.
+    const report = parseBuildxProgress(
+      '#21 exporting to docker image format\n#21 DONE 64.4s\n#23 importing to docker\n#23 DONE 24.3s\n',
+    )
+    expect(report.exportSeen).toBe(false)
+    expect(report.importSeen).toBe(false)
   })
 })

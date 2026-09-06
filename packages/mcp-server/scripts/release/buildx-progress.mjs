@@ -170,8 +170,13 @@ export function parseBuildxProgress(output) {
     cacheHitRatio: layers.length === 0 ? null : Number((cachedCount / layers.length).toFixed(3)),
     executedStepSeconds: Number(executedStepSeconds.toFixed(1)),
     slowest: [...ran].sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 5),
-    importSeen: resolved.some((s) => /importing cache/i.test(s.name)),
-    exportSeen: resolved.some((s) => /exporting cache/i.test(s.name)),
+    // Both words, in either order, because buildx uses both orders and the
+    // first real export was missed by a detector that only knew one:
+    // `exporting to GitHub Actions Cache` against a pattern reading
+    // `exporting cache`. `exporting to docker image format` and `importing to
+    // docker` are the --load and carry no `cache`, so they stay out.
+    importSeen: resolved.some((s) => /\bimporting\b.*\bcache\b/i.test(s.name)),
+    exportSeen: resolved.some((s) => /\bexporting\b.*\bcache\b/i.test(s.name)),
     diagnostics,
   }
 }
