@@ -31,6 +31,31 @@ export const textQuoteSelectorSchema = z
 export type TextQuoteSelector = z.infer<typeof textQuoteSelectorSchema>
 
 /**
+ * A passage of prose: the `text` arm of the anchor union, named because a
+ * second layer anchors to one. A proposal on a markdown note is a
+ * REPLACEMENT PASSAGE (ADR-0029 decision 6), and it points at its passage
+ * the same way a comment does — which is the point of naming this rather
+ * than restating it: the resolution order ADR-0026 established (mark →
+ * unique quote → quote with context → orphaned) is the mechanism, and a
+ * second selector shape would need a second one.
+ */
+export const textAnchorSchema = z
+  .object({
+    kind: z.literal('text'),
+    /** The text node whose text the passage is in; absent, the document's own body. */
+    nodeId: nodeIdSchema.optional(),
+    quote: textQuoteSelectorSchema,
+    start: z.number().int().nonnegative(),
+    end: z.number().int().nonnegative(),
+  })
+  .strict()
+  .refine((anchor) => anchor.end >= anchor.start, {
+    message: 'a text anchor must not end before it starts',
+  })
+
+export type TextAnchor = z.infer<typeof textAnchorSchema>
+
+/**
  * Where an annotation points. This is the ONLY part of the layer that varies
  * by document kind, which is what lets one thread shape serve the spatial
  * canvas, the markdown body, and whatever format comes next.
@@ -105,19 +130,7 @@ export const annotationAnchorSchema = z.discriminatedUnion('kind', [
     .refine((anchor) => (anchor.width === undefined) === (anchor.height === undefined), {
       message: 'a region has both a width and a height',
     }),
-  z
-    .object({
-      kind: z.literal('text'),
-      /** The text node whose text the passage is in; absent, the document's own body. */
-      nodeId: nodeIdSchema.optional(),
-      quote: textQuoteSelectorSchema,
-      start: z.number().int().nonnegative(),
-      end: z.number().int().nonnegative(),
-    })
-    .strict()
-    .refine((anchor) => anchor.end >= anchor.start, {
-      message: 'a text anchor must not end before it starts',
-    }),
+  textAnchorSchema,
   z.object({ kind: z.literal('document') }).strict(),
 ])
 

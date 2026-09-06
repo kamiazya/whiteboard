@@ -16,11 +16,12 @@ import {
 import {
   type CanvasComment,
   type CanvasEdge,
-  canvasColorSchema,
   canvasCommentSchema,
   canvasEdgeSchema,
   documentIdSchema,
+  edgePatchFieldsSchema,
   nodeIdSchema,
+  nodePatchFieldsSchema,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
@@ -119,39 +120,6 @@ const regionNodeSchema = z.discriminatedUnion('type', [
 ])
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
-
-/**
- * What `node.patch` may change. Deliberately limited to the geometry/style
- * fields every node type shares plus `label` (which only a group declares) —
- * not the per-type content fields. Patching `label` onto a text node is a
- * silent no-op after re-parse, because the per-type node schemas are not
- * strict and an unrecognized key is stripped rather than rejected. Inherited
- * from the retired `wb_node_patch`, whose only consumer this now is.
- */
-const nodePatchFieldsSchema = z
-  .object({
-    x: z.number().int().optional(),
-    y: z.number().int().optional(),
-    width: z.number().int().nonnegative().optional(),
-    height: z.number().int().nonnegative().optional(),
-    color: canvasColorSchema.optional(),
-    label: z.string().optional(),
-  })
-  .strict()
-
-/** What `edge.patch` may change. Inherited from the retired `wb_edge_patch`. */
-const edgePatchFieldsSchema = z
-  .object({
-    fromNode: nodeIdSchema.optional(),
-    toNode: nodeIdSchema.optional(),
-    fromSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-    toSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-    fromEnd: z.enum(['none', 'arrow']).optional(),
-    toEnd: z.enum(['none', 'arrow']).optional(),
-    color: canvasColorSchema.optional(),
-    label: z.string().optional(),
-  })
-  .strict()
 
 /**
  * One step of a batch. The verbs are the ones the retired single-purpose

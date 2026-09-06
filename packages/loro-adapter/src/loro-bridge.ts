@@ -24,7 +24,7 @@ import {
   readCommentThreads,
   writeThreadInto,
 } from './comment-threads.js'
-import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
+import { COMMENTS_KEY, type DocumentContainers, PROPOSALS_KEY, THREADS_KEY } from './containers.js'
 import { minimalChange } from './minimal-change.js'
 
 const NODES_KEY = 'nodes'
@@ -932,6 +932,7 @@ export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 
   { key: CANVAS_KEY, kind: 'map' },
   { key: COMMENTS_KEY, kind: 'map' },
   { key: THREADS_KEY, kind: 'map' },
+  { key: PROPOSALS_KEY, kind: 'map' },
   { key: FACETS_KEY, kind: 'map' },
   { key: NODE_LOCKS_KEY, kind: 'map' },
   { key: EDGE_LOCKS_KEY, kind: 'map' },

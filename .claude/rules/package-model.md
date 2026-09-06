@@ -55,6 +55,26 @@ paths:
   that surface's arm, never a new arm. `ANNOTATION_ANCHOR_KINDS` is read off
   the schema, and `annotation.test.ts` checks the generator draws every arm
   and every reference, so neither can be added without the other.
+- **The proposal layer (`proposal.ts`, ADR-0029) is the annotation layer's
+  shape carrying a change instead of a message.** A proposed change is
+  anchored to IDENTITY — an element id, or the `text` arm of
+  `annotationAnchorSchema` for a passage — because a proposal has to follow
+  the document as it moves, and a frontier does not. Each change carries its
+  own id and `status`: the DECISION is per change, so the batch has none, and
+  a status on both would leave "which one counts?" unanswerable the way
+  `resolved` on a message beside its thread would. `assumed` is the anchor's
+  prior value and does two jobs with one field — what to strike through, and
+  what to compare a conflict against — so a prior may OMIT a field the change
+  sets (the anchor held nothing there) and may never name one it does not
+  (that would fire the conflict check on somebody else's unrelated edit). The
+  union is closed, and `PROPOSED_CHANGE_OPS` is read off the schema, so a new
+  verb cannot arrive without someone deciding what its prior value is.
+  `nodePatchFieldsSchema` / `edgePatchFieldsSchema` live here rather than in
+  `server-core`'s `wb_canvas_edit` for the reason everything else here does:
+  a proposal STORES a patch, so it is a persisted document-model shape and a
+  second declaration beside the tool's would be the drift this package exists
+  to prevent.
+
 - A key joins `RESERVED_ROOT_KEYS` the moment something INTERPRETS it, and not before. Until then
   `facetsRaw` is the right home: preserved verbatim, never half-understood.
 
