@@ -200,6 +200,13 @@ export type ProposedChange = z.infer<typeof proposedChangeSchema>
 export type SpatialProposedChange = Exclude<ProposedChange, { op: 'body.replace' }>
 
 /**
+ * The arm whose subject is a document's BODY — decision 6's replacement
+ * passage. Named beside its canvas twin above so the split reads as one
+ * decision rather than an exclusion with no other side.
+ */
+export type BodyProposedChange = Extract<ProposedChange, { op: 'body.replace' }>
+
+/**
  * The verbs the union carries, read off the schema so a new one cannot be
  * added without the tests that enumerate them noticing.
  */

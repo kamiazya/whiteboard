@@ -153,6 +153,26 @@ context → orphaned), so a proposal rides the mechanism that exists.
 This gives prose the same granularity a canvas has, and it is what makes
 per-change adoption meaningful on a note.
 
+**Where it stands.** `applyBodyChange` and `bodyChangeConflicts` (model,
+beside their canvas twins) answer what adopting a passage MEANS and whether
+the passage still reads what the proposal assumed. They take the resolved
+range rather than resolving it: a body is a CRDT, and where a passage now
+sits is answered first by the Loro mark that followed the characters, which
+`model` cannot see and must not guess at — the surface has already resolved
+the anchor in order to draw the proposal.
+
+Two halves are still open, and neither is implied by the other:
+
+- **Who produces one.** `wb_canvas_edit` is spatial-only, `wb_document_set`
+  replaces a whole document, and `wb_body_patch` already spends the word
+  `mode` on `full` vs `range` and targets a canvas text node. A passage
+  proposal on a markdown document has no tool yet, and picking one is a
+  decision rather than a detail.
+- **Where a person sees and adopts one.** The proposal card is canvas chrome,
+  positioned on a bubble the renderer drew; prose needs its own in-place
+  surface — the annotation layer's passage highlight is the mechanism that
+  exists.
+
 ### 7. `wb_canvas_edit` gains a mode, and its default is *propose*
 
 One tool, not two: the same edit operations, with a mode saying whether they

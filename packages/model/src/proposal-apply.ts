@@ -1,4 +1,4 @@
-import type { SpatialProposedChange } from './proposal.js'
+import type { BodyProposedChange, SpatialProposedChange } from './proposal.js'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from './spatial.js'
 
 /**
@@ -11,9 +11,11 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from './spatial.js'
  * disagree with the first, which is the whole reason a proposal carries a
  * resolved op instead of a description.
  *
- * Neither judges `body.replace`. That arm is a passage of prose and its
- * subject is the body, not the canvas — so it is excluded by TYPE rather
- * than answered `false`, which would be a verdict nobody computed.
+ * The two canvas functions are excluded from judging `body.replace` by TYPE
+ * rather than answering `false`, which would be a verdict nobody computed;
+ * `applyBodyChange` and `bodyChangeConflicts` at the foot of this file are
+ * its prose twins (decision 6). They live here, beside the canvas pair, for
+ * the reason above: what adopting means is one reading.
  */
 
 type Fields = Record<string, unknown>
@@ -148,4 +150,65 @@ function sameElement(
     if (JSON.stringify(left) !== JSON.stringify(right)) return false
   }
   return true
+}
+
+/**
+ * A passage of prose (ADR-0029 decision 6): the range of body text a change
+ * points at, as the caller RESOLVED it.
+ *
+ * Resolution is deliberately not done here. A body is a CRDT, and where a
+ * passage now sits is answered first by the Loro mark that followed the
+ * characters (ADR-0026's order: mark → unique quote → quote with context →
+ * orphaned) — which this package cannot see and must not guess at. The
+ * caller has already resolved the anchor in order to DRAW the proposal, so
+ * asking it for the answer costs nothing and keeps one resolver rather than
+ * a second that could disagree.
+ *
+ * `undefined` means the passage could not be placed at all — the prose
+ * equivalent of an element that is gone.
+ */
+export interface ResolvedPassage {
+  readonly start: number
+  readonly end: number
+}
+
+/**
+ * The body with the passage replaced, or the body unchanged when the passage
+ * could not be placed.
+ *
+ * Idempotent in the same sense `applyCanvasChange` is, and by the same
+ * argument: adopting twice is an ordinary race. Re-applying against a body
+ * that already carries the replacement — resolved to where the replacement
+ * now is — writes the same characters back over themselves.
+ *
+ * An empty passage is an INSERTION and empty text is a DELETION; neither is
+ * a special case here, because a splice already means both.
+ */
+export function applyBodyChange(
+  body: string,
+  change: BodyProposedChange,
+  at: ResolvedPassage | undefined,
+): string {
+  if (at === undefined) return body
+  return body.slice(0, at.start) + change.text + body.slice(at.end)
+}
+
+/**
+ * Whether the passage still reads what the proposal assumed it read.
+ *
+ * This is decision 5 for prose, and what it deliberately does NOT flag is
+ * the same thing: an edit ELSEWHERE in the body moves every offset below it
+ * without touching this passage, and a resolver that followed the passage
+ * reports it in its new place. That is somebody working, not a collision.
+ *
+ * A passage that cannot be placed is a conflict, for the reason a missing
+ * element is one: there is no longer an anchor to follow.
+ */
+export function bodyChangeConflicts(
+  change: BodyProposedChange,
+  body: string,
+  at: ResolvedPassage | undefined,
+): boolean {
+  if (at === undefined) return true
+  return body.slice(at.start, at.end) !== change.assumed
 }
