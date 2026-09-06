@@ -17,6 +17,13 @@
  */
 
 import {
+  type LoadedReference,
+  type ReferenceWire,
+  referenceSeamsFromWire,
+  referenceTargets,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
+import {
   documentContainers,
   readMarkdownBody,
   readSpatialCanvas,
@@ -140,6 +147,56 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
     latestRecord.current = state.kind === 'ready' ? state.record : null
   }, [state])
 
+  // What the selected document points at, answered from the replica record
+  // itself. Nothing here reaches a keeper: the alias table is the record's
+  // own entries, and every target's body or canvas is read from the same
+  // record through `documentContainers`. That is what makes references work
+  // on the one page that exists BECAUSE the daemon is unreachable — and it
+  // stays inside the page's own rule, since reading a container is not an
+  // index write.
+  const references = useMemo((): ReferenceWire | undefined => {
+    if (state.kind !== 'ready' || selected === undefined) return undefined
+    const byPath = new Map(state.entries.map((entry) => [entry.path, entry]))
+    const byId = new Map(state.entries.map((entry) => [entry.documentId, entry]))
+    const load = (target: string): LoadedReference | null => {
+      const entry = byPath.get(target) ?? byId.get(target)
+      if (entry === undefined) return null
+      const containers = documentContainers(state.record, entry.documentId)
+      return {
+        documentId: entry.documentId,
+        ...(entry.name === undefined ? {} : { name: entry.name }),
+        ...(entry.kind === 'spatial'
+          ? { canvas: readSpatialCanvas(containers) }
+          : { body: readMarkdownBody(containers) }),
+      }
+    }
+    // Seeded from what the SELECTED document says, then walked the way every
+    // other keeper walks it — `referenceTargets` re-reads the graph as it
+    // grows, so a referenced body's own links load too, under its own caps.
+    const containers = documentContainers(state.record, selected.documentId)
+    const seeds =
+      selected.kind === 'spatial'
+        ? { canvases: [readSpatialCanvas(containers)] }
+        : { bodies: [readMarkdownBody(containers)] }
+    const graph = new Map<string, LoadedReference | null>()
+    for (;;) {
+      const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
+        (target) => !graph.has(target),
+      )
+      if (wanted.length === 0) break
+      for (const target of wanted) graph.set(target, load(target))
+    }
+    return referenceWire(graph, {
+      resolveAlias: (alias) => byPath.get(alias)?.documentId ?? null,
+      resolveTitle: (documentId) => byId.get(documentId)?.name,
+    })
+  }, [state, selected])
+
+  const seams = useMemo(
+    () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
+    [references],
+  )
+
   const content = useMemo(() => {
     if (state.kind !== 'ready' || selected === undefined) return null
     const containers = documentContainers(state.record, selected.documentId)
@@ -234,6 +291,7 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
                 initialViewMode="split"
                 value={draft}
                 onChange={onDraftChange}
+                references={seams}
               />
             )}
             {content?.kind === 'spatial' && spatialDraft !== null && (
@@ -246,6 +304,7 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
                 // should not need a tool switch first.
                 defaultTool="select"
                 className="h-full"
+                references={references}
               />
             )}
           </div>
