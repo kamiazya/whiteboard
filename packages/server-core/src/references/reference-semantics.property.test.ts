@@ -367,6 +367,38 @@ describe('reference semantics under command sequences', () => {
         fileRefs: [],
       })
 
+      // The CANVAS route, deterministically. A canvasEdit command needs a
+      // spatial document in a slot before it can fire, and the prelude seeds
+      // only markdown — so whether any run exercises a canvas reference at
+      // all is left to the generator. Measured against a real regression
+      // (#1454 flipping canvas-edit's default from apply to propose): 4 of 8
+      // unseeded runs caught it, and the change's own CI was one of the four
+      // that did not, landing 26/26 green.
+      //
+      // Off-pool like the shadow seeds, so it never contends with command
+      // traffic; it references 'alpha', which the commands DO move, so a
+      // canvas token also rides the follow pass on every run.
+      const seedCanvas = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'canvas-witness',
+        kind: 'spatial',
+      })
+      const witnessText = 'see [[alpha]]'
+      await editTool.execute({
+        workspaceId: WS,
+        documentId: seedCanvas.documentId,
+        mode: 'apply',
+        ops: [{ op: 'node.add', node: { id: 'n-witness', type: 'text', text: witnessText } }],
+      })
+      model.docs.set(seedCanvas.documentId, {
+        id: seedCanvas.documentId,
+        path: 'canvas-witness',
+        kind: 'spatial',
+        bodyTokens: scanReferences(witnessText).map((m) => m.target),
+        embedIds: [],
+        fileRefs: [],
+      })
+
       for (const cmd of cmds) {
         switch (cmd.t) {
           case 'create': {
@@ -426,6 +458,7 @@ describe('reference semantics under command sequences', () => {
               await editTool.execute({
                 workspaceId: WS,
                 documentId: doc.id,
+                mode: 'apply',
                 ops: [
                   {
                     op: 'node.add',
@@ -443,6 +476,7 @@ describe('reference semantics under command sequences', () => {
               await editTool.execute({
                 workspaceId: WS,
                 documentId: doc.id,
+                mode: 'apply',
                 ops: [{ op: 'node.add', node: { id: nodeId, type: 'file', file: cmd.node.file } }],
               })
               doc.fileRefs.push(cmd.node.file)
@@ -454,6 +488,7 @@ describe('reference semantics under command sequences', () => {
               await editTool.execute({
                 workspaceId: WS,
                 documentId: doc.id,
+                mode: 'apply',
                 ops: [{ op: 'node.add', node: { id: nodeId, type: 'text', text } }],
               })
               doc.bodyTokens.push(...scanReferences(text).map((m) => m.target))
