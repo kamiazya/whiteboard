@@ -21,7 +21,9 @@ import { Check, MessageSquarePlus, Pencil, SendHorizontal } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
+import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
+import { CommentBody } from './CommentBody.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
 import { ReplyComposer } from './ReplyComposer.js'
 import { ThreadReplies } from './ThreadReplies.js'
@@ -135,9 +137,31 @@ function matches(thread: CommentThread, filter: ThreadFilter): boolean {
 /**
  * The first message is the conversation's subject — replies are read by
  * opening it, not by scanning the list.
+ *
+ * As TEXT, not as the markdown it is: the row is a two-line clamp inside a
+ * button, and the rendered body is an SVG that neither `line-clamp` nor a
+ * button's semantics survive. Before this it showed the SOURCE, so a reader
+ * scanning the rail saw `**tighten**` while the card beside it drew
+ * emphasis.
  */
 function excerptOf(thread: CommentThread): string {
-  return thread.messages[0]?.body ?? ''
+  return commentExcerpt(thread.messages[0]?.body ?? '')
+}
+
+/**
+ * Whether the expanded conversation should draw its opening message, given
+ * that the row above it is already showing a summary of the same message.
+ *
+ * The panel used to draw it unconditionally and that was reverted, for a
+ * reason that still holds: on a one-line plain comment the two are the same
+ * sentence twice. What changed is that the row is now a LOSSY summary — the
+ * syntax stripped, the blocks joined, clamped to two lines — so for a body
+ * that has any of that in it the rendering is not a repeat, it is the
+ * message. Comparing the two is what tells them apart, rather than a taste
+ * call about which comments deserve it.
+ */
+function excerptLosesSomething(body: string): boolean {
+  return commentExcerpt(body) !== body.trim()
 }
 
 /**
@@ -624,6 +648,17 @@ export function CommentsPanel({
                         </div>
                       </form>
                     ) : null}
+                    {/* The opening message as WRITTEN, when the row's
+                        summary of it dropped something — see
+                        `excerptLosesSomething`. */}
+                    {excerptLosesSomething(thread.messages[0]?.body ?? '') ? (
+                      <CommentBody
+                        body={thread.messages[0]?.body ?? ''}
+                        compact
+                        className="text-neutral-800 dark:text-neutral-200"
+                      />
+                    ) : null}
+
                     <ThreadReplies thread={thread} compact />
 
                     {onReply === undefined ? null : (

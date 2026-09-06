@@ -22,6 +22,7 @@ import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
+import { CommentBody } from '../annotations/CommentBody.js'
 import { MessageBy } from '../annotations/message-meta.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
 import { ThreadReplies } from '../annotations/ThreadReplies.js'
@@ -132,7 +133,7 @@ export function CommentThreadCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="whitespace-pre-wrap break-words">{thread.messages[0]?.body ?? ''}</p>
+          <CommentBody body={thread.messages[0]?.body ?? ''} />
           <MessageBy message={thread.messages[0]} />
         </div>
         {/* Top-right, where a card's own verbs belong — reachable without

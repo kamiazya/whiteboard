@@ -413,3 +413,34 @@ it('sends a reply on Meta+Enter, the chord every other editing surface in the ap
 
   expect(replies).toEqual([{ threadId: 't-open', body: 'on it' }])
 })
+
+/**
+ * A comment's body is markdown, and the rail is where a reader who never
+ * opens the canvas meets it. Two surfaces in one row, each with its own
+ * job: the row summarises, the expanded conversation shows the message.
+ */
+it('summarises a markdown body as text in the row and draws it as markdown when opened', async () => {
+  const thread: CommentThread = {
+    ...OPEN,
+    id: 't-md',
+    messages: [
+      { id: 'm-md', body: '**tighten** the copy here', createdAt: '2026-09-03T00:00:00Z' },
+    ],
+  }
+  render(<CommentsPanel threads={[thread]} />)
+
+  // The row: a button clamped to two lines, so it says what the comment
+  // says rather than how it is written. The asterisks are the defect.
+  const row = page.getByRole('button', { name: /tighten the copy here/ })
+  await expect.element(row).toBeInTheDocument()
+  expect((await row.element()).textContent).not.toContain('**')
+
+  await userEvent.click(row)
+
+  // Opened: the message as written, drawn through canvas-render — so the
+  // emphasis is its own run rather than four characters of syntax.
+  const body = document.querySelector('[data-comment-body] svg')
+  expect(body).not.toBeNull()
+  const runs = [...(body?.querySelectorAll('text') ?? [])].map((node) => node.textContent)
+  expect(runs).toContain('tighten')
+})
