@@ -170,8 +170,13 @@ export function parseBuildxProgress(output) {
     cacheHitRatio: layers.length === 0 ? null : Number((cachedCount / layers.length).toFixed(3)),
     executedStepSeconds: Number(executedStepSeconds.toFixed(1)),
     slowest: [...ran].sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 5),
-    importSeen: resolved.some((s) => /importing cache/i.test(s.name)),
-    exportSeen: resolved.some((s) => /exporting cache/i.test(s.name)),
+    // Both words, in either order, because buildx uses both orders and the
+    // first real export was missed by a detector that only knew one:
+    // `exporting to GitHub Actions Cache` against a pattern reading
+    // `exporting cache`. `exporting to docker image format` and `importing to
+    // docker` are the --load and carry no `cache`, so they stay out.
+    importSeen: resolved.some((s) => /\bimporting\b.*\bcache\b/i.test(s.name)),
+    exportSeen: resolved.some((s) => /\bexporting\b.*\bcache\b/i.test(s.name)),
     diagnostics,
   }
 }
@@ -201,7 +206,7 @@ function addDiagnostic(into, line) {
  * @param {CacheReport} report
  * @param {{
  *   elapsedSeconds?: number,
- *   cacheCredentials?: { present: string[], absent: string[] },
+ *   cacheBackend?: 'gha' | 'none',
  * }} [timing]
  */
 export function formatCacheReport(report, timing = {}) {
@@ -226,44 +231,27 @@ export function formatCacheReport(report, timing = {}) {
       `${report.ranCount} of ${report.stepCount} steps ran, ` +
       `${elapsed}${report.executedStepSeconds}s of step time`,
   ]
-  // Which HALF of the round trip ran. A build that exports cache and imports
-  // none misses every layer while looking, from the ratio alone, exactly like
-  // a build whose inputs all changed — and the two want opposite fixes.
-  lines.push(
-    `  cache backend: import ${report.importSeen ? 'seen' : 'NOT seen'}, ` +
-      `export ${report.exportSeen ? 'seen' : 'NOT seen'}`,
-  )
+  // Why every run reads 0%, said out loud. Without this the ratio looks like
+  // a cache that is failing, and the next reader goes looking for the fault
+  // that was deliberately removed — see this module's header for the numbers.
+  //
+  // When a backend IS configured, which HALF of the round trip ran: a build
+  // that exports and imports nothing misses every layer while looking, from
+  // the ratio alone, exactly like a build whose inputs all changed, and the
+  // two want opposite fixes.
+  if (timing.cacheBackend === 'none') {
+    lines.push('  cache backend: none configured — layers rebuild every run, by decision')
+  } else if (timing.cacheBackend) {
+    lines.push(
+      `  cache backend: import ${report.importSeen ? 'seen' : 'NOT seen'}, ` +
+        `export ${report.exportSeen ? 'seen' : 'NOT seen'}`,
+    )
+  }
   for (const step of report.slowest) {
     lines.push(`  ${String(step.seconds ?? 0).padStart(7)}s  ${step.name}`)
   }
   for (const diagnostic of report.diagnostics) {
     lines.push(`  ${diagnostic}`)
   }
-  lines.push(...credentialLines(timing.cacheCredentials))
   return lines
-}
-
-/**
- * Whether the backend had anything to authenticate WITH.
- *
- * A cache that was never configured and a cache that missed every layer both
- * report 0%, and they want opposite fixes — expose the variables, or go find
- * what invalidated the layers. Docker's gha backend falls back to these
- * environment variables, and its own documentation says an inline `docker
- * buildx` invocation has to expose them by hand.
- *
- * NAMES and presence only. ACTIONS_RUNTIME_TOKEN is a credential; a report
- * that printed its value would be a worse defect than the one it exists to
- * find.
- *
- * @param {{ present: string[], absent: string[] } | undefined} credentials
- */
-function credentialLines(credentials) {
-  // No reading taken — a local `docker build` has no backend to report on, and
-  // inventing "absent" there would report a problem that does not exist.
-  if (!credentials) return []
-  const { present, absent } = credentials
-  if (absent.length === 0) return [`  cache credentials: all present (${present.join(', ')})`]
-  if (present.length === 0) return [`  cache credentials: none of ${absent.join(', ')} are set`]
-  return [`  cache credentials: ${present.join(', ')} set; ${absent.join(', ')} NOT set`]
 }
