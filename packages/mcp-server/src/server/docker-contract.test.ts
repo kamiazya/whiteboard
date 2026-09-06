@@ -30,7 +30,7 @@
 //     prefix" fails, while the cp-target equality test above stays green.
 
 import { readdirSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 
@@ -42,6 +42,13 @@ function readText(relPath: string): string {
 }
 
 const dockerfile = readText('Dockerfile.server')
+
+/**
+ * The base every stage builds `FROM`. A regex rather than the literal string,
+ * because `${NODE_VERSION}` here is Dockerfile ARG interpolation and biome
+ * reads a JS template placeholder that was never escaped.
+ */
+const GLIBC_BASE = /^FROM node:\$\{NODE_VERSION\}-slim/m
 const compose = readText('docker-compose.server.yml')
 const envExample = readText('.env.server.example')
 const docs = readText('docs/how-to/self-host-with-docker.md')
@@ -106,7 +113,7 @@ describe('Dockerfile.server contracts', () => {
   // on CI once the docker smokes started running there. Going back means first
   // checking the resolved libsql has a musl prebuild that loads.
   it('runs on a glibc base, which libsql needs', () => {
-    expect(dockerfile).toContain('FROM node:${NODE_VERSION}-slim')
+    expect(dockerfile).toMatch(GLIBC_BASE)
     expect(dockerfile, 'a musl base needs a libsql musl prebuild that loads').not.toMatch(
       /^FROM node:\$\{NODE_VERSION\}-alpine/m,
     )
@@ -383,7 +390,7 @@ describe('every Dockerfile.server build supplies NODE_VERSION', () => {
 
   it('the ARG has no default, which is what makes omitting it fatal', () => {
     expect(dockerfile).toMatch(/^ARG NODE_VERSION$/m)
-    expect(dockerfile).toContain('FROM node:${NODE_VERSION}-slim')
+    expect(dockerfile).toMatch(GLIBC_BASE)
   })
 
   it('found a plausible number of files reaching the image build', () => {

@@ -105,9 +105,13 @@ image that is not present is a hard failure rather than a rebuild — a fallback
 there would turn one build per commit back into two while every log still read
 as success.
 
-`smoke:docker`'s ten scenarios run there; `smoke:docker-backup-restore` does not,
-and its matrix exception records why — running it showed it saves a workspace
-palette through a route the server no longer has.
+Both run there now. `smoke:docker-backup-restore` was held back one increment:
+running it for the first time showed it saved a workspace palette through a
+route the server no longer has. That assertion moved to the workspace display
+name — a `workspaces`-table row, so it still covers the category the palette
+stood for: state that lives outside any document and has to survive the volume
+round-trip. It also needs the `dist/` build the image dry-run does not produce,
+which is why the job builds mcp-server before running it.
 
 Both were `docker-release`-only before, so the container boundary — auth,
 graceful stop, volume remount, log redaction — was first exercised during a

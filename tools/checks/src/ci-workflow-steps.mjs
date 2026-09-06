@@ -12,7 +12,7 @@
 
 /**
  * @typedef {{ name: string, run: string | null, if: string | null }} WorkflowStep
- * @typedef {{ id: string, if: string | null, steps: WorkflowStep[] }} WorkflowJob
+ * @typedef {{ id: string, if: string | null, needs: string[], steps: WorkflowStep[] }} WorkflowJob
  */
 
 function indentOf(line) {
@@ -59,6 +59,8 @@ export function extractWorkflowJobs(yamlText) {
       const jobId = jobMatch[1]
       const jobBodyIndent = jobsIndent + 2
       let jobIf = null
+      /** @type {string[]} */
+      let jobNeeds = []
       /** @type {WorkflowStep[]} */
       const steps = []
       i++
@@ -76,6 +78,41 @@ export function extractWorkflowJobs(yamlText) {
           i++
           continue
         }
+        // `needs:` in all three shapes GitHub accepts: a bare scalar
+        // (`needs: verify`), a flow sequence (`needs: [a, b]`), and a block
+        // sequence on the following lines. The aggregate gate's coverage guard
+        // reads this, so a shape that silently parsed as EMPTY would report
+        // full coverage over nothing.
+        const needsMatch = bodyLine.match(/^ {4}needs:\s*(.*)$/)
+        if (bodyIndent === jobBodyIndent && needsMatch) {
+          const inline = needsMatch[1].trim()
+          if (inline.startsWith('[')) {
+            jobNeeds = inline
+              .replace(/^\[|\]$/g, '')
+              .split(',')
+              .map((n) => n.trim())
+              .filter(Boolean)
+            i++
+          } else if (inline !== '') {
+            jobNeeds = [inline]
+            i++
+          } else {
+            i++
+            while (i < lines.length) {
+              const needLine = lines[i]
+              if (isBlankOrComment(needLine)) {
+                i++
+                continue
+              }
+              const needMatch = needLine.match(/^ {6}- ([A-Za-z0-9_-]+)\s*$/)
+              if (!needMatch) break
+              jobNeeds.push(needMatch[1])
+              i++
+            }
+          }
+          continue
+        }
+
         const stepsMatch = bodyLine.match(/^ {4}steps:\s*$/)
         if (bodyIndent === jobBodyIndent && stepsMatch) {
           i++
@@ -86,7 +123,7 @@ export function extractWorkflowJobs(yamlText) {
         }
         i++
       }
-      jobs.push({ id: jobId, if: jobIf, steps })
+      jobs.push({ id: jobId, if: jobIf, needs: jobNeeds, steps })
       continue
     }
     i++
