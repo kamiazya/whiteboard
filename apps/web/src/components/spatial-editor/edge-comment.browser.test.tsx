@@ -77,7 +77,9 @@ it('an edge’s menu opens a comment about the edge, pinned on its line', async 
   await userEvent.click(page.getByRole('menuitem', { name: 'Comment on this' }))
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
+  // The caret lands on CodeMirror's own contenteditable INSIDE the bubble,
+  // not on the bubble element the testid names.
+  await vi.waitFor(() => expect(compose.element().contains(document.activeElement)).toBe(true))
   await userEvent.keyboard('is this link right?')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 

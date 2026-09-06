@@ -186,6 +186,18 @@ it('the context menu drops Reply, since the card is where a reply is written', a
   expect(labels).not.toContain('Reply')
 })
 
+/**
+ * What the composer holds, which is NOT `.value` any more: it is a
+ * CodeMirror view, so the draft is the text of its rendered lines — and its
+ * placeholder renders inside them, so reading `textContent` straight off the
+ * box answers `Reply…` for an empty draft.
+ */
+function draftText(): string {
+  const box = page.getByLabelText('Reply').element()
+  const placeholder = box.querySelector('.cm-placeholder')?.textContent ?? ''
+  return (box.textContent ?? '').replace(placeholder, '')
+}
+
 it('an unsent draft does not follow the reader to the next conversation', async () => {
   const { Host, latest } = makeHost([THREAD, OTHER_THREAD])
   const { container } = render(<Host />)
@@ -201,9 +213,7 @@ it('an unsent draft does not follow the reader to the next conversation', async 
   // in one place, so its draft would otherwise survive the switch and be
   // committed against whichever thread is open when submit is pressed.
   pressOtherBubble(root, 11)
-  await vi.waitFor(() =>
-    expect((page.getByLabelText('Reply').element() as HTMLTextAreaElement).value).toBe(''),
-  )
+  await vi.waitFor(() => expect(draftText()).toBe(''))
 
   await userEvent.click(page.getByLabelText('Reply'))
   await userEvent.keyboard('meant for the second')
@@ -284,4 +294,44 @@ it('a cancelled press on a comment opens nothing later', async () => {
     expect(container.querySelector('[data-testid="canvas-content"]')).not.toBeNull(),
   )
   expect(container.querySelector('[data-testid="comment-card"]')).toBeNull()
+})
+
+/**
+ * A comment's body is markdown, on the surface it is anchored to.
+ *
+ * Pinned HERE rather than only on the shared components, because the
+ * annotation surface-parity matrix asks the question per surface: a cell
+ * pointing at `CommentBody`'s own test would say the component works, not
+ * that the card uses it — and the card had drawn the body raw for as long
+ * as the canvas beneath it had drawn it as markdown.
+ */
+it('the card draws its conversation as markdown and answers it in a markdown editor', async () => {
+  const thread: CommentThread = {
+    ...THREAD,
+    messages: [{ id: 'm1', body: '**tighten** this', createdAt: '2026-09-02T00:00:00.000Z' }],
+  }
+  const { Host } = makeHost([thread])
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  await waitForComment(container)
+
+  pressBubble(root, 20)
+  await expect.element(page.getByTestId('comment-card')).toBeInTheDocument()
+
+  // Drawn: emphasis is its own run, and the syntax is gone.
+  const runs = [...(container.querySelectorAll('[data-comment-body] text') ?? [])].map(
+    (node) => node.textContent,
+  )
+  expect(runs).toContain('tighten')
+  expect(container.querySelector('[data-comment-body]')?.textContent).not.toContain('**')
+
+  // Answered: the reply box is a CodeMirror view, so the note's own editing
+  // verbs reach it. Mod+b over a selection is the cheapest proof.
+  await userEvent.click(page.getByLabelText('Reply'))
+  await userEvent.keyboard('later')
+  await userEvent.keyboard('{Control>}a{/Control}')
+  await userEvent.keyboard('{Control>}b{/Control}')
+  await vi.waitFor(() =>
+    expect(page.getByLabelText('Reply').element().textContent).toBe('**later**'),
+  )
 })

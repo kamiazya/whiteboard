@@ -402,6 +402,55 @@ after, which is what decision 4 forbids.
 this product has no delete for a conversation (ADR-0025 decision: Resolve is
 the only way to close one), so there is no caller.
 
+## Supplement (2026-09-06): a comment's body is markdown, said once
+
+`commentMessageSchema.body` is a `z.string()` and has always declared no
+format. Two surfaces had already decided independently, and they disagreed:
+
+- `layoutSpatialCanvas` sent the body through the same mdast pipeline a text
+  node's body takes, so `**tighten**` was emphasis in the bubble, in an
+  export and in the picture the widget draws;
+- the web app's card and rail printed the same string raw, so it was four
+  asterisks in the rail beside the emphasis on the canvas.
+
+Nothing was red. No test had ever been asked to make two surfaces agree
+about this, and each was self-consistent.
+
+**The body is markdown.** That is the older behaviour made explicit rather
+than a new decision — the canvas has read it that way since the layer
+shipped, and it is what a person typing `- one` into a comment already
+expects.
+
+What follows from it:
+
+- **One producer.** `canvas-render`'s `layoutCommentBody` fixes the metrics
+  (the NODE markdown theme, not the DOCUMENT one the preview pane passes),
+  the measure a body wraps to when a surface names none, and what a body
+  that will not parse degrades to. A surface cannot pick those for itself,
+  which is how the rail would have quietly taken document typography by
+  reaching for the app's obvious markdown renderer.
+- **Drawn through canvas-render, not through HTML.** The web app has no
+  markdown-to-HTML path, deliberately (see `.claude/rules/package-codec.md`),
+  and a comment body is the same question the preview pane already answered.
+  The cost, stated because it is real: the body is `<text>` elements, so it
+  carries no heading or list semantics into the accessibility tree. Making a
+  different trade here would leave the app with two conventions for one
+  question.
+- **A LIST ROW is text, not a rendering.** The rail's row is a two-line
+  clamp inside a button, which neither `line-clamp` nor a button's semantics
+  survive an SVG inside. It shows what the comment says, with the syntax
+  stripped (`commentExcerpt`), and the rendering is one press away.
+- **Writing markdown needs no editor; the editor is an affordance.** Every
+  comment box in the web app is the note's own CodeMirror host now, so the
+  editing verbs transfer — but a body typed into the widget's one-line input
+  is still markdown when it is drawn. The two are separate columns in
+  `annotation-surface-parity.test.ts` for exactly that reason.
+
+What is NOT decided here: whether a comment body should be able to carry an
+embed or a wikiLink into another document. It parses as markdown, so it
+already can syntactically; nothing resolves references for a comment body,
+and nothing should until someone asks for it.
+
 ## Alternatives considered
 
 - **A facet on the document** — rejected in decision 1: wholesale writes lose

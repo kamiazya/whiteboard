@@ -3,7 +3,7 @@
 // changes — jsdom alone is disallowed for interaction by AGENTS.md.
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -362,7 +362,12 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
   await userEvent.click(page.getByText('tighten the copy here'))
   await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   const box = page.getByRole('textbox', { name: 'Edit comment text' })
-  await expect.element(box).toHaveValue('tighten the copy here')
+  // `textContent`, not `toHaveValue`: the box is a CodeMirror view, so what
+  // it holds is the text of its rendered lines and not a form value. Still
+  // the load-bearing assertion of this test's first half — the editor has
+  // to open PRE-FILLED, and an empty one would let the rest pass while
+  // rewriting the message from scratch.
+  await expect.element(box).toHaveTextContent('tighten the copy here')
   await userEvent.fill(box, 'tighten the copy here, and the heading')
   await userEvent.click(page.getByRole('button', { name: 'Save' }))
   expect(edits).toEqual([['t-open', 'm1', 'tighten the copy here, and the heading']])
@@ -386,4 +391,80 @@ it('offers neither verb on a host with no write path', async () => {
   await userEvent.click(page.getByText('tighten the copy here'))
   expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
   expect(page.getByRole('button', { name: 'Edit comment' }).query()).toBeNull()
+})
+
+/**
+ * The chord is the whole reason `ReplyComposer` was extracted — its own
+ * doc comment names this as the drift it exists to end: "the card
+ * submitted on Cmd/Ctrl+Enter and the panel did not, so the same
+ * conversation answered the same chord on one surface and swallowed it on
+ * the other." Only the CARD was folded onto it; the rail kept its inline
+ * copy, so the drift the extraction was written to close is still open.
+ */
+it('sends a reply on Meta+Enter, the chord every other editing surface in the app answers', async () => {
+  const replies: { threadId: string; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onReply={(threadId, body) => replies.push({ threadId, body })}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const box = page.getByRole('textbox', { name: /reply/i })
+  await userEvent.fill(box, 'on it')
+  await userEvent.click(box)
+  await userEvent.keyboard('{Meta>}{Enter}{/Meta}')
+
+  expect(replies).toEqual([{ threadId: 't-open', body: 'on it' }])
+})
+
+/**
+ * A comment's body is markdown, and the rail is where a reader who never
+ * opens the canvas meets it. Two surfaces in one row, each with its own
+ * job: the row summarises, the expanded conversation shows the message.
+ */
+it('summarises a markdown body as text in the row and draws it as markdown when opened', async () => {
+  const thread: CommentThread = {
+    ...OPEN,
+    id: 't-md',
+    messages: [
+      { id: 'm-md', body: '**tighten** the copy here', createdAt: '2026-09-03T00:00:00Z' },
+    ],
+  }
+  render(<CommentsPanel threads={[thread]} />)
+
+  // The row: a button clamped to two lines, so it says what the comment
+  // says rather than how it is written. The asterisks are the defect.
+  const row = page.getByRole('button', { name: /tighten the copy here/ })
+  await expect.element(row).toBeInTheDocument()
+  expect((await row.element()).textContent).not.toContain('**')
+
+  await userEvent.click(row)
+
+  // Opened: the message as written, drawn through canvas-render — so the
+  // emphasis is its own run rather than four characters of syntax.
+  const body = document.querySelector('[data-comment-body] svg')
+  expect(body).not.toBeNull()
+  const runs = [...(body?.querySelectorAll('text') ?? [])].map((node) => node.textContent)
+  expect(runs).toContain('tighten')
+})
+
+/**
+ * The rail's own box is the note's editor too. Pinned at the rail rather
+ * than only on `CommentComposer`, for the reason the parity matrix exists:
+ * a cell naming the component's test would say the component works, not
+ * that this surface uses it.
+ */
+it('answers a conversation in a markdown editor, with the editing verbs the note pane has', async () => {
+  render(<CommentsPanel threads={[OPEN]} onReply={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const box = page.getByRole('textbox', { name: /reply/i })
+  await userEvent.click(box)
+  await userEvent.keyboard('later')
+  await userEvent.keyboard('{Control>}a{/Control}')
+  await userEvent.keyboard('{Control>}b{/Control}')
+
+  await vi.waitFor(() => expect(box.element().textContent).toBe('**later**'))
 })

@@ -20,8 +20,16 @@
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
-import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
+import {
+  type CSSProperties,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
+import { CommentBody } from '../annotations/CommentBody.js'
 import { MessageBy } from '../annotations/message-meta.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
 import { ThreadReplies } from '../annotations/ThreadReplies.js'
@@ -61,7 +69,7 @@ export function CommentThreadCard({
   // the canvas, and only once they type. useLayoutEffect corrects before
   // paint, so there is no visible jump.
   const [slide, setSlide] = useState({ x: 0, y: 0 })
-  useLayoutEffect(() => {
+  const fit = useCallback(() => {
     const el = cardRef.current
     const parent = el?.offsetParent
     if (el == null || !(parent instanceof HTMLElement)) return
@@ -75,7 +83,27 @@ export function CommentThreadCard({
       y: Math.min(0, parent.clientHeight - CARD_EDGE_MARGIN_PX - naturalBottom),
     }
     setSlide((prev) => (prev.x === next.x && prev.y === next.y ? prev : next))
-  }, [box.x, box.y, box.width, thread])
+  }, [box.x, box.y])
+  useLayoutEffect(fit, [fit, box.width, thread])
+
+  // And again whenever the card's own height changes, which it does AFTER
+  // that first measure: the body is laid out by canvas-render once a
+  // ResizeObserver has reported the width to wrap to, and the composer is a
+  // CodeMirror view created in an effect — both land after layout effects
+  // have run, so a one-shot measure slides the card by a height it no
+  // longer has and it hangs off the bottom of the root.
+  //
+  // The one-shot was always fragile for the same reason (a reply arriving
+  // from another writer grows the card under a reader who is not touching
+  // it); it only became reliably wrong here. No feedback loop: the
+  // correction moves the card, it does not resize it.
+  useLayoutEffect(() => {
+    const el = cardRef.current
+    if (el === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(fit)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [fit])
 
   // Focus the CARD, not its reply box: a press that opens a conversation is
   // a request to read it, and pulling the caret into the box would send the
@@ -132,7 +160,7 @@ export function CommentThreadCard({
     >
       <div className="flex items-start gap-2">
         <div className="min-w-0 flex-1">
-          <p className="whitespace-pre-wrap break-words">{thread.messages[0]?.body ?? ''}</p>
+          <CommentBody body={thread.messages[0]?.body ?? ''} />
           <MessageBy message={thread.messages[0]} />
         </div>
         {/* Top-right, where a card's own verbs belong — reachable without

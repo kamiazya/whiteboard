@@ -21,8 +21,14 @@ import { Check, MessageSquarePlus, Pencil, SendHorizontal } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
+import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
+import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
+import { CommentBody } from './CommentBody.js'
+import { CommentComposer } from './CommentComposer.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
+import { ReplyComposer } from './ReplyComposer.js'
+import { ThreadReplies } from './ThreadReplies.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -133,9 +139,31 @@ function matches(thread: CommentThread, filter: ThreadFilter): boolean {
 /**
  * The first message is the conversation's subject — replies are read by
  * opening it, not by scanning the list.
+ *
+ * As TEXT, not as the markdown it is: the row is a two-line clamp inside a
+ * button, and the rendered body is an SVG that neither `line-clamp` nor a
+ * button's semantics survive. Before this it showed the SOURCE, so a reader
+ * scanning the rail saw `**tighten**` while the card beside it drew
+ * emphasis.
  */
 function excerptOf(thread: CommentThread): string {
-  return thread.messages[0]?.body ?? ''
+  return commentExcerpt(thread.messages[0]?.body ?? '')
+}
+
+/**
+ * Whether the expanded conversation should draw its opening message, given
+ * that the row above it is already showing a summary of the same message.
+ *
+ * The panel used to draw it unconditionally and that was reverted, for a
+ * reason that still holds: on a one-line plain comment the two are the same
+ * sentence twice. What changed is that the row is now a LOSSY summary — the
+ * syntax stripped, the blocks joined, clamped to two lines — so for a body
+ * that has any of that in it the rendering is not a repeat, it is the
+ * message. Comparing the two is what tells them apart, rather than a taste
+ * call about which comments deserve it.
+ */
+function excerptLosesSomething(body: string): boolean {
+  return commentExcerpt(body) !== body.trim()
 }
 
 /**
@@ -170,7 +198,6 @@ export function CommentsPanel({
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
   // The opening message under edit, with its draft: at most one, and it
   // belongs to the row, so opening another conversation abandons it.
   const [editing, setEditing] = useState<{
@@ -192,7 +219,6 @@ export function CommentsPanel({
     setLastRevealed(revealThreadId)
     if (revealThreadId !== null) {
       setOpenThreadId(revealThreadId)
-      setDraft('')
       const revealed = threads.find((t) => t.id === revealThreadId)
       if (revealed !== undefined && !matches(revealed, filter)) setFilter('all')
     }
@@ -226,8 +252,8 @@ export function CommentsPanel({
    * phone the virtual keyboard stays up over the rail that just opened.
    */
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
-  const composeRef = useRef<HTMLTextAreaElement | null>(null)
-  const editRef = useRef<HTMLTextAreaElement | null>(null)
+  const composeRef = useRef<SourcePaneApi | null>(null)
+  const editRef = useRef<SourcePaneApi | null>(null)
 
   // The ROW's toggle rather than its reply box: it is the conversation's
   // heading, and Tab continues from it into the verbs, the replies and the
@@ -251,6 +277,31 @@ export function CommentsPanel({
     if (editingThreadId === null) return
     editRef.current?.focus()
   }, [editingThreadId])
+
+  /**
+   * The compose box's commit, named because two things now reach it: the
+   * Send button and the composer's Mod+Enter. Guarded here rather than by
+   * disabling the button, so the keyboard path takes the same rule.
+   */
+  function submitCompose(): void {
+    const body = composeDraft.trim()
+    if (body === '' || composeAnchor === null || onCreateThread === undefined) return
+    onCreateThread(composeAnchor, body)
+    setComposeDraft('')
+  }
+
+  /** The edit's commit, reachable from Save and from the chord alike. */
+  function commitEdit(thread: CommentThread): void {
+    if (editing === null || onEditMessage === undefined) return
+    const body = editing.body.trim()
+    const opening = thread.messages[0]
+    // An emptied subject is a cancel, not a blank message: the schema
+    // refuses an empty body.
+    if (body !== '' && opening !== undefined && body !== opening.body) {
+      onEditMessage(thread.id, opening.id, body)
+    }
+    setEditing(null)
+  }
 
   /**
    * Escape is the way back out, and it unwinds one layer at a time: an edit
@@ -371,9 +422,6 @@ export function CommentsPanel({
 
   function toggle(thread: CommentThread): void {
     setOpenThreadId((current) => (current === thread.id ? null : thread.id))
-    // The draft belongs to the conversation it was typed into, so moving to
-    // another one starts empty rather than carrying half a sentence across.
-    setDraft('')
     onSelect?.(thread)
   }
 
@@ -421,13 +469,7 @@ export function CommentsPanel({
           className="flex flex-col gap-1 rounded border p-2"
           onSubmit={(event) => {
             event.preventDefault()
-            const body = composeDraft.trim()
-            // Same rule as the reply box, in the same place: guarded on
-            // submit rather than by disabling the button, so pressing Enter
-            // in the field is covered by it too.
-            if (body === '') return
-            onCreateThread(composeAnchor, body)
-            setComposeDraft('')
+            submitCompose()
           }}
         >
           {composeAnchor.kind === 'text' ? (
@@ -442,13 +484,13 @@ export function CommentsPanel({
               About the {anchorLabel(composeAnchor)}
             </p>
           )}
-          <textarea
-            ref={composeRef}
-            aria-label="Comment"
+          <CommentComposer
+            apiRef={composeRef}
+            label="Comment"
             value={composeDraft}
-            onChange={(event) => setComposeDraft(event.target.value)}
-            rows={2}
-            className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+            onChange={setComposeDraft}
+            onSubmit={submitCompose}
+            compact
           />
           <div className="flex justify-end">
             {/* Guarded on submit rather than disabled, so pressing Enter in
@@ -591,25 +633,16 @@ export function CommentsPanel({
                         className="flex flex-col gap-1"
                         onSubmit={(event) => {
                           event.preventDefault()
-                          const body = editing.body.trim()
-                          const opening = thread.messages[0]
-                          // An emptied subject is a cancel, not a blank
-                          // message: the schema refuses an empty body.
-                          if (body !== '' && opening !== undefined && body !== opening.body) {
-                            onEditMessage(thread.id, opening.id, body)
-                          }
-                          setEditing(null)
+                          commitEdit(thread)
                         }}
                       >
-                        <textarea
-                          ref={editRef}
-                          aria-label="Edit comment text"
+                        <CommentComposer
+                          apiRef={editRef}
+                          label="Edit comment text"
                           value={editing.body}
-                          onChange={(event) =>
-                            setEditing({ threadId: thread.id, body: event.target.value })
-                          }
-                          rows={2}
-                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+                          onChange={(body) => setEditing({ threadId: thread.id, body })}
+                          onSubmit={() => commitEdit(thread)}
+                          compact
                         />
                         {/* No Cancel button: Escape already leaves the edit,
                             and an X here would be the third meaning of that
@@ -627,56 +660,29 @@ export function CommentsPanel({
                         </div>
                       </form>
                     ) : null}
-                    {/* The REPLIES, not the whole conversation over again:
-                        the row above already carries the opening message,
-                        which is the conversation's subject. Repeating it here
-                        was the first shape and it read as the same sentence
-                        twice. Replies indent under their subject instead. */}
-                    {thread.messages.length > 1 ? (
-                      <ol className="flex flex-col gap-2 border-l pl-2">
-                        {thread.messages.slice(1).map((message) => (
-                          <li key={message.id} className="flex flex-col gap-0.5">
-                            <MessageBy message={message} />
-                            <p className="whitespace-pre-wrap text-xs text-neutral-800 dark:text-neutral-200">
-                              {message.body}
-                            </p>
-                          </li>
-                        ))}
-                      </ol>
+                    {/* The opening message as WRITTEN, when the row's
+                        summary of it dropped something — see
+                        `excerptLosesSomething`. */}
+                    {excerptLosesSomething(thread.messages[0]?.body ?? '') ? (
+                      <CommentBody
+                        body={thread.messages[0]?.body ?? ''}
+                        compact
+                        className="text-neutral-800 dark:text-neutral-200"
+                      />
                     ) : null}
 
+                    <ThreadReplies thread={thread} compact />
+
                     {onReply === undefined ? null : (
-                      <form
-                        className="flex flex-col gap-1"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          const body = draft.trim()
-                          // An empty reply is not a message. Guarded here
-                          // rather than by disabling the button, so the
-                          // keyboard path (Enter in the field) is covered by
-                          // the same rule as the pointer one.
-                          if (body === '') return
-                          onReply(thread.id, body)
-                          setDraft('')
-                        }}
-                      >
-                        <textarea
-                          aria-label="Reply"
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          rows={2}
-                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
-                        />
-                        <button
-                          type="submit"
-                          aria-label="Send reply"
-                          title="Send reply"
-                          aria-disabled={draft.trim() === ''}
-                          className={cn(ICON_VERB_CLASS, 'self-end aria-disabled:opacity-40')}
-                        >
-                          <SendHorizontal aria-hidden="true" className="size-4" />
-                        </button>
-                      </form>
+                      // Keyed by thread, which is what makes the draft belong
+                      // to the conversation it was typed into: moving to
+                      // another one mounts a fresh box instead of carrying
+                      // half a sentence across.
+                      <ReplyComposer
+                        key={thread.id}
+                        compact
+                        onReply={(body) => onReply(thread.id, body)}
+                      />
                     )}
                   </div>
                 ) : null}

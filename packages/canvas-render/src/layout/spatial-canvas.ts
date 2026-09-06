@@ -60,6 +60,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
+import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 import {
   commentLeaderEnd,
   nearestPointOnPolyline,
@@ -1541,9 +1542,13 @@ export const COMMENT_PIN_SIZE_PX = 20
  * to its 9px count.
  */
 export const COMMENT_PIN_COUNT_FONT_PX = 10
+export {
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  type CommentBodyLayoutOptions,
+  layoutCommentBody,
+} from './comment-body.js'
 export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
 
-const COMMENT_TEXT_MAX_WIDTH_PX = 200
 // Exported with the offset so the editor's compose bubble can wear the same
 // box the renderer draws (padding, corner) — the draft and the settled
 // comment are one object, not two that happen to look alike.
@@ -1688,19 +1693,15 @@ function composeComments(
         ? { x: region.rect.x + region.rect.width, y: region.rect.y }
         : commentAnchor(comment, canvas, edgePathOf)
 
-    // The text goes through the same mdast pipeline as a text node's body,
-    // so wrapping (CJK included) and theming have one producer. A parse
-    // failure degrades to the single-line label run, like a body's does.
-    let laid: Scene
-    try {
-      laid = layoutMdastBlocks(
-        options.parseBody(comment.text),
-        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
-      )
-    } catch (err) {
-      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err })
-      laid = { nodes: [labelRun(comment.text, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
-    }
+    // Through `layoutCommentBody`, which is the ONE producer of a comment's
+    // prose — so the card and rail that draw this same body in the web app
+    // cannot pick different metrics for it.
+    const laid = layoutCommentBody(comment.text, {
+      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      parseBody: options.parseBody,
+      onParseFailure: (err) =>
+        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err }),
+    })
     const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
     const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
     const bubble = placeCommentBubble(
@@ -1870,20 +1871,17 @@ function composeProposals(
 
     const changed = `${open.length} proposed change${open.length === 1 ? '' : 's'}`
     const label = conflicts === 0 ? changed : `${changed}, ${conflicts} needs a look`
-    // Through the same mdast pipeline a comment's text takes, so the label
-    // WRAPS instead of being truncated at the bubble's width — "2 proposed
-    // changes - 1 needs a look" does not fit on one line, and a truncated
-    // count is worse than no count.
-    let laid: Scene
-    try {
-      laid = layoutMdastBlocks(
-        options.parseBody(label),
-        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
-      )
-    } catch (err) {
-      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err })
-      laid = { nodes: [labelRun(label, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
-    }
+    // Through the comment body's own producer, so the label WRAPS instead of
+    // being truncated at the bubble's width — "2 proposed changes - 1 needs
+    // a look" does not fit on one line, and a truncated count is worse than
+    // no count. This bubble borrows the comment layer's grammar throughout;
+    // borrowing its producer is what keeps that true.
+    const laid = layoutCommentBody(label, {
+      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      parseBody: options.parseBody,
+      onParseFailure: (err) =>
+        options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
+    })
     const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
     const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
     const bubble = placeCommentBubble(
