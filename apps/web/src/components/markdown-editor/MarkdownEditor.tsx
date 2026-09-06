@@ -7,6 +7,7 @@ import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-re
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import {
   type CommentThread,
+  type CommentThreadStatus,
   documentIdSchema,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
@@ -501,6 +502,7 @@ export function MarkdownEditor({
       readonly top: number
       readonly selected: boolean
       readonly messages: number
+      readonly status: CommentThreadStatus
     }[]
   >([])
   const previewInnerRef = useRef<HTMLDivElement | null>(null)
@@ -763,6 +765,10 @@ export function MarkdownEditor({
       placeThreads(debouncedValue, projectedThreads, projectedMarks).map((placed) => ({
         threadId: placed.threadId,
         messages: messageCounts.get(placed.threadId) ?? 1,
+        // `PlacedThread` already carries it, and the preview said nothing
+        // about it: a resolved conversation's marker was drawn exactly like
+        // an open one, so a reader in Read mode could not tell them apart.
+        status: placed.status,
         top:
           svgTop +
           documentYForLine(
@@ -963,6 +969,7 @@ export function MarkdownEditor({
                   type="button"
                   data-testid="comment-preview-marker"
                   data-thread-id={marker.threadId}
+                  data-status={marker.status}
                   aria-label={
                     marker.messages > 1
                       ? `Open comment, ${marker.messages} messages`
@@ -972,7 +979,7 @@ export function MarkdownEditor({
                   // In the column's own left padding, on the block's top edge.
                   style={{ top: marker.top }}
                   className={cn(
-                    'absolute left-0 flex size-6 items-center justify-center rounded text-(--annotation) hover:bg-accent',
+                    'comment-preview-marker absolute left-0 flex size-6 items-center justify-center rounded text-(--annotation) hover:bg-accent',
                     marker.selected && 'bg-accent',
                   )}
                 >
