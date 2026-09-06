@@ -27,6 +27,9 @@ export const goodFocus = () => {
 export async function goodAwaited() {
   await expect(Promise.resolve(1)).resolves.toBe(1)
   await expect('snapshot').toMatchFileSnapshot('./out.txt')
+  await expect.element(page.getByRole('button')).toBeInTheDocument()
+  await expect.element(page.getByRole('menu')).not.toBeInTheDocument()
+  await expect.poll(() => 1).toBe(1)
 }
 
 export function goodReturned() {

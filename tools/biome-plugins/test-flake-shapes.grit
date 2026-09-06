@@ -88,6 +88,49 @@ any {
       severity = "error"
     )
   },
+  // The other two async assertion forms the write-time checklist names.
+  // `expect.element` is the browser assertion (148 call sites here) and
+  // `expect.poll` the retrying one (15); both return a promise, and both
+  // check NOTHING when nobody awaits them — the test ends first and a
+  // rejection lands as an unhandled error or nowhere. Exactly the shape the
+  // `.resolves`/`.rejects` rule above already refuses, and it was refused
+  // there for a reason that holds here word for word: Vitest 5 fails the
+  // test at runtime, so lint is the same verdict reached earlier, INCLUDING
+  // in a file the runtime never reaches.
+  //
+  // Measured 0 un-awaited occurrences across all 163 call sites when this was
+  // added, so it costs nothing today and only refuses the next one.
+  //
+  // Two patterns because `.not` re-parents the call: in
+  // `expect.element(x).not.toBeVisible()` the matcher's object is
+  // `expect.element(x).not`, which the plain shape cannot see. Six sites use
+  // it today.
+  //
+  // Their messages differ ON PURPOSE, unlike the chronology pair above. The
+  // fixture guard keys on the SET of messages, so two patterns sharing one
+  // message leave the second unverified — a `.not` pattern that stopped
+  // matching would keep the guard green. Distinct messages make the bad
+  // fixture prove each shape separately.
+  `expect.$kind($x).$m($args)` as $call where {
+    $kind <: or { `element`, `poll` },
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited retrying assertion: `expect.element`/`expect.poll` returns a promise, so without `await` the test finishes before it settles and checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
+  `expect.$kind($x).not.$m($args)` as $call where {
+    $kind <: or { `element`, `poll` },
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited negated retrying assertion: the `.not` form of `expect.element`/`expect.poll` returns a promise too, so without `await` it checks nothing. Vitest 5 fails the test for this; `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
   // A title is an identifier: flake-watch clusters failures by it, `-t`
   // filters on it, CI annotations carry it, and vitest 5 matches the whole
   // `suite > test` chain. A PR/issue number or a "pre-fix" in the title is

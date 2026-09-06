@@ -24,6 +24,9 @@ export const badFocus = () => {
 export async function badUnawaited() {
   expect(Promise.resolve(1)).resolves.toBe(1)
   expect('snapshot').toMatchFileSnapshot('./out.txt')
+  expect.element(page.getByRole('button')).toBeInTheDocument()
+  expect.element(page.getByRole('menu')).not.toBeInTheDocument()
+  expect.poll(() => 1).toBe(1)
 }
 
 // biome-ignore lint/suspicious/noExportsInTest: fixture, never executed
