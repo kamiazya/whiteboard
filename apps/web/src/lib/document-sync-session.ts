@@ -13,11 +13,13 @@ import {
   readEdgeLocks,
   readMarkdownBody,
   readNodeLocks,
+  readProposals,
   readSpatialCanvas,
   readThreadMarks,
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   setCommentThreadStatus,
+  setProposedChangeStatus,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
@@ -40,7 +42,12 @@ const NO_THREAD_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
-import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  Proposal,
+  SpatialCanvas,
+  StoredCoreFacets,
+} from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { sameAnnotations, sameThreadMarks } from './annotations-equal.js'
 import { getAppLogger } from './app-logger.js'
@@ -122,6 +129,11 @@ function commandTargetKey(command: EditorCommand): string {
       return 'body'
     case 'set-facets':
       return 'facets'
+    case 'decide-proposal':
+      // Keyed by PROPOSAL: a decision is the whole proposal answered once,
+      // so two presses inside one window really are one target written
+      // twice — while two proposals decided in a burst keep separate keys.
+      return `proposal:${command.proposalId}`
     case 'batch':
       // Mapped in writeCommandTarget (unlike the default arm), but each
       // batch is one distinct user action — never deduped against another.
@@ -330,6 +342,10 @@ export interface DocumentSyncSession {
    * all, would have no channel to hear about anything.
    */
   getAnnotations(): readonly CommentThread[]
+  /** This document's proposals (ADR-0029), read from the same doc read as the canvas. */
+  getProposals(): readonly Proposal[]
+  /** Fires whenever the proposal layer changes — a new one, or a decision on one. */
+  subscribeProposals(listener: (proposals: readonly Proposal[]) => void): () => void
   /**
    * Where each conversation's passage sits in the body right now, by thread
    * id, as the CRDT's own rich-text marks report it.
@@ -418,6 +434,18 @@ function writeCommandTarget(
       // write a reply is, aimed at a message the thread already holds.
       writeThreadMessage(doc, command.threadId, command.message)
       return true
+    case 'decide-proposal': {
+      // Two planes in one commit, because a decision is one act: the
+      // changes are stamped where the proposal lives, and an ADOPTED one
+      // also rewrites the board. The canvas write is the full resync
+      // deliberately — a proposal reaches whatever elements it names, and
+      // there is no single target to write fine-grained.
+      for (const change of command.changes) {
+        setProposedChangeStatus(doc, command.proposalId, change.id, command.decision)
+      }
+      if (command.decision === 'adopted') writeSpatialCanvas(doc, next)
+      return true
+    }
     case 'create-thread':
       // Always "handled", for `reply-to-thread`'s reason: the fallback writes
       // the whole SpatialCanvas, and a markdown document's canvas holds
@@ -616,6 +644,7 @@ export function createDocumentSyncSession(
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
   let currentAnnotations: readonly CommentThread[] = []
+  let currentProposals: readonly Proposal[] = []
   let currentThreadMarks: ReadonlyMap<string, PassageRange> = NO_THREAD_MARKS
   // Which doc the quote has already been asked about. Compared by identity
   // to the doc itself rather than kept as a boolean: `onSnapshot` mints a
@@ -625,6 +654,7 @@ export function createDocumentSyncSession(
   const annotationListeners = new Set<
     (threads: readonly CommentThread[], marks: ReadonlyMap<string, PassageRange>) => void
   >()
+  const proposalListeners = new Set<(proposals: readonly Proposal[]) => void>()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
@@ -752,6 +782,22 @@ export function createDocumentSyncSession(
     for (const listener of annotationListeners) listener(threads, currentThreadMarks)
   }
 
+  /**
+   * The proposal layer's own channel (ADR-0029), beside the annotation one
+   * rather than folded into it: they are two layers above content, and a
+   * channel named for one while carrying the other is how a name stops
+   * meaning anything.
+   *
+   * Published from the same functions and in the same synchronous turn as
+   * the canvas, which is what a reader needs — `canvasChangeConflicts`
+   * compares a proposal's prior against the canvas, so the two must be read
+   * from ONE doc read or a conflict is judged against a board that has
+   * already moved.
+   */
+  function notifyProposals(proposals: readonly Proposal[]): void {
+    for (const listener of proposalListeners) listener(proposals)
+  }
+
   function getCanvas(): SpatialCanvas {
     return currentCanvas
   }
@@ -766,6 +812,17 @@ export function createDocumentSyncSession(
 
   function getAnnotations(): readonly CommentThread[] {
     return currentAnnotations
+  }
+
+  function getProposals(): readonly Proposal[] {
+    return currentProposals
+  }
+
+  function subscribeProposals(listener: (proposals: readonly Proposal[]) => void): () => void {
+    proposalListeners.add(listener)
+    return () => {
+      proposalListeners.delete(listener)
+    }
   }
 
   function getThreadMarks(): ReadonlyMap<string, PassageRange> {
@@ -810,8 +867,10 @@ export function createDocumentSyncSession(
     // two reads a remote update could land between.
     currentAnnotations = readAnnotations(content)
     currentThreadMarks = refreshThreadMarks(targetDoc, content, currentAnnotations)
+    currentProposals = readProposals(content)
     notify(canvas, 'external')
     notifyAnnotations(currentAnnotations)
+    notifyProposals(currentProposals)
   }
 
   /**
@@ -847,6 +906,15 @@ export function createDocumentSyncSession(
     const marks = refreshThreadMarks(targetDoc, contentOf(targetDoc), next)
     const movedMarks = !sameThreadMarks(currentThreadMarks, marks)
     currentThreadMarks = marks
+    // The proposal layer changes on the same signal and is compared the
+    // same cheap way: adopting one rewrites its status, and a person's edit
+    // can turn a change into a conflict without touching the proposal at
+    // all — which the canvas publish beside this already reports.
+    const nextProposals = readProposals(contentOf(targetDoc))
+    if (JSON.stringify(currentProposals) !== JSON.stringify(nextProposals)) {
+      currentProposals = nextProposals
+      notifyProposals(nextProposals)
+    }
     if (!movedMarks && sameAnnotations(currentAnnotations, next)) return
     currentAnnotations = next
     notifyAnnotations(next)
@@ -1372,11 +1440,13 @@ export function createDocumentSyncSession(
     canUndo,
     canRedo,
     getAnnotations,
+    getProposals,
     getThreadMarks,
     getCanvas,
     getContentState,
     exportSnapshot,
     subscribeAnnotations,
+    subscribeProposals,
     subscribe,
     subscribeHistory,
     getNodeLocks,

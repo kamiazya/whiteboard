@@ -623,6 +623,7 @@ function DocumentPageBody({
                   overlayTitle={model.overlayTitle}
                   linkTargets={files.pickerTargets}
                   threads={threads.annotations}
+                  proposals={threads.proposals}
                 >
                   {model.spatial.children}
                 </SpatialEditorPane>

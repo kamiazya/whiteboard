@@ -293,6 +293,7 @@ function useDaemonDocument(
     readOutlineSource,
     annotations,
     threadMarks,
+    proposals,
   } = sync
 
   // New file nodes store the target's immutable id (ADR-0008: stored
@@ -623,7 +624,13 @@ function useDaemonDocument(
       ...(coreFacets === undefined ? {} : { facets: coreFacets }),
       onFacetsChange: setCoreFacets,
     },
-    threads: { annotations, threadMarks, write: threadWrite, railCanvas: canvasValue },
+    threads: {
+      annotations,
+      proposals,
+      threadMarks,
+      write: threadWrite,
+      railCanvas: canvasValue,
+    },
     files: {
       adapter: fileAdapter,
       stampOf,

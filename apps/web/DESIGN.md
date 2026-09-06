@@ -502,6 +502,23 @@ scrolling a list. The Copy/Cut/Duplicate trio ships icon-only first; if
 dogfooding observes misfires, labels return by observation, not by
 guess.
 
+**A card opened on the canvas is an object-action surface too.** The
+proposal card's Adopt and Dismiss (ADR-0029 decision 4) render icon-only
+under this rule, with `aria-label` and a `title` tooltip carrying the name.
+The glyphs are CIRCLED — `CircleCheck` / `CircleX` — while the card's own
+Close stays a bare `×`: a ring means a verb that writes something, a bare
+mark means chrome, which is the distinction the comment card's
+`CircleCheck` Resolve beside its bare `×` Close already teaches. They sit
+in their own row at a coarse pointer's 44px rather than beside Close,
+because Dismiss is the one verb on that surface no Undo reaches.
+
+The same row carries the per-change disclosure, and what it discloses is
+one more pair of those same glyphs per change. Two things keep that from
+reading as four identical buttons: the default pair is named by its COUNT
+once there is more than one change (`Adopt 2 changes`), and each row's pair
+names what it decides (`Adopt: Move “the plan”`) — the names do the
+distinguishing that the icons deliberately do not.
+
 Both vessels — the right-click list menu and the ⋯ grid — draw the SAME
 catalog in the SAME band order: property rows (color, z-order, arrows;
 the menu stays open), then verbs (one-shot; the menu closes), then the

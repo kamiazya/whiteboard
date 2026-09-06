@@ -60,7 +60,12 @@
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  Proposal,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -69,6 +74,7 @@ import {
   useImperativeHandle,
   useMemo,
   useRef,
+  useState,
 } from 'react'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
@@ -134,6 +140,7 @@ import {
   reduceNavigation,
 } from './navigation.js'
 import { PendingCutChip } from './PendingCutChip.js'
+import { ProposalCard } from './ProposalCard.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { reduceSelection } from './selection.js'
@@ -281,6 +288,13 @@ export interface SpatialEditorProps {
    */
   readonly threads?: readonly CommentThread[]
   /**
+   * This document's open proposals (ADR-0029 decision 1), drawn on the live
+   * canvas: an outline where each change would land, and one bubble per
+   * proposal. Absent, nothing proposal-shaped is drawn — a host with no
+   * proposal channel has nothing to show.
+   */
+  readonly proposals?: readonly Proposal[]
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -353,6 +367,11 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  */
 const COMMENT_PRESS_SLOP_PX = 4
 
+/** Screen distance between two points — how far a press travelled. */
+function travelled(from: Point, to: Point): number {
+  return Math.hypot(from.x - to.x, from.y - to.y)
+}
+
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const ZOOM_WHEEL_FACTOR = 1.1
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
@@ -397,6 +416,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onToggleNodeLock,
       onOpenInEditor,
       threads,
+      proposals,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -531,12 +551,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         suppressedBodyNodeIds,
         showResolved: showResolvedComments,
         threads,
+        proposals,
       },
       fileSeamOptions,
       { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },
     )
-    const { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes } =
-      useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    const {
+      keyed,
+      edgePaths,
+      commentChromeBoxes,
+      proposalChromeBoxes,
+      selectionMembers,
+      selectionBox,
+      minimapNodes,
+    } = useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
     /**
      * The routed path of an edge, as drawn — for a comment about an edge to
      * open its bubble on the path (canvas-render's `commentAnchor`), the
@@ -560,6 +588,37 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       commentDrag,
       setCommentDrag,
     } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
+    /**
+     * The proposal opened in place — at most one, for the reason a
+     * conversation is: a card is where ONE thing is decided.
+     */
+    const [openProposalId, setOpenProposalId] = useState<string | null>(null)
+    /**
+     * The proposal a press landed on, read back at the release. Same
+     * discipline as a comment's press and for the same reason — in hand
+     * mode navigation takes every plain press as a pan and never hands it
+     * back — minus the drag: a proposal's bubble is placed by the renderer
+     * from the changes it describes, so there is nothing to move it to.
+     */
+    const pressedProposalRef = useRef<{ readonly id: string; readonly startScreen: Point } | null>(
+      null,
+    )
+    const hitTestProposal = (point: Point): string | undefined => {
+      for (let i = proposalChromeBoxes.length - 1; i >= 0; i -= 1) {
+        const entry = proposalChromeBoxes[i]
+        if (entry === undefined) continue
+        const { bbox } = entry
+        if (
+          point.x >= bbox.x &&
+          point.x <= bbox.x + bbox.w &&
+          point.y >= bbox.y &&
+          point.y <= bbox.y + bbox.h
+        ) {
+          return entry.proposalId
+        }
+      }
+      return undefined
+    }
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -755,8 +814,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           lastPressRef.current = null
           doublePressRef.current = null
           // The press is spent on the menu: the release that follows must
-          // not ALSO open the card of the comment it landed on.
+          // not ALSO open the card of the comment or proposal it landed on.
           pressedCommentRef.current = null
+          pressedProposalRef.current = null
           // The native long-press this replaces gave a system haptic; keep
           // that cue so the menu opening under a still-down finger reads as
           // deliberate, not glitchy.
@@ -812,9 +872,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           case 'clear-press-memory':
             lastPressRef.current = null
             doublePressRef.current = null
-            // A second finger made this a pinch; the comment under the
-            // first is not being opened.
+            // A second finger made this a pinch; the comment or proposal
+            // under the first is not being opened.
             pressedCommentRef.current = null
+            pressedProposalRef.current = null
             break
           case 'cancel-manipulation':
             applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
@@ -921,6 +982,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // (see handlePointerUp): a press that never travelled opens the card
       // under either tool; one that travelled was the pan (hand) or the
       // pin drag (select) it became on the way.
+      // The proposal card is dismissed by a press off it, like the comment
+      // card above and for the same reason: the card covers its own bubble,
+      // so the second press that would toggle it shut lands on the card.
+      if (openProposalId !== null && hitTestProposal(point) !== openProposalId) {
+        setOpenProposalId(null)
+      }
       const hitCommentId = e.button === 0 ? hitTestComment(point) : undefined
       if (hitCommentId !== undefined) {
         const comment = commentById(hitCommentId)
@@ -977,6 +1044,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // successor: the second press of a pair would land on that card, which
       // stops propagation, so the pairing could never complete.
       if (pressedCommentRef.current !== null) return
+      // A proposal's BUBBLE is chrome above the content, so a press on it
+      // opens the card at the release rather than selecting whatever is
+      // under it. Its change OUTLINES are deliberately not tested: they are
+      // drawn on the document at the place a change would land, and making
+      // them pressable would put a dead zone over the node they describe.
+      const hitProposalId = hitTestProposal(point)
+      if (hitProposalId !== undefined) {
+        pressedProposalRef.current = { id: hitProposalId, startScreen: screenPoint }
+        return
+      }
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -1295,6 +1372,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         toggleCommentCard(pressedComment.comment.id)
         return
       }
+      // Consumed here whatever happens next, like the comment press above. A
+      // press that travelled was a pan and opens nothing; one that stayed put
+      // toggles the card, so pressing the bubble again is how it shuts.
+      const pressedProposal = pressedProposalRef.current
+      pressedProposalRef.current = null
+      if (
+        pressedProposal !== null &&
+        travelled(clientPointToRootLocal(e, root), pressedProposal.startScreen) <
+          COMMENT_PRESS_SLOP_PX
+      ) {
+        setOpenProposalId((current) => (current === pressedProposal.id ? null : pressedProposal.id))
+        return
+      }
       // A release the machine answered was navigation — a finger leaving a
       // gather or a pinch, or the end of a pan. None of them run the click
       // and marquee semantics below: the sequence was never a gesture on the
@@ -1517,8 +1607,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
       // A cancelled pin drag writes nothing: the comment stays where it was,
       // and the press that armed it is spent — left set, the next unrelated
-      // release would read the stale id and open that comment's card.
+      // release would read the stale id and open that comment's card. The
+      // same is true of a proposal's press.
       pressedCommentRef.current = null
+      pressedProposalRef.current = null
       setCommentDrag(null)
     }
 
@@ -1985,6 +2077,49 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   openCommentEditor(comment)
                 }}
                 onClose={() => setOpenCommentId(null)}
+              />
+            )
+          })()}
+          {(() => {
+            // The proposal opened in place, in SCREEN space and above the
+            // ambient chrome for the reasons the comment card states.
+            if (openProposalId === null) return null
+            const proposal = proposals?.find((entry) => entry.id === openProposalId)
+            const bubble = proposalChromeBoxes.find((entry) => entry.proposalId === openProposalId)
+            if (proposal === undefined || bubble === undefined) return null
+            return (
+              <ProposalCard
+                key={proposal.id}
+                proposal={proposal}
+                canvas={canvas}
+                box={(() => {
+                  const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
+                  return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
+                })()}
+                theme={theme}
+                onDecide={(decision, changes) => {
+                  // Closed here rather than waiting for the write to come
+                  // back: the card asked a question that has been answered,
+                  // and leaving it up over a board that just changed reads
+                  // as the press not having landed.
+                  setOpenProposalId(null)
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [
+                      {
+                        kind: 'decide-proposal',
+                        proposalId: proposal.id,
+                        decision,
+                        // Exactly what the card decided — its whole open set,
+                        // or the single row that was pressed. The card owns
+                        // that reading, so there is nothing here to re-derive
+                        // and nothing for the two to disagree about.
+                        changes,
+                      } as const,
+                    ],
+                  })
+                }}
+                onClose={() => setOpenProposalId(null)}
               />
             )
           })()}

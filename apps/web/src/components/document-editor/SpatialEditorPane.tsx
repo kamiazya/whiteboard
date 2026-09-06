@@ -37,6 +37,7 @@ type PassedThrough = Pick<
   | 'onToggleEdgeLock'
   | 'agentTouchedNodeIds'
   | 'threads'
+  | 'proposals'
 >
 
 export interface SpatialEditorPaneProps extends PassedThrough {
@@ -97,6 +98,7 @@ export function SpatialEditorPane({
   onToggleEdgeLock,
   agentTouchedNodeIds,
   threads,
+  proposals,
 }: SpatialEditorPaneProps) {
   // The overlay's markdown editor reads the seams as functions; it builds
   // them from the same wire the canvas posts to its worker.
@@ -139,6 +141,7 @@ export function SpatialEditorPane({
         onOpenInEditor={nodeInEditor.open}
         onToggleEdgeLock={onToggleEdgeLock}
         threads={threads}
+        proposals={proposals}
         paletteLeading={<HistoryCluster {...history} />}
       />
       {nodeInEditor.editing !== null && (

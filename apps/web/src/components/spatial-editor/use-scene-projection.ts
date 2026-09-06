@@ -91,6 +91,27 @@ export function useSceneProjection({
     [scene],
   )
   /**
+   * The proposal layer's BUBBLES, for the same reason and by the same
+   * marker (`proposalChrome`, ADR-0029 decision 1): the box a press opens a
+   * proposal card on is the box the renderer painted.
+   *
+   * Bubbles only. A change's outline is drawn ON the document at the place
+   * the change would land, so making it pressable would put a dead zone
+   * over the node underneath — the outline is the illustration, and the
+   * bubble is the affordance.
+   */
+  const proposalChromeBoxes = useMemo(
+    () =>
+      scene.nodes.flatMap((node) => {
+        if (node.kind !== 'shape' || node.proposalChrome !== true || node.id === undefined)
+          return []
+        const cut = node.id.lastIndexOf('/')
+        if (cut <= 0 || node.id.slice(cut + 1) !== 'bubble') return []
+        return [{ proposalId: node.id.slice(0, cut), bbox: node.bbox }]
+      }),
+    [scene],
+  )
+  /**
    * Every selected node with the box it currently occupies, primary first.
    *
    * The resize handles surround the UNION of these rather than the primary
@@ -120,5 +141,13 @@ export function useSceneProjection({
     return buildMinimapNodes(canvas.nodes, boxes, palette)
   }, [boxes, canvas, theme])
 
-  return { keyed, edgePaths, commentChromeBoxes, selectionMembers, selectionBox, minimapNodes }
+  return {
+    keyed,
+    edgePaths,
+    commentChromeBoxes,
+    proposalChromeBoxes,
+    selectionMembers,
+    selectionBox,
+    minimapNodes,
+  }
 }

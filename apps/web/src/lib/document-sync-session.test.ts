@@ -19,12 +19,15 @@ import {
   writeCanvasComment,
   writeCommentThread,
   writeMarkdownBody,
+  writeProposal,
   writeSpatialCanvas,
   writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CanvasComment,
   CommentThread,
+  Proposal,
+  ProposedChange,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
@@ -2325,5 +2328,198 @@ describe('createDocumentSyncSession', () => {
       // ...but it is not canvas content, so no canvas publish fires.
       expect(documentListener).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('deciding a proposal', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const node: SpatialNode = {
+    id: 'n1',
+    type: 'text',
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 50,
+    text: 'the plan',
+  }
+  const proposal: Proposal = {
+    id: 'p1',
+    createdAt: '2026-09-06T00:00:00.000Z',
+    changes: [
+      {
+        id: 'node:n1',
+        op: 'node.patch',
+        status: 'open',
+        nodeId: 'n1',
+        patch: { x: 240 },
+        assumed: { x: 0 },
+      },
+    ],
+  }
+
+  function seeded(): Uint8Array {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [node], edges: [] })
+    writeProposal(doc, proposal)
+    return doc.export({ mode: 'snapshot' })
+  }
+
+  it('adopting writes the board AND closes the changes, in one commit', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(seeded())
+
+    expect(session.getProposals()).toEqual([proposal])
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes: proposal.changes,
+    }
+    const next = applyCommand(session.getCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getCanvas().nodes[0]?.x).toBe(240)
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
+  })
+
+  it('dismissing closes the changes and leaves the board alone', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(seeded())
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'dismissed',
+      changes: proposal.changes,
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getCanvas().nodes[0]?.x).toBe(0)
+    expect(session.getProposals()[0]?.changes[0]?.status).toBe('dismissed')
+  })
+
+  it('publishes the decided proposals, so the card that asked can go', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(seeded())
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeProposals(listener)
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'dismissed',
+      changes: proposal.changes,
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(listener).toHaveBeenCalled()
+    expect(listener.mock.lastCall?.[0][0].changes[0].status).toBe('dismissed')
+    unsubscribe()
+  })
+})
+
+describe('deciding ONE change of a proposal', () => {
+  // ADR-0029 decision 4's second half. The write is the same one whole-
+  // proposal adoption uses, applied to a subset — which is what makes the
+  // two incapable of disagreeing about what adopting means.
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const nodes: readonly SpatialNode[] = [
+    { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'the plan' },
+    { id: 'n2', type: 'text', x: 0, y: 200, width: 100, height: 50, text: 'the risk' },
+  ]
+  const moveN1: ProposedChange = {
+    id: 'node:n1',
+    op: 'node.patch',
+    status: 'open',
+    nodeId: 'n1',
+    patch: { x: 240 },
+    assumed: { x: 0 },
+  }
+  const moveN2: ProposedChange = {
+    id: 'node:n2',
+    op: 'node.patch',
+    status: 'open',
+    nodeId: 'n2',
+    patch: { x: 480 },
+    assumed: { x: 0 },
+  }
+  const proposal: Proposal = {
+    id: 'p2',
+    createdAt: '2026-09-06T00:00:00.000Z',
+    changes: [moveN1, moveN2],
+  }
+
+  function seeded(): Uint8Array {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [...nodes], edges: [] })
+    writeProposal(doc, proposal)
+    return doc.export({ mode: 'snapshot' })
+  }
+
+  it('adopts and closes only the change it names, leaving its sibling open', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seeded())
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p2',
+      decision: 'adopted',
+      changes: [moveN2],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const canvas = session.getCanvas()
+    expect(canvas.nodes.find((n) => n.id === 'n2')?.x).toBe(480)
+    expect(canvas.nodes.find((n) => n.id === 'n1')?.x).toBe(0)
+    const stored = session.getProposals()[0]?.changes ?? []
+    expect(stored.find((c) => c.id === 'node:n2')?.status).toBe('adopted')
+    expect(stored.find((c) => c.id === 'node:n1')?.status).toBe('open')
+  })
+
+  it('dismisses one change without touching the board or its sibling', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seeded())
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p2',
+      decision: 'dismissed',
+      changes: [moveN1],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getCanvas().nodes.find((n) => n.id === 'n1')?.x).toBe(0)
+    const stored = session.getProposals()[0]?.changes ?? []
+    expect(stored.find((c) => c.id === 'node:n1')?.status).toBe('dismissed')
+    expect(stored.find((c) => c.id === 'node:n2')?.status).toBe('open')
   })
 })

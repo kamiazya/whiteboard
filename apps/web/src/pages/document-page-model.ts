@@ -74,6 +74,8 @@ export interface DocumentPageModel {
   }
   readonly threads: {
     readonly annotations: UseDocumentSyncResult['annotations']
+    /** This document's open proposals (ADR-0029); a keeper with none answers an empty list. */
+    readonly proposals: UseDocumentSyncResult['proposals']
     /** Where the CRDT still holds each passage; only a body has one, so a note's keeper may answer none. */
     readonly threadMarks: UseDocumentSyncResult['threadMarks'] | undefined
     readonly write: CommentsRailWrite

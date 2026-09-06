@@ -8,6 +8,7 @@ import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CommentThread,
   DocumentKind,
+  Proposal,
   SpatialCanvas,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
@@ -85,6 +86,12 @@ export interface UseDocumentSyncResult {
    */
   annotations: readonly CommentThread[]
   /**
+   * This document's proposals (ADR-0029), published on their own channel
+   * because a decision on one changes no node and no edge until it is
+   * applied — a consumer watching `canvas` alone would never learn of one.
+   */
+  proposals: readonly Proposal[]
+  /**
    * Where each conversation's passage sits in the body right now, as the
    * CRDT's own rich-text marks report it — the live half of a text anchor,
    * with the thread's quote as the durable fallback for whatever is absent.
@@ -121,6 +128,8 @@ export interface UseDocumentSyncResult {
 /** Stable identity so an unlocked canvas never re-renders the editor. */
 const EMPTY_LOCKED_IDS: ReadonlySet<string> = new Set()
 const EMPTY_ANNOTATIONS: readonly CommentThread[] = []
+/** Same purpose again, for the proposal layer beside them (ADR-0029). */
+const EMPTY_PROPOSALS: readonly Proposal[] = []
 /** Same purpose as EMPTY_ANNOTATIONS, for the passages beside them. */
 const EMPTY_MARKS: ReadonlyMap<string, PassageRange> = new Map()
 
@@ -221,6 +230,7 @@ export function useDocumentSync(
    * and neither re-renders a consumer that memoises on it.
    */
   const [annotations, setAnnotations] = useState<readonly CommentThread[]>(EMPTY_ANNOTATIONS)
+  const [proposals, setProposals] = useState<readonly Proposal[]>(EMPTY_PROPOSALS)
   const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(EMPTY_MARKS)
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
@@ -253,6 +263,7 @@ export function useDocumentSync(
     // is next, and with no successor session (backend going to null) nothing
     // would ever publish over them.
     setAnnotations(EMPTY_ANNOTATIONS)
+    setProposals(EMPTY_PROPOSALS)
     // And where their passages were, which is about this document's body
     // and means nothing against the next one's.
     setThreadMarks(EMPTY_MARKS)
@@ -325,6 +336,10 @@ export function useDocumentSync(
       setAnnotations(threads)
       setThreadMarks(marks)
     })
+    // And the proposal layer needs its own for the same reason: adopting a
+    // change rewrites a status, which is no canvas value at all until the
+    // adopted change is applied beside it.
+    const unsubscribeProposals = session.subscribeProposals(setProposals)
     // The body changes no canvas value either, so it needs its own
     // notification for the same reason locks do.
     const unsubscribeBody = session.subscribeMarkdownBody(() => {
@@ -338,6 +353,7 @@ export function useDocumentSync(
     setLockedNodeIds(session.getNodeLocks())
     setLockedEdgeIds(session.getEdgeLocks())
     setAnnotations(session.getAnnotations())
+    setProposals(session.getProposals())
     setThreadMarks(session.getThreadMarks())
     session.connect()
     session.onEditorReady()
@@ -346,6 +362,7 @@ export function useDocumentSync(
       unsubscribe()
       unsubscribeHistory()
       unsubscribeAnnotations()
+      unsubscribeProposals()
       unsubscribeLocks()
       unsubscribeBody()
       session.dispose()
@@ -506,6 +523,7 @@ export function useDocumentSync(
     lockedNodeIds,
     setNodeLock,
     annotations,
+    proposals,
     threadMarks,
     markdownBody,
     coreFacets,

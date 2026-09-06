@@ -20,6 +20,7 @@
  */
 
 import {
+  applyCanvasChange,
   type CanvasColor,
   type CanvasComment,
   type CanvasEdge,
@@ -30,6 +31,8 @@ import {
   canvasCommentFromThread,
   type EdgeRoutingStyle,
   type LineJumps,
+  type ProposedChange,
+  type ProposedChangeStatus,
   type SpatialCanvas,
   type SpatialNode,
   type StoredCoreFacets,
@@ -278,6 +281,26 @@ export type EditorCommand =
    * reasons: no node, no edge, canvas value untouched, never in a batch.
    */
   | { readonly kind: 'set-facets'; readonly facets: StoredCoreFacets }
+  /**
+   * A whole proposal, decided (ADR-0029 decision 4). Adopting applies every
+   * change it carries; dismissing applies none. Either way the changes are
+   * closed — the write path stamps their status, since a decision lives in
+   * the proposal beside the canvas rather than in it.
+   *
+   * The changes travel WITH the command rather than being looked up here,
+   * so what gets applied is exactly what the card showed the person who
+   * pressed the button — a proposal that grew between the render and the
+   * press does not silently ride along.
+   *
+   * Not an `EditorLeafCommand`: it targets no single element, and one
+   * decision is one undo step whatever it touches.
+   */
+  | {
+      readonly kind: 'decide-proposal'
+      readonly proposalId: string
+      readonly decision: Exclude<ProposedChangeStatus, 'open'>
+      readonly changes: readonly ProposedChange[]
+    }
 
 /** spatialCanvasSchema requires integer x/y and non-negative integer w/h. */
 function toPosition(value: number): number {
@@ -756,6 +779,16 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       // Only the opening message is drawn, so only its edit reaches the pin.
       return command.opening
         ? patchComment(canvas, command.threadId, { text: command.message.body })
+        : canvas
+    case 'decide-proposal':
+      // A passage change is skipped rather than refused: its subject is a
+      // markdown body, which this canvas does not hold. Dismissing folds
+      // nothing and returns the input reference.
+      return command.decision === 'adopted'
+        ? command.changes.reduce(
+            (acc, change) => (change.op === 'body.replace' ? acc : applyCanvasChange(acc, change)),
+            canvas,
+          )
         : canvas
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,

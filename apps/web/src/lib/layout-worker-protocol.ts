@@ -37,7 +37,7 @@ import type {
   ReferenceWire,
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -104,6 +104,11 @@ export type LayoutRequest = LayoutSubject & {
   readonly showResolved?: boolean
   /** The document's conversations, for passage highlights inside text nodes. */
   readonly threads?: readonly CommentThread[]
+  /**
+   * This document's open proposals (ADR-0029), drawn on the live canvas.
+   * Plain data, like the threads beside it, so it crosses to the worker.
+   */
+  readonly proposals?: readonly Proposal[]
   /**
    * Where this answer may be REMEMBERED, as the render key's own path — the
    * worker's persistent tier (ADR-0027 decision 5) reads it before working

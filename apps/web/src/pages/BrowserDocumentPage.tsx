@@ -550,6 +550,7 @@ function useBrowserDocument(
   const {
     canvas,
     annotations: spatialAnnotations,
+    proposals,
     onChange,
     backendError,
     readOutlineSource,
@@ -864,6 +865,7 @@ function useBrowserDocument(
     },
     threads: {
       annotations,
+      proposals,
       threadMarks,
       write: threadWrite,
       railCanvas: documentKind === 'spatial' ? canvas : null,

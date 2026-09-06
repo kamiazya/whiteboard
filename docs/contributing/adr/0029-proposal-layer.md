@@ -120,6 +120,20 @@ twenty decisions. It exists because "nine of these are right and one is not"
 is the common case, and without it the only reply is to dismiss everything and
 ask again.
 
+**Both halves are shipped, in that order** (project owner's decision,
+2026-09-06): the whole-proposal card first, the expansion straight after.
+The order was an order and not a retraction, which is what made the second
+half small — the record already carried a status per change, and adopting
+the whole proposal is that write applied to each open one, so the expansion
+added a control over a shape that was already there.
+
+What the editor draws: the card's default pair is named by COUNT once there
+is more than one change (`Adopt 2 changes`), a disclosure beside it reveals
+one verb pair per change, and the disclosure is offered only when there is
+more than one — with a single change the default pair already IS the
+per-change pair. Both roads call the same write with a different set of
+changes, so neither can drift from the other's idea of what adopting means.
+
 ### 5. A proposal follows the document; only a real collision is flagged
 
 When a person edits underneath a pending proposal, the proposal stays. It is

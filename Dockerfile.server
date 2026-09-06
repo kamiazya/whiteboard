@@ -69,8 +69,16 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 # dependency.
 COPY patches ./patches
 
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm fetch --store-dir /pnpm/store
+# The store lands in THIS LAYER, not in a `--mount=type=cache`. A cache
+# mount's contents are never exported by a layer-cache backend and never
+# restored with a cached layer, so `pnpm install --offline` below was correct
+# only while this step kept running — and failed the first build where the
+# layer cache worked (`fetched 3/3` CACHED, mount empty, install exit 1).
+#
+# On CI the mount could never have helped anyway: every job gets a fresh
+# builder, so it started empty on every run. What it cost is the layer cache
+# this stage exists to enable.
+RUN pnpm fetch --store-dir /pnpm/store
 
 
 # ── build — install + compile + deploy bundle ──────────────────────────────
@@ -83,8 +91,9 @@ COPY . .
 # GVS (enableGlobalVirtualStore) assumes a persistent global store that
 # survives across installs; inside an ephemeral Docker build layer there
 # is none, so symlinks into the store dangle. Disable it for the build.
-RUN --mount=type=cache,id=pnpm,target=/pnpm/store \
-    pnpm install --offline --frozen-lockfile \
+# Reads the store out of the `fetched` layer above; see the note there for
+# why it is not a cache mount.
+RUN pnpm install --offline --frozen-lockfile \
       --store-dir /pnpm/store \
       --config.enable-global-virtual-store=false
 
