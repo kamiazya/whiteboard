@@ -95,16 +95,15 @@ const SHARED_CANVAS_CHROME = [
  * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  HeaderBranchBanner: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'branches are a daemon concept (ADR-0004)',
-  },
-  MergeToast: { page: './DaemonDocumentPage.tsx', why: 'merge is a daemon concept (ADR-0004)' },
+  // `HeaderBranchBanner` and `MergeToast` stood here, first as "a daemon
+  // concept (ADR-0004)" and then as a gap once the browser keeper grew
+  // variations and merges. They are neither now: the shared DocumentPage
+  // mounts both for whichever keeper rendered it, so they are not
+  // mode-specific chrome and this scan should not expect them on one page.
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',
   },
-  CapabilityTeaser: { page: './DaemonDocumentPage.tsx', why: 'it teases daemon capabilities' },
 } satisfies Record<string, { page: (typeof KEEPER_PAGES)[number]; why: string }>
 
 /**
@@ -251,11 +250,11 @@ const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
  * only one keeper can fill it — the Connections opener and panel are fed by
  * the daemon's backlinks through `model.connections`, and a keeper that
  * answers none gets no opener. That is the gating the model does with DATA
- * rather than with a keeper page rendering its own copy: `ConnectionsChip`
+ * rather than with a keeper page rendering its own copy: `InspectorSegment`
  * used to be daemon-page chrome in `MODE_SPECIFIC_CHROME`, overlaid under the
  * header as its own band, and moved here when the inspector slot took it.
  */
-const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'ConnectionsChip', 'ConnectionsPanel'] as const
+const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'ConnectionsPanel'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {

@@ -79,13 +79,28 @@ minimumReleaseAgeStrict: true
 # package.json's "pnpm" field (see https://pnpm.io/settings).
 overrides:
   lodash-es@<4.18.0: ^4.18.0
-  nanoid@<3.3.8: ^3.3.8
+  # GHSA-2v37-7h3g-55p8 (high): a custom generator loops forever at size 0,
+  # cleared at 3.3.18. Reached only through postcss <- vite <- vitest, so it
+  # never ships; the published runtime asks for nanoid ^6 and is unaffected.
+  nanoid@<3.3.18: ^3.3.18
   nanoid@>=4.0.0 <5.0.9: ^5.0.9
+  # GHSA-g7r4-m6w7-qqqr (low): the dev server serves arbitrary files on
+  # Windows, cleared at 0.28.1. Reached only through vite <- vitest <-
+  # stryker, and nobody runs that dev server; pinned anyway because the fix
+  # is a patch within the same range vite already accepts.
+  "esbuild@>=0.27.3 <0.28.1": ^0.28.1
   protobufjs@<8.6.6: ^8.6.6
   fast-uri@<3.1.6: ^3.1.6
   kysely@<0.28.17: ^0.28.17
   "@grpc/grpc-js@<1.14.4": ^1.14.4
   shell-quote@<1.9.0: ^1.9.0
+  # Not a CVE bump like the rest — a DEDUPE. @libsql/kysely-libsql@0.4.1 is the
+  # latest and still asks for @libsql/client@^0.8.0, which drags libsql@0.3.19
+  # and its native bindings alongside the 0.17.3 the manifest declares. The
+  # runtime loaded the OLD one, and its musl prebuild is what failed to load on
+  # Alpine (`fcntl64: symbol not found`). @libsql/client@0.17.3 depends on
+  # libsql@0.5.29 — the version this manifest's devDependency already names.
+  "@libsql/client@<0.17.3": ^0.17.3
   uuid@<11.1.1: ^11.1.1
   # GHSA-x5fp-wj9c-mxmx + GHSA-4mjr-xmp4-gh2g: both cleared at 6.16.0 (reaches
   # the published runtime via express <- @modelcontextprotocol/sdk).

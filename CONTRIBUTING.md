@@ -13,7 +13,7 @@ cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm 
                    # full prerequisites: docs/contributing/development.md
 pnpm install
 pnpm --filter @kamiazya/whiteboard-web exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser / canvas-render-browser)
-pnpm test         # all 23 vitest projects (listed under Workflow below)
+pnpm test         # all 24 vitest projects (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -30,11 +30,11 @@ See [README.md](README.md) for the full setup including Claude Code / Codex auto
 
 This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer to choose for which kind of change.
 
-`pnpm test` runs 23 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
+`pnpm test` runs 24 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
 
 | runtime | projects |
 |---|---|
-| node | `mcp-node`, `mcp-smoke`, `daemon-client-node`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `server-core-node`, `workspace-index-node`, `canvas-render-node`, `canvas-viewer-node`, `web-node` |
+| node | `mcp-node`, `mcp-smoke`, `daemon-client-node`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `server-core-node`, `workspace-index-node`, `history-node`, `canvas-render-node`, `canvas-viewer-node`, `web-node` |
 | jsdom | `facet-ui-jsdom`, `plugin-visual-jsdom`, `canvas-viewer-jsdom`, `web-jsdom` |
 | real browser | `canvas-render-browser`, `canvas-viewer-browser`, `web-browser` |
 

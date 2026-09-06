@@ -248,7 +248,7 @@ describe('renameDocumentPath', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('moves only the path: branches/versions rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
+  it('moves only the path: branches, version rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
 
@@ -281,13 +281,6 @@ describe('renameDocumentPath', () => {
     const after = { id: afterId }
     expect(after.id).toBe(documentId)
 
-    const branchesAfter = await db
-      .selectFrom('branches')
-      .selectAll()
-      .where('documentId', '=', documentId)
-      .execute()
-    expect(branchesAfter.map((b) => b.name).sort()).toEqual(['feature', 'main'])
-
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
@@ -298,7 +291,11 @@ describe('renameDocumentPath', () => {
     // Content is untouched by the move — same documentId, same value.
     expect((await loadDocument('session1', 'b')).toJSON()).toEqual(contentBefore)
 
-    // loadDocumentBranches also resolves under the new path.
+    // Branches survive the move and resolve under the new path. This used to
+    // read the `branches` rows as well; branches live on the workspace
+    // record now, and the record is keyed by documentId, so the path change
+    // cannot reach them — which is the property, stated once through the
+    // reader everything else uses.
     const branches = await loadDocumentBranches('session1', 'b')
     expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
   })

@@ -57,10 +57,21 @@ export const DAEMON_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
   autoVersions: true,
 }
 
-/** The browser's history: one lane, and a point only when asked for. */
+/**
+ * The browser's history, which now answers the same two questions the
+ * daemon's does: its rows carry the variation they were taken on, and a
+ * checkpoint lands on its own once editing settles.
+ *
+ * Equal to the daemon's, therefore, and a pair that agrees declares no
+ * difference — the argument that retired the provider's capability map. What
+ * keeps this one alive for the moment is not a difference but the component
+ * below: `branches: false` and `autoVersions: false` still select real
+ * rendering paths that `version-row.test.tsx` exercises, so removing the pair
+ * means removing those too. That is the follow-up, not a drive-by here.
+ */
 export const BROWSER_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
-  branches: false,
-  autoVersions: false,
+  branches: true,
+  autoVersions: true,
 }
 
 interface Props {

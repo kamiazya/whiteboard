@@ -36,6 +36,7 @@
     "@kamiazya/whiteboard-facet-ui": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-daemon-client": "workspace:*",
+    "@kamiazya/whiteboard-history": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",

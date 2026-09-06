@@ -3,6 +3,7 @@ import {
   type VersionEntry,
   versionEntrySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { autoVersionsOverCap } from '@kamiazya/whiteboard-history'
 import { projectWorkspaceDocument, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -34,6 +35,18 @@ const versionRowSchema = z
     operator: operatorInfoSchema.optional(),
     /** Set only on the point a restore produced; see `versionEntrySchema`. */
     restoredFrom: z.string().optional(),
+    /**
+     * Whether a checkpoint took this point rather than a person.
+     *
+     * Optional for the reason `hasThumbnail` is, and it is the load-bearing
+     * reason on this schema: it is `.strict()` and its reader SKIPS a row
+     * that fails to parse, so making either of these REQUIRED would silently
+     * delete the whole history of anyone who has rows from before them.
+     * Absent reads as `false`, which is what every existing row is.
+     */
+    auto: z.boolean().optional(),
+    /** The variation HEAD was on when the point was taken; absent reads as `main`. */
+    branchName: z.string().min(1).optional(),
     /**
      * Whether `versionThumbnails` holds a picture for this point. Optional
      * because rows written before v17 have none — and because this schema is
@@ -81,6 +94,10 @@ export class BrowserVersionStore {
       operator?: VersionRow['operator']
       /** Records that this point is the merge a restore produced. */
       restoredFrom?: string
+      /** A checkpoint took this point, not a person. */
+      auto?: boolean
+      /** The variation HEAD was on. Omitted leaves the row on the default one. */
+      branchName?: string
     } = {},
   ): Promise<VersionEntry> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
@@ -98,6 +115,12 @@ export class BrowserVersionStore {
       elementCount: projection === null ? 0 : countNodes(projection),
       ...(input.operator === undefined ? {} : { operator: input.operator }),
       ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
+      // Written only when true / named, so a manual save on the default
+      // variation keeps writing exactly the row it wrote before this existed.
+      ...(input.auto === true ? { auto: true } : {}),
+      ...(input.branchName === undefined || input.branchName === ''
+        ? {}
+        : { branchName: input.branchName }),
       // The STORED record's frontier, never a live doc's: a checkpoint has to
       // point at ops that are on disk, and `open` reads what is.
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
@@ -105,7 +128,48 @@ export class BrowserVersionStore {
     await inTransaction(this.deps.dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
       await request(tx.objectStore(VERSIONS_STORE).put(versionRowSchema.parse(row)))
     })
+    // Only a checkpoint can push the document over the cap, so only a
+    // checkpoint pays for the sweep — a manual save reads no rows at all.
+    if (input.auto === true) await this.pruneAutoOverCap(workspaceId, placement.documentId)
     return toEntry(row, path)
+  }
+
+  /**
+   * Drop the automatic checkpoints past the cap, newest kept.
+   *
+   * Which rows go is the mechanic's call
+   * (`@kamiazya/whiteboard-history`'s `autoVersionsOverCap`, the same one the
+   * daemon asks); the rows, the delete and the thumbnail blobs are this
+   * store's. `referenced` is built over EVERY row rather than the automatic
+   * ones, because a manual save can be a restore's merge point too and the
+   * point it names must outlive the cap either way.
+   */
+  private async pruneAutoOverCap(workspaceId: string, documentId: string): Promise<void> {
+    const rows = await this.rowsOf(workspaceId, documentId)
+    const autosNewestFirst = rows
+      .filter((row) => row.auto === true)
+      .sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))
+      .map((row) => ({ id: row.id, restoredFrom: row.restoredFrom ?? null }))
+    const referenced = new Set(
+      rows.flatMap((row) => (row.restoredFrom === undefined ? [] : [row.restoredFrom])),
+    )
+    const toRemove = autoVersionsOverCap(autosNewestFirst, referenced)
+    if (toRemove.length === 0) return
+    await inTransaction(
+      this.deps.dbName,
+      [VERSIONS_STORE, VERSION_THUMBNAILS_STORE],
+      'readwrite',
+      async (tx) => {
+        const versions = tx.objectStore(VERSIONS_STORE)
+        const thumbnails = tx.objectStore(VERSION_THUMBNAILS_STORE)
+        for (const id of toRemove) {
+          await request(versions.delete(id))
+          // A point with no picture deletes nothing, which IndexedDB treats
+          // as success — so this needs no existence check.
+          await request(thumbnails.delete(id))
+        }
+      },
+    )
   }
 
   /** Newest first, as the History panel lists them. */
@@ -244,9 +308,9 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     path,
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
-    auto: false,
+    auto: row.auto === true,
     hasThumbnail: row.hasThumbnail === true,
-    branchName: 'main',
+    branchName: row.branchName ?? 'main',
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),
     ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),

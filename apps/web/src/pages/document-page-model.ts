@@ -15,7 +15,7 @@
  */
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import type { ComponentProps, ReactNode, RefObject } from 'react'
-import type { ConnectionsPanelProps } from '../components/connections/ConnectionsChip.js'
+import type { ConnectionsPanelProps } from '../components/connections/ConnectionsPanel.js'
 import type { MarkdownDocumentSession } from '../components/document-editor/DocumentEditorSurface.js'
 import type { SpatialEditorPaneProps } from '../components/document-editor/SpatialEditorPane.js'
 import type { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
@@ -25,7 +25,6 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { linkTargets } from '../lib/link-entries.js'
-import type { WhiteboardCapabilities } from '../lib/provider.js'
 import type { PastDocument, VersionsBackend } from '../lib/versions-backend.js'
 
 export interface DocumentPageModel {
@@ -39,7 +38,6 @@ export interface DocumentPageModel {
   readonly documentKey: string
   readonly documentKind: DocumentKind
   readonly srTitle: string
-  readonly capabilities: WhiteboardCapabilities
   /** The live sync session; the backend behind it is the keeper's. */
   readonly sync: UseDocumentSyncResult
   readonly markdown: Pick<

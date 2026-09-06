@@ -148,3 +148,65 @@ it('does not collide with the canvas dock at a phone width', async () => {
   const overlaps = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
   expect(overlaps, `exit ${JSON.stringify(a)} vs dock ${JSON.stringify(b)}`).toBe(false)
 })
+
+/** Puts the shell into fullscreen without the real API, which would pin the
+ *  viewport to the screen — and the viewport width is the variable here. */
+async function enterStubbedFullscreen(): Promise<HTMLElement> {
+  Object.defineProperty(document, 'fullscreenElement', {
+    configurable: true,
+    get: () => document.documentElement,
+  })
+  await act(async () => {
+    document.dispatchEvent(new Event('fullscreenchange'))
+  })
+  return await screen.findByRole('button', { name: 'Exit fullscreen' })
+}
+
+function rectsOverlap(a: DOMRect, b: DOMRect): boolean {
+  return a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+}
+
+/** The breakpoint as the control itself declares it, so this guard follows a
+ *  change to the declaration instead of pinning a second copy of the number. */
+function declaredCornerBreakpoint(control: HTMLElement): number {
+  const match = /max-\[(\d+)px\]/.exec(control.className)
+  expect(match, `no max-[Npx] variant in: ${control.className}`).not.toBeNull()
+  return Number((match as RegExpExecArray)[1])
+}
+
+// Lifting the control clear of the dock is only needed while the dock is near
+// the corner. On a wide screen it is nowhere near, and a control floating 70px
+// up with empty space beneath it reads as unanchored — reported from a landscape
+// device. So the lift is a narrow-width variant, and the corner is the default.
+it('takes the corner where the width allows', async () => {
+  await page.viewport(1280, 800)
+  await renderLoaded()
+  const exit = await enterStubbedFullscreen()
+
+  const control = exit.getBoundingClientRect()
+  // Within a gutter of the bottom-left corner, not a strip's height above it.
+  expect(window.innerHeight - control.bottom).toBeLessThan(24)
+  expect(control.left).toBeLessThan(24)
+})
+
+// The number in that variant is not free: below it the centred dock reaches the
+// corner. Measured at the breakpoint the control ITSELF declares, so changing
+// the declaration moves this guard with it — and widening the dock without
+// moving the breakpoint fails here rather than on someone's phone.
+it('declares a corner breakpoint that still clears the dock', async () => {
+  await page.viewport(1280, 800)
+  await renderLoaded()
+  const exit = await enterStubbedFullscreen()
+  const breakpoint = declaredCornerBreakpoint(exit)
+
+  await page.viewport(breakpoint, 780)
+  await act(async () => {})
+
+  const dock = document.querySelector('[data-testid="tool-palette"]')
+  expect(dock, 'the canvas dock must be on screen for this to mean anything').not.toBeNull()
+  const a = exit.getBoundingClientRect()
+  const b = (dock as HTMLElement).getBoundingClientRect()
+  // Still in corner mode at exactly the breakpoint — and still clear of the dock.
+  expect(window.innerHeight - a.bottom).toBeLessThan(24)
+  expect(rectsOverlap(a, b), `exit ${JSON.stringify(a)} vs dock ${JSON.stringify(b)}`).toBe(false)
+})

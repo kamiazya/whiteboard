@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it } from 'vitest'
 import { App } from './App.js'
-import { BROWSER_CAPABILITIES, type ProviderState } from './lib/provider.js'
+import type { ProviderState } from './lib/provider.js'
 
 // Real browser: the not-found page arrives as a REAL lazy chunk (no ESM
 // cache priming, no mocks), and clicking "Back to documents" navigates away
@@ -10,7 +10,6 @@ import { BROWSER_CAPABILITIES, type ProviderState } from './lib/provider.js'
 // this pins the recovery affordance end-to-end in a real browser.
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
-  capabilities: BROWSER_CAPABILITIES,
 }
 
 describe('unknown-route recovery (real browser)', () => {

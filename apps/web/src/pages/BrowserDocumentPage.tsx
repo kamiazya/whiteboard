@@ -1,4 +1,6 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { createCheckpointScheduler, readBranchesFromRecord } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -35,8 +37,8 @@ import {
   parseWorkspaceRoute,
   workspacePath,
 } from '../lib/app-routes.js'
-import { createBrowserBranchesBackend } from '../lib/branches-backend.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
+import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -56,7 +58,6 @@ import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
-import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -91,9 +92,6 @@ export interface BrowserDocumentPageProps {
   // (jsdom does not implement IndexedDB); production callers rely on the
   // controller hook's own default.
   loro?: LoroStoreLike
-  // Defaults to the browser keeper so existing callers/tests keep working
-  // unedited; App.tsx passes the resolved ProviderState's capabilities.
-  capabilities?: WhiteboardCapabilities
   // A document path requested by the URL at mount (e.g. a bookmarked
   // /local/:path deep link), read once — see
   // useBrowserDocumentController's own contract for the same parameter.
@@ -126,7 +124,6 @@ function useBrowserDocument(
     // (entry-graph-loro-free.test.ts).
     store = sharedFoldingBrowserIndex(),
     loro,
-    capabilities = BROWSER_CAPABILITIES,
     initialPath,
     pointer,
     clock,
@@ -464,6 +461,81 @@ function useBrowserDocument(
     [documentId, documentKind],
   )
 
+  // The store, not the seam, is what a merge's pre-merge point needs: the
+  // seam's `save` carries a label and nothing else, while a checkpoint has to
+  // say it is automatic and which variation it belongs to. So it is built
+  // once here and handed to both.
+  const versionStore = useMemo(
+    () => new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
+    [store],
+  )
+
+  // Automatic checkpoints, on the same mechanic the daemon runs
+  // (`@kamiazya/whiteboard-history`): a trailing debounce that lands a point
+  // once the document has been quiet, so a row marks where a person stopped
+  // rather than an arbitrary interval.
+  //
+  // The `doc` the scheduler is handed is the WORKSPACE RECORD, not this
+  // document's content — it uses the frontier only to ask "has anything
+  // changed since the last checkpoint", and the record's frontier is what
+  // the store saves. Keying on the content doc would compare a frontier
+  // against a row taken from a different one, and never match.
+  const checkpoints = useMemo(() => {
+    const scheduler = createCheckpointScheduler<VersionEntry>({
+      save: (workspaceId, path, _doc, branchName) =>
+        versionStore.save(workspaceId, path, {
+          auto: true,
+          ...(branchName === null ? {} : { branchName }),
+          // The person at this browser is not who took this one.
+          operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
+        }),
+      getHeadBranch: async (_workspaceId, _path) =>
+        backend?.readRecord((doc, id) => readBranchesFromRecord(doc, id)?.head ?? null) ?? null,
+      onError: (err) => log.warn('automatic checkpoint failed', err),
+    })
+    return scheduler
+  }, [backend, versionStore])
+
+  // Bound to the record the backend holds, and a no-op until one is there.
+  const checkpointPair = useMemo(() => {
+    const signal = (): void => {
+      // A document with no path yet has nowhere to file a row; the record
+      // is what a checkpoint points at, so both must be there.
+      if (documentPath === null) return
+      // Total, and deliberately so. This runs inside Loro's local-update
+      // subscriber, where a throw does not fail the edit — it escapes as an
+      // UNHANDLED REJECTION, which vitest reports as `Errors 1` with every
+      // test still passing and only the exit code red. A missed checkpoint is
+      // not worth that, and nothing here is worth failing an edit for either:
+      // a backend that cannot answer for a record has no record to bookmark.
+      try {
+        const record = backend?.readRecord?.((doc) => doc) ?? null
+        if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
+      } catch (err) {
+        log.warn('could not arm an automatic checkpoint', err)
+      }
+    }
+    return {
+      signal,
+      // Signal, THEN flush. The session flushes the pending edit before
+      // calling this, but the commit that performs reaches
+      // `subscribeLocalUpdates` — where `signal` lives — only on a later
+      // microtask, so flushing alone finds nothing armed and a person who
+      // edits and closes the tab leaves no checkpoint. Signalling here arms
+      // it against the record as it stands, which is what a checkpoint
+      // points at anyway: the store saves the frontier that is ON DISK, so
+      // an edit still in flight is simply not part of this point, rather
+      // than making it wrong.
+      flush: () => {
+        signal()
+        void checkpoints.flush()
+      },
+    }
+  }, [backend, checkpoints, documentPath])
+
+  // Nothing pending survives leaving this document for another.
+  useEffect(() => () => checkpoints.stop(), [checkpoints])
+
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
@@ -471,6 +543,7 @@ function useBrowserDocument(
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
+    checkpoints: checkpointPair,
   })
   const {
     canvas,
@@ -480,6 +553,19 @@ function useBrowserDocument(
     readOutlineSource,
     persistence: syncPersistence,
   } = sync
+  // The record is not readable at mount — the backend delivers it a beat
+  // later — so anything that reads the branch plane on mount gets the resting
+  // state, HEAD `main`. `useBranches` refetches only when its keeper or
+  // document changes, neither of which happens when the record lands, so a
+  // document opened ON a variation kept saying `Main`: the chip named the
+  // wrong one and the combine banner, which needs a non-default HEAD, could
+  // never appear. This is the signal the daemon page has always had; the
+  // browser simply never supplied one.
+  const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  useEffect(() => {
+    if (!sync.loaded) return
+    setBranchRefreshSignal((n) => n + 1)
+  }, [sync.loaded])
 
   // The browser's version history for this document: rows in IndexedDB,
   // restores through the backend holding the live record. Null while there
@@ -488,22 +574,24 @@ function useBrowserDocument(
   // the daemon's routes.
   const versionsBackend = useMemo(
     () =>
-      backend === null
-        ? null
-        : createBrowserVersionsBackend({
-            backend,
-            store: new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
-          }),
-    [backend, store],
+      backend === null ? null : createBrowserVersionsBackend({ backend, store: versionStore }),
+    [backend, versionStore],
   )
   const versionsEnabled = versionsBackend !== null
 
-  // Unconditional, unlike `versionsBackend`: this keeper has no branches at
-  // all, so there is nothing to build it out of and nothing that could make
-  // it unavailable. Mounting it is what stops a branch consumer on this page
-  // falling through to the context's daemon fallback and issuing a request
-  // to a daemon that is not there.
-  const branchesBackend = useMemo(() => createBrowserBranchesBackend(), [])
+  // Built on the backend, because a branch is a frontier of the record the
+  // backend holds and a branch write goes through the same queue its edits
+  // do. Mounting it is also what stops a branch consumer on this page falling
+  // through to the context's daemon fallback and issuing a request to a
+  // daemon that is not there — which was this provider's whole job while the
+  // keeper had no branches, and remains true now that it has them.
+  const branchesBackend = useMemo(
+    // The version store rides along so a merge can leave the point before it.
+    // Same instance the versions seam uses, so a pre-merge point is an
+    // ordinary row in the same history rather than a second kind of record.
+    () => createBrowserBranchesBackend({ backend, versions: versionStore }),
+    [backend, versionStore],
+  )
   // A manual save announces itself on the window (dispatched after the
   // keeper confirmed the save), and the page's history column re-reads on
   // it. Scoped to THIS document's identity — an unchecked listener refreshed
@@ -738,7 +826,6 @@ function useBrowserDocument(
     documentKey: documentId ?? 'no-canvas',
     documentKind,
     srTitle: renderState.snapshot.name,
-    capabilities,
     sync,
     markdown: {
       body: markdownDoc.body,
@@ -779,7 +866,7 @@ function useBrowserDocument(
     overlayTitle: documentName ?? 'Untitled',
     exportFilenameBase: documentName ?? 'canvas',
     commands: {
-      provider: { kind: 'browser', capabilities },
+      provider: { kind: 'browser' },
       canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
       registryKey: documentId,
     },
@@ -816,6 +903,7 @@ function useBrowserDocument(
       workspaceId: 'local',
       path: loadedPath,
       dataMode: 'local',
+      branchRefreshSignal,
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.

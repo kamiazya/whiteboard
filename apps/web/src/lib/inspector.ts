@@ -17,6 +17,28 @@
 export type InspectorKind = 'properties' | 'comments' | 'connections' | 'history'
 
 /**
+ * The order the four read IN — the header's segment, left to right.
+ *
+ * Declared here rather than left to the render site because it is the one
+ * thing a document KIND must not decide: before the segment existed, a
+ * canvas drew `comments, kebab, history` and a note drew `properties,
+ * comments, kebab`, each row assembled from whichever file happened to own
+ * the opener. `inspector-order.test.ts` holds it to exactly the members of
+ * `InspectorKind`, so a fifth panel takes a place here rather than landing
+ * wherever its component is mounted.
+ *
+ * Properties first: ADR-0006 puts an object's properties ahead of its
+ * verbs, and the rest run outward from the document — its own frontmatter,
+ * the talk about it, what points at it, what it was.
+ */
+export const INSPECTOR_ORDER = [
+  'properties',
+  'comments',
+  'connections',
+  'history',
+] as const satisfies readonly InspectorKind[]
+
+/**
  * What the vessel calls each panel. The test id spellings are the ones the
  * panels carried before they shared a vessel, kept so every browser flow
  * that finds them by name keeps finding them.

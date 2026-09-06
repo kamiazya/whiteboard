@@ -72,12 +72,6 @@ export interface HeaderBranchChipProps {
   // mutations (create/rename/delete/setHead) already refetch internally, so
   // this only needs to cover changes this component did not itself trigger.
   refreshSignal?: number
-  // The provider capability contract: switching/creating/renaming/deleting
-  // branches does not imply merge is available. Defaults to true so existing
-  // callers that only gate on `capabilities.branches` keep today's behavior;
-  // callers must pass `capabilities.merge` explicitly to hide the merge
-  // entry point when the provider does not support it.
-  mergeEnabled?: boolean
   // Look at a variation WITHOUT switching (ADR-0022's addressable preview).
   // The host page owns the address, so this only reports the chosen name;
   // omitted (a host with no preview surface) hides the control.
@@ -106,7 +100,6 @@ export function HeaderBranchChip({
   path,
   disabled,
   refreshSignal,
-  mergeEnabled = true,
   onPreviewVariation,
 }: HeaderBranchChipProps): JSX.Element {
   const {
@@ -508,11 +501,7 @@ export function HeaderBranchChip({
             <GitMerge className="size-3" />
             Combine into «{displayBranchName(head)}»
           </DropdownMenuLabel>
-          {!mergeEnabled ? (
-            <DropdownMenuItem disabled className="text-xs text-muted-foreground">
-              Combine unavailable
-            </DropdownMenuItem>
-          ) : otherBranches.length === 0 ? (
+          {otherBranches.length === 0 ? (
             <DropdownMenuItem disabled className="text-xs text-muted-foreground">
               No other variations
             </DropdownMenuItem>

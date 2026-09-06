@@ -17,6 +17,7 @@
  */
 import { unlink } from 'node:fs/promises'
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
+import { readWorkspaceBranchTips } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -880,18 +881,31 @@ async function retainedHistoryCut(
     .select(['tipFrontiers', 'name', 'documentId'])
     .where('workspaceId', '=', workspaceId)
     .execute()
+  // Both readings, because the move off rows is per document: a document
+  // written since the move has its branches on the record and no rows, one
+  // written before has rows and no plane. Never both, so this is a union
+  // rather than a merge — and a tip counted twice would be harmless anyway,
+  // since the cut is a pointwise MINIMUM.
+  const tips = [
+    ...readWorkspaceBranchTips(doc),
+    ...rows.map((row) => ({
+      documentId: row.documentId,
+      name: row.name,
+      tipFrontiers: row.tipFrontiers,
+    })),
+  ]
   const pins: { frontiers: Frontiers; branch: string }[] = []
-  for (const row of rows) {
+  for (const tip of tips) {
     // An empty tip is a branch nothing has written to yet — it pins nothing.
-    if (row.tipFrontiers.length === 0) continue
+    if (tip.tipFrontiers.length === 0) continue
     try {
       pins.push({
-        frontiers: decodeFrontiers(new Uint8Array(Buffer.from(row.tipFrontiers, 'base64'))),
-        branch: `${row.documentId}#${row.name}`,
+        frontiers: decodeFrontiers(new Uint8Array(Buffer.from(tip.tipFrontiers, 'base64'))),
+        branch: `${tip.documentId}#${tip.name}`,
       })
     } catch (error) {
       throw corruptStoredData(
-        `${workspaceId}/branches/${row.documentId}#${row.name}`,
+        `${workspaceId}/branches/${tip.documentId}#${tip.name}`,
         `tipFrontiers could not be decoded (${error instanceof Error ? error.message : String(error)})`,
       )
     }

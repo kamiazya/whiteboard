@@ -106,7 +106,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   'packages/server-core/src/tools/canvas-edit.ts': 948,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
-  'packages/loro-adapter/src/workspace-tree.ts': 1032,
+  // Raised from 1032 by the document PLANE primitives — a mergeable child
+  // map on a document's node, and the read that never opens one. They sit
+  // here rather than in a new file because `nodeById` is this module's, and
+  // because a plane is a tree-node concept: splitting it out would export
+  // the node lookup for one caller. The prose is most of the 44 lines and is
+  // the point of them — a plane opened the regular way loses one replica's
+  // whole plane with both sides agreeing on the survivor.
+  // Raised again from 1076 by PLANE NAMESPACING — the `plane:` prefix, and
+  // the two readers that now skip it. Nearly all of it is the reason: a
+  // plane in the node's flat namespace is carried into
+  // `projectWorkspaceDocument` and written back by the next content save,
+  // from whatever the projection held when it was taken. Measured through
+  // the daemon's merge before the fix, a branch tip read back as "" with
+  // nothing red, which is precisely the comment's job to prevent a second
+  // time.
+  'packages/loro-adapter/src/workspace-tree.ts': 1116,
   'packages/canvas-render/src/svg/backend.ts': 991,
   // Raised from 921 when the page became a KEEPER — its wiring answers the
   // `DocumentKeeper` contract (the hook signature, the two terminal answers,
@@ -115,10 +130,46 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // supplier built here, mounted for every consumer under it, in place of
   // four call sites building their own. Both are paid once; the keeper
   // conversion also took the browser page below from 981 to 926.
-  'apps/web/src/pages/DaemonDocumentPage.tsx': 934,
-  'apps/web/src/lib/document-sync-session.ts': 1366,
-  'packages/mcp-server/src/server/store/document-store.ts': 1131,
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 925,
+  'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
+  // Raised from 1366 by the automatic-checkpoint trigger: a narrow
+  // `{signal, flush}` pair on SessionDeps, signalled from
+  // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
+  // beside the edit flush. Most of the 25 lines is the reason the FLUSH lives
+  // here rather than as the page's own listener — its order against the edit
+  // flush is load-bearing, and two independent listeners would leave that to
+  // registration timing.
+  'apps/web/src/lib/document-sync-session.ts': 1391,
+  // Raised from 1131 because compaction's retained-history cut now reads
+  // branch tips from BOTH planes for the length of the migration: the record,
+  // where a document goes the first time its branches are written, and the
+  // rows a document that has not been written since still has. A union rather
+  // than a merge — a document is never in both — and the comment saying so is
+  // most of the 14 lines.
+  'packages/mcp-server/src/server/store/document-store.ts': 1145,
+  // Raised from 926 by the version STORE being built once and shared. A
+  // merge's pre-merge point cannot go through the versions seam — that
+  // `save` carries a label and nothing else, while a checkpoint has to say
+  // it is automatic and which variation it belongs to — so the store is
+  // built here and handed to both seams, and the comment saying why is most
+  // of the seven lines.
+  // Raised from 933 by the checkpoint scheduler being BUILT here — the
+  // keeper's `save`, the HEAD lookup its rows are laned by, and the pair the
+  // session signals. Most of the 54 lines is two pieces of reasoning a reader
+  // cannot recover from the code: the doc handed to the scheduler is the
+  // workspace RECORD rather than this document's content (it keys the
+  // "anything changed" check on a frontier, and the record's is what the
+  // store saves), and the pair's `flush` signals BEFORE it flushes, because
+  // the edit flush's commit reaches `subscribeLocalUpdates` only on a later
+  // microtask and a flush alone would find nothing armed. Raised again to 997
+  // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
+  // throw escapes as an unhandled rejection that reddens a whole run while
+  // every test passes.
+  // Raised again to 1011 by the branch-refresh signal: the browser record is
+  // not readable at mount, so nothing re-read the branch plane once it
+  // arrived and a document opened ON a variation kept naming the default one.
+  // Most of the added lines is that reason — the bug is invisible in the
+  // three lines of state that fix it.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1011,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

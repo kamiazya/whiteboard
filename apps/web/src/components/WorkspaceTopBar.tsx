@@ -1,15 +1,13 @@
-import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
+import { ChevronLeft, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { HEADER_BUTTON_CLASS, HEADER_TOGGLE_CLASS } from '../components/ui/header-button.js'
+import { HEADER_BUTTON_CLASS } from '../components/ui/header-button.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { cn } from '../lib/utils.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 
-// Gates which pieces of daemon-only chrome render. Omitted entirely (the
-// default), every capability behaves as if it were `true` — this keeps every
-// pre-existing caller (all of which never pass `capabilities`) byte-identical.
 /** What the top bar knows about the open document's NAME, handed to `titleSlot`. */
 export interface DocumentIdentity {
   /** The workspace's display name, falling back to the path when none is stored. */
@@ -33,11 +31,6 @@ export interface TopBarPreview {
   readonly restore: () => void
 }
 
-export interface WorkspaceTopBarCapabilities {
-  branches?: boolean
-  merge?: boolean
-}
-
 interface Props {
   workspaceId: string
   path: string
@@ -55,10 +48,6 @@ interface Props {
    * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
    */
   dataMode?: 'daemon' | 'local'
-  // Gates HeaderBranchChip (branches) and its mergeEnabled passthrough
-  // (merge). Undefined means "all capabilities on", matching every existing
-  // caller's behavior.
-  capabilities?: WorkspaceTopBarCapabilities
   // Passed through to HeaderBranchChip: preview a variation without
   // switching. The page owns the address, so it owns the handler.
   onPreviewVariation?: (name: string) => void
@@ -72,8 +61,6 @@ interface Props {
    * document's kind — a markdown document's history is its keeper's business,
    * and gating it here is what left one unreachable.
    */
-  onToggleHistory?: () => void
-  historyOpen?: boolean
   /**
    * A past version on screen in place of the document, and the two things to
    * do about it.
@@ -127,17 +114,17 @@ export default function WorkspaceTopBar({
   path,
   onNavigateBack,
   dataMode = 'daemon',
-  capabilities,
   onPreviewVariation,
-  onToggleHistory,
-  historyOpen = false,
   preview,
   branchRefreshSignal,
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
-  const branchesEnabled = capabilities?.branches ?? true
-  const mergeEnabled = capabilities?.merge ?? true
+  // Whether to show the chip at all is the BACKEND's answer, not a keeper
+  // flag: both keepers have variations now, but a document with no
+  // record-holding backend (a markdown body, or one still loading) has none.
+  // That is per document, which no provider-level flag can say.
+  const branchesEnabled = useBranchesBackend().hasBranches
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -232,28 +219,9 @@ export default function WorkspaceTopBar({
               workspaceId={workspaceId}
               path={path}
               refreshSignal={branchRefreshSignal}
-              mergeEnabled={mergeEnabled}
               onPreviewVariation={onPreviewVariation}
             />
           </>
-        )}
-
-        {/* The document's history. Kind-agnostic on purpose — see the prop. */}
-        {onToggleHistory && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="History"
-                aria-expanded={historyOpen}
-                onClick={onToggleHistory}
-                className={HEADER_TOGGLE_CLASS}
-              >
-                <History aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>History</TooltipContent>
-          </Tooltip>
         )}
       </div>
     </header>

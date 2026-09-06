@@ -112,11 +112,11 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // refresh the save announces — not through the panel's mount fetch.
     await userEvent.click(screen.getByRole('button', { name: 'History' }))
     const panel = await screen.findByTestId('history-panel')
-    // The browser's own empty-state copy: no auto-save to wait for, and it
-    // points at the panel's own save icon rather than at a shortcut a phone
-    // does not have.
+    // The empty-state copy, which says a checkpoint is coming — because for
+    // this keeper one now is. It used to point only at the save button, and
+    // that was correct until automatic checkpoints reached the browser.
     const empty = await within(panel).findByText(/No versions yet/)
-    expect(empty.textContent).toContain('Save one with the button above, or ⌘/Ctrl+S.')
+    expect(empty.textContent).toContain('A checkpoint is saved a little after you stop editing.')
 
     // ⌘/Ctrl+S asks for a bookmark rather than taking one: it opens the
     // history with its naming field ready. An unnamed mark would be titled

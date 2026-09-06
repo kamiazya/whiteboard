@@ -17,6 +17,14 @@
  */
 
 import {
+  type LoadedReference,
+  type ReferenceWire,
+  referenceSeamsFromWire,
+  referenceTargets,
+  referenceWire,
+} from '@kamiazya/whiteboard-canvas-render'
+import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
+import {
   documentContainers,
   readMarkdownBody,
   readSpatialCanvas,
@@ -33,6 +41,7 @@ import { formatRelative } from '../components/workspace-files/format-relative.js
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
+import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -140,6 +149,71 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
     latestRecord.current = state.kind === 'ready' ? state.record : null
   }, [state])
 
+  // What the selected document points at, answered from the replica record
+  // itself. Nothing here reaches a keeper: the alias table is the record's
+  // own entries, and every target's body or canvas is read from the same
+  // record through `documentContainers`. That is what makes references work
+  // on the one page that exists BECAUSE the daemon is unreachable — and it
+  // stays inside the page's own rule, since reading a container is not an
+  // index write.
+  // The same two tables both keeper pages build, over this record's own
+  // entries — so a `[[...]]` written here resolves by the rules the rest of
+  // the app already applies (path or id; a display name is a label, never a
+  // target) rather than by a lookup this page invented for itself.
+  const linkable = useMemo(
+    (): readonly LinkableDocument[] =>
+      state.kind === 'ready'
+        ? state.entries.map((entry) => ({
+            id: entry.documentId,
+            path: entry.path,
+            ...(entry.name === undefined ? {} : { displayName: entry.name }),
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          }))
+        : [],
+    [state],
+  )
+  const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
+  const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
+
+  const references = useMemo((): ReferenceWire | undefined => {
+    if (state.kind !== 'ready' || selected === undefined) return undefined
+    const byId = new Map(state.entries.map((entry) => [entry.documentId, entry]))
+    const load = (target: string): LoadedReference | null => {
+      const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
+      if (entry === undefined) return null
+      const containers = documentContainers(state.record, entry.documentId)
+      return {
+        documentId: entry.documentId,
+        ...(entry.name === undefined ? {} : { name: entry.name }),
+        ...(entry.kind === 'spatial'
+          ? { canvas: readSpatialCanvas(containers) }
+          : { body: readMarkdownBody(containers) }),
+      }
+    }
+    // Seeded from what the SELECTED document says, then walked the way every
+    // other keeper walks it — `referenceTargets` re-reads the graph as it
+    // grows, so a referenced body's own links load too, under its own caps.
+    const containers = documentContainers(state.record, selected.documentId)
+    const seeds =
+      selected.kind === 'spatial'
+        ? { canvases: [readSpatialCanvas(containers)] }
+        : { bodies: [readMarkdownBody(containers)] }
+    const graph = new Map<string, LoadedReference | null>()
+    for (;;) {
+      const wanted = referenceTargets({ ...seeds, loaded: graph }).filter(
+        (target) => !graph.has(target),
+      )
+      if (wanted.length === 0) break
+      for (const target of wanted) graph.set(target, load(target))
+    }
+    return referenceWire(graph, { resolveAlias, resolveTitle })
+  }, [state, selected, resolveAlias, resolveTitle])
+
+  const seams = useMemo(
+    () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
+    [references],
+  )
+
   const content = useMemo(() => {
     if (state.kind !== 'ready' || selected === undefined) return null
     const containers = documentContainers(state.record, selected.documentId)
@@ -234,6 +308,7 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
                 initialViewMode="split"
                 value={draft}
                 onChange={onDraftChange}
+                references={seams}
               />
             )}
             {content?.kind === 'spatial' && spatialDraft !== null && (
@@ -246,6 +321,7 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
                 // should not need a tool switch first.
                 defaultTool="select"
                 className="h-full"
+                references={references}
               />
             )}
           </div>

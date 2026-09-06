@@ -1,14 +1,21 @@
-import type {
-  BranchMeta,
-  DocumentBranchesState,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
+import type { DocumentBranchesState } from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
 import {
-  resolveWorkspaceDocument,
-  resolveWorkspaceDocumentById,
-  updateWorkspaceDocumentMeta,
-} from '@kamiazya/whiteboard-loro-adapter'
+  type BranchMeta,
+  type BranchScope,
+  createBranch as createBranchOp,
+  DEFAULT_MAIN_COLOR,
+  defaultMain,
+  deleteBranch as deleteBranchOp,
+  hasBranchesOnRecord,
+  readBranchesFromRecord,
+  renameBranch as renameBranchOp,
+  resolveHead,
+  setHead as setHeadOp,
+  updateBranchTip as updateBranchTipOp,
+  writeBranchesToRecord,
+} from '@kamiazya/whiteboard-history'
+import { resolveWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import { getDataDir } from '../config.js'
-import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -16,31 +23,43 @@ import { DocumentNotFoundError } from './document-not-found-error.js'
 import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
-// Canvas-scoped branch state. Backed by:
-//   branches table         -> one row per branch keyed on (documentId, name)
-//   documents.currentBranch -> HEAD pointer per canvas row
+// Canvas-scoped branch state, kept on the WORKSPACE RECORD: the branch plane
+// of the document's tree node, with HEAD as that node's `currentBranch`.
+//
+// It used to be a `branches` row per branch. A row is not something a replica
+// can carry, which is why the browser keeper had no variations at all, and it
+// does not survive a browser-to-daemon promotion (ADR-0023) either — a
+// variation lost in a move is exactly the kind of loss nothing goes red for.
+// A branch is a name and a frontier OF THE RECORD, so the record is where it
+// belongs, and both keepers read it the same way.
+//
+// The migration is per document and READ-THROUGH: a document whose branches
+// are still rows reads them, and the first write moves it onto the plane and
+// drops its rows. Nothing folds at boot, so there is no partial fold to
+// recover from and no marker to keep in step — a document either has a plane
+// or has rows, never a half of each.
+//
+// What a branch IS, and every rule about changing one (no duplicate names,
+// `main` immovable, HEAD undeletable, a rename follows HEAD and every
+// `baseBranch` that named it) is `@kamiazya/whiteboard-history`'s: this
+// module is the daemon's read-modify-write around those pure steps — the
+// per-workspace lock, and the record save.
 //
 // All accessors take (workspaceId, path) so the public API stays stable
 // across the path → documentId migration. Internally the path is resolved to
 // the stable canvas id before any branches/documents write.
 
 export type { BranchMeta } from '@kamiazya/whiteboard-daemon-client/api-contracts/branches'
+export {
+  BranchConflictError,
+  BranchNotFoundError,
+  DEFAULT_MAIN_COLOR,
+} from '@kamiazya/whiteboard-history'
 
 // Internal alias: this store's DocumentBranches predates the shared contract
 // and its callers already spell that name — kept to avoid a same-package
 // drive-by rename beyond this increment's scope.
 export type DocumentBranches = DocumentBranchesState
-
-export const DEFAULT_MAIN_COLOR = '#1971c2'
-
-function defaultMain(): BranchMeta {
-  return {
-    name: 'main',
-    tipFrontiers: '',
-    color: DEFAULT_MAIN_COLOR,
-    createdAt: new Date().toISOString(),
-  }
-}
 
 async function dbReady() {
   await prepareDataDir(getDataDir())
@@ -53,17 +72,33 @@ export async function loadDocumentBranches(
 ): Promise<DocumentBranches> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  // The document and its HEAD resolve from the workspace record (S7); the
-  // branch ROWS stay in sqlite, keyed by the id the tree answers.
-  const target = await resolveDocumentForBranches(workspaceId, path)
-  if (target === null) {
-    return { branches: [defaultMain()], head: 'main' }
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc === null) return { branches: [defaultMain()], head: 'main' }
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  if (entry === null) return { branches: [defaultMain()], head: 'main' }
+  if (hasBranchesOnRecord(workspaceDoc, entry.documentId)) {
+    return readBranchesFromRecord(workspaceDoc, entry.documentId)
   }
+  return branchesFromRows(entry.documentId, entry.currentBranch)
+}
+
+/**
+ * The pre-plane reading: this document's `branches` rows.
+ *
+ * Kept because a document acquires a plane only when something WRITES its
+ * branches, and a workspace can sit for a long time with variations nobody
+ * has touched. Deleting these rows without reading them first is how a stored
+ * variation disappears with nothing red.
+ */
+async function branchesFromRows(
+  documentId: string,
+  currentBranch: string | undefined,
+): Promise<DocumentBranches> {
+  const db = await dbReady()
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('documentId', '=', target.documentId)
+    .where('documentId', '=', documentId)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -78,28 +113,7 @@ export async function loadDocumentBranches(
     ...(r.sourceBranchName !== null ? { baseBranch: r.sourceBranchName } : {}),
     ...(r.sourceVersionId !== null ? { baseVersionId: r.sourceVersionId } : {}),
   }))
-  const persistedHead = target.currentBranch ?? 'main'
-  const head = branches.some((b) => b.name === persistedHead)
-    ? persistedHead
-    : branches.some((b) => b.name === 'main')
-      ? 'main'
-      : branches[0]!.name
-  return { branches, head }
-}
-
-/** The documentId + HEAD for a path, answered from the workspace tree; null when the tree does not serve it. */
-async function resolveDocumentForBranches(
-  workspaceId: string,
-  path: string,
-): Promise<{ documentId: string; currentBranch?: string } | null> {
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc === null) return null
-  const entry = resolveWorkspaceDocument(workspaceDoc, path)
-  if (entry === null) return null
-  return {
-    documentId: entry.documentId,
-    ...(entry.currentBranch === undefined ? {} : { currentBranch: entry.currentBranch }),
-  }
+  return { branches, head: resolveHead(branches, currentBranch) }
 }
 
 // The actual write, assuming the workspace write lock is already held by
@@ -115,51 +129,23 @@ async function saveDocumentBranchesLocked(
     validateBranchName(branch.name)
   }
   validateBranchName(state.head)
-  const db = await dbReady()
-  const target = await resolveDocumentForBranches(workspaceId, path)
-  if (target === null) throw new DocumentNotFoundError(workspaceId, path)
-  const documentId = target.documentId
-  await db.transaction().execute(async (trx) => {
-    await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
-    if (state.branches.length > 0) {
-      await trx
-        .insertInto('branches')
-        .values(
-          state.branches.map((b) => ({
-            documentId,
-            workspaceId,
-            name: b.name,
-            tipFrontiers: b.tipFrontiers,
-            color: b.color ?? null,
-            sourceBranchName: b.baseBranch ?? null,
-            sourceVersionId: b.baseVersionId ?? null,
-            createdAt: parseIsoOrNow(b.createdAt),
-          })),
-        )
-        .execute()
-    }
-  })
-  // Mirror the HEAD into the workspace record's node meta (dual-plane
-  // collapse S4b): shared CRDT state every replica converges on, while the
-  // row column keeps serving today's reads. Guarded by a read so a tip-only
-  // save does not append a same-value op per save. Fail-soft while the row
-  // is what reads serve: a mirror hiccup must not fail a branch write that
-  // already durably committed.
-  try {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-    if (workspaceDoc !== null) {
-      const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
-      if (entry !== null && (entry.currentBranch ?? 'main') !== state.head) {
-        updateWorkspaceDocumentMeta(workspaceDoc, documentId, { currentBranch: state.head })
-        await saveWorkspaceDoc(workspaceId, workspaceDoc)
-      }
-    }
-  } catch (err) {
-    getLogger('branches-store').warning(
-      { workspaceId, path, err },
-      'failed to mirror branch HEAD into the workspace record',
-    )
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc === null) throw new DocumentNotFoundError(workspaceId, path)
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  if (entry === null) throw new DocumentNotFoundError(workspaceId, path)
+  if (!writeBranchesToRecord(workspaceDoc, entry.documentId, state)) {
+    throw new DocumentNotFoundError(workspaceId, path)
   }
+  await saveWorkspaceDoc(workspaceId, workspaceDoc)
+  // The rows this document's branches used to be, retired only now — after
+  // the record write has durably landed. In this order a failure leaves the
+  // rows as the reading, which is the state the load path already handles;
+  // the other order would leave the document with neither.
+  //
+  // Per DOCUMENT, never per workspace: another document's rows are still the
+  // only copy of its branches until something writes them.
+  const db = await dbReady()
+  await db.deleteFrom('branches').where('documentId', '=', entry.documentId).execute()
 }
 
 // Every branch mutation (createBranch, deleteBranch, updateBranchTip,
@@ -236,33 +222,8 @@ export async function withDocumentBranchesLock<T>(
   })
 }
 
-function parseIsoOrNow(iso: string): number {
-  const t = Date.parse(iso)
-  return Number.isFinite(t) ? t : Date.now()
-}
-
-// Stable error names so callers can distinguish conflict vs not found.
-export class BranchConflictError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'BranchConflictError'
-  }
-}
-export class BranchNotFoundError extends Error {
-  constructor(message: string) {
-    super(message)
-    this.name = 'BranchNotFoundError'
-  }
-}
-
-const BRANCH_COLOR_PALETTE = ['#9333ea', '#2f9e44', '#e03131', '#f08c00', '#0c8599', '#e64980']
-
-function nextColor(existing: BranchMeta[]): string {
-  const used = new Set(existing.map((b) => b.color.toLowerCase()))
-  for (const c of BRANCH_COLOR_PALETTE) {
-    if (!used.has(c.toLowerCase())) return c
-  }
-  return BRANCH_COLOR_PALETTE[existing.length % BRANCH_COLOR_PALETTE.length]!
+function scopeOf(workspaceId: string, path: string): BranchScope {
+  return { workspaceId, path }
 }
 
 export async function createBranch(
@@ -279,24 +240,9 @@ export async function createBranch(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   validateBranchName(opts.name)
-
-  return mutateDocumentBranches(workspaceId, path, (state) => {
-    if (state.branches.some((b) => b.name === opts.name)) {
-      throw new BranchConflictError(
-        `Branch "${opts.name}" already exists on ${workspaceId}/${path}`,
-      )
-    }
-    const branch: BranchMeta = {
-      name: opts.name,
-      tipFrontiers: opts.initialTipFrontiers ?? '',
-      color: opts.color ?? nextColor(state.branches),
-      createdAt: new Date().toISOString(),
-      ...(opts.baseBranch !== undefined ? { baseBranch: opts.baseBranch } : {}),
-      ...(opts.baseVersionId !== undefined ? { baseVersionId: opts.baseVersionId } : {}),
-    }
-    const next: DocumentBranches = { ...state, branches: [...state.branches, branch] }
-    return { next, result: branch }
-  })
+  return mutateDocumentBranches(workspaceId, path, (state) =>
+    createBranchOp(state, scopeOf(workspaceId, path), opts),
+  )
 }
 
 export async function deleteBranch(
@@ -307,24 +253,14 @@ export async function deleteBranch(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   validateBranchName(name)
+  // The `main` refusal is the mechanic's, but it is answered before the
+  // lock is taken and the rows are read, as it always was here.
   if (name === 'main') {
-    throw new BranchConflictError('Cannot delete main branch')
+    deleteBranchOp({ branches: [], head: 'main' }, scopeOf(workspaceId, path), name)
   }
-  return mutateDocumentBranches(workspaceId, path, (state) => {
-    if (!state.branches.some((b) => b.name === name)) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
-    }
-    if (state.head === name) {
-      throw new BranchConflictError(
-        `Cannot delete branch "${name}" while it is HEAD. setHead to another branch first.`,
-      )
-    }
-    const next: DocumentBranches = {
-      ...state,
-      branches: state.branches.filter((b) => b.name !== name),
-    }
-    return { next, result: { ok: true as const, unmergedCommits: 0 } }
-  })
+  return mutateDocumentBranches(workspaceId, path, (state) =>
+    deleteBranchOp(state, scopeOf(workspaceId, path), name),
+  )
 }
 
 export async function setHead(
@@ -335,16 +271,9 @@ export async function setHead(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   validateBranchName(name)
-  return mutateDocumentBranches(workspaceId, path, (state) => {
-    if (!state.branches.some((b) => b.name === name)) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
-    }
-    const previousHead = state.head
-    if (previousHead === name) {
-      return { next: null, result: { head: name, previousHead } }
-    }
-    return { next: { ...state, head: name }, result: { head: name, previousHead } }
-  })
+  return mutateDocumentBranches(workspaceId, path, (state) =>
+    setHeadOp(state, scopeOf(workspaceId, path), name),
+  )
 }
 
 export async function renameBranch(
@@ -358,28 +287,11 @@ export async function renameBranch(
   validateBranchName(oldName)
   validateBranchName(newName)
   if (oldName === 'main') {
-    throw new BranchConflictError('Cannot rename main branch')
+    renameBranchOp({ branches: [], head: 'main' }, scopeOf(workspaceId, path), oldName, newName)
   }
-  return mutateDocumentBranches(workspaceId, path, (state) => {
-    const current = state.branches.find((b) => b.name === oldName)
-    if (!current) {
-      throw new BranchNotFoundError(`Branch "${oldName}" not found on ${workspaceId}/${path}`)
-    }
-    if (oldName === newName) {
-      return { next: null, result: current }
-    }
-    if (state.branches.some((b) => b.name === newName)) {
-      throw new BranchConflictError(`Branch "${newName}" already exists on ${workspaceId}/${path}`)
-    }
-    const renamed: BranchMeta = { ...current, name: newName }
-    const nextBranches = state.branches.map((b) => {
-      if (b.name === oldName) return renamed
-      if (b.baseBranch === oldName) return { ...b, baseBranch: newName }
-      return b
-    })
-    const nextHead = state.head === oldName ? newName : state.head
-    return { next: { branches: nextBranches, head: nextHead }, result: renamed }
-  })
+  return mutateDocumentBranches(workspaceId, path, (state) =>
+    renameBranchOp(state, scopeOf(workspaceId, path), oldName, newName),
+  )
 }
 
 export async function getBranchTipBase64(
@@ -404,23 +316,7 @@ export async function updateBranchTip(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   validateBranchName(name)
-  await mutateDocumentBranches(workspaceId, path, (state) => {
-    const idx = state.branches.findIndex((b) => b.name === name)
-    if (idx === -1) {
-      throw new BranchNotFoundError(`Branch "${name}" not found on ${workspaceId}/${path}`)
-    }
-    const current = state.branches[idx]!
-    if (current.tipFrontiers === tipFrontiers) {
-      return { next: null, result: undefined }
-    }
-    const next: DocumentBranches = {
-      ...state,
-      branches: [
-        ...state.branches.slice(0, idx),
-        { ...current, tipFrontiers },
-        ...state.branches.slice(idx + 1),
-      ],
-    }
-    return { next, result: undefined }
-  })
+  await mutateDocumentBranches(workspaceId, path, (state) =>
+    updateBranchTipOp(state, scopeOf(workspaceId, path), name, tipFrontiers),
+  )
 }

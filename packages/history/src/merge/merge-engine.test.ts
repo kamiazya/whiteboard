@@ -2,9 +2,9 @@ import { spatialCanvasArbitrary } from '@kamiazya/whiteboard-model/test-utils'
 import type { PeerID } from 'loro-crdt'
 import { VersionVector } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { makeSpatialDoc } from '../test-utils/spatial-doc.js'
 import { detectMergeBadges, type MergeBadge, meetVersion } from './merge-engine.js'
-import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
-import { makeSpatialDoc } from './test-utils/spatial-doc.js'
 
 // Small fixed peer-id pool so generated vectors actually overlap on some
 // peers and diverge on others — the case meetVersion exists for.

@@ -20,7 +20,7 @@
  * somebody answers, for it, the question this whole ledger exists to ask:
  * and in the browser?
  *
- * The four answers are the vocabulary below. `gap` is a first-class one:
+ * The three answers are the vocabulary below. `gap` is a first-class one:
  * the point is not that both keepers must have everything, it is that a
  * difference is a decision somebody took rather than one nobody noticed.
  *
@@ -39,7 +39,6 @@ import {
   DAEMON_HISTORY_CAPABILITIES,
 } from '../components/VersionTimeline.js'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
-import { BROWSER_CAPABILITIES, DAEMON_CAPABILITIES } from './provider.js'
 
 type KeeperReach =
   /**
@@ -50,22 +49,27 @@ type KeeperReach =
    * concept name is a claim.
    */
   | { readonly reach: 'both-keepers'; readonly browser: string; readonly note?: string }
-  /**
-   * A difference the app already DECLARES, through the capability map the
-   * teaser copy is built on. The user is told; nothing is silent.
-   */
-  | { readonly reach: 'capability'; readonly capability: keyof typeof BROWSER_CAPABILITIES }
+  // A `capability` answer stood here, for a difference the app DECLARED
+  // through a capability map. That map is gone — every flag in it left as the
+  // browser keeper grew the feature, because a flag both keepers set the same
+  // way declares no difference — so the answer is gone with it. A real
+  // declared difference would bring both back together.
   /** The module's subject IS the daemon connection, so there is nothing to mirror. */
   | { readonly reach: 'daemon-itself'; readonly why: string }
   /** A real difference nobody declared, with the follow-up that closes it. */
   | { readonly reach: 'gap'; readonly missing: string; readonly followUp: string }
 
+const BROWSER_BRANCHES = 'src/lib/browser-branches-backend.ts'
 const BROWSER_VERSIONS = 'src/lib/browser-versions-backend.ts'
 const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
-  'src/components/MergeDialog.tsx': { reach: 'capability', capability: 'merge' },
+  'src/components/MergeDialog.tsx': {
+    reach: 'both-keepers',
+    browser: BROWSER_BRANCHES,
+    note: 'the dialog is mounted by the chip, which both keepers now render; the browser backend plans and commits the merge behind it',
+  },
   'src/components/PairedOriginsCard.tsx': {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
@@ -75,7 +79,11 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: 'src/lib/persistent-storage.ts',
     note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
   },
-  'src/components/MergeToast.tsx': { reach: 'capability', capability: 'merge' },
+  'src/components/MergeToast.tsx': {
+    reach: 'both-keepers',
+    browser: BROWSER_PAGE,
+    note: 'the shared DocumentPage mounts it for whichever keeper rendered it, from the workspace and path the top bar already carries',
+  },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
     browser: BROWSER_PAGE,
@@ -96,16 +104,24 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
   // The branch seam, in two halves. The context is which keeper answers; the
-  // backend holds the daemon's requests AND the browser's refusal. Together
-  // they make the declared difference the DEFAULT rather than a flag each
-  // caller passes. (`capability` entries take no `note` — the vocabulary's
-  // own type says so — so this is a comment.)
+  // backend holds the daemon's requests. They were `capability` entries while
+  // only the daemon had variations; the browser keeps its own on the
+  // workspace record now, so the difference they named is gone and the answer
+  // is the ordinary one — a browser module that answers without a daemon.
   //
   // `src/hooks/useBranches.ts` is deliberately absent: it stopped reaching
   // the daemon when the transport moved out of it, and this ledger's other
   // direction fails on an entry naming a module that no longer reaches.
-  'src/contexts/BranchesBackendContext.tsx': { reach: 'capability', capability: 'branches' },
-  'src/lib/branches-backend.ts': { reach: 'capability', capability: 'branches' },
+  'src/contexts/BranchesBackendContext.tsx': {
+    reach: 'both-keepers',
+    browser: BROWSER_BRANCHES,
+    note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
+  },
+  'src/lib/branches-backend.ts': {
+    reach: 'both-keepers',
+    browser: BROWSER_BRANCHES,
+    note: "the daemon's half of the seam; the browser's is the module named here",
+  },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -142,7 +158,7 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
 }
 
 // `?raw` rather than node:fs — apps/web is browser-only and must not import a
-// Node builtin (the same reason provider.capability-reach.test.ts reads this way).
+// Node builtin (`web-app-boundary.test.ts` pins that).
 const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
   query: '?raw',
   import: 'default',
@@ -203,7 +219,7 @@ describe('every module that reaches the daemon says what the browser keeper does
   it('classifies every one of them, and names nothing that has stopped reaching', () => {
     assertScannedLedger(scanned, DAEMON_REACH, {
       unclassified:
-        'these modules reach the daemon and DAEMON_REACH does not say what the browser keeper does — add an entry: both-keepers (naming the module that answers without a daemon), capability (a difference the app already declares), daemon-itself, or gap (with the follow-up that closes it)',
+        'these modules reach the daemon and DAEMON_REACH does not say what the browser keeper does — add an entry: both-keepers (naming the module that answers without a daemon), daemon-itself, or gap (with the follow-up that closes it)',
       stale:
         'these DAEMON_REACH entries name modules that no longer reach the daemon — delete the entry',
     })
@@ -221,20 +237,6 @@ describe('each answer is checked, so none of them can be a word in front of an o
       known.has(entry.browser),
       `${entry.browser} is named as the browser keeper's answer but no such module exists — name the real one, or the entry is a gap`,
     ).toBe(true)
-  })
-
-  const capabilities = entries.filter(([, e]) => e.reach === 'capability')
-  it.each(capabilities)('%s names a capability the keepers really differ on', (_path, entry) => {
-    if (entry.reach !== 'capability') return
-    // A flag both keepers set the same way declares no difference, so an
-    // entry resting on it is claiming the user was told something they were
-    // not. provider.capability-reach.test.ts holds the other half — that a
-    // declared flag gates something.
-    expect(
-      BROWSER_CAPABILITIES[entry.capability],
-      `capabilities.${entry.capability} is not false for the browser, so this module's difference is not the declared one`,
-    ).toBe(false)
-    expect(DAEMON_CAPABILITIES[entry.capability]).toBe(true)
   })
 
   const gaps = entries.filter(([, e]) => e.reach === 'gap')
@@ -294,13 +296,22 @@ describe('a panel whose behaviour differs by keeper is told which keeper it is',
     ).toBe(true)
   })
 
-  it('agrees with the provider about branches', () => {
-    // Two capability surfaces describing one keeper: the provider's map,
-    // which gates the teaser copy, and the panel's prop, which decides
-    // whether a lane column is drawn. Disagreeing is a silent difference of
-    // its own — the chrome would promise branches while the panel drew one
-    // lane, or the reverse.
-    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(BROWSER_CAPABILITIES.branches)
-    expect(DAEMON_HISTORY_CAPABILITIES.branches).toBe(DAEMON_CAPABILITIES.branches)
+  it('draws lanes and expects checkpoints for BOTH keepers now', () => {
+    // This pinned the two apart, as a decision held "until that increment
+    // lands". It has landed: the browser's rows carry `auto` and the
+    // variation they were taken on, and a checkpoint arrives once editing
+    // settles — so one lane and a hand-only history would now be wrong about
+    // this keeper rather than correct.
+    //
+    // Which makes the pair EQUAL, and a pair that agrees declares no
+    // difference — the argument that retired the provider's capability map.
+    // It is not deleted here only because `false` still selects real
+    // rendering paths in the component (`version-row.test.tsx` drives them),
+    // so the deletion is theirs to carry, not this increment's. Until then
+    // this pins the agreement rather than a difference, so nothing can drift
+    // back to claiming one.
+    expect(BROWSER_HISTORY_CAPABILITIES).toEqual(DAEMON_HISTORY_CAPABILITIES)
+    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(true)
+    expect(BROWSER_HISTORY_CAPABILITIES.autoVersions).toBe(true)
   })
 })

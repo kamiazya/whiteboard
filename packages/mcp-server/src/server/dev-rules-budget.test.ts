@@ -88,15 +88,15 @@ function alwaysOnFiles(): string[] {
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
-  // 15 since the reference-resolution paragraph: where a document's
-  // references resolve (canvas-render's `references/`), the guard that
-  // keeps every surface on it, and the one gap left. Always-on because the
-  // defect it closes was invisible to every other gate — a seam a root
-  // forgot drew a placeholder, never a failure — so it is worth a paragraph
-  // every session reads. Trimmed once before pinning: the first draft
-  // crossed into 16, and the measurements it carried belong in the guard's
-  // own header, not here.
-  '.claude/rules/architecture-map.md': 15,
+  // 16 since `packages/history` joined the table — the shared mechanics both
+  // keepers read a branch, a merge plan and a checkpoint out of. A package
+  // that is not in the table is a package nobody can place, so the row is
+  // what every session needs; the package's own detail is path-scoped in
+  // `package-history.md` and costs nothing here. The file sat ONE character
+  // under the boundary, so 294 of the 295 characters this row added are
+  // charged to a step it did not take — a coarse instrument bills the whole
+  // bucket to whoever crosses it.
+  '.claude/rules/architecture-map.md': 16,
   // 26 since the design checkpoints gained `benefit` — the column a change's
   // worth is claimed in, which decides how it gets verified. The entry sits
   // beside `blastRadius` and `userReach` because it is a peer required field,

@@ -1,3 +1,4 @@
+import { MAX_AUTO_PER_DOCUMENT } from '@kamiazya/whiteboard-history'
 import {
   readSpatialCanvas,
   writeSpatialCanvas,
@@ -143,5 +144,82 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
     // The refusal loadPast makes, for the same reason: an id alone must not
     // read a history that is not this document's.
     expect(await store.loadThumbnail(workspaceId, 'canvas-a', theirs.id)).toBeNull()
+  })
+})
+
+describe('automatic checkpoints', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  it('records a checkpoint as automatic and on the branch it was taken from', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-auto')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'work')
+    const store = new BrowserVersionStore({ docs, index })
+
+    const auto = await store.save(workspaceId, 'canvas-auto', {
+      auto: true,
+      branchName: 'wide-layout',
+    })
+
+    expect(auto).toMatchObject({ auto: true, branchName: 'wide-layout' })
+    // Read back rather than trusting the return: the row is what the panel
+    // lists, and a field the save answers but does not persist would pass a
+    // return-value assertion and show nothing in the history.
+    const listed = await new BrowserVersionStore({ docs, index }).list(workspaceId, 'canvas-auto')
+    expect(listed).toEqual([expect.objectContaining({ auto: true, branchName: 'wide-layout' })])
+  })
+
+  it("leaves a manual save's own defaults alone, so a row written before this reads as it did", async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-manual')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'work')
+    const store = new BrowserVersionStore({ docs, index })
+
+    const manual = await store.save(workspaceId, 'canvas-manual', { label: 'by hand' })
+
+    expect(manual).toMatchObject({ auto: false, branchName: 'main' })
+  })
+
+  it('keeps the newest 50 automatic checkpoints and lets the older ones go, sparing manual saves', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-cap')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'work')
+    const store = new BrowserVersionStore({ docs, index })
+
+    const manual = await store.save(workspaceId, 'canvas-cap', { label: 'by hand' })
+    for (let i = 0; i < MAX_AUTO_PER_DOCUMENT + 3; i += 1) {
+      await store.save(workspaceId, 'canvas-cap', { auto: true })
+    }
+
+    const rows = await store.list(workspaceId, 'canvas-cap')
+    const autos = rows.filter((r) => r.auto)
+    expect(autos).toHaveLength(MAX_AUTO_PER_DOCUMENT)
+    // A manual save is not a checkpoint and the cap never reaches it.
+    expect(rows.filter((r) => !r.auto).map((r) => r.id)).toEqual([manual.id])
+  })
+
+  it('never sweeps a restore merge or the point it names, even past the cap', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-lineage')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'work')
+    const store = new BrowserVersionStore({ docs, index })
+
+    // The two ends of a restore, both automatic and both the OLDEST rows, so
+    // an unqualified cap would take them first. Lineage is what spares them:
+    // the merge names its source, and the source is named by the merge.
+    const named = await store.save(workspaceId, 'canvas-lineage', { auto: true })
+    const merge = await store.save(workspaceId, 'canvas-lineage', {
+      auto: true,
+      restoredFrom: named.id,
+    })
+    for (let i = 0; i < MAX_AUTO_PER_DOCUMENT + 1; i += 1) {
+      await store.save(workspaceId, 'canvas-lineage', { auto: true })
+    }
+
+    const ids = new Set((await store.list(workspaceId, 'canvas-lineage')).map((r) => r.id))
+    expect(ids.has(merge.id)).toBe(true)
+    expect(ids.has(named.id)).toBe(true)
   })
 })

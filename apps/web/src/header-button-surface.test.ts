@@ -34,15 +34,18 @@ const sources = import.meta.glob('./**/*.tsx', {
 /**
  * The files whose icon controls sit in a chrome row, and how many of them
  * wear a shared header class. Adding a control to one of these files, or a
- * ninth file to the rows, changes a number here — on purpose.
+ * sixth file to the rows, changes a number here — on purpose.
  */
 const HEADER_SURFACES: Record<string, number> = {
   './components/AppShell.tsx': 3,
-  './components/WorkspaceTopBar.tsx': 2,
+  './components/WorkspaceTopBar.tsx': 1,
   './components/workspace-top-bar/DocumentMenu.tsx': 1,
-  './components/document-properties/DocumentProperties.tsx': 1,
-  './components/annotations/CommentsRailChrome.tsx': 1,
-  './components/connections/ConnectionsChip.tsx': 1,
+  // The four inspect openers wear ONE class from ONE file now — see
+  // `InspectorSegment`. Before it they were four buttons in three other
+  // files, which is how the row came to read `comments, kebab, history` on
+  // a canvas and `properties, comments, kebab` on a note: each opener drawn
+  // wherever its own component already was.
+  './components/document-editor/InspectorSegment.tsx': 1,
   './components/document-editor/InspectorPanel.tsx': 1,
 }
 

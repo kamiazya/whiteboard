@@ -126,6 +126,36 @@ export function branchesBackendContract(
     }
   })
 
+  it('a committed merge says it committed, where a dry run says it did not', async () => {
+    const h = await create()
+    try {
+      await h.backend.create(h.workspaceId, h.path, { name: 'idea' })
+
+      const committed = await h.backend.merge(h.workspaceId, h.path, 'idea', {
+        into: 'main',
+        dryRun: false,
+      })
+
+      expect(committed.committed).toBeDefined()
+    } finally {
+      await h.cleanup()
+    }
+  })
+
+  // What this contract deliberately does NOT assert: that the target's tip
+  // becomes the source's — which is what the merge IS (tip adoption, "source
+  // wins"). It is unobservable from here, because nothing in this seam can
+  // give a branch a tip: `create` takes a version id, not a frontier, and
+  // `updateBranchTip` is a keeper's own business. A version of this case that
+  // compared the two tips passed on the first run against a stand-in that
+  // moves nothing, because both were the empty string — vacuous, and it read
+  // exactly like coverage.
+  //
+  // So tip adoption is pinned where the storage is reachable: `mcp-node`'s
+  // branch-merge suite for the daemon, and the browser keeper's own test over
+  // its record. The pair above is what the seam can honestly see — a dry run
+  // leaves `committed` undefined (asserted in its own case), a commit sets it.
+
   it('answers null for a variation that is not there, rather than throwing', async () => {
     const h = await create()
     try {
@@ -151,16 +181,22 @@ export function branchesBackendContract(
 }
 
 /**
- * The contract for a keeper that has NO branches yet: the resting state, and
- * refusals that are local and typed. This is what the browser keeper answers
- * today; when it grows branches it moves to `branchesBackendContract` above
- * and this describe goes with it.
+ * The contract for a browser keeper with no record-holding backend: the
+ * resting state, and refusals that are local and typed.
+ *
+ * This used to describe the browser keeper itself, which had no branches at
+ * all. It has them now — and the contract did not become dead, it changed
+ * SUBJECT. The page has no `BrowserBackend` for a markdown document, or
+ * before one loads, and in those states the keeper must still answer: handing
+ * the context a `null` instead falls through to its DAEMON fallback and
+ * starts issuing requests to a daemon that is not there, which is the one
+ * regression the provider was mounted to prevent.
  */
 export function branchlessBackendContract(create: () => BranchesBackend): void {
   it('declares that it has no branches, and answers the resting state', async () => {
     const backend = create()
     expect(backend.hasBranches).toBe(false)
-    expect(await backend.list('w', 'p')).toEqual({ branches: [], head: 'main' })
+    expect((await backend.list('w', 'p')).head).toBe('main')
     expect(await backend.loadDocument('w', 'p', 'main')).toBeNull()
   })
 
