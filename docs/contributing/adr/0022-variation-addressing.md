@@ -97,23 +97,31 @@ Easier:
 - There is one address for a document, so nothing has to decide whether two
   URLs naming the same document through different variations are the same
   page — for caching, for the service worker, for `documentPath`, or for a
-  reader.
+  reader. Still true of the address a plain URL means: `?v=` decorates only
+  a NON-DEFAULT variation, and decision 1 keeps every spelling of the
+  default collapsing back to the undecorated one.
 - No migration: this records the shape that already ships.
 
 Harder, and these are real:
 
-- **A variation cannot be shared or bookmarked.** Sending someone a link
-  sends them to the document, and they see whatever HEAD points at.
+- ~~**A variation cannot be shared or bookmarked.**~~ **Paid off
+  (2026-09-05)**, and the note above says how: `?v=<name>` is a read-only
+  view that shares, bookmarks and survives a reload. Kept struck through
+  rather than deleted, because it is what decision 2 cost while it stood —
+  and the bullet below it is the one addressing did NOT buy back.
 - **Switching is a shared act.** One person switching moves the document for
   everyone on it. That is a coordination property, not a viewing preference,
   and the UI must keep saying so — the chip names the current variation
-  precisely because it is not private.
-- **Reload does not return to a variation.** Whatever a reader was looking
-  at is only theirs until someone moves HEAD.
+  precisely because it is not private. Unchanged by `?v=`: looking is
+  private, moving HEAD is not, and the preview banner puts the switch behind
+  an explicit control for that reason.
+- ~~**Reload does not return to a variation.**~~ Paid off with the first:
+  the address carries the name, so a reload lands back on it.
 
-The second and third are the cost of decision 2, not of decision 1. If they
-become the wrong trade, the fix is to make a variation addressable — and
-decision 1 already says what that must look like for the default.
+The first and third were the cost of decision 2, not of decision 1, and
+revisiting decision 2 is what removed them. The second is not a cost of
+either — it follows from HEAD being one shared value, and no addressing
+decision reaches it.
 
 ## Alternatives considered
 
