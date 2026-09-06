@@ -82,7 +82,7 @@ describe('the buildx cache report', () => {
     expect(report.cacheHitRatio).toBe(0.5)
     expect(report.steps.filter((s) => !s.layer).map((s) => s.name)).toEqual([
       '[internal] load build definition from Dockerfile.server',
-      '#20',
+      'exporting cache to GitHub Actions Cache',
     ])
   })
 
@@ -164,5 +164,134 @@ describe('the buildx cache report', () => {
     const lines = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join(' ')
     expect(lines).toContain('2/4 layers CACHED (50%)')
     expect(lines).toContain('4 of 6 steps ran, 150.1s of step time')
+  })
+})
+
+// The report's first two real runs pinned a blind spot in the parser above.
+// Two consecutive main builds, eighteen minutes apart, both said `0/15 layers
+// CACHED` — and both spent 43% of the build (93.9s of 219.3s) in two steps the
+// report could only call `#21` and `#22`. Those two are exactly where a cache
+// backend reports itself: `exporting cache to GitHub Actions Cache` and, when
+// it happens at all, `importing cache manifest from …`.
+//
+// The cause was the name pattern: a step was named only by a line starting
+// `[`, which every Dockerfile layer does and no export step does. So the one
+// question the report exists to answer — is the cache backend working? — was
+// the one question its own output could not be read for.
+const CACHE_BACKEND_TAIL = `#4 importing cache manifest from gha:11
+#4 DONE 0.4s
+#13 [fetched 3/3] RUN --mount=type=cache,id=pnpm,target=/pnpm/store pnpm fetch
+#13 0.234 Progress: resolved 1, reused 0, downloaded 0
+#13 DONE 21.7s
+#21 exporting to image
+#21 exporting layers
+#21 DONE 67.5s
+#22 exporting cache to GitHub Actions Cache
+#22 preparing build cache for export
+#22 DONE 26.4s
+`
+
+describe('the cache backend the report exists to judge', () => {
+  it('names a step whose first line is not a bracketed layer', () => {
+    const report = parseBuildxProgress(CACHE_BACKEND_TAIL)
+    const named = Object.fromEntries(report.steps.map((s) => [s.id, s.name]))
+    expect(named['21']).toBe('exporting to image')
+    expect(named['22']).toBe('exporting cache to GitHub Actions Cache')
+    expect(named['4']).toBe('importing cache manifest from gha:11')
+  })
+
+  it('never mistakes a RUN step’s streamed output for its name', () => {
+    // `#13 0.234 Progress: resolved 1 …` is the step's own stdout, prefixed
+    // with seconds since the step began. Accepting any non-bracketed line as a
+    // name would rename every RUN step after its first line of output.
+    const step = parseBuildxProgress(CACHE_BACKEND_TAIL).steps.find((s) => s.id === '13')
+    expect(step?.name).toContain('[fetched 3/3]')
+  })
+
+  it('answers whether the cache was imported and exported', () => {
+    const report = parseBuildxProgress(CACHE_BACKEND_TAIL)
+    expect(report.importSeen).toBe(true)
+    expect(report.exportSeen).toBe(true)
+  })
+
+  it('says so when a build exported cache but imported none', () => {
+    // The measured shape of both real runs: export ran, no import step existed
+    // at all, every layer missed. A reader seeing `0/15` needs to know which
+    // half of the round trip is broken, or the only move left is to guess.
+    const exportOnly = CACHE_BACKEND_TAIL.split('\n')
+      .filter((l) => !l.startsWith('#4 '))
+      .join('\n')
+    const report = parseBuildxProgress(exportOnly)
+    expect(report.importSeen).toBe(false)
+    expect(report.exportSeen).toBe(true)
+    expect(formatCacheReport(report).join(' ')).toContain('import NOT seen')
+  })
+
+  it('keeps a step that failed, rather than dropping it as unresolved', () => {
+    // A cache export that ERRORs has no DONE line, so the resolution filter
+    // discarded it — turning the loudest possible evidence into silence.
+    const report = parseBuildxProgress(
+      '#22 exporting cache to GitHub Actions Cache\n#22 ERROR: failed to configure gha cache exporter\n',
+    )
+    const step = report.steps.find((s) => s.id === '22')
+    expect(step?.error).toBe(true)
+    expect(step?.name).toBe('exporting cache to GitHub Actions Cache')
+  })
+
+  it('collects the warnings and errors buildx wrote outside any step', () => {
+    const report = parseBuildxProgress(
+      `WARNING: failed to get github token: unauthorized\n${CACHE_BACKEND_TAIL}`,
+    )
+    expect(report.diagnostics).toContain('WARNING: failed to get github token: unauthorized')
+    expect(formatCacheReport(report).join('\n')).toContain('failed to get github token')
+  })
+})
+
+// The report's third run answered the question it was rebuilt to answer, and
+// ruled out the guess behind it: `#21` and `#22` were `exporting to docker
+// image format` (65.8s) and `importing to docker` (25.1s) — the `--load` back
+// into the local daemon, not cache steps at all. No cache step existed in any
+// run. buildx took `--cache-to type=gha,mode=max` and did nothing, silently.
+//
+// Which leaves one guess standing, and a report that cannot see it. Docker's
+// gha backend falls back to ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL from
+// the environment, and its own docs say an inline `docker buildx` invocation
+// must expose them manually — this job runs buildx from a `run:` step. So the
+// backend may never have been configured at all, which looks from the outside
+// exactly like a cache that is merely cold.
+//
+// Names and presence only, never a value: ACTIONS_RUNTIME_TOKEN is a
+// credential, and a report that printed one would be a worse defect than the
+// one it exists to find.
+describe('the credentials the GitHub Actions cache backend falls back to', () => {
+  it('says which are present and which are missing, by name', () => {
+    const report = parseBuildxProgress(PLAIN_OUTPUT)
+    const lines = formatCacheReport(report, {
+      cacheCredentials: { present: ['ACTIONS_CACHE_URL'], absent: ['ACTIONS_RUNTIME_TOKEN'] },
+    }).join('\n')
+    expect(lines).toContain('ACTIONS_RUNTIME_TOKEN')
+    expect(lines).toContain('ACTIONS_CACHE_URL')
+    expect(lines).toMatch(/absent|missing|NOT set/i)
+  })
+
+  it('separates a backend that was never configured from a cache that missed', () => {
+    // The two produce the same 0%, and want opposite fixes: expose the
+    // variables, or look at what invalidated the layers.
+    const report = parseBuildxProgress(PLAIN_OUTPUT)
+    const unconfigured = formatCacheReport(report, {
+      cacheCredentials: { present: [], absent: ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL'] },
+    }).join('\n')
+    expect(unconfigured).toContain('cache credentials: none of')
+    const configured = formatCacheReport(report, {
+      cacheCredentials: { present: ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL'], absent: [] },
+    }).join('\n')
+    expect(configured).toContain('cache credentials: all present')
+  })
+
+  it('says nothing at all when it was given no credential reading', () => {
+    // A local `docker build` has no backend to report on. Silence is right;
+    // inventing "absent" would report a problem that does not exist there.
+    const lines = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join('\n')
+    expect(lines).not.toContain('cache credentials')
   })
 })
