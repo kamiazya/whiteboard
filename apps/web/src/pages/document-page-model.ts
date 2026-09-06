@@ -14,11 +14,10 @@
  * a named position rather than by a keeper branch inside it.
  */
 import type { DocumentKind, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import type { ComponentProps, ReactNode, RefObject } from 'react'
+import type { ReactNode, RefObject } from 'react'
 import type { ConnectionsPanelProps } from '../components/connections/ConnectionsPanel.js'
 import type { MarkdownDocumentSession } from '../components/document-editor/DocumentEditorSurface.js'
 import type { SpatialEditorPaneProps } from '../components/document-editor/SpatialEditorPane.js'
-import type { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import type { UseDocumentFileSeamsOptions } from '../hooks/use-document-file-seams.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
@@ -101,7 +100,6 @@ export interface DocumentPageModel {
     readonly enabled: boolean
     readonly workspaceId: string
     readonly path: string
-    readonly historyCapabilities: ComponentProps<typeof VersionPanel>['capabilities']
     /** Where a bookmark's picture goes; null when this keeper has no history for the document. */
     readonly backend: Pick<VersionsBackend, 'putThumbnail'> | null
     readonly save: (

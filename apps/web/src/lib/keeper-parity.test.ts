@@ -24,20 +24,18 @@
  * the point is not that both keepers must have everything, it is that a
  * difference is a decision somebody took rather than one nobody noticed.
  *
- * What the scan cannot see, and what the second block here is for: a
- * difference that lives entirely in the daemon's own server code reaches no
- * apps/web module at all. Automatic checkpoints are the standing example —
- * the daemon saves one after work settles and the browser keeper saves only
- * when asked, and nothing in this app fetches that. It surfaces here as a
- * PROP, and a prop with a default surfaces as nothing: the mount that
- * forgets it claims the daemon's shape in silence.
+ * What the scan cannot see: a difference living entirely in the daemon's own
+ * server code reaches no apps/web module at all. A second block here used to
+ * cover one such case — automatic checkpoints, which surfaced as a
+ * `VersionTimelineCapabilities` prop whose default silently claimed the
+ * daemon's shape — and it is gone because the difference is: the browser
+ * keeper checkpoints too, the prop was deleted with the pair, and a guard
+ * whose subject no longer exists is a guard that cannot fail. A difference
+ * of that shape again needs a new guard written against whatever carries it,
+ * not this one revived.
  */
 
 import { describe, expect, it } from 'vitest'
-import {
-  BROWSER_HISTORY_CAPABILITIES,
-  DAEMON_HISTORY_CAPABILITIES,
-} from '../components/VersionTimeline.js'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
 
 type KeeperReach =
@@ -255,63 +253,5 @@ describe('each answer is checked, so none of them can be a word in front of an o
   it.each(daemonItself)('%s says why there is nothing to mirror', (_path, entry) => {
     if (entry.reach !== 'daemon-itself') return
     expect(entry.why.split(/\s+/).length).toBeGreaterThan(8)
-  })
-})
-
-describe('a panel whose behaviour differs by keeper is told which keeper it is', () => {
-  const mounts = Object.entries(sources)
-    .filter(([path]) => !path.includes('.test.'))
-    .flatMap(([path, text]) =>
-      // The props group is OPTIONAL. Requiring whitespace after the name
-      // skipped `<VersionTimeline/>` — a mount with no props at all, which
-      // is precisely the mount this guard exists to catch, since it is the
-      // one that takes the daemon's shape by default with nothing on the
-      // line to say so.
-      [...text.matchAll(/<(VersionPanel|VersionTimeline)(\s[^>]*?)?\/?>/g)].map((m) => ({
-        path: path.replace(/^\//, ''),
-        component: m[1] as string,
-        props: m[2] ?? '',
-      })),
-    )
-
-  it('finds every production mount of the history panel', () => {
-    // The shared DocumentPage decides once (both keepers render through
-    // it), and VersionPanel forwards to VersionTimeline. A regex that
-    // stopped matching would report zero mounts and pass every case below
-    // vacuously.
-    expect(mounts.length).toBeGreaterThanOrEqual(2)
-  })
-
-  it.each(
-    mounts.map((m) => [`${m.path} -> ${m.component}`, m] as const),
-  )('%s states its keeper', (_label, mount) => {
-    // `VersionTimelineCapabilities` defaults to the daemon's shape so that
-    // a test mount reads as one line. That default is exactly what makes a
-    // production mount able to claim automatic checkpoints and branches it
-    // does not have, without a word of code saying so — which is how a
-    // keeper difference goes back to being invisible.
-    expect(
-      /\bcapabilities=/.test(mount.props),
-      `${mount.path} mounts ${mount.component} without capabilities, so it silently takes the daemon's shape — pass DAEMON_HISTORY_CAPABILITIES or BROWSER_HISTORY_CAPABILITIES, or forward the prop it was given`,
-    ).toBe(true)
-  })
-
-  it('draws lanes and expects checkpoints for BOTH keepers now', () => {
-    // This pinned the two apart, as a decision held "until that increment
-    // lands". It has landed: the browser's rows carry `auto` and the
-    // variation they were taken on, and a checkpoint arrives once editing
-    // settles — so one lane and a hand-only history would now be wrong about
-    // this keeper rather than correct.
-    //
-    // Which makes the pair EQUAL, and a pair that agrees declares no
-    // difference — the argument that retired the provider's capability map.
-    // It is not deleted here only because `false` still selects real
-    // rendering paths in the component (`version-row.test.tsx` drives them),
-    // so the deletion is theirs to carry, not this increment's. Until then
-    // this pins the agreement rather than a difference, so nothing can drift
-    // back to claiming one.
-    expect(BROWSER_HISTORY_CAPABILITIES).toEqual(DAEMON_HISTORY_CAPABILITIES)
-    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(true)
-    expect(BROWSER_HISTORY_CAPABILITIES.autoVersions).toBe(true)
   })
 })
