@@ -62,7 +62,12 @@ it('wraps a selection in bold on Mod+b, the editing verb the note pane has', asy
 
   await userEvent.click(box())
   await userEvent.keyboard('tighten')
-  await userEvent.keyboard('{Control>}a{/Control}')
+  // Shift+Home rather than select-all: Ctrl+A is Cmd+A on a Mac, and
+  // `platform-independent-keys.test.ts` bans the chord for exactly the
+  // reason this change fixed in the composer itself — a chord that means
+  // one thing on Linux and another on a Mac. Ctrl+B stays legal because
+  // the composer binds both modifiers.
+  await userEvent.keyboard('{Shift>}{Home}{/Shift}')
   await userEvent.keyboard('{Control>}b{/Control}')
 
   await vi.waitFor(() => expect(box().element().textContent).toBe('**tighten**'))
