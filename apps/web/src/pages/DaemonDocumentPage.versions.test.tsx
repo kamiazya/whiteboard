@@ -705,14 +705,14 @@ describe('DaemonDocumentPage versions', () => {
       expect(screen.queryByTestId('history-cluster')).toBeNull()
 
       const historyButton = await screen.findByRole('button', { name: 'History' })
-      expect(historyButton.getAttribute('aria-expanded')).toBe('false')
+      expect(historyButton.getAttribute('aria-pressed')).toBe('false')
       await act(async () => {
         historyButton.click()
       })
 
       const panel = await screen.findByTestId('history-panel')
       await waitFor(() => expect(panel.textContent).toContain('Version history'))
-      expect(screen.getByRole('button', { name: 'History' }).getAttribute('aria-expanded')).toBe(
+      expect(screen.getByRole('button', { name: 'History' }).getAttribute('aria-pressed')).toBe(
         'true',
       )
       // The daemon's own versions route is what the column read.

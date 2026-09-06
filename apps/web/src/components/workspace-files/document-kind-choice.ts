@@ -13,7 +13,7 @@ import { FileText, LayoutDashboard, type LucideIcon } from 'lucide-react'
  * because a second surface has been added twice already.
  *
  * The glyphs are the ones the LISTING surfaces already settled on for these
- * kinds (`ConnectionsChip`), so what you pick here is what you recognise in
+ * kinds (`ConnectionsPanel`), so what you pick here is what you recognise in
  * the list afterwards.
  *
  * Canvas first: it is the order the empty-state chooser teaches the two
