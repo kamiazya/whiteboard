@@ -202,7 +202,7 @@ export function createBrowserBranchesBackend(deps: {
         source: { name: from.name, tipFrontiers: from.tipFrontiers },
       })
       const counts = {
-        badges: plan.badges as unknown as Record<string, unknown>[],
+        badges: plan.badges,
         preview: { elementCount: plan.previewElementCount },
         target: { elementCount: plan.targetElementCount },
         source: { elementCount: plan.sourceElementCount },
