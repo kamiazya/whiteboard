@@ -214,11 +214,26 @@ export const canvasEditInputSchema = z
      * (ADR-0029). A proposal is stored beside the content, drawn on the live
      * document, and adopted or dismissed by a person.
      *
-     * The default is `apply` while nothing can yet adopt a proposal. ADR-0029
-     * decision 7 wants `propose`, and the flip is the last increment of that
-     * work rather than this one: made now, an agent's every edit would land
-     * somewhere no surface shows and no verb can accept, which is a tool that
-     * cannot change a document at all.
+     * **The default is decided by what the batch CARRIES, not by who is
+     * calling.** Content — node and edge adds, patches and removes — is
+     * proposed, because nobody watches an agent type and there is no moment
+     * at which a person could object (decision 3). A batch carrying anything
+     * else applies: `comment.*` is the annotation layer, a lock is a claim on
+     * a document rather than a change to it, and `tidy`/`region.set` have no
+     * anchor to follow — the same line the layer already drew when it said
+     * which verbs a proposal can carry.
+     *
+     * A default that refused those instead would refuse a verb this tool
+     * supports, and one of its callers is the widget's comment box: a person
+     * typing there would get an error rather than a comment.
+     *
+     * A MIXED batch applies, because the batch is all-or-nothing and
+     * splitting it would be a third thing neither mode means.
+     *
+     * `apply` is therefore still what a surface a person is looking at
+     * should pass explicitly — the product's drawing skills do, since a
+     * person who asked for a drawing right now is the case decision 3
+     * exempts.
      */
     mode: z.enum(['apply', 'propose']).optional(),
     /**
@@ -432,12 +447,20 @@ export function createCanvasEditTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_edit' as const,
     description:
-      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. Set mode:"propose" to store the batch as a proposal for a person to adopt or dismiss instead of changing the document; pass proposalId to keep several calls in one proposal. A proposal carries node and edge adds, patches and removes — not tidy, region.set, comments or locks.',
+      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. A batch of CONTENT changes is stored as a proposal for a person to adopt or dismiss rather than changing the document — that is the default, because nobody watches you type. Pass mode:"apply" to change the document directly, which is what to do when a person just asked you to draw. A batch carrying anything a proposal cannot represent — comments, locks, tidy, region.set — applies whatever the mode, since those are not content. Pass proposalId to keep several calls in one proposal.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
-      const proposing = input.mode === 'propose'
-      if (proposing) {
+      // An omitted mode proposes only a batch every op of which COULD be
+      // proposed; see the field's own note for why that line and not
+      // "propose unless told otherwise".
+      const proposing =
+        input.mode === undefined
+          ? input.ops.every((op) => isProposableOp(op.op))
+          : input.mode === 'propose'
+      // Only an EXPLICIT propose can be refused: the default never chooses
+      // to propose a batch it would then have to reject.
+      if (input.mode === 'propose') {
         const refused = input.ops.findIndex((op) => !isProposableOp(op.op))
         if (refused >= 0) {
           fail(
@@ -919,8 +942,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
         }
         // Deliberately silent. Nothing changed for a watching browser, so a
         // toast saying "changed 1" would be a lie, and the viewport must not
-        // chase an edit nobody made. The surface that shows a proposal is a
-        // later increment of ADR-0029, and it is what will announce one.
+        // chase an edit nobody made. The editor draws the proposal itself —
+        // an outline where each change would land, and a bubble carrying the
+        // count — which is the announcement, and it needs no toast.
         return {
           documentId: input.documentId,
           applied: 0,

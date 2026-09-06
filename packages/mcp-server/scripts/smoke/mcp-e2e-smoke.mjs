@@ -409,6 +409,7 @@ async function main() {
   const seedBatch = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [
       {
         op: 'node.add',
@@ -463,6 +464,38 @@ async function main() {
     'a proposal cannot carry this verb',
   )
   console.log('[e2e] wb_canvas_edit(mode:propose) → stored, board untouched, tidy refused')
+
+  // ADR-0029 decision 7's flip, through a real MCP client: with NO mode, a
+  // batch of content is proposed and the board does not move, while a batch
+  // carrying something a proposal cannot represent applies. The compiler
+  // cannot see either — `mode` is optional on both sides of the wire — so
+  // this is the guard that would catch the default going back.
+  const defaulted = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [{ op: 'node.patch', id: 'target', patch: { x: 4242 } }],
+  })
+  if (defaulted.applied !== 0 || defaulted.proposed === undefined) {
+    throw new Error(`the default did not propose a content batch: ${JSON.stringify(defaulted)}`)
+  }
+  const afterDefault = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  if (afterDefault.nodes.find((node) => node.id === 'target')?.x === 4242) {
+    throw new Error('the default moved the board instead of proposing')
+  }
+  const defaultedComment = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [{ op: 'comment.add', comment: { targetNodeId: 'target', text: 'applied by default' } }],
+  })
+  if (defaultedComment.applied !== 1 || defaultedComment.proposed !== undefined) {
+    throw new Error(
+      `a batch carrying nothing proposable did not apply: ${JSON.stringify(defaultedComment)}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_edit(no mode) → content proposed, a comment applied')
 
   // Facet discovery: an agent learns the exact keys and payload contracts
   // rather than guessing them, which is what the writes below rely on.
@@ -587,6 +620,7 @@ async function main() {
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'node.lock', id: 'lockable', locked: true }],
   })
   console.log('[e2e] wb_canvas_edit → lockable locked')
@@ -621,6 +655,7 @@ async function main() {
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'node.lock', id: 'lockable', locked: false }],
   })
 
@@ -716,6 +751,10 @@ async function main() {
   const sticky = await callTool('wb_canvas_edit', {
     workspaceId: viewed.workspaceId,
     documentId: viewed.documentId,
+    // The widget is a surface a person is looking at, so it applies. The
+    // default would propose this one — it is content — which is the flip
+    // ADR-0029 decision 7 made and the step below proves.
+    mode: 'apply',
     ops: [{ op: 'node.add', node: { type: 'text', text: 'sticky note from the widget shape' } }],
   })
   if (sticky.applied !== 1) {
@@ -997,6 +1036,7 @@ async function main() {
   const applied = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [
       { op: 'node.add', node: { id: 'batch-a', type: 'text', text: 'batched A' } },
       { op: 'node.add', node: { id: 'batch-b', type: 'text', text: 'batched B' } },
@@ -1054,6 +1094,7 @@ async function main() {
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [
       {
         op: 'node.add',
@@ -1074,6 +1115,7 @@ async function main() {
   const reconciled = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [
       {
         op: 'region.set',
@@ -1122,6 +1164,7 @@ async function main() {
   const tidied = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'tidy' }],
   })
   if (
@@ -1138,6 +1181,7 @@ async function main() {
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'edge.lock', id: 'link', locked: true }],
   })
   console.log('[e2e] wb_canvas_edit → link locked')

@@ -58,6 +58,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',
@@ -92,6 +93,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           {
             op: 'node.add',
@@ -125,6 +127,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'free', type: 'text', text: 'no coordinates' } }],
     })
 
@@ -151,6 +154,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: Array.from({ length: count }, (_, i) => ({
         op: 'node.add' as const,
         node: { id: `n${i}`, type: 'text' as const, text: `n${i}` },
@@ -187,6 +191,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'node.patch', id: 'a', patch: { x: 7, color: '3' } },
         { op: 'edge.remove', id: 'e' },
@@ -218,6 +223,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.remove', id: 'b' }],
     })
 
@@ -240,6 +246,7 @@ describe('wb_canvas_edit tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.lock', id: 'a', locked: true }],
     })
 
@@ -249,6 +256,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           { op: 'node.lock', id: 'b', locked: true },
           { op: 'node.patch', id: 'b', patch: { x: 1 } },
@@ -260,6 +268,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'a', patch: { x: 1 } }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -281,6 +290,7 @@ describe('wb_canvas_edit tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.lock', id: 'a', locked: true }],
     })
     // An agent has to be able to lift its own mistake without a human at
@@ -288,6 +298,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'node.lock', id: 'a', locked: false },
         { op: 'node.patch', id: 'a', patch: { x: 9 } },
@@ -314,6 +325,7 @@ describe('wb_canvas_edit tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'edge.lock', id: 'e', locked: true }],
     })
     const { doc } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
@@ -323,6 +335,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'edge.patch', id: 'e', patch: { label: 'nope' } }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -336,6 +349,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',
@@ -374,6 +388,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
       }),
     ).rejects.toMatchObject({ name: 'DocumentKindMismatchError' })
@@ -391,6 +406,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'replacement' } }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -404,6 +420,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { type: 'text', text: 'anonymous' } }],
     })
 
@@ -423,6 +440,7 @@ describe('wb_canvas_edit tool', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
           { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'missing' } },
@@ -439,6 +457,7 @@ describe('wb_canvas_edit tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
@@ -473,6 +492,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
     })
 
@@ -492,6 +512,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
       }),
     ).rejects.toMatchObject({ name: 'WorkspaceDocumentNotFoundError' })
@@ -506,6 +527,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'a', patch: { x: 1 } }],
       }),
     ).rejects.toMatchObject({ name: 'SnapshotNotFoundError' })
@@ -521,6 +543,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.patch', id: 'a', patch: { width: -1 } }],
     })
     expect(parsed.success).toBe(false)
@@ -531,6 +554,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       canvasEditInputSchema.safeParse({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'a', patch: { width: 1 } }],
       }).success,
     ).toBe(true)
@@ -551,6 +575,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.patch', id: 'a', patch: { label: 'not for a text node' } }],
     })
 
@@ -562,6 +587,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'triangle' } }],
     })
     expect(parsed.success).toBe(false)
@@ -569,6 +595,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const valid = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'arrow', fromEnd: 'none' } }],
     })
     expect(valid.success).toBe(true)
@@ -588,6 +615,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'node.lock', id: 'a', locked: true },
         // Only an edge's OWN lock stops it being patched.
@@ -616,6 +644,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'edge.lock', id: 'x', locked: true },
         { op: 'node.patch', id: 'x', patch: { x: 5 } },
@@ -643,6 +672,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.lock', id: 'pinned', locked: true }, { op: 'tidy' }],
     })
 
@@ -665,6 +695,7 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'tidy', scope: ['b'] }],
     })
 
@@ -687,11 +718,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'tidy' }],
     })
     const second = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'tidy' }],
     })
 
@@ -735,6 +768,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
@@ -770,6 +804,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
           { op: 'node.patch', id: 'ghost', patch: { x: 1 } },
@@ -791,6 +826,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
       follow: false,
     })
@@ -816,6 +852,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'edge.remove', id: 'e' }],
     })
 
@@ -832,6 +869,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
     })
 
@@ -861,6 +899,7 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } }],
     })
 
@@ -905,6 +944,7 @@ describe('wb_canvas_edit — region.set', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'region.set',
@@ -941,6 +981,7 @@ describe('wb_canvas_edit — region.set', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
     })
 
@@ -957,6 +998,7 @@ describe('wb_canvas_edit — region.set', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
     })
 
@@ -983,6 +1025,7 @@ describe('wb_canvas_edit — region.set', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'region.set',
@@ -1014,6 +1057,7 @@ describe('wb_canvas_edit — region.set', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.lock', id: 'pinned', locked: true }],
     })
 
@@ -1021,6 +1065,7 @@ describe('wb_canvas_edit — region.set', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -1040,6 +1085,7 @@ describe('wb_canvas_edit — region.set', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'region.set',
@@ -1091,6 +1137,7 @@ describe('wb_canvas_edit — region.set', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'region.set', within: 'plain', nodes: [], edges: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -1099,6 +1146,7 @@ describe('wb_canvas_edit — region.set', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'region.set', within: 'ghost', nodes: [], edges: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
@@ -1121,6 +1169,7 @@ describe('wb_canvas_edit — region.set', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         // Touches `outside` — and this edge is nowhere near `g`.
         { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
@@ -1150,6 +1199,7 @@ describe('wb_canvas_edit — region.set', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           {
             op: 'region.set',
@@ -1191,6 +1241,7 @@ describe('wb_canvas_edit — region.set', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           {
             op: 'region.set',
@@ -1232,6 +1283,7 @@ describe('wb_canvas_edit — a node created without a height', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',

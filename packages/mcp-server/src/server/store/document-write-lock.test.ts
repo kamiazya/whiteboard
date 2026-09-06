@@ -120,11 +120,13 @@ describe('withDocumentWriteLock', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
       }),
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
       }),
     ])
@@ -146,6 +148,7 @@ describe('withDocumentWriteLock', () => {
         tool.execute({
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
+          mode: 'apply',
           ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
         }),
       ),
@@ -153,6 +156,7 @@ describe('withDocumentWriteLock', () => {
         tool.execute({
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
+          mode: 'apply',
           ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
         }),
       ),
@@ -227,6 +231,7 @@ describe('registered MCP handlers', () => {
         {
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
+          mode: 'apply',
           ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
         },
         {},
@@ -235,6 +240,7 @@ describe('registered MCP handlers', () => {
         {
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
+          mode: 'apply',
           ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
         },
         {},
@@ -321,6 +327,7 @@ describe('registered MCP handlers', () => {
       {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
       },
       {},
