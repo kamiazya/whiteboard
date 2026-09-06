@@ -96,14 +96,20 @@ interface PlacedChange {
  * document that no surface could ever show. Whether the passage still READS
  * what the caller assumed is a different question, and belongs to the mode.
  */
-function placeAll(body: string, ops: readonly BodyEditOp[]): PlacedChange[] {
-  const seen = new Set<string>()
+function placeAll(
+  body: string,
+  ops: readonly BodyEditOp[],
+  taken: ReadonlySet<string> = new Set(),
+): PlacedChange[] {
+  const seen = new Set<string>(taken)
   const placed: PlacedChange[] = []
   for (const op of ops) {
     if (seen.has(op.id)) {
       throw new PassageNotApplicableError(
         op.id,
-        'two passages in this call share that change id, and an Adopt naming it could not tell them apart',
+        taken.has(op.id)
+          ? 'the proposal this call continues already holds a change with that id, and storing it would replace that change rather than add one'
+          : 'two passages in this call share that change id, and an Adopt naming it could not tell them apart',
       )
     }
     seen.add(op.id)
@@ -113,7 +119,30 @@ function placeAll(body: string, ops: readonly BodyEditOp[]): PlacedChange[] {
     }
     placed.push({ change: { ...op, status: 'open' }, at: resolved })
   }
-  assertDisjoint(placed)
+  return placed
+}
+
+/**
+ * The passages a proposal ALREADY holds, placed against the body as it now
+ * stands — the set a whole-proposal Adopt would apply alongside whatever this
+ * call adds.
+ *
+ * Only OPEN changes: an adopted or dismissed one is not in that set, so it
+ * reserves nothing and must not block a later passage. Only `body.replace`
+ * ones, since a canvas change is about a different surface. And only those
+ * that still RESOLVE — a change whose passage has since vanished cannot be
+ * applied either, so letting it forbid an overlap would be a phantom
+ * refusing real work.
+ */
+function placeExisting(body: string, proposal: Proposal | undefined): PlacedChange[] {
+  if (proposal === undefined) return []
+  const placed: PlacedChange[] = []
+  for (const change of proposal.changes) {
+    if (change.op !== 'body.replace' || change.status !== 'open') continue
+    const resolved = resolveTextAnchor(body, change.anchor)
+    if (resolved.kind !== 'placed') continue
+    placed.push({ change, at: resolved })
+  }
   return placed
 }
 
@@ -243,9 +272,23 @@ export function createBodyEditTool(deps: ServerDeps) {
       }
 
       const body = readMarkdownBody(doc)
-      const placed = placeAll(body, input.ops)
 
       if (input.mode !== 'apply') {
+        // The rules are about the proposal, not about the call. A
+        // continuation merges into a stored proposal — the container keys
+        // changes by id, so an unrefused reuse REPLACES a passage the agent
+        // proposed, and a whole-proposal Adopt applies every open change at
+        // once, so an overlap spread across two calls corrupts the body just
+        // as one inside a single call would. Both checks therefore see what
+        // the proposal already holds.
+        const continuing = readProposals(doc).find((existing) => existing.id === input.proposalId)
+        const existing = placeExisting(body, continuing)
+        const placed = placeAll(
+          body,
+          input.ops,
+          new Set(continuing?.changes.map((change) => change.id) ?? []),
+        )
+        assertDisjoint([...existing, ...placed])
         const proposed = await storeBodyProposal({
           deps,
           workspaceId: input.workspaceId,
@@ -256,6 +299,9 @@ export function createBodyEditTool(deps: ServerDeps) {
         })
         return { documentId: input.documentId, applied: 0, proposed, body }
       }
+
+      const placed = placeAll(body, input.ops)
+      assertDisjoint(placed)
 
       assertAssumptionsHold(placed, body)
 
