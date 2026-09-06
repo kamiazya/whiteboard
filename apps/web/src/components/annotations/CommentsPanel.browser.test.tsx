@@ -133,7 +133,7 @@ it('sends a reply from the opened thread, carrying the thread it belongs to', as
   await userEvent.click(page.getByText('tighten the copy here'))
 
   await userEvent.fill(page.getByRole('textbox', { name: /reply/i }), 'will do')
-  await userEvent.click(page.getByRole('button', { name: /^reply$/i }))
+  await userEvent.click(page.getByRole('button', { name: /send reply/i }))
 
   expect(replies).toEqual([{ threadId: 't-open', body: 'will do' }])
 })
@@ -202,7 +202,7 @@ it('composes a new conversation about the passage the host handed it', async () 
     .element(page.getByTestId('comments-panel-compose').getByText('report'))
     .toBeInTheDocument()
   await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), 'is this still true?')
-  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+  await userEvent.click(page.getByRole('button', { name: /send comment/i }))
 
   expect(created).toEqual([{ anchor: PASSAGE, body: 'is this still true?' }])
 })
@@ -218,7 +218,14 @@ it('does not create a conversation out of an empty draft', async () => {
   )
 
   await userEvent.fill(page.getByRole('textbox', { name: /comment/i }), '   ')
-  await userEvent.click(page.getByRole('button', { name: /^comment$/i }))
+
+  // Two rungs, and both are asserted. The send SAYS it is inert, which is
+  // what an icon with no label owes a reader; and the submit handler still
+  // guards, so a path that reaches it anyway — the driver refuses to click
+  // an aria-disabled control, so this is the raw one — writes nothing.
+  const send = page.getByRole('button', { name: /send comment/i })
+  await expect.element(send).toHaveAttribute('aria-disabled', 'true')
+  ;(send.element() as HTMLElement).click()
 
   expect(created).toEqual([])
 })
@@ -248,6 +255,10 @@ it('abandons the passage when the reader cancels', async () => {
   // Without this the compose box has no exit that is not "write something":
   // a reader who selected the wrong sentence would have to create a comment
   // to get rid of the box asking for one.
+  //
+  // The exit is ESCAPE, not a button. A Cancel drawn as an icon would be an
+  // X, which is already the glyph that closes the panel — same shape, two
+  // scopes — and the verbs on a conversation are icon-only now.
   let cancels = 0
   render(
     <CommentsPanel
@@ -260,7 +271,8 @@ it('abandons the passage when the reader cancels', async () => {
     />,
   )
 
-  await userEvent.click(page.getByRole('button', { name: 'Cancel' }))
+  await expect.element(page.getByRole('textbox', { name: 'Comment' })).toHaveFocus()
+  await userEvent.keyboard('{Escape}')
 
   expect(cancels).toBe(1)
 })
@@ -357,8 +369,15 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
 
   await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   await userEvent.fill(page.getByRole('textbox', { name: 'Edit comment text' }), '   ')
-  await userEvent.click(page.getByRole('button', { name: 'Save' }))
+  // Emptying the subject no longer SAVES-as-cancel by accident: Save goes
+  // inert, and the way out is Escape — the same key the reply draft and the
+  // panel itself answer to.
+  const save = page.getByRole('button', { name: 'Save' })
+  await expect.element(save).toHaveAttribute('aria-disabled', 'true')
+  ;(save.element() as HTMLElement).click()
   expect(edits).toHaveLength(1)
+
+  await userEvent.keyboard('{Escape}')
   expect(page.getByTestId('comment-edit').query()).toBeNull()
 })
 

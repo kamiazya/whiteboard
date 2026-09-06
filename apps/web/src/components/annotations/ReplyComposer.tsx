@@ -20,6 +20,8 @@
  *   moving to another conversation mounts a fresh, empty box rather than
  *   carrying half a sentence across.
  */
+
+import { SendHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { cn } from '../../lib/utils.js'
 
@@ -69,11 +71,21 @@ export function ReplyComposer({ onReply, compact = false, autoFocus = false }: R
           compact ? 'text-xs' : 'text-inherit',
         )}
       />
+      {/* Icon-only, like every other verb on a conversation — and inert
+          while there is nothing to send. The submit stays GUARDED rather
+          than disabled so the Meta+Enter path takes the same rule, but with
+          no label to read, a press that does nothing has to say why before
+          it is pressed. */}
       <button
         type="submit"
-        className={cn('self-end rounded border px-2 py-1 hover:bg-accent', compact && 'text-xs')}
+        aria-label="Send reply"
+        title="Send reply"
+        aria-disabled={draft.trim() === ''}
+        className={cn(
+          'grid size-11 shrink-0 place-items-center self-end rounded text-muted-foreground hover:bg-accent hover:text-foreground aria-disabled:opacity-40',
+        )}
       >
-        Reply
+        <SendHorizontal aria-hidden="true" className="size-4" />
       </button>
     </form>
   )

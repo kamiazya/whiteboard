@@ -13,7 +13,7 @@
  * reader wants at document level is which ones are still open.
  */
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
-import { CircleCheck, MessageSquarePlus, Pencil, RotateCcw } from 'lucide-react'
+import { Check, MessageSquarePlus, Pencil, SendHorizontal } from 'lucide-react'
 import { type KeyboardEvent, useEffect, useMemo, useRef, useState } from 'react'
 import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { cn } from '../../lib/utils.js'
@@ -104,6 +104,16 @@ export interface CommentsPanelProps {
    */
   readonly onReturnFocus?: () => void
 }
+
+/**
+ * The object-verb target DESIGN.md's "Object-action surfaces are icon-first"
+ * specifies: 44px, no drawn label, the name carried by `aria-label` and a
+ * `title` for the desktop hover. The size half is load-bearing — dropping
+ * the labels while keeping the old padding would take the width the label
+ * was giving the target and give nothing back.
+ */
+const ICON_VERB_CLASS =
+  'grid size-11 shrink-0 place-items-center rounded text-muted-foreground hover:bg-accent hover:text-foreground'
 
 function matches(thread: CommentThread, filter: ThreadFilter): boolean {
   return filter === 'all' || thread.status === filter
@@ -248,6 +258,20 @@ export function CommentsPanel({
       event.stopPropagation()
       return
     }
+    // The draft's own way out. Its Cancel BUTTON is gone — an X there
+    // collides with the X that closes the panel, same glyph and two
+    // scopes — so the key that already meant this carries it alone.
+    //
+    // BOTH effects, unlike the edit above: the draft box is what focus was
+    // moved to when the passage was picked, so taking it away without
+    // handing focus back would drop the reader on the body with nothing
+    // selected and no way back to their caret.
+    if (composeAnchor !== null && onCancelCompose !== undefined) {
+      onCancelCompose()
+      onReturnFocus?.()
+      event.stopPropagation()
+      return
+    }
     if (onReturnFocus === undefined) return
     event.stopPropagation()
     onReturnFocus()
@@ -336,18 +360,18 @@ export function CommentsPanel({
             rows={2}
             className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
           />
-          <div className="flex justify-end gap-1">
-            {onCancelCompose === undefined ? null : (
-              <button
-                type="button"
-                onClick={onCancelCompose}
-                className="rounded border px-2 py-1 text-xs hover:bg-accent"
-              >
-                Cancel
-              </button>
-            )}
-            <button type="submit" className="rounded border px-2 py-1 text-xs hover:bg-accent">
-              Comment
+          <div className="flex justify-end">
+            {/* Guarded on submit rather than disabled, so pressing Enter in
+                the field takes the same rule — but with no label to read, a
+                press that does nothing has to say why BEFORE it is pressed. */}
+            <button
+              type="submit"
+              aria-label="Send comment"
+              title="Send comment"
+              aria-disabled={composeDraft.trim() === ''}
+              className={cn(ICON_VERB_CLASS, 'aria-disabled:opacity-40')}
+            >
+              <SendHorizontal aria-hidden="true" className="size-4" />
             </button>
           </div>
         </form>
@@ -370,86 +394,97 @@ export function CommentsPanel({
             const expanded = thread.id === openThreadId
             return (
               <li key={thread.id}>
-                <button
-                  type="button"
-                  ref={(node) => {
-                    if (node === null) rowRefs.current.delete(thread.id)
-                    else rowRefs.current.set(thread.id, node)
-                  }}
-                  aria-expanded={expanded}
-                  aria-controls={`thread-${thread.id}`}
-                  onClick={() => toggle(thread)}
-                  className={cn(
-                    'w-full rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
-                    TOGGLE_STATE_CLASS,
-                  )}
-                >
-                  <span className="line-clamp-2 text-neutral-800 dark:text-neutral-200">
-                    {excerptOf(thread)}
-                  </span>
-                  <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
-                    {anchorLabel(thread.anchor) === undefined ? null : (
-                      <span data-testid={`thread-about-${thread.id}`}>
-                        {anchorLabel(thread.anchor)}
+                <div className="flex items-start gap-0.5">
+                  {/* The status dot IS the Resolve toggle. One object holds
+                      the state and changes it, so the press lands on the
+                      thing that then changes — which is what makes the
+                      transition legible; a version that crossed the marker
+                      while the row cut read as no animation at all.
+
+                      A SIBLING of the row's own toggle, never inside it: a
+                      button within a button is invalid and collapses the
+                      accessibility tree, which is why merging the two
+                      restructured the row rather than adding a class. */}
+                  {onResolve === undefined ? (
+                    <span className="grid size-11 shrink-0 place-items-center">
+                      <span
+                        className="annotation-dot"
+                        data-status={thread.status}
+                        aria-hidden="true"
+                      />
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-label={thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
+                      title={thread.status === 'resolved' ? 'Reopen' : 'Resolve'}
+                      onClick={() => onResolve(thread.id, thread.status !== 'resolved')}
+                      className={ICON_VERB_CLASS}
+                    >
+                      <span className="annotation-dot" data-status={thread.status}>
+                        <Check aria-hidden="true" />
                       </span>
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    ref={(node) => {
+                      if (node === null) rowRefs.current.delete(thread.id)
+                      else rowRefs.current.set(thread.id, node)
+                    }}
+                    aria-expanded={expanded}
+                    aria-controls={`thread-${thread.id}`}
+                    onClick={() => toggle(thread)}
+                    className={cn(
+                      'min-w-0 flex-1 rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
+                      TOGGLE_STATE_CLASS,
                     )}
-                    <MessageBy message={thread.messages[0]} />
-                    <ThreadActivity thread={thread} />
-                    {resolveAnchor?.(thread) === 'orphaned' ? (
-                      <span data-testid={`thread-orphaned-${thread.id}`}>
-                        {/* Said, not hidden: the conversation outlived what it
+                  >
+                    <span className="line-clamp-2 text-neutral-800 dark:text-neutral-200">
+                      {excerptOf(thread)}
+                    </span>
+                    <span className="mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
+                      {anchorLabel(thread.anchor) === undefined ? null : (
+                        <span data-testid={`thread-about-${thread.id}`}>
+                          {anchorLabel(thread.anchor)}
+                        </span>
+                      )}
+                      <MessageBy message={thread.messages[0]} />
+                      <ThreadActivity thread={thread} />
+                      {resolveAnchor?.(thread) === 'orphaned' ? (
+                        <span data-testid={`thread-orphaned-${thread.id}`}>
+                          {/* Said, not hidden: the conversation outlived what it
                             was about, which is ordinary once a document is
                             edited — not an error state. */}
-                        anchor gone
-                      </span>
-                    ) : null}
-                  </span>
-                </button>
+                          anchor gone
+                        </span>
+                      ) : null}
+                    </span>
+                  </button>
+                </div>
 
                 {expanded ? (
                   <div id={`thread-${thread.id}`} className="mt-1 flex flex-col gap-2 pl-2">
-                    {/* The conversation's own verbs, the ones the canvas card
-                        carries top-right: here so a note's thread has a place
-                        to be closed and its subject a place to be corrected. */}
-                    {onResolve === undefined && onEditMessage === undefined ? null : (
-                      <div className="flex items-center gap-1">
-                        {onEditMessage === undefined || editing?.threadId === thread.id ? null : (
-                          <button
-                            type="button"
-                            aria-label="Edit comment"
-                            onClick={() =>
-                              setEditing({
-                                threadId: thread.id,
-                                body: thread.messages[0]?.body ?? '',
-                              })
-                            }
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                          >
-                            <Pencil aria-hidden="true" className="size-3" />
-                            Edit
-                          </button>
-                        )}
-                        {onResolve === undefined ? null : thread.status === 'resolved' ? (
-                          <button
-                            type="button"
-                            aria-label="Reopen"
-                            onClick={() => onResolve(thread.id, false)}
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                          >
-                            <RotateCcw aria-hidden="true" className="size-3" />
-                            Reopen
-                          </button>
-                        ) : (
-                          <button
-                            type="button"
-                            aria-label="Resolve"
-                            onClick={() => onResolve(thread.id, true)}
-                            className="flex items-center gap-1 rounded px-1.5 py-0.5 text-[11px] text-muted-foreground hover:bg-accent hover:text-foreground"
-                          >
-                            <CircleCheck aria-hidden="true" className="size-3" />
-                            Resolve
-                          </button>
-                        )}
+                    {/* Only Edit here now. Resolve moved ONTO the status dot
+                        on the row above — the state and the verb became one
+                        object, and it is reachable without opening the
+                        conversation first. */}
+                    {onEditMessage === undefined || editing?.threadId === thread.id ? null : (
+                      <div className="flex items-center">
+                        <button
+                          type="button"
+                          aria-label="Edit comment"
+                          title="Edit comment"
+                          onClick={() =>
+                            setEditing({
+                              threadId: thread.id,
+                              body: thread.messages[0]?.body ?? '',
+                            })
+                          }
+                          className={ICON_VERB_CLASS}
+                        >
+                          <Pencil aria-hidden="true" className="size-4" />
+                        </button>
                       </div>
                     )}
                     {onEditMessage !== undefined && editing?.threadId === thread.id ? (
@@ -478,19 +513,18 @@ export function CommentsPanel({
                           rows={2}
                           className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
                         />
-                        <div className="flex justify-end gap-1">
-                          <button
-                            type="button"
-                            onClick={() => setEditing(null)}
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
-                          >
-                            Cancel
-                          </button>
+                        {/* No Cancel button: Escape already leaves the edit,
+                            and an X here would be the third meaning of that
+                            glyph in one panel. */}
+                        <div className="flex justify-end">
                           <button
                             type="submit"
-                            className="rounded border px-2 py-1 text-xs hover:bg-accent"
+                            aria-label="Save"
+                            title="Save"
+                            aria-disabled={editing.body.trim() === ''}
+                            className={cn(ICON_VERB_CLASS, 'aria-disabled:opacity-40')}
                           >
-                            Save
+                            <Check aria-hidden="true" className="size-4" />
                           </button>
                         </div>
                       </form>
@@ -537,9 +571,12 @@ export function CommentsPanel({
                         />
                         <button
                           type="submit"
-                          className="self-end rounded border px-2 py-1 text-xs hover:bg-accent"
+                          aria-label="Send reply"
+                          title="Send reply"
+                          aria-disabled={draft.trim() === ''}
+                          className={cn(ICON_VERB_CLASS, 'self-end aria-disabled:opacity-40')}
                         >
-                          Reply
+                          <SendHorizontal aria-hidden="true" className="size-4" />
                         </button>
                       </form>
                     )}

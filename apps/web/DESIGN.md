@@ -682,6 +682,48 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**The rail's verbs are icon-first, and the status dot IS the Resolve
+toggle.** "Object-action surfaces are icon-first" below was written, the
+canvas card followed it (`CardAction`), and the rail never got held to it:
+the SAME four verbs drew icon-only there and icon + label here. Nothing was
+red, because the parity matrix checks which capabilities a surface has and
+not how it draws them.
+
+Two halves ship together and the second is the load-bearing one. Measured,
+today's verb was `71×22` — under WCAG 2.5.8's 24 in the dimension a thumb
+needs — so dropping the labels while keeping `px-1.5 py-0.5` would have
+taken the width the label was giving the target and given nothing back.
+`ICON_VERB_CLASS` is 44px, and a test asserts the computed box rather than
+the class. The labels also cost the subject a line: the same excerpt wraps
+to three beside them and two without.
+
+The dot merging with the verb is the further step, and it pays twice: the
+rail row had NO status indicator at all before, and the state and the verb
+being one object is what puts the resolve transition under the finger that
+caused it. It cost a restructure — the row was a `<button aria-expanded>`
+and a button inside a button is invalid, so the row is now an `<li>`
+holding the dot-toggle and the subject toggle as siblings. The subject
+toggle stays the row's heading, so the focus contract above is unchanged.
+
+Three carve-outs, each with a reason the rule itself gives:
+
+- **Submit is inert before it is pressed, not just guarded after.** The
+  rule's rationale is that a misfire is one Undo away; Resolve, Reopen and
+  Edit each are, and **a sent comment is not**. The submit stays guarded in
+  the handler (so the Meta+Enter path takes the same rule) and adds
+  `aria-disabled` while the draft is empty — with no label to read, a press
+  that does nothing has to say why beforehand. The driver refuses to click
+  an `aria-disabled` control, which is the state reading correctly and also
+  why the tests exercise the guard through a raw `.click()`.
+- **A submit is named for what it sends, not for the field.** `Reply` on
+  both the box and its button made `getByLabelText('Reply')` ambiguous and
+  broke ten tests at once — a collision a reader hits too. `Send reply` /
+  `Send comment`.
+- **Cancel is not an object verb and is gone.** An X there is the third
+  meaning of that glyph in one panel. Escape carries it: an edit first,
+  then a compose draft — and cancelling a compose returns focus too, since
+  the draft box is what focus was moved to.
+
 **A marker says how much is in the conversation it stands for.** Before
 this, every in-place marker said only "somebody is talking about this", so
 deciding whether to open one meant opening it. The gutter dot and the

@@ -303,6 +303,46 @@
   }
 
   /*
+   * The annotation layer's status dot, wherever a conversation is listed.
+   * Amber ring while the conversation is open, muted and dotted once it is
+   * resolved — the same picture the source pane's gutter draws, so a reader
+   * meets one shape for "somebody is talking about this" on every surface.
+   * (The gutter keeps its own 12px copy in `.cm-annotation-gutter-dot`
+   * because a CodeMirror marker builds its DOM by hand; the two should
+   * become one class next time either is touched.)
+   *
+   * The check inside is the AFFORDANCE, not decoration: this dot is the
+   * Resolve toggle, so hovering or focusing its button previews what the
+   * press does, and a resolved conversation keeps it shown.
+   */
+  .annotation-dot {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: color-mix(in oklch, var(--annotation) 20%, transparent);
+    color: var(--annotation);
+  }
+  .annotation-dot[data-status='resolved'] {
+    border-color: var(--muted-foreground);
+    border-style: dotted;
+    background: transparent;
+    color: var(--muted-foreground);
+  }
+  .annotation-dot > svg {
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+  }
+  .annotation-dot[data-status='resolved'] > svg,
+  button:hover > .annotation-dot > svg,
+  button:focus-visible > .annotation-dot > svg {
+    opacity: 1;
+  }
+
+  /*
    * Chromium repaints an SVG <a>'s fill with its UA :visited color, and in
    * visited context honors only an EXPLICIT color value — `inherit` and
    * `currentColor` are ignored (the :visited privacy model). Without this
