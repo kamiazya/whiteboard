@@ -60,7 +60,12 @@
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CommentThread,
+  Proposal,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -281,6 +286,13 @@ export interface SpatialEditorProps {
    */
   readonly threads?: readonly CommentThread[]
   /**
+   * This document's open proposals (ADR-0029 decision 1), drawn on the live
+   * canvas: an outline where each change would land, and one bubble per
+   * proposal. Absent, nothing proposal-shaped is drawn — a host with no
+   * proposal channel has nothing to show.
+   */
+  readonly proposals?: readonly Proposal[]
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -397,6 +409,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onToggleNodeLock,
       onOpenInEditor,
       threads,
+      proposals,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -531,6 +544,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         suppressedBodyNodeIds,
         showResolved: showResolvedComments,
         threads,
+        proposals,
       },
       fileSeamOptions,
       { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },
