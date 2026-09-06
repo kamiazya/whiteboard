@@ -68,7 +68,9 @@ it('Comment on this: composes at the node and commits a node-anchored comment', 
 
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
-  await vi.waitFor(() => expect(document.activeElement).toBe(compose.element()))
+  // The caret lands on CodeMirror's own contenteditable INSIDE the bubble,
+  // not on the bubble element the testid names.
+  await vi.waitFor(() => expect(compose.element().contains(document.activeElement)).toBe(true))
   await userEvent.keyboard('looks off')
   await userEvent.keyboard('{Control>}{Enter}{/Control}')
 
