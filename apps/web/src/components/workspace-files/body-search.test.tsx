@@ -129,6 +129,45 @@ describe('body search', () => {
     await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledTimes(2))
   })
 
+  it('says a row is here by meaning when no keyword put it here', async () => {
+    // The daemon reports where a document sat in the semantic ranking, and
+    // deliberately does not decide what that MEANS — every embedded document
+    // appears in that ranking, so a rank alone says nothing. The one case
+    // that needs no threshold is this: keywords produced no rank at all, so
+    // meaning is the only reason the row exists. Without saying so the row
+    // is indistinguishable from a result nothing actually matched.
+    renderPanel({
+      // A query no name and no path contains, so `withNameMatches` adds
+      // nothing and the rows under test are the source's own hits.
+      searchDocuments: async () => [
+        {
+          document: entries[1] as (typeof entries)[number],
+          contexts: ['An opening line about running out of room.'],
+          semanticRank: 1,
+        },
+        {
+          document: entries[0] as (typeof entries)[number],
+          contexts: ['…the disk pressure warning…'],
+          lexicalRank: 1,
+          semanticRank: 2,
+        },
+      ],
+    })
+    await search('disk pressure')
+
+    const list = await screen.findByTestId('search-results-list')
+    // By document, not by position: the panel is free to order rows, and an
+    // index-keyed assertion reads whichever row happens to be first.
+    const rowOf = (path: string) =>
+      within(list)
+        .getAllByRole('listitem')
+        .find((li) => li.querySelector(`[data-doc-path="${path}"]`)) as HTMLElement
+    expect(within(rowOf('plans/roadmap')).getByTestId('semantic-hit')).toBeTruthy()
+    // The keyword hit carries a semantic rank too — every embedded document
+    // does — and must NOT be labelled: a word in it did produce the row.
+    expect(within(rowOf('notes/quota')).queryByTestId('semantic-hit')).toBeNull()
+  })
+
   it('marks nothing in an excerpt that no keyword produced', async () => {
     renderPanel({
       searchDocuments: async () => [

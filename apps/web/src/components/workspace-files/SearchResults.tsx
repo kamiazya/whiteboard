@@ -34,6 +34,14 @@ export interface SearchResultRow {
    * match window, so there is no word in it the query is responsible for.
    */
   readonly lexicalRank?: number
+  /**
+   * Where this document sat in the SEMANTIC ranking, absent when no embedder
+   * answered. Every embedded document appears in that ranking, so a rank on
+   * its own says nothing about a row — it is meaningful here only beside an
+   * absent `lexicalRank`, which together mean no keyword produced this row
+   * and meaning is the only thing that did.
+   */
+  readonly semanticRank?: number
 }
 
 export interface SearchResultsProps {
@@ -177,7 +185,7 @@ export function SearchResults({
       </div>
       {layout === 'list' ? (
         <ul {...longPress} data-testid="search-results-list" className="space-y-1 p-0.5">
-          {results.map(({ document: entry, contexts, lexicalRank }) => (
+          {results.map(({ document: entry, contexts, lexicalRank, semanticRank }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -227,6 +235,18 @@ export function SearchResults({
                       {entry.tags?.map((tag) => `#${tag}`).join(' ')}
                     </span>
                   )}
+                  {lexicalRank === undefined && semanticRank !== undefined && (
+                    /* Why the row is here, when no word in it is. The excerpt
+                       below is the document's opening rather than a match
+                       window, so without this the row is indistinguishable
+                       from one nothing matched at all. */
+                    <span
+                      data-testid="semantic-hit"
+                      className="text-muted-foreground text-[10px] uppercase tracking-wide"
+                    >
+                      Matched by meaning
+                    </span>
+                  )}
                   {(contexts?.length ?? 0) > 0 && (
                     /* The match itself, when it was in the CONTENT: neither
                        the title nor the path shows it, so without this the
@@ -253,7 +273,7 @@ export function SearchResults({
           data-testid="search-results-grid"
           className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
         >
-          {results.map(({ document: entry, contexts, lexicalRank }) => (
+          {results.map(({ document: entry, contexts, lexicalRank, semanticRank }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -298,6 +318,18 @@ export function SearchResults({
                        so the row must show the tag that put it here. */
                     <span className="text-muted-foreground truncate text-[11px]">
                       {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+                    </span>
+                  )}
+                  {lexicalRank === undefined && semanticRank !== undefined && (
+                    /* Why the row is here, when no word in it is. The excerpt
+                       below is the document's opening rather than a match
+                       window, so without this the row is indistinguishable
+                       from one nothing matched at all. */
+                    <span
+                      data-testid="semantic-hit"
+                      className="text-muted-foreground text-[10px] uppercase tracking-wide"
+                    >
+                      Matched by meaning
                     </span>
                   )}
                   {(contexts?.length ?? 0) > 0 && (

@@ -1,7 +1,6 @@
-import { documentsApiUrl } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { CheckCircle2, Undo2, X } from 'lucide-react'
 import { type JSX, useEffect, useRef, useState } from 'react'
-import { useDaemonApi } from '../contexts/DaemonApiContext.js'
+import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { safeErrorCopy } from '../lib/error-copy.js'
 import {
@@ -10,6 +9,7 @@ import {
   parseMergeCommittedEvent,
 } from '../lib/merge-committed-event.js'
 import { cn, displayBranchName } from '../lib/utils.js'
+import { VersionsRequestError } from '../lib/versions-backend.js'
 import { Button } from './ui/button.js'
 
 const log = getAppLogger('merge-toast')
@@ -20,6 +20,10 @@ const log = getAppLogger('merge-toast')
 // - Undo hides the toast immediately and restores preMergeVersionId
 //
 // MergeDialog dispatches whiteboard:merge_committed, and DocumentPage mounts this so it stays local to the canvas view.
+//
+// Undo goes through the versions seam rather than the daemon's route, because
+// both keepers commit merges and both save the pre-merge point — a toast that
+// knew a URL could only be shown on one of them.
 
 export interface MergeToastProps {
   workspaceId: string
@@ -34,7 +38,7 @@ interface ActiveToast {
 }
 
 export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): JSX.Element | null {
-  const fetchFn = useDaemonApi()
+  const versions = useVersionsBackend()
   const [active, setActive] = useState<ActiveToast | null>(null)
   const [undoing, setUndoing] = useState(false)
   const [undoError, setUndoError] = useState<string | null>(null)
@@ -96,31 +100,16 @@ export function MergeToast({ workspaceId, path, onRestored }: MergeToastProps): 
     try {
       // Restore the canvas the merge actually happened on, not whichever
       // canvas is currently selected — the toast can outlive a canvas switch.
-      const res = await fetchFn(
-        documentsApiUrl(
-          mergeWorkspaceId,
-          mergePath,
-          `versions/${encodeURIComponent(preMergeVersionId)}/restore`,
-        ),
-        { method: 'POST' },
-      )
-      if (res.ok) {
-        onRestored?.()
-        setActive(null)
-        return
-      }
-      const body = await res.json().catch(() => undefined)
-      const message = safeErrorCopy({ status: res.status, body }, 'Undo failed. Try again.')
-      log.error('restore request failed', {
-        status: res.status,
-        workspaceId: mergeWorkspaceId,
-        path: mergePath,
-      })
-      setUndoError(message)
+      await versions.restore(mergeWorkspaceId, mergePath, preMergeVersionId)
+      onRestored?.()
+      setActive(null)
     } catch (err) {
       // Keep the toast (and its retry affordance) visible; the restore did not happen.
       log.error('restore request threw', err, { workspaceId: mergeWorkspaceId, path: mergePath })
-      setUndoError(safeErrorCopy(err, 'Undo failed. Try again.'))
+      // The keeper's own refusal copy when it authored one — "try again" is
+      // wrong for a refusal that will never succeed.
+      const reason = err instanceof VersionsRequestError ? err.reason : undefined
+      setUndoError(reason ?? safeErrorCopy(err, 'Undo failed. Try again.'))
     } finally {
       setUndoing(false)
     }

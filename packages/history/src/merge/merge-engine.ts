@@ -1,6 +1,7 @@
 import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc, PeerID } from 'loro-crdt'
 import { VersionVector } from 'loro-crdt'
+import { z } from 'zod'
 
 // CRDT merge is automatic, but the UI still needs signals for surprising LWW
 // outcomes. Given base / target / source / preview docs, this detects
@@ -15,10 +16,18 @@ import { VersionVector } from 'loro-crdt'
 //   node/edge missing from `base` never counts as resurrected or conflicted —
 //   it is simply new on one side
 
-export type MergeBadge =
-  | { type: 'resurrected'; elementId: string }
-  | { type: 'orphan_ref'; elementId: string; missingRef: string }
-  | { type: 'field_merge'; elementId: string; fields: string[] }
+// The badge is the one merge signal that leaves this process: the daemon
+// answers a merge with it, the browser keeper produces the same value locally,
+// and the dialog switches on `type` to say what happened. Declaring it as a
+// schema is what keeps those three in step — a reader that re-derives the
+// shape from field names cannot notice a rename here.
+export const mergeBadgeSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('resurrected'), elementId: z.string() }),
+  z.object({ type: z.literal('orphan_ref'), elementId: z.string(), missingRef: z.string() }),
+  z.object({ type: z.literal('field_merge'), elementId: z.string(), fields: z.array(z.string()) }),
+])
+
+export type MergeBadge = z.infer<typeof mergeBadgeSchema>
 
 type ElementSnap = Record<string, unknown> & { id: string }
 

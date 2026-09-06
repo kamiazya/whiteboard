@@ -2,6 +2,7 @@ import {
   type BranchMeta,
   documentsApiUrl,
   listVersionsResponseSchema,
+  type MergeBadge,
   type MergeRequest,
   type MergeResponse,
   type VersionEntry,
@@ -80,43 +81,32 @@ export function latestThumbnailVersion(
   return latest
 }
 
-function badgeLabel(badge: Record<string, unknown>): BadgeView {
-  const type = typeof badge.type === 'string' ? badge.type : 'unknown'
-  const elementId = typeof badge.elementId === 'string' ? badge.elementId : '?'
-  if (type === 'resurrected') {
-    return {
-      key: `${type}:${elementId}`,
-      label: `Deleted element restored: ${elementId}`,
-      tone: 'warning',
-      title:
-        'This element was deleted on the target canvas but edited on the incoming branch, so it will be restored.',
-    }
-  }
-  if (type === 'orphan_ref') {
-    const missing = typeof badge.missingRef === 'string' ? badge.missingRef : '?'
-    return {
-      key: `${type}:${elementId}:${missing}`,
-      label: `Missing reference: ${elementId} -> ${missing}`,
-      tone: 'danger',
-      title:
-        'A referenced target such as an arrow binding was deleted, so this item will be orphaned after merge.',
-    }
-  }
-  if (type === 'field_merge') {
-    const fields = Array.isArray(badge.fields) ? (badge.fields as string[]).join(', ') : ''
-    return {
-      key: `${type}:${elementId}`,
-      label: `Edited on both sides: ${elementId} (${fields})`,
-      tone: 'info',
-      title:
-        'The same element was edited on both branches, so the last-write-wins result will be kept.',
-    }
-  }
-  return {
-    key: `${type}:${elementId}`,
-    label: `${type}: ${elementId}`,
-    tone: 'info',
-    title: 'Unclassified badge',
+function badgeLabel(badge: MergeBadge): BadgeView {
+  switch (badge.type) {
+    case 'resurrected':
+      return {
+        key: `resurrected:${badge.elementId}`,
+        label: `Deleted element restored: ${badge.elementId}`,
+        tone: 'warning',
+        title:
+          'This element was deleted on the target canvas but edited on the incoming branch, so it will be restored.',
+      }
+    case 'orphan_ref':
+      return {
+        key: `orphan_ref:${badge.elementId}:${badge.missingRef}`,
+        label: `Missing reference: ${badge.elementId} -> ${badge.missingRef}`,
+        tone: 'danger',
+        title:
+          'A referenced target such as an arrow binding was deleted, so this item will be orphaned after merge.',
+      }
+    case 'field_merge':
+      return {
+        key: `field_merge:${badge.elementId}`,
+        label: `Edited on both sides: ${badge.elementId} (${badge.fields.join(', ')})`,
+        tone: 'info',
+        title:
+          'The same element was edited on both branches, so the last-write-wins result will be kept.',
+      }
   }
 }
 
