@@ -356,6 +356,11 @@ const DOCKERFILE_USES = {
     builds: false,
     reason: 'covers the reuse contract with an injected docker, never a real build',
   },
+  'packages/mcp-server/scripts/release/buildx-progress.test.ts': {
+    builds: false,
+    reason:
+      'its sample of buildx progress output quotes the Dockerfile name, as real output does; the parser under test reads text and never runs a build',
+  },
 } satisfies Record<string, DockerfileUse>
 
 // Directories a build invocation could plausibly live in. Deliberately not the
