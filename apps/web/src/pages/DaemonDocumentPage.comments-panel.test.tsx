@@ -328,7 +328,7 @@ describe('DaemonDocumentPage comments panel', () => {
     fireEvent.click(screen.getByRole('button', { name: /comments/i }))
     await screen.findByTestId('comments-panel')
     expect(screen.queryByTestId('history-panel')).toBeNull()
-    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-expanded')).toBe(
+    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-pressed')).toBe(
       'false',
     )
   })
@@ -397,7 +397,7 @@ describe('DaemonDocumentPage comments panel', () => {
     const panel = await screen.findByTestId('properties-panel')
     expect(within(panel).getByRole('combobox', { name: /type/i })).toBeTruthy()
     expect(screen.queryByTestId('history-panel')).toBeNull()
-    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-expanded')).toBe(
+    expect(screen.getByRole('button', { name: /history/i }).getAttribute('aria-pressed')).toBe(
       'false',
     )
     // And no second copy of the editor overlaid under the header.

@@ -260,11 +260,11 @@ const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
  * only one keeper can fill it — the Connections opener and panel are fed by
  * the daemon's backlinks through `model.connections`, and a keeper that
  * answers none gets no opener. That is the gating the model does with DATA
- * rather than with a keeper page rendering its own copy: `ConnectionsChip`
+ * rather than with a keeper page rendering its own copy: `InspectorSegment`
  * used to be daemon-page chrome in `MODE_SPECIFIC_CHROME`, overlaid under the
  * header as its own band, and moved here when the inspector slot took it.
  */
-const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'ConnectionsChip', 'ConnectionsPanel'] as const
+const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'ConnectionsPanel'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {

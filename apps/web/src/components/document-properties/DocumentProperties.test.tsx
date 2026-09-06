@@ -39,42 +39,28 @@ function titleProps(overrides: { title?: string; onTitleChange?: (next: string) 
 
 describe('DocumentProperties', () => {
   it('shows the workspace name as the title, without needing the panel opened', () => {
-    render(<DocumentProperties {...titleProps({ title: 'Release plan' })} facets={meta()} />)
+    render(<DocumentProperties {...titleProps({ title: 'Release plan' })} />)
     expect(textboxValue(/title/i)).toBe('Release plan')
   })
 
   it("labels the software keyboard's Enter as Done on the title field", () => {
     // The one keyboard extension point the web has: Enter finishes the edit
     // here, so the key says so instead of showing a return arrow.
-    render(<DocumentProperties {...titleProps()} facets={meta()} />)
+    render(<DocumentProperties {...titleProps()} />)
     expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('enterkeyhint')).toBe(
       'done',
     )
   })
 
-  it('offers only the opener: the facet editor lives in the inspector slot, not under the row', () => {
-    const onToggleProperties = vi.fn()
-    render(
-      <DocumentProperties
-        {...titleProps()}
-        facets={meta()}
-        onToggleProperties={onToggleProperties}
-      />,
-    )
-    expect(screen.queryByRole('combobox', { name: /type/i })).toBeNull()
-
-    // A press asks the page for the slot; nothing opens here, because the
-    // row does not own the slot and a second editor under the header is the
-    // overlay the retune retired.
-    fireEvent.click(screen.getByRole('button', { name: /properties/i }))
-    expect(onToggleProperties).toHaveBeenCalledTimes(1)
+  it('draws no facet editor under the row — the inspector slot is where one opens', () => {
+    render(<DocumentProperties {...titleProps()} />)
     expect(screen.queryByRole('combobox', { name: /type/i })).toBeNull()
   })
 
   it('reports an edited title through onTitleChange, and never as a facet', () => {
     const onChange = vi.fn()
     const onTitleChange = vi.fn()
-    render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} facets={meta()} />)
+    render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), {
       target: { value: 'new' },
@@ -87,7 +73,7 @@ describe('DocumentProperties', () => {
 
   it('reports a cleared title as the empty string, which the workspace reads as unnamed', () => {
     const onTitleChange = vi.fn()
-    render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} facets={meta()} />)
+    render(<DocumentProperties {...titleProps({ title: 'old', onTitleChange })} />)
 
     fireEvent.change(screen.getByRole('textbox', { name: /title/i }), { target: { value: '  ' } })
     expect(onTitleChange).toHaveBeenCalledWith('  ')
@@ -224,7 +210,6 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
       <DocumentProperties
         title={current === 'untitled' ? '' : current}
         onTitleChange={onTitleChange}
-        facets={{ type: 'markdown' }}
       />
     )
     const { rerender } = render(view())
@@ -252,9 +237,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     const onTitleChange = vi.fn((next: string) => {
       current = next
     })
-    const view = () => (
-      <DocumentProperties {...titleProps({ title: current, onTitleChange })} facets={meta()} />
-    )
+    const view = () => <DocumentProperties {...titleProps({ title: current, onTitleChange })} />
     render(view())
 
     const box = screen.getByRole('textbox', { name: /title/i })
@@ -275,10 +258,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     render(
       // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the page chrome that wraps this row
       <div onKeyDown={onAncestorKeyDown}>
-        <DocumentProperties
-          {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })}
-          facets={meta()}
-        />
+        <DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })} />
       </div>,
     )
 
@@ -294,12 +274,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // sits there and nothing says the name was kept.
   it('finishes the edit on Enter: the field blurs and keeps the typed name', () => {
     const onChange = vi.fn()
-    render(
-      <DocumentProperties
-        {...titleProps({ title: 'Draft', onTitleChange: onChange })}
-        facets={meta()}
-      />,
-    )
+    render(<DocumentProperties {...titleProps({ title: 'Draft', onTitleChange: onChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
     box.focus()
     fireEvent.change(box, { target: { value: 'Release plan' } })
@@ -315,7 +290,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
   // the middle of typing a word. Both spellings of "an IME is active" must
   // hold the field open (see lib/ime-keydown.ts).
   it('stays focused on the Enter that confirms an IME composition', () => {
-    render(<DocumentProperties {...titleProps({ title: 'Draft' })} facets={meta()} />)
+    render(<DocumentProperties {...titleProps({ title: 'Draft' })} />)
     const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
     box.focus()
     fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
@@ -327,12 +302,7 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
 
   it('drops the draft on blur so the box shows the canonical name', () => {
     const onTitleChange = vi.fn()
-    render(
-      <DocumentProperties
-        {...titleProps({ title: 'Release plan', onTitleChange })}
-        facets={meta()}
-      />,
-    )
+    render(<DocumentProperties {...titleProps({ title: 'Release plan', onTitleChange })} />)
     const box = screen.getByRole('textbox', { name: /title/i })
     fireEvent.change(box, { target: { value: 'Release plan  ' } })
     expect(textboxValue(/title/i)).toBe('Release plan  ')
@@ -344,33 +314,19 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
 })
 
 describe('DocumentProperties as the canvas row', () => {
-  it('the Properties toggle is an icon button with a real accessible name, and reads the slot it is given', () => {
-    const { rerender } = render(
-      <DocumentProperties {...titleProps()} facets={{ type: 'markdown' }} propertiesOpen={false} />,
-    )
-    const toggle = screen.getByRole('button', { name: 'Properties' })
-    // Icon-only: the word moved into aria-label + tooltip, off the surface.
-    expect(toggle.textContent).not.toContain('Properties')
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    // Controlled: the page's inspector slot decides, so a press alone
-    // changes nothing here, and the prop is what the state follows.
-    fireEvent.click(toggle)
-    expect(toggle.getAttribute('aria-expanded')).toBe('false')
-    rerender(
-      <DocumentProperties {...titleProps()} facets={{ type: 'markdown' }} propertiesOpen={true} />,
-    )
-    expect(screen.getByRole('button', { name: 'Properties' }).getAttribute('aria-expanded')).toBe(
-      'true',
-    )
+  // The opener moved into `InspectorSegment`, with the other three. It lived
+  // here because this file owned the title and the ⓘ sat beside it — which
+  // is how a canvas came to read `comments, kebab, history` and a note
+  // `properties, comments, kebab`: the same four controls, two orders.
+  it('has no Properties toggle of its own', () => {
+    render(<DocumentProperties {...titleProps()} />)
+
+    expect(screen.queryByRole('button', { name: 'Properties' })).toBeNull()
   })
 
   it('renders the actions cluster at the right edge', () => {
     render(
-      <DocumentProperties
-        {...titleProps()}
-        facets={{ type: 'markdown' }}
-        actions={<span data-testid="row-actions">ops</span>}
-      />,
+      <DocumentProperties {...titleProps()} actions={<span data-testid="row-actions">ops</span>} />,
     )
     expect(screen.getByTestId('row-actions')).toBeTruthy()
   })
@@ -379,7 +335,7 @@ describe('DocumentProperties as the canvas row', () => {
   // toggle. They are the only VIEW control the row ever carried; they live
   // in the ⋯ menu's leading band now, so the row has no way to take one.
   it('has no slot for a display control', () => {
-    render(<DocumentProperties {...titleProps()} facets={{ type: 'canvas' }} />)
+    render(<DocumentProperties {...titleProps()} />)
 
     expect(screen.queryByRole('button', { name: 'Display settings' })).toBeNull()
   })
@@ -387,9 +343,7 @@ describe('DocumentProperties as the canvas row', () => {
 
 describe('DocumentProperties inline variant (merged header row)', () => {
   it('renders as a row segment without its own chrome', () => {
-    const { container } = render(
-      <DocumentProperties inline {...titleProps()} facets={{ type: 'canvas' }} />,
-    )
+    const { container } = render(<DocumentProperties inline {...titleProps()} />)
     const wrapper = container.firstElementChild as HTMLElement
     // No own border/背景 chrome — the merged header row provides it.
     expect(wrapper.className).not.toContain('border-b')
@@ -399,26 +353,19 @@ describe('DocumentProperties inline variant (merged header row)', () => {
 
 describe('a spatial document has no facets to edit', () => {
   // ADR-0009 decision 3: a facet is OKF frontmatter, and a JSON Canvas
-  // document has none to hold one. The server refuses to write facets there,
-  // so a spatial canvas passes none — and there is no shape in which it
-  // hides the disclosure while still emitting through it.
-  it('offers no properties disclosure', () => {
-    render(<DocumentProperties {...titleProps()} />)
-
-    expect(screen.queryByRole('button', { name: /properties/i })).toBeNull()
-  })
-
+  // document has none to hold one, so a spatial canvas passes none.
+  //
+  // WHICH kinds offer the disclosure is no longer this component's answer —
+  // the opener is a member of `InspectorSegment` and the page decides which
+  // members a document offers (`DocumentPage`'s `tabs`). The kind gate is
+  // pinned where it now lives: `BrowserDocumentPage.test.tsx` for a canvas
+  // offering none, `BrowserDocumentPage.markdown.browser.test.tsx` for a
+  // note offering one. What stays here is the half this file still owns.
   it('still shows the title, which is the workspace name and not a facet', () => {
     // The name is a workspace concern (ADR-0009 decision 2), so having no
     // facets must not take it with them.
     render(<DocumentProperties {...titleProps({ title: 'Architecture' })} />)
 
     expect(textboxValue(/title/i)).toBe('Architecture')
-  })
-
-  it('a markdown document keeps the disclosure', () => {
-    render(<DocumentProperties {...titleProps()} facets={meta()} />)
-
-    expect(screen.queryByRole('button', { name: /properties/i })).not.toBeNull()
   })
 })

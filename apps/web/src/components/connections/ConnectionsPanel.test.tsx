@@ -1,12 +1,12 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { InspectorSegment } from '../document-editor/InspectorSegment.js'
 import {
   type ConnectionsBacklink,
-  ConnectionsChip,
   ConnectionsPanel,
   type ConnectionsPanelProps,
-} from './ConnectionsChip.js'
+} from './ConnectionsPanel.js'
 
 const TWO = [
   {
@@ -26,8 +26,13 @@ const TWO = [
 
 /**
  * The opener and the panel the way the document page composes them: the
- * page holds the inspector slot, the chip asks for it, the panel shows in
- * it. The chip alone opens nothing — that is the point of the split.
+ * page holds the inspector slot, the segment asks for it, the panel shows
+ * in it. The opener alone opens nothing — that is the point of the split.
+ *
+ * The opener used to be this module's own `ConnectionsChip`, which is why
+ * the file was named for it. It is one member of `InspectorSegment` now,
+ * beside the other three ways of looking at a document; what stays here is
+ * the panel, and the composition below is the pair as the page builds it.
  */
 function Connections({
   backlinks,
@@ -38,27 +43,17 @@ function Connections({
   const [open, setOpen] = useState(false)
   return (
     <>
-      <ConnectionsChip backlinks={backlinks} open={open} onToggle={() => setOpen((o) => !o)} />
+      <InspectorSegment
+        open={open ? 'connections' : null}
+        onToggle={() => setOpen((o) => !o)}
+        tabs={{ connections: { count: backlinks?.length ?? null } }}
+      />
       {open && backlinks !== null && <ConnectionsPanel backlinks={backlinks} {...panel} />}
     </>
   )
 }
 
-describe('ConnectionsChip', () => {
-  it('is controlled by the page: aria-expanded follows `open`, a press only asks', () => {
-    const onToggle = vi.fn()
-    const { rerender } = render(
-      <ConnectionsChip backlinks={TWO} open={false} onToggle={onToggle} />,
-    )
-    const chip = screen.getByRole('button', { name: /connections/i })
-    expect(chip.getAttribute('aria-expanded')).toBe('false')
-    fireEvent.click(chip)
-    expect(onToggle).toHaveBeenCalledTimes(1)
-    expect(chip.getAttribute('aria-expanded')).toBe('false')
-    rerender(<ConnectionsChip backlinks={TWO} open={true} onToggle={onToggle} />)
-    expect(chip.getAttribute('aria-expanded')).toBe('true')
-  })
-
+describe('the connections opener', () => {
   it('shows the backlink count and opens the panel with sources and contexts', () => {
     render(<Connections backlinks={TWO} onOpen={() => {}} />)
     const chip = screen.getByRole('button', { name: /connections/i })

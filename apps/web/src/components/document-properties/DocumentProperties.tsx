@@ -1,10 +1,8 @@
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { Info, X } from 'lucide-react'
+import { X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
-import { HEADER_TOGGLE_CLASS } from '../../components/ui/header-button.js'
 import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface DocumentPropertiesProps {
   /**
@@ -35,10 +33,6 @@ export interface DocumentPropertiesProps {
    * The row only OPENS the editor: `DocumentFacetsEditor` lives in the
    * page's inspector slot beside the document, which the row does not own.
    */
-  readonly facets?: StoredCoreFacets
-  /** Whether the inspector slot is showing the facets editor. */
-  readonly propertiesOpen?: boolean
-  readonly onToggleProperties?: () => void
   /**
    * Save-state indicator, rendered LEFT of the title — the canvas's "am I
    * safe" signal reads before its name, like a title-bar dirty dot.
@@ -68,9 +62,6 @@ export function DocumentProperties({
   inline = false,
   title,
   onTitleChange,
-  facets,
-  propertiesOpen = false,
-  onToggleProperties,
   status,
   actions,
 }: DocumentPropertiesProps) {
@@ -153,22 +144,6 @@ export function DocumentProperties({
             inline ? 'text-sm' : 'text-base'
           }`}
         />
-        {facets !== undefined && (
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                onClick={onToggleProperties}
-                aria-label="Properties"
-                aria-expanded={propertiesOpen}
-                className={HEADER_TOGGLE_CLASS}
-              >
-                <Info aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Properties</TooltipContent>
-          </Tooltip>
-        )}
         {actions !== undefined && (
           <div className="ml-auto flex shrink-0 items-center gap-1.5">{actions}</div>
         )}
