@@ -19,6 +19,15 @@
 //     invisible — nothing is red, a job simply stops being gated. That is what
 //     ci-gate.test.ts checks: every job in ci.yml is either needed here or
 //     exempted by name.
+//
+// What a matrix job contributes was measured rather than assumed, because the
+// GitHub docs for the needs context, the workflow syntax and the matrix how-to
+// each stop short of saying: on the first run of this job, `test-unit`,
+// `test-jsdom` and `test-browser` each appeared as ONE entry, not one per leg.
+// So a shard count really is invisible here. The FAILURE half — that the one
+// value reads `failure` when a single leg fails — is not yet observed, and is
+// why `ci-gate` should be required ALONGSIDE the per-leg checks until it has
+// been seen to go red with them.
 
 /**
  * Jobs whose `skipped` is a legitimate outcome, each with the reason it can
