@@ -9,9 +9,9 @@
  * reply TO and how the rest of its surface is sized.
  *
  * Rules that hold on both hosts, so neither can lose one:
- * - Enter alone is a newline: a reply is prose, and a conversation that
- *   eats paragraph breaks is worse than one extra chord. Cmd/Ctrl+Enter
- *   sends, matching every other editor in the app.
+ * - The box is a markdown editor (`CommentComposer`), because a comment's
+ *   body is markdown. Enter alone is a newline and Cmd/Ctrl+Enter sends;
+ *   both live there now, with the rest of the editing verbs.
  * - An empty reply is not a message, guarded at submit rather than by
  *   disabling the button, so the keyboard path is covered by the same rule
  *   as the pointer one.
@@ -25,6 +25,7 @@ import { SendHorizontal } from 'lucide-react'
 import { useState } from 'react'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
+import { CommentComposer } from './CommentComposer.js'
 
 export interface ReplyComposerProps {
   readonly onReply: (body: string) => void
@@ -52,25 +53,14 @@ export function ReplyComposer({ onReply, compact = false, autoFocus = false }: R
         commit()
       }}
     >
-      <textarea
-        // biome-ignore lint/a11y/noAutofocus: the composer only mounts because the reader asked to write; the caret is the request answered
-        autoFocus={autoFocus}
-        aria-label="Reply"
-        aria-keyshortcuts="Meta+Enter Control+Enter"
-        placeholder="Reply…"
+      <CommentComposer
         value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        onKeyDown={(event) => {
-          if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
-            event.preventDefault()
-            commit()
-          }
-        }}
-        rows={2}
-        className={cn(
-          'w-full resize-y rounded border bg-background px-2 py-1',
-          compact ? 'text-xs' : 'text-inherit',
-        )}
+        onChange={setDraft}
+        onSubmit={commit}
+        label="Reply"
+        placeholderText="Reply…"
+        autoFocus={autoFocus}
+        compact={compact}
       />
       {/* Icon-only, like every other verb on a conversation — and inert
           while there is nothing to send. The submit stays GUARDED rather

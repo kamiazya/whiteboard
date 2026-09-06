@@ -23,7 +23,9 @@ import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
+import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
 import { CommentBody } from './CommentBody.js'
+import { CommentComposer } from './CommentComposer.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
 import { ReplyComposer } from './ReplyComposer.js'
 import { ThreadReplies } from './ThreadReplies.js'
@@ -250,8 +252,8 @@ export function CommentsPanel({
    * phone the virtual keyboard stays up over the rail that just opened.
    */
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
-  const composeRef = useRef<HTMLTextAreaElement | null>(null)
-  const editRef = useRef<HTMLTextAreaElement | null>(null)
+  const composeRef = useRef<SourcePaneApi | null>(null)
+  const editRef = useRef<SourcePaneApi | null>(null)
 
   // The ROW's toggle rather than its reply box: it is the conversation's
   // heading, and Tab continues from it into the verbs, the replies and the
@@ -275,6 +277,31 @@ export function CommentsPanel({
     if (editingThreadId === null) return
     editRef.current?.focus()
   }, [editingThreadId])
+
+  /**
+   * The compose box's commit, named because two things now reach it: the
+   * Send button and the composer's Mod+Enter. Guarded here rather than by
+   * disabling the button, so the keyboard path takes the same rule.
+   */
+  function submitCompose(): void {
+    const body = composeDraft.trim()
+    if (body === '' || composeAnchor === null || onCreateThread === undefined) return
+    onCreateThread(composeAnchor, body)
+    setComposeDraft('')
+  }
+
+  /** The edit's commit, reachable from Save and from the chord alike. */
+  function commitEdit(thread: CommentThread): void {
+    if (editing === null || onEditMessage === undefined) return
+    const body = editing.body.trim()
+    const opening = thread.messages[0]
+    // An emptied subject is a cancel, not a blank message: the schema
+    // refuses an empty body.
+    if (body !== '' && opening !== undefined && body !== opening.body) {
+      onEditMessage(thread.id, opening.id, body)
+    }
+    setEditing(null)
+  }
 
   /**
    * Escape is the way back out, and it unwinds one layer at a time: an edit
@@ -442,13 +469,7 @@ export function CommentsPanel({
           className="flex flex-col gap-1 rounded border p-2"
           onSubmit={(event) => {
             event.preventDefault()
-            const body = composeDraft.trim()
-            // Same rule as the reply box, in the same place: guarded on
-            // submit rather than by disabling the button, so pressing Enter
-            // in the field is covered by it too.
-            if (body === '') return
-            onCreateThread(composeAnchor, body)
-            setComposeDraft('')
+            submitCompose()
           }}
         >
           {composeAnchor.kind === 'text' ? (
@@ -463,13 +484,13 @@ export function CommentsPanel({
               About the {anchorLabel(composeAnchor)}
             </p>
           )}
-          <textarea
-            ref={composeRef}
-            aria-label="Comment"
+          <CommentComposer
+            apiRef={composeRef}
+            label="Comment"
             value={composeDraft}
-            onChange={(event) => setComposeDraft(event.target.value)}
-            rows={2}
-            className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+            onChange={setComposeDraft}
+            onSubmit={submitCompose}
+            compact
           />
           <div className="flex justify-end">
             {/* Guarded on submit rather than disabled, so pressing Enter in
@@ -612,25 +633,16 @@ export function CommentsPanel({
                         className="flex flex-col gap-1"
                         onSubmit={(event) => {
                           event.preventDefault()
-                          const body = editing.body.trim()
-                          const opening = thread.messages[0]
-                          // An emptied subject is a cancel, not a blank
-                          // message: the schema refuses an empty body.
-                          if (body !== '' && opening !== undefined && body !== opening.body) {
-                            onEditMessage(thread.id, opening.id, body)
-                          }
-                          setEditing(null)
+                          commitEdit(thread)
                         }}
                       >
-                        <textarea
-                          ref={editRef}
-                          aria-label="Edit comment text"
+                        <CommentComposer
+                          apiRef={editRef}
+                          label="Edit comment text"
                           value={editing.body}
-                          onChange={(event) =>
-                            setEditing({ threadId: thread.id, body: event.target.value })
-                          }
-                          rows={2}
-                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
+                          onChange={(body) => setEditing({ threadId: thread.id, body })}
+                          onSubmit={() => commitEdit(thread)}
+                          compact
                         />
                         {/* No Cancel button: Escape already leaves the edit,
                             and an X here would be the third meaning of that

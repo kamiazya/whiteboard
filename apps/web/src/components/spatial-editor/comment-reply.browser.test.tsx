@@ -186,6 +186,18 @@ it('the context menu drops Reply, since the card is where a reply is written', a
   expect(labels).not.toContain('Reply')
 })
 
+/**
+ * What the composer holds, which is NOT `.value` any more: it is a
+ * CodeMirror view, so the draft is the text of its rendered lines — and its
+ * placeholder renders inside them, so reading `textContent` straight off the
+ * box answers `Reply…` for an empty draft.
+ */
+function draftText(): string {
+  const box = page.getByLabelText('Reply').element()
+  const placeholder = box.querySelector('.cm-placeholder')?.textContent ?? ''
+  return (box.textContent ?? '').replace(placeholder, '')
+}
+
 it('an unsent draft does not follow the reader to the next conversation', async () => {
   const { Host, latest } = makeHost([THREAD, OTHER_THREAD])
   const { container } = render(<Host />)
@@ -201,9 +213,7 @@ it('an unsent draft does not follow the reader to the next conversation', async 
   // in one place, so its draft would otherwise survive the switch and be
   // committed against whichever thread is open when submit is pressed.
   pressOtherBubble(root, 11)
-  await vi.waitFor(() =>
-    expect((page.getByLabelText('Reply').element() as HTMLTextAreaElement).value).toBe(''),
-  )
+  await vi.waitFor(() => expect(draftText()).toBe(''))
 
   await userEvent.click(page.getByLabelText('Reply'))
   await userEvent.keyboard('meant for the second')

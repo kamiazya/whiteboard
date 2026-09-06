@@ -362,7 +362,12 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
   await userEvent.click(page.getByText('tighten the copy here'))
   await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   const box = page.getByRole('textbox', { name: 'Edit comment text' })
-  await expect.element(box).toHaveValue('tighten the copy here')
+  // `textContent`, not `toHaveValue`: the box is a CodeMirror view, so what
+  // it holds is the text of its rendered lines and not a form value. Still
+  // the load-bearing assertion of this test's first half — the editor has
+  // to open PRE-FILLED, and an empty one would let the rest pass while
+  // rewriting the message from scratch.
+  await expect.element(box).toHaveTextContent('tighten the copy here')
   await userEvent.fill(box, 'tighten the copy here, and the heading')
   await userEvent.click(page.getByRole('button', { name: 'Save' }))
   expect(edits).toEqual([['t-open', 'm1', 'tighten the copy here, and the heading']])
