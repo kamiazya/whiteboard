@@ -53,6 +53,7 @@ export {
   detectMergeBadges,
   type MergeBadge,
   meetVersion,
+  mergeBadgeSchema,
   toElementMap,
 } from './merge/merge-engine.js'
 export {

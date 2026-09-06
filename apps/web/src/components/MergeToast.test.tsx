@@ -184,6 +184,36 @@ describe('MergeToast', () => {
     expect(screen.getByTestId('merge-toast')).toBeTruthy()
   })
 
+  it("shows the daemon's own refusal copy, not the generic fallback", async () => {
+    // The restore route answers a refusal it AUTHORED — `output-exists`,
+    // `subtree-takes-no-target` — as an { error, message } body, and that copy
+    // is the only thing telling a reader why Undo did not happen. It is
+    // forwarded through `apiErrorReason`, so it survives only as long as the
+    // failure reaches the toast as a BODY; an Error alone reads as the
+    // fallback by `safeErrorCopy`'s contract, and no assertion here would
+    // notice the difference.
+    const daemonFetch = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify({ error: 'output-exists', message: 'A document already exists there.' }),
+        {
+          status: 409,
+        },
+      ),
+    )
+    render(
+      <DaemonApiContext.Provider value={daemonFetch}>
+        <MergeToast workspaceId="s1" path="c1" />
+      </DaemonApiContext.Provider>,
+    )
+    act(() => dispatchMergeCommitted(baseDetail))
+    fireEvent.click(screen.getByTestId('merge-toast-undo'))
+    await waitFor(() =>
+      expect(screen.getByTestId('merge-toast-undo-error').textContent).toBe(
+        'A document already exists there.',
+      ),
+    )
+  })
+
   it('restores through the daemon-context fetch instead of the same-origin apiFetch', async () => {
     const daemonFetch = vi
       .fn()

@@ -55,6 +55,7 @@ const sources = import.meta.glob(
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
+    './pages/use-variation-preview.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -102,6 +103,7 @@ const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
 const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
 // The comments rail's screen state, extracted the same way — same rule.
 const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
+const VARIATION_PREVIEW_HOOK = './pages/use-variation-preview.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
@@ -400,6 +402,16 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
   versionRefreshSignal:
     'no subject: a counter that nudges the History column to refetch; the list it refreshes is the column’s own, and the column remounts per document',
+  // A read-only view of ONE document's variation tip (ADR-0022). The name in
+  // `?v=` qualifies the document it was written beside, so left standing it
+  // would show the departed document's tip under the arrived one's name.
+  variationPreview: 'cleared on switch',
+  // Called out separately from the preview because it is worse: `Variation
+  // «x» was not found` is a sentence about the document you have left, and
+  // it reads as being about the one in front of you.
+  variationNotice: 'cleared on switch',
+  lastPathRef:
+    'no subject: holds the PREVIOUS path so the reset can tell a real switch from the first path the hook ever sees — clearing it would make the next render read as a switch and strip a `?v=` nobody asked to lose',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
@@ -429,16 +441,6 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
-  // A read-only view of ONE document's variation tip (ADR-0022). `?v` is
-  // not stripped by a switch — `switchDocument` sets the path and nothing
-  // else — so the effect that owns this re-resolves the same NAME against
-  // the arrived document. Until it answers, the departed document's preview
-  // is on screen under the new one's name.
-  variationPreview: 'cleared on switch',
-  // Worse than the preview, which is why it is called out separately: no
-  // branch of that effect clears the notice, so `Variation «x» was not
-  // found` about one document outlived it onto the next until this reset.
-  variationNotice: 'cleared on switch',
   // Backlinks OF this document. Its own fetch nulls them, but only once it
   // knows the arrived document's id — which comes from a list that may
   // still be refreshing.
@@ -484,7 +486,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
+    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK, VARIATION_PREVIEW_HOOK],
     ledger: DOCUMENT_PAGE_STATE,
     label: 'DocumentPage',
     scanRefs: true,

@@ -11,6 +11,7 @@
  * result is annotated with the exported type so tsc catches any drift between
  * the schema and the exported alias.
  */
+import type { MergeBadge } from '@kamiazya/whiteboard-history'
 import { describe, expect, it } from 'vitest'
 import {
   type BranchMeta,
@@ -296,7 +297,7 @@ describe('mergeResponseSchema', () => {
 
   it('roundtrip with all optional fields populated', () => {
     const full: MergeResponse = {
-      badges: [{ type: 'conflict' }],
+      badges: [{ type: 'resurrected', elementId: 'n1' }],
       preview: { elementCount: 10 },
       committed: { elementCount: 8 },
       target: { elementCount: 5 },
@@ -315,5 +316,22 @@ describe('mergeResponseSchema', () => {
 
   it('rejects missing badges', () => {
     expect(mergeResponseSchema.safeParse({}).success).toBe(false)
+  })
+
+  it('rejects a badge kind the merge engine cannot produce', () => {
+    expect(mergeResponseSchema.safeParse({ badges: [{ type: 'conflict' }] }).success).toBe(false)
+  })
+
+  it("carries each badge kind's own fields, as the type the merge engine emits", () => {
+    const badges: MergeBadge[] = [
+      { type: 'resurrected', elementId: 'n1' },
+      { type: 'orphan_ref', elementId: 'e1', missingRef: 'n9' },
+      { type: 'field_merge', elementId: 'n2', fields: ['x', 'width'] },
+    ]
+    const result = roundtrip(mergeResponseSchema, { badges })
+    // The annotation is the assertion: a wire badge IS a MergeBadge, so a
+    // reader switches on `type` instead of re-deriving the shape by hand.
+    const read: MergeBadge[] = result.badges
+    expect(read).toEqual(badges)
   })
 })
