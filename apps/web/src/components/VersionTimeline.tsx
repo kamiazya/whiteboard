@@ -38,46 +38,24 @@ export interface VersionPreviewSession {
 }
 
 /**
- * What the keeper behind this history can do.
+ * A history is a history, whoever keeps it.
  *
- * A prop rather than a read of the provider's capability map, because these
- * are not the same question: that map says what the CONNECTION offers, and
- * this says what the history in front of you does. The two shapes below are
- * the only answers a keeper has, named so a mount states which keeper it is
- * instead of writing a literal that reads like a preference.
- */
-export interface VersionTimelineCapabilities {
-  readonly branches: boolean
-  readonly autoVersions: boolean
-}
-
-/** The daemon's history: lanes, and a checkpoint after work settles. */
-export const DAEMON_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
-  branches: true,
-  autoVersions: true,
-}
-
-/**
- * The browser's history, which now answers the same two questions the
- * daemon's does: its rows carry the variation they were taken on, and a
- * checkpoint lands on its own once editing settles.
+ * There was a `VersionTimelineCapabilities` prop here — `branches` and
+ * `autoVersions`, one shape per keeper — and it is gone because the two
+ * shapes had become identical: both keepers write rows carrying the
+ * variation they were taken on, and both land a checkpoint once editing
+ * settles. A pair that agrees declares no difference, which is the argument
+ * that retired the provider's capability map (ADR-0004's 2026-09-05
+ * addendum) one layer up.
  *
- * Equal to the daemon's, therefore, and a pair that agrees declares no
- * difference — the argument that retired the provider's capability map. What
- * keeps this one alive for the moment is not a difference but the component
- * below: `branches: false` and `autoVersions: false` still select real
- * rendering paths that `version-row.test.tsx` exercises, so removing the pair
- * means removing those too. That is the follow-up, not a drive-by here.
+ * What the `false` side actually held up, measured before deleting it: ONE
+ * assertion, the second direction of the lane test. The other four cases in
+ * `version-row.test.tsx` passed `branches: false` and never looked at a
+ * lane — they were rendering a configuration no keeper ships, for nothing.
  */
-export const BROWSER_HISTORY_CAPABILITIES: VersionTimelineCapabilities = {
-  branches: true,
-  autoVersions: true,
-}
-
 interface Props {
   workspaceId: string
   path: string
-  capabilities?: VersionTimelineCapabilities
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
   /**
@@ -187,7 +165,6 @@ function RowShell({
 export default function VersionTimeline({
   workspaceId,
   path,
-  capabilities = DAEMON_HISTORY_CAPABILITIES,
   onRestored,
   onPreview,
   refreshSignal,
@@ -474,9 +451,8 @@ export default function VersionTimeline({
                   the trigger's timing lives, and the one nothing updates —
                   it read "~30s" through the whole life of the five-minute
                   pause that replaced it. */}
-              {capabilities.autoVersions
-                ? 'A checkpoint is saved a little after you stop editing. Bookmark this point with the button above, or ⌘/Ctrl+S.'
-                : 'Save one with the button above, or ⌘/Ctrl+S.'}
+              A checkpoint is saved a little after you stop editing. Bookmark this point with the
+              button above, or ⌘/Ctrl+S.
             </div>
           ) : (
             visibleVersions.map((v) => {
@@ -488,17 +464,18 @@ export default function VersionTimeline({
                 restoredSource === undefined ? null : versionTitle(restoredSource)
               return (
                 <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
-                  {/* The lane column, only where lanes exist. A keeper with
-                      one branch drew a straight line down the left of every
-                      row and spent the width saying nothing. */}
-                  {/* The lane is drawn for BRANCHES or for lineage. It used
-                      to be branches-only, which left the browser keeper — one
-                      lane, and restores like any other — with nowhere to draw
-                      the arc a restore leaves. */}
-                  {(capabilities.branches ||
-                    row?.restoredFrom !== undefined ||
-                    row?.isRestoreSource === true ||
-                    row?.isRestoreArcThrough === true) && (
+                  {/* The lane column, on every row. It was gated on the
+                      keeper having branches, widened to lineage when the
+                      browser keeper's restores needed an arc to draw, and
+                      then always true once that keeper grew variations — so
+                      what is left is a condition, not a decision.
+
+                      A single lane down a document nobody has branched is
+                      still 24px saying little, which is what the gate was
+                      originally for. That question is about the DOCUMENT
+                      (how many lanes does it have?), not about the keeper,
+                      and answering it is not this deletion's job. */}
+                  {
                     /* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */
                     <svg
                       data-testid="version-lane"
@@ -575,7 +552,7 @@ export default function VersionTimeline({
                         />
                       )}
                     </svg>
-                  )}
+                  }
                   {/* Restore is offered on HEAD's lane only. Showing another
                       variation's history is not the same as offering to
                       restore from it: what restoring one variation's version
