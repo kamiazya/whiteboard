@@ -15,8 +15,15 @@
 // v4.0.0 tag and on its default branch. This repository is public, and so are
 // its job logs.
 
-const { appendFileSync } = require('node:fs')
-const { randomUUID } = require('node:crypto')
+// ESM, because the repository root declares `"type": "module"` and this file
+// inherits it. The runner executes this path with node directly, so the
+// declaration is what decides — and `node --check` does not: it parses, and
+// CommonJS is what it parses as. Its first CI run died on `require is not
+// defined in ES module scope` with every unit case green, which is why the
+// test file now also runs this file in a real subprocess.
+import { randomUUID } from 'node:crypto'
+import { appendFileSync } from 'node:fs'
+import { pathToFileURL } from 'node:url'
 
 // Exactly what the backend documents as its fallbacks — `url`
 // ($ACTIONS_CACHE_URL or $ACTIONS_RESULTS_URL), `url_v2`, `token` and the
@@ -37,7 +44,7 @@ const SECRET = new Set(['ACTIONS_RUNTIME_TOKEN'])
  * @param {Record<string, string | undefined>} env
  * @returns {{ present: string[], absent: string[], secret: string[] }}
  */
-function planExposure(env) {
+export function planExposure(env) {
   const present = CACHE_ENV.filter((name) => (env[name] ?? '') !== '')
   return {
     present,
@@ -54,7 +61,7 @@ function planExposure(env) {
  * @param {Record<string, string | undefined>} env
  * @param {string} delimiter
  */
-function envFileLines(plan, env, delimiter) {
+export function envFileLines(plan, env, delimiter) {
   const lines = []
   for (const name of plan.present) {
     const value = String(env[name])
@@ -73,7 +80,7 @@ function envFileLines(plan, env, delimiter) {
  * @param {{ secret: string[] }} plan
  * @param {Record<string, string | undefined>} env
  */
-function maskCommands(plan, env) {
+export function maskCommands(plan, env) {
   return plan.secret.map((name) => `::add-mask::${env[name]}`)
 }
 
@@ -82,7 +89,7 @@ function maskCommands(plan, env) {
  *
  * @param {{ present: string[], absent: string[] }} plan
  */
-function announce(plan) {
+export function announce(plan) {
   const lines = [`exposed to later steps: ${plan.present.join(', ') || '(none)'}`]
   if (plan.absent.length > 0) {
     lines.push(`not provided by the runner: ${plan.absent.join(', ')}`)
@@ -105,9 +112,5 @@ function run() {
   }
 }
 
-if (require.main === module) run()
-
-exports.planExposure = planExposure
-exports.envFileLines = envFileLines
-exports.maskCommands = maskCommands
-exports.announce = announce
+// Run only when the runner invoked this file, not when a test imports it.
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) run()

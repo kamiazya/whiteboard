@@ -14,7 +14,9 @@
 // at its v4.0.0 tag and on its default branch. This repository is public, so
 // its job logs are too.
 
-import { readFileSync } from 'node:fs'
+import { spawnSync } from 'node:child_process'
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -126,5 +128,45 @@ describe('the workflow that needs those credentials', () => {
       dryRunDocker.indexOf('- name: Docker build dry-run'),
     )
     expect(step).toContain("if: steps.detect.outputs.docker == 'true'")
+  })
+})
+
+describe('the action as the runner actually runs it', () => {
+  // The unit cases above import the module through vitest, which transforms it
+  // — so they passed against a file the runner could not execute at all. The
+  // repository root declares `"type": "module"`, which the action inherits,
+  // and its first CI run died on `require is not defined in ES module scope`
+  // with every one of those cases green. `node --check` did not catch it
+  // either: it parses, and CommonJS is what it parses as.
+  //
+  // Running the real file in a real subprocess is the only shape that fails
+  // when the file will not run. It costs a process; the alternative cost a CI
+  // round trip and a red check.
+  it('runs, masks the token, and writes GITHUB_ENV', () => {
+    const envFile = join(mkdtempSync(join(tmpdir(), 'expose-creds-')), 'github.env')
+    writeFileSync(envFile, '')
+    const result = spawnSync(process.execPath, [ACTION], {
+      encoding: 'utf-8',
+      env: { ...FULL_ENV, GITHUB_ENV: envFile, PATH: process.env.PATH ?? '' },
+    })
+
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).toContain(`::add-mask::${TOKEN}`)
+    expect(result.stdout).toContain('exposed to later steps: ACTIONS_RUNTIME_TOKEN')
+
+    const written = readFileSync(envFile, 'utf-8')
+    expect(written).toContain(TOKEN)
+    expect(written).toMatch(/ACTIONS_RUNTIME_TOKEN<<ghenv_[0-9a-f-]+\n/)
+  })
+
+  it('runs and says so when the runner provided nothing', () => {
+    // A job outside Actions must not fail the build; the report says the cache
+    // is unconfigured instead.
+    const result = spawnSync(process.execPath, [ACTION], {
+      encoding: 'utf-8',
+      env: { PATH: process.env.PATH ?? '' },
+    })
+    expect(result.status, result.stderr).toBe(0)
+    expect(result.stdout).toContain('not provided by the runner: ACTIONS_RUNTIME_TOKEN')
   })
 })
