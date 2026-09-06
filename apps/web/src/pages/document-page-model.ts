@@ -25,7 +25,7 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { linkTargets } from '../lib/link-entries.js'
-import type { PastDocument, VersionsBackend } from '../lib/versions-backend.js'
+import type { VersionsBackend } from '../lib/versions-backend.js'
 
 export interface DocumentPageModel {
   /**
@@ -122,10 +122,15 @@ export interface DocumentPageModel {
     readonly dataMode?: 'daemon' | 'local'
     readonly onNavigateBack?: () => void
     readonly branchRefreshSignal?: number
-    readonly onPreviewVariation?: (name: string) => void
+    /**
+     * Something moved HEAD or the branch set from inside the page — the
+     * shared `?v=` banner's switch — and the keeper's own signal above has
+     * no way to learn it. The counterpart of `branchRefreshSignal`: that one
+     * reports a change the keeper OBSERVED, this one reports one the page
+     * MADE.
+     */
+    readonly onBranchesChanged?: () => void
   } | null
-  /** A read-only state drawn in place of the editor that is not a version (a variation's tip). */
-  readonly readOnlyPast: PastDocument | null
   readonly spatial: Pick<SpatialEditorPaneProps, 'editorRef' | 'agentTouchedNodeIds' | 'children'>
   readonly slots: {
     /** Alerts in the document actions row, before the ⋯ menu. */

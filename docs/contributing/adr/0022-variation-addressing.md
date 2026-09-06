@@ -36,11 +36,19 @@ What that means today, read off the code rather than assumed:
 > addendum of the same date). Neither decision below is affected — they are
 > about the ADDRESS, which is the same grammar whoever keeps the document.
 >
-> What has NOT followed yet: `?v=` is supplied only by `DaemonDocumentPage`,
-> even though the browser backend answers `loadDocument` for a named
-> variation. So a browser-kept variation can be switched and combined but not
-> yet linked to. That is a gap in the page wiring rather than in this
-> decision, and it is recorded as one.
+> The page-wiring gap this note recorded — `?v=` supplied only by
+> `DaemonDocumentPage`, so a browser-kept variation could be switched and
+> combined but not linked to — is closed (2026-09-06). The shared
+> `DocumentPage` owns the mechanism for both keepers.
+>
+> Two things had to be true for a deep link to work on the browser keeper,
+> and each was its own defect. The page's canvas-id-to-URL sync wrote the
+> pathname alone, so `?v=` was dropped by a `replace` the reader never asked
+> for; and the browser's branches seam answers the resting state (`main`
+> alone) until the record arrives, so the first read of a valid name reports
+> it missing. A failed read therefore reports itself and LEAVES THE ADDRESS
+> ALONE — every read is provisional, and the one that succeeds corrects the
+> notice. Only a redundant address (decision 1) is rewritten.
 
 The open question was the grammar: if a variation ever becomes addressable,
 does the DEFAULT one appear in the address?

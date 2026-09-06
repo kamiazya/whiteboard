@@ -24,6 +24,7 @@ import {
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
@@ -33,6 +34,7 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
+import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
@@ -49,6 +51,7 @@ import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
+import { useVariationPreview } from './use-variation-preview.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
 // WorkspaceTopBar statically imports Radix, lucide, VersionTimeline,
@@ -303,6 +306,27 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
+  // ADR-0022's `?v=`, owned here because it is keeper-agnostic: it reads the
+  // branches seam and the address, and neither is a keeper's business. It sat
+  // on the daemon page from when variations were a daemon concept, which is
+  // why a browser-kept variation could be switched and combined but not
+  // linked to.
+  const branchesBackend = useBranchesBackend()
+  const variation = useVariationPreview({
+    workspaceId: topBar?.workspaceId ?? null,
+    path: topBar?.path ?? null,
+    branches: branchesBackend,
+    ...(topBar?.branchRefreshSignal === undefined
+      ? {}
+      : { refreshSignal: topBar.branchRefreshSignal }),
+    ...(topBar?.onBranchesChanged === undefined
+      ? {}
+      : { onHeadChanged: topBar.onBranchesChanged }),
+  })
+  // A variation's tip is a read-only state drawn in place of the editor —
+  // the same slot a version preview uses, and the only thing that ever put
+  // one there.
+  const readOnlyPast = variation.preview?.past ?? null
   // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
   // back, title, menus — steps aside with the shell's row above it, which
   // owns the control and floats the way back out. The dock stays because
@@ -344,7 +368,7 @@ function DocumentPageBody({
           <CommentsRailAside
             rail={commentsRail}
             threads={threads.annotations}
-            writable={preview === null && model.readOnlyPast === null}
+            writable={preview === null && readOnlyPast === null}
           />
         ) : inspector === 'connections' &&
           model.connections !== undefined &&
@@ -437,9 +461,7 @@ function DocumentPageBody({
                 {...(topBar.branchRefreshSignal === undefined
                   ? {}
                   : { branchRefreshSignal: topBar.branchRefreshSignal })}
-                {...(topBar.onPreviewVariation === undefined
-                  ? {}
-                  : { onPreviewVariation: topBar.onPreviewVariation })}
+                onPreviewVariation={variation.previewVariation}
                 // Whatever the document holds: a keeper writes a history for
                 // every kind, and gating this on the editor is what left a
                 // markdown document's checkpoints unreachable.
@@ -454,6 +476,42 @@ function DocumentPageBody({
               and the banner reads the same seam either keeper answers. It
               draws nothing until HEAD is a variation with work on it, so a
               document without variations is unaffected. */}
+          {topBar !== null && variation.preview !== null && (
+            <HeaderVariationBanner
+              workspaceId={topBar.workspaceId}
+              path={topBar.path}
+              name={variation.preview.name}
+              head={variation.preview.head}
+              branches={variation.preview.branches}
+              onSwitch={variation.switchToPreviewed}
+              onExit={variation.exitPreview}
+              runMerge={(src, args) =>
+                branchesBackend.merge(topBar.workspaceId, topBar.path, src, args)
+              }
+            />
+          )}
+          {variation.notice !== null && (
+            // role="alert", not "status": every notice here reports a failure
+            // (unknown name, unreadable tip, failed switch), and an alert
+            // injected with its content is the supported pattern — a
+            // conditionally-mounted status region is not
+            // (polite-live-region.test.ts).
+            <div
+              role="alert"
+              data-testid="variation-preview-notice"
+              className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
+            >
+              <span className="min-w-0 flex-1 truncate">{variation.notice}</span>
+              <button
+                type="button"
+                aria-label="Dismiss"
+                className="shrink-0 rounded-md p-1 hover:bg-accent"
+                onClick={variation.dismissNotice}
+              >
+                ×
+              </button>
+            </div>
+          )}
           {topBar !== null && (
             <HeaderBranchBanner
               workspaceId={topBar.workspaceId}
@@ -471,8 +529,8 @@ function DocumentPageBody({
         <div className="relative h-full min-h-0 min-w-0">
           {preview ? (
             <DocumentPreview past={preview.past} theme={resolvedTheme} />
-          ) : model.readOnlyPast ? (
-            <DocumentPreview past={model.readOnlyPast} theme={resolvedTheme} />
+          ) : readOnlyPast ? (
+            <DocumentPreview past={readOnlyPast} theme={resolvedTheme} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}

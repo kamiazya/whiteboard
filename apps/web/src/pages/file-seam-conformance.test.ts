@@ -80,6 +80,15 @@ const SHARED_CANVAS_CHROME = [
   // grid template and the same sr-only <h1> landmark by hand; the shell owns
   // them once, so a layout or a11y drift between modes cannot happen quietly.
   'DocumentPageShell',
+  // The variations chrome. Each was daemon-page chrome once, moved when the
+  // browser keeper grew variations; they are listed HERE rather than merely
+  // dropped from the exemptions below, because dropping an entry only stops
+  // the scan expecting one page to own it — nothing then refuses a keeper
+  // page growing its own copy back, which is the whole failure this file is
+  // about.
+  'HeaderBranchBanner',
+  'HeaderVariationBanner',
+  'MergeToast',
 ] as const
 
 /**
@@ -95,11 +104,11 @@ const SHARED_CANVAS_CHROME = [
  * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  // `HeaderBranchBanner` and `MergeToast` stood here, first as "a daemon
-  // concept (ADR-0004)" and then as a gap once the browser keeper grew
-  // variations and merges. They are neither now: the shared DocumentPage
-  // mounts both for whichever keeper rendered it, so they are not
-  // mode-specific chrome and this scan should not expect them on one page.
+  // `HeaderBranchBanner`, `HeaderVariationBanner` and `MergeToast` stood
+  // here, first as "a daemon concept (ADR-0004)" and then as a gap once the
+  // browser keeper grew variations and merges. They are neither now: the
+  // shared DocumentPage mounts all three for whichever keeper rendered it,
+  // so they have moved UP to SHARED_CANVAS_CHROME rather than out.
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',

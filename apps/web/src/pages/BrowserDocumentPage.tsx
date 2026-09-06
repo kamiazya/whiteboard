@@ -351,8 +351,15 @@ function useBrowserDocument(
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
-    navigate(path, { replace: isFirstSync })
-  }, [documentPath, navigate])
+    // The SEARCH rides along, because this writes the address of the document
+    // already loaded rather than navigating to another one. A bare pathname
+    // drops the query — which is how `?v=<variation>` never survived to be
+    // read on this keeper: the deep link arrived, this effect replaced the
+    // address with the pathname alone, and the preview had nothing left to
+    // resolve. (`navigateToDocument` and the repair below DO drop it: both
+    // name a different document, and a variation qualifies one document.)
+    navigate({ pathname: path, search: location.search }, { replace: isFirstSync })
+  }, [documentPath, navigate, location.search])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -910,7 +917,6 @@ function useBrowserDocument(
         navigate(handle === null ? indexPath() : workspacePath(handle))
       },
     },
-    readOnlyPast: null,
     spatial: {},
     slots: {
       rowAlerts: (
