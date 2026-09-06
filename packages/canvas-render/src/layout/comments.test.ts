@@ -2,6 +2,8 @@
 // bubbles composed into the SVG scene AFTER nodes and edges, so they paint
 // above content on every surface — widget, viewer, export — with no per-
 // surface wiring. Placement floats near the anchor; nothing here is stored.
+
+import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
@@ -13,6 +15,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
   COMMENT_BUBBLE_OFFSET_PX,
@@ -799,4 +802,33 @@ describe('the count a pin carries', () => {
     // here — the same rule the pin under it follows.
     expect(pinCountRun(scene.nodes, 'c1')?.appearance?.fillOpacity).toBe(0.45)
   })
+})
+
+/**
+ * A comment's body IS markdown, and the bubble draws it through the one
+ * producer every other surface uses (`layoutCommentBody`).
+ *
+ * Pinned at the bubble rather than only on the producer because the drift
+ * this closes ran the other way: the web app's card and rail printed the
+ * same string raw while the bubble had always parsed it, so `# Heading`
+ * was a heading on the canvas and a literal hash in the rail. A test on
+ * the producer alone would stay green over a bubble that grew its own
+ * path back.
+ *
+ * The HEADING is what makes it discriminating: the node and document
+ * markdown themes agree on body size and differ at h1 (24 vs 30), so a
+ * paragraph would pass under either.
+ */
+it('draws a comment body as markdown at the bubble metrics, through the shared producer', () => {
+  const scene = layoutSpatialCanvas(
+    canvasWith([{ id: 'c1', x: 400, y: 40, text: '# Heading' }]),
+    // codec's real parser, not the fixture's paragraph-wrapping stub: the
+    // claim is about what markdown MEANS here.
+    baseOptions({ parseBody: parseMarkdownBody }),
+  )
+  const heading = scene.nodes.find((node) => node.kind === 'heading')
+  expect(heading).toBeDefined()
+  const run = (heading as { runs?: readonly TextRunNode[] }).runs?.[0]
+  expect(run?.text).toBe('Heading')
+  expect(run?.appearance?.fontSize).toBe(MARKDOWN_THEME_NODE.headingFontSizePx[1])
 })
