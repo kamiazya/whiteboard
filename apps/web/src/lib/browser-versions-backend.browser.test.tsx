@@ -84,7 +84,7 @@ describe('the browser versions backend files a manual save on the current variat
     await vi.waitFor(() => expect(backend.readRecord(() => true)).toBe(true))
 
     const store = new BrowserVersionStore({ docs, index })
-    const versions = createBrowserVersionsBackend({ backend, store })
+    const versions = createBrowserVersionsBackend({ record: backend, store, kind: 'spatial' })
     await versions.save(workspaceId, 'canvas-a', { label: 'by hand' })
 
     expect(await store.list(workspaceId, 'canvas-a')).toEqual([

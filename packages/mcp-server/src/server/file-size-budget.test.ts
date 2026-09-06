@@ -165,7 +165,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // arrived and a document opened ON a variation kept naming the default one.
   // Most of the added lines is that reason — the bug is invisible in the
   // three lines of state that fix it.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1011,
+  // Raised again to 1028 by kind parity on the versions seam. Two lines pick
+  // the record seam by kind and supply the document's kind to it; the rest is
+  // the two findings behind them, neither recoverable from the code. A note's
+  // version ROWS were always written — a version is a frontier of the
+  // workspace record — and only the seam that reads and restores one was
+  // built from a backend a note never has. And `loadPast` asked the past
+  // STATE its kind, which a tree-hosted document keeps in its node meta, so
+  // the answer was always "not markdown": the fallback saved a canvas and
+  // drew a note an empty viewer.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1028,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
