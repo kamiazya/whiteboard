@@ -23,6 +23,8 @@ import { TOGGLE_STATE_CLASS } from '../../components/ui/dock-button.js'
 import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
+import { ReplyComposer } from './ReplyComposer.js'
+import { ThreadReplies } from './ThreadReplies.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -170,7 +172,6 @@ export function CommentsPanel({
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
-  const [draft, setDraft] = useState('')
   // The opening message under edit, with its draft: at most one, and it
   // belongs to the row, so opening another conversation abandons it.
   const [editing, setEditing] = useState<{
@@ -192,7 +193,6 @@ export function CommentsPanel({
     setLastRevealed(revealThreadId)
     if (revealThreadId !== null) {
       setOpenThreadId(revealThreadId)
-      setDraft('')
       const revealed = threads.find((t) => t.id === revealThreadId)
       if (revealed !== undefined && !matches(revealed, filter)) setFilter('all')
     }
@@ -371,9 +371,6 @@ export function CommentsPanel({
 
   function toggle(thread: CommentThread): void {
     setOpenThreadId((current) => (current === thread.id ? null : thread.id))
-    // The draft belongs to the conversation it was typed into, so moving to
-    // another one starts empty rather than carrying half a sentence across.
-    setDraft('')
     onSelect?.(thread)
   }
 
@@ -627,56 +624,18 @@ export function CommentsPanel({
                         </div>
                       </form>
                     ) : null}
-                    {/* The REPLIES, not the whole conversation over again:
-                        the row above already carries the opening message,
-                        which is the conversation's subject. Repeating it here
-                        was the first shape and it read as the same sentence
-                        twice. Replies indent under their subject instead. */}
-                    {thread.messages.length > 1 ? (
-                      <ol className="flex flex-col gap-2 border-l pl-2">
-                        {thread.messages.slice(1).map((message) => (
-                          <li key={message.id} className="flex flex-col gap-0.5">
-                            <MessageBy message={message} />
-                            <p className="whitespace-pre-wrap text-xs text-neutral-800 dark:text-neutral-200">
-                              {message.body}
-                            </p>
-                          </li>
-                        ))}
-                      </ol>
-                    ) : null}
+                    <ThreadReplies thread={thread} compact />
 
                     {onReply === undefined ? null : (
-                      <form
-                        className="flex flex-col gap-1"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          const body = draft.trim()
-                          // An empty reply is not a message. Guarded here
-                          // rather than by disabling the button, so the
-                          // keyboard path (Enter in the field) is covered by
-                          // the same rule as the pointer one.
-                          if (body === '') return
-                          onReply(thread.id, body)
-                          setDraft('')
-                        }}
-                      >
-                        <textarea
-                          aria-label="Reply"
-                          value={draft}
-                          onChange={(event) => setDraft(event.target.value)}
-                          rows={2}
-                          className="w-full resize-y rounded border bg-background px-2 py-1 text-xs"
-                        />
-                        <button
-                          type="submit"
-                          aria-label="Send reply"
-                          title="Send reply"
-                          aria-disabled={draft.trim() === ''}
-                          className={cn(ICON_VERB_CLASS, 'self-end aria-disabled:opacity-40')}
-                        >
-                          <SendHorizontal aria-hidden="true" className="size-4" />
-                        </button>
-                      </form>
+                      // Keyed by thread, which is what makes the draft belong
+                      // to the conversation it was typed into: moving to
+                      // another one mounts a fresh box instead of carrying
+                      // half a sentence across.
+                      <ReplyComposer
+                        key={thread.id}
+                        compact
+                        onReply={(body) => onReply(thread.id, body)}
+                      />
                     )}
                   </div>
                 ) : null}

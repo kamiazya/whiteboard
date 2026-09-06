@@ -23,6 +23,7 @@
 
 import { SendHorizontal } from 'lucide-react'
 import { useState } from 'react'
+import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { cn } from '../../lib/utils.js'
 
 export interface ReplyComposerProps {
@@ -81,9 +82,7 @@ export function ReplyComposer({ onReply, compact = false, autoFocus = false }: R
         aria-label="Send reply"
         title="Send reply"
         aria-disabled={draft.trim() === ''}
-        className={cn(
-          'grid size-11 shrink-0 place-items-center self-end rounded text-muted-foreground hover:bg-accent hover:text-foreground aria-disabled:opacity-40',
-        )}
+        className={cn(ICON_VERB_CLASS, 'self-end aria-disabled:opacity-40')}
       >
         <SendHorizontal aria-hidden="true" className="size-4" />
       </button>

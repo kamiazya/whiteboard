@@ -387,3 +387,29 @@ it('offers neither verb on a host with no write path', async () => {
   expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
   expect(page.getByRole('button', { name: 'Edit comment' }).query()).toBeNull()
 })
+
+/**
+ * The chord is the whole reason `ReplyComposer` was extracted — its own
+ * doc comment names this as the drift it exists to end: "the card
+ * submitted on Cmd/Ctrl+Enter and the panel did not, so the same
+ * conversation answered the same chord on one surface and swallowed it on
+ * the other." Only the CARD was folded onto it; the rail kept its inline
+ * copy, so the drift the extraction was written to close is still open.
+ */
+it('sends a reply on Meta+Enter, the chord every other editing surface in the app answers', async () => {
+  const replies: { threadId: string; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onReply={(threadId, body) => replies.push({ threadId, body })}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const box = page.getByRole('textbox', { name: /reply/i })
+  await userEvent.fill(box, 'on it')
+  await userEvent.click(box)
+  await userEvent.keyboard('{Meta>}{Enter}{/Meta}')
+
+  expect(replies).toEqual([{ threadId: 't-open', body: 'on it' }])
+})
