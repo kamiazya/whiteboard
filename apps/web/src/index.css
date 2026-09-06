@@ -230,13 +230,37 @@
    * margins and nothing else.
    */
   .cm-annotation-gutter {
-    min-width: 18px;
+    min-width: 26px;
   }
+  /*
+   * The button is the PRESS AREA and the span inside it is the picture. A
+   * 12px dot is the right size beside prose and half of WCAG 2.5.8's 24x24
+   * minimum in each dimension (a quarter of its area), so the two had to stop being one
+   * element. Measured before settling on this: a `::after` overhanging the
+   * 18px gutter reaches nothing — `.cm-gutterElement` clips it, and where
+   * it did extend, the toolbar above and the content beside won the hit
+   * test. So the gutter is 26px on every pointer, which costs 8px of a
+   * column that is centred anyway.
+   *
+   * It does not make the marker reachable by itself, and saying so is the
+   * point: it still sits where a phone OS keeps its back-gesture strip. The
+   * thumb-sized path is the toolbar's Comment button, which opens the
+   * conversation the caret's paragraph already has (`annotation-scope.ts`).
+   */
   .cm-annotation-gutter-marker {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .cm-annotation-gutter-dot {
     display: block;
     width: 12px;
     height: 12px;
-    margin: 0 3px;
     border-radius: 9999px;
     border: 2px solid var(--annotation);
     background: color-mix(in oklch, var(--annotation) 20%, transparent);
@@ -244,13 +268,12 @@
     font-size: 9px;
     line-height: 8px;
     text-align: center;
-    cursor: pointer;
   }
-  .cm-annotation-gutter-marker[data-thread-status='resolved'] {
+  .cm-annotation-gutter-marker[data-thread-status='resolved'] .cm-annotation-gutter-dot {
     border-style: dotted;
     background: transparent;
   }
-  .cm-annotation-gutter-marker[data-selected='true'] {
+  .cm-annotation-gutter-marker[data-selected='true'] .cm-annotation-gutter-dot {
     background: var(--annotation);
     color: var(--background);
   }
