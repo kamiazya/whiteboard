@@ -6,7 +6,8 @@ so a symptom string can be recognised before it is investigated. One entry
 points elsewhere, and says so in the row: a test-infrastructure defect with no
 PR attached belongs beside the technique, not in the CI-flakes section.
 
-Contents: browser suites · property tests · environment · order effects.
+Contents: browser suites · property tests · measured thresholds · environment ·
+order effects.
 
 ## Browser and jsdom suites
 
@@ -30,6 +31,13 @@ Contents: browser suites · property tests · environment · order effects.
 | `Test timed out in 5000ms ... (with seed=N)` | A **timeout**, not a property failure. `@fast-check/vitest` prints the seed in the test name either way. Do not hunt a counterexample; check whether the code under it got more expensive |
 | a genuine shrunk counterexample | **Never a flake**, however random it looks. Reproduce with `withDefaults({ seed })`. A different seed passing means the generator missed the input |
 | a reachability/density guard fails intermittently | The generator is too sparse. Denser domain plus a measured floor — never a pinned seed, never fewer assertions |
+
+## Measured thresholds
+
+| What you see | Verdict |
+|---|---|
+| the two numbers in the message are EQUAL (`expected 50.1 to be less than 50.1`) | The threshold was computed from the same run and the fixture is sitting on its boundary. Not a re-run — find the fixture dimension the ratio divides by, and floor it |
+| a measurement assertion that only fails on the SLOWER runner | A growth loop stopping on elapsed alone: the slow machine settles for a smaller fixture, which makes the assertion stricter. Both fixes and the worked pair: `testing-techniques/resources/stability-checks.md` |
 
 ## Environment
 

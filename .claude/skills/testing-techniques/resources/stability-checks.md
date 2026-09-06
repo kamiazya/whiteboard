@@ -46,6 +46,45 @@ that run is never the isolated one.
 - Before publishing a cause, a "not a regression", or a by-hand verification: the
   `diagnosis-evidence` skill — choose an observation that could REFUTE the claim.
 
+## A threshold taken from the same run
+
+`expect(measured.a).toBeLessThan(measured.b * k)` is the shape, and it hides a
+fixture dimension whenever the yields it is about happen ONCE PER ITEM. The
+worked pair, both in `mcp-server/src/server/store/`:
+
+|  | yields per pass | real `worst/elapsed` | `worst/elapsed` with the yield removed |
+|---|---|---|---|
+| `workspace-tail-loop-availability` | one per workspace, so N | ~2.4/N | 1.0 |
+| `file-gc-loop-availability` | many per document | 0.052-0.058 | 0.96 |
+
+The second is genuinely scale-free: measured 0.056 at two documents and 0.058
+at six, against a bound of 0.5. The first is not. `worst/elapsed` there is
+`worst/mean ÷ N`, so a fixed bound of 0.5 reads `worst/mean < N/2` — **six on
+this machine and two on CI, from a quantity that measures 2.09-3.32 on both.**
+It failed on main at `expected 50.1 to be less than 50.1`, at the LOWEST
+worst/mean ever recorded for it.
+
+Two things follow, and the second is the one that is easy to miss:
+
+- **Divide by the dimension the fixture grows**, when the effect is per-item.
+  `loopTurnShare` is the same move already made for sample counts; there is no
+  shared helper for the stall ratio because the two sites above genuinely want
+  different denominators, and one that forced a denominator on `file-gc` would
+  break its mutation check (`worst/mean` there is ~1, well under any usable
+  bound).
+- **A growth loop that stops on ELAPSED alone lets machine speed pick the
+  fixture size**, and a slower machine settles for a smaller one — so the
+  assertion is STRICTER on the runner that is worse at satisfying it. CI
+  reached 50ms on four workspaces at ~25ms each where this machine needed
+  twelve at ~8.5ms. Floor the count as well as the duration, and assert the
+  floor was reached.
+
+Pick the bound so it sits between the real distribution and the value the
+mutation produces, and say both numbers beside it. When no such number exists
+— at four workspaces the mutation value is 4 and the real one is 2-3.3 — the
+fixture is too small for the measurement to mean anything, and no phrasing of
+the assertion fixes that.
+
 ## When it is a flake
 
 - **A flake is only a flake once.** One `gh run rerun --failed` on a known shape; the SECOND

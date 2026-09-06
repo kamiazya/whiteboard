@@ -33,6 +33,8 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
 10. A title is an identifier: behaviour, not chronology or a count/ordinal of something that grows; unique in its `describe`.
 11. Wait for a condition (`vi.waitFor`, `expect.poll`, fake timers), never for time; the sleep ledger only goes down.
 12. Before pushing: five fresh-process runs of the file, then one inside its whole project.
+13. A threshold computed from the run divides by the dimension the fixture grows, and the
+    growth loop floors that dimension — otherwise the slower machine gets the stricter test.
 
 Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —

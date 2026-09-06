@@ -51,6 +51,24 @@ function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
 const MIN_PASS_MS = 50
 
 /**
+ * And enough workspaces for the answer to be an answer.
+ *
+ * `worstStallMs` without the yield is the WHOLE pass, so what the assertion
+ * below has to separate is `worst/mean` against the real distribution from
+ * `worst/mean` against the workspace count. Those are 2.09-3.32 and N, and at
+ * N=4 there is no number between them — the measurement cannot tell a yielding
+ * pass from a blocking one however it is phrased. Twelve is the first fixture
+ * round that leaves room for one.
+ *
+ * A floor on the COUNT rather than on elapsed alone, because which round the
+ * growth loop stops at is decided by how slow the machine is: CI reached 50ms
+ * of elapsed on round 0's four workspaces at ~25ms each, where this machine
+ * needs twelve at ~8.5ms. The slower the runner, the smaller the fixture it
+ * settles for, and the smaller the fixture the less the measurement means.
+ */
+const MIN_WORKSPACES = 12
+
+/**
  * What the workspace tail costs the loop that is serving requests, which is
  * the answer `background-work.ts` declares for it.
  *
@@ -85,7 +103,10 @@ const MIN_PASS_MS = 50
  *
  * A ratio rather than a duration, for the reason `snapshot-blocking.test.ts`
  * gives: "the loop keeps getting turns" is stable across machines in a way a
- * millisecond figure is not.
+ * millisecond figure is not. Which ratio matters, though — see
+ * `MIN_WORKSPACES` and the stall assertion. The stable quantity is the worst
+ * stall over ONE workspace's catch-up; the same number over the whole pass
+ * carries the workspace count inside it and only looks scale-free.
  */
 describe('a workspace-tail pass', () => {
   it('keeps handing the event loop back between workspaces', async () => {
@@ -136,14 +157,14 @@ describe('a workspace-tail pass', () => {
 
       availability = (await measureLoopAvailability(() => tail.pollOnce(), { intervalMs: 5 }))
         .availability
-      if (availability.elapsedMs > MIN_PASS_MS) break
+      if (availability.elapsedMs > MIN_PASS_MS && subscribed.length >= MIN_WORKSPACES) break
     }
 
     // Reached, not assumed — and the pass really caught something up rather
     // than baselining past every workspace.
     expect(availability.elapsedMs).toBeGreaterThan(MIN_PASS_MS)
     expect(emitted).toBeGreaterThan(0)
-    expect(subscribed.length).toBeGreaterThanOrEqual(4)
+    expect(subscribed.length).toBeGreaterThanOrEqual(MIN_WORKSPACES)
 
     // A SHARE of the ticks the sampler asked for, not a count — the scale-free
     // form `loopTurnShare` exists for, and the one both loop-availability
@@ -164,7 +185,22 @@ describe('a workspace-tail pass', () => {
     // each workspace's catch-up dearer and proportionally fewer ticks land —
     // one more way that fixture flattered the picture.
     expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
-    expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
+
+    // The worst stall is a small multiple of ONE workspace's catch-up rather
+    // than the pass, which is the whole of what the yield buys. Measured
+    // worst/mean: 2.09-3.32 over five runs here at twelve workspaces, and
+    // 2.00 on the CI run below. Without the yield it is N, because the pass is
+    // one unbroken stall — so 8 sits 2.4x above the real distribution and 1.5x
+    // below the mutation at the floor `MIN_WORKSPACES` sets.
+    //
+    // This was `worstStallMs < elapsedMs * 0.5`, which is this assertion with
+    // the workspace count folded invisibly into the constant: at N workspaces
+    // it reads `worst/mean < N/2`, so it demanded 6 on this machine and 2 on
+    // CI, from a quantity that measures 2.09-3.32 on both. It failed on main
+    // at `expected 50.1 to be less than 50.1` — worst/mean 2.00, the LOWEST
+    // value ever recorded for it, at four workspaces.
+    const meanWorkspaceStallMs = availability.elapsedMs / subscribed.length
+    expect(availability.worstStallMs).toBeLessThan(meanWorkspaceStallMs * 8)
 
     // The declaration, checked rather than written down. `background-work.ts`
     // publishes what this worker may cost the serving loop, and before this
