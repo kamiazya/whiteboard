@@ -83,6 +83,7 @@ const buildArgs = isGitHubActions
       '.',
     ]
 
+const buildStartedAt = Date.now()
 const buildResult = spawnSync('docker', buildArgs, {
   cwd: REPO_ROOT,
   encoding: 'utf-8',
@@ -98,8 +99,12 @@ if (buildResult.status !== 0 || buildResult.error) {
 
 // The build succeeded, so report what the cache did. `--progress=plain` is
 // already on both build paths above; buildx writes it to stderr.
+// Wall clock, kept apart from the summed step time: BuildKit runs steps in
+// parallel, so the sum is the total WORK and this is the wait. Measured on the
+// first real report, 214.4s of step time inside a 200s build.
+const elapsedSeconds = Number(((Date.now() - buildStartedAt) / 1000).toFixed(1))
 const cacheReport = parseBuildxProgress(buildResult.stderr ?? '')
-for (const line of formatCacheReport(cacheReport)) {
+for (const line of formatCacheReport(cacheReport, { elapsedSeconds })) {
   process.stderr.write(`${line}\n`)
 }
 // The raw output stays available for the case the report cannot explain, but
@@ -136,7 +141,7 @@ const metadata = {
   // Full report, step names included: this file is an artifact of the same run
   // whose log already names them, and trending the slowest steps across runs is
   // what turns "the build is slow" into a specific layer.
-  cache: cacheReport,
+  cache: { ...cacheReport, elapsedSeconds },
 }
 writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metadata, null, 2))
 
@@ -158,7 +163,8 @@ process.stdout.write(
         cachedCount: cacheReport.cachedCount,
         ranCount: cacheReport.ranCount,
         cacheHitRatio: cacheReport.cacheHitRatio,
-        ranSeconds: cacheReport.ranSeconds,
+        executedStepSeconds: cacheReport.executedStepSeconds,
+        elapsedSeconds,
       },
       sbomStatus: 'deferred',
       signingStatus: 'deferred',

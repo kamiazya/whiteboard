@@ -29,7 +29,7 @@ interface CacheReport {
   cachedCount: number
   ranCount: number
   cacheHitRatio: number | null
-  ranSeconds: number
+  executedStepSeconds: number
   slowest: BuildStep[]
 }
 
@@ -37,7 +37,7 @@ const { parseBuildxProgress, formatCacheReport } = (await import(
   join(__dirname, 'buildx-progress.mjs')
 )) as {
   parseBuildxProgress: (output: unknown) => CacheReport
-  formatCacheReport: (report: CacheReport) => string[]
+  formatCacheReport: (report: CacheReport, timing?: { elapsedSeconds?: number }) => string[]
 }
 
 // The shape `docker buildx build --progress=plain` writes to stderr. Both
@@ -98,9 +98,29 @@ describe('the buildx cache report', () => {
 
   it('sums the seconds of everything that ran, overhead included', () => {
     // A cached step has no duration to add. Overhead does, and it is counted:
-    // the number has to account for the build's wall clock, not just its
-    // layers, or the report cannot explain where 198s went.
-    expect(parseBuildxProgress(PLAIN_OUTPUT).ranSeconds).toBeCloseTo(150.1, 1)
+    // the number has to account for where the build's time went, not just its
+    // layers.
+    expect(parseBuildxProgress(PLAIN_OUTPUT).executedStepSeconds).toBeCloseTo(150.1, 1)
+  })
+
+  it('calls the sum step TIME, never elapsed time', () => {
+    // BuildKit runs steps in parallel, so the sum is total WORK and can exceed
+    // the time anyone waited. Measured on this job's first real report: 214.4s
+    // of step time inside a 200s build. Publishing the sum under a name that
+    // reads like elapsed would overstate every run, in the one number the
+    // report exists to trend — so elapsed is passed in, from a clock the
+    // parser cannot see.
+    const report = parseBuildxProgress(PLAIN_OUTPUT)
+    expect(report).not.toHaveProperty('elapsedSeconds')
+    const withElapsed = formatCacheReport(report, { elapsedSeconds: 121.5 }).join(' ')
+    expect(withElapsed).toContain('121.5s elapsed')
+    expect(withElapsed).toContain('150.1s of step time')
+  })
+
+  it('says only what it measured when no clock was passed', () => {
+    const line = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join(' ')
+    expect(line).not.toContain('elapsed')
+    expect(line).toContain('150.1s of step time')
   })
 
   it('names the slowest steps, worst first', () => {
@@ -143,6 +163,6 @@ describe('the buildx cache report', () => {
   it('says how many steps it saw when it did read the output', () => {
     const lines = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join(' ')
     expect(lines).toContain('2/4 layers CACHED (50%)')
-    expect(lines).toContain('4 of 6 steps ran, 150.1s total')
+    expect(lines).toContain('4 of 6 steps ran, 150.1s of step time')
   })
 })

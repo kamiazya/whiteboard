@@ -24,7 +24,7 @@
  *   cachedCount: number,
  *   ranCount: number,
  *   cacheHitRatio: number | null,
- *   ranSeconds: number,
+ *   executedStepSeconds: number,
  *   slowest: BuildStep[],
  * }} CacheReport
  */
@@ -100,7 +100,7 @@ export function parseBuildxProgress(output) {
       cachedCount: 0,
       ranCount: 0,
       cacheHitRatio: null,
-      ranSeconds: 0,
+      executedStepSeconds: 0,
       slowest: [],
     }
   }
@@ -110,7 +110,7 @@ export function parseBuildxProgress(output) {
   // Seconds are summed over EVERYTHING that ran, layer or not, so the number
   // still accounts for the build's wall clock rather than only part of it.
   const ran = resolved.filter((s) => !s.cached)
-  const ranSeconds = ran.reduce((sum, s) => sum + (s.seconds ?? 0), 0)
+  const executedStepSeconds = ran.reduce((sum, s) => sum + (s.seconds ?? 0), 0)
   return {
     parsed: true,
     steps: resolved,
@@ -119,13 +119,25 @@ export function parseBuildxProgress(output) {
     cachedCount,
     ranCount: ran.length,
     cacheHitRatio: layers.length === 0 ? null : Number((cachedCount / layers.length).toFixed(3)),
-    ranSeconds: Number(ranSeconds.toFixed(1)),
+    executedStepSeconds: Number(executedStepSeconds.toFixed(1)),
     slowest: [...ran].sort((a, b) => (b.seconds ?? 0) - (a.seconds ?? 0)).slice(0, 5),
   }
 }
 
-/** The report as lines a reader can scan in a CI log. */
-export function formatCacheReport(report) {
+/**
+ * The report as lines a reader can scan in a CI log.
+ *
+ * `elapsedSeconds` is passed in because the parser cannot know it: BuildKit
+ * runs steps in PARALLEL, so summing their durations is the total WORK, not
+ * the time anyone waited. Measured on this job's first real report, the two
+ * differ by more than rounding — 214.4s of step time inside a 200s step — so
+ * publishing the sum under a name that reads like elapsed time would overstate
+ * the build every run, in the one number the whole report exists to trend.
+ *
+ * @param {CacheReport} report
+ * @param {{ elapsedSeconds?: number }} [timing]
+ */
+export function formatCacheReport(report, timing = {}) {
   if (!report.parsed) {
     return [
       '[publish-dry-run:docker] cache report UNAVAILABLE: no buildx step lines were parsed.',
@@ -137,9 +149,14 @@ export function formatCacheReport(report) {
     report.cacheHitRatio === null
       ? 'no Dockerfile layer seen'
       : `${report.cachedCount}/${report.layerCount} layers CACHED (${Math.round(report.cacheHitRatio * 100)}%)`
+  const elapsed =
+    typeof timing.elapsedSeconds === 'number'
+      ? `${timing.elapsedSeconds.toFixed(1)}s elapsed, `
+      : ''
   const lines = [
     `[publish-dry-run:docker] cache report: ${ratio}; ` +
-      `${report.ranCount} of ${report.stepCount} steps ran, ${report.ranSeconds}s total`,
+      `${report.ranCount} of ${report.stepCount} steps ran, ` +
+      `${elapsed}${report.executedStepSeconds}s of step time`,
   ]
   for (const step of report.slowest) {
     lines.push(`  ${String(step.seconds ?? 0).padStart(7)}s  ${step.name}`)
