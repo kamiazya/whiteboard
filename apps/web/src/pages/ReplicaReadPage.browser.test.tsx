@@ -33,6 +33,8 @@ claimIsolatedWhiteboardDb('replica-read-page')
 const DAEMON_WS = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
 const DOC_MD = '01ARZ3NDEKTSV4RRFFQ69G5FB1'
 const DOC_SP = '01ARZ3NDEKTSV4RRFFQ69G5FB2'
+const DOC_LINKER = '01ARZ3NDEKTSV4RRFFQ69G5FB3'
+const DOC_EMBEDDER = '01ARZ3NDEKTSV4RRFFQ69G5FB4'
 const SYNCED = '2026-09-01T12:00:00.000Z'
 
 async function seedReplica(): Promise<void> {
@@ -46,6 +48,34 @@ async function seedReplica(): Promise<void> {
   createWorkspaceDocumentAtPath(record, { path: 'sketch', documentId: DOC_SP, kind: 'spatial' })
   writeSpatialCanvas(documentContainers(record, DOC_SP), {
     nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 120, height: 40, text: 'cached node' }],
+    edges: [],
+  })
+  // Two documents that POINT at `notes/plan`: one a markdown body with a
+  // wiki link, one a canvas whose text node embeds it. The replica record
+  // holds every document, so both are resolvable entirely offline.
+  createWorkspaceDocumentAtPath(record, {
+    path: 'notes/linker',
+    documentId: DOC_LINKER,
+    kind: 'markdown',
+  })
+  writeMarkdownBody(documentContainers(record, DOC_LINKER), '# Linker\n\n[[notes/plan]]')
+  createWorkspaceDocumentAtPath(record, {
+    path: 'embedder',
+    documentId: DOC_EMBEDDER,
+    kind: 'spatial',
+  })
+  writeSpatialCanvas(documentContainers(record, DOC_EMBEDDER), {
+    nodes: [
+      {
+        id: 'e1',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 220,
+        text: 'See:\n\n![[notes/plan]]',
+      },
+    ],
     edges: [],
   })
   record.commit()
@@ -155,6 +185,36 @@ describe('ReplicaReadPage', () => {
     await screen.findAllByText(/Hello from the cache/)
     const after = (await new BrowserWorkspaceDocs().open(DAEMON_WS))!.oplogVersion().encode()
     expect(Array.from(after)).toEqual(Array.from(before))
+  })
+
+  it('resolves a wiki link from the replica record alone, with no daemon to ask', async () => {
+    // The replica holds every document in the workspace, so a reference is
+    // answerable offline — the alias table from its own entries, the body
+    // from its own containers. Without seams the editor draws the literal
+    // brackets, which is what the reader sees on the one page that exists
+    // BECAUSE the keeper is unreachable.
+    await seedReplica()
+    render(<ReplicaReadPage workspaceId={DAEMON_WS} syncedAt={SYNCED} />)
+    await userEvent.click(await screen.findByText('linker'))
+
+    await vi.waitFor(() => {
+      const anchor = document.querySelector(`a[href="${DOC_MD}"]`)
+      if (anchor === null) throw new Error('the wiki link did not resolve to the document')
+      return anchor
+    })
+  })
+
+  it("draws an embedded note inside a canvas text node, from the replica's own copy", async () => {
+    await seedReplica()
+    render(<ReplicaReadPage workspaceId={DAEMON_WS} syncedAt={SYNCED} />)
+    await userEvent.click(await screen.findByText('embedder'))
+
+    await vi.waitFor(() => {
+      const drawn = [...document.querySelectorAll('svg text')]
+        .map((node) => node.textContent ?? '')
+        .join(' ')
+      expect(drawn).toContain('Hello from the cache')
+    })
   })
 
   it('a markdown edit persists to the replica record, and files no index row', async () => {
