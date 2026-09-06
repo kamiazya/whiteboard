@@ -47,6 +47,7 @@ export function CommentsRailAside({
           onComposeDocument={writable ? () => rail.composeThread({ kind: 'document' }) : undefined}
           onResolve={writable ? rail.resolve : undefined}
           onEditMessage={writable ? rail.editMessage : undefined}
+          onReturnFocus={rail.returnFocus}
         />
       </div>
     </InspectorPanel>

@@ -438,6 +438,13 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
    * where its outline is drawn and where its pin stands.
    */
   readonly regionsByThread: ReadonlyMap<string, RegionChrome>
+  /**
+   * How many messages each conversation holds, by thread id — the fact the
+   * pin draws. From `threads`, because the flat `comments` projection
+   * carries one text and cannot know; absent for a caller that passes none,
+   * which then gets the pin it always got.
+   */
+  readonly messagesByThread: ReadonlyMap<string, number>
   /** The contribution set actually in force, defaulted once at the entry
    *  point so no inner function repeats the `?? [visual]`. */
   readonly contributions: readonly RenderContribution[]
@@ -1341,6 +1348,7 @@ export function layoutSpatialCanvasWithAnchors(
     ...resolved,
     passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
     regionsByThread: regionsOf(options.threads ?? [], canvas),
+    messagesByThread: new Map((options.threads ?? []).map((t) => [t.id, t.messages.length])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1378,6 +1386,7 @@ export function naturalNodeContentSize(
     // extent beyond the words it sits under, so none is composed here.
     passagesByNode: new Map(),
     regionsByThread: new Map(),
+    messagesByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1525,6 +1534,13 @@ function layoutSpatialCanvasInternal(
 
 /** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
 export const COMMENT_PIN_SIZE_PX = 20
+
+/**
+ * The digits on a pin. Sized to sit inside the 20px pin with its 2px ring
+ * and still read — the same relation the source pane's 12px gutter dot has
+ * to its 9px count.
+ */
+export const COMMENT_PIN_COUNT_FONT_PX = 10
 export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
 
 const COMMENT_TEXT_MAX_WIDTH_PX = 200
@@ -1728,6 +1744,38 @@ function composeComments(
       radius: COMMENT_PIN_SIZE_PX / 2,
       ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
     })
+
+    const count = options.messagesByThread.get(comment.id) ?? 1
+    if (count > 1) {
+      // Past one only, the same rule the rail's row, the source pane's
+      // gutter and the preview marker follow: a digit beside every lone
+      // remark is noise, and the number only says something once there is
+      // more than one.
+      const countAppearance =
+        comment.resolved === true ? chrome?.resolvedOverlay?.pinCount : chrome?.pinCount
+      const text = String(count)
+      // Family from the resolver and size from geometry, the same split the
+      // edge label makes: this package assigns paint, never invents it, and
+      // a size is geometry rather than paint.
+      const metrics = options.measure(text, {
+        family: countAppearance?.fontFamily ?? 'sans-serif',
+        fallbackChain: [],
+        weight: 400,
+        style: 'normal',
+        sizePx: COMMENT_PIN_COUNT_FONT_PX,
+      })
+      const w = metrics.advanceWidth
+      const h = metrics.ascent + metrics.descent
+      out.push({
+        kind: 'textRun',
+        bbox: { x: anchor.x - w / 2, y: anchor.y - h / 2, w, h },
+        baseline: metrics.ascent,
+        text,
+        ...(countAppearance === undefined
+          ? {}
+          : { appearance: { ...countAppearance, fontSize: COMMENT_PIN_COUNT_FONT_PX } }),
+      })
+    }
 
     out.push({
       kind: 'shape',
@@ -2005,6 +2053,7 @@ export function layoutSpatialEdges(
     ...resolveContributions(options),
     passagesByNode: new Map(),
     regionsByThread: new Map(),
+    messagesByThread: new Map(),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,

@@ -105,12 +105,27 @@ interface AnnotationState {
   readonly marks: DecorationSet
 }
 
+/**
+ * What the marker beside a line says out loud. Two independent facts, and a
+ * reader wants whichever applies: how much is in the conversation a press
+ * will open, and whether that line carries more than one.
+ */
+function gutterLabel(messages: number, threads: number): string {
+  if (messages > 1 && threads > 1) {
+    return `A conversation of ${messages} messages, one of ${threads} on this line`
+  }
+  if (messages > 1) return `A conversation of ${messages} messages`
+  if (threads > 1) return `${threads} conversations on this line`
+  return 'A conversation on this line'
+}
+
 class ThreadGutterMarker extends GutterMarker {
   constructor(
     private readonly threadId: string,
     private readonly status: CommentThreadStatus,
     private readonly selected: boolean,
-    private readonly count: number,
+    private readonly messages: number,
+    private readonly threads: number,
   ) {
     super()
   }
@@ -120,7 +135,8 @@ class ThreadGutterMarker extends GutterMarker {
       other.threadId === this.threadId &&
       other.status === this.status &&
       other.selected === this.selected &&
-      other.count === this.count
+      other.messages === this.messages &&
+      other.threads === this.threads
     )
   }
 
@@ -131,23 +147,26 @@ class ThreadGutterMarker extends GutterMarker {
     dot.dataset.threadId = this.threadId
     if (this.status === 'resolved') dot.dataset.threadStatus = 'resolved'
     if (this.selected) dot.dataset.selected = 'true'
-    // The count is the whole reason this is a label and not a bare dot: two
-    // conversations about the same line are one marker, and a reader who is
-    // not told so would think the second one had vanished.
+    // The one digit this dot can hold belongs to the CONVERSATION, not to
+    // the line: a reader scanning a body is deciding whether to open this
+    // one, and "four messages" answers that where "two conversations here"
+    // does not. The line's own count is the rarer fact and keeps its own
+    // channel — `data-threads` for the stacked ring, and the label for
+    // anyone who cannot see it — so the second conversation is still never
+    // silently dropped.
+    //
     // The dot is an INNER element and the button is the press area. A 12px
     // dot is right beside prose and half of WCAG 2.5.8's 24x24 minimum in
     // each dimension, a quarter of its area; growing the button keeps the picture and
     // fixes the target. Measured first: a `::after` overhanging an 18px
     // gutter did not work — `.cm-gutterElement` clips it, and where it did
     // reach, the toolbar above and the content beside it won the hit test.
+    if (this.threads > 1) dot.dataset.threads = String(this.threads)
     const inner = document.createElement('span')
     inner.className = 'cm-annotation-gutter-dot'
-    inner.textContent = this.count > 1 ? String(this.count) : ''
+    inner.textContent = this.messages > 1 ? String(this.messages) : ''
     dot.append(inner)
-    dot.setAttribute(
-      'aria-label',
-      this.count > 1 ? `${this.count} conversations on this line` : 'A conversation on this line',
-    )
+    dot.setAttribute('aria-label', gutterLabel(this.messages, this.threads))
     return dot
   }
 }
@@ -224,7 +243,11 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
       markers: (view) => {
         const { placed } = view.state.field(annotationField)
         if (placed.length === 0) return RangeSet.empty
-        const { selectedThreadId } = view.state.field(annotationField).projection
+        const { selectedThreadId, threads } = view.state.field(annotationField).projection
+        // Read from the projection rather than carried on `PlacedThread`:
+        // placement is about WHERE a passage is, and how many messages it
+        // holds is not a property of that.
+        const messageCounts = new Map(threads.map((one) => [one.id, one.messages.length]))
         const perLine = new Map<number, PlacedThread[]>()
         for (const one of placed) {
           const lineStart = view.state.doc.lineAt(one.from).from
@@ -247,6 +270,7 @@ export function annotationDecorations(handlers: AnnotationHandlers = {}): Extens
               lead.threadId,
               lead.status,
               lead.threadId === selectedThreadId,
+              messageCounts.get(lead.threadId) ?? 1,
               bucket.length,
             ),
           )

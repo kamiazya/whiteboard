@@ -379,6 +379,8 @@ const DOCUMENT_PAGE_HOOK_STATE: Record<string, ScopeCoverage> = {
   writeRef: 'no subject: mirrors the keeper-specific write door, reassigned every render',
   threadsRef:
     'no subject: mirrors the threads the rail already holds, reassigned every render — an edit reads it to rebuild the message it rewrites, and the list it mirrors is republished per document',
+  returnTargetRef:
+    'no subject: the surface a conversation was opened FROM, rewritten by the next reveal and read only by Escape while that conversation is showing — a switch clears selectedThreadId and composeAnchor above, so nothing is left to return from',
 }
 
 const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {

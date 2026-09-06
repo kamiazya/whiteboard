@@ -78,6 +78,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
+      # One shard failing must not cancel its siblings: a cancelled job is not
+      # a failed one, so "Re-run failed jobs" never revives it and the run can
+      # never reach green again. See ci-policy.test.ts for the measurement.
+      fail-fast: false
       matrix:
         shard: [1, 2]
     steps:
@@ -138,6 +142,10 @@ jobs:
     # have retired the `whiteboard-web test` marker that ci-verify-coverage
     # and vitest-projects.mjs both key on.
     strategy:
+      # One shard failing must not cancel its siblings: a cancelled job is not
+      # a failed one, so "Re-run failed jobs" never revives it and the run can
+      # never reach green again. See ci-policy.test.ts for the measurement.
+      fail-fast: false
       matrix:
         shard: [1, 2]
     steps:
@@ -162,6 +170,10 @@ jobs:
     # locally that the shards partition exactly: 69+69 of 138 files,
     # 410+342 of 752 tests, no overlap and no loss.
     strategy:
+      # One shard failing must not cancel its siblings: a cancelled job is not
+      # a failed one, so "Re-run failed jobs" never revives it and the run can
+      # never reach green again. See ci-policy.test.ts for the measurement.
+      fail-fast: false
       matrix:
         shard: [1, 2]
     env:

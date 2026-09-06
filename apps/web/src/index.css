@@ -277,6 +277,107 @@
     background: var(--annotation);
     color: var(--background);
   }
+  /*
+   * A line carrying more than one conversation, drawn as a second dot
+   * behind the first. The dot's own digit belongs to the conversation a
+   * press opens, so the line's count needs a channel of its own that does
+   * not compete for those 12px — and the reader still has to be told, or
+   * they would think the second conversation had vanished. The label says
+   * it in words for anyone who cannot see the stack.
+   */
+  .cm-annotation-gutter-marker[data-threads] {
+    position: relative;
+  }
+  .cm-annotation-gutter-marker[data-threads]::before {
+    content: '';
+    position: absolute;
+    width: 12px;
+    height: 12px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: var(--background);
+    /* Behind and up-left of the dot the press opens, so both read as one
+       object seen edge-on rather than as two markers on one line. */
+    transform: translate(-3px, -3px);
+    opacity: 0.55;
+  }
+
+  /*
+   * Resolving a conversation MOVES it rather than making it disappear.
+   *
+   * The subject of the transition is the ROW, not the marker beside it.
+   * Measured in a real browser: a version that crossed only the dot showed
+   * the row already fully muted with its verb already flipped at 130ms,
+   * while a 12px dot in the corner was still animating — every duration
+   * running correctly, and indistinguishable from no animation at all.
+   *
+   * Colour, which DESIGN.md's motion rule allows exactly here: the colour
+   * IS the state, and these are chrome-sized elements. Everything that
+   * MOVES below is transform and opacity only.
+   */
+  li[data-thread-id] .annotation-dot,
+  li[data-thread-id] .comment-row-subject,
+  li[data-thread-id] .comment-row-meta {
+    transition:
+      color var(--motion-duration-normal) var(--motion-ease-out),
+      border-color var(--motion-duration-normal) var(--motion-ease-out),
+      background-color var(--motion-duration-normal) var(--motion-ease-out);
+  }
+  /*
+   * The row that no longer belongs in this list, after its beat. It fades
+   * and slides a little way out; the rows below it glide into the gap by
+   * transform (the FLIP in CommentsPanel), so the list never animates its
+   * own height. `both` holds the end state until React removes the node.
+   */
+  @keyframes comment-row-leave {
+    to {
+      opacity: 0;
+      transform: translateX(-8px);
+    }
+  }
+  .comment-row-leaving {
+    animation: comment-row-leave var(--motion-duration-normal) var(--motion-ease-out) 200ms both;
+  }
+
+  /*
+   * The annotation layer's status dot, wherever a conversation is listed.
+   * Amber ring while the conversation is open, muted and dotted once it is
+   * resolved — the same picture the source pane's gutter draws, so a reader
+   * meets one shape for "somebody is talking about this" on every surface.
+   * (The gutter keeps its own 12px copy in `.cm-annotation-gutter-dot`
+   * because a CodeMirror marker builds its DOM by hand; the two should
+   * become one class next time either is touched.)
+   *
+   * The check inside is the AFFORDANCE, not decoration: this dot is the
+   * Resolve toggle, so hovering or focusing its button previews what the
+   * press does, and a resolved conversation keeps it shown.
+   */
+  .annotation-dot {
+    display: grid;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    border: 2px solid var(--annotation);
+    background: color-mix(in oklch, var(--annotation) 20%, transparent);
+    color: var(--annotation);
+  }
+  .annotation-dot[data-status='resolved'] {
+    border-color: var(--muted-foreground);
+    border-style: dotted;
+    background: transparent;
+    color: var(--muted-foreground);
+  }
+  .annotation-dot > svg {
+    width: 10px;
+    height: 10px;
+    opacity: 0;
+  }
+  .annotation-dot[data-status='resolved'] > svg,
+  button:hover > .annotation-dot > svg,
+  button:focus-visible > .annotation-dot > svg {
+    opacity: 1;
+  }
 
   /*
    * Chromium repaints an SVG <a>'s fill with its UA :visited color, and in

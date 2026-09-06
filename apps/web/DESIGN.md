@@ -692,6 +692,201 @@ content beside win the hit test where it does extend). But a caret in the
 paragraph plus a toolbar button is the path with a target the size of the
 paragraph, and that is the one a thumb takes.
 
+**Four places measure their origin from the preview document's SVG, and
+they ask for it through one definition.** `previewDocumentSvg` exists
+because a bare `querySelector('svg')` inside the preview column answers with
+a comment MARKER's icon the moment a document has a conversation on it — the
+markers live in that column, each carries one, and they render before the
+pane. The marker placement was therefore reading its own previous output as
+its origin.
+
+Measured before it was named: markers stood a constant **+62px** below the
+blocks they quote — identical for the first block and the last, which is
+what ruled out a scale error and a stale-anchors error and left a pure
+translation. The query returned `viewBox="0 0 24 24"`, and the `svgTop` it
+produced was **165** where the document's is **32**. The residual after the
+fix is 5px, which is a `<text>`'s box starting at the cap height.
+
+The other three call sites had the same defect and nobody had reported it:
+the scroll sync, the seek, and the minimap rail's viewport box were all
+wrong on any document with a comment. Scoped by the pane's own class rather
+than by DOM order, so the next element added to this column cannot bring it
+back, and a source scan in `preview-marker-placement.browser.test.ts`
+refuses a bare query returning.
+
+**Resolving a conversation MOVES it, rather than making it disappear.** The
+row crosses to the resolved look, holds 200ms so the change can be read,
+then fades and slides out while the rows below glide into the gap by
+transform (FLIP in `CommentsPanel`, so the list never animates its own
+height). Durations are the motion tokens; the hold is the one number that
+is not a token yet, because there is none for "long enough to read a state
+change".
+
+**The subject of the transition is the ROW, and that was measured rather
+than chosen.** The first version crossed the marker and let everything else
+cut; frames from a real browser at 130ms showed the row already fully muted
+with its verb already reading "Reopen" while a 12px dot in the corner was
+still animating. Every duration ran correctly and the result was
+indistinguishable from no animation at all. A word swapping is a hard cut
+no easing can soften, so the verb's LABEL waits for the crossing to finish
+and never swaps at all on a row that is leaving.
+
+Two things the beat must not do, both of which it would do naively:
+
+- **It must not delay the WRITE.** `onResolve` fires on the press, so a peer
+  sees the change at once and a reader who navigates away mid-beat loses
+  nothing. Only the presentation waits.
+- **It must not show the OLD state while it waits.** The status arrives from
+  the host a render later, so the panel holds the status it just asked for
+  (`pending`) and the row wears that. Measured: with a host that had not
+  answered yet, the held row still read `open` — a beat spent showing
+  nothing, which is the cut with a pause in front of it.
+
+Not collapsed under `prefers-reduced-motion`, deliberately: the global floor
+in `index.css` already flattens the movement, and a reader who asked for
+less motion still has to see what their press did.
+
+**The canvas PIN's transition is not in this, and the reason took two
+corrections to get right.** The first answer — that it could live in the web
+app without touching the renderer — was wrong. The second, that
+`canvas-render` emits no handle for a scene node, was also wrong: that was
+true of the plain serializer, and both the editor and the preview mount the
+KEYED projection, whose groups are `<g data-wb-key="…">` keyed by the scene
+node's own id. The pin IS selectable, as `[data-wb-key$="/pin"]`.
+
+What actually blocks it is `keyed-svg-patcher`: a group whose bytes change
+is REPLACED, which is the continuity break it already animates position
+across. A resolve changes the pin's appearance, so the element is swapped
+and a CSS transition on it never runs. Cross-fading a replaced group is a
+change to machinery every canvas node and the markdown preview share, so it
+is its own increment rather than a rider on this one.
+
+**The rail's verbs are icon-first, and the status dot IS the Resolve
+toggle.** "Object-action surfaces are icon-first" below was written, the
+canvas card followed it (`CardAction`), and the rail never got held to it:
+the SAME four verbs drew icon-only there and icon + label here. Nothing was
+red, because the parity matrix checks which capabilities a surface has and
+not how it draws them.
+
+Two halves ship together and the second is the load-bearing one. Measured,
+today's verb was `71×22` — under WCAG 2.5.8's 24 in the dimension a thumb
+needs — so dropping the labels while keeping `px-1.5 py-0.5` would have
+taken the width the label was giving the target and given nothing back.
+`ICON_VERB_CLASS` is 44px, and a test asserts the computed box rather than
+the class. The labels also cost the subject a line: the same excerpt wraps
+to three beside them and two without.
+
+The dot merging with the verb is the further step, and it pays twice: the
+rail row had NO status indicator at all before, and the state and the verb
+being one object is what puts the resolve transition under the finger that
+caused it. It cost a restructure — the row was a `<button aria-expanded>`
+and a button inside a button is invalid, so the row is now an `<li>`
+holding the dot-toggle and the subject toggle as siblings. The subject
+toggle stays the row's heading, so the focus contract above is unchanged.
+
+Three carve-outs, each with a reason the rule itself gives:
+
+- **Submit is inert before it is pressed, not just guarded after.** The
+  rule's rationale is that a misfire is one Undo away; Resolve, Reopen and
+  Edit each are, and **a sent comment is not**. The submit stays guarded in
+  the handler (so the Meta+Enter path takes the same rule) and adds
+  `aria-disabled` while the draft is empty — with no label to read, a press
+  that does nothing has to say why beforehand. The driver refuses to click
+  an `aria-disabled` control, which is the state reading correctly and also
+  why the tests exercise the guard through a raw `.click()`.
+- **A submit is named for what it sends, not for the field.** `Reply` on
+  both the box and its button made `getByLabelText('Reply')` ambiguous and
+  broke ten tests at once — a collision a reader hits too. `Send reply` /
+  `Send comment`.
+- **Cancel is not an object verb and is gone.** An X there is the third
+  meaning of that glyph in one panel. Escape carries it: an edit first,
+  then a compose draft — and cancelling a compose returns focus too, since
+  the draft box is what focus was moved to.
+
+**A marker says how much is in the conversation it stands for.** Before
+this, every in-place marker said only "somebody is talking about this", so
+deciding whether to open one meant opening it. The gutter dot and the
+preview marker now carry the conversation's message count past one — past
+one, because a digit beside every lone remark is noise and the count only
+says something once there is more than one — and the rail's row carries the
+count with the stamp of when the conversation LAST moved
+(`lib/thread-activity.ts`).
+
+That stamp is deliberately not the one already beside the subject. The row
+carries the opening message, so its stamp answers "who started this, and
+when"; for a conversation running over days the question a scanning reader
+is actually asking is "has anything happened", and those have different
+answers. An edit counts as movement — a rewritten subject is news to whoever
+already read it, and `editedAt` is the only record that it happened. The
+comparison is by INSTANT, not by text: `okfTimestampSchema` accepts `Z` and
+an explicit `±HH:MM` alike, and midnight in Tokyo is the earlier instant
+while being the later string, so a lexical max reports a conversation as
+fresher than it is. (The model's `compareMessages` does compare as text,
+deliberately — what it needs is one order two peers agree on, and agreement
+is not chronology.)
+
+The gutter dot holds ONE digit and it now belongs to the conversation
+rather than to the line. The line's own count — more than one conversation
+on it — is the rarer fact and keeps its own channel, `data-threads`, drawn
+as a second ring behind the dot and said in words in the label, so the
+second conversation is still never silently dropped.
+
+The canvas PIN carries it too, composed into the SCENE by `canvas-render`
+rather than drawn by this app, so the widget, the export and
+`wb_scene_render` get it for the same reason they get the pin. The count
+comes from `threads` — the flat `comments` projection carries one text and
+cannot know — which makes a count on the canvas a claim about the WIRING as
+much as about the renderer, and `comment-pin-count.browser.test.tsx` is what
+holds the editor to handing the layout its threads. The digits take the
+bubble's fill from the theme, because layout assigns paint and never invents
+it; a resolver that predates the slot lays the count out unpainted, the way
+`passage` and `region` already work.
+
+`message-count` is a row in the annotation parity matrix now. The canvas
+being the last surface to carry it is exactly the drift that matrix exists
+to make visible, and it had no row to be visible in.
+
+Read status is a separate question and NOT answered here. `commentThreadSchema`
+carries no `readAt`/`readBy`, and adding one needs an answer to "whose read"
+that this app cannot give — `commentMessageSchema.author` is optional
+because a browser-kept workspace has no signed-in author. Last-activity is
+what can be said honestly today, and it is what both a per-device read
+marker and a shared one would be built beside rather than instead of.
+
+**Opening a conversation moves the reader into it, and Escape brings them
+back.** Reading a conversation and writing the body are two modes, and the
+press that opens one has to land somewhere: a revealed thread takes focus on
+its row — the conversation's heading, and the place Tab continues from into
+its verbs, its replies and its reply box — while a new one takes it on the
+draft box, which is the whole of what was asked for. Left as it was, the
+rail opened beside an editor that still held the caret, so the keyboard kept
+typing into the document, the conversation was unreachable without the
+pointer, and on a phone the virtual keyboard stayed up over the rail that had
+just opened — which reads as the press having done nothing.
+
+Moving focus is only safe with a way back, so the two are one decision.
+Escape unwinds a layer at a time: an edit in progress first, then the panel,
+and `useCommentsRail.returnFocus` hands focus to whatever held it when the
+rail was opened. That is read from `activeElement` inside `revealThread` /
+`composeThread` rather than named by each caller, because four surfaces open
+this rail — a gutter marker, a preview marker, the toolbar button, a canvas
+pin — and every one of them is already holding focus when it calls in; a
+parameter would be the same answer written out four times, and the fourth
+surface is the one that would forget. `selectThread` deliberately does NOT
+capture: picking another conversation from inside the rail is not an entry,
+and re-capturing there would make the way out a row of the list the reader is
+standing in.
+
+Two cases need no guard, which was measured rather than assumed after guards
+for both proved impossible to fail: `focus()` is a no-op on `document.body`
+(what `activeElement` answers when nothing holds focus) and on a node the
+surface has since unmounted, so the reader stays put in exactly the cases a
+guard would have arranged. What DOES need code is the catalog path — its menu
+row unmounts on close, so `useAnnotationEntry.open` puts the caret back in
+the body before telling the host. Two things depend on that and neither is
+visible from the press: the caret IS the scope, and the way back out is
+whatever held focus at that moment.
+
 **Where that entry lives on a phone is the toolbar the docked bar makes
 redundant.** With the caret in the body a phone shows two bars, and five of
 their verbs were the same five — Heading, Bold, Italic, Bullet list, Task.

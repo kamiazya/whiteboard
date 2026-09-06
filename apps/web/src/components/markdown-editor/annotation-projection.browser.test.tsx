@@ -74,17 +74,68 @@ describe('markdown annotation projection', () => {
     expect(onSelectThread).toHaveBeenCalledWith('t1')
   })
 
-  it('counts conversations sharing a line into one marker', async () => {
-    const utils = mount({ threads: [thread('a', 'due on Friday'), thread('b', 'the draft')] })
-    const marker = await waitFor(() => {
+  const marked = (utils: { container: HTMLElement }) =>
+    waitFor(() => {
       const found = utils.container.querySelector<HTMLElement>('.cm-annotation-gutter-marker')
       expect(found).not.toBeNull()
       return found as HTMLElement
     })
+
+  it('keeps a line second conversation visible when the two share one marker', async () => {
+    const utils = mount({ threads: [thread('a', 'due on Friday'), thread('b', 'the draft')] })
+    const marker = await marked(utils)
     // Both passages sit on the second line, so the gutter carries one marker
-    // saying so rather than silently dropping the second conversation.
+    // saying so rather than silently dropping the second conversation. The
+    // NUMBER now belongs to the conversation rather than to the line — see
+    // the test below — so the line's own count moves to an attribute the
+    // stacked drawing keys on, and to the label.
     expect(utils.container.querySelectorAll('.cm-annotation-gutter-marker')).toHaveLength(1)
-    expect(marker.textContent).toBe('2')
+    expect(marker.dataset.threads).toBe('2')
+    expect(marker.getAttribute('aria-label')).toBe('2 conversations on this line')
+  })
+
+  it('carries the conversation message count, so its weight is readable before opening', async () => {
+    const utils = mount({
+      threads: [
+        thread('a', 'due on Friday', {
+          messages: [
+            { id: 'a-m1', body: 'is that still true?' },
+            { id: 'a-m2', body: 'no, it slipped' },
+            { id: 'a-m3', body: 'moved to Monday' },
+          ],
+        }),
+      ],
+    })
+    const marker = await marked(utils)
+    expect(marker.textContent).toBe('3')
+    expect(marker.getAttribute('aria-label')).toBe('A conversation of 3 messages')
+    // One conversation on the line, so nothing to stack.
+    expect(marker.dataset.threads).toBeUndefined()
+  })
+
+  it('draws no number for a lone remark, where a digit would be noise beside prose', async () => {
+    const utils = mount({ threads: [thread('a', 'due on Friday')] })
+    const marker = await marked(utils)
+    expect(marker.textContent).toBe('')
+    expect(marker.getAttribute('aria-label')).toBe('A conversation on this line')
+  })
+
+  it('says both facts at once when a busy conversation shares its line', async () => {
+    const utils = mount({
+      threads: [
+        thread('a', 'due on Friday', {
+          messages: [
+            { id: 'a-m1', body: 'is that still true?' },
+            { id: 'a-m2', body: 'no' },
+          ],
+        }),
+        thread('b', 'the draft'),
+      ],
+    })
+    const marker = await marked(utils)
+    expect(marker.getAttribute('aria-label')).toBe(
+      'A conversation of 2 messages, one of 2 on this line',
+    )
   })
 
   it('re-marks the passage after an edit above it moves every offset', async () => {

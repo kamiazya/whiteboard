@@ -89,6 +89,14 @@ export interface SpatialCommentChromeAppearance {
    */
   readonly passage?: Appearance
   /**
+   * The digits painted ON the pin — how many messages the conversation
+   * holds. Needs the pin's CONTRAST rather than its fill, which is why it
+   * is its own slot and not derived here. Optional for the same reason as
+   * `passage`: a resolver that predates it still lays the count out, and
+   * an unpainted run is the SVG default rather than an invented colour.
+   */
+  readonly pinCount?: Appearance
+  /**
    * The outline around the box a node set or a region stands for (the
    * spatial arm with `nodeIds` or a rect). Optional for the same reason
    * as `passage`.
