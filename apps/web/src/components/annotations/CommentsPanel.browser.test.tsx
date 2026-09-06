@@ -3,7 +3,7 @@
 // changes — jsdom alone is disallowed for interaction by AGENTS.md.
 import type { AnnotationAnchor, CommentThread } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
 
@@ -448,4 +448,23 @@ it('summarises a markdown body as text in the row and draws it as markdown when 
   expect(body).not.toBeNull()
   const runs = [...(body?.querySelectorAll('text') ?? [])].map((node) => node.textContent)
   expect(runs).toContain('tighten')
+})
+
+/**
+ * The rail's own box is the note's editor too. Pinned at the rail rather
+ * than only on `CommentComposer`, for the reason the parity matrix exists:
+ * a cell naming the component's test would say the component works, not
+ * that this surface uses it.
+ */
+it('answers a conversation in a markdown editor, with the editing verbs the note pane has', async () => {
+  render(<CommentsPanel threads={[OPEN]} onReply={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const box = page.getByRole('textbox', { name: /reply/i })
+  await userEvent.click(box)
+  await userEvent.keyboard('later')
+  await userEvent.keyboard('{Control>}a{/Control}')
+  await userEvent.keyboard('{Control>}b{/Control}')
+
+  await vi.waitFor(() => expect(box.element().textContent).toBe('**later**'))
 })

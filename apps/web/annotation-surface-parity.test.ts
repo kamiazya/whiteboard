@@ -55,6 +55,10 @@ type Capability =
   | 'pin-drawn'
   /** How many messages the conversation holds, said before it is opened. */
   | 'message-count'
+  /** A comment's body is markdown; this surface draws it as markdown. */
+  | 'body-drawn-as-markdown'
+  /** The box a comment is typed into offers the note's own editing verbs. */
+  | 'composer-writes-markdown'
   | 'orphan-marked'
   | 'reveal-from-surface'
   | 'touch-reachable'
@@ -75,8 +79,55 @@ const READ_MODE =
   'Read mode is for reading: selecting words in the SVG preview is not an editing surface, so the compose entry is the source pane’s catalog (markdown-source)'
 const RAIL_ANSWERS =
   'the surface reveals the conversation (reveal-from-surface); the rail is where it is answered'
+/**
+ * Why a surface can lack the AFFORDANCES without lacking the capability.
+ * Markdown is plain text: `**x**` typed into any box at all is emphasis
+ * once it is drawn. What a markdown editor adds is the verbs and the
+ * highlighting, so a box without one is a smaller affordance rather than a
+ * different format — which is exactly why the two capabilities here are
+ * separate columns and not one.
+ */
+const STILL_MARKDOWN = 'the body is markdown wherever it is typed; only the editor affordances are'
 
 const PARITY = {
+  'body-drawn-as-markdown': {
+    canvas: {
+      pinnedBy:
+        'apps/web/src/components/spatial-editor/comment-reply.browser.test.tsx#the card draws its conversation as markdown and answers it in a markdown editor',
+    },
+    rail: {
+      pinnedBy:
+        'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx#summarises a markdown body as text in the row and draws it as markdown when opened',
+      gap: 'the ROW is text, not a rendering: it is a two-line clamp inside a button, which neither line-clamp nor a button’s semantics survive an SVG inside. `commentExcerpt` strips the syntax so it says what the comment says; the rendering is one press away',
+    },
+    'markdown-source': { absent: RAIL_ANSWERS },
+    'markdown-preview': { absent: RAIL_ANSWERS },
+    'static-scene': {
+      pinnedBy:
+        'packages/canvas-render/src/layout/comments.test.ts#draws a comment body as markdown at the bubble metrics, through the shared producer',
+    },
+    widget: { absent: PICTURE },
+    mcp: { absent: WRITES_ONLY },
+  },
+  'composer-writes-markdown': {
+    canvas: {
+      pinnedBy:
+        'apps/web/src/components/spatial-editor/comment-reply.browser.test.tsx#the card draws its conversation as markdown and answers it in a markdown editor',
+    },
+    rail: {
+      pinnedBy:
+        'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx#answers a conversation in a markdown editor, with the editing verbs the note pane has',
+    },
+    'markdown-source': { absent: RAIL_ANSWERS },
+    'markdown-preview': { absent: RAIL_ANSWERS },
+    'static-scene': { absent: PICTURE },
+    widget: {
+      absent: `a single-line input by design — ${ONE_WRITE}; ${STILL_MARKDOWN} missing, and a CodeMirror inside a host chat’s iframe is a large dependency for one spot comment`,
+    },
+    mcp: {
+      absent: `${WRITES_ONLY}; a tool takes a string, and ${STILL_MARKDOWN} not a thing a tool call has`,
+    },
+  },
   'compose-on-object': {
     canvas: {
       pinnedBy:
