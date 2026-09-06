@@ -63,6 +63,7 @@ function accessibleName(kind: InspectorKind, count: number | null | undefined): 
 
 export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps): JSX.Element {
   return (
+    // biome-ignore lint/a11y/useSemanticElements: <fieldset> groups form controls under a <legend>; these are toggle buttons, and the only role that fits a button cluster, "toolbar", promises roving-tabindex arrow navigation this segment does not implement — declaring it would be an a11y lie.
     <div
       role="group"
       aria-label="Inspect this document"
