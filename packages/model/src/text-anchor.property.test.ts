@@ -13,8 +13,9 @@
  * which would be building the oracle out of the code under test.
  */
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { resolveTextAnchor, type TextAnchor } from './text-anchor.js'
+import type { TextAnchor } from './annotation.js'
+import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
+import { resolveTextAnchor } from './text-anchor.js'
 
 /** Ordinary prose, and never the passage's own text — see `passage`. */
 const filler = fc.stringMatching(/^[a-d ]{0,40}$/)

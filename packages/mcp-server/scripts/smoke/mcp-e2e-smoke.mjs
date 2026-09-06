@@ -134,6 +134,7 @@ const WORKSPACE_ID = 'e2e'
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
 const EXPECTED_TOOLS = [
   'wb_viewport_set',
+  'wb_body_edit',
   'wb_body_patch',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
@@ -266,6 +267,70 @@ async function main() {
     throw new Error(`wb_document_create did not persist its body: ${readBack.content}`)
   }
   console.log('[e2e] wb_document_create → body written in one call')
+
+  // wb_body_edit against a REAL markdown document, which is the thing
+  // wb_body_patch cannot reach at all: its canvas read never sees the body's
+  // text container, so it answers NodeNotFoundError for `okf-body`. This step
+  // exists to keep that gap closed — it is only provable through a client
+  // that owns a real store, since a unit test seeds whatever shape it likes.
+  const edited = await callTool('wb_body_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    mode: 'apply',
+    ops: [
+      {
+        id: 'e2e-passage-1',
+        op: 'body.replace',
+        anchor: {
+          kind: 'text',
+          quote: { exact: 'creation time' },
+          // Deliberately stale: the frontmatter above shifts every offset the
+          // caller could have taken from the body it wrote. The quote is what
+          // finds the passage, and a line number could not have.
+          start: 0,
+          end: 13,
+        },
+        text: 'the smoke',
+        assumed: 'creation time',
+      },
+    ],
+  })
+  if (edited.applied !== 1 || !edited.body.includes('Written at the smoke.')) {
+    throw new Error(`wb_body_edit returned unexpected shape: ${JSON.stringify(edited)}`)
+  }
+  const afterEdit = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+  })
+  if (!afterEdit.content.includes('Written at the smoke.')) {
+    throw new Error(`wb_body_edit did not persist through the store: ${afterEdit.content}`)
+  }
+  if (afterEdit.content.includes('creation time')) {
+    throw new Error(`wb_body_edit left the old passage behind: ${afterEdit.content}`)
+  }
+
+  // The refusal a person's adopt depends on: a passage that no longer says
+  // what the caller assumed is named, not overwritten.
+  await expectToolError(
+    'wb_body_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId: withBody.documentId,
+      mode: 'apply',
+      ops: [
+        {
+          id: 'e2e-passage-stale',
+          op: 'body.replace',
+          anchor: { kind: 'text', quote: { exact: 'the smoke' }, start: 0, end: 9 },
+          text: 'never written',
+          assumed: 'creation time',
+        },
+      ],
+    },
+    'on a passage that no longer says what was assumed',
+    'e2e-passage-stale',
+  )
+  console.log('[e2e] wb_body_edit → passage replaced by quote, stale assumption refused by name')
 
   // The union's other side: a spatial document takes no markdown, and the
   // refusal must reach the client rather than the content being dropped.

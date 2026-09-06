@@ -130,6 +130,28 @@ const PRIOR_SCOPE_MESSAGE = {
  * place, before anyone adopts it, and a draft with its geometry left out has
  * no box to draw.
  */
+/**
+ * Prose (ADR-0029 decision 6): a range of body text and the text intended to
+ * replace it. `text` and `assumed` are both allowed to be empty — an
+ * insertion replaces nothing, a deletion replaces with nothing — so neither
+ * carries a minimum.
+ *
+ * Named apart from the union it belongs to because a tool that ACCEPTS one
+ * needs the same shape minus the verdict a caller does not get to send. It
+ * omits `status` from this rather than restating the fields, so what an
+ * agent puts on the wire and what a person's card shows cannot drift into
+ * two descriptions of one thing.
+ */
+export const bodyReplaceChangeSchema = z
+  .object({
+    ...changeIdentity,
+    op: z.literal('body.replace'),
+    anchor: textAnchorSchema,
+    text: z.string(),
+    assumed: z.string(),
+  })
+  .strict()
+
 export const proposedChangeSchema = z.discriminatedUnion('op', [
   z.object({ ...changeIdentity, op: z.literal('node.add'), node: spatialNodeSchema }).strict(),
   z
@@ -171,21 +193,7 @@ export const proposedChangeSchema = z.discriminatedUnion('op', [
       assumed: canvasEdgeSchema,
     })
     .strict(),
-  /**
-   * Prose (ADR-0029 decision 6): a range of body text and the text intended
-   * to replace it. `text` and `assumed` are both allowed to be empty — an
-   * insertion replaces nothing, a deletion replaces with nothing — so neither
-   * carries a minimum.
-   */
-  z
-    .object({
-      ...changeIdentity,
-      op: z.literal('body.replace'),
-      anchor: textAnchorSchema,
-      text: z.string(),
-      assumed: z.string(),
-    })
-    .strict(),
+  bodyReplaceChangeSchema,
 ])
 
 export type ProposedChange = z.infer<typeof proposedChangeSchema>
