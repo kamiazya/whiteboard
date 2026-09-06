@@ -25,19 +25,23 @@ export interface PerformBranchMergeArgs {
 }
 
 // The wire-safe shape routes/branches.ts's pluggable `performMerge` hook
-// expects: routes/branches.ts only forwards these fields into the JSON
-// response and never reads a badge's discriminant, so its contract stays
-// structurally loose (any implementation, not just this one, can satisfy
-// it) instead of hand-duplicating this file's stricter shape. Declared here
-// — not in branches.ts — because this file is the one production caller;
-// branches.ts imports the type rather than re-declaring it by hand, so the
-// two cannot silently drift the way a second hand-written interface would.
+// expects. Declared here — not in branches.ts — because this file is the one
+// production caller; branches.ts imports the type rather than re-declaring it
+// by hand, so the two cannot silently drift the way a second hand-written
+// interface would.
+//
+// `badges` is `MergeBadge[]` rather than a loose record even though this
+// route only forwards it: the response schema the client parses is
+// `mergeBadgeSchema`, so a hook answering any other shape produces a response
+// its own reader rejects. Structural looseness here bought nothing and cost
+// the discriminant — the dialog was reconstructing `type`/`elementId` by
+// field-name guesswork on the far side.
 export type PerformMergeHookResult = {
   previewElementCount: number
   // Optional target/source counts for the three MergeDialog columns.
   targetElementCount?: number
   sourceElementCount?: number
-  badges: Array<Record<string, unknown>>
+  badges: MergeBadge[]
   committed: boolean
   // For dry runs, include alive elements so MergeDialog can render a read-only preview.
   previewElements?: unknown[]
@@ -52,13 +56,11 @@ export type PerformMergeHookResult = {
   deletedSource?: string
 }
 
-// performBranchMerge always fills target/source counts and returns typed
-// badges, so its own return type narrows the hook contract above rather
-// than repeating it.
+// performBranchMerge always fills target/source counts, so its own return
+// type narrows the hook contract above rather than repeating it.
 export interface PerformBranchMergeResult extends PerformMergeHookResult {
   targetElementCount: number
   sourceElementCount: number
-  badges: MergeBadge[]
 }
 
 // Merge source into target.

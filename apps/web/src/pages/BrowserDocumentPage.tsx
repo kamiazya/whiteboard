@@ -23,6 +23,7 @@ import {
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
+import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
 import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import { useIdentityEvent } from '../hooks/use-identity-event.js'
@@ -650,22 +651,23 @@ function useBrowserDocument(
    * duplicate: they lead to different documents, and the second exists
    * precisely because the first is closed on a note.
    */
+  const spatialWrite = spatialThreadWrite(() => canvas, onChange)
   const threadWrite: CommentsRailWrite = {
     createThread: (thread) => {
       if (documentKind === 'markdown') markdownDoc.createThread(thread)
-      else onChange(canvas, { kind: 'create-thread', thread })
+      else spatialWrite.createThread(thread)
     },
     replyToThread: (threadId, message) => {
       if (documentKind === 'markdown') markdownDoc.replyToThread(threadId, message)
-      else onChange(canvas, { kind: 'reply-to-thread', threadId, message })
+      else spatialWrite.replyToThread(threadId, message)
     },
     setThreadStatus: (threadId, status) => {
       if (documentKind === 'markdown') markdownDoc.setThreadStatus(threadId, status)
-      else onChange(canvas, { kind: 'set-thread-status', threadId, status })
+      else spatialWrite.setThreadStatus(threadId, status)
     },
     editMessage: (threadId, message, opening) => {
       if (documentKind === 'markdown') markdownDoc.editMessage(threadId, message)
-      else onChange(canvas, { kind: 'edit-thread-message', threadId, message, opening })
+      else spatialWrite.editMessage(threadId, message, opening)
     },
   }
 

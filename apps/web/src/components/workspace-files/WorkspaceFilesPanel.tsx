@@ -995,6 +995,9 @@ export function WorkspaceFilesPanel({
                           ...(hit.lexicalRank === undefined
                             ? {}
                             : { lexicalRank: hit.lexicalRank }),
+                          ...(hit.semanticRank === undefined
+                            ? {}
+                            : { semanticRank: hit.semanticRank }),
                         })),
                         documents,
                         query,

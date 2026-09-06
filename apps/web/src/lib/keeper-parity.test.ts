@@ -77,11 +77,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: 'src/lib/persistent-storage.ts',
     note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
   },
-  'src/components/MergeToast.tsx': {
-    reach: 'both-keepers',
-    browser: BROWSER_PAGE,
-    note: 'the shared DocumentPage mounts it for whichever keeper rendered it, from the workspace and path the top bar already carries',
-  },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
     browser: BROWSER_PAGE,

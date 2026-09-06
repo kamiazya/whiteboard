@@ -1,4 +1,8 @@
-import { branchMetaSchema, documentBranchesStateSchema } from '@kamiazya/whiteboard-history'
+import {
+  branchMetaSchema,
+  documentBranchesStateSchema,
+  mergeBadgeSchema,
+} from '@kamiazya/whiteboard-history'
 import { z } from 'zod'
 
 // Request / response schemas for the /api/workspaces/:sid/documents/:path/branches
@@ -6,10 +10,10 @@ import { z } from 'zod'
 // `c.json(...)` responses) and the React client (parses fetch responses) so a
 // wire-format change has exactly one place to update.
 //
-// What a branch IS is not the wire's to say: `branchMetaSchema` and the
-// document's branch state are `@kamiazya/whiteboard-history`'s, re-exported
-// here so the route, the client and the mechanic parse one shape.
-export { branchMetaSchema, documentBranchesStateSchema }
+// What a branch IS is not the wire's to say: `branchMetaSchema`, the
+// document's branch state and a merge badge are `@kamiazya/whiteboard-history`'s,
+// re-exported here so the route, the client and the mechanic parse one shape.
+export { branchMetaSchema, documentBranchesStateSchema, mergeBadgeSchema }
 
 export const createBranchRequestSchema = z.object({
   name: z.string().min(1),
@@ -58,7 +62,7 @@ export const mergeRequestSchema = z.object({
 // highlights, so several fields are optional depending on dryRun and on whether
 // the deployment populates element-level preview metadata.
 export const mergeResponseSchema = z.object({
-  badges: z.array(z.record(z.string(), z.unknown())),
+  badges: z.array(mergeBadgeSchema),
   preview: z.object({ elementCount: z.number() }).optional(),
   committed: z.object({ elementCount: z.number() }).optional(),
   target: z.object({ elementCount: z.number() }).optional(),
@@ -72,7 +76,7 @@ export const mergeResponseSchema = z.object({
   deletedSource: z.string().optional(),
 })
 
-export type { BranchMeta, DocumentBranchesState } from '@kamiazya/whiteboard-history'
+export type { BranchMeta, DocumentBranchesState, MergeBadge } from '@kamiazya/whiteboard-history'
 export type CreateBranchRequest = z.infer<typeof createBranchRequestSchema>
 export type CreateBranchResponse = z.infer<typeof createBranchResponseSchema>
 export type DeleteBranchResponse = z.infer<typeof deleteBranchResponseSchema>

@@ -1,5 +1,6 @@
 import type {
   BranchMeta,
+  MergeBadge,
   MergeResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { cleanup, render, screen, waitFor } from '@testing-library/react'
@@ -76,7 +77,7 @@ describe('MergeDialog layout (browser — confirm footer reachable below the fol
     // A wide badge set forces the merged-preview card, badge list, and
     // side-effect notice to stack tall enough that the dialog exceeds an
     // 800px-tall viewport.
-    const badges = Array.from({ length: 20 }, (_, index) => ({
+    const badges: MergeBadge[] = Array.from({ length: 20 }, (_, index) => ({
       type: 'field_merge',
       elementId: `el-${index}`,
       fields: ['strokeColor', 'backgroundColor'],
