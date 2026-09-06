@@ -58,6 +58,9 @@ const log = getAppLogger('browser-branches')
  */
 type BrowserVersionSave = BrowserVersionStore['save']
 
+/** The store's reader, taken from it for the same reason `save` is. */
+type BrowserVersionList = BrowserVersionStore['list']
+
 /** The state a document has when its record has not been delivered yet. */
 const RESTING: DocumentBranchesState = {
   branches: [{ name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '' }],
@@ -84,7 +87,7 @@ export function createBrowserBranchesBackend(deps: {
    * merge that refused because a bookmark could not be written would be worse
    * than one nobody can rewind past.
    */
-  readonly versions?: { save: BrowserVersionSave } | null
+  readonly versions?: { save: BrowserVersionSave; list?: BrowserVersionList } | null
 }): BranchesBackend {
   const backend = deps.backend
   const refuse = (what: string) => Promise.reject(new BranchesUnsupportedError(what))
@@ -175,13 +178,23 @@ export function createBrowserBranchesBackend(deps: {
       return mutate((state) => setHeadOp(state, scope, branch))
     },
 
-    async getStats(_workspaceId, _path, name) {
+    async getStats(_workspaceId, path, name) {
       if (backend === null) return refuse('stats')
       const state = read()
-      // `unmergedCommits` is zero for the same reason the daemon answers zero:
-      // tip adoption has no commit count to report, and a number invented here
-      // would read as a measurement.
-      return { unmergedCommits: 0, isHead: state.head === name }
+      // The same count the daemon's route answers with: version rows whose
+      // variation matches. Tip adoption really does leave no commits to
+      // count, so rows are what there is — and `HeaderBranchBanner` shows
+      // only when this is above zero, which is what the number is FOR.
+      //
+      // It read zero unconditionally until the rows could carry a variation,
+      // under a comment claiming the daemon answered zero too. It does not:
+      // `countVersionsOnBranch` counts exactly this. A row with no variation
+      // recorded is the default one on both sides.
+      const rows = (await deps.versions?.list?.(getBrowserWorkspaceId(), path)) ?? []
+      return {
+        unmergedCommits: rows.filter((v) => (v.branchName ?? 'main') === name).length,
+        isHead: state.head === name,
+      }
     },
 
     async merge(_workspaceId, _path, source, args) {

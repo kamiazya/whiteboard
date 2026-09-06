@@ -110,6 +110,58 @@ describe('the browser keeper merges by adopting the source tip', () => {
     expect(after?.branches.map((b) => b.name)).not.toContain('idea')
   })
 
+  it("counts the variation's own version rows, the way the daemon's route does", async () => {
+    const workspaceId = getBrowserWorkspaceId()
+    const index = new FoldingBrowserIndex()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'canvas-c',
+      kind: 'spatial',
+    })
+
+    const docs = new BrowserWorkspaceDocs()
+    const record = await docs.open(workspaceId)
+    if (record === null) throw new Error('no record')
+    writeWorkspaceDocumentContent(record, documentId, canvasWith('work'))
+    writeBranchesToRecord(record, documentId, {
+      branches: [
+        { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-01-01T00:00:00.000Z' },
+        { name: 'idea', tipFrontiers: '', color: '#9333ea', createdAt: '2026-01-02T00:00:00.000Z' },
+      ],
+      head: 'idea',
+    })
+    await docs.save(workspaceId, record)
+
+    backend = new BrowserBackend({ documentId, path: 'canvas-c', kind: 'spatial' }, docs)
+    backend.connect(NO_OP_HANDLERS)
+    await vi.waitFor(() => expect(backend.readRecord(() => true)).toBe(true))
+
+    // Two points on `idea`, one on `main`. The daemon answers this question by
+    // counting version rows whose branch matches; nothing else can be counted,
+    // because tip adoption leaves no commits to count.
+    const store = new BrowserVersionStore({ docs, index })
+    await store.save(workspaceId, 'canvas-c', { branchName: 'idea', label: 'a' })
+    await store.save(workspaceId, 'canvas-c', { branchName: 'idea', label: 'b' })
+    await store.save(workspaceId, 'canvas-c', { label: 'on main' })
+
+    const branches = createBrowserBranchesBackend({
+      backend,
+      versions: { save: (w, p, o) => store.save(w, p, o), list: (w, p) => store.list(w, p) },
+    })
+
+    expect(await branches.getStats(workspaceId, 'canvas-c', 'idea')).toEqual({
+      unmergedCommits: 2,
+      isHead: true,
+    })
+    // A row with no variation recorded reads as the default one, as it does
+    // on the daemon — that is what the older rows are.
+    expect(await branches.getStats(workspaceId, 'canvas-c', 'main')).toEqual({
+      unmergedCommits: 1,
+      isHead: false,
+    })
+  })
+
   it('records the pre-merge point as automatic and on the target variation', async () => {
     const workspaceId = getBrowserWorkspaceId()
     const index = new FoldingBrowserIndex()
