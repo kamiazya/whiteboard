@@ -99,18 +99,38 @@ it('holds the resolved row on screen long enough to be read, then lets it leave'
 })
 
 it('glides the rows below into the gap rather than snapping them up', async () => {
-  render(<StatefulPanel />)
-  const before = rowOf('t-2')?.getBoundingClientRect().top
-  await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
-  await vi.waitFor(() => expect(rowOf('t-1')).toBeNull(), { timeout: 4000 })
+  // Both claims are read off the call that CREATES the glide. Neither can be
+  // observed after the fact, and each failed under load for its own reason:
+  // a `getAnimations()` check has to land inside a 220ms window, and
+  // `getBoundingClientRect()` INCLUDES the running transform, so a row
+  // caught mid-glide still measures at the place it is travelling from.
+  // Measured: the first shape failed 3 of 5 fresh runs, the second passed
+  // five in isolation and still failed the whole-project run.
+  const glided = new Map<string, number>()
+  const realAnimate = Element.prototype.animate
+  Element.prototype.animate = function patched(
+    this: Element,
+    ...args: Parameters<Element['animate']>
+  ) {
+    const id = (this as HTMLElement).dataset?.threadId
+    const from = /translateY\((-?[\d.]+)px\)/.exec(JSON.stringify(args[0] ?? null))
+    if (id !== undefined && from !== null) glided.set(id, Number(from[1]))
+    return realAnimate.apply(this, args)
+  }
 
-  // The survivor is mid-flight: it has a running transform animation, and
-  // it started from where it used to be rather than appearing at its new
-  // place. A snap would leave nothing animating at all.
-  const survivor = rowOf('t-2')
-  if (survivor === undefined || survivor === null) throw new Error('no survivor')
-  expect(survivor.getAnimations().length).toBeGreaterThan(0)
-  expect(before).toBeGreaterThan(survivor.getBoundingClientRect().top)
+  try {
+    render(<StatefulPanel />)
+    await userEvent.click(page.getByRole('button', { name: 'Resolve' }).nth(0))
+    await vi.waitFor(() => expect(rowOf('t-1')).toBeNull(), { timeout: 4000 })
+
+    // A POSITIVE offset: the survivor starts the animation displaced
+    // downward, which is where it used to be, and travels up into the gap.
+    // A snap would create no animation at all.
+    expect(glided.has('t-2')).toBe(true)
+    expect(glided.get('t-2')).toBeGreaterThan(0)
+  } finally {
+    Element.prototype.animate = realAnimate
+  }
 })
 
 it('leaves the row alone under the All filter, where resolving does not remove it', async () => {
