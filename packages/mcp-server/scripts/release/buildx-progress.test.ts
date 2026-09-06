@@ -246,3 +246,52 @@ describe('the cache backend the report exists to judge', () => {
     expect(formatCacheReport(report).join('\n')).toContain('failed to get github token')
   })
 })
+
+// The report's third run answered the question it was rebuilt to answer, and
+// ruled out the guess behind it: `#21` and `#22` were `exporting to docker
+// image format` (65.8s) and `importing to docker` (25.1s) — the `--load` back
+// into the local daemon, not cache steps at all. No cache step existed in any
+// run. buildx took `--cache-to type=gha,mode=max` and did nothing, silently.
+//
+// Which leaves one guess standing, and a report that cannot see it. Docker's
+// gha backend falls back to ACTIONS_RUNTIME_TOKEN and ACTIONS_CACHE_URL from
+// the environment, and its own docs say an inline `docker buildx` invocation
+// must expose them manually — this job runs buildx from a `run:` step. So the
+// backend may never have been configured at all, which looks from the outside
+// exactly like a cache that is merely cold.
+//
+// Names and presence only, never a value: ACTIONS_RUNTIME_TOKEN is a
+// credential, and a report that printed one would be a worse defect than the
+// one it exists to find.
+describe('the credentials the GitHub Actions cache backend falls back to', () => {
+  it('says which are present and which are missing, by name', () => {
+    const report = parseBuildxProgress(PLAIN_OUTPUT)
+    const lines = formatCacheReport(report, {
+      cacheCredentials: { present: ['ACTIONS_CACHE_URL'], absent: ['ACTIONS_RUNTIME_TOKEN'] },
+    }).join('\n')
+    expect(lines).toContain('ACTIONS_RUNTIME_TOKEN')
+    expect(lines).toContain('ACTIONS_CACHE_URL')
+    expect(lines).toMatch(/absent|missing|NOT set/i)
+  })
+
+  it('separates a backend that was never configured from a cache that missed', () => {
+    // The two produce the same 0%, and want opposite fixes: expose the
+    // variables, or look at what invalidated the layers.
+    const report = parseBuildxProgress(PLAIN_OUTPUT)
+    const unconfigured = formatCacheReport(report, {
+      cacheCredentials: { present: [], absent: ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL'] },
+    }).join('\n')
+    expect(unconfigured).toContain('cache credentials: none of')
+    const configured = formatCacheReport(report, {
+      cacheCredentials: { present: ['ACTIONS_RUNTIME_TOKEN', 'ACTIONS_CACHE_URL'], absent: [] },
+    }).join('\n')
+    expect(configured).toContain('cache credentials: all present')
+  })
+
+  it('says nothing at all when it was given no credential reading', () => {
+    // A local `docker build` has no backend to report on. Silence is right;
+    // inventing "absent" would report a problem that does not exist there.
+    const lines = formatCacheReport(parseBuildxProgress(PLAIN_OUTPUT)).join('\n')
+    expect(lines).not.toContain('cache credentials')
+  })
+})

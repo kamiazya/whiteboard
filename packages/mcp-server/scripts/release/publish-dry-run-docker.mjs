@@ -83,6 +83,25 @@ const buildArgs = isGitHubActions
       '.',
     ]
 
+// What `type=gha` falls back to when `--cache-from`/`--cache-to` name no url
+// or token of their own. Docker's documentation for the backend says an inline
+// `docker buildx` invocation — which this is, from a `run:` step — must expose
+// them manually, so their absence is the difference between a cache that never
+// ran and one that ran and missed. Read by NAME and reported as present or
+// absent; the values are credentials and never leave this process.
+const GHA_CACHE_ENV = [
+  'ACTIONS_RUNTIME_TOKEN',
+  'ACTIONS_CACHE_URL',
+  'ACTIONS_RESULTS_URL',
+  'ACTIONS_CACHE_SERVICE_V2',
+]
+
+/** @returns {{ present: string[], absent: string[] }} */
+function readCacheCredentials() {
+  const present = GHA_CACHE_ENV.filter((name) => (process.env[name] ?? '') !== '')
+  return { present, absent: GHA_CACHE_ENV.filter((name) => !present.includes(name)) }
+}
+
 const buildStartedAt = Date.now()
 const buildResult = spawnSync('docker', buildArgs, {
   cwd: REPO_ROOT,
@@ -104,7 +123,8 @@ if (buildResult.status !== 0 || buildResult.error) {
 // first real report, 214.4s of step time inside a 200s build.
 const elapsedSeconds = Number(((Date.now() - buildStartedAt) / 1000).toFixed(1))
 const cacheReport = parseBuildxProgress(buildResult.stderr ?? '')
-for (const line of formatCacheReport(cacheReport, { elapsedSeconds })) {
+const cacheCredentials = isGitHubActions ? readCacheCredentials() : undefined
+for (const line of formatCacheReport(cacheReport, { elapsedSeconds, cacheCredentials })) {
   process.stderr.write(`${line}\n`)
 }
 // The raw output stays available for the case the report cannot explain, but
@@ -141,7 +161,7 @@ const metadata = {
   // Full report, step names included: this file is an artifact of the same run
   // whose log already names them, and trending the slowest steps across runs is
   // what turns "the build is slow" into a specific layer.
-  cache: { ...cacheReport, elapsedSeconds },
+  cache: { ...cacheReport, elapsedSeconds, cacheCredentials },
 }
 writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metadata, null, 2))
 

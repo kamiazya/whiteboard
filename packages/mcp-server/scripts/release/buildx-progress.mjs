@@ -199,7 +199,10 @@ function addDiagnostic(into, line) {
  * the build every run, in the one number the whole report exists to trend.
  *
  * @param {CacheReport} report
- * @param {{ elapsedSeconds?: number }} [timing]
+ * @param {{
+ *   elapsedSeconds?: number,
+ *   cacheCredentials?: { present: string[], absent: string[] },
+ * }} [timing]
  */
 export function formatCacheReport(report, timing = {}) {
   if (!report.parsed) {
@@ -236,5 +239,31 @@ export function formatCacheReport(report, timing = {}) {
   for (const diagnostic of report.diagnostics) {
     lines.push(`  ${diagnostic}`)
   }
+  lines.push(...credentialLines(timing.cacheCredentials))
   return lines
+}
+
+/**
+ * Whether the backend had anything to authenticate WITH.
+ *
+ * A cache that was never configured and a cache that missed every layer both
+ * report 0%, and they want opposite fixes — expose the variables, or go find
+ * what invalidated the layers. Docker's gha backend falls back to these
+ * environment variables, and its own documentation says an inline `docker
+ * buildx` invocation has to expose them by hand.
+ *
+ * NAMES and presence only. ACTIONS_RUNTIME_TOKEN is a credential; a report
+ * that printed its value would be a worse defect than the one it exists to
+ * find.
+ *
+ * @param {{ present: string[], absent: string[] } | undefined} credentials
+ */
+function credentialLines(credentials) {
+  // No reading taken — a local `docker build` has no backend to report on, and
+  // inventing "absent" there would report a problem that does not exist.
+  if (!credentials) return []
+  const { present, absent } = credentials
+  if (absent.length === 0) return [`  cache credentials: all present (${present.join(', ')})`]
+  if (present.length === 0) return [`  cache credentials: none of ${absent.join(', ')} are set`]
+  return [`  cache credentials: ${present.join(', ')} set; ${absent.join(', ')} NOT set`]
 }
