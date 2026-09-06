@@ -229,12 +229,23 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
     // band that genuinely IS the full width. Left, since the canvas keeps its
     // overview at bottom-right.
     //
-    // Lifted 70px because the bottom edge is where the editing surfaces keep a
-    // strip: the canvas dock's own 0.75rem offset, its 46px, and the gap
-    // again. That dock is content-sized and centred, so its left edge walks
-    // toward the corner as the viewport narrows — x=33 at 360px CSS, against
-    // this control's 12..48. One offset also clears the markdown formatting
-    // bar (44px), so no page has to say anything about it.
+    // The corner is the default, and the lift is the exception, because the
+    // bottom edge is also where the editing surfaces keep a strip. The canvas
+    // dock is centred, so its left edge walks toward the corner only as the
+    // viewport narrows: below 407px it reaches this control, and above it the
+    // dock is nowhere near — where a control floating a strip's height up,
+    // with empty space beneath it, reads as unanchored rather than as placed.
+    //
+    // 407 is arithmetic, not taste. The dock is centred at 295px, so its left
+    // edge is (vw - 295) / 2; this control spans 12..44; 8px of clearance
+    // wants vw >= 295 + 112. `declares a corner breakpoint that still clears
+    // the dock` reads the number back out of this class and re-measures it
+    // against the real dock, so widening the dock fails there rather than on
+    // someone's phone.
+    //
+    // 70px is that strip: the dock's own 0.75rem offset, its 46px, and the gap
+    // again. It clears the markdown formatting bar (44px) too, so no page has
+    // to say anything about either.
     return (
       <button
         ref={exitFullscreenRef}
@@ -244,7 +255,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         onClick={fullscreen.toggle}
         className={cn(
           HEADER_BUTTON_CLASS,
-          'fixed bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
+          'fixed bottom-[calc(0.75rem+env(safe-area-inset-bottom))] max-[407px]:bottom-[calc(70px+env(safe-area-inset-bottom))] left-[calc(0.75rem+env(safe-area-inset-left))] z-50 border bg-background/80 shadow-sm backdrop-blur',
         )}
       >
         <Minimize2 aria-hidden="true" className="size-4" />
