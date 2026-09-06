@@ -296,6 +296,11 @@ export function useDocumentSync(
       ...(optionsRef.current.contentDocumentId === undefined
         ? {}
         : { contentDocumentId: optionsRef.current.contentDocumentId }),
+      // Captured once per session for the same reason as the scope above: a
+      // checkpoint belongs to the document this backend serves.
+      ...(optionsRef.current.checkpoints === undefined
+        ? {}
+        : { checkpoints: optionsRef.current.checkpoints }),
     })
     sessionRef.current = session
     const unsubscribe = session.subscribe((next, origin) => {

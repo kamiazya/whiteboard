@@ -73,6 +73,14 @@ export interface UseDocumentSyncOptions {
    * travel together.
    */
   contentDocumentId?: string
+  /**
+   * The automatic-checkpoint trigger, for a keeper that takes them — see
+   * SessionDeps.checkpoints for why the session owns the flush rather than
+   * the page. Captured when the session is constructed, like
+   * `contentDocumentId` and for the same reason: it is bound to the document
+   * this backend serves.
+   */
+  checkpoints?: { readonly signal: () => void; readonly flush: () => void }
 }
 
 // Dispatches a window event carrying { workspaceId, path } as detail, but only

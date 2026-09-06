@@ -203,6 +203,20 @@ export interface SessionDeps {
    * only WHERE content containers are found changes.
    */
   contentDocumentId?: string
+  /**
+   * The automatic-checkpoint trigger, for a keeper that takes them.
+   *
+   * A narrow pair rather than the scheduler itself: the session's business is
+   * WHEN the document changed and when the page is going away, not what a
+   * checkpoint is or where it goes. `signal` is cheap and safe per update
+   * (the scheduler debounces); `flush` takes any pending one now.
+   *
+   * It lives here rather than as the page's own `pagehide` listener because
+   * the ORDER against the edit flush is load-bearing and two independent
+   * listeners would leave it to registration timing: a checkpoint taken
+   * before the edit lands bookmarks the state without it.
+   */
+  checkpoints?: { readonly signal: () => void; readonly flush: () => void }
 }
 
 export interface DocumentSyncSession {
@@ -933,11 +947,16 @@ export function createDocumentSyncSession(
   // store, and the edit is still lost — the same as without this listener.
   // Closing that last gap means not having a window at all (write at once,
   // commit later), not a better signal.
+  // The edit flush first in both, then the checkpoint: the edit is what the
+  // checkpoint would be bookmarking.
   function onVisibilityChange(): void {
-    if (document.visibilityState === 'hidden') onCanvasChange.flush()
+    if (document.visibilityState !== 'hidden') return
+    onCanvasChange.flush()
+    deps.checkpoints?.flush()
   }
   function onPageHide(): void {
     onCanvasChange.flush()
+    deps.checkpoints?.flush()
   }
   function listenForPageLeaving(): void {
     if (typeof document === 'undefined' || typeof window === 'undefined') return
@@ -1037,6 +1056,12 @@ export function createDocumentSyncSession(
           // it, the transport could already be closed by the time this push
           // happens, silently losing the last edit before a canvas switch or
           // unmount.
+          // "This document just changed locally" — the browser's analogue of
+          // the update the daemon's trigger rides. Before the push rather
+          // than after it: the scheduler only arms a timer here, and a
+          // checkpoint that waited for durability would miss the edits a
+          // failing store is exactly when you want bookmarked.
+          deps.checkpoints?.signal()
           inFlightPushes++
           const epochAtPush = failureEpoch
           void Promise.resolve(backend.pushLocalUpdate(update)).then(

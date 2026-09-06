@@ -127,7 +127,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // four call sites building their own. Both are paid once; the keeper
   // conversion also took the browser page below from 981 to 926.
   'apps/web/src/pages/DaemonDocumentPage.tsx': 942,
-  'apps/web/src/lib/document-sync-session.ts': 1366,
+  // Raised from 1366 by the automatic-checkpoint trigger: a narrow
+  // `{signal, flush}` pair on SessionDeps, signalled from
+  // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
+  // beside the edit flush. Most of the 25 lines is the reason the FLUSH lives
+  // here rather than as the page's own listener — its order against the edit
+  // flush is load-bearing, and two independent listeners would leave that to
+  // registration timing.
+  'apps/web/src/lib/document-sync-session.ts': 1391,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -141,7 +148,19 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // it is automatic and which variation it belongs to — so the store is
   // built here and handed to both seams, and the comment saying why is most
   // of the seven lines.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 933,
+  // Raised from 933 by the checkpoint scheduler being BUILT here — the
+  // keeper's `save`, the HEAD lookup its rows are laned by, and the pair the
+  // session signals. Most of the 54 lines is two pieces of reasoning a reader
+  // cannot recover from the code: the doc handed to the scheduler is the
+  // workspace RECORD rather than this document's content (it keys the
+  // "anything changed" check on a frontier, and the record's is what the
+  // store saves), and the pair's `flush` signals BEFORE it flushes, because
+  // the edit flush's commit reaches `subscribeLocalUpdates` only on a later
+  // microtask and a flush alone would find nothing armed. Raised again to 997
+  // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
+  // throw escapes as an unhandled rejection that reddens a whole run while
+  // every test passes.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 997,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
