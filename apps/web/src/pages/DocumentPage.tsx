@@ -44,6 +44,7 @@ import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
+import { applyCommand } from '../lib/spatial/commands.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { buildVersionSaveBody } from '../lib/version-save-body.js'
@@ -227,6 +228,33 @@ function DocumentPageBody({
     canvas: threads.railCanvas,
     write: threads.write,
   })
+
+  /**
+   * A passage decided from the body (ADR-0029 decision 6). The same command
+   * the canvas card issues, so the two surfaces cannot mean different things
+   * by "adopt" — the write path in `document-sync-session` is what knows a
+   * body.replace has to rewrite the body, and it is reached from here for
+   * the same reason it is reached from there.
+   *
+   * The command carries the CHANGE, read from the proposal it names rather
+   * than rebuilt: what gets applied is exactly what the card showed.
+   */
+  const decidePassage = useCallback(
+    (proposalId: string, changeId: string, decision: 'adopted' | 'dismissed') => {
+      const change = sync.proposals
+        .find((one) => one.id === proposalId)
+        ?.changes.find((one) => one.id === changeId)
+      if (change === undefined) return
+      const command = {
+        kind: 'decide-proposal',
+        proposalId,
+        decision,
+        changes: [change],
+      } as const
+      sync.onChange(applyCommand(sync.canvas, command), command)
+    },
+    [sync.canvas, sync.onChange, sync.proposals],
+  )
 
   const nodeInEditor = useNodeInEditor(sync.canvas, sync.onChange, model.scopeKey)
 
@@ -584,6 +612,8 @@ function DocumentPageBody({
                       selectedThreadId: commentsRail.selectedThreadId,
                       onSelectThread: commentsRail.revealThread,
                       onComposeThread: commentsRail.composeThread,
+                      proposals: sync.proposals,
+                      onDecidePassage: decidePassage,
                     }
               }
               spatial={() => (

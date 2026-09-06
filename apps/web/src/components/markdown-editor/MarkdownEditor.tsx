@@ -1,6 +1,6 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import { redo, undo } from '@codemirror/commands'
-import type { Extension } from '@codemirror/state'
+import type { Extension, StateEffect } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
@@ -9,6 +9,7 @@ import {
   type CommentThread,
   type CommentThreadStatus,
   documentIdSchema,
+  type Proposal,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
@@ -42,6 +43,7 @@ import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
+import { PassageProposalCard } from './PassageProposalCard.js'
 import { PreviewPane } from './PreviewPane.js'
 import {
   previewWidth as computePreviewWidth,
@@ -52,6 +54,7 @@ import {
 } from './preview-width.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { usePassageProposals } from './use-passage-proposals.js'
 import { verbCatalogItems } from './verb-catalog.js'
 import {
   wikiLinkCompletionSource,
@@ -164,10 +167,30 @@ export interface MarkdownEditorProps {
    * offers no such row rather than an inert one.
    */
   onComposeThread?: (anchor: TextAnchor) => void
+  /**
+   * The proposal layer's open changes, projected onto the body: the passage
+   * each one would replace is marked in the text and named by a gutter
+   * marker beside it (ADR-0029 decision 1, for prose).
+   *
+   * Only `body.replace` changes are drawn — a canvas change is about a
+   * surface this document has not got — and only open ones, since a decision
+   * the person already made must not be asked again.
+   */
+  proposals?: readonly Proposal[]
+  /**
+   * The person decided one passage. Absent means this host has no proposal
+   * layer, and no card is offered rather than an inert one.
+   */
+  onDecidePassage?: (
+    proposalId: string,
+    changeId: string,
+    decision: 'adopted' | 'dismissed',
+  ) => void
 }
 
 /** Stable identity, so the projection effect below does not fire per render. */
 const NO_THREADS: readonly CommentThread[] = []
+const NO_PROPOSALS: readonly Proposal[] = []
 /** Same purpose as NO_THREADS, for the passages beside them. */
 const NO_MARKS: ReadonlyMap<string, LivePassage> = new Map()
 
@@ -339,6 +362,8 @@ export function MarkdownEditor({
   threadMarks,
   selectedThreadId = null,
   onSelectThread,
+  proposals,
+  onDecidePassage,
   onComposeThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
@@ -384,13 +409,30 @@ export function MarkdownEditor({
   // passes is a fresh closure on every render.
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
+  const rootRef = useRef<HTMLDivElement | null>(null)
+
+  const applyProposalEffects = useCallback((effects: readonly StateEffect<unknown>[]) => {
+    sourceApiRef.current?.applyEffects(effects)
+  }, [])
+  const passageProposals = usePassageProposals({
+    value,
+    proposals: proposals ?? NO_PROPOSALS,
+    applyEffects: applyProposalEffects,
+    rootRef,
+  })
+
   const annotationExtension = useMemo(
     () => annotationDecorations({ onSelectThread: (id) => onSelectThreadRef.current?.(id) }),
     [],
   )
   const paneExtensions = useMemo(
-    () => [completionExtension, annotationExtension, ...(sourceExtensions ?? [])],
-    [annotationExtension, completionExtension, sourceExtensions],
+    () => [
+      completionExtension,
+      annotationExtension,
+      passageProposals.extension,
+      ...(sourceExtensions ?? []),
+    ],
+    [annotationExtension, completionExtension, passageProposals.extension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
@@ -431,7 +473,7 @@ export function MarkdownEditor({
 
   // Source-pane share of the split, clamped so neither pane can vanish.
   const [splitRatio, setSplitRatio] = useState(0.5)
-  const rootRef = useRef<HTMLDivElement | null>(null)
+
   const sourceWrapRef = useRef<HTMLDivElement | null>(null)
   const previewScrollRef = useRef<HTMLDivElement | null>(null)
   const sourceApiRef = useRef<SourcePaneApi | null>(null)
@@ -1043,6 +1085,25 @@ export function MarkdownEditor({
           />
         )}
       </div>
+      {passageProposals.open !== null &&
+        passageProposals.placed !== null &&
+        onDecidePassage !== undefined && (
+          <PassageProposalCard
+            current={value.slice(passageProposals.placed.from, passageProposals.placed.to)}
+            proposed={passageProposals.placed.text}
+            conflicted={passageProposals.placed.conflicted}
+            at={{ x: passageProposals.open.x, y: passageProposals.open.y }}
+            onDecide={(decision) => {
+              onDecidePassage(
+                passageProposals.open?.proposalId as string,
+                passageProposals.open?.changeId as string,
+                decision,
+              )
+              passageProposals.close()
+            }}
+            onClose={passageProposals.close}
+          />
+        )}
       {linkPicker !== null && linkTargets !== undefined && (
         <LinkPickerDialog
           targets={linkTargets}
