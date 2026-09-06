@@ -1,6 +1,6 @@
 # ADR-0022: A variation is not in the address, and the default one has no name to put there
 
-**Status:** Accepted — decision 2 revisited on 2026-09-05 (see the dated note); decision 1 unchanged
+**Status:** Accepted — decision 2 revisited on 2026-09-05 (see the dated note); decision 1 unchanged. **The surface both decisions address is retired by [ADR-0029](0029-proposal-layer.md) (2026-09-06)** — see the note below the Decision.
 
 ## Context
 
@@ -86,6 +86,21 @@ constrains what revisiting it may look like.
 > per-reader EDITING variation stays rejected; a per-reader read-only VIEW
 > is what shipped, and it is a different thing — nothing anyone draws lands
 > in it.
+
+> **Note (2026-09-06): ADR-0029 retires the surface these decisions govern.**
+> Variations existed to carry the flow *an agent proposes, a person reviews,
+> the accepted part lands*. [ADR-0029](0029-proposal-layer.md) derives that
+> flow's shape from what a reviewer needs, and a proposal comes out as an
+> anchored change rather than a point in time — so the branch layer and its
+> UI, including `?v=`, do not fit and are retired with it.
+>
+> **Decision 1 survives its subject.** "The default carries no ref" is a rule
+> about how an address names an optional dimension, and it applies to whatever
+> is addressable next. It was also the durable half by its own account.
+>
+> Decision 2 does not survive: there will be no variation to put in `?v=`. Its
+> revision is left in place above rather than deleted, because what it cost
+> while it stood, and what addressing bought back, is the record.
 
 ## Consequences
 
