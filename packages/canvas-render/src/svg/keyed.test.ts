@@ -151,3 +151,108 @@ describe('renderSceneToKeyedSvg over a comment scene', () => {
     expect(keys.some((key) => key.startsWith('c1/bubble#'))).toBe(true)
   })
 })
+
+/**
+ * The annotation layer appears and disappears as a UNIT, and a consumer
+ * that patches the DOM has to know which groups those are.
+ *
+ * Resolving a conversation is not a recolour on this surface: with the
+ * default `showResolved`, the pin, its count, the leader and the whole
+ * bubble leave the scene together, and with the toggle on all four change
+ * paint at once. Either way a patch layer wants to treat them as one thing
+ * — and it must not reach that conclusion from the key's SHAPE, because a
+ * stored comment id may contain a `/` exactly like a document node id can
+ * (the same trap `ShapeSceneNode.commentChrome` exists to avoid in
+ * `sceneDigest`).
+ *
+ * Content entries inherit it from their owner, which is what carries the
+ * count run sitting on the pin and the body sitting in the bubble — neither
+ * has an id of its own to be marked by.
+ */
+describe('the keyed projection marks the annotation layer', () => {
+  const appearance: SpatialAppearanceResolver = {
+    resolveNode: () => ({}),
+    resolveEdge: () => ({}),
+    resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
+    resolveComment: () => ({
+      pin: { fill: '#d97706' },
+      bubble: { fill: '#fef3c7', stroke: '#d97706' },
+      leader: { stroke: '#d97706' },
+      passage: { fill: '#d97706', fillOpacity: 0.22 },
+      region: { fill: 'none', stroke: '#d97706' },
+      pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif' },
+      resolvedOverlay: {
+        pin: { fill: '#d97706', fillOpacity: 0.45 },
+        bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
+        leader: { stroke: '#d97706', strokeOpacity: 0.45 },
+        passage: { fill: '#d97706', fillOpacity: 0.1 },
+        region: { fill: 'none', stroke: '#d97706', strokeOpacity: 0.45 },
+        pinCount: { fill: '#fef3c7', fontFamily: 'sans-serif', fillOpacity: 0.45 },
+      },
+    }),
+  }
+  const parseBody = (text: string): MdastRoot => ({
+    type: 'root',
+    children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+  })
+  const canvas: SpatialCanvas = {
+    nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+    edges: [],
+    'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }] },
+  }
+  const laidOut = layoutSpatialCanvas(canvas, {
+    measure: createFakeMeasure(),
+    parseBody,
+    appearance,
+    // Two messages, so the pin carries a count — the entry with no id of
+    // its own, which is the case owner inheritance exists for.
+    threads: [
+      {
+        id: 'c1',
+        anchor: { kind: 'spatial', x: 400, y: 60 },
+        status: 'open',
+        messages: [
+          { id: 'm1', body: 'move this left' },
+          { id: 'm2', body: 'agreed' },
+        ],
+      },
+    ],
+    geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
+  })
+
+  it('marks every group the conversation draws, including the ones with no id of their own', () => {
+    const marked = renderSceneToKeyedSvg(laidOut)
+      .groups.filter((group) => group.annotation === true)
+      .map((group) => group.key)
+      .sort()
+
+    // The whole set, by equality: a subset check would pass while the
+    // leader still cut on its own.
+    expect(marked).toEqual(['c1/bubble', 'c1/bubble#1', 'c1/leader', 'c1/pin', 'c1/pin#1'])
+  })
+
+  it('leaves the document nodes and the chrome pseudo-groups unmarked', () => {
+    const groups = renderSceneToKeyedSvg(laidOut, { padding: 4, background: '#fff' }).groups
+    const unmarked = groups.filter((group) => group.annotation !== true).map((group) => group.key)
+    // No `#defs`: this scene draws nothing that needs one, and the
+    // pseudo-group is emitted only when it is non-empty.
+    expect(unmarked).toEqual(['#background', 'n1', 'n1#1'])
+  })
+
+  it('leaves the emitted bytes untouched — the mark is out-of-band', () => {
+    // The projection's whole safety argument is that its bytes are
+    // `renderSceneToSvg`'s. A marker that reached the document would break
+    // that, and would also be a second place the annotation layer is
+    // spelled.
+    const keyed = renderSceneToKeyedSvg(laidOut, { padding: 4 })
+    expect(keyed.svg).not.toContain('annotation')
+    const unwrapped = keyed.groups
+      .map((group) =>
+        group.key.startsWith('#')
+          ? group.svg
+          : group.svg.slice(`<g data-wb-key="${group.key}">`.length, -'</g>'.length),
+      )
+      .join('')
+    expect(`${keyed.rootOpen}${unwrapped}</svg>`).toBe(renderSceneToSvg(laidOut, { padding: 4 }))
+  })
+})

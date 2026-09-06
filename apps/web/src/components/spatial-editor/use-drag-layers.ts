@@ -61,6 +61,14 @@ export interface DragLayersInputs {
   anchors: RenderedCanvas['anchors']
   /** The committed surface's keyed projection (mount-once patch container). */
   keyed: KeyedSvgRender
+  /**
+   * A comment is being dragged, so `keyed` has had its groups taken out
+   * (`keyedWithoutPrefix`) for the drag layer to draw live. Like the drag
+   * backdrop below, that is a LAYER swap and not an edit — without saying
+   * so, the annotation ramp reads the grab as the conversation leaving and
+   * fades a second pin at the anchor the pointer just left.
+   */
+  commentInFlight?: boolean
   /** Draw resolved comments in the drag layers too, matching the committed surface. */
   showResolved?: boolean
   boxes: readonly NodeBox[]
@@ -81,6 +89,7 @@ export function useDragLayers({
   scene,
   anchors,
   keyed,
+  commentInFlight,
   showResolved,
   boxes,
   selectableBoxes,
@@ -240,7 +249,18 @@ export function useDragLayers({
   // The committed surface's mount-once container (see the editor's JSX):
   // during a gesture it patches to the drag backdrop, on drop back to the
   // committed render — both through the same keyed reconciliation.
-  const canvasContentRef = useKeyedSvg(dragStatic?.keyed ?? keyed)
+  // The source token is what tells the patcher that entering and leaving a
+  // gesture is a LAYER swap rather than an edit: the backdrop excludes
+  // whatever the drag layer draws live, so a grabbed comment pin arrives
+  // here as a removal and its drop as an insertion.
+  const canvasContentRef = useKeyedSvg(
+    dragStatic?.keyed ?? keyed,
+    dragStatic !== undefined
+      ? 'drag-backdrop'
+      : commentInFlight === true
+        ? 'comment-drag'
+        : 'committed',
+  )
 
   /**
    * The in-flight preview geometry, derived per frame from the gesture's own

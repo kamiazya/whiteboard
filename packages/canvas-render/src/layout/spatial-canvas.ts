@@ -1720,6 +1720,7 @@ function composeComments(
     out.push({
       kind: 'edge',
       id: `${comment.id}/leader`,
+      commentChrome: true,
       path: [
         { x: anchor.x, y: anchor.y },
         commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),

@@ -679,6 +679,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         scene,
         anchors,
         keyed: surfaceKeyed,
+        commentInFlight: draggedCommentId !== undefined,
         showResolved: showResolvedComments,
         boxes,
         selectableBoxes,
@@ -2403,6 +2404,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           >
             <div
               data-testid="canvas-content"
+              className="canvas-surface"
               style={{
                 position: 'absolute',
                 left: (dragStatic?.bounds ?? bounds).x,

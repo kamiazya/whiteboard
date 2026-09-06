@@ -225,14 +225,22 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision 1): where a change would land, and the bubble saying how many
   // are waiting. It reuses the comment layer's constants and placer rather
   // than growing a second set.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2096,
+  //
+  // +1: the leader edge carries `commentChrome`, so the keyed projection can
+  // mark a conversation's whole chrome as the annotation layer. Without it the
+  // leader is the one piece that cuts while the pin and bubble ramp.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2097,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
   // +2 more: the card now says WHICH changes it decided, so this handler
   // forwards them instead of re-deriving the open set.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2725,
+  // +2: the surface takes a class so it can draw past its own viewport, and
+  // tells `useDragLayers` that a comment is in flight — both so the
+  // annotation ramp is neither clipped by a re-fitted envelope nor mistaken
+  // for an edit when a gesture takes the pin over.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2727,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
