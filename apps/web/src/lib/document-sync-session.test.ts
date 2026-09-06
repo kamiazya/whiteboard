@@ -2584,6 +2584,33 @@ describe('adopting a proposed passage (ADR-0029 decision 6)', () => {
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
   })
 
+  it('lands as ONE update payload, because a decision is one act', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const changes = [
+      passageChange('c1', 'Thursday', 'Friday'),
+      passageChange('c2', '# Plan', '# The plan'),
+    ]
+    backend._ctrl.handlers?.onSnapshot(seededNote(changes))
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p1',
+      decision: 'adopted',
+      changes,
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Two statuses, the canvas and the body are four writes of one act. A
+    // commit each would ship four independent deltas, so a transport that
+    // died between them would leave the change marked adopted with the words
+    // it promised to rewrite still on the page.
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    expect(session.getMarkdownBody()).toBe('# The plan\n\nThe plan is to ship on Friday.\n')
+  })
+
   it('leaves the body alone when the passage is dismissed', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())

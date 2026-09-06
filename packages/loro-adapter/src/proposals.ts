@@ -71,6 +71,17 @@ export function setProposedChangeStatus(
   changeId: string,
   status: ProposedChangeStatus,
 ): void {
+  setProposedChangeStatusInto(doc, proposalId, changeId, status)
+  doc.commit()
+}
+
+/** The stamp itself, without the commit — see `withDocumentBatch`. */
+export function setProposedChangeStatusInto(
+  doc: DocumentContainers,
+  proposalId: string,
+  changeId: string,
+  status: ProposedChangeStatus,
+): void {
   const container = proposalContainer(doc, proposalId)
   if (container === undefined) return
   const changes = changesOf(container)
@@ -78,7 +89,6 @@ export function setProposedChangeStatus(
   const stored = changes.get(changeId)
   if (stored === undefined || stored === null || typeof stored !== 'object') return
   changes.set(changeId, { ...(stored as Record<string, unknown>), [STATUS_FIELD]: status })
-  doc.commit()
 }
 
 /**

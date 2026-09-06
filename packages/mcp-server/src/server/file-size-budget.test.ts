@@ -130,7 +130,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // (ADR-0029). One line, and it has to be here — the list is what a
   // tree-node host pre-attaches from, and a container attached on first
   // READ instead clears the UndoManager's redo stack.
-  'packages/loro-adapter/src/loro-bridge.ts': 943,
+  // +9: `writeSpatialCanvas` and `writeMarkdownBody` each split into a
+  // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
+  // can fold a whole act into ONE commit. The bodies did not grow; these are
+  // the two wrappers and the two lines saying what the split is for.
+  'packages/loro-adapter/src/loro-bridge.ts': 952,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -175,7 +179,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // (ADR-0029 decision 6). The write itself is `apply-adopted-passages.ts`;
   // these ten lines are its import, its call, and the comment saying why a
   // decision has to reach two planes here.
-  'apps/web/src/lib/document-sync-session.ts': 1471,
+  // +4: the decide-proposal arm moved inside `withDocumentBatch`, so its
+  // three subjects land as one delta and one undo step instead of four.
+  'apps/web/src/lib/document-sync-session.ts': 1475,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the

@@ -164,6 +164,12 @@ function commentToFields(comment: CanvasComment): Fields {
 }
 
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
+  writeSpatialCanvasInto(doc, canvas)
+  doc.commit()
+}
+
+/** The resync itself, without the commit — see `withDocumentBatch`. */
+export function writeSpatialCanvasInto(doc: DocumentContainers, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
@@ -217,8 +223,6 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
     edgesMap.delete(id)
     dropLockInto(doc, EDGE_LOCKS_KEY, id)
   }
-
-  doc.commit()
 }
 
 // Non-committing internals shared by the single committing helpers below
@@ -870,6 +874,12 @@ function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
  * a later reader to find.
  */
 export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
+  writeMarkdownBodyInto(doc, body)
+  doc.commit()
+}
+
+/** The body splice itself, without the commit — see `withDocumentBatch`. */
+export function writeMarkdownBodyInto(doc: DocumentContainers, body: string): void {
   const text = doc.getText(MARKDOWN_BODY_KEY)
   // Only what CHANGED. A whole-document replace is correct and ruinous:
   // every character is deleted and re-inserted, so one keystroke ships the
@@ -884,9 +894,8 @@ export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
   // unconditional rewrite would add CRDT operations — and a save — for a
   // change nobody made.
   if (doc.getMap(NODES_KEY).size > 0 || doc.getMap(EDGES_KEY).size > 0) {
-    writeSpatialCanvas(doc, { nodes: [], edges: [] })
+    writeSpatialCanvasInto(doc, { nodes: [], edges: [] })
   }
-  doc.commit()
 }
 
 /**

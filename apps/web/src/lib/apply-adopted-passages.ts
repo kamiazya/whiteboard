@@ -1,5 +1,5 @@
 import type { DocumentContainers } from '@kamiazya/whiteboard-loro-adapter'
-import { readMarkdownBody, writeMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   BodyProposedChange,
   ProposedChange,
@@ -23,6 +23,10 @@ import { applyBodyChange, resolveTextAnchor } from '@kamiazya/whiteboard-model'
  * written for it, which is the only honest thing to do with a passage that is
  * not there.
  *
+ * The body is READ from `doc` and WRITTEN through `write`, so the caller
+ * decides the commit boundary — today `withDocumentBatch`, which folds this
+ * rewrite into the same commit as the statuses it closes.
+ *
  * Applied from the last passage backwards so an earlier rewrite never shifts
  * the offsets a later one was resolved at — every position comes from ONE
  * read of the body, exactly as `wb_body_edit` does it on the other side.
@@ -30,6 +34,7 @@ import { applyBodyChange, resolveTextAnchor } from '@kamiazya/whiteboard-model'
 export function applyAdoptedPassages(
   doc: DocumentContainers,
   changes: readonly ProposedChange[],
+  write: (body: string) => void,
 ): void {
   const passages = changes.filter((change) => change.op === 'body.replace')
   if (passages.length === 0) return
@@ -44,5 +49,5 @@ export function applyAdoptedPassages(
   const next = [...placed]
     .sort((a, b) => b.at.start - a.at.start)
     .reduce((text, { change, at }) => applyBodyChange(text, change, at), body)
-  if (next !== body) writeMarkdownBody(doc, next)
+  if (next !== body) write(next)
 }

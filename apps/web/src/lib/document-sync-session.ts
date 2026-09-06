@@ -19,7 +19,7 @@ import {
   resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   setCommentThreadStatus,
-  setProposedChangeStatus,
+  withDocumentBatch,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
@@ -436,24 +436,28 @@ function writeCommandTarget(
       writeThreadMessage(doc, command.threadId, command.message)
       return true
     case 'decide-proposal': {
-      // Two planes in one commit, because a decision is one act: the
+      // Every plane in ONE commit, because a decision is one act: the
       // changes are stamped where the proposal lives, and an ADOPTED one
-      // also rewrites the board. The canvas write is the full resync
-      // deliberately — a proposal reaches whatever elements it names, and
-      // there is no single target to write fine-grained.
-      for (const change of command.changes) {
-        setProposedChangeStatus(doc, command.proposalId, change.id, command.decision)
-      }
-      if (command.decision === 'adopted') {
-        writeSpatialCanvas(doc, next)
+      // also rewrites the board and the body. A commit each would be four
+      // independent deltas for one press — see `withDocumentBatch` for the
+      // measurement and for what a transport dying between them left behind.
+      // The canvas write is the full resync deliberately: a proposal reaches
+      // whatever elements it names, and there is no single target to write
+      // fine-grained.
+      withDocumentBatch(doc, (writer) => {
+        for (const change of command.changes) {
+          writer.setProposedChangeStatus(command.proposalId, change.id, command.decision)
+        }
+        if (command.decision !== 'adopted') return
+        writer.writeSpatialCanvas(next)
         // And the OTHER subject a proposal can have (ADR-0029 decision 6).
         // `applyCommand` folds the canvas and cannot reach a body, so a
         // passage adopted here would otherwise close its change against a
         // document that never changed — the worst of the three states,
         // since the person is looking at an "adopted" verdict and their own
         // words still on the page.
-        applyAdoptedPassages(doc, command.changes)
-      }
+        applyAdoptedPassages(doc, command.changes, (body) => writer.writeMarkdownBody(body))
+      })
       return true
     }
     case 'create-thread':

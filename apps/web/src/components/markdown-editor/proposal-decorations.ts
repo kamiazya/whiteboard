@@ -210,6 +210,13 @@ class PassageGutterMarker extends GutterMarker {
  * in through `setProposalProjection`, because the view is created once per
  * mount and a changing extension array would not reach it.
  */
+function markerOf(event: Event): HTMLElement | undefined {
+  return (
+    (event.target as HTMLElement | null)?.closest<HTMLElement>('.cm-proposal-gutter-marker') ??
+    undefined
+  )
+}
+
 export function proposalDecorations(handlers: ProposalHandlers = {}): Extension {
   return [
     proposalField,
@@ -248,20 +255,29 @@ export function proposalDecorations(handlers: ProposalHandlers = {}): Extension 
         return builder.finish()
       },
       domEventHandlers: {
+        // The two halves are deliberately split. `mousedown` only holds the
+        // caret back; the ACTIVATION is on `click`, which is the event a
+        // native button answers to however it was reached — pointer, Enter,
+        // or Space. Handling it on `mousedown` alone made a tab-focusable
+        // button that no keyboard could press.
         mousedown: (_view, _line, event) => {
-          const button = (event.target as HTMLElement | null)?.closest<HTMLElement>(
-            '.cm-proposal-gutter-marker',
-          )
-          if (button === null || button === undefined) return false
+          if (markerOf(event) === undefined) return false
+          // Before the default, which would move the caret into the line and
+          // take focus off the card that is about to open. It does not stop
+          // the `click` that follows.
+          event.preventDefault()
+          return true
+        },
+        click: (_view, _line, event) => {
+          const button = markerOf(event)
+          if (button === undefined) return false
           const { proposalId, changeId } = button.dataset
           if (proposalId === undefined || changeId === undefined) return false
-          // Before the default, which would move the caret into the line and
-          // take focus off the card that is about to open.
-          event.preventDefault()
           const rect = button.getBoundingClientRect()
           // The MARKER's box, not the pointer: a card anchored to where the
           // finger happened to land drifts by up to the target's size, and
-          // this target is deliberately large enough for a thumb.
+          // this target is deliberately large enough for a thumb. It is also
+          // the only anchor a keyboard press has.
           handlers.onSelectPassage?.(proposalId, changeId, {
             clientX: rect.right,
             clientY: rect.top,

@@ -99,6 +99,32 @@ describe('a proposed passage in the body', () => {
     )
   })
 
+  it('opens the card from the keyboard, because the gutter target is a real button', async () => {
+    const { container, getByTestId, queryByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value={BODY}
+        onChange={vi.fn()}
+        proposals={proposalOf('Thursday', 'Friday')}
+        onDecidePassage={vi.fn()}
+      />,
+    )
+
+    const marker = await vi.waitFor(() => {
+      const found = container.querySelector<HTMLElement>('.cm-proposal-gutter-marker')
+      expect(found).not.toBeNull()
+      return found as HTMLElement
+    })
+    // It is reachable by tab, so it has to answer what a tab-reached button
+    // answers to. Enter and Space synthesize a `click`, never a `mousedown`.
+    expect(marker.tabIndex).toBe(0)
+    expect(queryByTestId('passage-proposal-card')).toBeNull()
+
+    marker.focus()
+    await userEvent.keyboard('{Enter}')
+    expect(getByTestId('passage-proposal-card').textContent).toContain('Friday')
+  })
+
   it('draws nothing for a change the person already decided', async () => {
     const decided: readonly Proposal[] = [
       {
