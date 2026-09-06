@@ -198,17 +198,24 @@ export function FolderContentsList({
                   role="img"
                   aria-label="Changed since you last opened it"
                   data-testid="card-changed-dot"
-                  // A HUE, not `--primary`. This theme's primary is
-                  // `oklch(0.205 0 0)` — chroma zero — so the dot shipped
-                  // black in light mode and white in dark, reading as
-                  // punctuation rather than as a status. Blue is the unread
-                  // convention; a raw palette colour rather than a token
-                  // because the conflict badge below does the same, and
-                  // `--manipulation` is spoken for (it means selection and
-                  // handles on the canvas, not "something happened here").
-                  // The ring keeps it legible over a thumbnail of any
-                  // colour, which is what a real document renders as.
-                  className="absolute top-1 right-1 size-2.5 rounded-full bg-sky-500 ring-2 ring-background dark:bg-sky-400"
+                  // The SAME badge as the settings nudge, deliberately.
+                  // BRAND.md reserves `#3b6ecc` as the blue spark, the AI's
+                  // hand — and says the favicon's syncing dot reuses that hue
+                  // because "the system is at work" is the same semantic
+                  // family as the AI acting. A document rewritten while the
+                  // person was elsewhere is that family: in this product the
+                  // thing that rewrote it is usually an agent.
+                  //
+                  // Not `--primary`, which is chroma zero here and drew this
+                  // as ink. Not amber, which the conflict badge below already
+                  // spends on this same card. Not a second blue of my own:
+                  // `badge-colour-surface.test.ts` holds every badge to one
+                  // literal, because that is exactly what went wrong.
+                  //
+                  // Fixed across themes on purpose — a brand hue is chosen to
+                  // read on both grounds — with the ring carrying it over a
+                  // thumbnail of any colour.
+                  className="absolute top-1 right-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
                 />
               )}
               {selection !== undefined && (

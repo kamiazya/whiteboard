@@ -51,6 +51,15 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
   brand surface. It appears when the AI acts (the tidy phase of the splash
   story, the spark on the OG card). Do not use it decoratively; its meaning
   is the point.
+- **Badges** — the small round dot on a control, ringed in the page
+  background — carry the spark too, for the same reason the syncing dot
+  does: a badge says the system has something for you. Two exist, the
+  settings nudge ("a setup step is waiting") and the card's
+  changed-since-you-opened-it dot, and `badge-colour-surface.test.ts` holds
+  them to one literal so a third cannot invent a second blue. Note the
+  settings nudge stretches the spark's meaning further than the card's does
+  — a setup step is not the AI acting — so if the spark is ever reserved
+  more strictly, that badge is the one to move.
 - **Status colors** (favicon dot): green `#16a34a` saved / amber `#d97706`
   unsaved / blue `#3b6ecc` syncing / gray + **dashed frame** + faded mark =
   offline. These are *state* colors, not accents; the syncing dot reuses
