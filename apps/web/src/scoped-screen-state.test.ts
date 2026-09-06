@@ -413,6 +413,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',
+  branchRefreshSignal:
+    'no subject: a monotonic tick, not a name — the chip and banner act only on a value that CHANGES after their own mount, so a leftover count is inert, and a switch re-bumps it anyway because `sync.loaded` goes false and back to true for the arriving document',
   listGenerationRef:
     'no subject: a monotonic stamp ordering list loads — resetting it would revive the stale-resolution race it exists to close',
   currentDocumentIdRef:
