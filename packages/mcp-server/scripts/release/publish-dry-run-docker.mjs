@@ -5,11 +5,19 @@
 // No cosign, no OIDC material, no registry credentials used.
 // Output: structured JSON summary to stdout on success; generic message to
 // stderr and exit 1 on failure. Full build logs never reach stdout.
+//
+// A CACHE REPORT does reach stderr, and its counts reach stdout. The build is
+// the longest step in ci.yml's dry-run-docker job — 198s of a 270s job,
+// measured — and runs with `--cache-from/--cache-to type=gha`. Whether that
+// cache was doing anything used to be unanswerable, because the output below
+// was captured and then printed only on FAILURE: every green run threw the
+// evidence away, so a warm cache and a cold one looked identical from outside.
 
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { formatCacheReport, parseBuildxProgress } from './buildx-progress.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -88,6 +96,19 @@ if (buildResult.status !== 0 || buildResult.error) {
   fail('docker build')
 }
 
+// The build succeeded, so report what the cache did. `--progress=plain` is
+// already on both build paths above; buildx writes it to stderr.
+const cacheReport = parseBuildxProgress(buildResult.stderr ?? '')
+for (const line of formatCacheReport(cacheReport)) {
+  process.stderr.write(`${line}\n`)
+}
+// The raw output stays available for the case the report cannot explain, but
+// behind a flag: it is long, and the point of the report is to make reading it
+// unnecessary.
+if (process.env.WHITEBOARD_DOCKER_BUILD_LOG === '1' && buildResult.stderr) {
+  process.stderr.write(buildResult.stderr)
+}
+
 // Step 2: capture locally-built image ID (sha256 digest of the image config).
 // RepoDigests are only populated after a registry push; use .Id for local builds.
 const inspectResult = spawnSync('docker', ['image', 'inspect', IMAGE_TAG, '--format', '{{.Id}}'], {
@@ -112,6 +133,10 @@ const metadata = {
   sbomStatus: 'deferred',
   signingStatus: 'deferred',
   note: 'No registry push. SBOM (docker buildx --sbom=true) and cosign keyless signing deferred to publish-workflow slice.',
+  // Full report, step names included: this file is an artifact of the same run
+  // whose log already names them, and trending the slowest steps across runs is
+  // what turns "the build is slow" into a specific layer.
+  cache: cacheReport,
 }
 writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metadata, null, 2))
 
@@ -125,6 +150,16 @@ process.stdout.write(
       artifactId: 'docker-image',
       imageTag: IMAGE_TAG,
       imageIdLength: imageId.length,
+      // Counts only. Step names stay out of stdout, which this script promises
+      // carries no build log.
+      cache: {
+        parsed: cacheReport.parsed,
+        stepCount: cacheReport.stepCount,
+        cachedCount: cacheReport.cachedCount,
+        ranCount: cacheReport.ranCount,
+        cacheHitRatio: cacheReport.cacheHitRatio,
+        ranSeconds: cacheReport.ranSeconds,
+      },
       sbomStatus: 'deferred',
       signingStatus: 'deferred',
       note: 'no registry push; no cosign signing; publish-workflow slice required',
