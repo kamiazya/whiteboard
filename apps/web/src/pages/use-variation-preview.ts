@@ -121,7 +121,12 @@ export function useVariationPreview(deps: {
           return
         }
         setVariationNotice(null)
-        setVariationPreview({ name: variationParam, head: state.head, branches: state.branches, past })
+        setVariationPreview({
+          name: variationParam,
+          head: state.head,
+          branches: state.branches,
+          past,
+        })
       } catch {
         if (!cancelled) {
           setVariationNotice('Variation preview failed to load')

@@ -351,13 +351,9 @@ function useBrowserDocument(
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
-    // The SEARCH rides along, because this writes the address of the document
-    // already loaded rather than navigating to another one. A bare pathname
-    // drops the query — which is how `?v=<variation>` never survived to be
-    // read on this keeper: the deep link arrived, this effect replaced the
-    // address with the pathname alone, and the preview had nothing left to
-    // resolve. (`navigateToDocument` and the repair below DO drop it: both
-    // name a different document, and a variation qualifies one document.)
+    // The SEARCH rides along: this writes the address of the document already
+    // loaded, so a bare pathname drops a query the reader arrived with — which
+    // is how `?v=` never survived to be read here (ADR-0022's note).
     navigate({ pathname: path, search: location.search }, { replace: isFirstSync })
   }, [documentPath, navigate, location.search])
 
@@ -909,6 +905,7 @@ function useBrowserDocument(
       path: loadedPath,
       dataMode: 'local',
       branchRefreshSignal,
+      onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.

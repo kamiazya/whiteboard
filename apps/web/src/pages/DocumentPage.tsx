@@ -319,9 +319,7 @@ function DocumentPageBody({
     ...(topBar?.branchRefreshSignal === undefined
       ? {}
       : { refreshSignal: topBar.branchRefreshSignal }),
-    ...(topBar?.onBranchesChanged === undefined
-      ? {}
-      : { onHeadChanged: topBar.onBranchesChanged }),
+    ...(topBar?.onBranchesChanged === undefined ? {} : { onHeadChanged: topBar.onBranchesChanged }),
   })
   // A variation's tip is a read-only state drawn in place of the editor —
   // the same slot a version preview uses, and the only thing that ever put
