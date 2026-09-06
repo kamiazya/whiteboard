@@ -113,13 +113,17 @@ describe('changed since you last opened it', () => {
     expect(dotFor('Tokens')).toBeNull()
   })
 
-  it('is drawn in a hue rather than in ink, and answers to the theme', async () => {
+  it('is drawn in a hue rather than in ink, on both grounds', async () => {
     // `bg-primary` shipped first and this theme's `--primary` is
     // `oklch(0.205 0 0)` — chroma ZERO — so the dot came out black in light
     // mode and white in dark, reading as punctuation rather than as a
-    // status. The invariant is not a particular blue: it is that the dot is
-    // not grey, and that the dark variant is a DIFFERENT colour rather than
-    // a `dark:` class nobody checked.
+    // status.
+    //
+    // The colour is now the settings nudge's, which BRAND.md reserves as the
+    // blue spark; that agreement is pinned by source in
+    // `badge-colour-surface.test.ts`. What THIS test adds is the rendered
+    // half: not grey, and unchanged by the theme, because a brand hue is
+    // chosen to read on both grounds rather than swapped per mode.
     renderPanel()
     await openCard('Roadmap')
     cleanup()
@@ -131,9 +135,7 @@ describe('changed since you last opened it', () => {
     expect(isChromatic(light)).toBe(true)
 
     document.documentElement.classList.add('dark')
-    const dark = getComputedStyle(dotFor('Roadmap') as HTMLElement).backgroundColor
-    expect(isChromatic(dark)).toBe(true)
-    expect(dark).not.toBe(light)
+    expect(getComputedStyle(dotFor('Roadmap') as HTMLElement).backgroundColor).toBe(light)
   })
 
   it('clears once the person opens it again', async () => {
