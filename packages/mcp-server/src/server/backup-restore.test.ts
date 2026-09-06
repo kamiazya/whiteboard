@@ -181,6 +181,48 @@ describe('backup-restore drill', () => {
     }
   })
 
+  // Both helpers accept an EMPTY destination directory by contract —
+  // `isEmptyDirOrMissing` says so and `restoreDataDir`'s own error message
+  // ("Target data directory is not empty") only makes sense if empty passes.
+  // The copy underneath disagreed: `cp` with `errorOnExist` + `force: false`
+  // throws ERR_FS_CP_EEXIST for the destination DIRECTORY, not just for a
+  // colliding entry inside it. Nothing caught it because every other test
+  // here lets the helper create the destination.
+  //
+  // It is not a hypothetical shape: a mounted volume is always an existing
+  // empty directory, so `docker run -v /backups/today:/backup` hit it every
+  // time, and with a raw Node SystemError rather than a BackupError.
+  it('backup into a pre-created empty directory succeeds, as the empty-dir check promises', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await seedDataDir(roots.src)
+      await mkdir(roots.backup, { recursive: true })
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      expect((await readdir(roots.backup)).length).toBeGreaterThan(0)
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+
+  it('restore into a pre-created empty directory succeeds, as the empty-dir check promises', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await seedDataDir(roots.src)
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+      await mkdir(roots.target, { recursive: true })
+
+      await restoreDataDir(roots.backup, roots.target, { allowedRoots: [roots.root] })
+
+      dataDir = roots.target
+      const restored = await listDocuments('session1')
+      expect(restored.map((c) => c.path)).toContain('canvas-a')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+
   it('path guard: backup refuses to operate outside any allowed root', async () => {
     const roots = await makeDrillRoots()
     const other = await mkdtemp(join(tmpdir(), 'whiteboard-backup-other-'))
