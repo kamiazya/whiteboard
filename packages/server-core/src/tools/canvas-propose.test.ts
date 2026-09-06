@@ -8,7 +8,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { describe, expect, test } from 'vitest'
+import { afterEach, describe, expect, test, vi } from 'vitest'
 import type { AgentActivity, ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -52,6 +52,10 @@ async function storedProposals(deps: ServerDeps) {
 }
 
 describe('wb_canvas_edit in propose mode', () => {
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
   test('leaves the board alone and stores what it would have done', async () => {
     const store = new FakeDocumentStore()
     await seed(store, BOARD)
@@ -212,6 +216,8 @@ describe('wb_canvas_edit in propose mode', () => {
     await seed(store, BOARD)
     const deps = makeDeps(store)
     const tool = createCanvasEditTool(deps)
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-06T00:00:00.000Z'))
 
     const first = await tool.execute({
       workspaceId: WORKSPACE_ID,
@@ -220,9 +226,10 @@ describe('wb_canvas_edit in propose mode', () => {
       ops: [{ op: 'node.patch', id: 'a', patch: { x: 400 } }],
     })
     const opened = first.proposed?.createdAt
-    // A real gap, so a re-stamp cannot pass by landing in the same
-    // millisecond as the call that opened the proposal.
-    await new Promise((resolve) => setTimeout(resolve, 5))
+    // An hour, so a re-stamp is unambiguous. Only `Date` is faked: the store
+    // and the tool await ordinary promises, and taking their timers away
+    // would make this test about vitest rather than about the clock.
+    vi.setSystemTime(new Date('2026-09-06T01:00:00.000Z'))
     const second = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
@@ -231,7 +238,7 @@ describe('wb_canvas_edit in propose mode', () => {
       ops: [{ op: 'node.patch', id: 'b', patch: { y: 300 } }],
     })
 
-    expect(opened).toEqual(expect.any(String))
+    expect(opened).toBe('2026-09-06T00:00:00.000Z')
     expect(second.proposed?.createdAt).toBe(opened)
   })
 
