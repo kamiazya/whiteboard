@@ -32,7 +32,7 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts } from '@kamiazya/whiteboard-model'
-import { X } from 'lucide-react'
+import { CircleCheck, CircleX, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Box } from '../../lib/spatial/geometry.js'
@@ -132,13 +132,26 @@ export function ProposalCard({
           <X className="size-3.5" />
         </CardAction>
       </div>
-      {/* Words, not icons. Adopt and Dismiss are a decision with a
-          consequence, and a pair of glyphs asks the reader to guess which
-          one rewrites their board — the comment card's icons are standard
-          lifecycle verbs, these are not. */}
+      {/*
+        Icon-only, per DESIGN.md's "object-action surfaces are icon-first":
+        the name is carried by `aria-label` and a `title` tooltip, and no
+        visible text. The two decisions are CIRCLED glyphs while the card's
+        own Close stays a bare ×, which is the distinction the comment card
+        already teaches — a ring means a verb that writes something, a bare
+        mark means chrome.
+
+        Their own row, at a coarse pointer's 44px, rather than tucked in
+        beside Close: Dismiss is the one verb on this surface that no Undo
+        reaches, so it gets a target sized for a thumb rather than one sized
+        for a mouse.
+      */}
       <div className="flex items-center justify-end gap-1">
-        <DecideButton label="Dismiss" onSelect={() => onDecide('dismissed')} />
-        <DecideButton label="Adopt" onSelect={() => onDecide('adopted')} />
+        <DecideButton label="Dismiss" onSelect={() => onDecide('dismissed')}>
+          <CircleX className="size-5" />
+        </DecideButton>
+        <DecideButton label="Adopt" onSelect={() => onDecide('adopted')}>
+          <CircleCheck className="size-5" />
+        </DecideButton>
       </div>
     </div>
   )
@@ -147,17 +160,21 @@ export function ProposalCard({
 function DecideButton({
   label,
   onSelect,
+  children,
 }: {
   readonly label: string
   readonly onSelect: () => void
+  readonly children: React.ReactNode
 }) {
   return (
     <button
       type="button"
+      aria-label={label}
+      title={label}
       onClick={onSelect}
-      className="rounded border border-current/30 px-2 py-1 text-xs hover:bg-accent hover:text-foreground"
+      className="flex size-9 items-center justify-center rounded hover:bg-accent hover:text-foreground pointer-coarse:size-11"
     >
-      {label}
+      <span aria-hidden="true">{children}</span>
     </button>
   )
 }
