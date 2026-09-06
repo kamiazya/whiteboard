@@ -15,6 +15,7 @@ import { LoroSyncPlugin } from 'loro-codemirror'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { expectCodeMirrorPluginCrash } from '../../test-utils/browser-setup.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -75,4 +76,51 @@ it('a remote edit merges into the editor and shifts the caret exactly', async ()
   await vi.waitFor(() => {
     expect(doc.getText('body').toString()).toBe('REMOTE alpha Xomega')
   })
+})
+
+/**
+ * The container a binding addresses is resolved LIVE, and a resolver that
+ * answers with a different container under an already-mounted view kills the
+ * binding outright.
+ *
+ * `LoroSyncPlugin` maps CodeMirror positions onto whatever the accessor hands
+ * it at that moment, so an answer that changes identity leaves the view's
+ * offsets addressing text that container never had. loro-crdt throws
+ * `Index out of bound`, `@codemirror/view` catches it, logs
+ * `CodeMirror plugin crashed` and DISABLES the plugin for good — the pane
+ * keeps taking input and reaches nothing.
+ *
+ * `use-markdown-document`'s `bodyTextOf` is a live resolver of exactly this
+ * shape: it reads `hostRef.current` on every call and answers with the
+ * workspace tree-node container or the root one depending on what it finds.
+ * This pins the consequence rather than the trigger, and doubles as the
+ * detector's own mutation check — a run that finds nothing here is looking at
+ * a guard that stopped guarding.
+ */
+it('reports a binding whose container changes under the mounted view', async () => {
+  const crashes = expectCodeMirrorPluginCrash()
+  const doc = new Loro()
+  doc.getText('body').insert(0, 'hello ')
+  doc.commit()
+  let key = 'body'
+  const binding = [LoroSyncPlugin(doc as LoroDoc, (d) => d.getText(key))]
+  const { container } = render(
+    <div style={{ width: 800, height: 300 }}>
+      <MarkdownEditor
+        initialViewMode="write"
+        value="hello "
+        onChange={() => {}}
+        previewDebounceMs={0}
+        sourceExtensions={binding}
+      />
+    </div>,
+  )
+  await focusEditable(() => container.querySelector('.cm-content'))
+  key = 'somewhere-else'
+  await userEvent.keyboard('{End}world')
+
+  await vi.waitFor(() => {
+    expect(crashes.length).toBeGreaterThan(0)
+  })
+  expect(crashes.join('\n')).toContain('Index out of bound')
 })
