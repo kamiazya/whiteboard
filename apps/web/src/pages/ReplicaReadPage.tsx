@@ -23,6 +23,7 @@ import {
   referenceTargets,
   referenceWire,
 } from '@kamiazya/whiteboard-canvas-render'
+import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import {
   documentContainers,
   readMarkdownBody,
@@ -40,6 +41,7 @@ import { formatRelative } from '../components/workspace-files/format-relative.js
 import { WorkspaceFileTree } from '../components/workspace-files/WorkspaceFileTree.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import type { WorkspaceDocumentEntry } from '../lib/document-entry.js'
+import { type LinkableDocument, linkEntries, linkTitles } from '../lib/link-entries.js'
 
 export interface ReplicaReadPageProps {
   /** The daemon workspace's canonical id — the replica registry's key. */
@@ -154,12 +156,30 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
   // on the one page that exists BECAUSE the daemon is unreachable — and it
   // stays inside the page's own rule, since reading a container is not an
   // index write.
+  // The same two tables both keeper pages build, over this record's own
+  // entries — so a `[[...]]` written here resolves by the rules the rest of
+  // the app already applies (path or id; a display name is a label, never a
+  // target) rather than by a lookup this page invented for itself.
+  const linkable = useMemo(
+    (): readonly LinkableDocument[] =>
+      state.kind === 'ready'
+        ? state.entries.map((entry) => ({
+            id: entry.documentId,
+            path: entry.path,
+            ...(entry.name === undefined ? {} : { displayName: entry.name }),
+            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          }))
+        : [],
+    [state],
+  )
+  const resolveAlias = useMemo(() => createUniqueNameResolver(linkEntries(linkable)), [linkable])
+  const resolveTitle = useMemo(() => linkTitles(linkable), [linkable])
+
   const references = useMemo((): ReferenceWire | undefined => {
     if (state.kind !== 'ready' || selected === undefined) return undefined
-    const byPath = new Map(state.entries.map((entry) => [entry.path, entry]))
     const byId = new Map(state.entries.map((entry) => [entry.documentId, entry]))
     const load = (target: string): LoadedReference | null => {
-      const entry = byPath.get(target) ?? byId.get(target)
+      const entry = byId.get(resolveAlias(target) ?? target) ?? byId.get(target)
       if (entry === undefined) return null
       const containers = documentContainers(state.record, entry.documentId)
       return {
@@ -186,11 +206,8 @@ export function ReplicaReadPage({ workspaceId, displayName, syncedAt }: ReplicaR
       if (wanted.length === 0) break
       for (const target of wanted) graph.set(target, load(target))
     }
-    return referenceWire(graph, {
-      resolveAlias: (alias) => byPath.get(alias)?.documentId ?? null,
-      resolveTitle: (documentId) => byId.get(documentId)?.name,
-    })
-  }, [state, selected])
+    return referenceWire(graph, { resolveAlias, resolveTitle })
+  }, [state, selected, resolveAlias, resolveTitle])
 
   const seams = useMemo(
     () => (references === undefined ? undefined : referenceSeamsFromWire(references)),
