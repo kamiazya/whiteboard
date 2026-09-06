@@ -95,21 +95,11 @@ const SHARED_CANVAS_CHROME = [
  * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  // These two reasons USED to be "branches/merge are a daemon concept
-  // (ADR-0004)". They are not any more — the browser keeper keeps its
-  // variations on the workspace record and commits merges over them — so what
-  // these entries record is a GAP rather than a difference: the chrome exists
-  // on one page because that is where it was written, not because the other
-  // keeper cannot have it. Moving it is deliberately not this increment's, so
-  // the reason says what is true rather than repeating what was.
-  HeaderBranchBanner: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'gap: the browser keeper has branches now and no banner; the chrome has not been moved yet',
-  },
-  MergeToast: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'gap: the browser keeper commits merges now and shows no toast; the chrome has not been moved yet',
-  },
+  // `HeaderBranchBanner` and `MergeToast` stood here, first as "a daemon
+  // concept (ADR-0004)" and then as a gap once the browser keeper grew
+  // variations and merges. They are neither now: the shared DocumentPage
+  // mounts both for whichever keeper rendered it, so they are not
+  // mode-specific chrome and this scan should not expect them on one page.
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',

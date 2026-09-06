@@ -23,6 +23,8 @@ import {
   DocumentFacetsEditor,
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
+import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -447,6 +449,20 @@ function DocumentPageBody({
               />
             </Suspense>
           )}
+          {/* Variation chrome, for BOTH keepers. It lived on the daemon page
+              from when variations were a daemon concept; they are not one now,
+              and the banner reads the same seam either keeper answers. It
+              draws nothing until HEAD is a variation with work on it, so a
+              document without variations is unaffected. */}
+          {topBar !== null && (
+            <HeaderBranchBanner
+              workspaceId={topBar.workspaceId}
+              path={topBar.path}
+              {...(topBar.branchRefreshSignal === undefined
+                ? {}
+                : { refreshSignal: topBar.branchRefreshSignal })}
+            />
+          )}
           {model.slots.headerExtras}
         </>
       }
@@ -532,6 +548,13 @@ function DocumentPageBody({
             />
           )}
         </div>
+      )}
+      {topBar !== null && (
+        <MergeToast
+          workspaceId={topBar.workspaceId}
+          path={topBar.path}
+          onRestored={model.sync.clearLocalUndo}
+        />
       )}
       {model.slots.footer}
     </DocumentPageShell>

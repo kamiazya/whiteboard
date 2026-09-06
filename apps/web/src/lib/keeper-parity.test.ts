@@ -80,11 +80,9 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
   },
   'src/components/MergeToast.tsx': {
-    reach: 'gap',
-    missing:
-      'the browser keeper commits merges but shows no toast — only DaemonDocumentPage mounts one',
-    followUp:
-      'task #36: move the toast to the shared DocumentPage, beside the banner it sits with (file-seam-conformance.test.ts records the same gap)',
+    reach: 'both-keepers',
+    browser: BROWSER_PAGE,
+    note: 'the shared DocumentPage mounts it for whichever keeper rendered it, from the workspace and path the top bar already carries',
   },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',

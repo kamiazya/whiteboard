@@ -1,5 +1,5 @@
 import { AlertTriangle, GitMerge } from 'lucide-react'
-import { type JSX, useEffect, useState } from 'react'
+import { type JSX, useEffect, useRef, useState } from 'react'
 import { Button } from '../components/ui/button.js'
 import type { MergeResult } from '../hooks/useBranches.js'
 import { useBranches } from '../hooks/useBranches.js'
@@ -22,13 +22,32 @@ import { MergeDialog } from './MergeDialog'
 export interface HeaderBranchBannerProps {
   workspaceId: string
   path: string
+  /**
+   * Bumped when the keeper's state may have moved under this component —
+   * the same signal the chip beside it takes, and for a reason that is not
+   * cosmetic on a browser-kept document: its record is not readable at mount,
+   * so `useBranches`' own first read answers the resting state (HEAD `main`)
+   * and nothing re-read it once the record arrived. Without this, a document
+   * opened ON a variation showed the default one and this banner never
+   * appeared at all.
+   */
+  refreshSignal?: number
 }
 
 export function HeaderBranchBanner({
   workspaceId,
   path,
+  refreshSignal,
 }: HeaderBranchBannerProps): JSX.Element | null {
-  const { state, getBranchStats, merge: runMerge } = useBranches(workspaceId, path)
+  const { state, getBranchStats, merge: runMerge, refetch } = useBranches(workspaceId, path)
+  // Skip the initial mount, as the chip does: `useBranches` refetches on its
+  // own there, and only a value that CHANGES afterwards means something moved.
+  const prevRefreshSignalRef = useRef(refreshSignal)
+  useEffect(() => {
+    if (prevRefreshSignalRef.current === refreshSignal) return
+    prevRefreshSignalRef.current = refreshSignal
+    void refetch()
+  }, [refreshSignal, refetch])
   const head = state.head
   const targetBranch = state.branches.find((b) => b.name === 'main')
   const sourceBranch = state.branches.find((b) => b.name === head)
