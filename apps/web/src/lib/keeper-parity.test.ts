@@ -298,18 +298,22 @@ describe('a panel whose behaviour differs by keeper is told which keeper it is',
     ).toBe(true)
   })
 
-  it('draws lanes for what the ROWS carry, which is not the same as having variations', () => {
-    // This compared the panel's flag to the provider's, back when the
-    // provider had one. It does not any more: both keepers have variations,
-    // so `capabilities.branches` is gone the way `workspaces` and `versions`
-    // went before it.
+  it('draws lanes and expects checkpoints for BOTH keepers now', () => {
+    // This pinned the two apart, as a decision held "until that increment
+    // lands". It has landed: the browser's rows carry `auto` and the
+    // variation they were taken on, and a checkpoint arrives once editing
+    // settles — so one lane and a hand-only history would now be wrong about
+    // this keeper rather than correct.
     //
-    // The panel's flag survives because it asks a DIFFERENT question — do the
-    // version rows carry a branch to lane by? The browser's do not yet (they
-    // gain `auto`/`branchName` with automatic checkpoints), so one lane there
-    // is correct rather than a leftover, and this pins it as a decision until
-    // that increment lands.
-    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(false)
-    expect(DAEMON_HISTORY_CAPABILITIES.branches).toBe(true)
+    // Which makes the pair EQUAL, and a pair that agrees declares no
+    // difference — the argument that retired the provider's capability map.
+    // It is not deleted here only because `false` still selects real
+    // rendering paths in the component (`version-row.test.tsx` drives them),
+    // so the deletion is theirs to carry, not this increment's. Until then
+    // this pins the agreement rather than a difference, so nothing can drift
+    // back to claiming one.
+    expect(BROWSER_HISTORY_CAPABILITIES).toEqual(DAEMON_HISTORY_CAPABILITIES)
+    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(true)
+    expect(BROWSER_HISTORY_CAPABILITIES.autoVersions).toBe(true)
   })
 })

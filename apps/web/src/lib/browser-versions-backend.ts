@@ -1,3 +1,4 @@
+import { readBranchesFromRecord } from '@kamiazya/whiteboard-history'
 import {
   readDocumentKind,
   readMarkdownBody,
@@ -25,13 +26,28 @@ export function createBrowserVersionsBackend(deps: {
 }): VersionsBackend {
   return {
     list: (_workspaceId, path) => deps.store.list(getBrowserWorkspaceId(), path),
-    save: (_workspaceId, path, { label }) =>
-      deps.store.save(getBrowserWorkspaceId(), path, {
+    save(_workspaceId, path, { label }) {
+      // WHICH variation this lands on is the keeper's to resolve — the seam
+      // carries a label and nothing else, and the daemon's route reads HEAD
+      // the same way before writing its row. Without this a browser document
+      // with variations files every manual save on the default lane while
+      // its automatic checkpoints lane correctly, which reads as a history
+      // that lost track of where the work happened.
+      //
+      // A record that cannot answer falls back to the store's own default,
+      // exactly as the daemon's route does.
+      const head =
+        deps.backend.readRecord(
+          (doc, documentId) => readBranchesFromRecord(doc, documentId).head,
+        ) ?? null
+      return deps.store.save(getBrowserWorkspaceId(), path, {
         label,
+        ...(head === null || head === '' ? {} : { branchName: head }),
         // The person at this browser. The daemon names its humans by their
         // sync peer; the browser has one person and no peer to name.
         operator: { kind: 'human', peerId: 'browser' },
-      }),
+      })
+    },
     async loadPast(_workspaceId, path, versionId) {
       // The store answers a LoroDoc; the seam answers something to draw. The
       // projection happens here so the seam stays free of CRDT types and a

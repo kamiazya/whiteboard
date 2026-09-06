@@ -337,6 +337,38 @@ describe('createDocumentSyncSession', () => {
       }
     })
 
+    // The automatic-checkpoint trigger rides the same two signals, and its
+    // flush must come AFTER the edit flush above — a checkpoint taken first
+    // would point at the record as it stood before the last edit landed,
+    // which is the one state nobody wants bookmarked. Registering a second
+    // listener from the page would leave that order to registration timing,
+    // so the session owns both.
+    it('signals the checkpoint trigger on a local edit, and flushes it when the page goes away', async () => {
+      vi.useFakeTimers()
+      const checkpoints = { signal: vi.fn(), flush: vi.fn() }
+      try {
+        const backend = makeFakeBackend()
+        const session = createDocumentSyncSession(backend, makeDeps({ checkpoints }))
+        session.connect()
+        backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+        const move: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+        session.onChange(applyCommand(twoNodeCanvas(), move), move)
+        window.dispatchEvent(new Event('pagehide'))
+        // Microtasks only, for the reason `editThen` above gives: the
+        // debounce timer must not be what lands the edit this signals on.
+        await flushMicrotasks()
+
+        // Both, and this order: the edit reaches the record on the same
+        // signal, so a checkpoint flushed before it would bookmark the state
+        // without it.
+        expect(checkpoints.signal).toHaveBeenCalled()
+        expect(checkpoints.flush).toHaveBeenCalledTimes(1)
+        session.dispose()
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     // The control: becoming VISIBLE is the same event name and must not
     // flush, or every tab switch back would write mid-gesture.
     it('not on visibilitychange to visible', async () => {

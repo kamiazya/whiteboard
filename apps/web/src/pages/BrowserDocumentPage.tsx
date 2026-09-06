@@ -1,4 +1,6 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import { createCheckpointScheduler, readBranchesFromRecord } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -458,6 +460,81 @@ function useBrowserDocument(
     [documentId, documentKind],
   )
 
+  // The store, not the seam, is what a merge's pre-merge point needs: the
+  // seam's `save` carries a label and nothing else, while a checkpoint has to
+  // say it is automatic and which variation it belongs to. So it is built
+  // once here and handed to both.
+  const versionStore = useMemo(
+    () => new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
+    [store],
+  )
+
+  // Automatic checkpoints, on the same mechanic the daemon runs
+  // (`@kamiazya/whiteboard-history`): a trailing debounce that lands a point
+  // once the document has been quiet, so a row marks where a person stopped
+  // rather than an arbitrary interval.
+  //
+  // The `doc` the scheduler is handed is the WORKSPACE RECORD, not this
+  // document's content — it uses the frontier only to ask "has anything
+  // changed since the last checkpoint", and the record's frontier is what
+  // the store saves. Keying on the content doc would compare a frontier
+  // against a row taken from a different one, and never match.
+  const checkpoints = useMemo(() => {
+    const scheduler = createCheckpointScheduler<VersionEntry>({
+      save: (workspaceId, path, _doc, branchName) =>
+        versionStore.save(workspaceId, path, {
+          auto: true,
+          ...(branchName === null ? {} : { branchName }),
+          // The person at this browser is not who took this one.
+          operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
+        }),
+      getHeadBranch: async (_workspaceId, _path) =>
+        backend?.readRecord((doc, id) => readBranchesFromRecord(doc, id)?.head ?? null) ?? null,
+      onError: (err) => log.warn('automatic checkpoint failed', err),
+    })
+    return scheduler
+  }, [backend, versionStore])
+
+  // Bound to the record the backend holds, and a no-op until one is there.
+  const checkpointPair = useMemo(() => {
+    const signal = (): void => {
+      // A document with no path yet has nowhere to file a row; the record
+      // is what a checkpoint points at, so both must be there.
+      if (documentPath === null) return
+      // Total, and deliberately so. This runs inside Loro's local-update
+      // subscriber, where a throw does not fail the edit — it escapes as an
+      // UNHANDLED REJECTION, which vitest reports as `Errors 1` with every
+      // test still passing and only the exit code red. A missed checkpoint is
+      // not worth that, and nothing here is worth failing an edit for either:
+      // a backend that cannot answer for a record has no record to bookmark.
+      try {
+        const record = backend?.readRecord?.((doc) => doc) ?? null
+        if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
+      } catch (err) {
+        log.warn('could not arm an automatic checkpoint', err)
+      }
+    }
+    return {
+      signal,
+      // Signal, THEN flush. The session flushes the pending edit before
+      // calling this, but the commit that performs reaches
+      // `subscribeLocalUpdates` — where `signal` lives — only on a later
+      // microtask, so flushing alone finds nothing armed and a person who
+      // edits and closes the tab leaves no checkpoint. Signalling here arms
+      // it against the record as it stands, which is what a checkpoint
+      // points at anyway: the store saves the frontier that is ON DISK, so
+      // an edit still in flight is simply not part of this point, rather
+      // than making it wrong.
+      flush: () => {
+        signal()
+        void checkpoints.flush()
+      },
+    }
+  }, [backend, checkpoints, documentPath])
+
+  // Nothing pending survives leaving this document for another.
+  useEffect(() => () => checkpoints.stop(), [checkpoints])
+
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
   // represented as null instead of a throwaway placeholder canvas id.
@@ -465,6 +542,7 @@ function useBrowserDocument(
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
+    checkpoints: checkpointPair,
   })
   const {
     canvas,
@@ -480,14 +558,6 @@ function useBrowserDocument(
   // is no spatial backend (a markdown document, or nothing loaded yet), in
   // which case the save control is hidden rather than left to fall back onto
   // the daemon's routes.
-  // The store, not the seam, is what a merge's pre-merge point needs: the
-  // seam's `save` carries a label and nothing else, while a checkpoint has to
-  // say it is automatic and which variation it belongs to. So it is built
-  // once here and handed to both.
-  const versionStore = useMemo(
-    () => new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
-    [store],
-  )
   const versionsBackend = useMemo(
     () =>
       backend === null ? null : createBrowserVersionsBackend({ backend, store: versionStore }),
