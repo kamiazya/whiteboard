@@ -84,7 +84,41 @@ function placeAll(body: string, ops: readonly BodyEditOp[]): PlacedChange[] {
     }
     placed.push({ change, at: at as ResolvedPassage })
   }
+  assertDisjoint(placed)
   return placed
+}
+
+/**
+ * Refuses a batch whose passages reach into one another.
+ *
+ * Placement reads ONE body, and applying back-to-front is what keeps each
+ * op's offsets valid — but that equivalence holds only while the ranges are
+ * disjoint. Two overlapping passages are each applicable against the body the
+ * caller saw and produce, together, a result that is neither: 'abc'→'X' and
+ * 'bcd'→'Y' over `abcdef` persist `Xf`, not `Xdef` and not `aYef`. Nothing
+ * downstream could tell that apart from an edit somebody meant.
+ *
+ * Ranges that merely TOUCH are fine — `[0,3)` and `[3,6)` share no character,
+ * so neither rewrites text the other was placed on. Hence a strict overlap
+ * test rather than a `<=`.
+ *
+ * A placed range is never empty here: `resolveTextAnchor` places a passage by
+ * finding `quote.exact`, which the schema requires to be at least one
+ * character, so the degenerate zero-length case this test would miss cannot
+ * arise.
+ */
+function assertDisjoint(placed: readonly PlacedChange[]): void {
+  const byStart = [...placed].sort((a, b) => a.at.start - b.at.start)
+  for (let i = 1; i < byStart.length; i += 1) {
+    const previous = byStart[i - 1] as PlacedChange
+    const current = byStart[i] as PlacedChange
+    if (current.at.start < previous.at.end) {
+      throw new PassageNotApplicableError(
+        current.change.id,
+        `its passage [${current.at.start}, ${current.at.end}) overlaps ${previous.change.id}'s [${previous.at.start}, ${previous.at.end}) — applying both would write text neither one proposed`,
+      )
+    }
+  }
 }
 
 export function createBodyEditTool(deps: ServerDeps) {

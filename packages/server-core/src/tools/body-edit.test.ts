@@ -210,6 +210,71 @@ describe('wb_body_edit', () => {
     expect(await storedBody(store)).toBe('Ship on Monday. Review on Wednesday too.\n')
   })
 
+  test('refuses two passages that overlap, rather than splicing a third thing', async () => {
+    const store = new FakeDocumentStore()
+    // Each op is applicable on its own — 'abc' → 'Xdef', 'bcd' → 'aYef' — and
+    // each passes the assumption check against the body as placed. Applied
+    // together they produce 'Xf', which is neither. Placement reads ONE body,
+    // so overlap is the case where back-to-front application stops being
+    // equivalent to applying each op to the body the caller saw.
+    await seedMarkdown(store, 'abcdef')
+
+    await expect(
+      createBodyEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            id: 'c1',
+            op: 'body.replace',
+            anchor: { kind: 'text', quote: { exact: 'abc' }, start: 0, end: 3 },
+            text: 'X',
+            assumed: 'abc',
+          },
+          {
+            id: 'c2',
+            op: 'body.replace',
+            anchor: { kind: 'text', quote: { exact: 'bcd' }, start: 1, end: 4 },
+            text: 'Y',
+            assumed: 'bcd',
+          },
+        ],
+      }),
+    ).rejects.toThrow(/c2.*c1|c1.*c2/)
+
+    expect(await storedBody(store)).toBe('abcdef')
+  })
+
+  test('allows two passages that merely touch, since neither reaches into the other', async () => {
+    const store = new FakeDocumentStore()
+    await seedMarkdown(store, 'abcdef')
+
+    await createBodyEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          id: 'c1',
+          op: 'body.replace',
+          anchor: { kind: 'text', quote: { exact: 'abc' }, start: 0, end: 3 },
+          text: 'X',
+          assumed: 'abc',
+        },
+        {
+          id: 'c2',
+          op: 'body.replace',
+          anchor: { kind: 'text', quote: { exact: 'def' }, start: 3, end: 6 },
+          text: 'Y',
+          assumed: 'def',
+        },
+      ],
+    })
+
+    expect(await storedBody(store)).toBe('XY')
+  })
+
   test('refuses a spatial document by name, rather than writing prose onto a canvas', async () => {
     const store = new FakeDocumentStore()
     await seedSpatial(store)
