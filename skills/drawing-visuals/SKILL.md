@@ -280,6 +280,8 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;
-  `kind: "markdown"` gives you an OKF Markdown body edited through `wb_document_set` / `wb_body_patch`
-  and has no nodes or edges of its own. There is no format parameter on read — `wb_document_get`
+  `kind: "markdown"` gives you an OKF Markdown body — `wb_document_set` replaces the whole
+  document, `wb_body_edit` replaces individual passages of its body — and has no nodes or edges of
+  its own. (`wb_body_patch` is for a text NODE on a spatial canvas and cannot reach a markdown
+  document's body at all.) There is no format parameter on read — `wb_document_get`
   answers in whichever format the document already is.

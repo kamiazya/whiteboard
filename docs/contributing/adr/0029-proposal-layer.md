@@ -161,17 +161,54 @@ sits is answered first by the Loro mark that followed the characters, which
 `model` cannot see and must not guess at — the surface has already resolved
 the anchor in order to draw the proposal.
 
-Two halves are still open, and neither is implied by the other:
+**Who produces one: `wb_body_edit`** (project owner's decision, 2026-09-06),
+a new tool rather than a mode on an existing one. The three candidates each
+said something the redesign had to keep: `wb_canvas_edit` is spatial-only,
+`wb_document_set` replaces a whole document, and `wb_body_patch` had already
+spent the word `mode` on `full` vs `range` — and, measured, could not reach a
+markdown body at ALL, since it looks the body up as a canvas node and a
+markdown document's body lives in a text container the canvas read does not
+see (`NodeNotFoundError: node not found: okf-body`). Three places nonetheless
+documented it as the way to edit a note, which is why the gap survived.
 
-- **Who produces one.** `wb_canvas_edit` is spatial-only, `wb_document_set`
-  replaces a whole document, and `wb_body_patch` already spends the word
-  `mode` on `full` vs `range` and targets a canvas text node. A passage
-  proposal on a markdown document has no tool yet, and picking one is a
-  decision rather than a detail.
-- **Where a person sees and adopts one.** The proposal card is canvas chrome,
-  positioned on a bubble the renderer drew; prose needs its own in-place
-  surface — the annotation layer's passage highlight is the mechanism that
-  exists.
+What the new tool fixes is not one missing verb but the axis the write
+surface was cut on. The MODEL is cut by what a change is about — one
+`textAnchor` says "a passage of a note's body" or "a passage of a text node's
+text" depending on whether `nodeId` is present, and `wb_thread_edit` already
+serves every document kind by varying nothing but the anchor. The TOOLS were
+cut by where the bytes sit, so a passage had two addressings (line numbers and
+quote+offsets) and `mode` meant two different things on two tools. So:
+
+- Its ops ARE `body.replace`, imported from `packages/model` minus `status`.
+  What an agent sends, what a person's card shows, and what adoption applies
+  are one object with no translation between them.
+- It addresses a passage by ANCHOR, which is what decision 5 requires: a
+  proposal follows the document, so its address has to follow too. ADR-0026's
+  resolution order (mark → unique quote → quote with context → orphaned)
+  survives an intervening edit; a line number does not. `resolveTextAnchor`
+  moved into `packages/model` for this — a second implementation would be a
+  second answer, disagreeing exactly where it matters.
+- `mode` means `apply` vs `propose`, the same word decision 7 spends on
+  `wb_canvas_edit`, and nothing else. Prose ships `apply` first and gains the
+  content-proposes default in its own increment.
+- `wb_document_set` keeps its job unchanged: it is the IMPORT verb — a whole
+  OKF document with its frontmatter and provenance — not the edit verb. It
+  could not have carried decision 6 anyway, since a whole-document replace has
+  nowhere to say what a particular passage was assumed to hold, and would put
+  decision 5's collision check against the entire body.
+
+**Where a person sees and adopts one: the body, in place** (project owner's
+decision, 2026-09-06). The annotation layer's in-place projection is the
+mechanism that exists — `placeThreads` over `resolveTextAnchor`, drawing a
+highlight with a reachable affordance in the gutter beside it. A proposed
+passage is the same shape, and gets the same icon-verb card the canvas
+proposal card uses. The proposal card itself stays canvas chrome: it is
+positioned on a bubble the renderer drew, and prose has no such bubble.
+
+Still open: the propose mode on `wb_body_edit`, the in-place adopt surface,
+and retiring `wb_body_patch` in favour of `wb_canvas_edit`'s `node.patch` for
+the text-node case it actually serves — a published-surface break, so its own
+increment.
 
 ### 7. `wb_canvas_edit` gains a mode, and its default is *propose*
 

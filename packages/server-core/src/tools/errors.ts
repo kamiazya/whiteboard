@@ -93,3 +93,23 @@ export class FacetWriteRejectedError extends Error {
     this.name = 'FacetWriteRejectedError'
   }
 }
+
+/**
+ * Thrown when a proposed passage cannot be applied to the body as it now
+ * stands — either its quote no longer appears, or it appears with different
+ * words than the caller assumed.
+ *
+ * Names the CHANGE rather than the document, because a batch refused for one
+ * passage has to say which one: the caller's next move is to re-read that
+ * passage, and a message naming only the document leaves it re-reading
+ * everything.
+ */
+export class PassageNotApplicableError extends Error {
+  constructor(
+    public readonly changeId: string,
+    detail: string,
+  ) {
+    super(`Passage ${changeId} does not apply: ${detail}`)
+    this.name = 'PassageNotApplicableError'
+  }
+}

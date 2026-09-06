@@ -273,6 +273,23 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
+    tools.bodyEdit.name,
+    {
+      description: tools.bodyEdit.description,
+      inputSchema: tools.bodyEdit.inputSchema,
+      outputSchema: tools.bodyEdit.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.bodyEdit.inputSchema.parse(args)
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
+        tools.bodyEdit.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.bodyPatch.name,
     {
       description: tools.bodyPatch.description,

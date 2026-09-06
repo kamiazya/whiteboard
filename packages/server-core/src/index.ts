@@ -46,6 +46,13 @@ export type {
 } from './server-deps.js'
 export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
 export { backlinksInputSchema, backlinksOutputSchema, computeBacklinks } from './tools/backlinks.js'
+export type { BodyEditInput, BodyEditOp, BodyEditOutput } from './tools/body-edit.js'
+export {
+  bodyEditInputSchema,
+  bodyEditOpSchema,
+  bodyEditOutputSchema,
+  createBodyEditTool,
+} from './tools/body-edit.js'
 export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
 export {
   bodyPatchInputSchema,
