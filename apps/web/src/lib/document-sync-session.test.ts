@@ -27,6 +27,7 @@ import type {
   CanvasComment,
   CommentThread,
   Proposal,
+  ProposedChange,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
@@ -2431,5 +2432,94 @@ describe('deciding a proposal', () => {
     expect(listener).toHaveBeenCalled()
     expect(listener.mock.lastCall?.[0][0].changes[0].status).toBe('dismissed')
     unsubscribe()
+  })
+})
+
+describe('deciding ONE change of a proposal', () => {
+  // ADR-0029 decision 4's second half. The write is the same one whole-
+  // proposal adoption uses, applied to a subset — which is what makes the
+  // two incapable of disagreeing about what adopting means.
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const nodes: readonly SpatialNode[] = [
+    { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'the plan' },
+    { id: 'n2', type: 'text', x: 0, y: 200, width: 100, height: 50, text: 'the risk' },
+  ]
+  const moveN1: ProposedChange = {
+    id: 'node:n1',
+    op: 'node.patch',
+    status: 'open',
+    nodeId: 'n1',
+    patch: { x: 240 },
+    assumed: { x: 0 },
+  }
+  const moveN2: ProposedChange = {
+    id: 'node:n2',
+    op: 'node.patch',
+    status: 'open',
+    nodeId: 'n2',
+    patch: { x: 480 },
+    assumed: { x: 0 },
+  }
+  const proposal: Proposal = {
+    id: 'p2',
+    createdAt: '2026-09-06T00:00:00.000Z',
+    changes: [moveN1, moveN2],
+  }
+
+  function seeded(): Uint8Array {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, { nodes: [...nodes], edges: [] })
+    writeProposal(doc, proposal)
+    return doc.export({ mode: 'snapshot' })
+  }
+
+  it('adopts and closes only the change it names, leaving its sibling open', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seeded())
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p2',
+      decision: 'adopted',
+      changes: [moveN2],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    const canvas = session.getCanvas()
+    expect(canvas.nodes.find((n) => n.id === 'n2')?.x).toBe(480)
+    expect(canvas.nodes.find((n) => n.id === 'n1')?.x).toBe(0)
+    const stored = session.getProposals()[0]?.changes ?? []
+    expect(stored.find((c) => c.id === 'node:n2')?.status).toBe('adopted')
+    expect(stored.find((c) => c.id === 'node:n1')?.status).toBe('open')
+  })
+
+  it('dismisses one change without touching the board or its sibling', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers?.onSnapshot(seeded())
+
+    const command: EditorCommand = {
+      kind: 'decide-proposal',
+      proposalId: 'p2',
+      decision: 'dismissed',
+      changes: [moveN1],
+    }
+    session.onChange(applyCommand(session.getCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getCanvas().nodes.find((n) => n.id === 'n1')?.x).toBe(0)
+    const stored = session.getProposals()[0]?.changes ?? []
+    expect(stored.find((c) => c.id === 'node:n1')?.status).toBe('dismissed')
+    expect(stored.find((c) => c.id === 'node:n2')?.status).toBe('open')
   })
 })

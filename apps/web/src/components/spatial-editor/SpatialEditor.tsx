@@ -2096,7 +2096,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
                 })()}
                 theme={theme}
-                onDecide={(decision) => {
+                onDecide={(decision, changes) => {
                   // Closed here rather than waiting for the write to come
                   // back: the card asked a question that has been answered,
                   // and leaving it up over a board that just changed reads
@@ -2109,9 +2109,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                         kind: 'decide-proposal',
                         proposalId: proposal.id,
                         decision,
-                        // Exactly what the card showed: the changes still
-                        // open when this render was made.
-                        changes: proposal.changes.filter((change) => change.status === 'open'),
+                        // Exactly what the card decided — its whole open set,
+                        // or the single row that was pressed. The card owns
+                        // that reading, so there is nothing here to re-derive
+                        // and nothing for the two to disagree about.
+                        changes,
                       } as const,
                     ],
                   })

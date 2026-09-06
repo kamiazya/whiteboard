@@ -226,7 +226,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2723,
+  // +2 more: the card now says WHICH changes it decided, so this handler
+  // forwards them instead of re-deriving the open set.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2725,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
