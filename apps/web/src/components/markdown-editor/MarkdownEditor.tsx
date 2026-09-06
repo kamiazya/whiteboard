@@ -9,6 +9,7 @@ import {
   type CommentThread,
   type CommentThreadStatus,
   documentIdSchema,
+  type Proposal,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
@@ -42,6 +43,7 @@ import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import { MinimapRail } from './MinimapRail.js'
+import { PassageProposalCard } from './PassageProposalCard.js'
 import { PreviewPane } from './PreviewPane.js'
 import {
   previewWidth as computePreviewWidth,
@@ -50,6 +52,11 @@ import {
   railFits,
   railScrollable,
 } from './preview-width.js'
+import {
+  placePassages,
+  proposalDecorations,
+  setProposalProjection,
+} from './proposal-decorations.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import { verbCatalogItems } from './verb-catalog.js'
@@ -164,10 +171,30 @@ export interface MarkdownEditorProps {
    * offers no such row rather than an inert one.
    */
   onComposeThread?: (anchor: TextAnchor) => void
+  /**
+   * The proposal layer's open changes, projected onto the body: the passage
+   * each one would replace is marked in the text and named by a gutter
+   * marker beside it (ADR-0029 decision 1, for prose).
+   *
+   * Only `body.replace` changes are drawn — a canvas change is about a
+   * surface this document has not got — and only open ones, since a decision
+   * the person already made must not be asked again.
+   */
+  proposals?: readonly Proposal[]
+  /**
+   * The person decided one passage. Absent means this host has no proposal
+   * layer, and no card is offered rather than an inert one.
+   */
+  onDecidePassage?: (
+    proposalId: string,
+    changeId: string,
+    decision: 'adopted' | 'dismissed',
+  ) => void
 }
 
 /** Stable identity, so the projection effect below does not fire per render. */
 const NO_THREADS: readonly CommentThread[] = []
+const NO_PROPOSALS: readonly Proposal[] = []
 /** Same purpose as NO_THREADS, for the passages beside them. */
 const NO_MARKS: ReadonlyMap<string, LivePassage> = new Map()
 
@@ -339,6 +366,8 @@ export function MarkdownEditor({
   threadMarks,
   selectedThreadId = null,
   onSelectThread,
+  proposals,
+  onDecidePassage,
   onComposeThread,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
@@ -384,13 +413,39 @@ export function MarkdownEditor({
   // passes is a fresh closure on every render.
   const onSelectThreadRef = useRef(onSelectThread)
   onSelectThreadRef.current = onSelectThread
+  const [openPassage, setOpenPassage] = useState<{
+    proposalId: string
+    changeId: string
+    x: number
+    y: number
+  } | null>(null)
+  const proposalExtension = useMemo(
+    () =>
+      proposalDecorations({
+        onSelectPassage: (proposalId, changeId, at) => {
+          const rect = rootRef.current?.getBoundingClientRect()
+          setOpenPassage({
+            proposalId,
+            changeId,
+            x: at.clientX - (rect?.left ?? 0),
+            y: at.clientY - (rect?.top ?? 0),
+          })
+        },
+      }),
+    [],
+  )
   const annotationExtension = useMemo(
     () => annotationDecorations({ onSelectThread: (id) => onSelectThreadRef.current?.(id) }),
     [],
   )
   const paneExtensions = useMemo(
-    () => [completionExtension, annotationExtension, ...(sourceExtensions ?? [])],
-    [annotationExtension, completionExtension, sourceExtensions],
+    () => [
+      completionExtension,
+      annotationExtension,
+      proposalExtension,
+      ...(sourceExtensions ?? []),
+    ],
+    [annotationExtension, completionExtension, proposalExtension, sourceExtensions],
   )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
@@ -457,6 +512,33 @@ export function MarkdownEditor({
       }),
     ])
   }, [projectedThreads, projectedMarks, selectedThreadId])
+
+  const projectedProposals = proposals ?? NO_PROPOSALS
+  useEffect(() => {
+    sourceApiRef.current?.applyEffects([
+      setProposalProjection.of({
+        proposals: projectedProposals,
+        selectedChangeId: openPassage?.changeId ?? null,
+      }),
+    ])
+  }, [projectedProposals, openPassage])
+
+  // The card follows the DOCUMENT, not the press: once the passage it is
+  // about stops resolving — the person adopted it, dismissed it, or edited
+  // the words out from under it — there is nothing left to decide, and a
+  // card still offering the verbs would write against a passage that is
+  // gone.
+  const openPlacedPassage = useMemo(() => {
+    if (openPassage === null) return null
+    return (
+      placePassages(value, projectedProposals).find(
+        (one) => one.changeId === openPassage.changeId,
+      ) ?? null
+    )
+  }, [openPassage, projectedProposals, value])
+  useEffect(() => {
+    if (openPassage !== null && openPlacedPassage === null) setOpenPassage(null)
+  }, [openPassage, openPlacedPassage])
 
   // Scroll to the passage when the SELECTION changes, and only then. `value`
   // is a dependency because the passage's offset is derived from it, but a
@@ -1043,6 +1125,19 @@ export function MarkdownEditor({
           />
         )}
       </div>
+      {openPassage !== null && openPlacedPassage !== null && onDecidePassage !== undefined && (
+        <PassageProposalCard
+          current={value.slice(openPlacedPassage.from, openPlacedPassage.to)}
+          proposed={openPlacedPassage.text}
+          conflicted={openPlacedPassage.conflicted}
+          at={{ x: openPassage.x, y: openPassage.y }}
+          onDecide={(decision) => {
+            onDecidePassage(openPassage.proposalId, openPassage.changeId, decision)
+            setOpenPassage(null)
+          }}
+          onClose={() => setOpenPassage(null)}
+        />
+      )}
       {linkPicker !== null && linkTargets !== undefined && (
         <LinkPickerDialog
           targets={linkTargets}

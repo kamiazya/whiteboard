@@ -78,6 +78,9 @@
    * not a ruler, and not destruction.
    */
   --annotation: oklch(0.649 0.153 62.5);
+  /* The proposal layer, distinct from the annotation layer's amber: a
+     proposed passage is a change waiting on a decision, not a remark. */
+  --proposal: oklch(0.588 0.158 254.2);
 }
 
 .dark {
@@ -104,6 +107,7 @@
   --manipulation-halo: color-mix(in srgb, oklch(0.707 0.165 254.62) 18%, transparent);
   /* Amber-500 rather than 600: the darker tone loses against a dark ground. */
   --annotation: oklch(0.769 0.165 70.08);
+  --proposal: oklch(0.714 0.143 254.6);
 }
 
 /*
@@ -222,6 +226,66 @@
   .cm-annotation-selected {
     background-color: color-mix(in oklch, var(--annotation) 18%, transparent);
     border-bottom-color: var(--annotation);
+  }
+  /*
+   * The proposal layer's in-place projection (ADR-0029 decision 1, for
+   * prose). Shaped like the annotation layer's above deliberately — a reader
+   * looking at a body should not have to learn two ways of being shown
+   * "something is about these words" — and coloured apart from it, because
+   * one is a remark and the other is a change waiting on a decision.
+   *
+   * Dashed rather than solid, matching how the canvas draws a proposed node:
+   * the same "not yet part of the document" the outline says there.
+   */
+  .cm-proposal {
+    border-bottom: 2px dashed color-mix(in oklch, var(--proposal) 65%, transparent);
+  }
+  .cm-proposal-conflicted {
+    border-bottom-color: var(--annotation);
+  }
+  .cm-proposal-selected {
+    background-color: color-mix(in oklch, var(--proposal) 18%, transparent);
+    border-bottom-color: var(--proposal);
+  }
+  /* Reserved for the same reason the annotation gutter is: a proposal
+     arriving from an agent must not reflow the body under whoever is
+     typing in it. */
+  .cm-proposal-gutter {
+    min-width: 26px;
+  }
+  /* Press area and picture split for the annotation marker's reason — a
+     12px glyph is right beside prose and half of WCAG 2.5.8's 24x24
+     minimum in each dimension. */
+  .cm-proposal-gutter-marker {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    cursor: pointer;
+  }
+  .cm-proposal-gutter-glyph {
+    display: block;
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+    border: 2px dashed var(--proposal);
+    background: color-mix(in oklch, var(--proposal) 20%, transparent);
+  }
+  .cm-proposal-gutter-marker[data-conflicted='true'] .cm-proposal-gutter-glyph {
+    border-color: var(--annotation);
+    background: color-mix(in oklch, var(--annotation) 20%, transparent);
+  }
+  .cm-proposal-gutter-marker[data-selected='true'] .cm-proposal-gutter-glyph {
+    border-style: solid;
+    background: var(--proposal);
+  }
+  /* A square glyph is one proposed change; two stacked squares say the line
+     carries more than the marker can name. */
+  .cm-proposal-gutter-marker[data-passages] .cm-proposal-gutter-glyph {
+    box-shadow: 2px 2px 0 -1px var(--proposal);
   }
   /*
    * Reserved whether or not this document has any conversations, on purpose:
