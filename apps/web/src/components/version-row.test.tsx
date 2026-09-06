@@ -74,11 +74,7 @@ function backendOf(list: () => Promise<typeof ROWS>): VersionsBackend {
 function renderTimeline(backend: VersionsBackend) {
   return render(
     <VersionsBackendContext.Provider value={backend}>
-      <VersionTimeline
-        workspaceId="ws"
-        path="doc"
-        capabilities={{ branches: false, autoVersions: true }}
-      />
+      <VersionTimeline workspaceId="ws" path="doc" />
     </VersionsBackendContext.Provider>,
   )
 }
@@ -135,25 +131,19 @@ describe('a version row is written from the content side', () => {
     expect(screen.queryByText('manual')).toBeNull()
   })
 
-  it('draws the lane column only for a keeper that HAS branches', async () => {
-    // Both directions, or "absent" is indistinguishable from a testid that
-    // was never added.
-    const withBranches = render(
-      <VersionsBackendContext.Provider value={backendOf(async () => ROWS)}>
-        <VersionTimeline
-          workspaceId="ws"
-          path="doc"
-          capabilities={{ branches: true, autoVersions: true }}
-        />
-      </VersionsBackendContext.Provider>,
-    )
-    await screen.findAllByTestId('version-row')
-    expect(withBranches.container.querySelectorAll('[data-testid="version-lane"]').length).toBe(3)
-    cleanup()
-
-    const noBranches = renderTimeline(backendOf(async () => ROWS))
-    await screen.findAllByTestId('version-row')
-    expect(noBranches.container.querySelector('[data-testid="version-lane"]')).toBeNull()
+  it('draws a lane beside every row, so the graph has somewhere to land', async () => {
+    // This asserted BOTH directions while the lane was gated on a keeper
+    // having branches — the second one being that a keeper without them drew
+    // none. Both keepers have them now, the gate went with
+    // `VersionTimelineCapabilities`, and a direction no configuration can
+    // reach is not a direction.
+    //
+    // What is left is a count rather than a presence: one lane per row is
+    // what `mini-graph` computes a dot, a colour and connectors FOR, and a
+    // count cannot pass vacuously the way a `queryBy…` returning null can.
+    const view = renderTimeline(backendOf(async () => ROWS))
+    const rows = await screen.findAllByTestId('version-row')
+    expect(view.container.querySelectorAll('[data-testid="version-lane"]').length).toBe(rows.length)
   })
 
   it('says so when the list could not be read, instead of showing stale rows in silence', async () => {
@@ -165,12 +155,7 @@ describe('a version row is written from the content side', () => {
     })
     const view = render(
       <VersionsBackendContext.Provider value={backend}>
-        <VersionTimeline
-          workspaceId="ws"
-          path="doc"
-          capabilities={{ branches: false, autoVersions: true }}
-          refreshSignal={0}
-        />
+        <VersionTimeline workspaceId="ws" path="doc" refreshSignal={0} />
       </VersionsBackendContext.Provider>,
     )
     await screen.findAllByTestId('version-row')
@@ -179,12 +164,7 @@ describe('a version row is written from the content side', () => {
     // Drive the refetch rather than waiting out the 15s poll.
     view.rerender(
       <VersionsBackendContext.Provider value={backend}>
-        <VersionTimeline
-          workspaceId="ws"
-          path="doc"
-          capabilities={{ branches: false, autoVersions: true }}
-          refreshSignal={1}
-        />
+        <VersionTimeline workspaceId="ws" path="doc" refreshSignal={1} />
       </VersionsBackendContext.Provider>,
     )
     // A refresh that fails leaves the rows on screen — they are still the

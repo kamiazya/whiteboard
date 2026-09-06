@@ -154,6 +154,31 @@ implementations live in the composition roots.
   intent rather than convergence: a reply to a thread this replica does not
   hold would otherwise materialise an anchorless, statusless thread around it.
   `setContainer` is banned here for the reason it is banned on tree nodes.
+- **A proposal lives in the `proposals` plane (`proposals.ts`, ADR-0029),
+  shaped like `threads` and nested for a different reason.** A proposal
+  container holds its provenance beside a map of CHANGES keyed by change id,
+  so two people deciding different parts of one proposal at once is a merge
+  with nothing to resolve. Inside that map a change is a PLAIN VALUE, not a
+  container: the extra level a thread needs buys nothing here, because the
+  only write after a change is created is a verdict, and two verdicts on two
+  changes are already two keys. What would change that answer is a change
+  whose payload becomes editable — a person adjusting a proposed geometry
+  before adopting it — and that is when `status` earns a key of its own.
+
+  `openMergeableMap` for the proposal container itself, for exactly the reason
+  a thread needs it: the key is the caller's proposal id, so two keepers can
+  reach the write having never seen each other's. Creation is still the only
+  path allowed to open one — a verdict on a proposal this replica does not
+  hold would materialise a headless record around a decision nobody made.
+
+  `PROPOSALS_KEY` is in `CONTENT_CONTAINER_KEYS`, so a pending proposal MOVES
+  the document's content digest and a listing shows the document as having
+  changed. That is the intended reading rather than a side effect, and it is
+  the opposite call from the branch plane's (outside the set, because a tip
+  recorded on every save would invalidate every cached picture). The price is
+  pinned: `workspace-record-growth.test.ts` measures 919 -> 950 bytes at one
+  document and 14860 -> 16082 at fifty.
+
 - A third map, `doc.getMap('canvas')`, holds the canvas ENVELOPE —
   properties of the canvas rather than of anything on it (today
   `x-whiteboard`, the rendering preferences). Separate because the merge

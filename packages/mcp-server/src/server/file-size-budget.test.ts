@@ -113,9 +113,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // answers with a comment MARKER's own icon, so the placement was reading
   // its own previous output.
   'apps/web/src/components/markdown-editor/MarkdownEditor.tsx': 1066,
-  'packages/loro-adapter/src/loro-bridge.ts': 942,
+  // +1: `CONTENT_CONTAINER_KEYS` gains the proposal layer's plane
+  // (ADR-0029). One line, and it has to be here — the list is what a
+  // tree-node host pre-attaches from, and a container attached on first
+  // READ instead clears the UndoManager's redo stack.
+  'packages/loro-adapter/src/loro-bridge.ts': 943,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
-  'packages/server-core/src/tools/canvas-edit.ts': 948,
+  // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
+  // field, and the branch that stores a proposal instead of the board. Most
+  // of it is the prose those three fields carry, which IS this tool's
+  // published contract: an agent reads the schema, not this repo. The
+  // mechanics went to `canvas-propose.ts` rather than here.
+  'packages/server-core/src/tools/canvas-edit.ts': 997,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child

@@ -1,15 +1,11 @@
 import type { ReactNode, Ref } from 'react'
-import VersionTimeline, {
-  type VersionPreviewSession,
-  type VersionTimelineCapabilities,
-} from '../../components/VersionTimeline.js'
+import VersionTimeline, { type VersionPreviewSession } from '../../components/VersionTimeline.js'
 import { InspectorPanel } from '../document-editor/InspectorPanel.js'
 
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>
   workspaceId: string
   path: string
-  capabilities?: VersionTimelineCapabilities
   onRestored?: () => void
   refreshSignal?: number
   onPreview?: (session: VersionPreviewSession | null) => void
@@ -30,7 +26,6 @@ export function VersionPanel({
   panelRef,
   workspaceId,
   path,
-  capabilities,
   onRestored,
   refreshSignal,
   onPreview,
@@ -46,7 +41,6 @@ export function VersionPanel({
       <VersionTimeline
         workspaceId={workspaceId}
         path={path}
-        capabilities={capabilities}
         onRestored={onRestored}
         refreshSignal={refreshSignal}
         onPreview={onPreview}

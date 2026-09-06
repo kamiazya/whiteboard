@@ -10,7 +10,7 @@
     "build": "tsc --noEmit && vite build && node scripts/copy-into-mcp-dist.mjs",
     "preview": "vite preview",
     "preview:pages": "pnpm build && wrangler pages dev dist",
-    "test": "vitest run && vitest run --config vitest.node.config.ts",
+    "test": "node scripts/run-web-tests.mjs",
     "test:browser": "vitest run --config vitest.browser.config.ts",
     "docs:snapshots": "vitest run --config vitest.docs-snapshots.config.ts",
     "docs:snapshots:check": "pnpm docs:snapshots && pnpm docs:snapshots && git diff --exit-code -- ../../docs/assets/",

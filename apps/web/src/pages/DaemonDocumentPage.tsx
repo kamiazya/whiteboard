@@ -14,7 +14,6 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsP
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
-import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
@@ -652,7 +651,6 @@ function useDaemonDocument(
       enabled: canvas !== null,
       workspaceId: canvas?.workspaceId ?? '',
       path: canvas?.path ?? '',
-      historyCapabilities: DAEMON_HISTORY_CAPABILITIES,
       backend: versionsBackend,
       save: async (label) => {
         if (canvas === null) throw new Error('saveVersion: no canvas')

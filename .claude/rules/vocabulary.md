@@ -19,6 +19,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Version** | a saved point in a document's history | a branch |
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
 | **Comment** | the annotation layer's unit (ADR-0024/0025/0026): anchored feedback about a spot or node, floating above content. A **thread** is the anchored unit and comments are its messages | content — never tidied, never part of what the document says. Says nothing about EXPORT, which ADR-0026 decision 1b decides; "annotation layer" in user copy; "History"/"Archived"/"Done" for resolved |
+| **Proposal** | ADR-0029's unit: a batch of anchored CHANGES somebody wants made, each carrying the value it assumed the anchor held. The **change** is what gets decided; the proposal is what arrived together | a branch, a variation, or any point in time — a proposal FOLLOWS the document rather than fixing it |
 
 Two consequences that catch people out:
 

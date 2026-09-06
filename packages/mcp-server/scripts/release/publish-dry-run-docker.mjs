@@ -5,11 +5,19 @@
 // No cosign, no OIDC material, no registry credentials used.
 // Output: structured JSON summary to stdout on success; generic message to
 // stderr and exit 1 on failure. Full build logs never reach stdout.
+//
+// A CACHE REPORT does reach stderr, and its counts reach stdout. The build is
+// the longest step in ci.yml's dry-run-docker job — 198s of a 270s job,
+// measured — and runs with `--cache-from/--cache-to type=gha`. Whether that
+// cache was doing anything used to be unanswerable, because the output below
+// was captured and then printed only on FAILURE: every green run threw the
+// evidence away, so a warm cache and a cold one looked identical from outside.
 
 import { spawnSync } from 'node:child_process'
 import { mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { formatCacheReport, parseBuildxProgress } from './buildx-progress.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const PACKAGE_ROOT = resolve(__dirname, '../..')
@@ -75,6 +83,26 @@ const buildArgs = isGitHubActions
       '.',
     ]
 
+// What `type=gha` falls back to when `--cache-from`/`--cache-to` name no url
+// or token of their own. Docker's documentation for the backend says an inline
+// `docker buildx` invocation — which this is, from a `run:` step — must expose
+// them manually, so their absence is the difference between a cache that never
+// ran and one that ran and missed. Read by NAME and reported as present or
+// absent; the values are credentials and never leave this process.
+const GHA_CACHE_ENV = [
+  'ACTIONS_RUNTIME_TOKEN',
+  'ACTIONS_CACHE_URL',
+  'ACTIONS_RESULTS_URL',
+  'ACTIONS_CACHE_SERVICE_V2',
+]
+
+/** @returns {{ present: string[], absent: string[] }} */
+function readCacheCredentials() {
+  const present = GHA_CACHE_ENV.filter((name) => (process.env[name] ?? '') !== '')
+  return { present, absent: GHA_CACHE_ENV.filter((name) => !present.includes(name)) }
+}
+
+const buildStartedAt = Date.now()
 const buildResult = spawnSync('docker', buildArgs, {
   cwd: REPO_ROOT,
   encoding: 'utf-8',
@@ -86,6 +114,24 @@ if (buildResult.status !== 0 || buildResult.error) {
     process.stderr.write(buildResult.stderr)
   }
   fail('docker build')
+}
+
+// The build succeeded, so report what the cache did. `--progress=plain` is
+// already on both build paths above; buildx writes it to stderr.
+// Wall clock, kept apart from the summed step time: BuildKit runs steps in
+// parallel, so the sum is the total WORK and this is the wait. Measured on the
+// first real report, 214.4s of step time inside a 200s build.
+const elapsedSeconds = Number(((Date.now() - buildStartedAt) / 1000).toFixed(1))
+const cacheReport = parseBuildxProgress(buildResult.stderr ?? '')
+const cacheCredentials = isGitHubActions ? readCacheCredentials() : undefined
+for (const line of formatCacheReport(cacheReport, { elapsedSeconds, cacheCredentials })) {
+  process.stderr.write(`${line}\n`)
+}
+// The raw output stays available for the case the report cannot explain, but
+// behind a flag: it is long, and the point of the report is to make reading it
+// unnecessary.
+if (process.env.WHITEBOARD_DOCKER_BUILD_LOG === '1' && buildResult.stderr) {
+  process.stderr.write(buildResult.stderr)
 }
 
 // Step 2: capture locally-built image ID (sha256 digest of the image config).
@@ -112,6 +158,10 @@ const metadata = {
   sbomStatus: 'deferred',
   signingStatus: 'deferred',
   note: 'No registry push. SBOM (docker buildx --sbom=true) and cosign keyless signing deferred to publish-workflow slice.',
+  // Full report, step names included: this file is an artifact of the same run
+  // whose log already names them, and trending the slowest steps across runs is
+  // what turns "the build is slow" into a specific layer.
+  cache: { ...cacheReport, elapsedSeconds, cacheCredentials },
 }
 writeFileSync(join(OUT_DIR, 'docker-image-metadata.json'), JSON.stringify(metadata, null, 2))
 
@@ -125,6 +175,20 @@ process.stdout.write(
       artifactId: 'docker-image',
       imageTag: IMAGE_TAG,
       imageIdLength: imageId.length,
+      // Counts and flags only. Step names and buildx's own diagnostics stay
+      // out of stdout, which this script promises carries no build log; both
+      // are in the stderr report and the metadata artifact instead.
+      cache: {
+        parsed: cacheReport.parsed,
+        stepCount: cacheReport.stepCount,
+        cachedCount: cacheReport.cachedCount,
+        ranCount: cacheReport.ranCount,
+        cacheHitRatio: cacheReport.cacheHitRatio,
+        executedStepSeconds: cacheReport.executedStepSeconds,
+        importSeen: cacheReport.importSeen,
+        exportSeen: cacheReport.exportSeen,
+        elapsedSeconds,
+      },
       sbomStatus: 'deferred',
       signingStatus: 'deferred',
       note: 'no registry push; no cosign signing; publish-workflow slice required',

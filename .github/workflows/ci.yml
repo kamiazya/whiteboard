@@ -122,6 +122,24 @@ jobs:
   test-jsdom:
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    # Sharded for the same reason test-unit and test-browser are, and only once
+    # dry-run-docker stopped being the ceiling: on the ~half of pull requests
+    # that skip the image build, this job IS the wall. Measured locally, whole
+    # command (jsdom + web-node): 372 files / 3907 tests / 279s unsharded;
+    # 186 files / 2056 tests / 117s at shard 1/2 and 186 / 1851 / 162s at 2/2.
+    # The shards partition exactly — 186+186 and 2056+1851 — so nothing is
+    # lost or run twice, and the wall clock goes 279s -> 162s. Uneven because
+    # vitest shards by file, not by cost.
+    #
+    # The command stays `pnpm --filter @kamiazya/whiteboard-web test`, which
+    # runs BOTH the jsdom project and web-node's build/deploy guards, and
+    # forwards --shard to each (apps/web/scripts/run-web-tests.mjs). Two
+    # hand-written vitest invocations here would have been simpler and would
+    # have retired the `whiteboard-web test` marker that ci-verify-coverage
+    # and vitest-projects.mjs both key on.
+    strategy:
+      matrix:
+        shard: [1, 2]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -130,8 +148,8 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
-      - name: Test web (jsdom + node)
-        run: pnpm --filter @kamiazya/whiteboard-web test
+      - name: Test web (jsdom + node, shard ${{ matrix.shard }}/2)
+        run: pnpm --filter @kamiazya/whiteboard-web test -- --shard=${{ matrix.shard }}/2
 
   test-browser:
     runs-on: ubuntu-latest
@@ -334,10 +352,17 @@ jobs:
     # verify consumes nothing from the test jobs (fresh checkout + install),
     # and the "a release tag points at a commit where the tests ran"
     # property is carried by branch protection, which requires every test
-    # job INDIVIDUALLY (check, test-unit 1+2, test-jsdom, test-browser 1+2,
-    # widget-smoke — verified via the branch-protection API; the Actions
+    # job INDIVIDUALLY (check, test-unit 1+2, test-jsdom 1+2, test-browser
+    # 1+2, widget-smoke — verified via the branch-protection API; the Actions
     # token cannot read it, so no test can pin this and the settings page is
-    # the source of truth). What unchaining costs is only compute on a red
+    # the source of truth). SHARDING A REQUIRED JOB RENAMES ITS CHECK — a
+    # matrix reports `test-jsdom (1)`, and a bare `test-jsdom` in the required
+    # list then never reports at all, so every PR waits on a check that cannot
+    # arrive. That is what `ci-gate` at the bottom of this file is for: it is
+    # one stable check name over every job here, so a shard count becomes an
+    # implementation detail rather than a settings change. Until the required
+    # list is narrowed to `ci-gate` alone, both lists have to stay in step.
+    # What unchaining costs is only compute on a red
     # run: verify's smokes run even when a test job fails, which on a free
     # public repo is minutes, not money.
     runs-on: ubuntu-latest
@@ -526,10 +551,24 @@ jobs:
           WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
         run: pnpm smoke:docker
 
-      # smoke:docker-backup-restore is NOT here, and its matrix exception says
-      # why: running it revealed that it asserts against an API surface the
-      # product no longer has. Adding it needs the smoke rewritten against the
-      # current API first, which is its own change.
+      # The backup/restore smoke joins it now that its one dead assertion is
+      # gone. It imports one built module — dist/server/server-mode-backup-
+      # restore.js — which the image dry-run does not leave behind, so it gets
+      # its own build step. The image itself is still the dry-run's.
+      #
+      # build:server, not build: the full `build` also copies canvas-viewer's
+      # widget into dist, and that package is not built in this job, so it
+      # fails on a missing dist/widget/canvas-viewer.html. tsup produces the
+      # module the smoke needs on its own.
+      - name: Build mcp-server dist for the backup/restore smoke
+        if: steps.detect.outputs.docker == 'true'
+        run: pnpm --filter @kamiazya/whiteboard-mcp build:server
+
+      - name: Server-mode backup/restore docker smoke
+        if: steps.detect.outputs.docker == 'true'
+        env:
+          WHITEBOARD_SMOKE_IMAGE: whiteboard-server:dry-run
+        run: pnpm smoke:docker-backup-restore
 
       - name: Upload docker dry-run metadata
         if: steps.detect.outputs.docker == 'true'
@@ -538,3 +577,44 @@ jobs:
           name: docker-image-dry-run-${{ github.run_id }}
           path: packages/mcp-server/tmp/publish-dry-run/docker-image-metadata.json
           if-no-files-found: warn
+
+  # The single required status check for this workflow — require THIS and
+  # nothing else from ci.yml, and a shard count stops being a settings change.
+  # See tools/checks/src/ci-gate.mjs for what it refuses and why it judges the
+  # run's per-leg conclusions rather than `needs.<job>.result`.
+  #
+  # `if: always()` is load-bearing: without it a failed dependency SKIPS this
+  # job, so the one check branch protection waits on never reports and the
+  # merge blocks on an absent check rather than on the real failure.
+  #
+  # Every ci.yml job must appear in `needs` — for ordering, and as the list the
+  # gate cross-checks the run against. ci-gate.test.ts fails on a missing one.
+  ci-gate:
+    if: always()
+    needs:
+      - check
+      - test-unit
+      - test-jsdom
+      - test-browser
+      - stress-changed-tests
+      - sbom-npm
+      - packaged-smoke
+      - widget-smoke
+      - verify
+      - dry-run-npm
+      - dry-run-docker
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    # A job-level block REPLACES the workflow's `contents: read` rather than
+    # adding to it, so checkout's own permission is restated here.
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Every job in this run succeeded
+        env:
+          NEEDS_JSON: ${{ toJSON(needs) }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: node tools/checks/src/ci-gate.mjs

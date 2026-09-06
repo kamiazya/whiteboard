@@ -389,7 +389,6 @@ function DocumentPageBody({
           <VersionPanel
             workspaceId={versions.workspaceId}
             path={versions.path}
-            capabilities={versions.historyCapabilities}
             onRestored={sync.clearLocalUndo}
             onPreview={setPreview}
             refreshSignal={versionRefreshSignal}

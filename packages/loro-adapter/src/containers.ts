@@ -49,3 +49,18 @@ export const COMMENTS_KEY = 'comments'
  * `CONTENT_CONTAINER_KEYS` so a tree-node host pre-attaches it.
  */
 export const THREADS_KEY = 'threads'
+
+/**
+ * The proposal layer's plane (ADR-0029), shaped like `threads` above and for
+ * the same reason: a map of proposal containers, each holding its provenance
+ * beside a nested map of CHANGES keyed by change id. The nesting is what lets
+ * two people decide different parts of one proposal at once without either
+ * verdict overwriting the other.
+ *
+ * Read and written by `proposals.ts`, and named in `CONTENT_CONTAINER_KEYS`
+ * so a tree-node host pre-attaches it — which also means a pending proposal
+ * moves the document's content digest, and a listing shows the document as
+ * having changed. That is the intended reading: something happened to this
+ * document that somebody should look at.
+ */
+export const PROPOSALS_KEY = 'proposals'

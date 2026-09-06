@@ -14,13 +14,16 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  annotationIdSchema,
   type CanvasComment,
   type CanvasEdge,
-  canvasColorSchema,
   canvasCommentSchema,
   canvasEdgeSchema,
   documentIdSchema,
+  edgePatchFieldsSchema,
   nodeIdSchema,
+  nodePatchFieldsSchema,
+  proposalSchema,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
@@ -31,6 +34,7 @@ import { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { canvasSnapshotSchema, projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
@@ -121,39 +125,6 @@ const regionNodeSchema = z.discriminatedUnion('type', [
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 
 /**
- * What `node.patch` may change. Deliberately limited to the geometry/style
- * fields every node type shares plus `label` (which only a group declares) —
- * not the per-type content fields. Patching `label` onto a text node is a
- * silent no-op after re-parse, because the per-type node schemas are not
- * strict and an unrecognized key is stripped rather than rejected. Inherited
- * from the retired `wb_node_patch`, whose only consumer this now is.
- */
-const nodePatchFieldsSchema = z
-  .object({
-    x: z.number().int().optional(),
-    y: z.number().int().optional(),
-    width: z.number().int().nonnegative().optional(),
-    height: z.number().int().nonnegative().optional(),
-    color: canvasColorSchema.optional(),
-    label: z.string().optional(),
-  })
-  .strict()
-
-/** What `edge.patch` may change. Inherited from the retired `wb_edge_patch`. */
-const edgePatchFieldsSchema = z
-  .object({
-    fromNode: nodeIdSchema.optional(),
-    toNode: nodeIdSchema.optional(),
-    fromSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-    toSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-    fromEnd: z.enum(['none', 'arrow']).optional(),
-    toEnd: z.enum(['none', 'arrow']).optional(),
-    color: canvasColorSchema.optional(),
-    label: z.string().optional(),
-  })
-  .strict()
-
-/**
  * One step of a batch. The verbs are the ones the retired single-purpose
  * tools carried, so nothing an agent could do before is missing here — plus
  * `node.remove` / `edge.remove`, which had no tool at all: the only way to
@@ -239,6 +210,26 @@ export const canvasEditInputSchema = z
     documentId: documentIdSchema,
     ops: z.array(canvasOpSchema).min(1).max(MAX_OPS),
     /**
+     * Whether this batch CHANGES the document or PROPOSES a change to it
+     * (ADR-0029). A proposal is stored beside the content, drawn on the live
+     * document, and adopted or dismissed by a person.
+     *
+     * The default is `apply` while nothing can yet adopt a proposal. ADR-0029
+     * decision 7 wants `propose`, and the flip is the last increment of that
+     * work rather than this one: made now, an agent's every edit would land
+     * somewhere no surface shows and no verb can accept, which is a tool that
+     * cannot change a document at all.
+     */
+    mode: z.enum(['apply', 'propose']).optional(),
+    /**
+     * Add to the proposal already open under this id instead of opening a
+     * new one — decision 8's "one request, not one call". Only meaningful
+     * with `mode: 'propose'`; a batch that touches an element the proposal
+     * already carries REPLACES that change rather than stacking a second
+     * opinion beside it.
+     */
+    proposalId: annotationIdSchema.optional(),
+    /**
      * Move a watching browser's viewport onto what this batch touched.
      * Defaults to true: an agent editing a board a human is looking at
      * should not leave them hunting for the change. Set false for
@@ -284,6 +275,13 @@ const canvasEditOutputSchema = z
     geometry: z.array(geometryEntrySchema),
     /** The board after the batch, so no second round trip is needed to read it. */
     snapshot: canvasSnapshotSchema,
+    /**
+     * What was proposed, present only in `propose` mode. The whole proposal
+     * rather than a summary of it: the caller does not know the ids minted
+     * or the geometry placed, and this is the same schema the document
+     * stores, so there is no second shape to keep in step.
+     */
+    proposed: proposalSchema.optional(),
   })
   .strict()
 type CanvasEditOutput = z.infer<typeof canvasEditOutputSchema>
@@ -434,10 +432,22 @@ export function createCanvasEditTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_edit' as const,
     description:
-      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again.',
+      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again. Set mode:"propose" to store the batch as a proposal for a person to adopt or dismiss instead of changing the document; pass proposalId to keep several calls in one proposal. A proposal carries node and edge adds, patches and removes — not tidy, region.set, comments or locks.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
+      const proposing = input.mode === 'propose'
+      if (proposing) {
+        const refused = input.ops.findIndex((op) => !isProposableOp(op.op))
+        if (refused >= 0) {
+          fail(
+            refused,
+            input.ops[refused]?.op ?? 'unknown',
+            'a proposal cannot carry this verb: it has no single anchor to follow, ' +
+              'or it changes what it was not asked about, so nobody could adopt part of it',
+          )
+        }
+      }
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
 
@@ -884,6 +894,45 @@ export function createCanvasEditTool(deps: ServerDeps) {
             .map((issue) => issue.message)
             .join('; ')}`,
         )
+      }
+
+      // A proposal is stored INSTEAD of the board it describes: the content
+      // containers are left exactly as they were, and only the proposals
+      // plane grows. Locks are not written either — a lock is a claim on the
+      // document, and this batch has not touched the document.
+      if (proposing) {
+        const proposal = await storeCanvasProposal({
+          deps,
+          workspaceId: input.workspaceId,
+          documentId: input.documentId,
+          ...(input.proposalId === undefined ? {} : { proposalId: input.proposalId }),
+          doc,
+          before: canvas,
+          after: parsed.data,
+        })
+        if (proposal === undefined) {
+          throw new CanvasEditError(
+            input.ops.length - 1,
+            'batch',
+            'this batch would change nothing, so there is nothing to propose',
+          )
+        }
+        // Deliberately silent. Nothing changed for a watching browser, so a
+        // toast saying "changed 1" would be a lie, and the viewport must not
+        // chase an edit nobody made. The surface that shows a proposal is a
+        // later increment of ADR-0029, and it is what will announce one.
+        return {
+          documentId: input.documentId,
+          applied: 0,
+          touched: {
+            nodes: [...touchedNodes].sort(),
+            edges: [...touchedEdges].sort(),
+            comments: [...touchedComments].sort(),
+          },
+          geometry: [...geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
+          snapshot: projectCanvasSnapshot(input.documentId, canvas, nodeLocks, edgeLocks),
+          proposed: proposal,
+        }
       }
 
       // Locks are written only now, after every op has applied — see the

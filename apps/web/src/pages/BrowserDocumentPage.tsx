@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import { BROWSER_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
 import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
@@ -889,7 +888,6 @@ function useBrowserDocument(
       enabled: versionsEnabled,
       workspaceId,
       path: loadedPath,
-      historyCapabilities: BROWSER_HISTORY_CAPABILITIES,
       backend: versionsBackend,
       save: async (label) => {
         if (versionsBackend === null) {

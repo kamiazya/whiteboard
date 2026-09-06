@@ -10,17 +10,17 @@
 //   2.  Server image available (reused via WHITEBOARD_SMOKE_IMAGE, else built).
 //   3.  Start container A with a fresh source data volume.
 //   4.  Seed via valid JWT:
-//         - workspace + canvas (Loro snapshot via canvas POST)
+//         - workspace + canvas, with one node written through /update
 //         - file blob  (PUT /api/w/:ws/document/:path/file/:fileId)
 //         - manual version + thumbnail
-//         - palette entry  (PUT /api/workspaces/:ws/palette, no auth needed)
+//         - workspace display name (PUT /api/workspaces/:ws/name)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
 //   6.  Stop container A.
 //   7.  backupServerModeDataDir → restoreServerModeDataDir via dist helper.
 //   8.  Verify server-mode.json is absent from restored dir.
 //   9.  Start container B with the restored data volume.
 //  10.  Verify all seeded data via HTTP API (canvas list, snapshot bytes,
-//       file bytes, version list + thumbnail bytes, palette entry).
+//       file bytes, version list + thumbnail bytes, workspace name).
 //  11.  Verify 401 (no auth) and 403 (wrong scope) contracts still hold.
 //  12.  Scan docker logs for JWT / credential / path leaks.
 //  13.  Cleanup containers, JWKS server, temp dirs.
@@ -35,10 +35,11 @@ import { spawnSync } from 'node:child_process'
 import { createSign, generateKeyPairSync } from 'node:crypto'
 import { chmodSync, existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
+import { createRequire } from 'node:module'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { assertNoLeak, resolveServerImage } from './smoke-helpers.mjs'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
@@ -54,6 +55,55 @@ const READINESS_TIMEOUT_MS = 60_000
 const WORKSPACE_ID = 'sess-smoke-br'
 const CANVAS_PATH = 'canvas-smoke-br'
 const FILE_ID = 'filesmokebr001' // must match validateFileId: [A-Za-z0-9_-]{1,64}
+const WORKSPACE_DISPLAY_NAME = 'Backup Restore Smoke'
+const CANVAS_NODE_ID = 'smoke-node-1'
+
+// Resolved against mcp-server, whose dependency it is — this file's own
+// directory has no node_modules under pnpm's strict layout. The smoke already
+// reaches into that package for dist/server/server-mode-backup-restore.js.
+const requireFromServer = createRequire(
+  pathToFileURL(resolve(REPO_ROOT, 'packages/mcp-server/package.json')),
+)
+const { LoroDoc } = requireFromServer('loro-crdt')
+
+/**
+ * The canvas NODES a snapshot carries, as a stable string.
+ *
+ * Deliberately not the whole `toJSON()`: which empty containers a document has
+ * instantiated depends on how the process that exported it opened the
+ * document, and that legitimately differs between the server that created it
+ * and the one that loaded it back. Measured — a created doc and the same doc
+ * reloaded differ in exactly that, with identical nodes. The nodes map is what
+ * a backup has to preserve, and `loro-adapter`'s readSpatialCanvas reads the
+ * same key.
+ */
+function canvasNodes(bytes) {
+  const doc = new LoroDoc()
+  doc.import(bytes)
+  const nodes = doc.toJSON()?.nodes ?? {}
+  return JSON.stringify(
+    Object.fromEntries(Object.entries(nodes).sort(([a], [b]) => (a < b ? -1 : 1))),
+  )
+}
+
+/** A Loro update that puts one node into an otherwise empty canvas. */
+function nodeUpdateBytes() {
+  const doc = new LoroDoc()
+  // `nodes`, keyed by node id, is the shape loro-adapter's readSpatialCanvas
+  // reads; the fields are spatialNodeSchema's text variant. Writing anywhere
+  // else would store bytes the product never looks at.
+  doc.getMap('nodes').set(CANVAS_NODE_ID, {
+    id: CANVAS_NODE_ID,
+    type: 'text',
+    text: 'seeded by the backup/restore smoke',
+    x: 10,
+    y: 20,
+    width: 200,
+    height: 60,
+  })
+  doc.commit()
+  return doc.export({ mode: 'update' })
+}
 
 const BACKUP_RESTORE_ENTRY = resolve(
   REPO_ROOT,
@@ -405,6 +455,21 @@ try {
       })
     }
 
+    // Put real content in the canvas before capturing it. Without this the
+    // smoke backed up an EMPTY document and asserted over its bytes, which
+    // could not have caught a backup that dropped canvas content.
+    const updateRes = await authedFetch(
+      serverBaseUrl,
+      `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(CANVAS_PATH)}/update`,
+      jwt,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: nodeUpdateBytes(),
+      },
+    )
+    if (!updateRes.ok) fail(`scenario 3: canvas update failed with ${updateRes.status}`)
+
     // Capture Loro snapshot bytes (canvas:read).
     const snapshotRes = await authedFetch(
       serverBaseUrl,
@@ -452,21 +517,23 @@ try {
     )
     if (!thumbRes.ok) fail(`scenario 3: thumbnail upload failed with ${thumbRes.status}`)
 
-    // Save palette entry.
-    const paletteRes = await authedFetch(
+    // The workspace's own display name — a workspaces-table row rather than
+    // anything inside a document, which is a category of state the backup has
+    // to carry and no other step here touches.
+    const nameRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/name`,
       jwt,
       {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ entries: { '#smoke-red': '#FF0000' } }),
+        body: JSON.stringify({ name: WORKSPACE_DISPLAY_NAME }),
       },
     )
-    if (!paletteRes.ok) fail(`scenario 3: palette save failed with ${paletteRes.status}`)
+    if (!nameRes.ok) fail(`scenario 3: workspace name save failed with ${nameRes.status}`)
 
     console.log(
-      `[docker-br-smoke] scenario 3 PASS: seeded workspace=${WORKSPACE_ID}, canvas=${CANVAS_PATH}, snapshot=${seededSnapshotBytes.byteLength} bytes, versionId=${seededVersionId}`,
+      `[docker-br-smoke] scenario 3 PASS: seeded workspace=${WORKSPACE_ID}, canvas=${CANVAS_PATH} (node=${CANVAS_NODE_ID}), snapshot=${seededSnapshotBytes.byteLength} bytes, versionId=${seededVersionId}`,
     )
   }
 
@@ -582,16 +649,33 @@ try {
       fail(`scenario 7: snapshot fetch on restored server failed with ${snapshotRes.status}`)
     const restoredSnapshot = new Uint8Array(await snapshotRes.arrayBuffer())
     if (restoredSnapshot.byteLength === 0) fail('scenario 7: restored snapshot is empty')
-    if (restoredSnapshot.byteLength !== seededSnapshotBytes.byteLength) {
-      fail('scenario 7: snapshot byte length mismatch', {
-        seeded: seededSnapshotBytes.byteLength,
-        restored: restoredSnapshot.byteLength,
+    // Compared by CONTENT, not by bytes. A snapshot's encoding is not
+    // canonical: two opens of the SAME stored document export different bytes
+    // and different lengths (measured, with no backup in the picture at all:
+    // 501 then 513, differing at the header checksum and at several 8-byte
+    // runs). So byte equality here could never hold for any backup
+    // implementation — it asserted something about Loro's encoder and the
+    // daemon's per-open state, not about whether the data survived.
+    //
+    // Both sides decode through the same reader, so hydration and peer
+    // differences cancel and what is left is the document itself.
+    const seededNodes = canvasNodes(seededSnapshotBytes)
+    const restoredNodes = canvasNodes(restoredSnapshot)
+    // Guard the comparison FIRST: an empty canvas stringifies to `{}` on both
+    // sides, so a seed that silently wrote nothing would satisfy the equality
+    // below while proving nothing.
+    if (!seededNodes.includes(CANVAS_NODE_ID)) {
+      fail('scenario 7: the seeded snapshot carries none of the nodes the smoke wrote', {
+        seededNodes: seededNodes.slice(0, 400),
       })
     }
-    for (let i = 0; i < seededSnapshotBytes.byteLength; i++) {
-      if (restoredSnapshot[i] !== seededSnapshotBytes[i]) {
-        fail(`scenario 7: snapshot byte mismatch at index ${i}`)
-      }
+    if (restoredNodes !== seededNodes) {
+      fail('scenario 7: restored canvas nodes differ from the seeded ones', {
+        seededLength: seededSnapshotBytes.byteLength,
+        restoredLength: restoredSnapshot.byteLength,
+        seededNodes: seededNodes.slice(0, 400),
+        restoredNodes: restoredNodes.slice(0, 400),
+      })
     }
 
     // File blob (files:read).
@@ -643,18 +727,19 @@ try {
       fail('scenario 7: restored thumbnail byte length mismatch')
     }
 
-    // Palette entry.
-    const paletteRes = await authedFetch(
+    // Workspace display name.
+    const namesRes = await authedFetch(
       serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/palette`,
+      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/names`,
       jwt,
     )
-    if (!paletteRes.ok)
-      fail(`scenario 7: palette GET on restored server failed with ${paletteRes.status}`)
-    const palette = await paletteRes.json()
-    if (palette?.palette?.['#smoke-red'] !== '#FF0000') {
-      fail('scenario 7: palette entry missing from restored server', {
-        paletteKeyCount: Object.keys(palette?.palette ?? {}).length,
+    if (!namesRes.ok)
+      fail(`scenario 7: names GET on restored server failed with ${namesRes.status}`)
+    const names = await namesRes.json()
+    if (names?.workspace !== WORKSPACE_DISPLAY_NAME) {
+      fail('scenario 7: workspace display name missing from restored server', {
+        got: names?.workspace,
+        want: WORKSPACE_DISPLAY_NAME,
       })
     }
 

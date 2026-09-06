@@ -209,6 +209,41 @@ function isDatabaseFile(dataDir: string, path: string): boolean {
 // not an archive — restore is the inverse copy. `srcDataDir` must
 // exist; `backupDir` must be empty (or missing) so a backup never
 // silently merges into a stale tree.
+/**
+ * Copy a directory's CONTENTS into an existing-or-missing destination.
+ *
+ * `cp(src, dst, { errorOnExist, force: false })` rejects the destination
+ * DIRECTORY itself when it exists, not merely a colliding entry inside it —
+ * so it contradicts the empty-dir contract both callers check just above.
+ * A mounted volume is always an existing empty directory, which is how a
+ * `docker run -v /backups/today:/backup` backup failed every time, with a
+ * raw `ERR_FS_CP_EEXIST` rather than a `BackupError`.
+ *
+ * Copying each top-level entry separately keeps `errorOnExist`'s real job —
+ * failing closed if anyone writes a colliding entry between the empty check
+ * and the copy — while letting the destination root already be there. It
+ * also leaves the destination's own mode and owner alone, which is what a
+ * mount point needs.
+ */
+async function copyDirContents(
+  src: string,
+  dst: string,
+  options: { filter: (path: string) => boolean },
+): Promise<void> {
+  await mkdir(dst, { recursive: true })
+  for (const name of await readdir(src)) {
+    const from = join(src, name)
+    if (!options.filter(from)) continue
+    await cp(from, join(dst, name), {
+      recursive: true,
+      dereference: false,
+      errorOnExist: true,
+      force: false,
+      filter: options.filter,
+    })
+  }
+}
+
 export async function backupDataDir(
   srcDataDir: string,
   backupDir: string,
@@ -235,11 +270,7 @@ export async function backupDataDir(
   // `errorOnExist: true` belt-and-suspenders against a race: if
   // anyone writes into backupDir between the empty check and the
   // copy, fail closed instead of silently overwriting.
-  await cp(srcDataDir, backupDir, {
-    recursive: true,
-    dereference: false,
-    errorOnExist: true,
-    force: false,
+  await copyDirContents(srcDataDir, backupDir, {
     // Two things are filtered out rather than deleted afterwards: a fossil
     // that is copied and then removed exists on disk in between, and a backup
     // interrupted in that window is one holding rows it was never meant to
@@ -283,11 +314,7 @@ export async function restoreDataDir(
   // Read before copying, because it decides what the copy must leave out.
   const references = await readBackupBlobManifest(backupDir)
 
-  await cp(backupDir, targetDataDir, {
-    recursive: true,
-    dereference: false,
-    errorOnExist: true,
-    force: false,
+  await copyDirContents(backupDir, targetDataDir, {
     // A mirrored backup's own `blobs/`+`files/` are the MIRROR's stores, not
     // a data directory's contents — they are keyed by digest, and `files/`
     // has no meaning in a data dir at all. Copying them would also collide
