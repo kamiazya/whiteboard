@@ -351,8 +351,11 @@ function useBrowserDocument(
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
-    navigate(path, { replace: isFirstSync })
-  }, [documentPath, navigate])
+    // The SEARCH rides along: this writes the address of the document already
+    // loaded, so a bare pathname drops a query the reader arrived with — which
+    // is how `?v=` never survived to be read here (ADR-0022's note).
+    navigate({ pathname: path, search: location.search }, { replace: isFirstSync })
+  }, [documentPath, navigate, location.search])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -914,6 +917,7 @@ function useBrowserDocument(
       path: loadedPath,
       dataMode: 'local',
       branchRefreshSignal,
+      onBranchesChanged: () => setBranchRefreshSignal((n) => n + 1),
       // The way out of the editor. This page had none until now — the
       // app-shell brand mark was the only exit, and it says nothing about
       // where it goes.
@@ -922,7 +926,6 @@ function useBrowserDocument(
         navigate(handle === null ? indexPath() : workspacePath(handle))
       },
     },
-    readOnlyPast: null,
     spatial: {},
     slots: {
       rowAlerts: (
