@@ -62,6 +62,7 @@ describe('wb_canvas_edit comment ops', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'comment.add', comment: { x: 400, y: 60, text: 'この矢印は逆では?' } }],
     })
 
@@ -86,6 +87,7 @@ describe('wb_canvas_edit comment ops', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'comment.add', comment: { targetNodeId: 'n1', text: 'rename this' } }],
     })
 
@@ -104,6 +106,7 @@ describe('wb_canvas_edit comment ops', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [
           { op: 'node.add', node: { type: 'text', text: 'should not land' } },
           { op: 'comment.add', comment: { targetNodeId: 'missing', text: 'about nothing' } },
@@ -128,6 +131,7 @@ describe('wb_canvas_edit comment ops', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'comment.resolve', id: 'c1' }],
     })
     expect((await storedComments(store))[0]?.resolved).toBe(true)
@@ -135,6 +139,7 @@ describe('wb_canvas_edit comment ops', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'comment.resolve', id: 'c1', resolved: false }],
     })
     // Reopened, and read back as an open comment with no `resolved` field.
@@ -162,6 +167,7 @@ describe('wb_canvas_edit comment ops', () => {
     const refused = tool.inputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'comment.remove', id: 'c1' }],
     })
     expect(refused.success).toBe(false)
@@ -170,6 +176,7 @@ describe('wb_canvas_edit comment ops', () => {
         tool.inputSchema.safeParse({
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
+          mode: 'apply',
           ops: [{ op: 'comment.resolve', id: 'c1' }],
         }).success,
       ),
@@ -185,6 +192,7 @@ describe('wb_canvas_edit comment ops', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
+        mode: 'apply',
         ops: [{ op: 'comment.resolve', id: 'nope' }],
       }),
     ).rejects.toMatchObject({ message: expect.stringMatching(/"nope"/) })
@@ -208,6 +216,7 @@ describe('wb_canvas_edit comment ops', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
+      mode: 'apply',
       ops: [{ op: 'node.patch', id: 'n1', patch: { x: 111 } }],
     })
 

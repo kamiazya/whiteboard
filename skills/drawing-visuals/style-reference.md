@@ -72,6 +72,7 @@ Hierarchy should come mostly from layout, not from painting everything in emphas
 ```js
 wb_canvas_edit({
   workspaceId, documentId,
+  mode: "apply",
   ops: [
     { op: "edge.add", edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" } },
   ],

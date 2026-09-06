@@ -330,6 +330,7 @@ async function main() {
   const addedA = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'node.add', node: NODE_A }],
   })
   if (!addedA.touched?.nodes.includes('node-a')) {
@@ -404,6 +405,7 @@ async function main() {
   const addedC = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    mode: 'apply',
     ops: [{ op: 'node.add', node: NODE_C }],
   })
   if (!addedC.touched?.nodes.includes('node-c')) {

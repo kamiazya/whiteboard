@@ -17,7 +17,7 @@ assuming a full-featured drawing-app tool set.
 Use these tools:
 
 - `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
-- `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction
+- `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction. **Pass `mode: "apply"`**: the default proposes content changes for a person to adopt, because nobody watches an agent type — but somebody just asked you to draw this, and they are looking at it
 - `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
 - `wb_version_save` / `wb_version_list` / `wb_version_restore` — checkpoint and roll back
@@ -116,6 +116,10 @@ Do not issue one call per node.
 ```js
 wb_canvas_edit({
   workspaceId, documentId,
+  // Somebody asked for this drawing and is waiting to see it, so it applies.
+  // Without a mode a batch of content is stored as a PROPOSAL instead, which
+  // is the right default when nobody asked (ADR-0029 decision 3).
+  mode: "apply",
   ops: [
     { op: "node.add", node: { id: "client", type: "text", text: "Client", color: "#1971c2" } },
     { op: "node.add", node: { id: "server", type: "text", text: "Server" } },
@@ -155,10 +159,10 @@ Tidy is an op, so it usually belongs at the END of the same call that drew the d
 in a call of its own:
 
 ```js
-wb_canvas_edit({ workspaceId, documentId, ops: [ /* ...adds... */, { op: "tidy" } ] })
+wb_canvas_edit({ workspaceId, documentId, mode: "apply", ops: [ /* ...adds... */, { op: "tidy" } ] })
 
 // Re-tidy only a subset, leaving everything else as a fixed obstacle:
-wb_canvas_edit({ workspaceId, documentId, ops: [{ op: "tidy", scope: ["client", "server"] }] })
+wb_canvas_edit({ workspaceId, documentId, mode: "apply", ops: [{ op: "tidy", scope: ["client", "server"] }] })
 
 wb_scene_render({ workspaceId, documentId })
 // Draw what the document references: a `file` node's target inside the node (a

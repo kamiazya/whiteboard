@@ -268,25 +268,100 @@ describe('wb_canvas_edit in propose mode', () => {
 
     expect(activity).toEqual([])
   })
+})
 
-  // The default is still apply, and stays so until a person can see and adopt
-  // a proposal. ADR-0029 decision 7 wants propose; flipping it before the
-  // surface exists would leave this tool unable to change a document at all.
-  test('still applies when no mode is named', async () => {
+describe('the default mode (ADR-0029 decision 7)', () => {
+  // The flip that finishes the ADR. What the default answers is decided by
+  // WHAT THE BATCH CARRIES, not by who is calling: content is proposed, and
+  // anything that is not content applies — the same line the ADR already
+  // drew when it said which verbs a proposal can carry (`comment.*` is the
+  // annotation layer, a lock is a claim, `tidy`/`region.set` have no anchor
+  // to follow). A default that refused those instead would refuse a verb
+  // the tool supports, and the widget's comment box is one of its callers.
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  test('proposes a batch of content changes when no mode is given', async () => {
     const store = new FakeDocumentStore()
     await seed(store, BOARD)
     const deps = makeDeps(store)
-
     const result = await createCanvasEditTool(deps).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       ops: [{ op: 'node.patch', id: 'a', patch: { x: 400 } }],
     })
 
+    expect(result.applied).toBe(0)
+    expect(result.proposed?.changes).toHaveLength(1)
+    expect(result.snapshot.nodes.find((n) => n.id === 'a')?.x).toBe(0)
+    expect(await storedProposals(deps)).toHaveLength(1)
+  })
+
+  test('applies a batch that carries nothing proposable — the widget comment box', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    const result = await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'comment.add', comment: { x: 10, y: 20, text: 'is this right?' } }],
+    })
+
     expect(result.applied).toBe(1)
     expect(result.proposed).toBeUndefined()
+    expect(result.snapshot.comments).toHaveLength(1)
     expect(await storedProposals(deps)).toEqual([])
-    const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes.find((node) => node.id === 'a')?.x).toBe(400)
+  })
+
+  test('applies a MIXED batch rather than splitting an all-or-nothing one', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    const result = await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        { op: 'node.patch', id: 'a', patch: { x: 400 } },
+        { op: 'comment.add', comment: { x: 10, y: 20, text: 'moved it' } },
+      ],
+    })
+
+    expect(result.proposed).toBeUndefined()
+    expect(result.snapshot.nodes.find((n) => n.id === 'a')?.x).toBe(400)
+    expect(await storedProposals(deps)).toEqual([])
+  })
+
+  test('an explicit apply still changes the document', async () => {
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    const result = await createCanvasEditTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'a', patch: { x: 400 } }],
+    })
+
+    expect(result.proposed).toBeUndefined()
+    expect(result.snapshot.nodes.find((n) => n.id === 'a')?.x).toBe(400)
+    expect(await storedProposals(deps)).toEqual([])
+  })
+
+  test('an EXPLICIT propose carrying a comment is still refused, not quietly applied', async () => {
+    // The default resolving by content must not soften what an explicit
+    // request means: a caller that asked to propose a comment asked for
+    // something the layer cannot represent, and is told so.
+    const store = new FakeDocumentStore()
+    await seed(store, BOARD)
+    const deps = makeDeps(store)
+    await expect(
+      createCanvasEditTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'propose',
+        ops: [{ op: 'comment.add', comment: { x: 10, y: 20, text: 'no' } }],
+      }),
+    ).rejects.toThrow(/cannot carry this verb/)
   })
 })

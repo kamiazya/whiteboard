@@ -119,6 +119,7 @@ describe('POST /linkify-mentions', () => {
     await edit.execute({
       workspaceId: WS,
       documentId: board.documentId,
+      mode: 'apply',
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'we depend on Redis heavily' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },

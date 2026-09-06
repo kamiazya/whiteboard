@@ -81,7 +81,7 @@ Use this loop:
 2. brainstorm: generate 2-3 candidate node / edge compositions
 3. curate: choose one and explicitly name what you are discarding
 4. gap check: find meaning that still exists only in your head
-5. draw/update: one `wb_canvas_edit` call carrying the whole composition as ops
+5. draw/update: one `wb_canvas_edit` call carrying the whole composition as ops, with `mode: "apply"` — you are drawing WITH somebody who is watching, which is the case the proposal default (ADR-0029 decision 3) exempts
 6. refine: tighten labels, alignment, and reading direction
 
 Stage 2 rules:
@@ -203,7 +203,7 @@ Open [`references/geometry-checks.md`](./references/geometry-checks.md) when the
 
 If the fresh-viewer test surfaces ambiguity, return to Stage 2.
 Do not over-explain by dumping more text.
-Prefer **local whiteboard surgery** — `node.patch` / `edge.patch` / `node.remove` ops in one `wb_canvas_edit` call — over redrawing everything.
+Prefer **local whiteboard surgery** — `node.patch` / `edge.patch` / `node.remove` ops in one `wb_canvas_edit` call (`mode: "apply"`) — over redrawing everything.
 At this stage, prioritize the **second polish pass** over adding more nodes:
 composition, whitespace, alignment, and label density should get tighter before the board gets bigger.
 

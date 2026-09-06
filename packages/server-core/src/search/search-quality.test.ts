@@ -79,6 +79,7 @@ beforeAll(async () => {
     await edit.execute({
       workspaceId: WS,
       documentId: created.documentId,
+      mode: 'apply',
       ops: [
         ...(doc.nodes ?? []).map((n) => ({
           op: 'node.add' as const,

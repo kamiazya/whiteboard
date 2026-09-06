@@ -127,7 +127,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // of it is the prose those three fields carry, which IS this tool's
   // published contract: an agent reads the schema, not this repo. The
   // mechanics went to `canvas-propose.ts` rather than here.
-  'packages/server-core/src/tools/canvas-edit.ts': 997,
+  // +24 for ADR-0029 decision 7's flip: the default now reads the batch to
+  // decide whether it is content, and most of the growth is the note saying
+  // why that line and not "propose unless told otherwise" — the widget's
+  // comment box is a caller a refusing default would have broken.
+  'packages/server-core/src/tools/canvas-edit.ts': 1021,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child

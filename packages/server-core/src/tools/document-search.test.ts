@@ -56,6 +56,7 @@ describe('wb_document_search', () => {
     await edit.execute({
       workspaceId: WS,
       documentId: board.documentId,
+      mode: 'apply',
       ops: [
         { op: 'node.add', node: { id: 'n1', type: 'text', text: 'websocket の再接続を設計する' } },
         { op: 'node.add', node: { id: 'n2', type: 'group', label: 'インフラ構成' } },
@@ -88,6 +89,7 @@ describe('wb_document_search', () => {
     await edit.execute({
       workspaceId: WS,
       documentId: board.documentId,
+      mode: 'apply',
       ops: [{ op: 'node.add', node: { id: 'n', type: 'text', text: '共通の検索語を含む本文' } }],
     })
 

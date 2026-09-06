@@ -64,6 +64,7 @@ describe('followReferencesAfterRename', () => {
     await createCanvasEditTool(deps).execute({
       workspaceId: WS,
       documentId: canvas.documentId,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',
@@ -149,6 +150,7 @@ describe('followReferencesAfterRename', () => {
     await createCanvasEditTool(deps).execute({
       workspaceId: WS,
       documentId: board.documentId,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',

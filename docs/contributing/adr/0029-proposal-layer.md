@@ -163,13 +163,31 @@ Two tools were rejected because the same operation union would then be
 declared in two places, which is the drift `zod-schema-discipline` exists to
 prevent.
 
-**The default flip is the LAST increment, not the first.** The mode landed
-with `apply` as its default, because a tool whose proposals no surface shows
-and no verb accepts is a tool that cannot change a document at all. Flipping
-it is what finishes this ADR, and it is gated on decision 1 (a person can see
-a proposal) and decision 4 (a person can adopt one) being reachable. The end
-state above is unchanged; only the order is stated here, where a reader
-comparing the ADR to the code would otherwise read the gap as drift.
+**The default flip was the LAST increment, and it has landed.** The mode
+shipped with `apply` as its default, because a tool whose proposals no
+surface shows and no verb accepts is a tool that cannot change a document at
+all; the flip was gated on decision 1 (a person can see a proposal) and
+decision 4 (a person can adopt one), and both are now reachable.
+
+**What the default reads is the BATCH, not the caller** (project owner's
+decision, 2026-09-06). Content — node and edge adds, patches and removes — is
+proposed. A batch carrying anything else applies: `comment.*` is the
+annotation layer, a lock is a claim on a document rather than a change to it,
+and `tidy`/`region.set` have no anchor to follow. That is the same line this
+ADR already drew when it said which verbs a proposal can carry, so the
+default needs no second rule of its own.
+
+It is not the obvious reading of "an agent always proposes", and the reason
+it is the right one was found rather than argued: the MCP Apps widget submits
+a person's comment through this tool with no mode, so a default that refused
+what it could not propose would answer a person typing in a comment box with
+an error. A mixed batch applies for the neighbouring reason — the batch is
+all-or-nothing, and splitting it would be a third thing neither mode means.
+
+`apply` is therefore what a surface a person is looking at passes
+explicitly, and the product's drawing skills now do: somebody who asked for a
+drawing and is waiting to see it is exactly the case decision 3 exempts when
+it says a person proposes only as an explicit act.
 
 ### 8. A proposal is bounded by one request
 

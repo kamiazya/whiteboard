@@ -97,6 +97,7 @@ describe('GET /backlinks', () => {
     await edit.execute({
       workspaceId: WS,
       documentId: canvas.documentId,
+      mode: 'apply',
       ops: [
         {
           op: 'node.add',
