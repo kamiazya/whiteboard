@@ -1,50 +1,7 @@
 import type { DocumentBacklinksResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { FileText, LayoutDashboard, Waypoints } from 'lucide-react'
-import { HEADER_WIDE_TOGGLE_CLASS } from '../../components/ui/header-button.js'
-import { cn } from '../../lib/utils.js'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
+import { FileText, LayoutDashboard } from 'lucide-react'
 
 export type ConnectionsBacklink = DocumentBacklinksResponse['backlinks'][number]
-
-export interface ConnectionsChipProps {
-  /** `null` while the fetch is in flight or unavailable — the chip waits. */
-  readonly backlinks: readonly ConnectionsBacklink[] | null
-  /** Whether the inspector slot is showing the connections panel. */
-  readonly open: boolean
-  readonly onToggle: () => void
-}
-
-/**
- * The opener for the "linked from" half of the incentive loop: a link
- * someone writes elsewhere permanently shows up HERE, on the document it
- * points at. Renders beside DocumentProperties in the merged header row;
- * what it opens is `ConnectionsPanel`, in the page's one inspector slot.
- *
- * A zero count still renders. The empty chip is the affordance that says
- * links land somewhere, which is the reason to write one; hiding it until
- * content exists would hide the loop exactly where it needs starting.
- */
-export function ConnectionsChip({ backlinks, open, onToggle }: ConnectionsChipProps) {
-  const loaded = backlinks !== null
-  return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <button
-          type="button"
-          aria-label={`Connections${loaded ? ` (${backlinks.length})` : ''}`}
-          aria-expanded={open}
-          disabled={!loaded}
-          onClick={onToggle}
-          className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
-        >
-          <Waypoints aria-hidden="true" className="size-4" />
-          {loaded && backlinks.length}
-        </button>
-      </TooltipTrigger>
-      <TooltipContent>Connections — documents linking here</TooltipContent>
-    </Tooltip>
-  )
-}
 
 export interface ConnectionsPanelProps {
   readonly backlinks: readonly ConnectionsBacklink[]

@@ -11,10 +11,9 @@ import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
-import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
+import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
-import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { Button } from '../components/ui/button.js'
 import { DAEMON_HISTORY_CAPABILITIES } from '../components/VersionTimeline'
@@ -881,7 +880,6 @@ function useDaemonDocument(
               </button>
             </div>
           )}
-          {canvas && <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />}
         </>
       ),
       ...(emptyState === undefined ? {} : { replaceEditor: emptyState }),

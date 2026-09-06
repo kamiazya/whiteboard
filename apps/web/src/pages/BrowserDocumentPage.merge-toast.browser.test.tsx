@@ -126,7 +126,12 @@ describe('BrowserDocumentPage merge confirmation (browser)', () => {
     expect(await storedText(documentId)).toBe('after the merge')
 
     dispatchMergeCommitted({
-      workspaceId,
+      // What the browser page's top bar publishes, and therefore what the
+      // dialog announces — the toast filters on it, so the fixture has to be
+      // the bar's id and not the record's. The browser versions backend
+      // ignores the argument and reads the active workspace itself, which is
+      // why an Undo keyed this way still lands in the right record.
+      workspaceId: 'local',
       path: 'canvas-a',
       sourceName: 'idea',
       targetName: 'main',

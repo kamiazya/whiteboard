@@ -160,7 +160,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // when `signal` was made TOTAL: it runs inside Loro's subscriber, where a
   // throw escapes as an unhandled rejection that reddens a whole run while
   // every test passes.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 997,
+  // Raised again to 1011 by the branch-refresh signal: the browser record is
+  // not readable at mount, so nothing re-read the branch plane once it
+  // arrived and a document opened ON a variation kept naming the default one.
+  // Most of the added lines is that reason — the bug is invisible in the
+  // three lines of state that fix it.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1011,
   'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
   'packages/canvas-render/src/layout/spatial-canvas.ts': 1840,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,

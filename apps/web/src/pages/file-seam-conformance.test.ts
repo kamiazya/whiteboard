@@ -80,9 +80,11 @@ const SHARED_CANVAS_CHROME = [
   // grid template and the same sr-only <h1> landmark by hand; the shell owns
   // them once, so a layout or a11y drift between modes cannot happen quietly.
   'DocumentPageShell',
-  // Merge confirmation and its Undo. Daemon-only until the toast stopped
-  // naming a route: it restores through the versions seam, which both keepers
-  // implement, so the shared page can draw it for either one.
+  // Branch chrome, shared since both keepers grew variations and merges.
+  // Listed rather than left out of both groups: "not mode-specific" only
+  // stops the scan expecting them on ONE page, and a component nothing
+  // names is a component nothing notices the loss of.
+  'HeaderBranchBanner',
   'MergeToast',
 ] as const
 
@@ -99,17 +101,11 @@ const SHARED_CANVAS_CHROME = [
  * was rejected — and nothing while the keeper is keeping.
  */
 const MODE_SPECIFIC_CHROME = {
-  // These two reasons USED to be "branches/merge are a daemon concept
-  // (ADR-0004)". They are not any more — the browser keeper keeps its
-  // variations on the workspace record and commits merges over them — so what
-  // these entries record is a GAP rather than a difference: the chrome exists
-  // on one page because that is where it was written, not because the other
-  // keeper cannot have it. Moving it is deliberately not this increment's, so
-  // the reason says what is true rather than repeating what was.
-  HeaderBranchBanner: {
-    page: './DaemonDocumentPage.tsx',
-    why: 'gap: the browser keeper has branches now and no banner; the chrome has not been moved yet',
-  },
+  // `HeaderBranchBanner` and `MergeToast` stood here, first as "a daemon
+  // concept (ADR-0004)" and then as a gap once the browser keeper grew
+  // variations and merges. They are neither now: the shared DocumentPage
+  // mounts both for whichever keeper rendered it, so they are not
+  // mode-specific chrome and this scan should not expect them on one page.
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',
@@ -260,11 +256,11 @@ const SHARED_DOCUMENT_CHROME = ['CommentsRailAside'] as const
  * only one keeper can fill it — the Connections opener and panel are fed by
  * the daemon's backlinks through `model.connections`, and a keeper that
  * answers none gets no opener. That is the gating the model does with DATA
- * rather than with a keeper page rendering its own copy: `ConnectionsChip`
+ * rather than with a keeper page rendering its own copy: `InspectorSegment`
  * used to be daemon-page chrome in `MODE_SPECIFIC_CHROME`, overlaid under the
  * header as its own band, and moved here when the inspector slot took it.
  */
-const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'ConnectionsChip', 'ConnectionsPanel'] as const
+const SHARED_INSPECTOR_CHROME = ['InspectorPanel', 'InspectorSegment', 'ConnectionsPanel'] as const
 
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('the shared page renders %s', async (chrome) => {
