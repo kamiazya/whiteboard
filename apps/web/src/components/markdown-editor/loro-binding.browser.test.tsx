@@ -15,7 +15,7 @@ import { LoroSyncPlugin } from 'loro-codemirror'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { expectCodeMirrorPluginCrash } from '../../test-utils/browser-setup.js'
+import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -98,7 +98,7 @@ it('a remote edit merges into the editor and shifts the caret exactly', async ()
  * a guard that stopped guarding.
  */
 it('reports a binding whose container changes under the mounted view', async () => {
-  const crashes = expectCodeMirrorPluginCrash()
+  const crashes = expectLoggedFailures()
   const doc = new Loro()
   doc.getText('body').insert(0, 'hello ')
   doc.commit()

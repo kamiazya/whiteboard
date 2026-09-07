@@ -48,74 +48,93 @@ setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
 configure({ asyncUtilTimeout: 5_000 })
 
 /**
- * A crashed CodeMirror ViewPlugin fails the test that caused it.
+ * Anything a browser test writes to `console.error` or `console.warn` fails
+ * that test.
  *
- * `@codemirror/view` catches an exception thrown by a plugin's update, logs
- * `CodeMirror plugin crashed: …` and DISABLES that plugin for the life of the
- * view. Nothing throws, nothing rejects, and the editor keeps accepting input
- * — so a CRDT binding that dies this way leaves a pane that looks perfectly
- * healthy and reaches no document at all.
+ * The shape this exists for: an exception that is CAUGHT, logged, and
+ * swallowed, leaving the run to fail somewhere else entirely. Measured on CI —
+ * `@codemirror/view` caught a ViewPlugin exception, logged
+ * `CodeMirror plugin crashed: Index out of bound. The given pos is 1, but the
+ * length is 0`, and DISABLED that plugin for the life of the view. Every later
+ * keystroke went into CodeMirror and never into the CRDT, no save was ever
+ * scheduled, and the failure surfaced ten seconds later as
+ * `expected 'untitled' to be 'Weekly review'` — an assertion about a document
+ * NAME, in a different panel, naming neither the plugin nor the exception. The
+ * one line that said what happened was a `stderr` the run printed and nothing
+ * read.
  *
- * What that costs without this guard, measured on CI: the markdown binding
- * crashed with `Index out of bound. The given pos is 1, but the length is 0`,
- * every later keystroke went only into CodeMirror, no save was ever scheduled,
- * and the failure surfaced ten seconds later as `expected 'untitled' to be
- * 'Weekly review'` — an assertion about a document NAME, in a different panel,
- * naming neither the plugin nor the exception. The line that said what
- * happened was a `stderr` the run printed and nothing read.
+ * Strict, with no allowlist, because it costs nothing: measured over the whole
+ * `web-browser` project — 235 files, 1237 tests — the ONLY record in the run is
+ * the one `loro-binding.browser.test.tsx` provokes on purpose. `app-logger`
+ * routes through `console[level]` under `import.meta.env.DEV`, which is what a
+ * browser test runs as, so this catches the app's own swallowed-failure warns
+ * (`log.warn('reading annotations failed', err)`) as well as React's and the
+ * platform's.
  *
- * Narrow on purpose: only this marker, not `console.error` at large. A test
- * that provokes a crash deliberately calls `expectCodeMirrorPluginCrash()`
- * and reads what was caught.
+ * `web-jsdom` is deliberately NOT held to this yet, and the reason is a
+ * measurement rather than caution: the same guard there reports ~100 records
+ * across 73 tests, most of them tests driving a failure path on purpose
+ * (`canvas exploded`, `network down`, a refused registration). That is a ledger
+ * of claims, not a free guard — see `testing-techniques/resources/
+ * executable-rungs.md` for the two real defects the measurement turned up.
+ *
+ * A test that means to provoke one calls `expectLoggedFailures()` and reads
+ * what was caught.
  */
-const CODEMIRROR_CRASH_MARKER = 'CodeMirror plugin crashed'
 
 /**
  * On `globalThis`, not in module scope, because there are TWO instances of
  * this module: the one vitest loads as a `setupFiles` entry, and the one a
  * test that wants the escape hatch imports by path. Module-scoped state gave
  * each its own copy — the setup's `afterEach` read its own untouched flag and
- * failed the test that had just claimed the crash. Measured: the provoking
- * test below failed with the guard's own message while holding the exception
- * it asked for.
+ * failed the test that had just claimed the record. Measured: the provoking
+ * test in `loro-binding.browser.test.tsx` failed with this guard's own message
+ * while holding the exception it asked for.
  */
-interface CodeMirrorCrashState {
+interface LoggedFailureState {
   seen: string[]
   expected: boolean
 }
-const CRASH_STATE_KEY = '__whiteboardCodeMirrorCrashes'
+const LOGGED_FAILURE_KEY = '__whiteboardLoggedFailures'
 const globalScope = globalThis as Record<string, unknown>
-globalScope[CRASH_STATE_KEY] ??= { seen: [], expected: false } satisfies CodeMirrorCrashState
-const crashState = globalScope[CRASH_STATE_KEY] as CodeMirrorCrashState
+globalScope[LOGGED_FAILURE_KEY] ??= { seen: [], expected: false } satisfies LoggedFailureState
+const loggedFailures = globalScope[LOGGED_FAILURE_KEY] as LoggedFailureState
 
 /**
- * Claims the crashes this test provokes, and returns the live list. Also the
+ * Claims the records this test provokes, and returns the live list. Also the
  * guard's own mutation check: a test that provokes one and finds this empty is
  * looking at a detector that stopped detecting.
  */
-export function expectCodeMirrorPluginCrash(): readonly string[] {
-  crashState.expected = true
-  return crashState.seen
+export function expectLoggedFailures(): readonly string[] {
+  loggedFailures.expected = true
+  return loggedFailures.seen
 }
 
-// biome-ignore lint/suspicious/noConsole: intercepting this sink IS the guard — @codemirror/view reports a crashed plugin here and nowhere else
+function record(level: string, args: unknown[]): void {
+  loggedFailures.seen.push(`${level}: ${args.map((arg) => String(arg)).join(' ')}`)
+}
+
+// biome-ignore lint/suspicious/noConsole: intercepting these sinks IS the guard — a swallowed failure is reported here and nowhere else; both originals are called through, so nothing is swallowed by the guard itself
 const realConsoleError = console.error.bind(console)
-// biome-ignore lint/suspicious/noConsole: same interception; the original is called through, so nothing is swallowed
+// biome-ignore lint/suspicious/noConsole: same interception
+const realConsoleWarn = console.warn.bind(console)
 console.error = (...args: unknown[]): void => {
-  if (args.some((arg) => typeof arg === 'string' && arg.includes(CODEMIRROR_CRASH_MARKER))) {
-    crashState.seen.push(args.map((arg) => String(arg)).join(' '))
-  }
+  record('error', args)
   realConsoleError(...args)
+}
+console.warn = (...args: unknown[]): void => {
+  record('warn', args)
+  realConsoleWarn(...args)
 }
 
 afterEach(() => {
-  const seen = [...crashState.seen]
-  const expected = crashState.expected
-  crashState.seen.length = 0
-  crashState.expected = false
+  const seen = [...loggedFailures.seen]
+  const expected = loggedFailures.expected
+  loggedFailures.seen.length = 0
+  loggedFailures.expected = false
   if (seen.length > 0 && !expected) {
     throw new Error(
-      `A CodeMirror plugin crashed and was silently disabled — every later edit in that view reached nothing.\n${seen.join('\n')}`,
+      `This test logged a failure and carried on. Something was caught and swallowed — the assertion that eventually breaks will be somewhere else.\n${seen.join('\n')}`,
     )
   }
 })

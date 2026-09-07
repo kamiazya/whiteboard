@@ -22,6 +22,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `tools/checks/src/vitest-projects.mjs` (+ `ci-verify-coverage`, `docs-contract`) | `mcp-node` | a vitest project CI never runs; a project without `name:` |
 | `.claude/scripts/quarantine.test.mjs`, `biome-plugin.test.mjs` | `pnpm test:scripts` | quarantine cap/age/undeclared skips; a GritQL pattern that stopped matching |
 | `apps/web/vitest.setup.ts`, `src/test-utils/browser-setup.ts`, `vitest.browser.shared.ts` | setup guard | unmounted trees, leaked fake timers (fails the test by name), `localStorage`, missing stylesheet, 1000ms async budget, trace growth |
+| `src/test-utils/browser-setup.ts`'s `expectLoggedFailures` | setup guard (`web-browser`) | any `console.error`/`warn` in a browser test — a failure that was caught, logged and swallowed. Strict, no allowlist; opt in per test to claim one |
 | `background-work-costs.test.ts` + `loop-availability.ts` | `mcp-node` | a declared stall ceiling no test asserts |
 
 ## Adding a GritQL shape
@@ -94,6 +95,49 @@ The rung for "every test in this project, at runtime". `apps/web/vitest.setup.ts
 exercise it directly (throw + restore), and reporting the offending test BY NAME rather than
 restoring silently. Order matters inside it — unmount first, so a file that also leaks fake
 timers still gets its trees torn down.
+
+## The swallowed failure, and why one project is guarded and the other is not
+
+A caught-and-logged exception is the worst failure shape a suite has: the run
+keeps going and breaks somewhere unrelated. The measured case — a
+`@codemirror/view` ViewPlugin crash that disabled the CRDT binding for the life
+of the view, surfacing ten seconds later as `expected 'untitled' to be 'Weekly
+review'`, an assertion about a document NAME in a different panel.
+
+Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement.
+Take it by installing the strict guard temporarily and reading what turns red —
+the failures are the data, and they arrive with test names attached:
+
+| project | records in one full run | verdict |
+|---|---|---|
+| `web-browser` | **1**, the one a test provokes on purpose (235 files, 1237 tests) | free — strict, no allowlist |
+| `web-jsdom` | **~100 across 73 tests** (376 files) | a ledger of claims, not yet taken |
+
+`web-jsdom`'s are mostly tests driving a failure path deliberately (`canvas
+exploded`, `network down`, a refused tool registration), which is a legitimate
+reason to log. Guarding it means claiming each, which is real work and has to
+be worth it on its own.
+
+Two things the measurement found on the way, both invisible while nothing read
+these lines:
+
+- **56 `The current testing environment is not configured to support act(...)`.**
+  React state updates outside `act`, in a suite that reports green.
+- **`[document-sync] backfilling thread marks failed Index out of bound. The
+  given pos is 20, but the length is 19`, in three PASSING tests.**
+  `document-sync-session.ts` computes passage offsets against
+  `readMarkdownBody(content)` and applies them to
+  `containers.getText(MARKDOWN_BODY_KEY)` — and those are not the same string:
+  `readMarkdownBody` falls back to the legacy text NODE when the container is
+  empty. It is exactly the mistake `use-markdown-document.ts` documents and
+  avoids ("asking the wrong one would go wrong silently if they ever stopped
+  agreeing"), going wrong silently. `markThreadPassages` bounds `end <= start`
+  and never bounds `end` against the text, so the throw comes from inside Loro
+  naming neither the thread nor the document. Consequence: conversations on
+  those documents never get their passage marks.
+
+Neither was found by reading code. Both fell out of asking a suite to stop
+swallowing.
 
 ## Adding a source-scan test
 
