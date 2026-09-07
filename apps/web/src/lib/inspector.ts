@@ -11,10 +11,11 @@
  *
  * Every member is the same kind of thing — information ABOUT the open
  * document, read or written beside it: its frontmatter (`properties`, a
- * markdown document only), its conversations, the documents that link to it
+ * markdown document only), its conversations, the changes somebody wants
+ * made to it (`proposals`, ADR-0029), the documents that link to it
  * (`connections`, a daemon keeper only), its history.
  */
-export type InspectorKind = 'properties' | 'comments' | 'connections' | 'history'
+export type InspectorKind = 'properties' | 'comments' | 'proposals' | 'connections' | 'history'
 
 /**
  * The order the four read IN — the header's segment, left to right.
@@ -29,11 +30,19 @@ export type InspectorKind = 'properties' | 'comments' | 'connections' | 'history
  *
  * Properties first: ADR-0006 puts an object's properties ahead of its
  * verbs, and the rest run outward from the document — its own frontmatter,
- * the talk about it, what points at it, what it was.
+ * the talk about it, the changes proposed to it, what points at it, what it
+ * was.
+ *
+ * `proposals` sits beside `comments` rather than beside `history` because
+ * both are what somebody put ON this document through ADR-0026's annotation
+ * layer — a proposal is a resident of it carrying a change where a comment
+ * carries a message — while history is what the document WAS. (User
+ * decision, 2026-09-07.)
  */
 export const INSPECTOR_ORDER = [
   'properties',
   'comments',
+  'proposals',
   'connections',
   'history',
 ] as const satisfies readonly InspectorKind[]
@@ -46,6 +55,7 @@ export const INSPECTOR_ORDER = [
 export const INSPECTOR_CHROME = {
   properties: { label: 'Properties', testId: 'properties-panel' },
   comments: { label: 'Comments', testId: 'comments-rail' },
+  proposals: { label: 'Proposals', testId: 'proposals-panel' },
   connections: { label: 'Connections', testId: 'connections-panel' },
   history: { label: 'History', testId: 'history-panel' },
 } as const satisfies Record<InspectorKind, { label: string; testId: string }>

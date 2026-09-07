@@ -31,7 +31,7 @@ describe('InspectorSegment', () => {
       <InspectorSegment
         open={null}
         onToggle={noop}
-        tabs={{ history: {}, comments: {}, connections: {}, properties: {} }}
+        tabs={{ history: {}, comments: {}, proposals: {}, connections: {}, properties: {} }}
       />,
     )
 
@@ -41,8 +41,35 @@ describe('InspectorSegment', () => {
         ?.replace(/[,(].*$/, '')
         .trim(),
     )
-    expect(names).toEqual(['Properties', 'Comments', 'Connections', 'History'])
+    expect(names).toEqual(['Properties', 'Comments', 'Proposals', 'Connections', 'History'])
     expect(names).toHaveLength(INSPECTOR_ORDER.length)
+  })
+
+  // ADR-0029 decision 9's place. Proposals sit beside comments rather than
+  // beside history because both are what somebody put ON this document
+  // through the annotation layer — ADR-0026's residents — where history is
+  // what the document WAS. (User decision, this session.)
+  it('offers Proposals at nought, pressable, the way Comments is', () => {
+    render(
+      <InspectorSegment
+        open={null}
+        onToggle={noop}
+        tabs={{ comments: {}, proposals: { count: 0 } }}
+      />,
+    )
+
+    const proposals = screen.getByRole('button', { name: /^Proposals/ })
+    expect(proposals.hasAttribute('disabled')).toBe(false)
+    // A conversation anyone can start says just "Comments" at nought; a
+    // proposal nobody can start says the same, because the opener's job at
+    // nought is to be in the same place tomorrow when one arrives.
+    expect(proposals.getAttribute('aria-label')).toBe('Proposals')
+  })
+
+  it('says how many proposals are open, the way Comments says its threads', () => {
+    render(<InspectorSegment open={null} onToggle={noop} tabs={{ proposals: { count: 3 } }} />)
+
+    expect(screen.getByRole('button', { name: 'Proposals, 3 open' })).not.toBeNull()
   })
 
   it('offers only what the document has — a canvas has no frontmatter, a browser keeper no backlinks', () => {

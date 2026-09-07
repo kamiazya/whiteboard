@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { History, Info, MessageSquare, Waypoints } from 'lucide-react'
+import { GitPullRequestArrow, History, Info, MessageSquare, Waypoints } from 'lucide-react'
 import type { JSX } from 'react'
 import { INSPECTOR_CHROME, INSPECTOR_ORDER, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
@@ -45,6 +45,7 @@ export interface InspectorSegmentProps {
 const GLYPHS = {
   properties: Info,
   comments: MessageSquare,
+  proposals: GitPullRequestArrow,
   connections: Waypoints,
   history: History,
 } as const satisfies Record<InspectorKind, LucideIcon>
@@ -57,7 +58,13 @@ const GLYPHS = {
 function accessibleName(kind: InspectorKind, count: number | null | undefined): string {
   const label = INSPECTOR_CHROME[kind].label
   if (count === undefined || count === null) return label
-  if (kind === 'comments') return count === 0 ? label : `${label}, ${count} open`
+  // Both say "N open" and both fall back to the bare label at nought: an
+  // opener at nought is holding its place for tomorrow, not reporting a
+  // zero. The other members read `(N)` because their count is a size, not a
+  // backlog.
+  if (kind === 'comments' || kind === 'proposals') {
+    return count === 0 ? label : `${label}, ${count} open`
+  }
   return `${label} (${count})`
 }
 
