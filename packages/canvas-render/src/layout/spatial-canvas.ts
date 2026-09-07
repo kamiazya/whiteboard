@@ -1343,17 +1343,15 @@ export function layoutSpatialCanvasWithAnchors(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const resolved = resolveContributions(options)
   return layoutSpatialCanvasInternal(canvas, {
     ...withSpatialReferenceSeams(options),
-    ...resolved,
+    ...resolveContributions(canvas, options),
     passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
     regionsByThread: regionsOf(options.threads ?? [], canvas),
     messagesByThread: new Map((options.threads ?? []).map((t) => [t.id, t.messages.length])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, resolved.contributions),
     activeEmbedPath: new Set(options.embedPath ?? []),
     embedDepth: options.embedPath?.length ?? 0,
     fitToBox: true,
@@ -1382,7 +1380,9 @@ export function naturalNodeContentSize(
 ): { readonly w: number; readonly h: number } {
   const content = composeNode(node, {
     ...withSpatialReferenceSeams(options),
-    ...resolveContributions(options),
+    // A silhouette inscribes the box its content has to fit, so the natural
+    // size of a shaped node is not the natural size of the rect around it.
+    ...resolveContributions({ nodes: [node], edges: [] }, options),
     // A natural size asks how big the box must be; a highlight adds no
     // extent beyond the words it sits under, so none is composed here.
     passagesByNode: new Map(),
@@ -1461,16 +1461,30 @@ export interface RenderContribution {
 }
 
 /**
- * The contribution set in force, plus its composed shape table — resolved in
- * ONE function because three entry points build resolved options and a fourth
- * would otherwise be a silent omission rather than a type error.
+ * Everything a contribution set decides ABOUT ONE CANVAS — the set, its shape
+ * table, and the silhouette each node resolves to — in ONE function, so an
+ * entry point omitting a piece is a type error rather than a silent omission.
+ *
+ * `nodeOutlines` is here rather than beside each entry point because the edge
+ * overlay proved the point: resolved for the committed layout and not for
+ * `layoutSpatialEdges`, so an edge into a shaped node sat on the bbox border
+ * for a whole drag and snapped onto the silhouette on drop. Both call sites
+ * read as complete alone; only comparing them showed the gap.
  */
-function resolveContributions(options: SpatialLayoutOptions): {
+function resolveContributions(
+  canvas: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): {
   contributions: readonly RenderContribution[]
   shapeTable: ShapeTable
+  nodeOutlines: Readonly<Record<string, string>> | undefined
 } {
   const contributions = options.renderContributions ?? [visualRenderContribution]
-  return { contributions, shapeTable: resolveShapeTable(contributions) }
+  return {
+    contributions,
+    shapeTable: resolveShapeTable(contributions),
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, contributions),
+  }
 }
 
 /** The composed shape table a contribution set resolves to — what the SVG
@@ -2049,7 +2063,7 @@ export function layoutSpatialEdges(
 ): SceneNode[] {
   return composeEdgesAndLabels(canvas, {
     ...withSpatialReferenceSeams(options),
-    ...resolveContributions(options),
+    ...resolveContributions(canvas, options),
     passagesByNode: new Map(),
     regionsByThread: new Map(),
     messagesByThread: new Map(),

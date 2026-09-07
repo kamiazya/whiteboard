@@ -158,7 +158,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // that no root writes a seam's body, and the gap the layout worker leaves.
 // Path-scoped, so paid only by a session in canvas-render — where the two
 // thousand characters are the module's design record.
-const CANVAS_RENDER_BUDGET = 80
+// 81 since the live-drag parity property's generator started reading the
+// facet REGISTRY. What bought the bucket is the account of how that property
+// shipped VACUOUS — plain nodes on both sides, agreeing about canvases that
+// carried no facets at all, while the bug it exists to catch was live. A
+// reader who does not know that will write the next generator the same way.
+const CANVAS_RENDER_BUDGET = 81
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

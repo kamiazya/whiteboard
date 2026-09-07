@@ -1,8 +1,10 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
+import { nodeFacetCoverage, nodeFacetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
@@ -444,8 +446,17 @@ const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
       y: fc.constantFrom(0, 80, 160, 240, 320),
       width: fc.constantFrom(60, 120, 240),
       height: fc.constantFrom(60, 120, 240),
+      // Read off the registry, never listed here: what a node CARRIES is the
+      // half of this parity the live overlay keeps forgetting, and a facet
+      // registered next month has to arrive in this generator on its own.
+      'x-whiteboard': nodeFacetsArb(bundledFacetRegistry),
     })
-    .map((n) => (n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }) as SpatialNode)
+    .map(({ 'x-whiteboard': extension, ...n }) => {
+      const base = n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }
+      return (
+        extension === undefined ? base : { ...base, 'x-whiteboard': extension }
+      ) as SpatialNode
+    })
 
 const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
   fc
@@ -496,6 +507,42 @@ describe('live-drag parity property (PBT)', () => {
       expect(live).toEqual(committed.slice(committed.length - live.length))
     },
   )
+
+  it('every registered node facet contributes payloads the generator can draw', () => {
+    // The mechanism's own failure mode: a facet whose schema `facetPayloadSamples`
+    // cannot express widens the generator by nothing while the property still
+    // reads as covering "the facets". Naming it here is what turns that into a
+    // decision — give the facet a derivable schema, or teach the sample deriver
+    // its shape.
+    const empty = nodeFacetCoverage(bundledFacetRegistry)
+      .filter((entry) => entry.samples.length === 0)
+      .map((entry) => entry.key)
+    expect(empty).toEqual([])
+  })
+
+  it('the facets the generator draws actually change the layout it compares', () => {
+    // Anti-vacuity for the half above: payloads that parse but that this
+    // layout never reads would make the parity hold for a reason unrelated to
+    // facets. A scenario whose scene MOVES when its facets are stripped is
+    // proof the generator reaches the fold the property is about.
+    const options = { measure, parseBody: fakeParseBody, appearance }
+    const stripped = (canvas: SpatialCanvas): SpatialCanvas => ({
+      ...canvas,
+      nodes: canvas.nodes.map(({ 'x-whiteboard': _facets, ...node }) => node as SpatialNode),
+    })
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) => {
+      const canvas: SpatialCanvas = {
+        nodes: [...nodes],
+        edges: [...edges],
+        'x-whiteboard': { edgeRouting: routing },
+      }
+      return (
+        JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
+        JSON.stringify(layoutSpatialCanvas(stripped(canvas), options).nodes)
+      )
+    })
+    expect(moved.length).toBeGreaterThanOrEqual(20)
+  })
 
   it('the scenario reaches the jump geometry it claims to cover', () => {
     const options = { measure, parseBody: fakeParseBody, appearance }

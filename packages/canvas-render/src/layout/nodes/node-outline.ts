@@ -313,10 +313,15 @@ export function outlineEntryPoint(
   // the center so a degenerate edge still lands on the boundary.
   const dirX = length > 0 ? dx / length : center.x - to.x
   const dirY = length > 0 ? dy / length : center.y - to.y
-  // The farthest useful probe: past the center the ray is leaving again.
-  const span = Math.hypot(center.x - to.x, center.y - to.y)
+  // The farthest useful probe: the ray's closest approach to the center,
+  // past which it is leaving again. This is the PROJECTION of the center
+  // onto the ray, not the distance to it — walking the full distance along
+  // an off-center approach overshoots the far rim, and a probe that lands
+  // outside makes the bisection give up and leave the terminal on the bbox.
   const dirLength = Math.hypot(dirX, dirY)
-  if (!(dirLength > 0) || !Number.isFinite(span)) return to
+  if (!(dirLength > 0)) return to
+  const span = Math.max(0, ((center.x - to.x) * dirX + (center.y - to.y) * dirY) / dirLength)
+  if (!Number.isFinite(span)) return to
   const far = { x: to.x + (dirX / dirLength) * span, y: to.y + (dirY / dirLength) * span }
   if (!outlineContains(shapeId, box, far, shapes)) return to
   let lo = 0 // outside
