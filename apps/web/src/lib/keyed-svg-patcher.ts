@@ -70,6 +70,12 @@ const MIN_MOVE_PX = 0.5
  * a declared 220ms ramp spent its remaining half on the last hundredth of
  * a percent nobody can see. Opacity's perceived moment is the middle, so
  * these are the standard accelerate/decelerate pair instead.
+ *
+ * The same two curves are `--motion-ease-exit` / `--motion-ease-enter` in
+ * index.css, for the CSS-driven surfaces (the inspector panel). Stated
+ * twice on purpose: this path drives `element.animate()` per patch, and
+ * reading a custom property back off the document each time would put a
+ * layout read on it.
  */
 const FADE_DURATION_MS = 220
 /** Leaving accelerates: it lingers long enough to be read, then goes. */

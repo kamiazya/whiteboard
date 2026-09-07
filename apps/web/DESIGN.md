@@ -472,9 +472,39 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   instead of ad-hoc numbers: `--motion-duration-fast` (150ms,
   hover/press feedback), `--motion-duration-normal` (220ms, state
   changes and small surfaces like popovers/toasts),
-  `--motion-ease-out` (soft ease-out — never bouncy in chrome).
+  `--motion-ease-out` (soft ease-out — never bouncy in chrome), and
+  `--motion-ease-enter` / `--motion-ease-exit` for anything whose perceived
+  change is OPACITY. **The last pair is not a style preference.**
+  `--motion-ease-out` is shaped for a MOVE — arrive fast, settle — and on a
+  fade it spends the declared duration on a change nobody can see. Measured
+  twice: the comment pin was 65% faded 40ms into a 220ms ramp, and the
+  inspector panel reached 0.61 opacity at 30ms and 0.85 at 60ms, so three
+  quarters of its duration went on the last 15%. Opacity's perceived moment
+  is the middle, so arriving decelerates and leaving accelerates.
   Entrances are fade + small rise/scale (0.98→1); no entrance animation
-  without an explicit reason. **Stateful colour is the one paint-property
+  without an explicit reason.
+  **A PANE's motion is decided once, in `InspectorPanel`** — all four
+  inspectors (properties, comments, connections, history) stand in that one
+  vessel, so a fifth inherits how a pane arrives rather than restating it.
+  Each shape enters from where it lives: the phone sheet rises off the
+  bottom edge it is anchored to, the desktop column slides in from the edge
+  it borders. What is deliberately NOT animated there is the column's
+  WIDTH, and that is measured rather than chosen — `MarkdownEditor` observes
+  its container width, re-typesets the preview whenever it changes, and
+  flips split→write below 640px, so an animated in-flow width would
+  re-typeset every frame and change the editor's MODE mid-slide. Leaving
+  needs the pane to outlive its own unmount, which is
+  `contexts/inspector-presence.ts`; a pane that finds nothing animating
+  releases itself on the next frame rather than waiting out a ceiling.
+  **A pane that REPLACES another plays no entrance**, and that is measured
+  rather than chosen: the entrance fades in from nothing, the outgoing pane
+  leaves in the same commit, and for those frames nothing covers what is
+  under the slot. On the canvas at 390px, switching Comments to History, the
+  incoming pane read 0.00 opacity on the first frame and 0.65 by the fifth,
+  with the dock beneath showing through for all of them. The slot's previous
+  occupancy therefore reaches the pane, which reads it ONCE at mount —
+  reading it per render would flip the class mid-animation and cut the
+  entrance it exists to protect. **Stateful colour is the one paint-property
   exception**: where the colour IS the state (the shell mark's cap, a hover
   affordance), it crosses with `transition-colors` on the normal token
   rather than cutting. There is no transform/opacity encoding of "which
