@@ -639,3 +639,34 @@ it('stops summarising a conversation that is open, since the messages are right 
   await userEvent.click(row)
   expect(summary.getBoundingClientRect().width).toBeGreaterThan(20)
 })
+
+/**
+ * The messages carry the weight, not the row above them.
+ *
+ * `TOGGLE_STATE_CLASS` fills a control that is ON, which is right for a
+ * toggle whose effect is somewhere else — the header button that opens this
+ * rail has no other way to say so. A DISCLOSURE says it by disclosing: the
+ * conversation appears directly under the row, indented and ruled. Filling
+ * the row as well made a solid slab out of the one line on screen that is
+ * pure chrome, above the prose that is the point.
+ */
+it('leaves an open row unfilled, since the conversation under it is the state', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  // Opened WITHOUT moving the pointer: `userEvent.click` drives the real
+  // mouse and leaves it parked on the row, so `hover:bg-accent` answers the
+  // question this test is asking and the reading says nothing about the
+  // open state at all. A bubbled click runs the same handler with the
+  // pointer nowhere near.
+  const row = document.querySelector('li[data-thread-id="t-open"] button[aria-expanded]')
+  if (!(row instanceof HTMLElement)) throw new Error('no row')
+  row.click()
+
+  await vi.waitFor(() => expect(row.getAttribute('aria-expanded')).toBe('true'))
+  // The pointer is a REAL one and it stays where the last test in this file
+  // left it — which, since every test here renders the same panel at the
+  // same place, is often this very row. Park it somewhere harmless first or
+  // `hover:bg-accent` answers instead, and the test passes alone while
+  // failing in its own file.
+  await page.getByRole('button', { name: 'All' }).hover()
+  expect(getComputedStyle(row).backgroundColor).toBe('rgba(0, 0, 0, 0)')
+})

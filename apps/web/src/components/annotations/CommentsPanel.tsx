@@ -560,12 +560,19 @@ export function CommentsPanel({
                     aria-expanded={expanded}
                     aria-controls={`thread-${thread.id}`}
                     onClick={() => toggle(thread)}
+                    // No `TOGGLE_STATE_CLASS` here, deliberately. That fill
+                    // is how a control whose effect is ELSEWHERE says it is
+                    // on — the header button that opens this rail has no
+                    // other way to say so. A disclosure says it by
+                    // disclosing: the conversation appears right under this
+                    // row, indented and ruled. Filling the row as well made
+                    // a solid slab of the one line on screen that is pure
+                    // chrome, sitting above the prose that is the point.
                     className={cn(
                       'min-w-0 flex-1 rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
                       // Open, the row is one meta line; centring it in the
                       // dot's own 44px keeps the collapse target a target.
                       expanded && 'flex min-h-11 flex-col justify-center',
-                      TOGGLE_STATE_CLASS,
                     )}
                   >
                     {/* A summary is what a CLOSED conversation shows. Open,
