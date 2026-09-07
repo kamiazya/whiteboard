@@ -2,6 +2,12 @@
 
 **Status:** Accepted — decision 2 revisited on 2026-09-05 (see the dated note); decision 1 unchanged. **The surface both decisions address is retired by [ADR-0029](0029-proposal-layer.md) (2026-09-06)** — see the note below the Decision.
 
+**Superseded by [ADR-0029](0029-proposal-layer.md)** (2026-09-07). Its
+decision that a variation is not in the address stands as history; the
+surface it addressed — the chip, `?v=`, the merge dialog — is retired,
+because a proposal is drawn on the document a person is already looking at
+rather than in a lane they switch onto.
+
 ## Context
 
 Three things a session is "in" can be told apart by asking what names them:

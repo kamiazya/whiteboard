@@ -63,11 +63,6 @@ const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
-  'src/components/MergeDialog.tsx': {
-    reach: 'both-keepers',
-    browser: BROWSER_BRANCHES,
-    note: 'the dialog is mounted by the chip, which both keepers now render; the browser backend plans and commits the merge behind it',
-  },
   'src/components/PairedOriginsCard.tsx': {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
@@ -206,7 +201,7 @@ describe('every module that reaches the daemon says what the browser keeper does
   it('finds a plausible number of daemon-reaching modules', () => {
     // A regex that stopped matching would otherwise report itself below as
     // "every entry is stale", sending the reader to the wrong file entirely.
-    expect(scanned.length).toBeGreaterThanOrEqual(18)
+    expect(scanned.length).toBeGreaterThanOrEqual(17)
   })
 
   it('classifies every one of them, and names nothing that has stopped reaching', () => {

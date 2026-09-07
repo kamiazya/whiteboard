@@ -86,9 +86,6 @@ const SHARED_CANVAS_CHROME = [
   // the scan expecting one page to own it — nothing then refuses a keeper
   // page growing its own copy back, which is the whole failure this file is
   // about.
-  'HeaderBranchBanner',
-  'HeaderVariationBanner',
-  'MergeToast',
 ] as const
 
 /**
@@ -105,10 +102,9 @@ const SHARED_CANVAS_CHROME = [
  */
 const MODE_SPECIFIC_CHROME = {
   // `HeaderBranchBanner`, `HeaderVariationBanner` and `MergeToast` stood
-  // here, first as "a daemon concept (ADR-0004)" and then as a gap once the
-  // browser keeper grew variations and merges. They are neither now: the
-  // shared DocumentPage mounts all three for whichever keeper rendered it,
-  // so they have moved UP to SHARED_CANVAS_CHROME rather than out.
+  // here, then moved up to SHARED_CANVAS_CHROME when both keepers grew
+  // variations. They are gone from both lists now: ADR-0029 retires the
+  // variation surface outright, so there is no chrome left to place.
   AgentPresenceChip: {
     page: './DaemonDocumentPage.tsx',
     why: 'no agents connect in browser mode',

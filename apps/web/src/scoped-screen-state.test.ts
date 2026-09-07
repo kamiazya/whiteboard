@@ -47,7 +47,6 @@ const sources = import.meta.glob(
     './components/workspace-files/use-debounced-document-search.ts',
     './components/workspace-files/use-device-memory.ts',
     './pages/DaemonIndexPage.tsx',
-    './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
@@ -55,7 +54,6 @@ const sources = import.meta.glob(
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
     './hooks/use-comments-rail.ts',
-    './pages/use-variation-preview.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -88,7 +86,6 @@ const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-s
 // file-size budget said so; same SCREEN by the same rule as the two above.
 const PANEL_DEVICE_MEMORY_HOOK = './components/workspace-files/use-device-memory.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
-const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
@@ -103,7 +100,6 @@ const DOCUMENT_PAGE = './pages/DocumentPage.tsx'
 const VERSION_SAVE_FLOW_HOOK = './pages/use-version-save-flow.ts'
 // The comments rail's screen state, extracted the same way — same rule.
 const COMMENTS_RAIL_HOOK = './hooks/use-comments-rail.ts'
-const VARIATION_PREVIEW_HOOK = './pages/use-variation-preview.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
@@ -274,31 +270,6 @@ function scopeResetBlock(source: string): string {
   return blocks.join('\n')
 }
 
-// Scoped on the DOCUMENT rather than the workspace: both live in the top bar
-// and take `path` as a prop, so a document switch changes what they are about
-// without remounting them.
-const BRANCH_CHIP_STATE: Record<string, ScopeCoverage> = {
-  pendingDelete: 'cleared on switch',
-  pendingStats: 'cleared on switch',
-  deleting: 'cleared on switch',
-  renameOpen: 'cleared on switch',
-  renameTarget: 'cleared on switch',
-  renameDraft: 'cleared on switch',
-  pendingMerge: 'cleared on switch',
-  errorMessage: 'cleared on switch',
-
-  createOpen: 'no subject: a disclosure for the inline create form',
-  newName:
-    'no subject: free text for a variation that does not exist yet, so it cannot address the wrong one — creating it here creates it HERE',
-  chipTooltipOpen: 'no subject: hover state on the chip itself',
-  prevRefreshSignalRef:
-    'no subject: only decides whether a refetch is REDUNDANT — useBranches already refetches on the document change itself',
-  suppressNextTooltipOpenRef:
-    'no subject: a one-shot about Radix’s return-focus rather than about the document, and the very next open request clears it',
-  pendingFocusInCleanupRef: 'no subject: holds a listener remover; unmount runs it',
-  chipButtonRef: 'no subject: the trigger’s DOM node',
-}
-
 const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   versions: 'cleared on switch',
   previewing: 'cleared on switch',
@@ -404,16 +375,6 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
   versionRefreshSignal:
     'no subject: a counter that nudges the History column to refetch; the list it refreshes is the column’s own, and the column remounts per document',
-  // A read-only view of ONE document's variation tip (ADR-0022). The name in
-  // `?v=` qualifies the document it was written beside, so left standing it
-  // would show the departed document's tip under the arrived one's name.
-  variationPreview: 'cleared on switch',
-  // Called out separately from the preview because it is worse: `Variation
-  // «x» was not found` is a sentence about the document you have left, and
-  // it reads as being about the one in front of you.
-  variationNotice: 'cleared on switch',
-  lastPathRef:
-    'no subject: holds the PREVIOUS path so the reset can tell a real switch from the first path the hook ever sees — clearing it would make the next render read as a switch and strip a `?v=` nobody asked to lose',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
@@ -474,7 +435,6 @@ const CASES = [
     scanRefs: true,
   },
   { files: [DAEMON_INDEX], ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: true },
-  { files: [BRANCH_CHIP], ledger: BRANCH_CHIP_STATE, label: 'HeaderBranchChip', scanRefs: true },
   {
     files: [VERSION_TIMELINE],
     ledger: VERSION_TIMELINE_STATE,
@@ -488,7 +448,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK, VARIATION_PREVIEW_HOOK],
+    files: [DOCUMENT_PAGE, VERSION_SAVE_FLOW_HOOK, COMMENTS_RAIL_HOOK],
     ledger: DOCUMENT_PAGE_STATE,
     label: 'DocumentPage',
     scanRefs: true,

@@ -28,10 +28,16 @@ function render(ui: ReactElement) {
 }
 
 /**
- * The chrome that sits BESIDE the variations chip — the "you are on a
- * variation, combine it" banner. It was mounted only by the daemon page, from
- * when variations were a daemon concept; both keepers have them now, so the
- * browser showing nothing was a gap rather than a difference.
+ * The variation chrome is RETIRED (ADR-0029): a proposal is drawn on the
+ * document a person is already looking at, so a lane to switch to and a
+ * banner offering to combine it are the shape that decision rejects.
+ *
+ * This file used to assert the opposite — a document whose HEAD is a
+ * variation with work on it showed a chip naming it and a "Combine into"
+ * banner. The record is deliberately kept and inverted rather than deleted:
+ * the fixture below still writes a branch plane with work on it, because a
+ * DOCUMENT that still carries branches is exactly the case that must draw
+ * nothing once the surface is gone.
  */
 describe('BrowserDocumentPage variation chrome (browser)', () => {
   beforeEach(async () => {
@@ -39,7 +45,7 @@ describe('BrowserDocumentPage variation chrome (browser)', () => {
   })
   afterEach(() => cleanup())
 
-  it('offers to combine when HEAD is a variation with work on it', async () => {
+  it('draws no chip and no combine banner, even when the record still carries a variation', async () => {
     const workspaceId = getBrowserWorkspaceId()
     const index = new FoldingBrowserIndex()
     await index.createWorkspace({ workspaceId })
@@ -88,16 +94,18 @@ describe('BrowserDocumentPage variation chrome (browser)', () => {
       },
     )
 
-    // The banner names the variation, its count, and the target — the count
-    // is what `getStats` answers, so this pins the whole chain: record ->
-    // version rows -> stats -> banner.
-    // The banner's CTA. Its own sentence is split across elements (the
-    // variation names are their own spans), so the button is what identifies
-    // the banner; the count behind it is asserted on `getStats` directly.
-    const combine = await screen.findByRole('button', { name: /Combine into/i }, { timeout: 5000 })
-    expect(combine).toBeInTheDocument()
-    // And the chip beside it names the same variation. It said `Main` until
-    // the record's arrival re-read the branch plane.
-    expect(screen.getByTestId('header-branch-chip').textContent ?? '').toMatch(/idea/i)
+    // Waited for, not queried once. Both used to arrive on the record's
+    // branch plane landing, which is a fetch after the first paint — a
+    // synchronous `queryBy` here passes before either had a chance to
+    // render, which is a green test that has checked nothing. Measured:
+    // with the surfaces still in place, the synchronous form passed and
+    // this one fails.
+    await expect(
+      screen.findByRole('button', { name: /Combine into/i }, { timeout: 2000 }),
+    ).rejects.toThrow()
+    await expect(screen.findByTestId('header-branch-chip', {}, { timeout: 1000 })).rejects.toThrow()
+    // And nothing names the variation anywhere in the chrome: a label left
+    // behind would be a surface with no verb, which is worse than either.
+    expect(document.body.textContent ?? '').not.toMatch(/idea/i)
   })
 })

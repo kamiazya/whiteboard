@@ -5,9 +5,6 @@ import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
-vi.mock('./HeaderBranchChip', () => ({
-  HeaderBranchChip: () => <div data-testid="header-branch-chip" />,
-}))
 vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
