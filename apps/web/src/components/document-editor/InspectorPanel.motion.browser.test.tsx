@@ -197,3 +197,32 @@ it('animates again the next time it opens into an empty slot', async () => {
   expect(again?.getAttribute('data-state')).toBe('open')
   expect(again?.getAnimations() ?? []).not.toHaveLength(0)
 })
+
+/**
+ * The leaving pane is the SAME one, not a fresh copy of it.
+ *
+ * This is the load-bearing half of holding a pane, and it was wrong while
+ * every other test here passed: `leaving` was set in an EFFECT, which runs
+ * after the commit in which the slot emptied — so that commit rendered no
+ * pane at all, React unmounted it, and the effect mounted a new one. The
+ * exit animated, the pane converged, and the tests were green over a pane
+ * that was destroyed and rebuilt every time it closed.
+ *
+ * What it cost in the running app: a remounted `VersionTimeline` refetches,
+ * so closing History flashed its "Loading…" for two frames and made a
+ * request nobody asked for, and anything the pane held — a scroll position,
+ * an open preview — went with it.
+ *
+ * Identity is asserted on the DOM node because that is what a remount
+ * replaces and what no amount of "it is still on screen" can distinguish.
+ */
+it('holds the very same pane on the way out, rather than rebuilding it', async () => {
+  render(<ShellHost />)
+  await vi.waitFor(() => expect(panel()).not.toBeNull())
+  const before = panel()
+
+  await userEvent.click(page.getByRole('button', { name: 'toggle' }))
+
+  expect(panel()).toBe(before)
+  await vi.waitFor(() => expect(panel()).toBeNull(), { timeout: 4000 })
+})
