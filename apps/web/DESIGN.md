@@ -495,7 +495,16 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   re-typeset every frame and change the editor's MODE mid-slide. Leaving
   needs the pane to outlive its own unmount, which is
   `contexts/inspector-presence.ts`; a pane that finds nothing animating
-  releases itself on the next frame rather than waiting out a ceiling. **Stateful colour is the one paint-property
+  releases itself on the next frame rather than waiting out a ceiling.
+  **A pane that REPLACES another plays no entrance**, and that is measured
+  rather than chosen: the entrance fades in from nothing, the outgoing pane
+  leaves in the same commit, and for those frames nothing covers what is
+  under the slot. On the canvas at 390px, switching Comments to History, the
+  incoming pane read 0.00 opacity on the first frame and 0.65 by the fifth,
+  with the dock beneath showing through for all of them. The slot's previous
+  occupancy therefore reaches the pane, which reads it ONCE at mount —
+  reading it per render would flip the class mid-animation and cut the
+  entrance it exists to protect. **Stateful colour is the one paint-property
   exception**: where the colour IS the state (the shell mark's cap, a hover
   affordance), it crosses with `transition-colors` on the normal token
   rather than cutting. There is no transform/opacity encoding of "which

@@ -25,11 +25,27 @@ import { createContext, useContext } from 'react'
 
 export interface InspectorPresence {
   readonly state: 'open' | 'closed'
+  /**
+   * Whether another pane was in the slot when this one arrived.
+   *
+   * A pane that REPLACES another must not fade in from nothing: the
+   * outgoing pane is gone in the same commit, so for the length of the
+   * entrance there is nothing covering what sits under the slot, and the
+   * dock beneath it shows through. Measured on the canvas at 390px,
+   * switching Comments -> History: the incoming pane read 0.00 opacity on
+   * the first frame and only 0.65 by the fifth, with the outgoing pane
+   * already gone on the first.
+   *
+   * Read ONCE, at mount, by the pane — see `InspectorPanel`. Reading it per
+   * render would flip the class mid-animation and cut the entrance it is
+   * there to protect.
+   */
+  readonly slotWasOccupied: boolean
   /** The pane, saying it has finished leaving. */
   readonly onLeft: () => void
 }
 
-const OPEN: InspectorPresence = { state: 'open', onLeft: () => {} }
+const OPEN: InspectorPresence = { state: 'open', slotWasOccupied: false, onLeft: () => {} }
 
 export const InspectorPresenceContext = createContext<InspectorPresence>(OPEN)
 

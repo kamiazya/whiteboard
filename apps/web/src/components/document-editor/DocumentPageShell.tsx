@@ -69,9 +69,25 @@ export function DocumentPageShell({
     lastAside.current = null
   }, [aside])
 
-  const presence = useMemo<InspectorPresence>(
-    () => ({ state: 'closed', onLeft: () => setLeaving(null) }),
+  // Whether the slot held a pane on the PREVIOUS render. Updated in an
+  // effect, so during the render that mounts a new pane it still holds the
+  // answer for the moment before — which is exactly the question that pane
+  // asks itself once, on mount.
+  const wasOccupied = useRef(false)
+  useEffect(() => {
+    wasOccupied.current = aside !== undefined
+  })
+
+  const closing = useMemo<InspectorPresence>(
+    () => ({ state: 'closed', slotWasOccupied: false, onLeft: () => setLeaving(null) }),
     [],
+  )
+  const live = useMemo<InspectorPresence>(
+    () => ({ state: 'open', slotWasOccupied: wasOccupied.current, onLeft: () => {} }),
+    // Rebuilt per `aside` rather than on the ref, which is not a dependency
+    // React can track — and the pane below captures the value once on mount
+    // anyway, so a later object with a staler flag reaches nobody.
+    [aside],
   )
   // A pane that never animates would otherwise stay on screen forever,
   // covering the editor. The frame is the fallback, not the mechanism:
@@ -92,12 +108,17 @@ export function DocumentPageShell({
       </div>
       <div className="relative flex min-h-0 min-w-0">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-        {aside ??
-          (leaving === null ? null : (
-            <InspectorPresenceContext.Provider value={presence}>
+        {aside === undefined ? (
+          leaving === null ? null : (
+            <InspectorPresenceContext.Provider value={closing}>
               {leaving}
             </InspectorPresenceContext.Provider>
-          ))}
+          )
+        ) : (
+          <InspectorPresenceContext.Provider value={live}>
+            {aside}
+          </InspectorPresenceContext.Provider>
+        )}
       </div>
     </main>
   )

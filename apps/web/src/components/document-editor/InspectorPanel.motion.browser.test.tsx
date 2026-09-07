@@ -121,6 +121,27 @@ it('grows between its two stages instead of jumping, on the sheet only', async (
  * plays its entrance would draw exactly that for a beat.
  */
 it('replaces one pane with another outright, never showing both', async () => {
+  // Two DIFFERENT components, because that is what the app does and it is
+  // what decides the case: `CommentsRailAside` and `VersionPanel` are
+  // distinct types, so React unmounts one and mounts the other. Rendering
+  // `<InspectorPanel kind={...}>` directly for both — the first shape of
+  // this fixture — keeps ONE instance and changes a prop, which never
+  // remounts, never re-runs the entrance, and so cannot reproduce the flash
+  // at all. It passed the opacity assertion for entirely the wrong reason.
+  function CommentsPane() {
+    return (
+      <InspectorPanel kind="comments" onClose={() => {}}>
+        <p>comments</p>
+      </InspectorPanel>
+    )
+  }
+  function HistoryPane() {
+    return (
+      <InspectorPanel kind="history" onClose={() => {}}>
+        <p>history</p>
+      </InspectorPanel>
+    )
+  }
   function Swap() {
     const [kind, setKind] = useState<'comments' | 'history'>('comments')
     return (
@@ -132,11 +153,7 @@ it('replaces one pane with another outright, never showing both', async () => {
               swap
             </button>
           }
-          aside={
-            <InspectorPanel kind={kind} onClose={() => {}}>
-              <p>{kind}</p>
-            </InspectorPanel>
-          }
+          aside={kind === 'comments' ? <CommentsPane /> : <HistoryPane />}
         >
           <p>the editor</p>
         </DocumentPageShell>
@@ -146,8 +163,37 @@ it('replaces one pane with another outright, never showing both', async () => {
   render(<Swap />)
   await userEvent.click(page.getByRole('button', { name: 'swap' }))
 
-  await vi.waitFor(() =>
-    expect(document.querySelector('[data-testid="history-panel"]')).not.toBeNull(),
-  )
+  const arrived = document.querySelector('[data-testid="history-panel"]')
+  expect(arrived).not.toBeNull()
   expect(panel()).toBeNull()
+
+  // And it arrives OPAQUE. The entrance fades in from nothing, which is
+  // right for an empty slot and wrong here: the outgoing pane is gone in
+  // the same commit, so a fade would leave nothing covering what is under
+  // the slot. Measured on the canvas at 390px before this: the incoming
+  // pane read 0.00 on the first frame and 0.65 by the fifth, and the dock
+  // beneath showed through for all of them.
+  expect(arrived?.getAttribute('data-state')).toBe('replaced')
+  expect(Number(getComputedStyle(arrived as Element).opacity)).toBe(1)
+})
+
+/**
+ * The other half of that, and the one a silent regression hides in: the
+ * slot going EMPTY has to reset the answer. If it did not, every open after
+ * the first would take the replacing path and no pane would ever animate
+ * again — with all the other tests here still green, since they open into a
+ * fresh mount.
+ */
+it('animates again the next time it opens into an empty slot', async () => {
+  render(<ShellHost />)
+  await vi.waitFor(() => expect(panel()).not.toBeNull())
+
+  await userEvent.click(page.getByRole('button', { name: 'toggle' }))
+  await vi.waitFor(() => expect(panel()).toBeNull(), { timeout: 4000 })
+
+  await userEvent.click(page.getByRole('button', { name: 'toggle' }))
+
+  const again = panel()
+  expect(again?.getAttribute('data-state')).toBe('open')
+  expect(again?.getAnimations() ?? []).not.toHaveLength(0)
 })

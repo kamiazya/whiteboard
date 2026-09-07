@@ -54,6 +54,10 @@ export function InspectorPanel({
   const [expanded, setExpanded] = useState(false)
   const presence = useInspectorPresence()
   const root = useRef<HTMLDivElement | null>(null)
+  // Captured ONCE, at mount: a pane that took over an occupied slot plays
+  // no entrance. Reading `presence` per render instead would flip the class
+  // mid-animation and cut the very entrance this protects.
+  const [replacing] = useState(presence.slotWasOccupied)
 
   // Let go AT ONCE when nothing is actually animating.
   //
@@ -87,7 +91,14 @@ export function InspectorPanel({
       }}
       data-testid={testId}
       data-stage={expanded ? 'full' : 'peek'}
-      data-state={presence.state}
+      // `replaced` rather than `open` for a pane that took over from
+      // another: the entrance fades in from nothing, which is right for an
+      // arrival into an EMPTY slot and wrong here, because the outgoing
+      // pane leaves in the same commit and for those frames nothing covers
+      // what is under the slot — the canvas dock showed through for about
+      // five frames. Still an ordinary `data-state` so the exit, which is
+      // the same either way, keeps its one selector.
+      data-state={presence.state === 'closed' ? 'closed' : replacing ? 'replaced' : 'open'}
       // The shell is holding this pane past its own unmount so this can
       // run; telling it the animation is over is what lets it go. Guarded
       // on the target because a child's animation bubbles here too — the
