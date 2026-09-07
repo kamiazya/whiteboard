@@ -5,7 +5,11 @@
 import { describe, expect, it } from 'vitest'
 import type { SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { MARKDOWN_THEME_DOCUMENT, MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
+import {
+  MARKDOWN_THEME_COMPACT,
+  MARKDOWN_THEME_DOCUMENT,
+  MARKDOWN_THEME_NODE,
+} from '../theme/markdown-theme.js'
 import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
 
 const measure = createFakeMeasure()
@@ -91,4 +95,39 @@ describe('a body that will not parse', () => {
     const scene = layoutCommentBody('half a sentence', { ...base, parseBody: boom })
     expect(runs(scene.nodes)).not.toHaveLength(0)
   })
+})
+
+/**
+ * The density axis, which is NOT the theme axis this file's other tests
+ * guard. A comment is never laid out as a DOCUMENT — that stays fixed. What
+ * a surface may say is how much room it has: the bubble floats on a canvas
+ * at reading size, while the rail is a 300px column whose own chrome is
+ * 11-12px, and 16px prose inside it is the largest text on the surface by a
+ * third.
+ */
+it('lays a comment out at the surface density it is asked for, and stays comfortable by default', () => {
+  const comfortable = runs(layoutCommentBody('body text', { ...base }).nodes)[0]
+  const compact = runs(layoutCommentBody('body text', { ...base, density: 'compact' }).nodes)[0]
+
+  expect(comfortable?.appearance?.fontSize).toBe(MARKDOWN_THEME_NODE.bodyFontSizePx)
+  expect(compact?.appearance?.fontSize).toBe(MARKDOWN_THEME_COMPACT.bodyFontSizePx)
+  expect(compact?.appearance?.fontSize ?? 0).toBeLessThan(comfortable?.appearance?.fontSize ?? 0)
+})
+
+it('compresses a compact heading further than the bubble does, rather than scaling it flat', () => {
+  // The ratios are not uniform — the same reason the document theme is a
+  // second constant instead of a multiplier. A heading that stayed at the
+  // bubble's ramp would tower over 14px prose.
+  const bubble = runs(layoutCommentBody('# Heading', { ...base }).nodes)[0]
+  const dense = runs(layoutCommentBody('# Heading', { ...base, density: 'compact' }).nodes)[0]
+
+  expect(bubble?.appearance?.fontSize).toBe(MARKDOWN_THEME_NODE.headingFontSizePx[1])
+  expect(dense?.appearance?.fontSize).toBe(MARKDOWN_THEME_COMPACT.headingFontSizePx[1])
+  // The heading keeps its rank: still bigger than the prose beside it.
+  expect(dense?.appearance?.fontSize ?? 0).toBeGreaterThan(MARKDOWN_THEME_COMPACT.bodyFontSizePx)
+})
+
+it('never lets a compact comment reach document typography', () => {
+  const dense = runs(layoutCommentBody('# Heading', { ...base, density: 'compact' }).nodes)[0]
+  expect(dense?.appearance?.fontSize).not.toBe(MARKDOWN_THEME_DOCUMENT.headingFontSizePx[1])
 })

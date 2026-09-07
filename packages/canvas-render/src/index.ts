@@ -125,7 +125,11 @@ export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { MarkdownTheme } from './theme/markdown-theme.js'
-export { MARKDOWN_THEME_DOCUMENT, MARKDOWN_THEME_NODE } from './theme/markdown-theme.js'
+export {
+  MARKDOWN_THEME_COMPACT,
+  MARKDOWN_THEME_DOCUMENT,
+  MARKDOWN_THEME_NODE,
+} from './theme/markdown-theme.js'
 export type { SpatialGeometry } from './theme/spatial-geometry.js'
 export { SPATIAL_THEME_GEOMETRY } from './theme/spatial-geometry.js'
 export type {
