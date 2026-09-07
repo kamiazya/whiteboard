@@ -71,7 +71,7 @@ async function seedDocument(db: Handle['db']): Promise<void> {
     .execute()
 }
 
-async function seedVersionAndBranch(db: Handle['db']): Promise<void> {
+async function seedVersion(db: Handle['db']): Promise<void> {
   await db
     .insertInto('versions')
     .values({
@@ -92,6 +92,12 @@ async function seedVersionAndBranch(db: Handle['db']): Promise<void> {
       createdAt: Date.now(),
     })
     .execute()
+}
+
+// Branch rows only exist before 0023 drops the table, so a test that reaches
+// head cannot seed one. Kept separate rather than folded into the seeder
+// above, which several pre-0023 tests still need whole.
+async function seedBranch(db: Handle['db']): Promise<void> {
   await db
     .insertInto('branches')
     .values({
@@ -113,11 +119,12 @@ describe('0016-drop-documents-fk', () => {
   })
 
   // The documents table stops being the address book (dual-plane collapse
-  // S7): a version/branch row must outlive its mirror row, because after
-  // the wrapper retirement a document created through the tree has no row
-  // at all. Delete-completeness moves from the FK cascade into the delete
-  // path's own explicit cleanup.
-  it('version and branch rows survive without any documents row', async () => {
+  // S7): a version row must outlive its mirror row, because after the
+  // wrapper retirement a document created through the tree has no row at
+  // all. Delete-completeness moves from the FK cascade into the delete
+  // path's own explicit cleanup. (Branch rows were the other half of this
+  // until 0023 dropped the table.)
+  it('version rows survive without any documents row', async () => {
     const handle = await openDb()
     await handle.migrateToHead()
     const now = Date.now()
@@ -127,7 +134,7 @@ describe('0016-drop-documents-fk', () => {
       .execute()
 
     // No documents row at all — the insert must succeed post-0016.
-    await seedVersionAndBranch(handle.db)
+    await seedVersion(handle.db)
 
     const versions = await handle.db.selectFrom('versions').select(['id']).execute()
     expect(versions).toEqual([{ id: 'v-a' }])
@@ -137,7 +144,8 @@ describe('0016-drop-documents-fk', () => {
     const handle = await openDb()
     await handle.migrateTo(PRE_0016)
     await seedDocument(handle.db)
-    await seedVersionAndBranch(handle.db)
+    await seedVersion(handle.db)
+    await seedBranch(handle.db)
 
     // This is 0016's own migration test: migrate to exactly the stage it
     // introduces, not head — 0017 (a later, unrelated migration) drops the

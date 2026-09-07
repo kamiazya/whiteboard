@@ -23,9 +23,6 @@ const { withBackupMarker } = await import('./backup-in-progress.js')
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
-const { createBranch, loadDocumentBranches, saveDocumentBranches, updateBranchTip } = await import(
-  './branches-store.js'
-)
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc, makeSpatialDocWithImage, setSpatialDocImage, clearSpatialDocNodes } =
   await import('../../shared/test-utils/spatial-doc.js')
@@ -446,66 +443,22 @@ describe('purgeDanglingFiles', () => {
     expect(remaining).toEqual(['about-to-reference.png'])
   })
 
-  it('keeps a file referenced only by a non-head branch tip', async () => {
-    // File node lives at the point where "feature" branches off.
-    const doc = makeSpatialDocWithImage('branch-only-image')
-    await saveDocument('ws_branch', 'page', doc)
-    // Recorded the way app.ts's getCurrentFrontiers records tips: as
-    // WORKSPACE record frontiers, the lineage branch history lives in.
-    const branchTip = Buffer.from((await workspaceFrontiersForPath('ws_branch', 'page'))!).toString(
-      'base64',
-    )
-    await createBranch('ws_branch', 'page', { name: 'feature', initialTipFrontiers: branchTip })
-
-    // At head (main), the file node is removed — main's live state no
-    // longer references it, but "feature"'s tip still does.
-    const live = await loadDocument('ws_branch', 'page')
-    clearSpatialDocNodes(live)
-    await saveDocument('ws_branch', 'page', live, { overwrite: true })
-
-    await seedFile('ws_branch', 'branch-only-image', '.png', 42)
-
-    const result = await purgeDanglingFiles('ws_branch', { graceMs: 0 })
-    expect(result.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_branch', 'files'))).sort()
-    expect(remaining).toEqual(['branch-only-image.png'])
-  })
-
-  it('refuses to purge with a corrupt_stored_data failure when a branch tip cannot be checked out', async () => {
-    // Unlike a version load failure (ambiguous cause, retryable 503), a
-    // branch tip that fails to decode/checkout means the persisted bytes
-    // themselves are corrupt — no retry fixes that, so this must surface
-    // as CorruptStoredDataError (mapped to 500 corrupt_stored_data by the
-    // route), not the retryable IncompleteFileGcScanError (503).
-    await saveDocument('ws_brk2', 'broken-branch', makeSpatialDocWithImage('only-by-broken-branch'))
-    await createBranch('ws_brk2', 'broken-branch', {
-      name: 'feature',
-      initialTipFrontiers: 'not-valid-base64-frontiers!!',
-    })
-    await seedFile('ws_brk2', 'only-by-broken-branch', '.png', 111)
-    await seedFile('ws_brk2', 'really-dangling-2', '.png', 22)
-
-    await expect(purgeDanglingFiles('ws_brk2', { graceMs: 0 })).rejects.toSatisfy(
-      isCorruptStoredDataError,
-    )
-
-    const remaining = (await readdir(join(tempDir, 'ws_brk2', 'files'))).sort()
-    expect(remaining).toEqual(['only-by-broken-branch.png', 'really-dangling-2.png'])
-  })
-
   it('skips the expensive reference scan entirely when there are no candidate files', async () => {
-    // Same corrupt branch as above — but with no files/ dir the purge must
-    // return zero WITHOUT running collectReferencedFileIds (which would
-    // throw on the corrupt tip). This is what keeps the periodic sweeper
-    // cheap on the common no-uploads workspace; reordering the scan back
-    // in front of the readdir turns this test red.
-    await saveDocument('ws_noscan', 'broken-branch', makeSpatialDocWithImage('never-uploaded'))
-    await createBranch('ws_noscan', 'broken-branch', {
-      name: 'feature',
-      initialTipFrontiers: 'not-valid-base64-frontiers!!',
-    })
+    // A version store that EXPLODES if consulted. With no files/ dir the
+    // purge must return zero without ever running collectReferencedFileIds,
+    // so the store is never asked and the tripwire never fires. This is what
+    // keeps the periodic sweeper cheap on the common no-uploads workspace;
+    // reordering the scan back in front of the readdir turns this test red.
+    await saveDocument('ws_noscan', 'page', makeSpatialDocWithImage('never-uploaded'))
+    const exploding = {
+      list: async () => {
+        throw new Error('the reference scan ran when it should have been skipped')
+      },
+    } as unknown as FileVersionStore
 
-    await expect(purgeDanglingFiles('ws_noscan', { graceMs: 0 })).resolves.toEqual({
+    await expect(
+      purgeDanglingFiles('ws_noscan', { graceMs: 0, versionStore: exploding }),
+    ).resolves.toEqual({
       purgedCount: 0,
       purgedBytes: 0,
     })
@@ -548,144 +501,6 @@ describe('purgeDanglingFiles', () => {
 
     const remaining = (await readdir(join(tempDir, 'ws_nullver', 'files'))).sort()
     expect(remaining).toEqual(['only-by-null-version.png', 'really-dangling-3.png'])
-  })
-
-  it('serialises purge against a concurrent updateBranchTip (GC-vs-branch-write race)', async () => {
-    // The mirror image of the saveDocument race above: a branch tip is
-    // updated (e.g. after a commit on that branch) concurrently with a
-    // purge pass. Without branches-store also taking the workspace write
-    // lock, the purge could snapshot branch state before the tip update
-    // lands and unlink a file the new tip references.
-    const doc = makeSpatialDocWithImage('about-to-be-tip-referenced')
-    await saveDocument('ws_branch_race', 'page', doc)
-    await createBranch('ws_branch_race', 'page', { name: 'feature' })
-    const branchTip = Buffer.from(
-      (await workspaceFrontiersForPath('ws_branch_race', 'page'))!,
-    ).toString('base64')
-
-    // Head (main) no longer references the image — only the about-to-land
-    // "feature" tip update will.
-    const live = await loadDocument('ws_branch_race', 'page')
-    clearSpatialDocNodes(live)
-    await saveDocument('ws_branch_race', 'page', live, { overwrite: true })
-
-    await seedFile('ws_branch_race', 'about-to-be-tip-referenced', '.png', 77)
-
-    // updateBranchTip's own async read (loadDocumentBranches) happens before
-    // it reaches the lock, which would make lock-acquisition order
-    // non-deterministic under Promise.all. Pre-compute the next branches
-    // state here (mirroring exactly what updateBranchTip does internally)
-    // so the race below starts both sides at the same synchronous point —
-    // saveDocumentBranches is the single write path updateBranchTip funnels
-    // through, so this exercises the identical lock.
-    const preRaceState = await loadDocumentBranches('ws_branch_race', 'page')
-    const idx = preRaceState.branches.findIndex((b) => b.name === 'feature')
-    const nextState = {
-      ...preRaceState,
-      branches: [
-        ...preRaceState.branches.slice(0, idx),
-        { ...preRaceState.branches[idx]!, tipFrontiers: branchTip },
-        ...preRaceState.branches.slice(idx + 1),
-      ],
-    }
-
-    const updatePromise = saveDocumentBranches('ws_branch_race', 'page', nextState)
-    const purgePromise = purgeDanglingFiles('ws_branch_race', { graceMs: 0 })
-    const [, purgeResult] = await Promise.all([updatePromise, purgePromise])
-
-    expect(purgeResult.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_branch_race', 'files'))).sort()
-    expect(remaining).toEqual(['about-to-be-tip-referenced.png'])
-  })
-
-  it('serialises purge against updateBranchTip called through its real production path', async () => {
-    // Unlike the test above (which precomputes state to sidestep
-    // updateBranchTip's own unlocked read), this drives updateBranchTip
-    // itself. updateBranchTip must acquire the workspace write lock
-    // before it reads the current branch state — otherwise GC can
-    // acquire the lock first despite starting second, scan the state
-    // before the tip lands, and permanently delete the file the new
-    // tip is about to reference.
-    const doc = makeSpatialDocWithImage('about-to-be-tip-referenced-live')
-    await saveDocument('ws_branch_race_live', 'page', doc)
-    await createBranch('ws_branch_race_live', 'page', { name: 'feature' })
-    const branchTip = Buffer.from(
-      (await workspaceFrontiersForPath('ws_branch_race_live', 'page'))!,
-    ).toString('base64')
-
-    // Head (main) no longer references the image — only the about-to-land
-    // "feature" tip update will.
-    const live = await loadDocument('ws_branch_race_live', 'page')
-    clearSpatialDocNodes(live)
-    await saveDocument('ws_branch_race_live', 'page', live, { overwrite: true })
-
-    await seedFile('ws_branch_race_live', 'about-to-be-tip-referenced-live', '.png', 77)
-
-    // Kick updateBranchTip first so it should win the lock if its entire
-    // read-modify-write is inside the workspace write barrier.
-    const updatePromise = updateBranchTip('ws_branch_race_live', 'page', 'feature', branchTip)
-    const purgePromise = purgeDanglingFiles('ws_branch_race_live', { graceMs: 0 })
-    const [, purgeResult] = await Promise.all([updatePromise, purgePromise])
-
-    expect(purgeResult.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_branch_race_live', 'files'))).sort()
-    expect(remaining).toEqual(['about-to-be-tip-referenced-live.png'])
-  })
-
-  it('serialises purge against the real PUT /head route (HEAD-switch tipFrontiers persist race)', async () => {
-    // The multi-step production HEAD-switch flow (read state -> capture
-    // current frontiers -> checkout -> save canvas -> save branches) must
-    // run as a single atomic unit against file-gc. Without a lock spanning
-    // the whole thing, a purge could interleave right after the live doc
-    // has moved to the new HEAD (no longer referencing the image) but
-    // before the outgoing HEAD's captured frontiers are persisted — and
-    // see the file as unreferenced by either state.
-    const { createBranchesRouter } = await import('../routes/branches.js')
-
-    // "feature" branches off an earlier, image-free point in the SAME
-    // doc's history, so its tip is a real, checkoutable frontiers value.
-    const doc = new LoroDoc()
-    doc.commit()
-    const baselineFrontiers = doc.frontiers()
-    const featureTip = Buffer.from(encodeFrontiers(baselineFrontiers)).toString('base64')
-
-    setSpatialDocImage(doc, 'about-to-be-captured-on-head-switch')
-
-    await saveDocument('ws_head_race', 'page', doc)
-    await createBranch('ws_head_race', 'page', {
-      name: 'feature',
-      initialTipFrontiers: featureTip,
-    })
-    await seedFile('ws_head_race', 'about-to-be-captured-on-head-switch', '.png', 90)
-
-    const app = createBranchesRouter({
-      getCurrentFrontiers: async (sid, path) => {
-        const live = await loadDocument(sid, path)
-        return Buffer.from(encodeFrontiers(live.frontiers())).toString('base64')
-      },
-      checkoutTo: async (sid, path, tipFrontiersBase64) => {
-        const live = await loadDocument(sid, path)
-        const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
-        const targetFrontiers = decodeFrontiers(
-          new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')),
-        )
-        clone.checkout(targetFrontiers)
-        await saveDocument(sid, path, clone, { overwrite: true })
-      },
-    })
-
-    const putHeadPromise = app.request('/api/workspaces/ws_head_race/documents/page/head', {
-      method: 'PUT',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ branch: 'feature' }),
-    })
-    const purgePromise = purgeDanglingFiles('ws_head_race', { graceMs: 0 })
-    const [headRes, purgeResult] = await Promise.all([putHeadPromise, purgePromise])
-
-    expect(headRes.status).toBe(200)
-    expect(purgeResult.purgedCount).toBe(0)
-    const remaining = (await readdir(join(tempDir, 'ws_head_race', 'files'))).sort()
-    expect(remaining).toEqual(['about-to-be-captured-on-head-switch.png'])
   })
 })
 
@@ -745,7 +560,7 @@ describe('purgeDanglingFiles across instances', () => {
  *
  * Catching up first fixes what this instance can SEE; it does nothing about a
  * write that lands while the pass is deciding. Collecting forks and checks
- * out every branch and version of every document, so it is the longest window
+ * out every version of every document, so it is the longest window
  * in the pass and the one another instance is most likely to write into — and
  * a referenced set computed against a record that no longer exists must not
  * be acted on.

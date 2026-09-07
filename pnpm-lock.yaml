@@ -496,9 +496,6 @@ importers:
 
   packages/daemon-client:
     dependencies:
-      '@kamiazya/whiteboard-history':
-        specifier: workspace:*
-        version: link:../history
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
@@ -583,18 +580,9 @@ importers:
 
   packages/history:
     dependencies:
-      '@kamiazya/whiteboard-loro-adapter':
-        specifier: workspace:*
-        version: link:../loro-adapter
-      '@kamiazya/whiteboard-model':
-        specifier: workspace:*
-        version: link:../model
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6
-      zod:
-        specifier: 'catalog:'
-        version: 4.4.3
     devDependencies:
       '@fast-check/vitest':
         specifier: ^0.4.1

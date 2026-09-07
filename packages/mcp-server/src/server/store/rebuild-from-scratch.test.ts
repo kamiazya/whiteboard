@@ -1,7 +1,7 @@
 /**
  * The dual-plane collapse's permanent acceptance test (S8): the workspace
  * tree is the address book, so the ENTIRE document surface — listing,
- * content, names, pins, branches, versions, rename, delete — must work
+ * content, names, pins, versions, rename, delete — must work
  * across a restart with no `documents` table at all.
  *
  * Migration 0017 dropped the table outright; nothing here may need it. If a
@@ -38,7 +38,6 @@ const { clearCache } = await import('./doc-cache.js')
 const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await import(
   './names-store.js'
 )
-const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
@@ -85,7 +84,6 @@ it('the whole document surface works with no documents table at all, across a re
   await saveDocument(WS, 'notes/readme', new LoroDoc(), { kind: 'markdown' })
   await setDocumentDisplayName(WS, 'boards/main', 'Main Board')
   await setDocumentPinned(WS, 'notes/readme', true)
-  await createBranch(WS, 'boards/main', { name: 'feature' })
   const versionStore = new FileVersionStore()
   const version = await versionStore.save(WS, 'boards/main', canvasDoc('the canvas'), {
     auto: false,
@@ -117,9 +115,6 @@ it('the whole document surface works with no documents table at all, across a re
   const names = await loadWorkspaceNames(WS)
   expect(names.documents['boards/main']).toBe('Main Board')
   expect(names.pinned).toEqual(['notes/readme'])
-
-  const branches = await loadDocumentBranches(WS, 'boards/main')
-  expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
 
   const versions = await versionStore.list(WS, 'boards/main')
   expect(versions.map((v) => v.id)).toContain(version.id)

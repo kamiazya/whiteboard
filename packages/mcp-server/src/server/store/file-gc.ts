@@ -7,13 +7,12 @@ import {
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { decodeFrontiers, LoroDoc } from 'loro-crdt'
+import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
-import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import {
   catchUpWorkspaceDoc,
@@ -90,14 +89,11 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
 // Internal-only description of a canvas/version that GC could not safely
 // inspect. Not a persisted or wire type, so no Zod schema — kept as a
 // discriminated union purely to make the fail-closed reason legible in logs
-// and error messages. A branch tip that fails to decode/checkout is NOT
-// represented here: that failure means the persisted tipFrontiers bytes are
-// corrupt (no retry repairs it), so it throws corruptStoredData directly
-// instead of being collected as a skipped, retryable target.
+// and error messages.
 type SkippedScanTarget = { kind: 'version'; path: string; versionId: string; cause: unknown }
 
-// Walk every canvas in the workspace (live state, plus past versions and
-// every branch tip) and collect referenced fileIds.
+// Walk every canvas in the workspace (live state plus past versions) and
+// collect referenced fileIds.
 export class IncompleteFileGcScanError extends Error {
   constructor(
     public readonly workspaceId: string,
@@ -125,24 +121,12 @@ export function incompleteFileGcScanErrorBody(
   return { error: 'incomplete_file_gc_scan', message: error.message }
 }
 
-// Fork the live doc through a snapshot and checkout the given base64
-// frontiers, mirroring version-store.ts's load(). Returns null for an
-// empty/unset tip (fresh branch off nothing — no history to check out,
-// equivalent to the live doc referencing nothing extra).
-function checkoutFrontiersBase64(live: LoroDoc, frontiersBase64: string): LoroDoc | null {
-  if (frontiersBase64.length === 0) return null
-  const clone = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
-  const frontiers = decodeFrontiers(new Uint8Array(Buffer.from(frontiersBase64, 'base64')))
-  clone.checkout(frontiers)
-  return clone
-}
-
 /**
  * Every fileId any state of this workspace still points at.
  *
  * **The `yieldToLoop()` calls are load-bearing, not tidiness.** This is the
  * expensive half of a purge — a fork and checkout of the workspace record per
- * branch and per version of every document — and every one of those is a
+ * version of every document — and every one of those is a
  * synchronous WASM call. The `await`s around them look like they let the
  * daemon breathe and do not: `loadDocument` answers from the cached workspace
  * document and `versionStore.load` goes through a native binding, so nothing
@@ -172,56 +156,11 @@ async function collectReferencedFileIds(
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
   const documents = await listDocuments(workspaceId)
-  // A tree-served document's branch tips are recorded against the WORKSPACE
-  // record's oplog (app.ts getCurrentFrontiers), so they check out on a
-  // clone of that record and the document is projected at that point; the
-  // per-document fallback survives only for the damaged-content remnant the
-  // fold could not move.
-  const wsClone = await cloneStoredWorkspaceDoc(workspaceId)
   for (const { path } of documents) {
-    // One per scan unit: document, branch tip, version. See above.
+    // One per scan unit: document, version. See above.
     await yieldToLoop()
     const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
-
-    const wsEntry = wsClone === null ? null : resolveWorkspaceDocument(wsClone, path)
-    const checkoutTip = (frontiersBase64: string): LoroDoc | null => {
-      if (frontiersBase64.length === 0) return null
-      if (wsClone !== null && wsEntry !== null) {
-        const at = LoroDoc.fromSnapshot(wsClone.export({ mode: 'snapshot' }))
-        at.checkout(decodeFrontiers(new Uint8Array(Buffer.from(frontiersBase64, 'base64'))))
-        return projectWorkspaceDocument(at, wsEntry.documentId)
-      }
-      return checkoutFrontiersBase64(live, frontiersBase64)
-    }
-
-    const { branches } = await loadDocumentBranches(workspaceId, path)
-    for (const branch of branches) {
-      await yieldToLoop()
-      // Every branch tip (including HEAD's, which is redundant with the
-      // live scan above but harmless) is a live reference set — a file
-      // is only dangling when NO branch's tip references it, not just
-      // the currently checked-out one.
-      try {
-        const doc = checkoutTip(branch.tipFrontiers)
-        if (doc) collectFromDoc(doc, referenced)
-      } catch (err) {
-        // Unlike a version load failure (which can stem from ambiguous
-        // causes worth a retryable fail-closed refusal), a branch tip that
-        // fails to decode/checkout means the persisted tipFrontiers bytes
-        // themselves are malformed. No retry repairs that, so surface it
-        // as corrupt_stored_data (500) instead of folding it into the
-        // retryable incomplete-scan (503) path.
-        log.error(
-          { workspaceId, path, branch: branch.name, err },
-          'corrupt branch tipFrontiers; refusing to purge',
-        )
-        throw corruptStoredData(
-          `${workspaceId}/${path} branch "${branch.name}"`,
-          `tipFrontiers could not be decoded or checked out (${err instanceof Error ? err.message : String(err)})`,
-        )
-      }
-    }
 
     if (!versionStore) continue
     const versions = await versionStore.list(workspaceId, path)
@@ -339,7 +278,7 @@ export async function purgeDanglingFiles(
     // deadlock against the lock this pass is running inside.
     const before = await catchUpWorkspaceDoc(workspaceId)
     // List the candidate files BEFORE the reference scan: collecting
-    // references forks + checks out every branch/version of every canvas,
+    // references forks + checks out every version of every canvas,
     // which is far too expensive to pay for a workspace that has no files
     // directory (or an empty one) — the common case for every workspace
     // the periodic sweeper visits that never had an upload.
@@ -355,8 +294,8 @@ export async function purgeDanglingFiles(
 
     const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
 
-    // The fence. Collecting forks and checks out every branch and version of
-    // every document, so it is the longest window in this pass and the one
+    // The fence. Collecting forks and checks out every version of every
+    // document, so it is the longest window in this pass and the one
     // another instance is most likely to write into. A record that moved
     // means the referenced set was computed against a state that no longer
     // exists, so this pass stands down rather than acting on it. Purging is

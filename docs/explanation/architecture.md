@@ -36,7 +36,7 @@ This project is split into three main runtime layers:
   - Applies remote updates and emits local edits
 - **storage**
   - Lives under `~/.whiteboard/{workspaceId}/`
-  - Stores canvas state, branches, versions, exports, and library metadata
+  - Stores canvas state, versions, exports, and library metadata
 
 ## Data flow
 
@@ -52,7 +52,7 @@ This project is split into three main runtime layers:
 1. A browser opens `/w/{workspaceId}/document/{path}`.
 2. The app loads the current canvas snapshot from the daemon.
 3. Local edits update the in-memory document and are persisted through daemon routes.
-4. WebSocket events broadcast document changes, version events, and branch head changes.
+4. WebSocket events broadcast document changes and version events.
 
 ## MCP tool surface
 
@@ -98,7 +98,7 @@ Loro is the CRDT layer used to keep whiteboard state mergeable and replayable.
 
 - It supports incremental updates for collaboration flows.
 - It supports snapshot export for persistence and restore.
-- It works well with versioning, branching, and version restore.
+- It works well with versioning and version restore.
 
 ## Design boundaries
 

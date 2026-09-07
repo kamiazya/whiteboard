@@ -1,6 +1,6 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { createCheckpointScheduler, readBranchesFromRecord } from '@kamiazya/whiteboard-history'
+import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -482,15 +482,12 @@ function useBrowserDocument(
   // against a row taken from a different one, and never match.
   const checkpoints = useMemo(() => {
     const scheduler = createCheckpointScheduler<VersionEntry>({
-      save: (workspaceId, path, _doc, branchName) =>
+      save: (workspaceId, path) =>
         versionStore.save(workspaceId, path, {
           auto: true,
-          ...(branchName === null ? {} : { branchName }),
           // The person at this browser is not who took this one.
           operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
         }),
-      getHeadBranch: async (_workspaceId, _path) =>
-        backend?.readRecord((doc, id) => readBranchesFromRecord(doc, id)?.head ?? null) ?? null,
       onError: (err) => log.warn('automatic checkpoint failed', err),
     })
     return scheduler

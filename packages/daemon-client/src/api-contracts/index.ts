@@ -22,7 +22,6 @@ export {
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
-export * from './branches.js'
 export * from './document.js'
 export * from './document-url.js'
 export * from './errors.js'

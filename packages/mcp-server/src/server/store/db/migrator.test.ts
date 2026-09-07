@@ -136,38 +136,42 @@ describe('runMigrations', () => {
     },
   )
 
-  it('exposes the expected workspaces + branches + versions schema after init, with no documents row required (0016/0017)', async () => {
+  it('exposes the expected workspaces + versions schema after init, with no documents row required (0016/0017)', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     await db
       .insertInto('workspaces')
       .values({ id: 'ws1', displayName: null, createdAt: 1, updatedAt: 1 })
       .execute()
-    // No documents row: migration 0016 dropped its FK from branches/versions
-    // and 0017 dropped the table outright, so a tree-only document's rows
-    // must insert cleanly on their own.
+    // No documents row: migration 0016 dropped its FK from versions and 0017
+    // dropped the table outright, so a tree-only document's rows must insert
+    // cleanly on their own. (Branch rows were the other half of this until
+    // 0023 dropped that table.)
     await db
-      .insertInto('branches')
+      .insertInto('versions')
       .values({
+        id: 'v1',
         documentId: 'cv1',
         workspaceId: 'ws1',
-        name: 'main',
-        tipFrontiers: '',
-        color: null,
-        sourceBranchName: null,
-        sourceVersionId: null,
+        branchName: 'main',
+        auto: 1,
+        label: null,
+        operatorKind: 'system',
+        operatorPeerId: '',
+        operatorDisplayName: null,
+        operatorAgentId: null,
+        operatorWorkspaceId: null,
+        elementCount: 0,
+        frontiers: '',
+        hasThumbnail: 0,
         createdAt: 1,
       })
       .execute()
     const row = await db
-      .selectFrom('branches')
-      .select(['documentId', 'workspaceId', 'name'])
+      .selectFrom('versions')
+      .select(['id', 'documentId', 'workspaceId'])
       .where('documentId', '=', 'cv1')
       .executeTakeFirst()
-    expect(row).toEqual({
-      documentId: 'cv1',
-      workspaceId: 'ws1',
-      name: 'main',
-    })
+    expect(row).toEqual({ id: 'v1', documentId: 'cv1', workspaceId: 'ws1' })
   })
 })

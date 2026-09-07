@@ -67,19 +67,12 @@ import type { RuntimeConfig } from '@kamiazya/whiteboard-daemon-client/api-clien
 export { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
 export declare function _useRuntimeConfig(c: RuntimeConfig): void
 
-// ── api-contracts barrel: proves the branches + canvas Zod schemas resolve
-// and z.infer-derived types compile under this DOM-enabled tsconfig too ─────
-export {
-  branchMetaSchema,
-  createDocumentRequestSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+// ── api-contracts barrel: proves the canvas Zod schemas resolve and
+// z.infer-derived types compile under this DOM-enabled tsconfig too ─────────
+export { createDocumentRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 
-import type {
-  branchMetaSchema,
-  createDocumentRequestSchema,
-} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import type { createDocumentRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import type { z } from 'zod'
-export declare function _useBranchMeta(b: z.infer<typeof branchMetaSchema>): void
 export declare function _useCreateDocumentRequest(
   r: z.infer<typeof createDocumentRequestSchema>,
 ): void

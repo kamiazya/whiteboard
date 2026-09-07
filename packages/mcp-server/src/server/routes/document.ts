@@ -33,7 +33,6 @@ export interface DocumentRouterOptions {
   autoVersionQuietMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
-  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
   // The operations the routes below adapt onto (ADR-0018). Production wires
   // this from app.ts; see `getDefaultServerDeps` for what a caller that
   // omits it gets, which is the same wiring rather than a stand-in.
@@ -63,7 +62,6 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   const versionStore = options.versionStore ?? new FileVersionStore()
   const triggerAutoVersion = createAutoVersionTrigger(versionStore, {
     ...(options.autoVersionQuietMs === undefined ? {} : { quietMs: options.autoVersionQuietMs }),
-    ...(options.getHeadBranch === undefined ? {} : { getHeadBranch: options.getHeadBranch }),
     // The checkpoint lands long after the update that signalled it, so the
     // broadcast is the trigger's to make rather than the caller's.
     onSaved: (workspaceId, path, entry) => {
@@ -104,7 +102,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
     }),
   )
-  app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
+  app.route('/', createVersionsRouter({ versionStore }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
   app.route('/', createThumbnailsRouter({ versionStore }))
