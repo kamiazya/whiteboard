@@ -1024,6 +1024,20 @@ the table alone.
   the scoreboard exists to report. Metrics are an independent oracle
   (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
   and never calls the wrapping code.
+- `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
+  keeps `layoutSpatialEdges` equal to the edge suffix of
+  `layoutSpatialCanvas`. Its node generator reads the facet REGISTRY
+  (`test-utils/facet-arbitraries.ts` over facet-engine's
+  `facetPayloadSamples`) rather than a list of facet names, because what it
+  guards is a second entry point folding over FEWER facets than the
+  committed layout — which a named list cannot cover for a facet registered
+  later. It shipped that way: plain generated nodes, no silhouettes on
+  either side, the property agreeing vacuously while every edge into a
+  shaped node floated off it for a whole drag. Two guards keep it honest — one fails naming a
+  registered node facet whose schema yields no payloads, one fails when the
+  drawn facets stop changing the layout being compared. Adding a node facet
+  needs no edit here; adding one `deriveFacetForm` cannot express fails the
+  first guard, which is the decision point.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say
