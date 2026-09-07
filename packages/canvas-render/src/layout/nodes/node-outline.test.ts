@@ -174,8 +174,32 @@ describe('outlineEntryPoint — where a segment entering the box first meets the
     expect(pulled.x).toBeGreaterThan(20)
   })
 
-  it('is total: a segment that never enters the outline returns the terminal unchanged', () => {
-    const kept = outlineEntryPoint('visual.ellipse', box, { x: -40, y: 20 }, { x: 10, y: 20 })
+  it('an off-center approach reaches the near rim instead of overshooting past the far one', () => {
+    // The probe walks the ray's CLOSEST APPROACH to the center, not the
+    // distance to it. A tall diamond entered low on its left border is the
+    // case that separates them: the distance overshoots past the right rim,
+    // the probe lands outside, and the bisection gives up — leaving the
+    // arrowhead on the bbox border with nothing drawn under it.
+    const tall = { x: 500, y: 200, w: 200, h: 200 }
+    const pulled = outlineEntryPoint('visual.diamond', tall, { x: 220, y: 380 }, { x: 500, y: 380 })
+    expect(outlineContains('visual.diamond', tall, pulled)).toBe(true)
+    // The diamond's left border at height h below its vertex is x = 500 + h.
+    expect(pulled.x).toBeCloseTo(580, 3)
+    expect(pulled.y).toBeCloseTo(380, 3)
+  })
+
+  it('a grazing approach lands on the single tangent point it touches', () => {
+    // y = 20 is the ellipse's topmost line, so the extension meets it at
+    // exactly one point. "First meets the outline at or beyond `to`" names
+    // that point; stopping at the corner leaves the terminal off the rim.
+    const grazed = outlineEntryPoint('visual.ellipse', box, { x: -40, y: 20 }, { x: 10, y: 20 })
+    expect(grazed.x).toBeCloseTo(60, 3)
+    expect(grazed.y).toBeCloseTo(20, 3)
+  })
+
+  it('is total: a terminal whose approach points AWAY from the outline is unchanged', () => {
+    // Leaving the box at its corner: nothing lies at or beyond `to`.
+    const kept = outlineEntryPoint('visual.ellipse', box, { x: 60, y: 50 }, { x: 10, y: 20 })
     expect(kept).toEqual({ x: 10, y: 20 })
     expect(
       outlineEntryPoint(
