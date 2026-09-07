@@ -35,6 +35,8 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
 12. Before pushing: five fresh-process runs of the file, then one inside its whole project.
 13. A threshold computed from the run divides by the dimension the fixture grows, and the
     growth loop floors that dimension — otherwise the slower machine gets the stricter test.
+14. `act` comes from `@testing-library/react`, never `react`, and never wraps a `waitFor` /
+    `findBy*` (RTL turns the act environment off inside those, deliberately).
 
 Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —

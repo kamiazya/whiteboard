@@ -22,8 +22,7 @@
  * `VersionTimeline` drops its rows "immediately on canvas change so a stale
  * row ... never renders under the new canvas while the refetch is in flight".
  */
-import { renderHook, waitFor } from '@testing-library/react'
-import { act } from 'react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { SAVE_DEBOUNCE_MS, useMarkdownDocument } from './use-markdown-document.js'

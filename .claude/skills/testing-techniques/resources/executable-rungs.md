@@ -23,6 +23,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `.claude/scripts/quarantine.test.mjs`, `biome-plugin.test.mjs` | `pnpm test:scripts` | quarantine cap/age/undeclared skips; a GritQL pattern that stopped matching |
 | `apps/web/vitest.setup.ts`, `src/test-utils/browser-setup.ts`, `vitest.browser.shared.ts` | setup guard | unmounted trees, leaked fake timers (fails the test by name), `localStorage`, missing stylesheet, 1000ms async budget, trace growth |
 | `src/test-utils/browser-setup.ts`'s `expectLoggedFailures` | setup guard (`web-browser`) | any `console.error`/`warn` in a browser test — a failure that was caught, logged and swallowed. Strict, no allowlist; opt in per test to claim one |
+| `apps/web/vitest.setup.ts`'s act guard | setup guard (`web-jsdom`) | React's act complaints — `act` inside a `waitFor`/`findBy*`, or imported from `react` rather than RTL |
 | `background-work-costs.test.ts` + `loop-availability.ts` | `mcp-node` | a declared stall ceiling no test asserts |
 
 ## Adding a GritQL shape
@@ -109,13 +110,15 @@ Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
 | project | records | over | verdict |
 |---|---|---|---|
 | `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
-| `web-jsdom` | **219**, across 70 tests | 376 files, 3944 tests | a ledger of ~65 claims, not yet written |
+| `web-jsdom` | **82**, across 63 tests | 377 files, 3947 tests | a ledger of ~63 claims, not yet written |
 
-`web-jsdom`'s 219 split two ways: **138** are React's act-environment complaint
-(below), and the other **81**, spread over 65 tests, are mostly tests driving a
-failure path deliberately (`canvas exploded`, `network down`, a refused tool
-registration). Logging is the right behaviour there, so guarding the project
-means claiming each one — real work, worth doing on its own merits.
+`web-jsdom` started at 219. **138 were React's act-environment complaint** and
+are now gone entirely (below); the remaining **82**, spread over 63 tests, are
+mostly tests driving a failure path deliberately (`canvas exploded`,
+`network down`, a refused tool registration). Logging is the right behaviour
+there, so guarding the project on `console.error` at large still means claiming
+each one — real work, worth doing on its own merits. The act family is guarded
+already, because that part became free.
 
 ### Take this measurement with a RECORDER, never a throwing guard
 
@@ -145,24 +148,41 @@ Two traps beside it, both of which produced a confident wrong number here:
   `An update to %s inside a test was not wrapped in act(...)`; grepping for the
   formatted component name finds nothing.
 
-### The act flag, measured and rejected
+### The act flag, measured and rejected — and what worked instead
 
-`IS_REACT_ACT_ENVIRONMENT` is set nowhere, so React logs
-`The current testing environment is not configured to support act(...)` — a
-complaint about configuration that says nothing about any test. Setting it in
-the jsdom setup looks like the obvious fix. Measured over the full project:
+`IS_REACT_ACT_ENVIRONMENT` was set nowhere, so React logged
+`The current testing environment is not configured to support act(...)` 138
+times. Setting it in the jsdom setup looks like the obvious fix. Measured over
+the full project:
 
 | | config warning | un-acted updates | total records |
 |---|---|---|---|
-| flag off (shipped) | 138, in 8 tests | 0 reported | 219 |
+| flag off | 138, in 8 tests | 0 reported | 219 |
 | flag on | 103 | **502** | 689 |
 
-So it does two unhelpful things at once. It fails to clear the noise it targets
-— 99 of the 138 are one file, `BrowserDocumentPage.test.tsx`, which keeps
-warning with the flag set — and it turns on 502 genuine un-acted-update reports
-that nothing reads, tripling the channel this whole rung exists to keep clean.
-The 502 are a real finding and a real backlog; the flag is not the increment
-that pays for them.
+It fails to clear the noise it targets and triples the channel. **Rejected.**
+
+The real causes were two, with no syntax in common, and three mechanical fixes
+took all 138 to **0**:
+
+- **`act()` wrapping an RTL async utility** (103). `@testing-library/react`
+  sets the flag to FALSE around `waitFor`/`findBy*` on purpose, so an `act`
+  call inside one warns — measured at the warning itself, `flag=false`. The
+  wrapper is also unnecessary: those utilities manage `act` themselves. Both
+  call sites wrapped a HELPER that used `findBy*` internally, which is why
+  neither a reader nor a lint rule looking at one file could see it. Five
+  wrappers deleted, tests unchanged and still passing.
+- **`act` imported from `react`** (35). RTL's `act` sets the environment flag
+  itself; React's bare one does not, so every call warns. Two files, import
+  changed.
+
+That left the guard FREE, which is the point — it is in
+`apps/web/vitest.setup.ts` and fails any test React complains about, narrow to
+the act family rather than `console.error` at large. Mutation-checked: putting
+one wrapper back fails that test with `React complained about act() in this
+test.`
+
+Records over the whole project: **219 to 82**, over 70 tests to 63.
 
 ### What the measurement found
 
