@@ -380,8 +380,11 @@ Harder, and these are real:
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a
   migration — but it is a break.
-- **Two mechanisms for "someone else's changes" exist during the transition**,
-  until the branch surface is removed.
+- **Two mechanisms for "someone else's changes" existed during the
+  transition.** Closed: the branch surface is gone, down to the table, so the
+  proposal is the only one. Kept here rather than deleted because a
+  consequence that was real and is now discharged is what tells a later reader
+  the transition actually finished, instead of leaving them to wonder.
 
 ## Alternatives considered
 
