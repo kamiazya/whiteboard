@@ -130,8 +130,16 @@ export function InspectorPanel({
         'data-[state=open]:ease-(--motion-ease-enter) data-[state=closed]:ease-(--motion-ease-exit)',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-4',
         'md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=open]:slide-in-from-right-4',
-        // And back out the way it came in.
-        'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom-4',
+        // And back out the way it came in — HOLDING where it ended, which
+        // `animate-out` does not do on its own. Without a fill the element
+        // reverts to its natural state the instant the animation ends, and
+        // React needs a further commit to remove it; that gap gets painted.
+        // Measured frame by frame on the closing sheet at 390px: twelve
+        // monotone frames (top 479.6 -> 495.2, opacity 1.00 -> 0.02, height
+        // constant), then ONE frame back at top 479.6 and opacity 1.00 with
+        // no animation left, then gone. It reads as the sheet jumping back
+        // up before it disappears.
+        'data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:slide-out-to-bottom-4 data-[state=closed]:fill-mode-forwards',
         'md:data-[state=closed]:slide-out-to-bottom-0 md:data-[state=closed]:slide-out-to-right-4',
         // Stage: 45% -> 100% and back. Safe to transition because BOTH
         // ends are definite — an `auto` end would not animate at all, which

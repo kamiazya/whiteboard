@@ -10,6 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
+import { InspectorPresenceContext } from '../../contexts/inspector-presence.js'
 import { DocumentPageShell } from './DocumentPageShell.js'
 import { InspectorPanel } from './InspectorPanel.js'
 
@@ -225,4 +226,43 @@ it('holds the very same pane on the way out, rather than rebuilding it', async (
 
   expect(panel()).toBe(before)
   await vi.waitFor(() => expect(panel()).toBeNull(), { timeout: 4000 })
+})
+
+/**
+ * A pane that has finished leaving stays where the exit left it.
+ *
+ * `animate-out` carries no fill mode of its own, so the moment the
+ * animation ends the element reverts to its natural state — fully opaque,
+ * back at its start position — and React needs a further commit to remove
+ * it. That gap is painted. Measured frame by frame on the closing history
+ * sheet at 390px: twelve monotone frames (top 479.6 -> 495.2, opacity 1.00
+ * -> 0.02, height constant, so the stage transition is not involved), then
+ * ONE frame at top 479.6 and opacity 1.00 with no animations left, then
+ * gone. That one frame is the jump back up a reader sees.
+ *
+ * Held open here by a presence whose `onLeft` does nothing, so the question
+ * is only what the element looks like after its exit — the shell's own job
+ * of letting go is pinned by the tests above.
+ */
+it('holds where the exit left it, rather than snapping back before it goes', async () => {
+  render(
+    <InspectorPresenceContext.Provider
+      value={{ state: 'closed', slotWasOccupied: false, onLeft: () => {} }}
+    >
+      <div style={{ position: 'relative', width: 390, height: 600 }}>
+        <InspectorPanel kind="comments" onClose={() => {}}>
+          <p>a conversation</p>
+        </InspectorPanel>
+      </div>
+    </InspectorPresenceContext.Provider>,
+  )
+
+  const el = panel()
+  if (el === null) throw new Error('no panel')
+  const exits = el.getAnimations()
+  expect(exits).not.toHaveLength(0)
+
+  await Promise.all(exits.map((animation) => animation.finished))
+
+  expect(Number(getComputedStyle(el).opacity)).toBeLessThan(0.05)
 })
