@@ -21,7 +21,6 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
@@ -37,7 +36,6 @@ import {
   workspacePath,
 } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
-import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -600,13 +598,6 @@ function useBrowserDocument(
   // through to the context's daemon fallback and issuing a request to a
   // daemon that is not there — which was this provider's whole job while the
   // keeper had no branches, and remains true now that it has them.
-  const branchesBackend = useMemo(
-    // The version store rides along so a merge can leave the point before it.
-    // Same instance the versions seam uses, so a pre-merge point is an
-    // ordinary row in the same history rather than a second kind of record.
-    () => createBrowserBranchesBackend({ backend, versions: versionStore }),
-    [backend, versionStore],
-  )
   // A manual save announces itself on the window (dispatched after the
   // keeper confirmed the save), and the page's history column re-reads on
   // it. Scoped to THIS document's identity — an unchecked listener refreshed
@@ -1014,9 +1005,7 @@ function useBrowserDocument(
     model,
     wrap: (page: ReactNode) => (
       <VersionsBackendContext.Provider value={versionsBackend}>
-        <BranchesBackendContext.Provider value={branchesBackend}>
-          {page}
-        </BranchesBackendContext.Provider>
+        {page}
       </VersionsBackendContext.Provider>
     ),
   }

@@ -131,20 +131,9 @@ describe('a version row is written from the content side', () => {
     expect(screen.queryByText('manual')).toBeNull()
   })
 
-  it('draws a lane beside every row, so the graph has somewhere to land', async () => {
-    // This asserted BOTH directions while the lane was gated on a keeper
-    // having branches — the second one being that a keeper without them drew
-    // none. Both keepers have them now, the gate went with
-    // `VersionTimelineCapabilities`, and a direction no configuration can
-    // reach is not a direction.
-    //
-    // What is left is a count rather than a presence: one lane per row is
-    // what `mini-graph` computes a dot, a colour and connectors FOR, and a
-    // count cannot pass vacuously the way a `queryBy…` returning null can.
-    const view = renderTimeline(backendOf(async () => ROWS))
-    const rows = await screen.findAllByTestId('version-row')
-    expect(view.container.querySelectorAll('[data-testid="version-lane"]').length).toBe(rows.length)
-  })
+  // A case pinning the lane column stood here. Lanes were the branch
+  // surface's view of this list and go with it (ADR-0029); a row is now the
+  // card alone.
 
   it('says so when the list could not be read, instead of showing stale rows in silence', async () => {
     let attempt = 0

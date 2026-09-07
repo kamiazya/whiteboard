@@ -14,7 +14,6 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsP
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
-import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
@@ -24,7 +23,6 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -98,7 +96,6 @@ function useDaemonDocument(
   // for the `?v=` preview below and for every consumer under the provider
   // (chip, banner, dialog), so a hosted page paired to a loopback daemon
   // cannot have half of them fall back to its own origin.
-  const branches = useMemo(() => createDaemonBranchesBackend(daemonFetch), [daemonFetch])
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -739,9 +736,7 @@ function useDaemonDocument(
     kind: 'render',
     model,
     wrap: (page: ReactNode) => (
-      <DaemonApiContext.Provider value={daemonFetch}>
-        <BranchesBackendContext.Provider value={branches}>{page}</BranchesBackendContext.Provider>
-      </DaemonApiContext.Provider>
+      <DaemonApiContext.Provider value={daemonFetch}>{page}</DaemonApiContext.Provider>
     ),
   }
 }
