@@ -109,3 +109,65 @@ it('lands a dropped node where it was released, never back at the grab point', a
   // zero because nothing replayed rather than because nothing happened.
   expect(settled?.left ?? 0).toBeGreaterThan(startLeft + 100)
 })
+
+it('settles the ghost on the box the COMMIT produced, not on the last pointermove', async () => {
+  // The release computes its own snapped point (`handlePointerUp`), which the
+  // last `pointermove` need not agree with — a release that travelled since
+  // the last move, or one whose snap modifier changed under it. Holding the
+  // pointer's frame parks the node where the drag passed rather than where it
+  // was dropped, for as long as the settle lasts.
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const committed = () => container.querySelector('[data-wb-key="n5"]') as SVGGElement | null
+  const ghost = () => container.querySelector('[data-testid="drag-preview"]')
+
+  await frame()
+  const grabbed = committed()?.getBoundingClientRect()
+  const r = root.getBoundingClientRect()
+  const grab = { x: (grabbed?.left ?? 0) - r.left + 90, y: (grabbed?.top ?? 0) - r.top + 45 }
+  const moved = { x: grab.x + 260, y: grab.y + 430 }
+  // The release lands somewhere the pointer never reported passing through.
+  const released = { x: moved.x + 44, y: moved.y + 37 }
+
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 4,
+    buttons: 1,
+    clientX: r.left + grab.x,
+    clientY: r.top + grab.y,
+  })
+  await frame()
+  fireEvent.pointerMove(root, {
+    pointerId: 4,
+    buttons: 1,
+    clientX: r.left + moved.x,
+    clientY: r.top + moved.y,
+  })
+  await frame()
+  fireEvent.pointerUp(root, {
+    pointerId: 4,
+    clientX: r.left + released.x,
+    clientY: r.top + released.y,
+  })
+
+  // Where the held ghost sat while the committed surface could not draw the
+  // node yet, and where the node actually landed.
+  const heldAt: number[] = []
+  let landedAt: number | null = null
+  const deadline = performance.now() + 3000
+  while (performance.now() < deadline && landedAt === null) {
+    const group = committed()
+    if (group !== null) landedAt = group.getBoundingClientRect().left
+    else {
+      const box = ghost()?.getAttribute('data-box-x')
+      if (box !== null && box !== undefined) heldAt.push(Number(box))
+    }
+    await frame()
+  }
+
+  expect(heldAt.length).toBeGreaterThan(0)
+  expect(landedAt).not.toBeNull()
+  // The ghost's canvas-space x and the landed group's screen x share an
+  // origin here (zoom 1, viewport at 0), so they are directly comparable.
+  expect([...new Set(heldAt)]).toEqual([landedAt])
+})

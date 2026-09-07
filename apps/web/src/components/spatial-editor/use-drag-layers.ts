@@ -108,11 +108,12 @@ export function useDragLayers({
   // committed scene carries the drop — the alternative is the surface
   // falling back to a scene that still has the node at the grab point, and
   // the patcher then flying it from there (see use-drop-settle.ts).
-  const { gestureState, canvas, livePoint } = useDropSettle(
+  const { frame, settling } = useDropSettle(
     liveGesture.kind === 'moving' || liveGesture.kind === 'resizing',
     { gestureState: liveGesture, canvas: liveCanvas, livePoint: livePointer },
     sceneCurrent,
   )
+  const { gestureState, canvas, livePoint } = frame
   // The committed layout, FROZEN at gesture start. The worker's next
   // reply may land mid-gesture, and THREE things ride on it: the anchors
   // are the points bystander edges are pinned to, the scene is what
@@ -289,6 +290,19 @@ export function useDragLayers({
    * routeEdge calls per frame.
    */
   const dragPreview = useMemo(() => {
+    // A SETTLING frame is no longer being pointed at, so its geometry comes
+    // from the commit rather than from the pointer: `boxes` is derived off
+    // the canvas prop, so the node's committed box is already here while the
+    // SCENE that draws it is still a worker round trip away. Re-deriving it
+    // from the pointer instead runs the commit's own arithmetic on a
+    // different input — the last pointermove rather than the release — and
+    // the two disagree whenever the release travelled since that move or its
+    // snap modifier changed under it, parking the ghost where the drag
+    // passed instead of where it was dropped.
+    if (settling && (gestureState.kind === 'moving' || gestureState.kind === 'resizing')) {
+      const box = boxes.find((b) => b.id === gestureState.nodeId)?.box
+      return box === undefined ? undefined : { kind: 'box' as const, box }
+    }
     // Existing edges keep their committed sides while a connect gesture
     // is in flight — same freeze the live drag overlay applies, so the
     // canvas around the pointer stays still and pointer frames skip the
@@ -300,7 +314,7 @@ export function useDragLayers({
       selectableBoxes,
       frozenEdgeSides,
     })
-  }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted])
+  }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted, settling])
 
   /**
    * EVERY edge, re-composed against the ghost's snapped live position and

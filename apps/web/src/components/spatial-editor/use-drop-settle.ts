@@ -22,19 +22,30 @@ import { useRef } from 'react'
  * the actual question: whether what is on screen was built from the canvas the
  * drop produced.
  *
+ * `settling` says the hold is engaged, so a caller can answer the geometry
+ * question differently for a frame that is no longer being pointed at: the
+ * held frame is what the node LOOKS like, but where it goes is the commit's
+ * answer, not the pointer's (see use-drag-layers.ts).
+ *
  * The ref is written during render for the same reason `useGestureCaptured`
  * writes its own: the hold must be visible to the very render that ends the
  * gesture, and an effect would lag it by a frame — which is the frame the
  * stale scene paints.
  */
-export function useDropSettle<T>(inFlight: boolean, live: T, sceneCurrent: boolean): T {
+export function useDropSettle<T>(
+  inFlight: boolean,
+  live: T,
+  sceneCurrent: boolean,
+): { readonly frame: T; readonly settling: boolean } {
   // Boxed, so a held value that is itself nullish still reads as held.
   const held = useRef<{ readonly value: T } | null>(null)
   if (inFlight) {
     held.current = { value: live }
-    return live
+    return { frame: live, settling: false }
   }
-  if (held.current !== null && !sceneCurrent) return held.current.value
+  if (held.current !== null && !sceneCurrent) {
+    return { frame: held.current.value, settling: true }
+  }
   held.current = null
-  return live
+  return { frame: live, settling: false }
 }

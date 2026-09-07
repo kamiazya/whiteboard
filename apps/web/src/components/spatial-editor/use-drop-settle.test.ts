@@ -16,20 +16,27 @@ describe('useDropSettle', () => {
     const { result, rerender } = run({ inFlight: true, live: 'dragging', sceneCurrent: true })
     act(() => rerender({ inFlight: true, live: 'at drop', sceneCurrent: true }))
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: false }))
-    expect(result.current).toBe('at drop')
+    expect(result.current).toEqual({ frame: 'at drop', settling: true })
+  })
+
+  it('reports no settle while the gesture is still in flight', () => {
+    // The caller answers the geometry question from the commit only once
+    // nobody is pointing at the frame any more.
+    const { result } = run({ inFlight: true, live: 'dragging', sceneCurrent: false })
+    expect(result.current).toEqual({ frame: 'dragging', settling: false })
   })
 
   it('releases the frame as soon as the scene carries the drop', () => {
     const { result, rerender } = run({ inFlight: true, live: 'at drop', sceneCurrent: true })
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: false }))
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: true }))
-    expect(result.current).toBe('committed')
+    expect(result.current).toEqual({ frame: 'committed', settling: false })
   })
 
   it('holds nothing when the drop changed nothing, so the scene never went stale', () => {
     const { result, rerender } = run({ inFlight: true, live: 'at drop', sceneCurrent: true })
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: true }))
-    expect(result.current).toBe('committed')
+    expect(result.current).toEqual({ frame: 'committed', settling: false })
   })
 
   it('a new gesture takes over from a hold that has not been released yet', () => {
@@ -37,8 +44,8 @@ describe('useDropSettle', () => {
     const { result, rerender } = run({ inFlight: true, live: 'first drop', sceneCurrent: true })
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: false }))
     act(() => rerender({ inFlight: true, live: 'second drag', sceneCurrent: false }))
-    expect(result.current).toBe('second drag')
+    expect(result.current).toEqual({ frame: 'second drag', settling: false })
     act(() => rerender({ inFlight: false, live: 'committed', sceneCurrent: false }))
-    expect(result.current).toBe('second drag')
+    expect(result.current).toEqual({ frame: 'second drag', settling: true })
   })
 })
