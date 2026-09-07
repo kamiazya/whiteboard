@@ -1,6 +1,14 @@
 # ADR-0029: A proposal is an anchored change, not a point in time
 
-**Status:** Accepted — design of record (human gate, 2026-09-06); nothing implemented yet. Retires the variation surface [ADR-0022](0022-variation-addressing.md) addresses.
+**Status:** Accepted — design of record (human gate, 2026-09-06). Retires the variation surface [ADR-0022](0022-variation-addressing.md) addresses.
+
+Implementation, as of 2026-09-07: decisions 1-8 have landed — the proposal
+record, the in-place card on a canvas and per-change adoption, the
+`wb_canvas_edit` mode with `propose` as its default, and `wb_body_edit` for a
+markdown note's replacement passage. Retiring the variation surface has
+started at the UI: the chip, the merge dialog, both combine banners and the
+`?v=` preview are gone. What is NOT done: decision 9's place in the inspector
+segment, and the branch contracts, backends and storage below the UI.
 
 ## Context
 

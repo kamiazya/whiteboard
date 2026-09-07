@@ -21,10 +21,6 @@ import {
   DocumentFacetsEditor,
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
-import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
-import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
-import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
-import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -33,7 +29,6 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
-import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
@@ -51,11 +46,9 @@ import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
-import { useVariationPreview } from './use-variation-preview.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
-// WorkspaceTopBar statically imports Radix, lucide, VersionTimeline,
-// HeaderBranchChip and the Zod-validated daemon-client api-contracts. None
+// WorkspaceTopBar statically imports Radix, lucide and VersionTimeline. None
 // of that weight is needed for a page's own entry chunk, so it loads as a
 // sibling chunk. Kicked at page-module evaluation (this module is itself
 // behind a lazy route), so it is a parallel prefetch, not a render-time
@@ -358,51 +351,14 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
-  // ADR-0022's `?v=`, owned here because it is keeper-agnostic: it reads the
-  // branches seam and the address, and neither is a keeper's business. It sat
-  // on the daemon page from when variations were a daemon concept, which is
-  // why a browser-kept variation could be switched and combined but not
-  // linked to.
-  const branchesBackend = useBranchesBackend()
-  const variation = useVariationPreview({
-    workspaceId: topBar?.workspaceId ?? null,
-    path: topBar?.path ?? null,
-    branches: branchesBackend,
-    ...(topBar?.branchRefreshSignal === undefined
-      ? {}
-      : { refreshSignal: topBar.branchRefreshSignal }),
-    ...(topBar?.onBranchesChanged === undefined ? {} : { onHeadChanged: topBar.onBranchesChanged }),
-  })
-  // A variation's tip is a read-only state drawn in place of the editor —
-  // the same slot a version preview uses, and the only thing that ever put
-  // one there.
-  const readOnlyPast = variation.preview?.past ?? null
-
-  // Identity, not act: which variation you are on is WHICH document you are
-  // looking at, the same question the title answers. It renders in
-  // `DocumentProperties`'s identity slot — beside the name — rather than in
-  // `WorkspaceTopBar`, where it sat after `titleSlot` and so ended up to the
-  // RIGHT of the act menu once P4 moved the row's actions INTO that slot.
+  // No variation chrome here, and no `?v=`: ADR-0029 retires the surface.
+  // A proposal is drawn on the document a person is already looking at, so
+  // a lane to switch onto — and an address that names which one — is the
+  // shape that decision rejects. What used to stand here was the chip, the
+  // preview hook that owned `?v=`, and the read-only tip it rendered.
   //
-  // Whether to draw it at all is the BACKEND's answer rather than a keeper
-  // flag: both keepers have variations, and a document with no
-  // record-holding backend (a markdown body, or one still loading) has none.
-  // `previewVariation` comes from the same hook that owns `?v=`, so the chip
-  // and the address cannot disagree about what is being previewed.
-  const branchIdentity =
-    topBar === null || !branchesBackend.hasBranches ? null : (
-      <>
-        <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:inline-block" aria-hidden />
-        <HeaderBranchChip
-          workspaceId={topBar.workspaceId}
-          path={topBar.path}
-          {...(topBar.branchRefreshSignal === undefined
-            ? {}
-            : { refreshSignal: topBar.branchRefreshSignal })}
-          onPreviewVariation={variation.previewVariation}
-        />
-      </>
-    )
+  // The read-only slot itself SURVIVES: a past version still renders there
+  // (History is unchanged by ADR-0029), and `preview` below is that one.
   // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
   // back, title, menus — steps aside with the shell's row above it, which
   // owns the control and floats the way back out. The dock stays because
@@ -443,7 +399,7 @@ function DocumentPageBody({
           <CommentsRailAside
             rail={commentsRail}
             threads={threads.annotations}
-            writable={preview === null && readOnlyPast === null}
+            writable={preview === null}
           />
         ) : inspector === 'connections' &&
           model.connections !== undefined &&
@@ -508,7 +464,6 @@ function DocumentPageBody({
                           ? {}
                           : { status: model.properties.status })}
                         actions={rowActions}
-                        {...(branchIdentity === null ? {} : { identity: branchIdentity })}
                       />
                     ) : null}
                   </>
@@ -523,56 +478,6 @@ function DocumentPageBody({
               />
             </Suspense>
           )}
-          {/* Variation chrome, for BOTH keepers. It lived on the daemon page
-              from when variations were a daemon concept; they are not one now,
-              and the banner reads the same seam either keeper answers. It
-              draws nothing until HEAD is a variation with work on it, so a
-              document without variations is unaffected. */}
-          {topBar !== null && variation.preview !== null && (
-            <HeaderVariationBanner
-              workspaceId={topBar.workspaceId}
-              path={topBar.path}
-              name={variation.preview.name}
-              head={variation.preview.head}
-              branches={variation.preview.branches}
-              onSwitch={variation.switchToPreviewed}
-              onExit={variation.exitPreview}
-              runMerge={(src, args) =>
-                branchesBackend.merge(topBar.workspaceId, topBar.path, src, args)
-              }
-            />
-          )}
-          {variation.notice !== null && (
-            // role="alert", not "status": every notice here reports a failure
-            // (unknown name, unreadable tip, failed switch), and an alert
-            // injected with its content is the supported pattern — a
-            // conditionally-mounted status region is not
-            // (polite-live-region.test.ts).
-            <div
-              role="alert"
-              data-testid="variation-preview-notice"
-              className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              <span className="min-w-0 flex-1 truncate">{variation.notice}</span>
-              <button
-                type="button"
-                aria-label="Dismiss"
-                className="shrink-0 rounded-md p-1 hover:bg-accent"
-                onClick={variation.dismissNotice}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {topBar !== null && (
-            <HeaderBranchBanner
-              workspaceId={topBar.workspaceId}
-              path={topBar.path}
-              {...(topBar.branchRefreshSignal === undefined
-                ? {}
-                : { refreshSignal: topBar.branchRefreshSignal })}
-            />
-          )}
           {model.slots.headerExtras}
         </>
       }
@@ -581,8 +486,6 @@ function DocumentPageBody({
         <div className="relative h-full min-h-0 min-w-0">
           {preview ? (
             <DocumentPreview past={preview.past} theme={resolvedTheme} />
-          ) : readOnlyPast ? (
-            <DocumentPreview past={readOnlyPast} theme={resolvedTheme} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}
@@ -661,13 +564,6 @@ function DocumentPageBody({
             />
           )}
         </div>
-      )}
-      {topBar !== null && (
-        <MergeToast
-          workspaceId={topBar.workspaceId}
-          path={topBar.path}
-          onRestored={model.sync.clearLocalUndo}
-        />
       )}
       {model.slots.footer}
     </DocumentPageShell>
