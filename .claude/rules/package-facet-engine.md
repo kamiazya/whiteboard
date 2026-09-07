@@ -60,6 +60,23 @@ paths:
   lines changed in `apps/web`. If a new facet needs a vessel edit to be
   usable, the editor spec is the thing to extend, not the vessel.
 
+- `payload-samples.ts`: `facetPayloadSamples`, valid payloads for a facet
+  derived from its own declaration. Not test-only machinery in a test
+  folder, and not a per-consumer helper, because the question it answers is
+  the engine's: what CAN this build write for a facet it was told about at
+  distribution time? A consumer that folds over a node's facets — a layout,
+  an exporter — is property-testable against the registry rather than
+  against a list of facet names, which is the difference between a property
+  that covers the facet added next month and one that silently does not.
+  Its vocabulary is `deriveFacetForm`'s, deliberately: a schema the form
+  layer answers `unsupported` for yields no payloads, which is the same
+  honest signal one level along, and a caller turns the empty list into a
+  failure naming the facet. Every candidate is re-parsed through the
+  facet's schema before it is returned, so a constraint the form layer
+  cannot see (`visual.symbol`'s single-grapheme refinement) drops the
+  payloads it rejects rather than handing back ones no reader resolves.
+  `canvas-render` is the first consumer, through a dev-only dependency.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's
