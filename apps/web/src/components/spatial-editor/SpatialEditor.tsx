@@ -151,6 +151,7 @@ import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useCommentState } from './use-comment-state.js'
 import { useDragLayers } from './use-drag-layers.js'
+import { useDropSettle } from './use-drop-settle.js'
 import { useEditSessionState } from './use-edit-session-state.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
@@ -661,14 +662,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setSnapGuides,
     })
 
+    // The drop's own layout arrives one worker round trip after the commit
+    // that asked for it, so the layers below hold their last in-flight frame
+    // until the committed scene can draw the node where it was dropped — see
+    // use-drop-settle.ts for what releasing them early looks like.
+    const dragFrame = useDropSettle(
+      gestureState.kind === 'moving' || gestureState.kind === 'resizing',
+      { gestureState, canvas, livePoint },
+      sceneCurrent,
+    )
+
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
     // live resize, preview geometry, and the committed surface's mount-once
     // patch container) — one derivation hook, no state of its own. See
     // use-drag-layers.ts for the per-gesture vs per-frame split.
     const { dragContentSvg, dragStatic, dragPreview, liveEdges, liveNode, canvasContentRef } =
       useDragLayers({
-        gestureState,
-        canvas,
+        gestureState: dragFrame.gestureState,
+        canvas: dragFrame.canvas,
         extraIds,
         isLocked,
         lockEnabled,
@@ -683,7 +694,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         showResolved: showResolvedComments,
         boxes,
         selectableBoxes,
-        livePoint,
+        livePoint: dragFrame.livePoint,
       })
 
     useImperativeHandle(
