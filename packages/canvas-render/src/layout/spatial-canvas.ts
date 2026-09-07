@@ -1461,18 +1461,15 @@ export interface RenderContribution {
 }
 
 /**
- * Everything a contribution set decides ABOUT ONE CANVAS — the set itself, its
- * composed shape table, and the silhouette each node resolves to — in ONE
- * function, because several entry points build resolved options and one that
- * omits a piece would otherwise be a silent omission rather than a type error.
+ * Everything a contribution set decides ABOUT ONE CANVAS — the set, its shape
+ * table, and the silhouette each node resolves to — in ONE function, so an
+ * entry point omitting a piece is a type error rather than a silent omission.
  *
- * `nodeOutlines` belongs here rather than beside each entry point for the
- * reason the edge overlay proved: it was resolved for the committed layout and
- * not for `layoutSpatialEdges`, so an edge into a shaped node terminated on the
- * bbox border for every frame of a drag and snapped onto the silhouette on
- * drop. Both call sites read as complete on their own — the omission is only
- * visible by comparing them, which is exactly what a shared resolver removes
- * the need to do.
+ * `nodeOutlines` is here rather than beside each entry point because the edge
+ * overlay proved the point: resolved for the committed layout and not for
+ * `layoutSpatialEdges`, so an edge into a shaped node sat on the bbox border
+ * for a whole drag and snapped onto the silhouette on drop. Both call sites
+ * read as complete alone; only comparing them showed the gap.
  */
 function resolveContributions(
   canvas: SpatialCanvas,

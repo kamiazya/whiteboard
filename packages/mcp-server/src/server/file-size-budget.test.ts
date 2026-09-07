@@ -249,7 +249,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +1: the leader edge carries `commentChrome`, so the keyed projection can
   // mark a conversation's whole chrome as the annotation layer. Without it the
   // leader is the one piece that cuts while the pin and bubble ramp.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2097,
+  //
+  // +12: `resolveContributions` also resolves each node's silhouette now, so
+  // it takes the canvas and answers a third field. That is the whole growth —
+  // a signature and a return that no longer fit one line each — and it buys
+  // deleting the call site where `nodeOutlines` was resolved separately, which
+  // is where `layoutSpatialEdges` came to be missing it.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2109,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
