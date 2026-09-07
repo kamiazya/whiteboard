@@ -99,7 +99,9 @@ import {
   fitViewportToBoxes,
   type Point,
   panBy,
+  proposalAt,
   screenToCanvas,
+  viewportRevealingProposal,
   viewportTransformCss,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
@@ -367,16 +369,6 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  */
 const COMMENT_PRESS_SLOP_PX = 4
 
-/**
- * How far in from the viewport's corner a revealed proposal lands.
- *
- * `fitViewportToBoxes` pins the union's top-left to the origin rather than
- * centring it, which is right for `fitToContent` (the union is the board) and
- * leaves a single small box flush against the editor's edge — with the card,
- * which opens at that box's own screen position, half outside it.
- */
-const PROPOSAL_REVEAL_INSET_PX = 80
-
 /** Screen distance between two points — how far a press travelled. */
 function travelled(from: Point, to: Point): number {
   return Math.hypot(from.x - to.x, from.y - to.y)
@@ -613,22 +605,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const pressedProposalRef = useRef<{ readonly id: string; readonly startScreen: Point } | null>(
       null,
     )
-    const hitTestProposal = (point: Point): string | undefined => {
-      for (let i = proposalChromeBoxes.length - 1; i >= 0; i -= 1) {
-        const entry = proposalChromeBoxes[i]
-        if (entry === undefined) continue
-        const { bbox } = entry
-        if (
-          point.x >= bbox.x &&
-          point.x <= bbox.x + bbox.w &&
-          point.y >= bbox.y &&
-          point.y <= bbox.y + bbox.h
-        ) {
-          return entry.proposalId
-        }
-      }
-      return undefined
-    }
+    const hitTestProposal = (point: Point): string | undefined =>
+      proposalAt(proposalChromeBoxes, point)
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -705,30 +683,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           setViewport(fitViewportToBoxes(scoped.map((b) => b.box)))
         },
         openProposal(proposalId) {
-          // The CHROME box, not the changed nodes: a proposal that adds a
-          // node anchors on ids the canvas does not hold yet, and fitting to
-          // those lands on nothing. The chrome is what a person is looking
-          // for, and it is on screen by definition.
-          const chrome = proposalChromeBoxes.find((entry) => entry.proposalId === proposalId)
-          if (chrome === undefined) return false
-          const { x, y, w, h } = chrome.bbox
-          // Inset, because `fitViewportToBoxes` PINS the union's top-left to
-          // the origin rather than centring it — which is right for
-          // `fitToContent`, where the union is the whole board, and wrong
-          // here. The card opens at the chrome's own screen position, so
-          // without this it lands half off the left edge with the change it
-          // is about outside the frame. Caught by looking at the figure, not
-          // by a test that passed.
-          setViewport(
-            fitViewportToBoxes([
-              {
-                x: x - PROPOSAL_REVEAL_INSET_PX,
-                y: y - PROPOSAL_REVEAL_INSET_PX,
-                width: w,
-                height: h,
-              },
-            ]),
-          )
+          const at = viewportRevealingProposal(proposalChromeBoxes, proposalId)
+          if (at === null) return false
+          setViewport(at)
           setOpenProposalId(proposalId)
           return true
         },
