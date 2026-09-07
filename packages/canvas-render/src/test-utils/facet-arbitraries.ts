@@ -18,7 +18,7 @@
  * the facet instead of passing over it.
  */
 
-import { facetPayloadSamples, type FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { type FacetRegistry, facetPayloadSamples } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { fc } from './fast-check.js'
 
