@@ -39,7 +39,6 @@ import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
-import { createBranchesRouter } from './routes/branches.js'
 import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
@@ -75,8 +74,6 @@ import {
 } from './security/server-mode-middleware.js'
 import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
-import { performBranchMerge } from './store/branch-merge.js'
-import { loadDocumentBranches } from './store/branches-store.js'
 import { corruptStoredData, isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { peekDoc } from './store/doc-cache.js'
 import {
@@ -447,18 +444,6 @@ export function createApp(options: AppOptions) {
       ...(options.onAutoVersionTrigger === undefined
         ? {}
         : { onAutoVersionTrigger: options.onAutoVersionTrigger }),
-      // Attach the current HEAD branch name to saved versions when available.
-      getHeadBranch: async (sid, path) => {
-        try {
-          const state = await loadDocumentBranches(sid, path)
-          return state.head
-        } catch (error) {
-          if (isCorruptStoredDataError(error)) {
-            throw error
-          }
-          return null
-        }
-      },
     }),
   )
   // Shared versionStore so the files router can do version-aware purge
@@ -502,131 +487,6 @@ export function createApp(options: AppOptions) {
       pairingTokens: options.authMode === 'local-daemon' ? options.pairing?.tokens : undefined,
     }),
   )
-  // Branches router: branch metadata plus checkout / broadcast integration.
-  {
-    const versionStore = sharedVersionStore
-    app.route(
-      '/',
-      createBranchesRouter({
-        // Resolve fromVersionId to its saved frontiers (base64).
-        resolveFromVersionFrontiers: (sid, vid) => versionStore.getFrontiersBase64(sid, vid),
-        // Return the live document frontiers as base64 so the previous HEAD can keep
-        // its current position before a branch switch.
-        getCurrentFrontiers: async (sid, path) => {
-          // Tree-served documents record the WORKSPACE document's frontiers:
-          // a projection's lineage dies with the process, so a head kept in
-          // it would break on the first daemon restart. Legacy documents
-          // keep the per-document frontiers they always had.
-          const workspaceFrontiers = await workspaceFrontiersForPath(sid, path)
-          if (workspaceFrontiers !== null) {
-            return Buffer.from(workspaceFrontiers).toString('base64')
-          }
-          const cached = peekDoc(sid, path)
-          if (!cached && !(await documentExists(sid, path))) {
-            return null
-          }
-          const doc = cached ?? (await getDoc(sid, path))
-          const bytes = encodeFrontiers(doc.frontiers())
-          return Buffer.from(bytes).toString('base64')
-        },
-        // Reconcile the live document to the new HEAD tipFrontiers, then commit, save, and broadcast.
-        checkoutTo: async (sid, path, tipFrontiersBase64) => {
-          const doc = await getDoc(sid, path)
-          const targetFrontiers = decodeBranchTipOrThrow(
-            sid,
-            path,
-            'checkout-target',
-            tipFrontiersBase64,
-          )
-          // Tree-served: the tip names WORKSPACE-document frontiers; the
-          // past state is projected out of the stored record and diffed onto
-          // the live doc as new ops (a cross-lineage import would lose to
-          // the live doc's later ops and silently no-op). A tip this cannot
-          // check out is a pre-cutover branch of a since-folded document —
-          // history the fold deliberately did not carry — and surfaces as
-          // the same corrupt-tip error a damaged file would.
-          let past: LoroDoc | null = null
-          try {
-            past = await projectDocumentAtWorkspaceFrontiers(sid, path, targetFrontiers)
-          } catch (error) {
-            throw corruptStoredData(
-              `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
-              `tipFrontiers could not be checked out against the workspace document (${
-                error instanceof Error ? error.message : 'unknown error'
-              })`,
-            )
-          }
-          if (past !== null) {
-            reconcileDocContent(doc, past)
-          } else {
-            const clone = checkoutCloneOrThrow(
-              doc,
-              targetFrontiers,
-              `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
-              'tipFrontiers could not be checked out against the live document',
-            )
-            reconcileDocContent(doc, clone)
-          }
-          await saveDocument(sid, path, doc, { overwrite: true })
-          // The workspace record's funnel broadcasts the persisted bytes;
-          // no per-document fan-out remains.
-        },
-        // One variation's content, read-only, at its tip — the projection
-        // GET /branches/:name/document serves. An empty tip names an
-        // uninitialized branch, whose content is the live document. Any
-        // failure to check the tip out answers null (a 404 upstream): this
-        // is a read, and an unreadable tip should refuse the preview, not
-        // report the store corrupt.
-        loadDocumentAtTip: async (sid, path, tipFrontiersBase64) => {
-          const project = (d: LoroDoc): VersionDocumentResponse =>
-            readDocumentKind(d) === 'markdown'
-              ? { kind: 'markdown', body: readMarkdownBody(d) }
-              : { kind: 'spatial', canvas: readSpatialCanvas(d) }
-          try {
-            if (tipFrontiersBase64 === '') {
-              return project(await getDoc(sid, path))
-            }
-            const targetFrontiers = decodeBranchTipOrThrow(
-              sid,
-              path,
-              'document-read',
-              tipFrontiersBase64,
-            )
-            const past = await projectDocumentAtWorkspaceFrontiers(sid, path, targetFrontiers)
-            if (past !== null) return project(past)
-            // Legacy per-document lineage: the tip names the live doc's own oplog.
-            const doc = await getDoc(sid, path)
-            const clone = checkoutCloneOrThrow(
-              doc,
-              targetFrontiers,
-              `${sid}/branches/${path}.json#document-read.tipFrontiers`,
-              'tipFrontiers could not be checked out against the live document',
-            )
-            return project(clone)
-          } catch {
-            return null
-          }
-        },
-        // Notify all peers when the HEAD switch is complete.
-        notifyHeadChanged: (sid, path, head) => sendHeadChanged(sid, path, head),
-        // Keep version metadata branchName values in sync during branch rename.
-        renameInVersions: (sid, path, oldName, newName) =>
-          versionStore.renameBranchInVersions(sid, path, oldName, newName),
-        // Count the actual unmerged commits returned by DELETE /branches/:name.
-        countVersionsOnBranch: async (sid, path, branchName) => {
-          const list = await versionStore.list(sid, path)
-          return list.filter((v) => (v.branchName ?? 'main') === branchName).length
-        },
-        // Merge source into target. Algorithm lives in store/branch-merge.ts
-        // (its own unit tests cover the read-modify-write, the lock
-        // boundary, and the swallowed-failure cleanup branches); this is
-        // just the composition-root wiring of its store + ws dependencies.
-        performMerge: (sid, path, args) =>
-          performBranchMerge({ versionStore, sendHeadChanged }, sid, path, args),
-      }),
-    )
-  }
-
   if (options.authMode === 'server-mode') {
     // Server-mode serves only the static placeholder above — no build
     // artifact, no runtime-config / token injection, no static asset roots.

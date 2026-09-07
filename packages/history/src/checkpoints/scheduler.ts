@@ -38,32 +38,16 @@ export const CHECKPOINT_CEILING_MS = 30 * 60_000
 export interface CheckpointSchedulerOptions<Entry> {
   readonly quietMs?: number
   readonly ceilingMs?: number
-  /** Writes the checkpoint; `branchName` is what `getHeadBranch` answered, or null. */
-  readonly save: (
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-    branchName: string | null,
-  ) => Promise<Entry>
-  /**
-   * Resolves the HEAD branch at save time so the row can carry it. Omitted
-   * (or answering null) leaves the keeper's save to its own default.
-   */
-  readonly getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
+  /** Writes the checkpoint. */
+  readonly save: (workspaceId: string, path: string, doc: LoroDoc) => Promise<Entry>
   /**
    * Called when a checkpoint actually lands. The trigger does not answer its
    * caller with an entry — the save happens long after the update that
    * signalled it — so this is how a broadcast reaches the surfaces watching.
    */
   readonly onSaved?: (workspaceId: string, path: string, entry: Entry) => void
-  /** A save (or a fatal head lookup) failed; the keeper logs it its own way. */
+  /** A save failed; the keeper logs it its own way. */
   readonly onError: (err: unknown, at: { workspaceId: string; path: string }) => void
-  /**
-   * A `getHeadBranch` failure that must NOT be absorbed into "no branch":
-   * corrupt stored data is one — the checkpoint would otherwise be filed
-   * under `main` and hide it.
-   */
-  readonly isFatal?: (err: unknown) => boolean
 }
 
 export interface CheckpointScheduler {
@@ -102,16 +86,7 @@ export function createCheckpointScheduler<Entry>(
     const now = frontiersToBase64(doc.oplogFrontiers())
     if (savedAt.get(key) === now) return
 
-    let branchName: string | null = null
-    if (options.getHeadBranch) {
-      try {
-        branchName = await options.getHeadBranch(workspaceId, path)
-      } catch (err) {
-        if (options.isFatal?.(err)) throw err
-        branchName = null
-      }
-    }
-    const entry = await options.save(workspaceId, path, doc, branchName)
+    const entry = await options.save(workspaceId, path, doc)
     // Recorded only after the save succeeded: a failed checkpoint must leave
     // the next edit free to try again rather than looking already covered.
     savedAt.set(key, now)

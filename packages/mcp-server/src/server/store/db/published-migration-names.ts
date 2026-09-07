@@ -33,4 +33,5 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0020-snapshot-generation',
   '0021-leases',
   '0022-version-restored-from',
+  '0023-drop-branches',
 ] as const satisfies readonly string[]

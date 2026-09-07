@@ -17,7 +17,6 @@
  */
 import { unlink } from 'node:fs/promises'
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readWorkspaceBranchTips } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -124,12 +123,6 @@ function workspaceDocCacheKey(workspaceId: string): string {
   return `${getDataDir()}::${workspaceId}`
 }
 
-/**
- * The STORED workspace record's frontiers when the tree serves `path`, null
- * on the legacy plane. What a branch head stores for a tree-served document:
- * a projection's frontiers die with the process, the workspace record's
- * outlive it.
- */
 /** The documentId at `path`, or null when the workspace tree does not serve it. */
 export async function resolveDocumentIdAtPath(
   workspaceId: string,
@@ -161,9 +154,9 @@ export async function workspaceFrontiersForPath(
 /**
  * The document at `path` as it stood at `frontiers` of the WORKSPACE
  * document — null when the tree does not serve the path (legacy plane).
- * Throws when the frontiers cannot be checked out (a tip recorded against a
- * different lineage, e.g. a pre-cutover branch of a since-folded document —
- * that history was deliberately not carried by the fold).
+ * Throws when the frontiers cannot be checked out — a point recorded against
+ * a different lineage, e.g. a pre-cutover version of a since-folded document,
+ * whose history the fold deliberately did not carry.
  */
 export async function projectDocumentAtWorkspaceFrontiers(
   workspaceId: string,
@@ -182,7 +175,7 @@ export async function projectDocumentAtWorkspaceFrontiers(
 
 /**
  * A detached clone of the STORED workspace record, or null when none is
- * stored. What version/branch machinery forks and checks out: the stored
+ * stored. What the version machinery forks and checks out: the stored
  * record's oplog is durable across restarts, where a projection's is
  * per-process.
  */
@@ -743,7 +736,7 @@ async function unlinkIfExists(path: string): Promise<void> {
  * since 0016 dropped the cascade FK): the ids have to be captured while
  * the document is still whole. The row delete and the two sweeps are
  * separate statements, not one transaction — a crash between them leaves
- * orphaned versions/branches rows.
+ * orphaned versions rows.
  * ponytail: acceptable while nothing lists rows by dangling documentId;
  * a boot-time orphan sweep is the upgrade path if they ever show up.
  */
@@ -764,12 +757,11 @@ export const documentTeardown: DocumentTeardown = {
 
       const result = await deleteDocument()
 
-      // Version/branch rows no longer cascade from a documents row
-      // (migration 0016 dropped the FK — a tree-only document has no row to
-      // cascade from), so delete-completeness for every delete path that
-      // runs through this bracket lives here.
+      // Version rows no longer cascade from a documents row (migration 0016
+      // dropped the FK — a tree-only document has no row to cascade from), so
+      // delete-completeness for every delete path that runs through this
+      // bracket lives here.
       await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
-      await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
 
       for (const { id: versionId } of versionRows) {
         await unlinkIfExists(thumbnailPath(workspaceId, versionId))
@@ -795,7 +787,7 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   // document-crud.ts) — deliberately, because the two used to be separate
   // implementations and only one of them cleaned up. The bracket takes the
   // workspace write lock, captures thumbnail ids while the document is
-  // whole, and deletes versions/branches rows after (migration 0016 dropped
+  // whole, and deletes versions rows after (migration 0016 dropped
   // the cascade).
   return documentTeardown.around({ workspaceId, documentId, path }, async () => {
     // The tree node goes through the index's delete, which EVACUATES the
@@ -857,89 +849,11 @@ export interface CompactResult {
  * every document now lives in the one workspace record, they all compact the
  * same thing — a second call right after answers 'no-gain'.
  *
- * Risk parity with the retired per-document compaction, not an improvement
- * on it: the cut considers version rows only, so a branch head recorded
- * before the workspace's earliest version can lose the history its checkout
- * needs, exactly as the old design could per document.
+ * The cut is the earliest workspace-scoped version frontier, full stop.
+ * Branch tips used to hold it back — ADR-0029 retired the branch, so there is
+ * no second pin and no checkout to protect. Measured on a one-tip fixture
+ * before they went: the folded record was ~75% larger with the pin.
  */
-/**
- * The earliest history any reader still needs: the pointwise-minimum version
- * vector across the earliest version row and every branch tip recorded for
- * the workspace, converted back to a frontiers cut. A peer absent from any
- * pin's vector means that pin includes none of the peer's ops, so the
- * minimum excludes the peer entirely — the cut only ever moves BACKWARD
- * from the version-only cut, never forward.
- */
-async function retainedHistoryCut(
-  workspaceId: string,
-  doc: LoroDoc,
-  earliestVersion: Frontiers,
-): Promise<Frontiers> {
-  const db = await dbReady()
-  const rows = await db
-    .selectFrom('branches')
-    .select(['tipFrontiers', 'name', 'documentId'])
-    .where('workspaceId', '=', workspaceId)
-    .execute()
-  // Both readings, because the move off rows is per document: a document
-  // written since the move has its branches on the record and no rows, one
-  // written before has rows and no plane. Never both, so this is a union
-  // rather than a merge — and a tip counted twice would be harmless anyway,
-  // since the cut is a pointwise MINIMUM.
-  const tips = [
-    ...readWorkspaceBranchTips(doc),
-    ...rows.map((row) => ({
-      documentId: row.documentId,
-      name: row.name,
-      tipFrontiers: row.tipFrontiers,
-    })),
-  ]
-  const pins: { frontiers: Frontiers; branch: string }[] = []
-  for (const tip of tips) {
-    // An empty tip is a branch nothing has written to yet — it pins nothing.
-    if (tip.tipFrontiers.length === 0) continue
-    try {
-      pins.push({
-        frontiers: decodeFrontiers(new Uint8Array(Buffer.from(tip.tipFrontiers, 'base64'))),
-        branch: `${tip.documentId}#${tip.name}`,
-      })
-    } catch (error) {
-      throw corruptStoredData(
-        `${workspaceId}/branches/${tip.documentId}#${tip.name}`,
-        `tipFrontiers could not be decoded (${error instanceof Error ? error.message : String(error)})`,
-      )
-    }
-  }
-  if (pins.length === 0) return earliestVersion
-  const vvs = [doc.frontiersToVV(earliestVersion).toJSON()]
-  for (const pin of pins) {
-    try {
-      vvs.push(doc.frontiersToVV(pin.frontiers).toJSON())
-    } catch {
-      // A frontier the workspace record's oplog does not contain: a branch
-      // tip captured on the retired per-document plane, whose ops the boot
-      // fold copied by VALUE rather than importing. Such a branch cannot be
-      // checked out on the workspace record no matter what the cut keeps, so
-      // it pins nothing — and it must not disable compaction for the whole
-      // workspace by throwing here.
-      getLogger('document-store').warning(
-        { workspaceId, branch: pin.branch },
-        'branch tip frontier is foreign to the workspace record; not pinning history',
-      )
-    }
-  }
-  if (vvs.length === 1) return earliestVersion
-  const min = new Map(vvs[0])
-  for (const vv of vvs.slice(1)) {
-    for (const [peer, counter] of [...min]) {
-      const other = vv.get(peer)
-      if (other === undefined) min.delete(peer)
-      else if (other < counter) min.set(peer, other)
-    }
-  }
-  return doc.vvToFrontiers(VersionVector.parseJSON(min))
-}
-
 export async function compactDocument(
   workspaceId: string,
   path: string,
@@ -988,14 +902,10 @@ export async function compactDocument(
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId)
 
-    // Branch tips pin history exactly like version rows do: Loro refuses a
-    // checkout before the shallow start, so a cut past a branch tip breaks
-    // that branch's switch, merge and file-gc scan. The cut is held back to
-    // the pointwise-minimum version vector across the earliest version and
-    // every recorded branch tip — strictly conservative, and the version
-    // requirement stays: no version row still means no compaction at all.
-    const cut = await retainedHistoryCut(workspaceId, doc, earliestVersion)
-    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    // The earliest version row is the whole cut: it is the oldest point any
+    // reader can still ask to see. No version row still means no compaction
+    // at all, which is the guard above.
+    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: earliestVersion })
     if (shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }

@@ -200,12 +200,8 @@ describe('0019-workspace-canonical-id', () => {
     await handle.migrateToHead()
     const newId = await idOf(handle, 'default')
 
-    const branch = await handle.db
-      .selectFrom('branches')
-      .select(['workspaceId'])
-      .executeTakeFirstOrThrow()
-    expect(branch.workspaceId).toBe(newId)
-
+    // The branch row 0019 also re-keyed is not asserted here: this test runs
+    // to head, and 0023 drops the table. What 0019 did to it is history.
     const version = await handle.db
       .selectFrom('versions')
       .select(['workspaceId', 'operatorWorkspaceId'])

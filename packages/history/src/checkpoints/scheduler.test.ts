@@ -13,21 +13,20 @@ describe('createCheckpointScheduler', () => {
   afterEach(() => vi.useRealTimers())
 
   function harness(opts: { quietMs?: number; ceilingMs?: number } = {}) {
-    const saves: Array<{ path: string; branchName: string | null }> = []
+    const saves: Array<{ path: string }> = []
     const errors: unknown[] = []
     const scheduler = createCheckpointScheduler<{ id: string }>({
       ...opts,
-      save: async (_ws, path, _doc, branchName) => {
-        saves.push({ path, branchName })
+      save: async (_ws, path) => {
+        saves.push({ path })
         return { id: `v${saves.length}` }
       },
-      getHeadBranch: async () => 'idea',
       onError: (err) => errors.push(err),
     })
     return { scheduler, saves, errors }
   }
 
-  it('takes one checkpoint once the document has been quiet, carrying the head branch', async () => {
+  it('takes one checkpoint once the document has been quiet', async () => {
     const { scheduler, saves } = harness({ quietMs: 1000 })
     const doc = new LoroDoc()
     scheduler('w', 'a', edited(doc, 'x'))
@@ -36,7 +35,7 @@ describe('createCheckpointScheduler', () => {
     await vi.advanceTimersByTimeAsync(600)
     expect(saves).toEqual([])
     await vi.advanceTimersByTimeAsync(500)
-    expect(saves).toEqual([{ path: 'a', branchName: 'idea' }])
+    expect(saves).toEqual([{ path: 'a' }])
   })
 
   it('writes no row for a document whose frontier has not moved since its last checkpoint', async () => {
@@ -92,30 +91,5 @@ describe('createCheckpointScheduler', () => {
     scheduler('w', 'a', doc)
     await vi.advanceTimersByTimeAsync(150)
     expect(saves).toEqual(['a'])
-  })
-
-  it('absorbs an ordinary head-lookup failure as no branch, and rethrows a fatal one', async () => {
-    const saves: Array<string | null> = []
-    const errors: unknown[] = []
-    let fatal = false
-    const scheduler = createCheckpointScheduler<void>({
-      quietMs: 100,
-      save: async (_ws, _path, _doc, branchName) => {
-        saves.push(branchName)
-      },
-      getHeadBranch: async () => {
-        throw new Error(fatal ? 'corrupt' : 'transient')
-      },
-      isFatal: (err) => (err as Error).message === 'corrupt',
-      onError: (err) => errors.push(err),
-    })
-    scheduler('w', 'a', edited(new LoroDoc(), 'x'))
-    await vi.advanceTimersByTimeAsync(150)
-    expect(saves).toEqual([null])
-    fatal = true
-    scheduler('w', 'b', edited(new LoroDoc(), 'y'))
-    await vi.advanceTimersByTimeAsync(150)
-    expect(saves).toEqual([null])
-    expect(errors).toHaveLength(1)
   })
 })

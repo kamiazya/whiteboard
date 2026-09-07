@@ -157,8 +157,8 @@ MCP tool. It mints a `#wb=` link that carries the daemon's bootstrap token —
 the same full-authority credential that authenticates every `/api/*` request,
 valid until it is rotated, not a short-lived or single-use token — open it in
 your browser to connect that tab to the daemon's workspaces — with live sync
-over WebSocket, automatic version checkpoints, thumbnails, branches, and merge
-on top of the manual version history the browser keeps on its own.
+over WebSocket, automatic version checkpoints and thumbnails on top of the
+manual version history the browser keeps on its own.
 
 - Loopback web origins (`http://127.0.0.1:...`) need no extra configuration.
 - The official hosted web app (`https://kamiazya-whiteboard.pages.dev`) can
