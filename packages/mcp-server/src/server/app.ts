@@ -2,14 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
-import type { VersionDocumentResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
-import {
-  readDocumentKind,
-  readMarkdownBody,
-  readSpatialCanvas,
-  reconcileDocContent,
-} from '@kamiazya/whiteboard-loro-adapter'
 import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
@@ -18,11 +11,8 @@ import {
 } from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 import { errorMessage } from '../shared/error-message.js'
 import {
-  checkoutCloneOrThrow,
-  decodeBranchTipOrThrow,
   extractInitializeDebugPayload,
   isJsonObject,
   isReservedUiPath,
@@ -54,7 +44,7 @@ import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
-import { sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
+import { setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
@@ -74,15 +64,6 @@ import {
 } from './security/server-mode-middleware.js'
 import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
-import { corruptStoredData, isCorruptStoredDataError } from './store/corrupt-stored-data.js'
-import { peekDoc } from './store/doc-cache.js'
-import {
-  documentExists,
-  getDoc,
-  projectDocumentAtWorkspaceFrontiers,
-  saveDocument,
-  workspaceFrontiersForPath,
-} from './store/document-store.js'
 import { FileVersionStore } from './store/version-store.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
