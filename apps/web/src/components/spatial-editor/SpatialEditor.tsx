@@ -367,6 +367,16 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  */
 const COMMENT_PRESS_SLOP_PX = 4
 
+/**
+ * How far in from the viewport's corner a revealed proposal lands.
+ *
+ * `fitViewportToBoxes` pins the union's top-left to the origin rather than
+ * centring it, which is right for `fitToContent` (the union is the board) and
+ * leaves a single small box flush against the editor's edge — with the card,
+ * which opens at that box's own screen position, half outside it.
+ */
+const PROPOSAL_REVEAL_INSET_PX = 80
+
 /** Screen distance between two points — how far a press travelled. */
 function travelled(from: Point, to: Point): number {
   return Math.hypot(from.x - to.x, from.y - to.y)
@@ -702,7 +712,23 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           const chrome = proposalChromeBoxes.find((entry) => entry.proposalId === proposalId)
           if (chrome === undefined) return false
           const { x, y, w, h } = chrome.bbox
-          setViewport(fitViewportToBoxes([{ x, y, width: w, height: h }]))
+          // Inset, because `fitViewportToBoxes` PINS the union's top-left to
+          // the origin rather than centring it — which is right for
+          // `fitToContent`, where the union is the whole board, and wrong
+          // here. The card opens at the chrome's own screen position, so
+          // without this it lands half off the left edge with the change it
+          // is about outside the frame. Caught by looking at the figure, not
+          // by a test that passed.
+          setViewport(
+            fitViewportToBoxes([
+              {
+                x: x - PROPOSAL_REVEAL_INSET_PX,
+                y: y - PROPOSAL_REVEAL_INSET_PX,
+                width: w,
+                height: h,
+              },
+            ]),
+          )
           setOpenProposalId(proposalId)
           return true
         },

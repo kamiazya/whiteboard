@@ -86,6 +86,16 @@ it('opens a proposal where it sits, and answers whether it could', async () => {
   // board moved onto the chrome, AND the card drawn there is now open.
   await expect.element(page.getByTestId('proposal-card')).toBeInTheDocument()
   await vi.waitFor(() => expect(farNodeLeft(container)).not.toBe(framedOnLoad))
+
+  // And the card is WHOLLY on screen. The fit pins the box's top-left to the
+  // origin rather than centring it, so without an inset the card — which
+  // opens at that box's own screen position — hangs off the left edge with
+  // the change it is about outside the frame. Found by looking at the
+  // figure; the two assertions above passed over it.
+  const surface = (await page.getByTestId('spatial-editor').element()).getBoundingClientRect()
+  const card = (await page.getByTestId('proposal-card').element()).getBoundingClientRect()
+  expect(card.left).toBeGreaterThan(surface.left)
+  expect(card.top).toBeGreaterThan(surface.top)
 })
 
 // The guard, not a signal: a panel's list can outrun the scene by a frame,
