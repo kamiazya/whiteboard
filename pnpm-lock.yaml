@@ -377,6 +377,9 @@ importers:
       '@fast-check/vitest':
         specifier: ^0.4.1
         version: 0.4.1(vitest@5.0.0)
+      '@kamiazya/whiteboard-facet-engine':
+        specifier: workspace:*
+        version: link:../facet-engine
       '@stryker-mutator/core':
         specifier: ^9.6.1
         version: 9.6.1(@types/node@24.13.1)
