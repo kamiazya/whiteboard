@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readdir, rm, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 let tempDir: string
@@ -15,17 +15,15 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument, listDocuments, workspaceFrontiersForPath } = await import(
-  './document-store.js'
-)
+const { saveDocument, loadDocument, listDocuments } = await import('./document-store.js')
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { withBackupMarker } = await import('./backup-in-progress.js')
-const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
-const { makeSpatialDoc, makeSpatialDocWithImage, setSpatialDocImage, clearSpatialDocNodes } =
-  await import('../../shared/test-utils/spatial-doc.js')
+const { makeSpatialDoc, makeSpatialDocWithImage, setSpatialDocImage } = await import(
+  '../../shared/test-utils/spatial-doc.js'
+)
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 

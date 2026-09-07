@@ -6,7 +6,6 @@ import {
 } from '@kamiazya/whiteboard-history'
 import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../../log.js'
-import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import type { OperatorInfo, VersionEntry, VersionStore } from '../../store/version-store.js'
 
 /**

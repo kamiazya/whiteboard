@@ -1,6 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { deleteSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
   Client,
@@ -8,9 +7,7 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
-import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeSpatialDoc } from '../shared/test-utils/spatial-doc.js'
 import { withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')

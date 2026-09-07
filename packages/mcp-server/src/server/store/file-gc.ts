@@ -2,24 +2,15 @@ import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { purgeResultSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import {
-  collectImageRefIds,
-  projectWorkspaceDocument,
-  resolveWorkspaceDocument,
-} from '@kamiazya/whiteboard-loro-adapter'
-import { decodeFrontiers, type LoroDoc } from 'loro-crdt'
+import { collectImageRefIds } from '@kamiazya/whiteboard-loro-adapter'
+import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { backupIsInProgress } from './backup-in-progress.js'
-import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
-import {
-  catchUpWorkspaceDoc,
-  cloneStoredWorkspaceDoc,
-  listDocuments,
-  loadDocument,
-} from './document-store.js'
+import { isMissingFileError } from './corrupt-stored-data.js'
+import { catchUpWorkspaceDoc, listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { parseFileGcGraceMs } from './storage-env.js'
 import type { VersionStore } from './version-store.js'

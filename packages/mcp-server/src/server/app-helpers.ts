@@ -89,34 +89,3 @@ export function extractInitializeDebugPayload(parsedBody: unknown) {
     capabilities,
   }
 }
-
-export function decodeBranchTipOrThrow(
-  workspaceId: string,
-  path: string,
-  branchName: string,
-  tipFrontiersBase64: string,
-) {
-  try {
-    return decodeFrontiers(new Uint8Array(Buffer.from(tipFrontiersBase64, 'base64')))
-  } catch (error) {
-    throw corruptStoredData(
-      `${workspaceId}/branches/${path}.json#${branchName}.tipFrontiers`,
-      `tipFrontiers could not be decoded (${errorMessage(error)})`,
-    )
-  }
-}
-
-export function checkoutCloneOrThrow(
-  doc: LoroDoc,
-  target: ReturnType<typeof decodeFrontiers>,
-  location: string,
-  detail: string,
-): LoroDoc {
-  const clone = LoroDoc.fromSnapshot(doc.export({ mode: 'snapshot' }))
-  try {
-    clone.checkout(target)
-  } catch (error) {
-    throw corruptStoredData(location, `${detail} (${errorMessage(error)})`)
-  }
-  return clone
-}

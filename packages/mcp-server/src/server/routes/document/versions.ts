@@ -10,7 +10,6 @@ import {
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
-import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {

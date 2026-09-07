@@ -51,7 +51,7 @@ import {
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
