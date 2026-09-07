@@ -9,9 +9,7 @@ vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@kamiazya/whiteboard-daemon-client/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-daemon-client/api-client'
-import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {
@@ -222,12 +220,9 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     // keepers have variations — and whether to show the chip became the
     // BACKEND's answer, which is per document: a browser page has no
     // record-holding backend for a markdown body or before one loads.
-    render(
-      <BranchesBackendContext.Provider value={createBrowserBranchesBackend({ backend: null })}>
-        <WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />
-      </BranchesBackendContext.Provider>,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
+      container: document.body,
+    })
     expect(screen.queryByTestId('header-branch-chip')).toBeNull()
   })
 })

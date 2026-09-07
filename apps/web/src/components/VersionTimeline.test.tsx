@@ -154,35 +154,6 @@ function capturePreview() {
 }
 
 describe('VersionTimeline', () => {
-  it('does not render version rows while the branch HEAD is still loading', async () => {
-    const preview = capturePreview()
-    // useBranches defaults head to 'main' until /branches resolves. If the
-    // real HEAD is a feature branch, rendering rows filtered by that default
-    // briefly offers the WRONG branch's versions as restore targets.
-    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      // Branches never resolve within this test; versions resolve immediately.
-      if (url.includes('/branches')) return new Promise<Response>(() => {})
-      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-
-    // Give the versions fetch time to land.
-    await waitFor(() => {
-      expect(fetchMock.mock.calls.some(([input]) => String(input).includes('/versions'))).toBe(true)
-    })
-
-    // No rows filtered against the default head — show loading instead.
-    expect(screen.getByText('Loading…')).toBeTruthy()
-    expect(screen.queryByText(/5 els/)).toBeNull()
-    expect(screen.queryByText(/3 els/)).toBeNull()
-  })
-
   it('closes an open restore dialog when the canvas changes', async () => {
     const preview = capturePreview()
     // Switching documents with the dialog open must not leave the previous
@@ -305,97 +276,8 @@ describe('VersionTimeline', () => {
   // adjusted until it passes — the two are indistinguishable in a diff
   // otherwise. What it asserted (v-feat absent, two lanes) was true of a
   // timeline that showed one lane; the timeline now shows them all.
-  it('shows every lane, not only the one HEAD is on', async () => {
-    const preview = capturePreview()
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
-    // v-new and v-mid on `main`, v-feat on `feature`. Before this, asking for
-    // the feature branch's history meant switching onto it first.
-    await waitFor(() => {
-      expect(screen.getAllByText(/5 els|3 els/).length).toBeGreaterThanOrEqual(2)
-    })
-    expect(screen.getByText(/4 els/)).toBeTruthy()
-
-    await waitFor(() => {
-      expect(document.querySelectorAll('[data-testid="version-lane"]').length).toBe(3)
-    })
-
-    // Branch tabs are gone, so no tab role should exist.
-    expect(screen.queryAllByRole('tab').length).toBe(0)
-  })
-
-  it('draws the rows HEAD is not on as rings, which is mini-graph own rule', async () => {
-    const preview = capturePreview()
-    // `mini-graph.ts` has documented "rows on other branches use a ring dot"
-    // since it was written, and no call site could reach it: the timeline
-    // filtered to HEAD first, so every row it drew was active by
-    // construction. This is that rule becoming visible.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-
-    await waitFor(() => {
-      expect(document.querySelectorAll('[data-testid="version-lane"]').length).toBe(3)
-    })
-    const dots = [...document.querySelectorAll('[data-testid="version-lane"] circle')]
-    expect(dots.length).toBe(3)
-
-    const rings = dots.filter((c) => c.getAttribute('fill') === 'none')
-    const solid = dots.filter((c) => c.getAttribute('fill') !== 'none')
-    // Exactly the one `feature` row is a ring; the two `main` rows are solid.
-    expect(rings.length).toBe(1)
-    expect(solid.length).toBe(2)
-    expect(rings[0]?.getAttribute('stroke-width')).toBe('2')
-  })
-
-  it('names the variation a row is on, but only on the rows HEAD is not on', async () => {
-    const preview = capturePreview()
-    // A ring says "not the lane you are on". It does not say WHICH lane, and
-    // colour is not a name — with two variations open the reader has a row of
-    // history and no way to tell whose. The lane HEAD is on takes no label
-    // for the same reason the shell does not repeat the current workspace on
-    // every row: it is the frame, so saying it once is saying it.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/4 els/)).toBeTruthy()
-    })
-
-    // The `feature` row, and no other, carries the lane's name.
-    const labels = screen.getAllByTestId('version-lane-name')
-    expect(labels.length).toBe(1)
-    expect(labels[0]?.textContent).toBe('feature')
-
-    // And it is on the row it describes, not floating beside the list.
-    expect(labels[0]?.closest('[data-testid="version-row"]')?.textContent).toContain('4 els')
-  })
-
-  it('offers restore only on the lane HEAD is on', async () => {
-    const preview = capturePreview()
-    // Showing another variation history is not the same as offering to
-    // restore from it. What restoring one variation version into another
-    // MEANS is a question nobody has answered, so the row is context here,
-    // not a target — an affordance that acts on an undecided semantic is
-    // worse than no affordance.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-
-    await waitFor(() => {
-      expect(screen.getByText(/4 els/)).toBeTruthy()
-    })
-    const buttons = screen.getAllByRole('button')
-    const labels = buttons.map((b) => b.textContent ?? '')
-    expect(labels.filter((t) => /5 els|3 els/.test(t)).length).toBe(2)
-    expect(labels.some((t) => /4 els/.test(t))).toBe(false)
-  })
-
-  it('renders the branchOut label on the row matching baseVersionId', async () => {
-    const preview = capturePreview()
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-    // "variation -> feature" should appear on the v-mid row.
-    await waitFor(() => {
-      expect(screen.getByText(/variation → feature/)).toBeTruthy()
-    })
-  })
-
-  it('renders operator affordances and keeps the lane color on the branch color', async () => {
+  it('renders operator affordances', async () => {
     const preview = capturePreview()
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
@@ -404,22 +286,10 @@ describe('VersionTimeline', () => {
       expect(screen.getByText(/Alice/)).toBeTruthy()
     })
 
-    const circles = document.querySelectorAll('[data-testid="version-lane"] circle')
-    expect(circles).toHaveLength(3)
-    // Each lane keeps its own BranchMeta.color, on the stroke whichever shape
-    // the dot takes — that is what makes a ring readable as the same lane.
-    const mainDots = [...circles].filter((c) => c.getAttribute('stroke') === '#1971c2')
-    expect(mainDots).toHaveLength(2)
-    for (const dot of mainDots) {
-      expect(dot.getAttribute('fill')).toBe('#1971c2')
-      expect(dot.getAttribute('stroke-width')).toBe('0')
-    }
-    // The `feature` row carries that branch's colour and the ring shape. The
-    // previous version of this case asserted the dot is ALWAYS solid, which
-    // was true only because the rows were pre-filtered to HEAD.
-    const featureDot = [...circles].find((c) => c.getAttribute('stroke') === '#9333ea')
-    expect(featureDot?.getAttribute('fill')).toBe('none')
-    expect(featureDot?.getAttribute('stroke-width')).toBe('2')
+    // The lane dots this case also asserted on — one per row, coloured by
+    // `BranchMeta.color`, solid or ringed by whether HEAD was on it — are
+    // gone with the lane column (ADR-0029). Who wrote a version is History's
+    // own, and stays.
   })
 
   it('legacy row without operator renders system fallback', async () => {
@@ -777,78 +647,10 @@ describe('VersionTimeline', () => {
   })
 })
 
-describe('VersionTimeline HEAD polling', () => {
-  afterEach(() => {
-    vi.useRealTimers()
-    vi.unstubAllGlobals()
-    cleanup()
-  })
-
-  it('refetches branches on the same 15s poll as versions, picking up an external HEAD change', async () => {
-    const preview = capturePreview()
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    let head = 'main'
-    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) {
-        return Promise.resolve(
-          new Response(
-            JSON.stringify({
-              head,
-              branches: [
-                {
-                  name: 'main',
-                  tipFrontiers: '',
-                  color: '#1971c2',
-                  createdAt: '2026-04-23T00:00:00Z',
-                },
-                {
-                  name: 'feature',
-                  tipFrontiers: '',
-                  color: '#9333ea',
-                  createdAt: '2026-04-23T01:00:00Z',
-                },
-              ],
-            }),
-            { status: 200, headers: { 'Content-Type': 'application/json' } },
-          ),
-        )
-      }
-      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-    await waitFor(() => {
-      expect(screen.getByText(/5 els/)).toBeTruthy()
-    })
-
-    // An external HEAD change (e.g. another peer switching branches) is not
-    // pushed to this component; simulate the server having moved on.
-    head = 'feature'
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000)
-    })
-
-    // mkVersionsResponse's v-feat row (branchName: 'feature', 4 elements) is
-    // the one version on the new head; the two main-branch rows must drop
-    // out of the filtered view.
-    // What follows an external HEAD change is no longer WHICH rows exist —
-    // every lane is shown either way — but which of them is the active one.
-    // The `feature` row becomes solid and the two `main` rows become rings.
-    await waitFor(() => {
-      const dots = [...document.querySelectorAll('[data-testid="version-lane"] circle')]
-      const solid = dots.filter((c) => c.getAttribute('fill') !== 'none')
-      expect(solid).toHaveLength(1)
-      expect(solid[0]?.getAttribute('stroke')).toBe('#9333ea')
-    })
-    expect(screen.getByText(/4 els/)).toBeTruthy()
-    expect(screen.getByText(/5 els/)).toBeTruthy()
-  })
-})
+// `VersionTimeline HEAD polling` stood here: the list refetched branches on
+// the same 15s tick so an externally-moved HEAD reached its filter. There is
+// no HEAD to move any more (ADR-0029) — the poll now only looks for new
+// versions, which the refreshSignal cases above cover.
 
 describe('formatRelative display branches (via rendered version rows)', () => {
   afterEach(() => {
@@ -1328,7 +1130,7 @@ describe('VersionTimeline draws where a restored state came from', () => {
       { status: 200, headers: { 'Content-Type': 'application/json' } },
     )
 
-  it('arcs from the merge down to the point it restored, and names it', async () => {
+  it('names the point a restore came from', async () => {
     vi.unstubAllGlobals()
     vi.stubGlobal(
       'fetch',
@@ -1341,7 +1143,7 @@ describe('VersionTimeline draws where a restored state came from', () => {
       }),
     )
 
-    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await screen.findByText('first draft')
 
     // Named by what the row it points at is CALLED, so the label and the
@@ -1350,21 +1152,10 @@ describe('VersionTimeline draws where a restored state came from', () => {
     expect(label.textContent).toBe('restored from first draft')
     expect(label.closest('[data-testid="version-row"]')?.textContent).toContain('5 els')
 
-    // All three pieces of the arc, or it is two hooks with a gap: the merge
-    // row's top hook, the middle row's straight run, the source's bottom
-    // hook. Dashed is what separates it from the trunk it runs beside.
-    const dashed = [
-      ...container.querySelectorAll('[data-testid="version-lane"] [stroke-dasharray]'),
-    ]
-    expect(dashed).toHaveLength(3)
-    const rows = [...container.querySelectorAll('[data-testid="version-row"]')]
-    expect(rows).toHaveLength(3)
-    for (const [i, row] of rows.entries()) {
-      expect(
-        row.querySelectorAll('[stroke-dasharray]').length,
-        `row ${i} should paint exactly its own piece of the arc`,
-      ).toBe(1)
-    }
+    // The ARC that used to run beside this label is gone with the lane
+    // column (ADR-0029). What it drew — that these two points met because
+    // somebody went back — is what the label says in words, which is why the
+    // label is what survived.
   })
 
   it('draws no arc for a history nobody restored in', async () => {
