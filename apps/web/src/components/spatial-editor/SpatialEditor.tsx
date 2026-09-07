@@ -694,8 +694,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           const scoped = nodeIds === undefined ? boxes : boxes.filter((b) => nodeIds.includes(b.id))
           setViewport(fitViewportToBoxes(scoped.map((b) => b.box)))
         },
+        openProposal(proposalId) {
+          // The CHROME box, not the changed nodes: a proposal that adds a
+          // node anchors on ids the canvas does not hold yet, and fitting to
+          // those lands on nothing. The chrome is what a person is looking
+          // for, and it is on screen by definition.
+          const chrome = proposalChromeBoxes.find((entry) => entry.proposalId === proposalId)
+          if (chrome === undefined) return false
+          const { x, y, w, h } = chrome.bbox
+          setViewport(fitViewportToBoxes([{ x, y, width: w, height: h }]))
+          setOpenProposalId(proposalId)
+          return true
+        },
       }),
-      [boxes],
+      [boxes, proposalChromeBoxes],
     )
 
     const isMultiSelection = selectionMembers.length > 1
