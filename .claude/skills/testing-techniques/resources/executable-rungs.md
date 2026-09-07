@@ -110,15 +110,29 @@ Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
 | project | records | over | verdict |
 |---|---|---|---|
 | `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
-| `web-jsdom` | **82**, across 63 tests | 377 files, 3947 tests | a ledger of ~63 claims, not yet written |
+| `web-jsdom` | **43**, across 35 tests | 377 files, 3947 tests | a ledger of ~35 claims, not yet written |
 
-`web-jsdom` started at 219. **138 were React's act-environment complaint** and
-are now gone entirely (below); the remaining **82**, spread over 63 tests, are
-mostly tests driving a failure path deliberately (`canvas exploded`,
-`network down`, a refused tool registration). Logging is the right behaviour
-there, so guarding the project on `console.error` at large still means claiming
-each one — real work, worth doing on its own merits. The act family is guarded
-already, because that part became free.
+`web-jsdom` started at 219, and two thirds of that was never a judgement call:
+
+| | records | tests | what it was |
+|---|---|---|---|
+| measured | 219 | 70 | |
+| after the act fixes | 82 | 63 | React's act-environment complaint, 138 of them (below) |
+| after mocking the fold | **43** | **35** | jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws; the production path catches it and continues, and the guarded warn on the way was 36 records over 29 tests in six files |
+
+Neither reduction weakened a test. The fold one is behaviour-identical — those
+tests already ran under the guarded continue, and the mock returns the same
+outcome the throw produced — so it removes noise rather than coverage.
+
+What is left is a ledger of ~35 claims: tests driving a failure path
+deliberately (`canvas exploded`, `network down`, a refused tool registration),
+where logging is the right behaviour and each needs an entry saying so. Real
+work, worth doing on its own merits rather than as a side effect. The act
+family is guarded already, because that part became free.
+
+The order generalises: **before writing a ledger, subtract the entries that are
+the environment rather than a decision.** Two thirds of this one dissolved, and
+the remainder is small enough to write honestly.
 
 ### Take this measurement with a RECORDER, never a throwing guard
 
