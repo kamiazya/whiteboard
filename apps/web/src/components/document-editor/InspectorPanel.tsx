@@ -109,7 +109,14 @@ export function InspectorPanel({
         // the bottom edge it is anchored to, and the column slides in from
         // the edge it borders. Both fade, so the first frame is not a slab
         // of background over the editor.
-        'duration-(--motion-duration-normal) ease-(--motion-ease-out)',
+        // `--motion-ease-enter` / `-exit`, NOT `--motion-ease-out`: what
+        // changes here is mostly opacity, and that token is shaped for a
+        // move. Measured on this panel before the swap — opacity 0.61 at
+        // 30ms and 0.85 at 60ms of a 220ms animation, so it read as a flash
+        // rather than a rise. The same measurement was taken on the comment
+        // pin's ramp earlier and reached the same pair.
+        'duration-(--motion-duration-normal)',
+        'data-[state=open]:ease-(--motion-ease-enter) data-[state=closed]:ease-(--motion-ease-exit)',
         'data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:slide-in-from-bottom-4',
         'md:data-[state=open]:slide-in-from-bottom-0 md:data-[state=open]:slide-in-from-right-4',
         // And back out the way it came in.
@@ -118,6 +125,8 @@ export function InspectorPanel({
         // Stage: 45% -> 100% and back. Safe to transition because BOTH
         // ends are definite — an `auto` end would not animate at all, which
         // is the usual reason a height transition is said not to work.
+        // The stage change IS a move (the sheet's edge travels), so it
+        // keeps the move curve.
         'transition-[height] duration-(--motion-duration-normal) ease-(--motion-ease-out) md:transition-none',
       )}
     >

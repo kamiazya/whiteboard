@@ -40,6 +40,23 @@
   --motion-duration-fast: 150ms;
   --motion-duration-normal: 220ms;
   --motion-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /*
+   * The pair for anything whose perceived change is OPACITY, which
+   * `--motion-ease-out` above is the wrong curve for. That token is shaped
+   * for a MOVE — arrive fast, settle — and applied to a fade it spends the
+   * declared duration on a change nobody can see: measured on the comment
+   * pin, 65% faded 40ms into a 220ms ramp; measured again on the inspector
+   * panel, opacity 0.61 at 30ms and 0.85 at 60ms, so three quarters of the
+   * duration went on the last 15%. Opacity's perceived moment is the
+   * MIDDLE, so arriving decelerates and leaving accelerates.
+   *
+   * `lib/keyed-svg-patcher.ts` states the same two curves as JS literals,
+   * because it drives `element.animate()` rather than CSS. That is a
+   * deliberate duplication, noted at both ends: reading a custom property
+   * back per animation would put a layout read on the patch path.
+   */
+  --motion-ease-enter: cubic-bezier(0, 0, 0.2, 1);
+  --motion-ease-exit: cubic-bezier(0.4, 0, 1, 1);
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
   --card: oklch(1 0 0);
