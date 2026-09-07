@@ -48,10 +48,11 @@ export function nodeFacetCoverage(registry: FacetRegistry): readonly NodeFacetCo
  * A node's `x-whiteboard` facets bucket: each registered node facet
  * independently absent or carrying one of its payloads.
  *
- * Absence is drawn as often as any single payload because it is the case
- * every existing consumer already handles — the property needs the mixed
- * canvas (some nodes shaped, some not), not a canvas where every node
- * wears everything.
+ * Absence is a first-class draw, not a rare one: it is the case every
+ * existing consumer already handles, and what the property needs is the
+ * MIXED canvas — some nodes shaped, some not — rather than one where every
+ * node wears everything. Facets are drawn independently for the same
+ * reason, so a canvas reaches combinations no single fixture would.
  */
 export function nodeFacetsArb(
   registry: FacetRegistry,
