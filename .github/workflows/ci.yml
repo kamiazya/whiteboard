@@ -235,9 +235,17 @@ jobs:
         #
         # `pipefail` is the half that makes this loud rather than correct:
         # without it any future failure of that git command is a pass again.
+        #
+        # The existence filter is an `if`, not `[ -f ] && echo`. A while loop
+        # exits with the status of its LAST iteration, so under `-e` the
+        # short-circuited `&&` on a file the diff DELETED killed the whole
+        # step — before anything ran. Order-dependent, which is why it hid:
+        # measured, the same list passes when a surviving file happens to
+        # come last and exits 1 when a deleted one does. Found on a PR that
+        # retired sixteen test files.
         run: |
           set -o pipefail
-          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
+          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
