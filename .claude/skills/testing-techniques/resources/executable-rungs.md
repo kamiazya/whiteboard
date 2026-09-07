@@ -104,25 +104,74 @@ keeps going and breaks somewhere unrelated. The measured case — a
 of the view, surfacing ten seconds later as `expected 'untitled' to be 'Weekly
 review'`, an assertion about a document NAME in a different panel.
 
-Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement.
-Take it by installing the strict guard temporarily and reading what turns red —
-the failures are the data, and they arrive with test names attached:
+Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
 
-| project | records in one full run | verdict |
+| project | records | over | verdict |
+|---|---|---|---|
+| `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
+| `web-jsdom` | **219**, across 70 tests | 376 files, 3944 tests | a ledger of ~65 claims, not yet written |
+
+`web-jsdom`'s 219 split two ways: **138** are React's act-environment complaint
+(below), and the other **81**, spread over 65 tests, are mostly tests driving a
+failure path deliberately (`canvas exploded`, `network down`, a refused tool
+registration). Logging is the right behaviour there, so guarding the project
+means claiming each one — real work, worth doing on its own merits.
+
+### Take this measurement with a RECORDER, never a throwing guard
+
+The obvious way to size it — install the strict guard and read what turns red —
+is wrong here, and wrong in both directions at once. Throwing in `afterEach`
+breaks the shared teardown: React trees stay mounted, and every later test in
+the file cascades. Measured, same suite, same commit:
+
+|  | throwing guard | file recorder |
 |---|---|---|
-| `web-browser` | **1**, the one a test provokes on purpose (235 files, 1237 tests) | free — strict, no allowlist |
-| `web-jsdom` | **~100 across 73 tests** (376 files) | a ledger of claims, not yet taken |
+| records | ~100 | **219** |
+| tests reporting | 73 | **70** |
+| un-acted React updates | 878 | **0** |
 
-`web-jsdom`'s are mostly tests driving a failure path deliberately (`canvas
-exploded`, `network down`, a refused tool registration), which is a legitimate
-reason to log. Guarding it means claiming each, which is real work and has to
-be worth it on its own.
+It under-reported the records (each test aborts at its FIRST one) while
+inventing 878 un-acted updates that do not exist — the cascade from its own
+broken teardown. A throwing guard is the right SHIPPING shape and the wrong
+measuring instrument.
 
-Two things the measurement found on the way, both invisible while nothing read
-these lines:
+Two traps beside it, both of which produced a confident wrong number here:
 
-- **56 `The current testing environment is not configured to support act(...)`.**
-  React state updates outside `act`, in a suite that reports green.
+- **Vitest's terminal output carries no test console records in these runs.**
+  Grepping the run's stdout for a warning returns 0 whether or not it happened.
+  Every count above comes from a recorder appending to a file, with
+  `expect.getState().currentTestName` for attribution.
+- **A `console.error` format string is recorded raw.** The message is
+  `An update to %s inside a test was not wrapped in act(...)`; grepping for the
+  formatted component name finds nothing.
+
+### The act flag, measured and rejected
+
+`IS_REACT_ACT_ENVIRONMENT` is set nowhere, so React logs
+`The current testing environment is not configured to support act(...)` — a
+complaint about configuration that says nothing about any test. Setting it in
+the jsdom setup looks like the obvious fix. Measured over the full project:
+
+| | config warning | un-acted updates | total records |
+|---|---|---|---|
+| flag off (shipped) | 138, in 8 tests | 0 reported | 219 |
+| flag on | 103 | **502** | 689 |
+
+So it does two unhelpful things at once. It fails to clear the noise it targets
+— 99 of the 138 are one file, `BrowserDocumentPage.test.tsx`, which keeps
+warning with the flag set — and it turns on 502 genuine un-acted-update reports
+that nothing reads, tripling the channel this whole rung exists to keep clean.
+The 502 are a real finding and a real backlog; the flag is not the increment
+that pays for them.
+
+### What the measurement found
+
+Neither of these was found by reading code. Both fell out of asking a suite to
+stop swallowing:
+
+- **502 un-acted React updates**, invisible until the flag is set, over 26
+  distinct components — about a quarter of them Radix internals (Tooltip,
+  Presence, Popper) rather than this repo's own hygiene.
 - **`[document-sync] backfilling thread marks failed Index out of bound. The
   given pos is 20, but the length is 19`, in three PASSING tests.**
   `document-sync-session.ts` computes passage offsets against
@@ -135,9 +184,6 @@ these lines:
   and never bounds `end` against the text, so the throw comes from inside Loro
   naming neither the thread nor the document. Consequence: conversations on
   those documents never get their passage marks.
-
-Neither was found by reading code. Both fell out of asking a suite to stop
-swallowing.
 
 ## Adding a source-scan test
 

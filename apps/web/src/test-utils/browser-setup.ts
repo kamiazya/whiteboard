@@ -72,11 +72,13 @@ configure({ asyncUtilTimeout: 5_000 })
  * platform's.
  *
  * `web-jsdom` is deliberately NOT held to this yet, and the reason is a
- * measurement rather than caution: the same guard there reports ~100 records
- * across 73 tests, most of them tests driving a failure path on purpose
+ * measurement rather than caution: 219 records across 70 of its 3944 tests.
+ * 138 of those are React's act-environment complaint, and the other 81 are
+ * spread over 65 tests, most driving a failure path on purpose
  * (`canvas exploded`, `network down`, a refused registration). That is a ledger
- * of claims, not a free guard — see `testing-techniques/resources/
- * executable-rungs.md` for the two real defects the measurement turned up.
+ * of ~65 claims, not a free guard — see `testing-techniques/resources/
+ * executable-rungs.md` for the numbers, the two real defects the measurement
+ * turned up, and why a throwing guard cannot take this measurement at all.
  *
  * A test that means to provoke one calls `expectLoggedFailures()` and reads
  * what was caught.
