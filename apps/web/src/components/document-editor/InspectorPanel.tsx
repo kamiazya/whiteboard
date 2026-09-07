@@ -33,7 +33,7 @@
 
 import { ChevronUp, X } from 'lucide-react'
 import type { ReactNode, Ref } from 'react'
-import { useState } from 'react'
+import { useLayoutEffect, useRef, useState } from 'react'
 import { useInspectorPresence } from '../../contexts/inspector-presence.js'
 import { INSPECTOR_CHROME, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
@@ -53,11 +53,38 @@ export function InspectorPanel({
 }) {
   const [expanded, setExpanded] = useState(false)
   const presence = useInspectorPresence()
+  const root = useRef<HTMLDivElement | null>(null)
+
+  // Let go AT ONCE when nothing is actually animating.
+  //
+  // The exit is driven by `animationend`, which is the right signal when an
+  // animation runs — but it never fires where none does: jsdom runs no CSS
+  // animations at all, and a build that dropped the animation utilities
+  // would behave the same. Without this the pane sits on screen, covering
+  // the editor, until the shell's ceiling fires a second later. Asked after
+  // a frame, because the class that starts the animation lands with this
+  // render and the animation is not registered until the next one.
+  useLayoutEffect(() => {
+    if (presence.state !== 'closed') return
+    const element = root.current
+    if (element === null || typeof element.getAnimations !== 'function') {
+      presence.onLeft()
+      return
+    }
+    const frame = requestAnimationFrame(() => {
+      if (element.getAnimations().length === 0) presence.onLeft()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [presence])
   const { label, testId } = INSPECTOR_CHROME[kind]
   const lower = label.toLowerCase()
   return (
     <div
-      ref={panelRef}
+      ref={(node) => {
+        root.current = node
+        if (typeof panelRef === 'function') panelRef(node)
+        else if (panelRef !== null && panelRef !== undefined) panelRef.current = node
+      }}
       data-testid={testId}
       data-stage={expanded ? 'full' : 'peek'}
       data-state={presence.state}
