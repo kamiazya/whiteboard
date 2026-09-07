@@ -562,10 +562,26 @@ export function CommentsPanel({
                     onClick={() => toggle(thread)}
                     className={cn(
                       'min-w-0 flex-1 rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
+                      // Open, the row is one meta line; centring it in the
+                      // dot's own 44px keeps the collapse target a target.
+                      expanded && 'flex min-h-11 flex-col justify-center',
                       TOGGLE_STATE_CLASS,
                     )}
                   >
-                    <span className="comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200">
+                    {/* A summary is what a CLOSED conversation shows. Open,
+                        the messages are right below it, so drawing this too
+                        put the same sentence on screen twice — and at two
+                        sizes, 12px row chrome against 14px prose. `sr-only`
+                        rather than unrendered: it is still the name of the
+                        control that collapses this conversation, and a row
+                        named "whole document 3 messages 0s ago" is not one
+                        anybody could act on. */}
+                    <span
+                      className={cn(
+                        'comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200',
+                        expanded && 'sr-only',
+                      )}
+                    >
                       {excerptOf(thread)}
                     </span>
                     <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">

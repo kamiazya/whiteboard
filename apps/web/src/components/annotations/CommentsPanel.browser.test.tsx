@@ -611,3 +611,31 @@ it('draws a reply at the size the box that wrote it uses', async () => {
   if (field === null || prose === null) throw new Error('no field or no prose')
   expect(getComputedStyle(field).fontSize).toBe(getComputedStyle(prose).fontSize)
 })
+
+/**
+ * A summary is what a CLOSED conversation shows. Once it is open the
+ * messages themselves are right there, so drawing the summary above them
+ * puts the same sentence on screen twice — and at two sizes, since a row
+ * summary is 12px chrome and prose is 14px. The row keeps its identity for
+ * a screen reader (it is still the control that collapses this thread) and
+ * keeps saying how much is in here; what it stops doing is repeating the
+ * first message.
+ */
+it('stops summarising a conversation that is open, since the messages are right there', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  const summary = document.querySelector('.comment-row-subject')
+  if (summary === null) throw new Error('no summary')
+  expect(summary.getBoundingClientRect().width).toBeGreaterThan(20)
+
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  // Not drawn — but still the row's accessible name, so the control that
+  // collapses this conversation is still named by the conversation.
+  expect(summary.getBoundingClientRect().width).toBeLessThan(2)
+  const row = page.getByRole('button', { expanded: true })
+  expect((await row.element()).textContent).toContain('tighten the copy here')
+
+  // And it comes back: the summary is the CLOSED state's job.
+  await userEvent.click(row)
+  expect(summary.getBoundingClientRect().width).toBeGreaterThan(20)
+})
