@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import type { Proposal } from '@kamiazya/whiteboard-model'
+import { describe, expect, it } from 'vitest'
 import { isOpenProposal, openChangeCount, openProposals } from './open-proposals.js'
 
 function proposal(id: string, ...statuses: Array<'open' | 'adopted' | 'dismissed'>): Proposal {

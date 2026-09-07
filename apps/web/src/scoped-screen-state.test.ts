@@ -375,6 +375,14 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
   versionRefreshSignal:
     'no subject: a counter that nudges the History column to refetch; the list it refreshes is the column’s own, and the column remounts per document',
+  // The same answer `spatialEditorRef` gives on the daemon page, and for the
+  // same reason — this is the page-level half of that handle. Clearing it in
+  // the SCOPE RESET effect would be WRONG rather than merely redundant:
+  // effects run after refs are attached, so by the time that effect fires the
+  // arrived editor has already bound itself, and nulling it there would
+  // discard the live handle instead of a stale one.
+  spatialHandle:
+    'no subject: the mounted editor’s imperative handle, and the editor is keyed per document — React swaps the handle on a switch without anything here clearing it',
 }
 
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
