@@ -46,8 +46,13 @@ export function ReplyComposer({ onReply, compact = false, autoFocus = false }: R
   }
 
   return (
+    // ONE line, bottom-aligned. Stacked, the Send sat under the field with
+    // a band of nothing beside it, and read as a control belonging to the
+    // panel rather than to the box above it. Bottom rather than centre
+    // because the field GROWS: while a reply runs to three lines the Send
+    // stays beside the line being written.
     <form
-      className="flex flex-col gap-1"
+      className="flex items-end gap-1"
       onSubmit={(event) => {
         event.preventDefault()
         commit()
@@ -61,18 +66,23 @@ export function ReplyComposer({ onReply, compact = false, autoFocus = false }: R
         placeholderText="Reply…"
         autoFocus={autoFocus}
         compact={compact}
+        className="min-w-0 flex-1"
       />
       {/* Icon-only, like every other verb on a conversation — and inert
           while there is nothing to send. The submit stays GUARDED rather
           than disabled so the Meta+Enter path takes the same rule, but with
           no label to read, a press that does nothing has to say why before
-          it is pressed. */}
+          it is pressed.
+
+          `-my-2` keeps the 44px tap target while letting the row be as
+          tall as the FIELD: a 44px button sets the height of a row holding
+          a 26px box otherwise, and the reply box floats in it. */}
       <button
         type="submit"
         aria-label="Send reply"
         title="Send reply"
         aria-disabled={draft.trim() === ''}
-        className={cn(ICON_VERB_CLASS, 'self-end aria-disabled:opacity-40')}
+        className={cn(ICON_VERB_CLASS, '-my-2 aria-disabled:opacity-40')}
       >
         <SendHorizontal aria-hidden="true" className="size-4" />
       </button>

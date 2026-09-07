@@ -76,9 +76,15 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
       measure: resolvedMeasure,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
       maxWidth: width ?? UNMEASURED_WIDTH_PX,
+      // What `compact` has always claimed and, until this, did not do: it
+      // set a `text-xs` class the SVG never reads, so a rail whose chrome
+      // runs at 11-12px drew its prose at the bubble's 16px — the largest
+      // text on the surface, and a third bigger than the row summarising
+      // the same sentence above it.
+      density: compact === true ? 'compact' : 'comfortable',
     })
     return renderSceneToKeyedSvg(scene, { padding: BODY_PADDING_PX })
-  }, [body, resolvedMeasure, width])
+  }, [body, compact, resolvedMeasure, width])
 
   const mount = useKeyedSvg(keyed)
   // One stable callback: an inline arrow here changes identity every render,
@@ -96,7 +102,7 @@ export function CommentBody({ body, compact, className, measure }: CommentBodyPr
     <div
       ref={attach}
       data-comment-body=""
-      className={cn(compact === true && 'text-xs', className)}
+      className={cn(className)}
       // `currentColor`, not a palette value: canvas-render assigns markdown
       // body runs no fill of their own precisely so they inherit one, and
       // each `<text>` would otherwise take the SVG default — black — on

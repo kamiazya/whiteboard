@@ -184,7 +184,13 @@ export function CommentThreadCard({
         </div>
       </div>
 
-      <ThreadReplies thread={thread} />
+      {/* The card's own answer to where replies sit: indented inside the
+          bubble, under the opening message above them. The rail answers it
+          differently (one column for the whole conversation), which is why
+          the line is here and not in `ThreadReplies`. */}
+      <div className="border-l pl-2 empty:hidden">
+        <ThreadReplies thread={thread} />
+      </div>
       <ReplyComposer onReply={onReply} />
     </div>
   )

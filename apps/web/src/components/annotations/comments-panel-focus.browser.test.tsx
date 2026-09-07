@@ -58,7 +58,10 @@ it('follows the host to another conversation rather than staying on the first', 
   await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
 
   rerender(<CommentsPanel threads={[OPEN, RESOLVED]} revealThreadId="t-resolved" />)
-  await expect.element(page.getByText('settled last week')).toBeInTheDocument()
+  // Waited on by the ROW, not by the text: an opened conversation draws its
+  // opening message as the first entry of its column, so the same words are
+  // on screen twice and a text query matches both.
+  await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
   expect(document.activeElement?.textContent).toContain('settled last week')
 })
 

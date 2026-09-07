@@ -108,8 +108,15 @@ it('opens a thread onto its whole conversation, not just the line the list shows
   await userEvent.click(page.getByText('tighten the copy here'))
 
   await expect.element(page.getByText('agreed')).toBeInTheDocument()
-  // Both messages, in the order the thread holds them.
-  await expect.element(page.getByText('tighten the copy here')).toBeInTheDocument()
+  // Both messages, in the order the thread holds them — read out of the
+  // opened column rather than off the page, because the row above it
+  // carries a summary of the opening message and a bare text query matches
+  // that one too.
+  const conversation = [...document.querySelectorAll('#thread-t-open [data-comment-body]')].map(
+    (node) => node.textContent,
+  )
+  expect(conversation[0]).toContain('tighten the copy here')
+  expect(conversation[1]).toContain('agreed')
 })
 
 it('names the author of a message that has one, and says nothing for a message that does not', async () => {
@@ -472,4 +479,194 @@ it('answers a conversation in a markdown editor, with the editing verbs the note
   await userEvent.keyboard('{Control>}b{/Control}')
 
   await vi.waitFor(() => expect(box.element().textContent).toBe('**later**'))
+})
+
+/**
+ * The shape of an opened conversation. Four claims that were all wrong at
+ * once on a phone, and each of them is about POSITION rather than content —
+ * so they are measured, not read off the DOM.
+ *
+ * What it looked like: the row's summary started at 54px (a 44px status dot,
+ * a 2px gap, 8px of padding) while the replies under it started at 17px,
+ * outdented by 37px from the message they answer. Between the two sat the
+ * Edit pencil, alone on a 44px row of its own. The reply box and its Send
+ * were stacked, leaving a band of nothing to the right of the field.
+ */
+function rectOf(selector: string): DOMRect {
+  const node = document.querySelector(selector)
+  if (node === null) throw new Error(`no element for ${selector}`)
+  return node.getBoundingClientRect()
+}
+
+/** How much of a vertical band two elements share — 0 when stacked. */
+function sharedRows(a: DOMRect, b: DOMRect): number {
+  return Math.min(a.bottom, b.bottom) - Math.max(a.top, b.top)
+}
+
+it('draws the opening message as the first entry of the opened conversation, every time', async () => {
+  // Not only when the row's summary dropped something. A column whose first
+  // entry is the opening message on one thread and a REPLY on the next is a
+  // column a reader has to re-read to place; `tighten the copy here` is
+  // plain, so under the old rule it was drawn nowhere but the row.
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const bodies = document.querySelectorAll('#thread-t-open [data-comment-body]')
+  expect(bodies).toHaveLength(2)
+})
+
+it('stands the opened conversation on the same left edge as the row that holds it', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const subject = rectOf('#thread-t-open')
+  // The row's own TEXT edge, read off the toggle's content box rather than
+  // off the summary span: what the axis has to line up with is where the row
+  // writes, which is a fact about the button whatever it currently draws.
+  const row = document.querySelector('li[data-thread-id="t-open"] button[aria-expanded]')
+  if (row === null) throw new Error('no row')
+  const textEdge =
+    row.getBoundingClientRect().left + Number.parseFloat(getComputedStyle(row).paddingLeft)
+  // One axis: what the row says and what the conversation says line up, so
+  // the indent alone tells a reader the messages belong to that dot.
+  expect(rectOf('#thread-t-open [data-comment-body]').left).toBeCloseTo(textEdge, 0)
+  // And the column hangs INSIDE the row's own text column rather than
+  // beside the status dot.
+  expect(subject.left).toBeGreaterThan(40)
+})
+
+it('carries the grouping in the spacing: further between messages than inside one', async () => {
+  // The rhythm claim, stated as the invariant rather than as a number. It
+  // was 8px between messages and 2px between a message's stamp and its
+  // body — a 4:1 ratio, which reads as one undifferentiated column.
+  render(<CommentsPanel threads={[OPEN]} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const list = document.querySelectorAll('#thread-t-open [data-comment-body]')
+  const stamps = document.querySelectorAll('#thread-t-open time')
+  expect(list.length).toBeGreaterThanOrEqual(2)
+  expect(stamps.length).toBeGreaterThanOrEqual(2)
+
+  const insideOne = list[0]!.getBoundingClientRect().top - stamps[0]!.getBoundingClientRect().bottom
+  const betweenTwo =
+    stamps[1]!.getBoundingClientRect().top - list[0]!.getBoundingClientRect().bottom
+  expect(betweenTwo).toBeGreaterThan(insideOne)
+})
+
+it('keeps Edit on the opening message stamp line, not on a row of its own', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const edit = (
+    await page.getByRole('button', { name: 'Edit comment' }).element()
+  ).getBoundingClientRect()
+  const stamp = rectOf('#thread-t-open time')
+  // Beside the stamp it acts on, sharing its line — a 44px tap target sunk
+  // into an 11px row rather than pushing the conversation down by 44px.
+  expect(edit.left).toBeGreaterThan(stamp.right)
+  expect(sharedRows(edit, stamp)).toBeGreaterThan(8)
+  // And NEXT to it. Pushed to the trailing edge of a full-width message the
+  // pencil stood 239px from the stamp with nothing in between, and what it
+  // acts on was anybody's guess — proximity is the only thing saying so.
+  expect(edit.left - stamp.right).toBeLessThan(24)
+})
+
+it('puts the reply field and its Send on one line', async () => {
+  render(<CommentsPanel threads={[OPEN]} onReply={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const field = (
+    await page.getByRole('textbox', { name: /reply/i }).element()
+  ).getBoundingClientRect()
+  const send = (
+    await page.getByRole('button', { name: 'Send reply' }).element()
+  ).getBoundingClientRect()
+  expect(send.left).toBeGreaterThanOrEqual(field.right - 1)
+  expect(sharedRows(field, send)).toBeGreaterThan(8)
+})
+
+it('says one time on a closed row, not the opening stamp and the last activity both', async () => {
+  // The row answers "how much is in here, and has it moved lately". The
+  // opening stamp is the first entry of the column one tap away, and two
+  // stamps on an 11px line at 390px is what made the row wrap.
+  render(<CommentsPanel threads={[OPEN]} />)
+  await expect.element(page.getByTestId('thread-message-count-t-open')).toBeInTheDocument()
+
+  expect(document.querySelectorAll('li[data-thread-id="t-open"] time')).toHaveLength(1)
+})
+
+/**
+ * One reading size on the surface. The rail's chrome is 11-12px and its
+ * message bodies were laid out at the bubble's 16px, so the largest text in
+ * the panel was the prose — a third bigger than the row summarising the very
+ * same sentence directly above it. The box you type a reply INTO was 12px
+ * while the reply it posts drew at 16px.
+ */
+it('draws a reply at the size the box that wrote it uses', async () => {
+  render(<CommentsPanel threads={[OPEN]} onReply={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const field = document.querySelector('#thread-t-open .cm-content')
+  const prose = document.querySelector('#thread-t-open [data-comment-body] text')
+  if (field === null || prose === null) throw new Error('no field or no prose')
+  expect(getComputedStyle(field).fontSize).toBe(getComputedStyle(prose).fontSize)
+})
+
+/**
+ * A summary is what a CLOSED conversation shows. Once it is open the
+ * messages themselves are right there, so drawing the summary above them
+ * puts the same sentence on screen twice — and at two sizes, since a row
+ * summary is 12px chrome and prose is 14px. The row keeps its identity for
+ * a screen reader (it is still the control that collapses this thread) and
+ * keeps saying how much is in here; what it stops doing is repeating the
+ * first message.
+ */
+it('stops summarising a conversation that is open, since the messages are right there', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  const summary = document.querySelector('.comment-row-subject')
+  if (summary === null) throw new Error('no summary')
+  expect(summary.getBoundingClientRect().width).toBeGreaterThan(20)
+
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  // Not drawn — but still the row's accessible name, so the control that
+  // collapses this conversation is still named by the conversation.
+  expect(summary.getBoundingClientRect().width).toBeLessThan(2)
+  const row = page.getByRole('button', { expanded: true })
+  expect((await row.element()).textContent).toContain('tighten the copy here')
+
+  // And it comes back: the summary is the CLOSED state's job.
+  await userEvent.click(row)
+  expect(summary.getBoundingClientRect().width).toBeGreaterThan(20)
+})
+
+/**
+ * The messages carry the weight, not the row above them.
+ *
+ * `TOGGLE_STATE_CLASS` fills a control that is ON, which is right for a
+ * toggle whose effect is somewhere else — the header button that opens this
+ * rail has no other way to say so. A DISCLOSURE says it by disclosing: the
+ * conversation appears directly under the row, indented and ruled. Filling
+ * the row as well made a solid slab out of the one line on screen that is
+ * pure chrome, above the prose that is the point.
+ */
+it('leaves an open row unfilled, since the conversation under it is the state', async () => {
+  render(<CommentsPanel threads={[OPEN]} />)
+  // Opened WITHOUT moving the pointer: `userEvent.click` drives the real
+  // mouse and leaves it parked on the row, so `hover:bg-accent` answers the
+  // question this test is asking and the reading says nothing about the
+  // open state at all. A bubbled click runs the same handler with the
+  // pointer nowhere near.
+  const row = document.querySelector('li[data-thread-id="t-open"] button[aria-expanded]')
+  if (!(row instanceof HTMLElement)) throw new Error('no row')
+  row.click()
+
+  await vi.waitFor(() => expect(row.getAttribute('aria-expanded')).toBe('true'))
+  // The pointer is a REAL one and it stays where the last test in this file
+  // left it — which, since every test here renders the same panel at the
+  // same place, is often this very row. Park it somewhere harmless first or
+  // `hover:bg-accent` answers instead, and the test passes alone while
+  // failing in its own file.
+  await page.getByRole('button', { name: 'All' }).hover()
+  expect(getComputedStyle(row).backgroundColor).toBe('rgba(0, 0, 0, 0)')
 })
