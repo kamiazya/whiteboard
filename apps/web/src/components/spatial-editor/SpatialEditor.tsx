@@ -678,6 +678,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         fileSeamOptions,
         scene,
         anchors,
+        sceneCurrent,
         keyed: surfaceKeyed,
         commentInFlight: draggedCommentId !== undefined,
         showResolved: showResolvedComments,
