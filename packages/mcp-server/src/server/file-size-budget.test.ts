@@ -269,7 +269,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +1: it also tells `useDragLayers` whether the committed scene is CURRENT,
   // which is what lets those layers hold their last frame until a drop's own
   // layout lands. Only the answer is passed; the holding is that hook's.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2728,
+  //
+  // -5, NET, over a seam that added 38: `openProposal` and the proposal
+  // hit-test are geometry over the scene's chrome boxes, so they moved to
+  // `lib/spatial/viewport.ts` (`viewportRevealingProposal`, `proposalAt`)
+  // where the earlier splits put this file's pure core. This guard is what
+  // asked the question — the growth read as the feature's cost until it
+  // turned out two thirds of it was misfiled.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2723,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

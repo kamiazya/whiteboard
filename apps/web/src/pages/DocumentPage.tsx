@@ -21,6 +21,7 @@ import {
   DocumentFacetsEditor,
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
+import { ProposalsPanel } from '../components/proposals/ProposalsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -39,7 +40,9 @@ import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
+import { openProposals } from '../lib/open-proposals.js'
 import { applyCommand } from '../lib/spatial/commands.js'
+import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { buildVersionSaveBody } from '../lib/version-save-body.js'
@@ -135,6 +138,29 @@ function DocumentPageBody({
   const toggleInspector = (kind: InspectorKind) =>
     setInspector((open) => (open === kind ? null : kind))
   const setCommentsOpen = useCallback((open: boolean) => setInspector(open ? 'comments' : null), [])
+
+  /**
+   * The page's own hold on the spatial editor, so an inspector row can reach
+   * back into the board (ADR-0029 decision 1: the panel is an index, and a
+   * row press takes you to where the change is already drawn — it does not
+   * open a second place to decide).
+   *
+   * Merged with whatever ref the keeper supplied rather than replacing it:
+   * the daemon page holds one for MCP viewport requests, and both want the
+   * same handle.
+   */
+  const spatialHandle = useRef<SpatialEditorHandle | null>(null)
+  const keeperEditorRef = model.spatial.editorRef
+  const attachSpatialHandle = useCallback(
+    (node: SpatialEditorHandle | null) => {
+      spatialHandle.current = node
+      if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
+      else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
+        keeperEditorRef.current = node
+      }
+    },
+    [keeperEditorRef],
+  )
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
@@ -307,6 +333,11 @@ function DocumentPageBody({
         // (ADR-0009 decision 3); the keeper answers none for a spatial one.
         ...(model.properties.facets === undefined ? {} : { properties: {} }),
         comments: { count: commentsRail.openThreadCount },
+        // Always offered, and pressable at nought (user decision,
+        // 2026-09-07): a document with no proposals is a fact worth being
+        // able to check, and a member that comes and goes is a control that
+        // moves under the finger reaching for its neighbour.
+        proposals: { count: openProposals(threads.proposals).length },
         // `null` until the backlinks fetch answers: the member waits rather
         // than claiming zero, which is what the chip did before it moved.
         ...(model.connections === undefined
@@ -401,6 +432,24 @@ function DocumentPageBody({
             threads={threads.annotations}
             writable={preview === null}
           />
+        ) : inspector === 'proposals' ? (
+          <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
+            <ProposalsPanel
+              proposals={threads.proposals}
+              // Two ways to have no viewport to move, and the panel wants
+              // the same answer for both. A markdown body draws its
+              // passages where they are already; and while a past state is
+              // on screen the live editor is UNMOUNTED (`preview ?
+              // DocumentPreview : DocumentEditorSurface` below), so the
+              // handle is null and a row would be a button that does
+              // nothing. The index still counts either way — it just has
+              // nowhere to send you, which the panel draws as a row that is
+              // not a button rather than a dead one.
+              {...(documentKind === 'spatial' && preview === null
+                ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
+                : {})}
+            />
+          </InspectorPanel>
         ) : inspector === 'connections' &&
           model.connections !== undefined &&
           model.connections.backlinks !== null ? (
@@ -524,9 +573,7 @@ function DocumentPageBody({
                   className="relative h-full min-h-0"
                   editorKey={documentKey}
                   canvasLoaded={sync.loaded}
-                  {...(model.spatial.editorRef === undefined
-                    ? {}
-                    : { editorRef: model.spatial.editorRef })}
+                  editorRef={attachSpatialHandle}
                   {...(model.spatial.agentTouchedNodeIds === undefined
                     ? {}
                     : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}

@@ -242,3 +242,66 @@ export function panToShowTarget(
   // The shifts are screen pixels; the viewport origin is canvas units.
   return { ...viewport, x: viewport.x + dx / viewport.zoom, y: viewport.y + dy / viewport.zoom }
 }
+
+/**
+ * How far in from the viewport's corner a revealed proposal lands.
+ *
+ * `fitViewportToBoxes` pins the union's top-left to the origin rather than
+ * centring it, which is right for `fitToContent` (the union is the board) and
+ * leaves a single small box flush against the editor's edge — with the
+ * proposal card, which opens at that box's own screen position, half outside
+ * it. Found by looking at a figure, not by a test that passed.
+ */
+const PROPOSAL_REVEAL_INSET_PX = 80
+
+/** One proposal's chrome, as the scene projection reports it. */
+export interface ProposalChromeBox {
+  readonly proposalId: string
+  readonly bbox: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+}
+
+/**
+ * Where to stand to see one proposal, or `null` when the canvas draws no
+ * chrome for it — a panel's list can outrun the scene by a frame, and moving
+ * the viewport to nowhere is worse than not moving.
+ *
+ * The CHROME box, not the changed nodes: a proposal that adds a node anchors
+ * on ids the canvas does not hold yet, and fitting to those lands on nothing.
+ * The chrome is what a person is looking for, and it is in the scene by
+ * definition.
+ */
+export function viewportRevealingProposal(
+  chrome: readonly ProposalChromeBox[],
+  proposalId: string,
+): Viewport | null {
+  const found = chrome.find((entry) => entry.proposalId === proposalId)
+  if (found === undefined) return null
+  const { x, y, w, h } = found.bbox
+  return fitViewportToBoxes([
+    { x: x - PROPOSAL_REVEAL_INSET_PX, y: y - PROPOSAL_REVEAL_INSET_PX, width: w, height: h },
+  ])
+}
+
+/**
+ * The proposal whose chrome covers this canvas point, or `undefined`.
+ *
+ * Topmost first — later chrome is drawn over earlier, so a press belongs to
+ * whichever bubble the person can actually see.
+ */
+export function proposalAt(
+  chrome: readonly ProposalChromeBox[],
+  point: { readonly x: number; readonly y: number },
+): string | undefined {
+  for (let i = chrome.length - 1; i >= 0; i -= 1) {
+    const entry = chrome[i]
+    if (entry === undefined) continue
+    const { bbox } = entry
+    const inside =
+      point.x >= bbox.x &&
+      point.x <= bbox.x + bbox.w &&
+      point.y >= bbox.y &&
+      point.y <= bbox.y + bbox.h
+    if (inside) return entry.proposalId
+  }
+  return undefined
+}

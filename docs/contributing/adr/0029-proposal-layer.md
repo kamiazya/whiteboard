@@ -20,10 +20,16 @@ were measured before the change (see
 cut is now the earliest version row alone, and file-GC no longer counts a
 tip's checkout as a live reference set.
 
-What is NOT done: decision 9's place in the inspector segment, and
-`versions.branchName` — a label on a version row rather than a branch object,
-which leaves through the published version wire and the browser's IndexedDB
-schema, so it is its own increment.
+Decision 9's place in the inspector segment is done: `proposals` is a member
+of `InspectorKind`, and its panel (`apps/web`'s `ProposalsPanel`) is an INDEX
+— it counts what is waiting and a row press moves the board onto that
+proposal's chrome and opens the card already drawn there, rather than growing
+a second Adopt. What that leaves open is the half a panel cannot answer:
+what the CANVAS looks like under forty markers (see the Consequences below).
+
+What is NOT done: `versions.branchName` — a label on a version row rather
+than a branch object, which leaves through the published version wire and the
+browser's IndexedDB schema, so it is its own increment.
 
 ## Context
 
@@ -375,7 +381,11 @@ Harder, and these are real:
   is a person expecting their edit to be a proposal, or the reverse.
 - **A pile of open proposals is a new state to design.** Decision 9 says
   collapse to a count, which is a direction, not a finished answer for what a
-  document with forty open proposals looks like.
+  document with forty open proposals looks like. Half answered: the inspector
+  segment's Proposals member carries the count, and its panel is the index
+  that finds one without hunting the board for it. The unanswered half is the
+  BOARD — forty bubbles drawn at once, each placed to avoid the last, is a
+  density nothing has looked at, and the panel does not make it better.
 - **`wb_canvas_edit`'s default changes.** Existing callers that expect a write
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a

@@ -461,6 +461,12 @@ describe('DaemonDocumentPage comments panel', () => {
   // (`CommentsPanel.browser.test.tsx`); what is no longer covered at the
   // PAGE level is `writable={preview === null}`, which a version preview
   // still exercises and nothing yet tests here.
+  //
+  // A SECOND panel now reads the same state: the Proposals index withholds
+  // its row action under a preview, because the spatial editor is unmounted
+  // there and the handle a row would call is null. Same rule, same gap —
+  // and it is one gap rather than two, so the fixture that closes it closes
+  // both.
 })
 
 /** Every thread resolved: the zero-open branch of the opener's label. */

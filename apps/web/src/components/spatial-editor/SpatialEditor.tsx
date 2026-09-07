@@ -99,7 +99,9 @@ import {
   fitViewportToBoxes,
   type Point,
   panBy,
+  proposalAt,
   screenToCanvas,
+  viewportRevealingProposal,
   viewportTransformCss,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
@@ -603,22 +605,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const pressedProposalRef = useRef<{ readonly id: string; readonly startScreen: Point } | null>(
       null,
     )
-    const hitTestProposal = (point: Point): string | undefined => {
-      for (let i = proposalChromeBoxes.length - 1; i >= 0; i -= 1) {
-        const entry = proposalChromeBoxes[i]
-        if (entry === undefined) continue
-        const { bbox } = entry
-        if (
-          point.x >= bbox.x &&
-          point.x <= bbox.x + bbox.w &&
-          point.y >= bbox.y &&
-          point.y <= bbox.y + bbox.h
-        ) {
-          return entry.proposalId
-        }
-      }
-      return undefined
-    }
+    const hitTestProposal = (point: Point): string | undefined =>
+      proposalAt(proposalChromeBoxes, point)
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -695,8 +683,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           const scoped = nodeIds === undefined ? boxes : boxes.filter((b) => nodeIds.includes(b.id))
           setViewport(fitViewportToBoxes(scoped.map((b) => b.box)))
         },
+        openProposal(proposalId) {
+          const at = viewportRevealingProposal(proposalChromeBoxes, proposalId)
+          if (at === null) return false
+          setViewport(at)
+          setOpenProposalId(proposalId)
+          return true
+        },
       }),
-      [boxes],
+      [boxes, proposalChromeBoxes],
     )
 
     const isMultiSelection = selectionMembers.length > 1
