@@ -436,10 +436,16 @@ function DocumentPageBody({
           <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
             <ProposalsPanel
               proposals={threads.proposals}
-              // Only a canvas has a viewport to move. A markdown body draws
-              // its passages where they are already, so the index counts
-              // them and has nowhere to send you — see the panel's `onOpen`.
-              {...(documentKind === 'spatial'
+              // Two ways to have no viewport to move, and the panel wants
+              // the same answer for both. A markdown body draws its
+              // passages where they are already; and while a past state is
+              // on screen the live editor is UNMOUNTED (`preview ?
+              // DocumentPreview : DocumentEditorSurface` below), so the
+              // handle is null and a row would be a button that does
+              // nothing. The index still counts either way — it just has
+              // nowhere to send you, which the panel draws as a row that is
+              // not a button rather than a dead one.
+              {...(documentKind === 'spatial' && preview === null
                 ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
                 : {})}
             />

@@ -18,7 +18,7 @@
 
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { INSPECTOR_ORDER } from '../../lib/inspector.js'
+import { INSPECTOR_CHROME, INSPECTOR_ORDER } from '../../lib/inspector.js'
 import { InspectorSegment } from './InspectorSegment'
 
 afterEach(cleanup)
@@ -64,6 +64,32 @@ describe('InspectorSegment', () => {
     // proposal nobody can start says the same, because the opener's job at
     // nought is to be in the same place tomorrow when one arrives.
     expect(proposals.getAttribute('aria-label')).toBe('Proposals')
+  })
+
+  // The name and the BADGE are two renderings of one rule, and they were two
+  // spellings of it until a review found them disagreeing: `proposals` was in
+  // the name's backlog test and not the badge's, so this opener read
+  // "Proposals" and drew a `0`. Every backlog member is driven here, so a
+  // third one cannot be added to the name alone.
+  it.each([
+    'comments',
+    'proposals',
+  ] as const)('draws no digit for %s at nought, matching what it says', (kind) => {
+    render(<InspectorSegment open={null} onToggle={noop} tabs={{ [kind]: { count: 0 } }} />)
+
+    const opener = screen.getByRole('button')
+    expect(opener.textContent ?? '').not.toMatch(/\d/)
+    expect(opener.getAttribute('aria-label')).toBe(INSPECTOR_CHROME[kind].label)
+  })
+
+  // The other side of the same rule: a SIZE is reported at nought, because
+  // "no documents link here" is the answer rather than an empty place.
+  it('keeps drawing a size at nought — connections is not a backlog', () => {
+    render(<InspectorSegment open={null} onToggle={noop} tabs={{ connections: { count: 0 } }} />)
+
+    const opener = screen.getByRole('button')
+    expect(opener.textContent).toContain('0')
+    expect(opener.getAttribute('aria-label')).toBe('Connections (0)')
   })
 
   it('says how many proposals are open, the way Comments says its threads', () => {

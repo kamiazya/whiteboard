@@ -55,16 +55,26 @@ const GLYPHS = {
  * controls already carried, so a browser flow finding them by name keeps
  * finding them.
  */
+/**
+ * Whether this member's count is a BACKLOG — things waiting on a person —
+ * rather than a SIZE. The two are said differently ("N open" against
+ * "(N)") and drawn differently (a backlog at nought shows nothing, because
+ * the opener is holding its place for tomorrow rather than reporting a
+ * zero), so the split is named once here.
+ *
+ * It used to be spelled twice — `kind === 'comments' || kind === 'proposals'`
+ * in the name and a bare `kind !== 'comments'` in the badge — and the two
+ * disagreed the moment `proposals` arrived: a screen reader heard
+ * "Proposals" while the eye saw a `0`.
+ */
+function countIsBacklog(kind: InspectorKind): boolean {
+  return kind === 'comments' || kind === 'proposals'
+}
+
 function accessibleName(kind: InspectorKind, count: number | null | undefined): string {
   const label = INSPECTOR_CHROME[kind].label
   if (count === undefined || count === null) return label
-  // Both say "N open" and both fall back to the bare label at nought: an
-  // opener at nought is holding its place for tomorrow, not reporting a
-  // zero. The other members read `(N)` because their count is a size, not a
-  // backlog.
-  if (kind === 'comments' || kind === 'proposals') {
-    return count === 0 ? label : `${label}, ${count} open`
-  }
+  if (countIsBacklog(kind)) return count === 0 ? label : `${label}, ${count} open`
   return `${label} (${count})`
 }
 
@@ -95,7 +105,7 @@ export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps
                 className={cn(HEADER_WIDE_TOGGLE_CLASS, 'text-xs tabular-nums')}
               >
                 <Glyph aria-hidden="true" className="size-4" />
-                {typeof count === 'number' && (kind !== 'comments' || count > 0) ? count : null}
+                {typeof count === 'number' && (!countIsBacklog(kind) || count > 0) ? count : null}
               </button>
             </TooltipTrigger>
             <TooltipContent>{INSPECTOR_CHROME[kind].label}</TooltipContent>
