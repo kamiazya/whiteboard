@@ -173,17 +173,25 @@ stop swallowing:
   distinct components — about a quarter of them Radix internals (Tooltip,
   Presence, Popper) rather than this repo's own hygiene.
 - **`[document-sync] backfilling thread marks failed Index out of bound. The
-  given pos is 20, but the length is 19`, in three PASSING tests.**
-  `document-sync-session.ts` computes passage offsets against
-  `readMarkdownBody(content)` and applies them to
-  `containers.getText(MARKDOWN_BODY_KEY)` — and those are not the same string:
-  `readMarkdownBody` falls back to the legacy text NODE when the container is
-  empty. It is exactly the mistake `use-markdown-document.ts` documents and
-  avoids ("asking the wrong one would go wrong silently if they ever stopped
-  agreeing"), going wrong silently. `markThreadPassages` bounds `end <= start`
-  and never bounds `end` against the text, so the throw comes from inside Loro
-  naming neither the thread nor the document. Consequence: conversations on
-  those documents never get their passage marks.
+  given pos is 20, but the length is 19`, in three PASSING tests.** Two
+  defects, one throw. `resolveTextAnchor`'s stored-offsets shortcut compared
+  `body.slice(anchor.start, anchor.end) === exact` — and `slice` CLAMPS, so on
+  a body shorter than the stored `end` it returns the tail rather than
+  nothing, and a stored range whose width disagrees with its own quote MATCHES
+  and is answered verbatim. `markThreadPassages` then handed that `end`
+  straight to `LoroText.mark`, which throws from inside the CRDT naming
+  neither the thread nor the document, into a catch that logs and carries on.
+  Consequence: those conversations never got their passage marks.
+
+  Worth recording as a diagnosis, because two confident explanations came
+  first and both were wrong. "It measures offsets against `readMarkdownBody`
+  and applies them to the text container" does not fit the numbers — a
+  non-empty container makes those the same string. "Loro indexes text by code
+  point while JS counts UTF-16" was refuted by probing the installed version:
+  `text.length` is 18 for a body JS also calls 18. The mechanism only came out
+  by reading what produces the range, and the fixture confirms it — the anchor
+  is `{ exact: 'is this still true?', start: 0, end: 20 }`, and that quote is
+  19 characters.
 
 ## Adding a source-scan test
 
