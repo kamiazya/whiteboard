@@ -29,12 +29,6 @@ export interface AutoVersionOptions {
   readonly quietMs?: number
   readonly ceilingMs?: number
   /**
-   * Resolves the HEAD branch at save time and writes it into the version's
-   * meta. Omitted (or answering null) leaves `VersionStore.save` to fall back
-   * to "main", which is the behaviour every caller had before branches.
-   */
-  readonly getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
-  /**
    * Called when a checkpoint actually lands. The trigger no longer answers
    * its caller with an entry — the save happens long after the update that
    * signalled it — so this is how a broadcast reaches the surfaces watching.
@@ -89,19 +83,14 @@ export function createAutoVersionTrigger(
   return createCheckpointScheduler<VersionEntry>({
     ...(options.quietMs === undefined ? {} : { quietMs: options.quietMs }),
     ...(options.ceilingMs === undefined ? {} : { ceilingMs: options.ceilingMs }),
-    ...(options.getHeadBranch === undefined ? {} : { getHeadBranch: options.getHeadBranch }),
     ...(options.onSaved === undefined ? {} : { onSaved: options.onSaved }),
-    save: (workspaceId, path, doc, branchName) => {
-      const opts: { auto: boolean; branchName?: string; operator: OperatorInfo } = {
+    save: (workspaceId, path, doc) => {
+      const opts: { auto: boolean; operator: OperatorInfo } = {
         auto: true,
         operator: { kind: 'system', peerId: doc.peerIdStr, displayName: 'auto-save' },
       }
-      if (typeof branchName === 'string' && branchName.length > 0) opts.branchName = branchName
       return versionStore.save(workspaceId, path, doc, opts)
     },
-    // Corrupt stored data must not be absorbed into "no branch": the
-    // checkpoint would be filed under `main` and the corruption hidden.
-    isFatal: isCorruptStoredDataError,
     onError: (err, { workspaceId, path }) => {
       getLogger('auto-version').error({ workspaceId, path, err: err as Error }, 'save failed')
     },

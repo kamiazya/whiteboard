@@ -5,10 +5,25 @@
 Implementation, as of 2026-09-07: decisions 1-8 have landed — the proposal
 record, the in-place card on a canvas and per-change adoption, the
 `wb_canvas_edit` mode with `propose` as its default, and `wb_body_edit` for a
-markdown note's replacement passage. Retiring the variation surface has
-started at the UI: the chip, the merge dialog, both combine banners and the
-`?v=` preview are gone. What is NOT done: decision 9's place in the inspector
-segment, and the branch contracts, backends and storage below the UI.
+markdown note's replacement passage.
+
+Retiring the variation surface is complete down to storage, in three
+increments: the UI (chip, merge dialog, both combine banners, the `?v=`
+preview), then the browser's branch client and the version list's lane
+column, then the branch object itself — `packages/history`'s `branches/` and
+`merge/`, the daemon's `/branches` routes, the `branches` table (migration
+`0023`), and the record's branch plane.
+
+Two mechanics stopped consulting branch tips in that last increment, and both
+were measured before the change (see
+`packages/mcp-server/src/server/store/history-retention.test.ts`): compaction's
+cut is now the earliest version row alone, and file-GC no longer counts a
+tip's checkout as a live reference set.
+
+What is NOT done: decision 9's place in the inspector segment, and
+`versions.branchName` — a label on a version row rather than a branch object,
+which leaves through the published version wire and the browser's IndexedDB
+schema, so it is its own increment.
 
 ## Context
 
@@ -329,9 +344,9 @@ Judged by fit with the derived shape, not by whether it is wanted:
 | Annotation layer (`threads`, marks) | **Unchanged** | Anchored, follows edits, floats above content — the derived shape itself. It gains a payload. |
 | Edit ops (`wb_canvas_edit`'s union) | **Unchanged** | Already an anchored intended change. Gains `assumed value` and a mode. |
 | History (version rows over a frontier) | **Unchanged** | Answers a different question. A frontier is right for *"what did this used to be"* — a past state genuinely is a point in time. |
-| `planMerge`'s **output** shape | **Survives** | new / changed / conflict per element is what a review surface renders. Its input (two frontiers) is not what will be at hand. |
-| Branches (tip, HEAD, create/switch/merge) | **Does not fit** | Being a point in time, it can satisfy neither decision 4 nor decision 5. |
-| The variation UI (chip, `?v=`, merge dialog) | **Does not fit** | It sends a person elsewhere to look, which decision 1 rejects. |
+| `planMerge`'s **output** shape | **Survives as a shape, not as code** | new / changed / conflict per element is what a review surface renders, and the proposal record carries that per change. Its INPUT (two frontiers) is not what will be at hand, so the function went with the branch; what survived is the vocabulary, re-expressed on the proposal. |
+| Branches (tip, HEAD, create/switch/merge) | **Does not fit** — retired | Being a point in time, it can satisfy neither decision 4 nor decision 5. |
+| The variation UI (chip, `?v=`, merge dialog) | **Does not fit** — retired | It sends a person elsewhere to look, which decision 1 rejects. |
 
 **A frontier is not retired.** What is retired is *using a frontier to
 represent a proposal*. History keeps it, on its own merits.
@@ -365,8 +380,11 @@ Harder, and these are real:
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a
   migration — but it is a break.
-- **Two mechanisms for "someone else's changes" exist during the transition**,
-  until the branch surface is removed.
+- **Two mechanisms for "someone else's changes" existed during the
+  transition.** Closed: the branch surface is gone, down to the table, so the
+  proposal is the only one. Kept here rather than deleted because a
+  consequence that was real and is now discharged is what tells a later reader
+  the transition actually finished, instead of leaving them to wonder.
 
 ## Alternatives considered
 

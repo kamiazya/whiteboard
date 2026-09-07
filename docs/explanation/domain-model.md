@@ -59,7 +59,7 @@ path is derived from its node's ancestry and its `documentId` is the node's
 stable name.
 
 **Paths are the canonical user-facing identity** in daemon mode: URLs,
-versions, branches, and per-document text events all address a canvas as
+versions and per-document text events all address a canvas as
 `(workspaceId, path)`, while binary sync rides the workspace record and
 scopes to a document by its `documentId`. A path is assigned at creation
 (derived automatically — `untitled`, `untitled-2`, … — since creation asks
@@ -107,10 +107,9 @@ That split is **gone**, in four steps recorded in the migration log:
   the pre-existing filesystem blobs once, and a blob file was deleted only
   once its bytes were proven byte-identical to the stored rows.
 - Finally the **workspace record became the address book itself**: placement,
-  names, pins, kinds and branch HEAD live on the workspace tree's nodes as
-  shared CRDT state, versions and branches are keyed on the workspace
-  (migrations `0015`/`0016`), and migration `0017` dropped the `documents`
-  table outright (approved plain break, pre-1.0 disposable-DB policy) — the
+  names, pins and kinds live on the workspace tree's nodes as shared CRDT
+  state, versions are keyed on the workspace (migrations `0015`/`0016`), and
+  migration `0017` dropped the `documents` table outright (approved plain break, pre-1.0 disposable-DB policy) — the
   workspace record is the store, full stop.
 
 ## Practical consequences today
@@ -146,11 +145,12 @@ That split is **gone**, in four steps recorded in the migration log:
 - The workspace record accumulates every edit's history, and the daemon
   periodically **compacts** it: history older than anything still reachable
   is folded into the snapshot. What stays reachable is exactly what your
-  saved versions and branches point at — the record keeps history back to
-  the oldest version and the oldest branch tip, and nothing before that.
-  Deleting old versions (or the automatic version pruning) is therefore
-  what lets compaction reclaim space; a branch left on an old state keeps
-  the history its checkout needs for as long as the branch exists.
+  saved versions point at — the record keeps history back to the oldest
+  version and nothing before that. Deleting old versions (or the automatic
+  version pruning) is therefore what lets compaction reclaim space. Branch
+  tips used to be a second pin here; ADR-0029 retired the branch, and
+  migration `0023` dropped the table, so the oldest version is the whole
+  answer.
 - Documents kept in the browser cross to a daemon by an explicit,
   user-initiated **move of the whole workspace** (Settings → Connections →
   "This workspace"): the browser's workspace record merges into the chosen

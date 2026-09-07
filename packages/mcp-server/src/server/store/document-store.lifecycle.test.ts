@@ -99,9 +99,8 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
   })
 
-  it('removes the tree entry, deletes branches/versions rows explicitly, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('removes the tree entry, deletes version rows explicitly, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
-    const { createBranch } = await import('./branches-store.js')
     const { stat } = await import('node:fs/promises')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
@@ -111,7 +110,6 @@ describe('deleting a document', () => {
     const store = new FileVersionStore()
     const version = await store.save('session1', 'canvas-a', doc, { auto: true })
     await store.saveThumbnail('session1', 'canvas-a', version.id, new Uint8Array([1, 2, 3]))
-    await createBranch('session1', 'canvas-a', { name: 'feature' })
 
     const db = await getDb(tempDir)
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
@@ -124,12 +122,6 @@ describe('deleting a document', () => {
 
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
 
-    const branchesAfter = await db
-      .selectFrom('branches')
-      .selectAll()
-      .where('documentId', '=', documentId)
-      .execute()
-    expect(branchesAfter).toEqual([])
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
@@ -248,13 +240,11 @@ describe('renameDocumentPath', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('moves only the path: branches, version rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
+  it('moves only the path: version rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
-    const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'a', doc)
-    await createBranch('session1', 'a', { name: 'feature' })
     const store = new FileVersionStore()
     const version = await store.save('session1', 'a', doc, { auto: true })
 
@@ -290,14 +280,6 @@ describe('renameDocumentPath', () => {
 
     // Content is untouched by the move — same documentId, same value.
     expect((await loadDocument('session1', 'b')).toJSON()).toEqual(contentBefore)
-
-    // Branches survive the move and resolve under the new path. This used to
-    // read the `branches` rows as well; branches live on the workspace
-    // record now, and the record is keyed by documentId, so the path change
-    // cannot reach them — which is the property, stated once through the
-    // reader everything else uses.
-    const branches = await loadDocumentBranches('session1', 'b')
-    expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
   })
 
   it('returns null (never throws) for a missing source canvas', async () => {

@@ -10,10 +10,6 @@
       "types": "./src/api-client.ts",
       "import": "./src/api-client.ts"
     },
-    "./api-contracts/branches": {
-      "types": "./src/api-contracts/branches.ts",
-      "import": "./src/api-contracts/branches.ts"
-    },
     "./api-contracts/document": {
       "types": "./src/api-contracts/document.ts",
       "import": "./src/api-contracts/document.ts"
@@ -100,7 +96,6 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-history": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
     "@opentelemetry/api": "^1.9.1",

@@ -82,7 +82,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
   })
 
   it('the scan actually reaches the adapter tree', () => {
-    expect(actual.length).toBeGreaterThan(20)
+    expect(actual.length).toBeGreaterThan(15)
   })
 
   // Asserted against a FIXTURE rather than the real tree, because the real

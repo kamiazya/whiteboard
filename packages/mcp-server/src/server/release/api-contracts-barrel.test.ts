@@ -30,7 +30,6 @@ describe('api-contracts barrel scope', () => {
     // package directly (architecture-map.md).
     expect(specifiers).toEqual([
       '@kamiazya/whiteboard-server-core',
-      './branches.js',
       './document.js',
       // document-url: the live-canvas API's URL shape, exported so apps/web
       // builds request URLs through the same function the daemon's own
