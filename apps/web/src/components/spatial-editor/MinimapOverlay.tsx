@@ -24,14 +24,28 @@ import {
 const PADDING_PX = 6
 
 /**
+ * The mark's own size, in pixels, whatever box it lands in.
+ *
+ * ONE size, the same rule the full-size badge follows on a node of any area.
+ * Scaling it with the box was measured in one overview at 20.9px and 31.4px,
+ * which reads as a ranking of node areas rather than as identity — and the
+ * threshold below already assumed a fixed glyph, so the two had drifted: its
+ * reasoning is written for ~11px and the code drew 26 and 39.
+ *
+ * 11 is the floor for an emoji to read, and it is what the smallest box this
+ * draws in can hold with its own fill still visible around it.
+ */
+const SYMBOL_PX = 11
+
+/**
  * The shortest side a box must project to before a mark is drawn in it.
  *
  * Measured rather than chosen: on a real canvas of eight ordinary notes the
- * overview projects each one to 21x11px, which puts the glyph at ~9px — too
- * small to recognise, and 11 sat right ON an earlier 10px guess, where an
- * ordinary edit rescales the fit and flips every mark on and off. 14 puts
- * the glyph at ~11px, about the floor for an emoji to read, and lands
- * clearly above the ordinary case rather than inside it.
+ * overview projects each one to 21x11px, which puts an 11px glyph over the
+ * whole box — and 11 sat right ON an earlier 10px guess, where an ordinary
+ * edit rescales the fit and flips every mark on and off. 14 holds
+ * `SYMBOL_PX` with a rim of box left, and lands clearly above the ordinary
+ * case rather than inside it.
  *
  * The consequence is deliberate and worth knowing: a busy canvas shows no
  * marks in its overview, and a canvas of a few large nodes does. A mark
@@ -147,7 +161,11 @@ export function MinimapOverlay({
               <span
                 data-testid="minimap-symbol"
                 className="leading-none"
-                style={{ fontSize: Math.min(width, height) * 0.8, width: '0.8em', height: '0.8em' }}
+                // The span is the glyph's own size rather than a fraction of
+                // it: an emoji is text at `fontSize` and a vendored icon is an
+                // SVG with no intrinsic size that fills its box, so the two
+                // only land at the same size when the box and the font agree.
+                style={{ fontSize: SYMBOL_PX, width: SYMBOL_PX, height: SYMBOL_PX }}
               >
                 <SymbolMark symbol={box.symbol} />
               </span>

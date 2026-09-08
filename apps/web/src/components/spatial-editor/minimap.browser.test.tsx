@@ -249,3 +249,52 @@ it('leaves a box too small for a mark as a plain box', () => {
   expect(container.querySelector('[data-testid="minimap"]')).toBeTruthy()
   expect(container.querySelector('[data-testid="minimap-symbol"]')).toBeNull()
 })
+
+// The mark is ONE size whatever box it lands in, the same rule the full-size
+// badge follows on a node of any size. Scaling it with the box made the mark
+// a ranking of node areas rather than a statement of identity — measured at
+// 20.9px and 31.4px in one overview — and at 0.8 of the short side it also
+// left the box's own colour, which is what the overview is FOR, as a rim.
+const twoMarked: SpatialCanvas = {
+  nodes: [
+    {
+      id: 'big',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 1400,
+      height: 900,
+      text: 'A',
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+    },
+    {
+      id: 'small',
+      type: 'text',
+      x: 2000,
+      y: 0,
+      width: 600,
+      height: 600,
+      text: 'B',
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '⭐' } } },
+    },
+  ],
+  edges: [],
+}
+
+it('draws every mark in the overview at one size, whatever box it sits in', () => {
+  const { container } = render(<Host canvas0={twoMarked} />)
+  const marks = [...container.querySelectorAll('[data-testid="minimap-symbol"]')]
+  expect(marks.length).toBe(2)
+  const sizes = marks.map((mark) => mark.getBoundingClientRect().width)
+  expect(sizes[1]).toBeCloseTo(sizes[0] as number, 1)
+})
+
+it('leaves the box it marks still visible around the mark', () => {
+  // The box carries WHERE and its authored colour; the mark adds WHICH. A
+  // glyph at 80% of the short side reduced the first to a rim.
+  const { container } = render(<Host canvas0={twoMarked} />)
+  const mark = container.querySelector('[data-testid="minimap-symbol"]') as HTMLElement
+  const box = mark.parentElement as HTMLElement
+  const shortSide = Math.min(box.getBoundingClientRect().width, box.getBoundingClientRect().height)
+  expect(mark.getBoundingClientRect().width).toBeLessThan(shortSide * 0.5)
+})
