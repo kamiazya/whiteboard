@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   applyUpdate,
   bindApplyUpdate,
@@ -49,6 +50,7 @@ describe('sw-status-store', () => {
     bindCheckForUpdates(() => Promise.reject(new Error('offline')))
     await checkForUpdates()
     expect(getSwStatus().checking).toBe(false)
+    await expectLoggedFailure('manual service worker update check failed')
   })
 
   it('bindApplyUpdate marks an update ready; applyUpdate calls the handler', async () => {

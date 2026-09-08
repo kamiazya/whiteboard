@@ -11,6 +11,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { createDaemonFileAdapter } from './daemon-file-adapter.js'
 
 const BASE = 'http://127.0.0.1:3099'
@@ -131,6 +132,7 @@ describe('createDaemonFileAdapter', () => {
     await expect(
       adapter.storeImage(new File(['x'], 'x.png', { type: 'image/png' })),
     ).resolves.toBeUndefined()
+    await expectLoggedFailure('image upload rejected')
   })
 
   it('loads a referenced canvas from its snapshot', async () => {
@@ -230,6 +232,7 @@ describe('createDaemonFileAdapter', () => {
     })
 
     await expect(adapter.loadDocument('sibling')).resolves.toBeUndefined()
+    await expectLoggedFailure('referenced document load failed')
   })
 
   it('percent-encodes a path on its way into the path', async () => {

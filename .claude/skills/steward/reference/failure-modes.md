@@ -20,6 +20,7 @@ order effects.
 | every test PASSED and the file exits 1, `NotFoundError: removeChild` | A teardown doing `document.body.innerHTML = ''` while React roots are mounted. Use `cleanup()` |
 | "the list does not contain this item" | No list was opened — the trigger was clicked while a menu was still dismissing. Wait for `[role="menu"]` to be gone |
 | an assertion reads an empty value that was definitely typed | The element was remounted and the held reference is detached. Query inside the assertion |
+| `stress-changed-tests` red while both `test-jsdom` shards are green | The two steps split the classes: five fresh processes catch order/module-state flakes, `--repeats=3` catches state carried BETWEEN repetitions of one test. A once-per-process record (a memoised startup attempt) passes the first and fails the second |
 | a `web-browser` test fails saying it logged a failure and carried on | Exactly what it says: something was caught and swallowed. The record is in the message; the assertion that would have broken is elsewhere. Claim it with `expectLoggedFailures()` only if the test provokes it on purpose |
 | a test times out only under the full suite | An `await import()` of a heavy module inside a test body, or a `React.lazy` page racing a `findBy*` (testing-library's budget is 1000ms). Hoist the import |
 | an assertion on a global counter or a "most recent" handle | Another test's `SharedWorker` is still alive. Scope every assertion to a handle the test itself minted |
