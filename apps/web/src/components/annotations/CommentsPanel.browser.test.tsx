@@ -561,14 +561,12 @@ it('keeps Edit on the opening message stamp line, not on a row of its own', asyn
   // one per message.
   const edit = (await page.getByTestId('edit-m1').element()).getBoundingClientRect()
   const stamp = rectOf('#thread-t-open time')
-  // Beside the stamp it acts on, sharing its line — a 44px tap target sunk
-  // into an 11px row rather than pushing the conversation down by 44px.
+  // On the line of the stamp it acts on — a 44px tap target sunk into an
+  // 11px row rather than pushing the conversation down by 44px. WHERE on
+  // that line is the column claim below; what matters here is that the verb
+  // shares a line with its message instead of owning a row.
   expect(edit.left).toBeGreaterThan(stamp.right)
   expect(sharedRows(edit, stamp)).toBeGreaterThan(8)
-  // And NEXT to it. Pushed to the trailing edge of a full-width message the
-  // pencil stood 239px from the stamp with nothing in between, and what it
-  // acts on was anybody's guess — proximity is the only thing saying so.
-  expect(edit.left - stamp.right).toBeLessThan(24)
 })
 
 it('puts the reply field and its Send on one line', async () => {
@@ -715,4 +713,47 @@ it('rewrites one message at a time, leaving the rest of the conversation readabl
   await userEvent.click(page.getByTestId('edit-m2'))
 
   expect(document.querySelectorAll('[data-testid="comment-edit"]')).toHaveLength(1)
+})
+
+/**
+ * The verbs line up in a column.
+ *
+ * Beside its stamp is where this started, and with ONE message that was
+ * right — pushed to the trailing edge of a full-width message the pencil
+ * stood 239px from the only other thing on its line, and what it edited was
+ * a guess. Every message carries one now, and the stamps are different
+ * widths (`4s ago` against `9/5 21:29`), so following the stamp put the
+ * verbs at four different x positions down one short column. A column of
+ * per-row actions at the trailing edge is what a reader already knows from
+ * every list of rows with actions on them, and the row it belongs to is
+ * said by the line it shares.
+ */
+it('lines the message verbs up in one column rather than following each stamp', async () => {
+  const wide: CommentThread = {
+    ...OPEN,
+    id: 't-wide',
+    messages: [
+      // Stamps of deliberately different widths: an absolute date for the
+      // old one, a relative label for the fresh one.
+      { id: 'w1', body: 'started this a while back', createdAt: '2026-01-02T03:04:00.000Z' },
+      { id: 'w2', body: 'answered just now', createdAt: new Date().toISOString() },
+    ],
+  }
+  render(<CommentsPanel threads={[wide]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('started this a while back'))
+
+  const verbs = [...document.querySelectorAll('#thread-t-wide [data-testid^="edit-"]')].map(
+    (node) => node.getBoundingClientRect(),
+  )
+  expect(verbs).toHaveLength(2)
+  const stamps = [...document.querySelectorAll('#thread-t-wide time')].map((node) =>
+    node.getBoundingClientRect(),
+  )
+  // The stamps really do differ, or this test would pass over the defect.
+  expect(Math.abs((stamps[0]?.width ?? 0) - (stamps[1]?.width ?? 0))).toBeGreaterThan(4)
+  // The verbs do not.
+  expect(verbs[1]?.left ?? 0).toBeCloseTo(verbs[0]?.left ?? 0, 0)
+  // And each still shares the line of the stamp it acts on.
+  expect(sharedRows(verbs[0]!, stamps[0]!)).toBeGreaterThan(8)
+  expect(sharedRows(verbs[1]!, stamps[1]!)).toBeGreaterThan(8)
 })

@@ -27,10 +27,16 @@ export interface ThreadMessageProps {
   /** The panel's dense typography; the card inherits the bubble's own. */
   readonly compact?: boolean
   /**
-   * A verb that acts on THIS message, drawn beside its stamp. Beside, not
-   * at the trailing edge: on a full-width message that left 239px between
-   * the pencil and the only other thing on its line, and proximity is the
-   * only thing naming an unlabelled verb.
+   * A verb that acts on THIS message, drawn at the trailing edge of its
+   * stamp line — so the verbs form a COLUMN down the conversation.
+   *
+   * It sat beside the stamp first, because with one message that was the
+   * only thing naming it: pushed to the trailing edge of a full-width
+   * message it stood 239px from the only other thing on its line. Once
+   * every message carried one, following the stamp put them at different x
+   * positions (measured: 16.2px apart on two messages whose stamps read
+   * `9/5 21:29` and `4s ago`) and the short column read as ragged. What
+   * names a verb now is the LINE it shares, which a column keeps.
    */
   readonly action?: ReactNode
   /**
@@ -44,7 +50,7 @@ export interface ThreadMessageProps {
 export function ThreadMessage({ message, compact = false, action, editor }: ThreadMessageProps) {
   return (
     <li className="flex flex-col gap-0.5">
-      <div className="flex min-h-4 items-center gap-1">
+      <div className="flex min-h-4 items-center justify-between gap-2">
         <MessageBy message={message} />
         {action}
       </div>
