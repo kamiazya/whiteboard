@@ -50,6 +50,18 @@ let receivedInitialPath: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
 // during render, so App's ErrorBoundary wiring has something real to catch.
 let throwInBrowserDocumentPage = false
+// jsdom has no IndexedDB, so the counts panel's startup fold cannot run: it
+// throws, the production path catches it and continues, and that guarded
+// continue is what this file already ran under. Mocked to the same outcome
+// because the warn on the way is ONCE PER PROCESS — the module memoises the
+// attempt — so it cannot be claimed by a test either. Measured:
+// `stress-changed-tests` runs a touched file five times and the claim passed
+// five times and failed on the repeat, which is exactly the shape that job
+// exists to find.
+vi.mock('./lib/fold-workspace.js', () => ({
+  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+}))
+
 vi.mock('./pages/BrowserDocumentPage.js', () => ({
   BrowserDocumentPage: ({ initialPath }: { initialPath?: string }) => {
     receivedInitialPath = initialPath
@@ -1022,7 +1034,6 @@ describe('App daemon provider state', () => {
       throwInDaemonDocumentPage = false
       reportSpy.mockRestore()
     }
-    await expectLoggedFailure('fold before counting failed')
     await expectLoggedFailure('The above error occurred')
   })
 })

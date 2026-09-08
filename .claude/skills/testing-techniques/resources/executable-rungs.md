@@ -139,6 +139,16 @@ see. Each of those tests was already asserting that a failure is SURVIVED
 the page down); the claim adds the half they were all missing, that the failure
 is also REPORTED.
 
+A third, and the one `stress-changed-tests` caught rather than a reviewer:
+**a claim must name a failure the test PROVOKES, not one the environment
+produces once per process.** `App.test.tsx` claimed
+`fold before counting failed` — jsdom having no IndexedDB — and the module
+memoises the attempt, so the record exists on the FIRST execution and never
+again. Five fresh-process runs passed and the in-process `--repeats=3` run
+failed, which is exactly the split those two steps exist to separate. The fix
+is the same as everywhere else that record appears: mock the fold, and do not
+claim it.
+
 Two mechanics it cost, both measured:
 
 - **The claim must WAIT.** These reports are fire-and-forget catches on rejected
