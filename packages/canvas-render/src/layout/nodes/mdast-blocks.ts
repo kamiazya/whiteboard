@@ -75,6 +75,69 @@ function panelPaint(theme: MarkdownTheme, opacity: number): Appearance {
 }
 
 /**
+ * The one exception to the rule above, and the reason it is an exception: a
+ * task list's checkbox IS an outline around nothing. Everything else here
+ * paints a surface, so nothing else has a stroke.
+ */
+function outlinePaint(theme: MarkdownTheme, opacity: number): Appearance {
+  return {
+    fill: 'none',
+    stroke: theme.chromeColor,
+    strokeWidth: theme.borderWidthPx,
+    strokeOpacity: opacity,
+  }
+}
+
+/**
+ * The checkbox a task item draws where a bullet would go, as RECTS.
+ *
+ * Not a character: measured against the vendored export face (ADR-0011),
+ * U+2713 / U+2714 / U+2610 / U+2611 each draw with exactly the ink of a
+ * private-use code point that certainly does not exist (296px against a
+ * blank control of 0 and an `A` of 363) — the face carries none of them, so
+ * a glyph checkbox exports as a tofu box.
+ *
+ * Not a path either: `scaleScene` deliberately leaves `svgFragment` content
+ * alone (the arrowhead class), so a drawn tick would keep its size while
+ * the prose around it grew. A rect's bbox scales like everything else, so
+ * the state is carried by INK — an empty box against a filled one — rather
+ * than by a mark the renderer might not be able to draw.
+ */
+function checkboxMarker(
+  theme: MarkdownTheme,
+  checked: boolean,
+  startY: number,
+): readonly ShapeSceneNode[] {
+  const size = Math.round(theme.bodyFontSizePx * 0.8)
+  // Centred in the first line's box, like a glyph sitting on its baseline
+  // would be, and right-aligned against the content edge exactly as the
+  // bullet is (see `listMarkerGapPx`).
+  const box = {
+    x: -(size + theme.listMarkerGapPx),
+    y: startY + (bodyLineHeightPx(theme) - size) / 2,
+    w: size,
+    h: size,
+  }
+  const frame: ShapeSceneNode = {
+    kind: 'shape',
+    bbox: box,
+    radius: Math.max(theme.cornerRadiusPx / 3, 1),
+    appearance: outlinePaint(theme, theme.borderOpacity),
+  }
+  if (!checked) return [frame]
+  const inset = Math.round(size / 4)
+  return [
+    frame,
+    {
+      kind: 'shape',
+      bbox: { x: box.x + inset, y: box.y + inset, w: size - inset * 2, h: size - inset * 2 },
+      radius: Math.max(theme.cornerRadiusPx / 6, 1),
+      appearance: panelPaint(theme, theme.mutedTextOpacity),
+    },
+  ]
+}
+
+/**
  * Where a line's glyphs sit inside a line box taller than the font. CSS
  * calls it half-leading: the extra height splits evenly above and below, so
  * a 16px run in a 24px box has 4px of air on each side rather than sitting
@@ -1274,12 +1337,16 @@ function layoutListItem(
   const children: (ListItemNode['children'][number] | TextRunNode)[] = item.children.map((child) =>
     layoutBlock(child, cursor, indented, depth, embedPath),
   )
-  // The marker glyph (bullet or ordinal). Wrapper-RELATIVE like every other
-  // child (the listItem renderer translates by its own bbox.x), so the
-  // gutter to the left of the content is negative x. Checked task items
-  // keep provenance only — a checkbox affordance is a separate feature,
-  // and drawing a bullet next to it would double the glyphs.
-  if (item.checked === null || item.checked === undefined) {
+  // The marker (bullet, ordinal, or a task item's checkbox). Wrapper-
+  // RELATIVE like every other child — the listItem renderer translates by
+  // its own bbox.x — so the gutter to the left of the content is negative x.
+  // A task item draws a checkbox INSTEAD of a bullet: two markers for one
+  // item is two glyphs saying the same thing. It used to draw neither, so
+  // `- [ ] ship it` rendered as bare prose with nothing in the gutter, on
+  // every surface this layout serves.
+  if (item.checked === true || item.checked === false) {
+    children.unshift(...checkboxMarker(options.theme, item.checked, startY))
+  } else {
     const markerText = ordinal !== undefined ? `${ordinal}.` : '\u2022'
     const metrics = options.measure(
       markerText,
