@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { celebrate } from './celebrate.js'
 
 const confettiMock = vi.hoisted(() => vi.fn())
@@ -34,5 +35,8 @@ describe('celebrate', () => {
   it('never throws when the burst itself fails', async () => {
     confettiMock.mockRejectedValue(new Error('canvas exploded'))
     await expect(celebrate()).resolves.toBeUndefined()
+    // Swallowing it is only half the contract: a burst that failed silently
+    // and one that never ran look identical from here.
+    await expectLoggedFailure('confetti burst failed')
   })
 })
