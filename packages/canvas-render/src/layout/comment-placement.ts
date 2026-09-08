@@ -62,9 +62,20 @@ export interface Size {
  */
 export const COMMENT_BUBBLE_RING_REACH_PX = 180
 
-/** Directions around the anchor, and the distances tried at each. */
+/**
+ * Directions around the anchor, and the distances tried at each. The last
+ * distance IS the reach rather than being filtered against it: a guard
+ * comparing the two never fires while every distance is inside it, which is
+ * dead code wearing a constant's clothes — the mutation lane reported
+ * exactly that, as a survivor no test could kill.
+ *
+ * The ring closes on itself, so an off-by-one in the direction loop only
+ * repeats the first direction. That candidate ties with the one already
+ * there and loses on the earliest-wins rule, which is why it is unkillable
+ * too, and equivalent rather than a gap.
+ */
 const RING_DIRECTIONS = 16
-const RING_DISTANCES_PX = [40, 80, 120, 180] as const
+const RING_DISTANCES_PX = [40, 80, 120, COMMENT_BUBBLE_RING_REACH_PX] as const
 
 /**
  * The candidate boxes in preference order: the four diagonal quadrants
@@ -88,7 +99,6 @@ export function commentBubbleCandidates(anchor: Point, size: Size): readonly Bou
   // hang a corner off the anchor: a direction has no corner to choose, and
   // centring is what makes the sixteen evenly spaced rather than bunched.
   for (const distance of RING_DISTANCES_PX) {
-    if (distance > COMMENT_BUBBLE_RING_REACH_PX) continue
     for (let k = 0; k < RING_DIRECTIONS; k += 1) {
       const angle = (k / RING_DIRECTIONS) * 2 * Math.PI
       const centerX = anchor.x + Math.cos(angle) * (distance + size.w / 2)
