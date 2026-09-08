@@ -89,14 +89,22 @@ describe('the proposal layer under density', () => {
       bubbles: 40,
       cleanBubbles: 17,
       overOwnOutline: 0,
-      overOtherOutline: 25600,
-      overNode: 40832,
-      overBubble: 4928,
+      overOtherOutline: 22080,
+      overNode: 30990,
+      overBubble: 0,
       meanLeaderPx: 23,
       maxLeaderPx: 23,
     })
   })
 
+  // One number here got WORSE when the bubble was narrowed, and it is left
+  // in rather than smoothed over: `ten`'s `overOtherOutline` went 7977 ->
+  // 10700. A smaller box finds a placement the larger one could not, and at
+  // that one density the placement it finds sits over a neighbouring
+  // proposal's outline. Every other case improved, so it was taken — but a
+  // pinned number that only ever moves the good way is a number nobody is
+  // reading.
+  //
   // Every leader is 23px in every case, and that is the finding rather than
   // a quirk of the fixture: today's four candidates all sit one 14px offset
   // from the anchor, so the placer has NO ability to trade distance for
@@ -113,41 +121,41 @@ describe('the proposal layer under density', () => {
     }).toEqual({
       five: {
         bubbles: 5,
-        cleanBubbles: 0,
+        cleanBubbles: 2,
         overOwnOutline: 0,
-        overOtherOutline: 2908,
-        overNode: 5824,
-        overBubble: 3778,
+        overOtherOutline: 2578,
+        overNode: 4300,
+        overBubble: 360,
         meanLeaderPx: 23,
         maxLeaderPx: 23,
       },
       ten: {
         bubbles: 10,
-        cleanBubbles: 1,
+        cleanBubbles: 4,
         overOwnOutline: 0,
-        overOtherOutline: 7977,
-        overNode: 22135,
-        overBubble: 6390,
+        overOtherOutline: 10700,
+        overNode: 18114,
+        overBubble: 720,
         meanLeaderPx: 23,
         maxLeaderPx: 23,
       },
       twenty: {
         bubbles: 20,
-        cleanBubbles: 1,
+        cleanBubbles: 5,
         overOwnOutline: 0,
-        overOtherOutline: 68527,
-        overNode: 93574,
-        overBubble: 15976,
+        overOtherOutline: 57033,
+        overNode: 69430,
+        overBubble: 1800,
         meanLeaderPx: 23,
         maxLeaderPx: 23,
       },
       forty: {
         bubbles: 40,
-        cleanBubbles: 1,
+        cleanBubbles: 8,
         overOwnOutline: 0,
-        overOtherOutline: 183920,
-        overNode: 221694,
-        overBubble: 33475,
+        overOtherOutline: 148981,
+        overNode: 165653,
+        overBubble: 3601,
         meanLeaderPx: 23,
         maxLeaderPx: 23,
       },

@@ -267,6 +267,33 @@ today would remove the only way to edit a text node's text through MCP.
 Closing it needs a decision first: teach `node.patch` (and therefore the
 proposal vocabulary) about a node's content, or keep a separate verb for it.
 
+### 6b. The bubble borrows the comment layer's grammar, but not its WIDTH
+
+*(supplement, measured)* A proposal's bubble reuses the comment layer's
+constants and grammar deliberately — a reader who has used a comment has
+already learned how to read this, and two sets of numbers for one visual
+language would drift. One number is now excepted, and the exception is
+narrower than it sounds: the WIDTH its text measures to.
+
+A comment carries prose somebody wrote, so 200px is a judgement about
+reading prose over a canvas. A proposal's bubble carries a COUNT somebody
+reads at a glance (`3 proposed changes, 1 needs a look`), so that width was
+borrowed rather than earned — and the borrowed box comes out 216px wide,
+which does not fit between columns 168px apart however many candidates the
+placer is given.
+
+`PROPOSAL_TEXT_MAX_WIDTH_PX` is 145: the narrowest width that still fits
+`1 proposed change` on ONE line. The second half of that sentence is what
+picked it, and it was not the obvious answer — **height dominates width**.
+120px is narrower and scores WORSE (node overlap 199048 against 165653 at
+forty proposals), because the label wraps and the taller box reaches a row
+it used to clear; the same wrap costs the uncrowded control board nine of
+its seventeen clean bubbles. Everything else about the bubble — padding,
+radius, the leader, the card's own grammar — stays the comment layer's.
+
+The density (`compact`) is not an exception at all: it is the axis the
+comment layer already declares for a surface with less room.
+
 ### 7. `wb_canvas_edit` gains a mode, and its default is *propose*
 
 One tool, not two: the same edit operations, with a mode saying whether they
@@ -381,11 +408,24 @@ Harder, and these are real:
   is a person expecting their edit to be a proposal, or the reverse.
 - **A pile of open proposals is a new state to design.** Decision 9 says
   collapse to a count, which is a direction, not a finished answer for what a
-  document with forty open proposals looks like. Half answered: the inspector
-  segment's Proposals member carries the count, and its panel is the index
-  that finds one without hunting the board for it. The unanswered half is the
-  BOARD — forty bubbles drawn at once, each placed to avoid the last, is a
-  density nothing has looked at, and the panel does not make it better.
+  document with forty open proposals looks like. The inspector segment's
+  Proposals member carries the count, and its panel is the index that finds
+  one without hunting the board for it.
+
+  The BOARD is being answered by measurement rather than by argument, and the
+  first two readings changed what the question was. **Crowding, not count, is
+  the axis**: at a 220px column pitch the covered fraction barely moves
+  between five proposals and forty (17.1% -> 20.2%), and at a 168px pitch the
+  same counts go 28.4% -> 41.4% -> 101.0% -> 124.6% — past 100% the average
+  bubble is overlapped by more than its own area. And **a clean placement
+  exists for all forty**: a wider candidate search finds zero-coverage
+  positions for every one, so this is a candidate-generation problem rather
+  than a full board. What that costs is leader length, which is the trade the
+  scoreboard prices.
+
+  `layout/proposal-density-quality.test.ts` is that scoreboard, and the
+  increments answering the board are judged by it. The first of them narrowed
+  the bubble (below); the second widens the candidate ring.
 - **`wb_canvas_edit`'s default changes.** Existing callers that expect a write
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a

@@ -49,6 +49,28 @@ import { layoutMdastBlocks, type MdastLayoutOptions } from './nodes/mdast-blocks
 export const COMMENT_TEXT_MAX_WIDTH_PX = 200
 
 /**
+ * The width a PROPOSAL's bubble measures to, against the comment layer's
+ * 200. A comment carries prose somebody wrote; this carries a COUNT somebody
+ * reads at a glance, so the prose width was borrowed rather than earned.
+ *
+ * The value is the narrowest that still fits `1 proposed change` on ONE
+ * line, and the second half of that sentence is what picked it. Measured
+ * over the density corpus, HEIGHT dominates width: 120px is narrower and
+ * scores WORSE (node overlap 199048 against 165653 at forty proposals),
+ * because the label wraps to two lines and the taller box reaches a row it
+ * used to clear. The same wrap costs the uncrowded board nine of its
+ * seventeen clean bubbles — a regression the corpus's spread control is
+ * there to catch.
+ *
+ * Five pixels below this the label wraps, so `proposals.test.ts` pins the
+ * one-line height rather than leaving a measurer change to flip it and
+ * report itself as a mysterious scoreboard move. It lives here, beside the
+ * width it is measured against, because the two are one decision read
+ * together: what a comment's prose needs, and what a count does not.
+ */
+export const PROPOSAL_TEXT_MAX_WIDTH_PX = 145
+
+/**
  * What a comment body's layout needs beyond an ordinary body's.
  *
  * `theme` is absent rather than optional — the point of this function is
