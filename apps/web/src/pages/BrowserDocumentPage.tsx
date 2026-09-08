@@ -3,6 +3,7 @@ import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contra
 import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
+import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Trash2 } from 'lucide-react'
@@ -729,6 +730,20 @@ function useBrowserDocument(
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
     [readOutlineSource, markdownDoc],
   )
+  // The tab's mark. A SPATIAL document keeps its symbol on the canvas
+  // envelope, the same bucket the edge-style facet uses. A markdown
+  // document keeps its own in OKF frontmatter, which no keeper hands to
+  // this page yet — see `resolveDocumentSymbol`'s callers when it does.
+  // Memoised because the resolver PARSES: a fresh object every render
+  // would re-arm the favicon's debounce on every render rather than on
+  // a change to the document.
+  const documentSymbol = useMemo(
+    () =>
+      documentKind === 'spatial' && canvas !== null && canvas !== undefined
+        ? resolveCanvasSymbol(canvas)
+        : undefined,
+    [documentKind, canvas],
+  )
   useDocumentFavicon({
     settingsStore,
     documentId,
@@ -736,6 +751,7 @@ function useBrowserDocument(
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
     status: browserFaviconStatus(storageHealth),
+    symbol: documentSymbol,
   })
 
   // The facts themselves, published for tests and nothing else: hidden, so

@@ -28,6 +28,8 @@ export type FaviconStatus = 'quiet' | 'unsaved' | 'syncing' | 'offline'
 export type FaviconStyle = 'minimap' | 'dot'
 
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { LUCIDE_ICONS } from '@kamiazya/whiteboard-plugin-visual'
 import type { SyncStatus } from './document-sync-types.js'
 import { fitMinimap, projectBox } from './spatial/minimap.js'
 import type { StorageHealth } from './storage-health.js'
@@ -95,6 +97,12 @@ const BOARD = { x: 1.6, y: 4.4, w: 28.8, h: 23.2, r: 5 }
 const INNER = { x: 4.4, y: 7.2, w: 23.2, h: 17.6 }
 const MIN_RECT_PX = 1.4
 const MAX_RECTS = 16
+
+// The symbol occupies a square inside the board, so the shorter inner axis
+// bounds it; a little under that keeps it off the frame.
+const SYMBOL_SIZE_PX = 16
+const LUCIDE_UNITS = 24
+const SYMBOL_STROKE_PX = 1.9
 
 const AMBER = '#d97706'
 const GRAY = '#909090'
@@ -189,6 +197,69 @@ function drawStatusDot(ctx: CanvasRenderingContext2D, status: FaviconStatus): vo
 }
 
 /**
+ * The document's own symbol, drawn where the minimap or the squiggle would
+ * be. Centred in the board's inner area and square, so an icon and an emoji
+ * occupy the same place.
+ *
+ * Answers whether it drew anything: an icon NAME is validated for
+ * non-emptiness only (the vendored set belongs to the plugin, and a
+ * document may have been written elsewhere), so a name this build does not
+ * carry has to fall back to whatever the icon would otherwise have shown
+ * rather than leaving an empty board. That is the same degradation the node
+ * badge makes, said once per surface because each surface has a different
+ * thing to fall back TO.
+ */
+function drawSymbol(ctx: CanvasRenderingContext2D, symbol: VisualSymbolFacet): boolean {
+  const cx = INNER.x + INNER.w / 2
+  const cy = INNER.y + INNER.h / 2
+  if (symbol.kind === 'emoji') {
+    ctx.save()
+    ctx.font = `${SYMBOL_SIZE_PX}px sans-serif`
+    ctx.textAlign = 'center'
+    ctx.textBaseline = 'middle'
+    ctx.fillStyle = GRAY
+    ctx.fillText(symbol.char, cx, cy)
+    ctx.restore()
+    return true
+  }
+  const elements = LUCIDE_ICONS[symbol.name]
+  // Path2D is what draws the vendored `d` strings; a 2D context without it
+  // is old enough that the squiggle is the better answer.
+  if (elements === undefined || typeof Path2D !== 'function') return false
+  const scale = SYMBOL_SIZE_PX / LUCIDE_UNITS
+  ctx.save()
+  ctx.translate(cx - SYMBOL_SIZE_PX / 2, cy - SYMBOL_SIZE_PX / 2)
+  ctx.scale(scale, scale)
+  ctx.strokeStyle = GRAY
+  // Declared in ICON units so the scale above lands it at the on-screen
+  // weight named by the constant, instead of at lucide's 2 shrunk to 1.3 —
+  // which reads as a smudge at 32px.
+  ctx.lineWidth = SYMBOL_STROKE_PX / scale
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  for (const element of elements) {
+    ctx.beginPath()
+    switch (element.tag) {
+      case 'path':
+        ctx.stroke(new Path2D(element.d))
+        continue
+      case 'rect':
+        ctx.roundRect(element.x, element.y, element.width, element.height, element.rx ?? 0)
+        break
+      case 'circle':
+        ctx.arc(element.cx, element.cy, element.r, 0, Math.PI * 2)
+        break
+      case 'ellipse':
+        ctx.ellipse(element.cx, element.cy, element.rx, element.ry, 0, 0, Math.PI * 2)
+        break
+    }
+    ctx.stroke()
+  }
+  ctx.restore()
+  return true
+}
+
+/**
  * Render the favicon as a PNG data URL, or null where canvas 2D is
  * unavailable (jsdom, ancient browsers) — callers keep the static icon.
  */
@@ -196,10 +267,17 @@ export function renderFavicon({
   style,
   status,
   rects,
+  symbol,
 }: {
   style: FaviconStyle
   status: FaviconStatus
   rects: readonly FaviconRect[]
+  /**
+   * This document's own mark, when it has one. It outranks BOTH styles: the
+   * style setting says how much of the document's content to show, and a
+   * symbol is not content — it is what the document is called by.
+   */
+  symbol?: VisualSymbolFacet
 }): string | null {
   const canvas = document.createElement('canvas')
   canvas.width = 32
@@ -209,16 +287,21 @@ export function renderFavicon({
   ctx.clearRect(0, 0, 32, 32)
   ctx.globalAlpha = status === 'offline' ? 0.45 : 1
   drawBoard(ctx, status)
-  const projected = style === 'minimap' ? projectRectsToBoard(rects) : []
-  if (projected.length === 0) {
-    drawSquiggle(ctx)
-  } else {
-    ctx.save()
-    for (const r of projected) {
-      ctx.fillStyle = r.color ?? GRAY
-      ctx.fillRect(r.x, r.y, r.w, r.h)
+  // The mark, in order of precedence: the document's own symbol, then the
+  // content the style asks for, then the logo. The board and its status
+  // grammar are drawn either way — they are the frame, not the mark.
+  if (symbol === undefined || !drawSymbol(ctx, symbol)) {
+    const projected = style === 'minimap' ? projectRectsToBoard(rects) : []
+    if (projected.length === 0) {
+      drawSquiggle(ctx)
+    } else {
+      ctx.save()
+      for (const r of projected) {
+        ctx.fillStyle = r.color ?? GRAY
+        ctx.fillRect(r.x, r.y, r.w, r.h)
+      }
+      ctx.restore()
     }
-    ctx.restore()
   }
   ctx.globalAlpha = 1
   drawStatusDot(ctx, status)
