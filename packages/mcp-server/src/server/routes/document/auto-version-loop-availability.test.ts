@@ -73,6 +73,8 @@ const MAX_NODES = 8000
  * was: it takes two readings over the ceiling to fail, which is a machine
  * whose timings are not to be trusted anyway — and the message below says so
  * with all three readings rather than the one that lost.
+ *
+ * Must stay ODD: `median` takes the middle element rather than averaging.
  */
 const READINGS = 3
 
@@ -119,26 +121,25 @@ describe('what a checkpoint costs the loop that is serving requests', () => {
     const store = new FileVersionStore()
 
     let nodes = 250
-    let measured = await runOnce(store, nodes)
+    let readings = await readAt(store, nodes)
     // Grow until the pass is long enough for the sampler to say anything —
-    // an absolute fixture size is a statement about this machine.
-    while (measured.availability.elapsedMs < MIN_PASS_MS && nodes < MAX_NODES) {
+    // an absolute fixture size is a statement about this machine. The
+    // decision takes the median for the same reason the assertion does: one
+    // pause during the 250-node pass would clear `MIN_PASS_MS` on a document
+    // that does not, and every reading after it would be taken on a fixture
+    // too small to show a size-dependent regression at all.
+    while (median(readings, (a) => a.elapsedMs) < MIN_PASS_MS && nodes < MAX_NODES) {
       nodes *= 2
-      measured = await runOnce(store, nodes)
+      readings = await readAt(store, nodes)
     }
-
-    const readings = [measured]
-    while (readings.length < READINGS) readings.push(await runOnce(store, nodes))
 
     // The measurement is of checkpoints that HAPPENED. A flush that saved
     // nothing would report a stall of nothing, and pass.
     expect(readings.map((reading) => reading.saved)).toEqual(readings.map(() => 1))
-    expect(measured.availability.elapsedMs).toBeGreaterThanOrEqual(MIN_PASS_MS)
 
     const stalls = readings
       .map((reading) => reading.availability.worstStallMs)
       .sort((a, b) => a - b)
-    const median = stalls[(stalls.length - 1) / 2] as number
     // Carried into the assertion because the bare comparison names neither
     // the document it measured nor how the readings sat around each other,
     // and those are the two things a failure has to be triaged with. The
@@ -146,9 +147,34 @@ describe('what a checkpoint costs the loop that is serving requests', () => {
     // less than 500` is the same sentence at 250 nodes and at 8000.
     const detail = `${nodes} nodes, stalls ${stalls.join('/')}ms`
 
-    expect(median, detail).toBeLessThan(stallCeilingMs('auto-checkpoint'))
+    expect(
+      median(readings, (a) => a.elapsedMs),
+      detail,
+    ).toBeGreaterThanOrEqual(MIN_PASS_MS)
+    expect(
+      median(readings, (a) => a.worstStallMs),
+      detail,
+    ).toBeLessThan(stallCeilingMs('auto-checkpoint'))
   })
 })
+
+type Reading = { saved: number; availability: LoopAvailability }
+
+/** Every reading at one fixture size, so no decision here rests on one sample. */
+async function readAt(
+  store: InstanceType<typeof FileVersionStore>,
+  nodes: number,
+): Promise<Reading[]> {
+  const readings: Reading[] = []
+  while (readings.length < READINGS) readings.push(await runOnce(store, nodes))
+  return readings
+}
+
+/** `READINGS` is odd, so this is the middle element and not an average. */
+function median(readings: readonly Reading[], of: (a: LoopAvailability) => number): number {
+  const values = readings.map((reading) => of(reading.availability)).sort((a, b) => a - b)
+  return values[(values.length - 1) / 2] as number
+}
 
 async function runOnce(
   store: InstanceType<typeof FileVersionStore>,
