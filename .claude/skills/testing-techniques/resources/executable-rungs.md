@@ -111,18 +111,25 @@ Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
 | project | records | over | verdict |
 |---|---|---|---|
 | `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
-| `web-jsdom` | **0** unclaimed, 24 tests claiming | 368 files, 3819 tests | guarded |
+| `web-jsdom` | **0** unclaimed, 24 tests claiming | 368 files, 3819 collected | guarded |
 
 Both are guarded now. `web-jsdom` started at 219 records, and **two thirds of
 that was never a judgement call** — the reduction ran before the ledger, which
 is the order worth keeping:
 
+Each row is an independent measurement of the whole project on the tree at that
+point, not a delta from the row above — the test counts move between rows too,
+so subtracting two rows does not give the size of one cause. What each cause
+cost is stated in its own row: 138 of the 219, then 36 of the 43, then 8 of the
+36. (`3819` is what the project COLLECTS; the PR that landed this reports 3818
+passed, the difference being the one pre-existing wrong-Node-major failure.)
+
 | | records | tests | what it was |
 |---|---|---|---|
 | measured | 219 | 70 | |
-| after the act fixes | 82 | 63 | React's act-environment complaint, 138 of them (below) |
-| after mocking the fold | 43 | 35 | jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws; the guarded warn on the way was 36 records over 29 tests in six files |
-| after fixing one fixture | 36 | 29 | a mock answered the schema-checked GET `/versions` with the catch-all `{}`, so five tests quietly exercised a schema failure none of them is about |
+| after the act fixes | 82 | 63 | 138 of the 219: React's act-environment complaint (below) |
+| after mocking the fold | 43 | 35 | 36 of the 82: jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws, and the guarded warn on the way spanned 29 tests in six files |
+| after fixing one fixture | 36 | 29 | 8 of the 43: a mock answered the schema-checked GET `/versions` with the catch-all `{}`, so five tests quietly exercised a schema failure none of them is about |
 | claimed | **0** unclaimed | 24 claiming | tests driving a failure path on purpose |
 
 **Before writing a ledger, subtract the entries that are the environment rather

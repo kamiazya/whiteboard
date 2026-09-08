@@ -168,7 +168,10 @@ describe('DaemonDocumentPage versions', () => {
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method !== 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
             return Promise.resolve(
               new Response(JSON.stringify({ versions: [] }), {
                 status: 200,
@@ -249,7 +252,10 @@ describe('DaemonDocumentPage versions', () => {
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method !== 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
             return Promise.resolve(
               new Response(JSON.stringify({ versions: [] }), {
                 status: 200,
@@ -348,7 +354,10 @@ describe('DaemonDocumentPage versions', () => {
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method !== 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
             return Promise.resolve(
               new Response(JSON.stringify({ versions: [] }), {
                 status: 200,
@@ -409,7 +418,10 @@ describe('DaemonDocumentPage versions', () => {
           // POST — so the catch-all `{}` below reached `versionsResponseSchema`
           // and every one of these tests quietly exercised a schema failure it
           // is not about, logging it and carrying on.
-          if (url.includes('/workspaces/w1/documents/main/versions') && init?.method !== 'POST') {
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
             return Promise.resolve(
               new Response(JSON.stringify({ versions: [] }), {
                 status: 200,

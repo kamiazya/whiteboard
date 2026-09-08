@@ -37,8 +37,9 @@ The write-time rules, so the skill is a lookup rather than a prerequisite:
     growth loop floors that dimension — otherwise the slower machine gets the stricter test.
 14. `act` comes from `@testing-library/react`, never `react`, and never wraps a `waitFor` /
     `findBy*` (RTL turns the act environment off inside those, deliberately).
-15. A test that provokes a logged failure claims it with `await expectLoggedFailure('<fragment>')`,
-    which asserts the report arrived — never an allowlist entry.
+15. A test that provokes a logged failure claims it — `await expectLoggedFailure('<fragment>')`
+    in `web-jsdom`, which asserts the report arrived; `expectLoggedFailures()` in `web-browser`,
+    which returns the records to assert on. Never an allowlist entry.
 
 Executable rungs already hold most of these (`pnpm lint`'s GritQL plugin, `arch-lint`'s scans,
 the jsdom setup's teardown). A shape that costs a real defect twice moves up the ladder —
