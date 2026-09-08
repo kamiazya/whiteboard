@@ -97,31 +97,29 @@ describe('the proposal layer under density', () => {
   it('scores the spread board — the control', () => {
     expect(scoreOf('spread pitch 220x160, 40 proposals')).toEqual({
       bubbles: 40,
-      cleanBubbles: 17,
+      cleanBubbles: 40,
       overOwnOutline: 0,
-      overOtherOutline: 22080,
-      overNode: 30990,
+      overOtherOutline: 0,
+      overNode: 0,
       overBubble: 0,
-      meanLeaderPx: 23,
-      maxLeaderPx: 23,
+      meanLeaderPx: 38,
+      maxLeaderPx: 50,
     })
   })
 
-  // One number here got WORSE when the bubble was narrowed, and it is left
-  // in rather than smoothed over: `ten`'s `overOtherOutline` went 7977 ->
-  // 10700. A smaller box finds a placement the larger one could not, and at
-  // that one density the placement it finds sits over a neighbouring
-  // proposal's outline. Every other case improved, so it was taken — but a
-  // pinned number that only ever moves the good way is a number nobody is
+  // Numbers here move in BOTH directions and are left that way. Narrowing
+  // the bubble made `ten`'s outline overlap worse (7977 -> 10700) before the
+  // ring took it to zero; widening the candidate ring collapsed node and
+  // outline overlap while making bubble-on-bubble WORSE at twenty and forty
+  // (1800 -> 4856, 3601 -> 9532), because bubbles that fan out land in each
+  // other's chosen ground. Total debt at forty still fell 318235 -> 40961.
+  // A pinned number that only ever moves the good way is a number nobody is
   // reading.
   //
-  // Every leader is 23px in every case, and that is the finding rather than
-  // a quirk of the fixture: today's four candidates all sit one 14px offset
-  // from the anchor, so the placer has NO ability to trade distance for
-  // clarity. It picks the least-covered of four equally near boxes, and when
-  // all four are covered it takes the least bad one and stays put. A change
-  // that buys clean bubbles will move this number, which is the point of
-  // pinning it beside the debt.
+  // The leaders are the PRICE, and they are what the ring spends: they were
+  // 23px in every case before it, because the four candidates all sat one
+  // 14px offset from the anchor and the placer could not trade distance for
+  // clarity at all. It can now, out to `COMMENT_BUBBLE_RING_REACH_PX`.
   it('scores the crowded board as it fills', () => {
     expect({
       five: scoreOf('crowded pitch 168x90, 5 proposals'),
@@ -131,43 +129,43 @@ describe('the proposal layer under density', () => {
     }).toEqual({
       five: {
         bubbles: 5,
-        cleanBubbles: 2,
+        cleanBubbles: 5,
         overOwnOutline: 0,
-        overOtherOutline: 2578,
-        overNode: 4300,
-        overBubble: 360,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        overOtherOutline: 0,
+        overNode: 0,
+        overBubble: 0,
+        meanLeaderPx: 35,
+        maxLeaderPx: 77,
       },
       ten: {
         bubbles: 10,
-        cleanBubbles: 4,
+        cleanBubbles: 10,
         overOwnOutline: 0,
-        overOtherOutline: 10700,
-        overNode: 18114,
-        overBubble: 720,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        overOtherOutline: 0,
+        overNode: 0,
+        overBubble: 0,
+        meanLeaderPx: 64,
+        maxLeaderPx: 173,
       },
       twenty: {
         bubbles: 20,
-        cleanBubbles: 5,
+        cleanBubbles: 12,
         overOwnOutline: 0,
-        overOtherOutline: 57033,
-        overNode: 69430,
-        overBubble: 1800,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        overOtherOutline: 0,
+        overNode: 9025,
+        overBubble: 4856,
+        meanLeaderPx: 109,
+        maxLeaderPx: 198,
       },
       forty: {
         bubbles: 40,
-        cleanBubbles: 8,
+        cleanBubbles: 22,
         overOwnOutline: 0,
-        overOtherOutline: 148981,
-        overNode: 165653,
-        overBubble: 3601,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        overOtherOutline: 17163,
+        overNode: 14266,
+        overBubble: 9532,
+        meanLeaderPx: 124,
+        maxLeaderPx: 198,
       },
     })
   })
@@ -193,12 +191,12 @@ describe('the proposal layer under density', () => {
       },
       crowdedTen: {
         bubbles: 10,
-        cleanBubbles: 1,
+        cleanBubbles: 8,
         overPin: 0,
-        overNode: 14443,
-        overBubble: 11750,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        overNode: 0,
+        overBubble: 1371,
+        meanLeaderPx: 70,
+        maxLeaderPx: 183,
       },
       // The same collapse the proposal layer shows, on the same board: one
       // clean bubble in forty. It was never measured before this case
@@ -206,13 +204,40 @@ describe('the proposal layer under density', () => {
       // the proposal numbers alone.
       crowdedForty: {
         bubbles: 40,
-        cleanBubbles: 1,
-        overPin: 0,
-        overNode: 218688,
-        overBubble: 34867,
-        meanLeaderPx: 23,
-        maxLeaderPx: 23,
+        cleanBubbles: 18,
+        overPin: 2804,
+        overNode: 27991,
+        overBubble: 22034,
+        meanLeaderPx: 126,
+        maxLeaderPx: 211,
       },
     })
+  })
+  // The invariant, checked against ids this corpus MINTED rather than
+  // inferred from id shape: a bubble may be pushed onto a neighbour's pin
+  // when the board leaves nowhere clean, and never onto its own. The four
+  // quadrants cleared their own pin by the 14px offset; every ring candidate
+  // starts 40px out, so it clears it too — which is why `overPin` above is
+  // entirely other comments' pins, and why it is a debt rather than a broken
+  // rule.
+  it('never covers the pin of the comment it belongs to', () => {
+    for (const name of ['spread pitch 220x160, 40 comments', 'crowded pitch 168x90, 40 comments']) {
+      const entry = entryOf(name)
+      const scene = sceneOf(entry)
+      const boxOf = (id: string): BoundingBox | undefined => {
+        const node = scene.nodes.find((n) => n.kind === 'shape' && n.id === id)
+        return node !== undefined && node.kind === 'shape' ? node.bbox : undefined
+      }
+      for (const comment of entry.comments) {
+        const bubble = boxOf(`${comment.id}/bubble`)
+        const pin = boxOf(`${comment.id}/pin`)
+        expect(bubble, `${name} ${comment.id} bubble`).toBeDefined()
+        expect(pin, `${name} ${comment.id} pin`).toBeDefined()
+        if (bubble === undefined || pin === undefined) continue
+        const w = Math.min(bubble.x + bubble.w, pin.x + pin.w) - Math.max(bubble.x, pin.x)
+        const h = Math.min(bubble.y + bubble.h, pin.y + pin.h) - Math.max(bubble.y, pin.y)
+        expect(w > 0 && h > 0 ? w * h : 0, `${name} ${comment.id}`).toBe(0)
+      }
+    }
   })
 })
