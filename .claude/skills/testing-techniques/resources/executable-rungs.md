@@ -8,7 +8,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 
 | Instrument | Rung | Catches |
 |---|---|---|
-| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`); a PR/issue number or `pre-fix` in a title |
+| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`) and un-awaited `expectLoggedFailure`; a PR/issue number or `pre-fix` in a title |
 | `tools/biome-plugins/logger-argument-order.grit` | lint | `log.warning('msg', x)` in `mcp-server/src/server/**` (pino drops `x`) |
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
 | `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
@@ -193,6 +193,36 @@ Two traps beside it, both of which produced a confident wrong number here:
 - **A `console.error` format string is recorded raw.** The message is
   `An update to %s inside a test was not wrapped in act(...)`; grepping for the
   formatted component name finds nothing.
+
+### Which learnings became rungs, and which were refused
+
+Three candidates came out of this work. Only two became rungs, and the third is
+worth recording because refusing it was the finding:
+
+- **Un-awaited `expectLoggedFailure` → a GritQL rule.** A worse shape than the
+  assertions beside it in the same plugin: the call both CLAIMS the record
+  (silencing the guard) and WAITS for it (the assertion). Without `await` the
+  claim lands and the assertion never runs, so a forgotten one does not skip a
+  check, it disables the safety net for that test. Measured, worst case: with
+  the `await` dropped AND the provoked failure no longer happening,
+  `celebrate.test.ts` reported `3 passed`.
+
+- **An out-of-range passage is a conflict → a property.** `bodyChangeConflicts`
+  carried the same `slice` clamping trap `resolveTextAnchor` did, and its own
+  doc comment already stated the intent the code missed ("a passage that cannot
+  be placed is a conflict") — for `at === undefined` only. The property is
+  one-sided on purpose: a false positive there is friction, a false negative is
+  adopting an edit onto text the proposer was never shown.
+
+- **A lint rule on `.slice(a, b) === x` → REFUSED.** The clamping trap is real
+  and the pattern is greppable, so it looks like the obvious rung. Measured:
+  three occurrences repo-wide, and after the resolver fix ALL THREE are safe,
+  because the invariant is enforced upstream where the range is produced. A
+  rule with three false positives and no true ones is the kind nobody trusts
+  when it fires. **Fixing the producer beat guarding every consumer** — which
+  is the same judgement `storedCoreFacetsSchema` and `readCoreFacets` record:
+  remove the place wrong state can live, rather than checking for it at each
+  call site.
 
 ### The act flag, measured and rejected — and what worked instead
 
