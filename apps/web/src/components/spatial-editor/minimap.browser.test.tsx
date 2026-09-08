@@ -214,3 +214,38 @@ it('sits above the canvas scene', () => {
   const { container } = render(<Host canvas0={spread} />)
   expect(getComputedStyle(minimapOf(container)!).zIndex).not.toBe('auto')
 })
+
+// The overview is the surface `visual.symbol` was built for: a node here is
+// a few pixels, so the box says WHERE and the mark says WHICH.
+const marked = (width: number): SpatialCanvas => ({
+  nodes: [
+    {
+      id: 'a',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width,
+      height: width,
+      text: 'A',
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+    },
+    { id: 'b', type: 'text', x: 4000, y: 4000, width: 100, height: 60, text: 'B' },
+  ],
+  edges: [],
+})
+
+it("draws a node's symbol in the overview once its box is big enough to hold one", () => {
+  // A node occupying most of the fitted bounds projects well past the
+  // threshold.
+  const { container } = render(<Host canvas0={marked(3000)} />)
+  expect(container.querySelector('[data-testid="minimap-symbol"]')).toBeTruthy()
+})
+
+it('leaves a box too small for a mark as a plain box', () => {
+  // The same document, with the marked node small enough that its projected
+  // box is a few pixels: a symbol drawn there is dirt on the box, not a
+  // mark, so the overview keeps what it had.
+  const { container } = render(<Host canvas0={marked(40)} />)
+  expect(container.querySelector('[data-testid="minimap"]')).toBeTruthy()
+  expect(container.querySelector('[data-testid="minimap-symbol"]')).toBeNull()
+})
