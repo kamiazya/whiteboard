@@ -23,6 +23,17 @@ import { afterEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 
+// jsdom has no IndexedDB, so the startup fold cannot run here: it throws, the
+// production path catches it and continues, and that guarded continue is
+// exactly what these tests already run under. Mocked to the same outcome
+// rather than left to throw, because the warn it logs on the way is noise in a
+// channel that has to stay readable — `vitest.setup.ts`'s act guard and
+// `web-browser`'s wider one both live there. Measured: 36 of the project's 78
+// console records were this one line.
+vi.mock('../lib/fold-workspace.js', () => ({
+  foldWorkspaceDocuments: async () => ({ folded: 0, skipped: 0 }),
+}))
+
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: () => <div data-testid="mock-spatial-editor" />,
 }))

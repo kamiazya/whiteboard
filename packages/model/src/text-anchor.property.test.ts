@@ -84,6 +84,58 @@ describe('resolveTextAnchor', () => {
     },
   )
 
+  fcTest.prop([built, fc.integer({ min: -4, max: 8 }), fc.integer({ min: 0, max: 6 })])(
+    'never answers with a range the body does not have',
+    (b, widthDrift, trimmed) => {
+      // Two independent ways the stored anchor stops agreeing with the body,
+      // because the invariant has to hold under both and each alone misses the
+      // defect this property exists for.
+      //
+      // `widthDrift` is the one that matters and the one a naive generator
+      // never produces: an anchor whose WIDTH disagrees with its own quote.
+      // `built` always stores `end = start + quote.length`, and under that
+      // invariant `slice`'s clamping can never fabricate a match — the tail of
+      // a shortened body is shorter than the quote, so the comparison fails
+      // honestly. Measured: with `widthDrift` fixed at 0 this property passes
+      // against the unfixed resolver, which is the vacuous version of it.
+      //
+      // Every consumer indexes the body with a `placed` answer;
+      // `markThreadPassages` hands it straight to `LoroText.mark`, where an
+      // end past the text is a throw from inside the CRDT naming neither the
+      // thread nor the document.
+      const shorter = b.body.slice(0, Math.max(0, b.body.length - trimmed))
+      const resolved = resolveTextAnchor(shorter, {
+        ...b.anchor,
+        end: Math.max(b.anchor.start, b.anchor.end + widthDrift),
+      })
+      if (resolved.kind !== 'placed') return
+
+      expect(resolved.start).toBeGreaterThanOrEqual(0)
+      expect(resolved.end).toBeGreaterThanOrEqual(resolved.start)
+      expect(resolved.end).toBeLessThanOrEqual(shorter.length)
+    },
+  )
+
+  it('refuses the stored offsets when they run past the end of the body', () => {
+    // `String.prototype.slice` CLAMPS, so the shortcut that trusts the stored
+    // offsets cannot tell "the quote is still there" from "the body ends
+    // early and what remains happens to equal the quote". Measured:
+    // `'hello world'.slice(6, 20)` is `'world'`, so the comparison succeeds
+    // and the branch returns `end: 20` for an eleven-character body.
+    //
+    // Observed as `[document-sync] backfilling thread marks failed Index out
+    // of bound. The given pos is 20, but the length is 19`, swallowed by a
+    // catch, in three PASSING tests.
+    const resolved = resolveTextAnchor('hello world', {
+      kind: 'text',
+      quote: { exact: 'world' },
+      start: 6,
+      end: 20,
+    })
+
+    expect(resolved).toEqual({ kind: 'placed', start: 6, end: 11 })
+  })
+
   fcTest.prop([built], withDefaults())('says a passage that was deleted is orphaned', (b) => {
     // The alphabets are disjoint, so removing the passage removes every
     // occurrence of it — this is a real deletion, not a move.

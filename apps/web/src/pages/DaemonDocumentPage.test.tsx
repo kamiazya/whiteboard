@@ -400,9 +400,7 @@ describe('DaemonDocumentPage', () => {
 
     const oldBackend = createdBackends[0]!
 
-    await act(async () => {
-      await switchDocumentViaConnections('Second board')
-    })
+    await switchDocumentViaConnections('Second board')
 
     expect(oldBackend.disconnectCount).toBe(1)
     expect(createdBackends).toHaveLength(2)
@@ -506,9 +504,7 @@ describe('DaemonDocumentPage', () => {
     })
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 
-    await act(async () => {
-      await switchDocumentViaConnections('Second board')
-    })
+    await switchDocumentViaConnections('Second board')
 
     // The stale sync-off state must not outlive the backend that produced it.
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })

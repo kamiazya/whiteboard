@@ -132,8 +132,23 @@ export function markThreadPassages(
   configureThreadStyles(doc, ids)
   const text = containers.getText(MARKDOWN_BODY_KEY)
   for (const [threadId, range] of passages) {
-    if (range.end <= range.start) continue
-    text.mark(range, threadStyleKey(threadId), true)
+    // Bounded against the text, because a caller can hand over a range it
+    // does not have and `mark` answers that with a throw from inside the CRDT
+    // — `Index out of bound. The given pos is 20, but the length is 19` —
+    // naming neither the thread nor the document, which every caller here has
+    // behind a catch that logs and carries on. Two sources, both real: the
+    // resolver's stored-offsets shortcut used to answer an `end` past the
+    // body, and `document-sync-session`'s create-thread path passes
+    // `thread.anchor` straight through with no resolution at all.
+    //
+    // Clamped rather than skipped: a passage whose tail was deleted still HAS
+    // a place in this body, and marking what survived is the same answer
+    // `readThreadMarks` gives for a partial deletion. Only a range with
+    // nothing left of it inside the text is dropped.
+    const start = Math.min(range.start, text.length)
+    const end = Math.min(range.end, text.length)
+    if (end <= start) continue
+    text.mark({ start, end }, threadStyleKey(threadId), true)
   }
   containers.commit()
 }
