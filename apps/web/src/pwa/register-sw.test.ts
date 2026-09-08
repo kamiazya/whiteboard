@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { setupSwRegistration } from './register-sw.js'
 
 function fireWindowLoad(): void {
@@ -150,6 +151,7 @@ describe('setupSwRegistration', () => {
     } finally {
       window.removeEventListener('unhandledrejection', onUnhandledRejection)
     }
+    await expectLoggedFailure('failed to register the service worker')
   })
 
   it('passes both onNeedRefresh and onRegisteredSW to registerSW', async () => {
@@ -242,6 +244,7 @@ describe('setupSwRegistration', () => {
       window.removeEventListener('unhandledrejection', onUnhandledRejection)
       vi.doUnmock('./sw-update-scheduler.js')
     }
+    await expectLoggedFailure('failed to load the service worker update scheduler')
   })
 
   it('does not throw and schedules nothing when onRegisteredSW is invoked with no registration', async () => {

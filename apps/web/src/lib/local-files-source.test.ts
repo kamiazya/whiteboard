@@ -8,6 +8,7 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -197,6 +198,7 @@ describe('createLocalFilesSource tags', () => {
     const entries = await createLocalFilesSource().listDocuments()
     expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
     expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
+    await expectLoggedFailure('startup fold left documents behind')
   })
 })
 

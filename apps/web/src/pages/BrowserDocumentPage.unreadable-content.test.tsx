@@ -19,6 +19,7 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { ensureLocalWorkspace, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 
@@ -70,6 +71,7 @@ describe('a document this build cannot read', () => {
     // The half that protects the document: no editor, so nothing can save
     // over it.
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
+    await expectLoggedFailure('startup fold left documents behind')
   })
 
   it('says the data is corrupt when the bytes are not Loro', async () => {
@@ -84,6 +86,7 @@ describe('a document this build cannot read', () => {
       expect(screen.getByRole('alert').textContent).toMatch(/could not be read/i)
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
+    await expectLoggedFailure('startup fold left documents behind')
   })
 
   it('stops reporting the failure once a readable document is opened', async () => {
@@ -117,5 +120,6 @@ describe('a document this build cannot read', () => {
 
     await waitFor(() => expect(screen.getByTestId('mock-spatial-editor')).toBeTruthy())
     expect(screen.queryByRole('alert')).toBeNull()
+    await expectLoggedFailure('startup fold left documents behind')
   })
 })

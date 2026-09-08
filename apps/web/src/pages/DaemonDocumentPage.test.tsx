@@ -739,6 +739,20 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all reached `versionsResponseSchema` and this
+          // test quietly exercised a schema failure it is not about.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(

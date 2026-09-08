@@ -1,5 +1,6 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { expectLoggedFailure } from '../../test-utils/logged-failures.js'
 import { createWhiteboardCommands } from '../commands/create-commands.js'
 import type { WhiteboardCommands } from '../commands/index.js'
 import { webMcpTools } from './tool-definitions.js'
@@ -151,7 +152,7 @@ describe('useBrowserToolRegistry', () => {
     expect(live).toEqual(webMcpTools.map((tool) => tool.name))
   })
 
-  it('a duplicate-name refusal is caught instead of taking down the page', () => {
+  it('a duplicate-name refusal is caught instead of taking down the page', async () => {
     // Chrome throws InvalidStateError synchronously for an already-live name.
     const fake = createFakeModelContext()
     document.modelContext = fake
@@ -163,6 +164,7 @@ describe('useBrowserToolRegistry', () => {
     })
 
     expect(() => render(<TestHarness commands={fakeCommands()} documentKey="c1" />)).not.toThrow()
+    await expectLoggedFailure('registerTool(whiteboard_get_app_context) failed')
   })
 
   it('a synchronous registration failure is caught and never escapes the effect', async () => {
@@ -181,6 +183,7 @@ describe('useBrowserToolRegistry', () => {
     } finally {
       process.off('unhandledRejection', onUnhandledRejection)
     }
+    await expectLoggedFailure('registerTool(whiteboard_get_app_context) failed')
   })
 
   it('does not attempt registration when documentKey is null (no canvas open)', async () => {
