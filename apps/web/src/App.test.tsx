@@ -30,6 +30,7 @@ import './components/status/NotFoundPage.js'
 import './pages/PairConsentPage.js'
 import { type ProviderState, resolveHostedProviderStateFromRaw } from './lib/provider.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
+import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
 afterEach(() => {
   cleanup()
@@ -1021,6 +1022,8 @@ describe('App daemon provider state', () => {
       throwInDaemonDocumentPage = false
       reportSpy.mockRestore()
     }
+    await expectLoggedFailure('fold before counting failed')
+    await expectLoggedFailure('The above error occurred')
   })
 })
 
@@ -1509,6 +1512,7 @@ describe('App error boundary', () => {
     expect(screen.getByText('Something went wrong')).toBeTruthy()
     expect(reportSpy).toHaveBeenCalled()
     reportSpy.mockRestore()
+    await expectLoggedFailure('The above error occurred')
   })
 
   it('catches an error surfacing through the paired branch lazy path (boundary sits outside Suspense)', async () => {
@@ -1539,6 +1543,7 @@ describe('App error boundary', () => {
       mockDaemonConnectionResult = { status: 'none' }
       reportSpy.mockRestore()
     }
+    await expectLoggedFailure('The above error occurred')
   })
 })
 

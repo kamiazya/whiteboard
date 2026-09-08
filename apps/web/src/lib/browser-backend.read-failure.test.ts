@@ -28,6 +28,7 @@
 import { StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { BrowserBackend } from './browser-backend.js'
 import type { DocumentFileStore } from './document-file-store.js'
 import type { LoroStore } from './loro-store.js'
@@ -79,6 +80,7 @@ describe('what a failed workspace read is reported as', () => {
       new StoredDocumentUnreadableError('malformed', 'chunks do not match the manifest'),
     )
     await vi.waitFor(() => expect(reasons).toEqual(['corrupt-snapshot']))
+    await expectLoggedFailure('opening the workspace record failed')
   })
 
   it('reports a read that never completed as unavailable, not as damage', async () => {
@@ -88,6 +90,7 @@ describe('what a failed workspace read is reported as', () => {
       new Error('another tab has this app open at an older version; close it and reload'),
     )
     await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
+    await expectLoggedFailure('opening the workspace record failed')
   })
 
   it('treats an aborted IndexedDB transaction the same way', async () => {
@@ -96,5 +99,6 @@ describe('what a failed workspace read is reported as', () => {
     // that neither says anything about the bytes.
     const { reasons } = connectAgainst(new DOMException('transaction aborted', 'AbortError'))
     await vi.waitFor(() => expect(reasons).toEqual(['read-unavailable']))
+    await expectLoggedFailure('opening the workspace record failed')
   })
 })

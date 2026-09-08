@@ -10,6 +10,7 @@
  * bundle is offering a button that does nothing.
  */
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { reloadFresh } from './reload-fresh.js'
 
 interface Recorder {
@@ -92,5 +93,6 @@ describe('reloadFresh', () => {
       reloaded += 1
     })
     expect(reloaded).toBe(1)
+    await expectLoggedFailure('could not drop the service worker before reloading')
   })
 })

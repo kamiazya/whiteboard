@@ -24,6 +24,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `apps/web/vitest.setup.ts`, `src/test-utils/browser-setup.ts`, `vitest.browser.shared.ts` | setup guard | unmounted trees, leaked fake timers (fails the test by name), `localStorage`, missing stylesheet, 1000ms async budget, trace growth |
 | `src/test-utils/browser-setup.ts`'s `expectLoggedFailures` | setup guard (`web-browser`) | any `console.error`/`warn` in a browser test — a failure that was caught, logged and swallowed. Strict, no allowlist; opt in per test to claim one |
 | `apps/web/vitest.setup.ts`'s act guard | setup guard (`web-jsdom`) | React's act complaints — `act` inside a `waitFor`/`findBy*`, or imported from `react` rather than RTL |
+| `src/test-utils/logged-failures.ts`'s `expectLoggedFailure` | setup guard (`web-jsdom`) | any other `console.error`/`warn` — a failure caught, logged and swallowed. The claim is an ASSERTION: it waits for the named record and fails if it never arrives |
 | `background-work-costs.test.ts` + `loop-availability.ts` | `mcp-node` | a declared stall ceiling no test asserts |
 
 ## Adding a GritQL shape
@@ -110,29 +111,43 @@ Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
 | project | records | over | verdict |
 |---|---|---|---|
 | `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
-| `web-jsdom` | **43**, across 35 tests | 377 files, 3947 tests | a ledger of ~35 claims, not yet written |
+| `web-jsdom` | **0** unclaimed, 24 tests claiming | 368 files, 3819 tests | guarded |
 
-`web-jsdom` started at 219, and two thirds of that was never a judgement call:
+Both are guarded now. `web-jsdom` started at 219 records, and **two thirds of
+that was never a judgement call** — the reduction ran before the ledger, which
+is the order worth keeping:
 
 | | records | tests | what it was |
 |---|---|---|---|
 | measured | 219 | 70 | |
 | after the act fixes | 82 | 63 | React's act-environment complaint, 138 of them (below) |
-| after mocking the fold | **43** | **35** | jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws; the production path catches it and continues, and the guarded warn on the way was 36 records over 29 tests in six files |
+| after mocking the fold | 43 | 35 | jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws; the guarded warn on the way was 36 records over 29 tests in six files |
+| after fixing one fixture | 36 | 29 | a mock answered the schema-checked GET `/versions` with the catch-all `{}`, so five tests quietly exercised a schema failure none of them is about |
+| claimed | **0** unclaimed | 24 claiming | tests driving a failure path on purpose |
 
-Neither reduction weakened a test. The fold one is behaviour-identical — those
-tests already ran under the guarded continue, and the mock returns the same
-outcome the throw produced — so it removes noise rather than coverage.
+**Before writing a ledger, subtract the entries that are the environment rather
+than a decision.** Two thirds of this one dissolved that way, and what was left
+was small enough to write honestly.
 
-What is left is a ledger of ~35 claims: tests driving a failure path
-deliberately (`canvas exploded`, `network down`, a refused tool registration),
-where logging is the right behaviour and each needs an entry saying so. Real
-work, worth doing on its own merits rather than as a side effect. The act
-family is guarded already, because that part became free.
+### A claim that asserts beats an allowlist that exempts
 
-The order generalises: **before writing a ledger, subtract the entries that are
-the environment rather than a decision.** Two thirds of this one dissolved, and
-the remainder is small enough to write honestly.
+The 24 that remain do not get an exemption. `expectLoggedFailure('<fragment>')`
+claims the record AND waits for it, so a test that stops producing its degraded
+report fails rather than passing quietly — the direction a bare allowlist cannot
+see. Each of those tests was already asserting that a failure is SURVIVED
+(`celebrate` resolves, `reloadFresh` still reloads, the registry does not take
+the page down); the claim adds the half they were all missing, that the failure
+is also REPORTED.
+
+Two mechanics it cost, both measured:
+
+- **The claim must WAIT.** These reports are fire-and-forget catches on rejected
+  promises, so they land after the body that provoked them. A synchronous
+  assertion saw `(none)` and let the record leak into the NEXT test — one cause,
+  two failing tests. `vi.waitFor`, and the fragment is claimed BEFORE the wait
+  so a record arriving during it is already spoken for.
+- **State on `globalThis`**, for the reason `browser-setup.ts` records: the
+  setup file and a test importing the helper are two module instances.
 
 ### Take this measurement with a RECORDER, never a throwing guard
 

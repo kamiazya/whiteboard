@@ -17,6 +17,7 @@ import {
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import { loadWorkspaceDocumentProjection } from './lib/workspace-content.js'
 import { clearNamedDb } from './test-utils/browser-document.js'
+import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
 const REAL_DB_NAME = 'whiteboard-boot-test'
 
@@ -110,6 +111,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     const recovered = await resolveBrowserWorkspaceId(REAL_DB_NAME)
     expect(recovered).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
     expect(getBrowserWorkspaceId()).toBe(recovered)
+    await expectLoggedFailure('browser workspace id resolution failed')
   })
 
   it('renders anyway when the resolver never settles, rather than holding the splash', async () => {
@@ -137,6 +139,7 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     // never waited for the resolver at all.
     expect(Date.now() - start).toBeGreaterThanOrEqual(2500)
     expect(() => getBrowserWorkspaceId()).toThrow(/resolveBrowserWorkspaceId/)
+    await expectLoggedFailure('browser workspace id resolution did not settle')
   }, 15_000)
 
   it('refuses a sole workspace key that is not a canonical id', async () => {
