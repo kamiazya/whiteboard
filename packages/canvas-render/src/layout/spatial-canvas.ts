@@ -1858,7 +1858,7 @@ function composeProposals(
         out.push({
           kind: 'shape',
           id: `${change.id}/outline`,
-          proposalChrome: true,
+          proposalChrome: { proposalId: proposal.id },
           bbox: box,
           radius: COMMENT_BUBBLE_RADIUS_PX,
           ...paint,
@@ -1924,7 +1924,7 @@ function composeProposals(
     out.push({
       kind: 'shape',
       id: `${proposal.id}/bubble`,
-      proposalChrome: true,
+      proposalChrome: { proposalId: proposal.id },
       bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(chrome === undefined ? {} : { appearance: chrome.bubble }),

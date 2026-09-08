@@ -254,10 +254,25 @@ export function panToShowTarget(
  */
 const PROPOSAL_REVEAL_INSET_PX = 80
 
-/** One proposal's chrome, as the scene projection reports it. */
+interface SceneBox {
+  readonly x: number
+  readonly y: number
+  readonly w: number
+  readonly h: number
+}
+
+/**
+ * One proposal's chrome, as the scene projection reports it.
+ *
+ * Two boxes because two questions: `bbox` is the BUBBLE — where the card
+ * opens and what a press hits — and `extent` is all of this proposal's
+ * chrome, which is what a reveal frames so the change is in the picture
+ * beside the affordance.
+ */
 export interface ProposalChromeBox {
   readonly proposalId: string
-  readonly bbox: { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
+  readonly bbox: SceneBox
+  readonly extent: SceneBox
 }
 
 /**
@@ -265,10 +280,11 @@ export interface ProposalChromeBox {
  * chrome for it — a panel's list can outrun the scene by a frame, and moving
  * the viewport to nowhere is worse than not moving.
  *
- * The CHROME box, not the changed nodes: a proposal that adds a node anchors
- * on ids the canvas does not hold yet, and fitting to those lands on nothing.
- * The chrome is what a person is looking for, and it is in the scene by
- * definition.
+ * The whole CHROME, not the changed nodes: a proposal that adds a node
+ * anchors on ids the canvas does not hold yet, and fitting to those lands on
+ * nothing. The chrome is what a person is looking for, it is in the scene by
+ * definition, and its extent already covers where each change would land —
+ * `composeProposals` draws an outline there.
  */
 export function viewportRevealingProposal(
   chrome: readonly ProposalChromeBox[],
@@ -276,7 +292,7 @@ export function viewportRevealingProposal(
 ): Viewport | null {
   const found = chrome.find((entry) => entry.proposalId === proposalId)
   if (found === undefined) return null
-  const { x, y, w, h } = found.bbox
+  const { x, y, w, h } = found.extent
   return fitViewportToBoxes([
     { x: x - PROPOSAL_REVEAL_INSET_PX, y: y - PROPOSAL_REVEAL_INSET_PX, width: w, height: h },
   ])

@@ -28,6 +28,18 @@ export interface SceneProjectionInputs {
   readonly extraIds: ReadonlySet<string>
 }
 
+/** The smallest box covering both — scene bboxes are `{x,y,w,h}`. */
+function coverBoth(a: BoundingBox, b: BoundingBox): BoundingBox {
+  const x = Math.min(a.x, b.x)
+  const y = Math.min(a.y, b.y)
+  return {
+    x,
+    y,
+    w: Math.max(a.x + a.w, b.x + b.w) - x,
+    h: Math.max(a.y + a.h, b.y + b.h) - y,
+  }
+}
+
 export function useSceneProjection({
   scene,
   bounds,
@@ -95,22 +107,38 @@ export function useSceneProjection({
    * marker (`proposalChrome`, ADR-0029 decision 1): the box a press opens a
    * proposal card on is the box the renderer painted.
    *
-   * Bubbles only. A change's outline is drawn ON the document at the place
-   * the change would land, so making it pressable would put a dead zone
-   * over the node underneath — the outline is the illustration, and the
+   * `bbox` is the BUBBLE only. A change's outline is drawn ON the document at
+   * the place the change would land, so making it pressable would put a dead
+   * zone over the node underneath — the outline is the illustration, and the
    * bubble is the affordance.
+   *
+   * `extent` is the opposite answer to a different question: every piece of
+   * this proposal's chrome, so REVEALING one can frame what the change is
+   * about. Fitting to the bubble alone put the affordance on screen with the
+   * outline cut off at the edge — measured at -54px in the V4 figure.
+   *
+   * Grouped by the marker's `proposalId` rather than by splitting ids,
+   * because an outline's id names its CHANGE and only the bubble's names the
+   * proposal (`scene-graph.ts` says why id shape is not sound to infer from).
    */
-  const proposalChromeBoxes = useMemo(
-    () =>
-      scene.nodes.flatMap((node) => {
-        if (node.kind !== 'shape' || node.proposalChrome !== true || node.id === undefined)
-          return []
-        const cut = node.id.lastIndexOf('/')
-        if (cut <= 0 || node.id.slice(cut + 1) !== 'bubble') return []
-        return [{ proposalId: node.id.slice(0, cut), bbox: node.bbox }]
-      }),
-    [scene],
-  )
+  const proposalChromeBoxes = useMemo(() => {
+    const byProposal = new Map<string, { bubble?: BoundingBox; extent: BoundingBox }>()
+    for (const node of scene.nodes) {
+      if (node.kind !== 'shape' || node.proposalChrome === undefined) continue
+      const { proposalId } = node.proposalChrome
+      const held = byProposal.get(proposalId)
+      const isBubble = node.id?.endsWith('/bubble') === true
+      byProposal.set(proposalId, {
+        ...(isBubble ? { bubble: node.bbox } : held?.bubble ? { bubble: held.bubble } : {}),
+        extent: held === undefined ? node.bbox : coverBoth(held.extent, node.bbox),
+      })
+    }
+    // A proposal with no bubble has no affordance to open, so it is not in
+    // the list at all — the same reading the bubbles-only filter had.
+    return [...byProposal].flatMap(([proposalId, { bubble, extent }]) =>
+      bubble === undefined ? [] : [{ proposalId, bbox: bubble, extent }],
+    )
+  }, [scene])
   /**
    * Every selected node with the box it currently occupies, primary first.
    *
