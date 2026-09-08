@@ -60,7 +60,11 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
+import {
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  layoutCommentBody,
+  PROPOSAL_TEXT_MAX_WIDTH_PX,
+} from './comment-body.js'
 import {
   commentLeaderEnd,
   nearestPointOnPolyline,
@@ -1891,7 +1895,8 @@ function composeProposals(
     // no count. This bubble borrows the comment layer's grammar throughout;
     // borrowing its producer is what keeps that true.
     const laid = layoutCommentBody(label, {
-      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      ...mdastOptionsFor(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
+      density: 'compact',
       parseBody: options.parseBody,
       onParseFailure: (err) =>
         options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
