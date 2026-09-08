@@ -1,7 +1,17 @@
-import type { Proposal, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  Proposal,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 
 /**
- * Boards for the proposal-density scoreboard.
+ * Boards for the annotation-density scoreboard.
+ *
+ * It covers BOTH residents of ADR-0026's annotation layer, because they
+ * share one bubble placer: a change to `comment-placement.ts` reaches a
+ * comment and a proposal alike, and measuring only one of them is how the
+ * other's damage goes unseen.
  *
  * ADR-0029 decision 9 says a pile of proposals collapses to a count, and
  * calls that a direction rather than an answer for what a document with
@@ -23,10 +33,12 @@ const NODE_W = 160
 const NODE_H = 80
 const NODE_COUNT = 40
 
-export interface ProposalDensityCase {
+export interface AnnotationDensityCase {
   readonly name: string
   readonly canvas: SpatialCanvas
+  /** Empty on a comment case; a case carries one kind, so a score names one. */
   readonly proposals: readonly Proposal[]
+  readonly comments: readonly CanvasComment[]
 }
 
 function board(pitchX: number, pitchY: number): SpatialCanvas {
@@ -93,12 +105,47 @@ function proposalsFor(canvas: SpatialCanvas, count: number): Proposal[] {
   return out
 }
 
-function caseOf(name: string, pitchX: number, pitchY: number, count: number): ProposalDensityCase {
+function caseOf(
+  name: string,
+  pitchX: number,
+  pitchY: number,
+  count: number,
+): AnnotationDensityCase {
   const canvas = board(pitchX, pitchY)
-  return { name, canvas, proposals: proposalsFor(canvas, count) }
+  return { name, canvas, proposals: proposalsFor(canvas, count), comments: [] }
 }
 
-export const PROPOSAL_DENSITY_CORPUS: readonly ProposalDensityCase[] = [
+/**
+ * One comment per targeted node, anchored where a proposal's outline puts
+ * its own anchor — the node's top-right — so the two kinds are placed from
+ * the same points and a difference in the score is a difference in what the
+ * placer did, not in where it was asked to start.
+ */
+function commentsFor(canvas: SpatialCanvas, count: number): CanvasComment[] {
+  const out: CanvasComment[] = []
+  for (let i = 0; i < count; i += 1) {
+    const target = canvas.nodes[i] as SpatialNode
+    out.push({
+      id: `k${i}`,
+      x: target.x + target.width,
+      y: target.y,
+      text: 'looks right to me',
+    })
+  }
+  return out
+}
+
+function commentCaseOf(
+  name: string,
+  pitchX: number,
+  pitchY: number,
+  count: number,
+): AnnotationDensityCase {
+  const canvas = board(pitchX, pitchY)
+  return { name, canvas, proposals: [], comments: commentsFor(canvas, count) }
+}
+
+export const ANNOTATION_DENSITY_CORPUS: readonly AnnotationDensityCase[] = [
   // The control: a board with room, where the placer has always been fine.
   caseOf('spread pitch 220x160, 40 proposals', 220, 160, 40),
   // Crowded, at the counts ADR-0029 names and the ones on the way there.
@@ -106,4 +153,10 @@ export const PROPOSAL_DENSITY_CORPUS: readonly ProposalDensityCase[] = [
   caseOf('crowded pitch 168x90, 10 proposals', 168, 90, 10),
   caseOf('crowded pitch 168x90, 20 proposals', 168, 90, 20),
   caseOf('crowded pitch 168x90, 40 proposals', 168, 90, 40),
+  // The placer's OTHER consumer, on the same boards. A comment's bubble is
+  // the same geometry placed by the same search, so a change made for the
+  // proposal layer lands here whether anyone measured it or not.
+  commentCaseOf('spread pitch 220x160, 40 comments', 220, 160, 40),
+  commentCaseOf('crowded pitch 168x90, 10 comments', 168, 90, 10),
+  commentCaseOf('crowded pitch 168x90, 40 comments', 168, 90, 40),
 ]

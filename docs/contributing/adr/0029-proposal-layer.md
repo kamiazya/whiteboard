@@ -423,9 +423,29 @@ Harder, and these are real:
   than a full board. What that costs is leader length, which is the trade the
   scoreboard prices.
 
-  `layout/proposal-density-quality.test.ts` is that scoreboard, and the
-  increments answering the board are judged by it. The first of them narrowed
-  the bubble (below); the second widens the candidate ring.
+  `layout/annotation-density-quality.test.ts` is that scoreboard, and both
+  increments answering the board were judged by it. The first narrowed the
+  bubble (decision 6b below). The second gave the placer a RING of
+  candidates out to 180px, where it had only four boxes a fixed 14px from
+  the anchor and so could not trade distance for clarity at all. Together,
+  at forty proposals on the crowded board: total overlap 318235 -> 40961,
+  clean bubbles 1 -> 22, and the uncrowded control went to 40 of 40 clean.
+  The price is the leader, 23px in every case before and up to 198px after,
+  and about 3.4x the annotation layer's layout time (under 2ms either way).
+
+  Two things that work found, both worth keeping:
+
+  - **The comment layer had the same collapse**, and nobody had looked. It
+    shares `comment-placement.ts`, so the corpus now covers it: one clean
+    bubble in forty before, eighteen after. A change to that placer cannot
+    be judged on the proposal numbers alone, which is why the scoreboard is
+    named for the annotation layer rather than for proposals.
+  - **A wider search broke an invariant the narrow one held by accident.**
+    A bubble may be pushed anywhere except over the thing it is about — and
+    with the ring it could land on a NEIGHBOUR's pin, because pins were
+    never obstacles. They are now, seeded before placement rather than as
+    each is drawn, since pushing them in order protects only the comments
+    after each one.
 - **`wb_canvas_edit`'s default changes.** Existing callers that expect a write
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a

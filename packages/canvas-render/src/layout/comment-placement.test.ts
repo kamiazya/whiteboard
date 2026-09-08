@@ -8,6 +8,7 @@ import type { BoundingBox } from '../scene-graph.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   COMMENT_BUBBLE_OFFSET_PX,
+  COMMENT_BUBBLE_RING_REACH_PX,
   commentBubbleCandidates,
   placeCommentBubble,
 } from './comment-placement.js'
@@ -54,42 +55,56 @@ describe('placeCommentBubble', () => {
     expect(overlapArea(first, second)).toBe(0)
   })
 
-  it('falls back to the least-covered candidate, in candidate order on a tie', () => {
-    // Anchor inside a large node: every quadrant overlaps it equally, so the
-    // first candidate (down-right) wins the tie...
-    const big = { x: 0, y: 0, w: 400, h: 400 }
-    expect(placeCommentBubble({ x: 200, y: 200 }, SIZE, [big])).toEqual({
-      x: 200 + D,
-      y: 200 + D,
-      ...SIZE,
-    })
-    // ...unless something ELSE also covers it, when the next-least-covered
-    // quadrant is taken instead.
-    const alsoDownRight = { x: 200 + D, y: 200 + D, w: 300, h: 300 }
-    expect(placeCommentBubble({ x: 200, y: 200 }, SIZE, [big, alsoDownRight])).toEqual({
-      x: 200 + D,
-      y: 200 - D - SIZE.h,
-      ...SIZE,
-    })
+  // What the ring changed, stated as the case it was built for. An anchor
+  // inside a node has no free quadrant: before the ring the placer took the
+  // least-covered of four boxes that all sat on the node, and stayed put.
+  it('escapes an anchor with no free quadrant, instead of settling for the least bad one', () => {
+    // 200 square, anchored at its centre: every quadrant sits on it, and its
+    // far edge is 100px away — inside the ring's reach. A node too big for
+    // the reach is a different case and is the one below.
+    const box = { x: 0, y: 0, w: 200, h: 200 }
+    const anchor = { x: 100, y: 100 }
+    const placed = placeCommentBubble(anchor, SIZE, [box])
+    expect(overlapArea(placed, box)).toBe(0)
+    // Still near what it is about: bounded by the reach, not a free-for-all.
+    const distance = Math.hypot(
+      placed.x + placed.w / 2 - anchor.x,
+      placed.y + placed.h / 2 - anchor.y,
+    )
+    expect(distance).toBeLessThanOrEqual(COMMENT_BUBBLE_RING_REACH_PX + Math.hypot(SIZE.w, SIZE.h))
   })
 
-  it('compares covered AREA, not the shape of the overlap', () => {
-    // Both left-hand quadrants are walled off. Down-right is crossed by a
-    // thin strip the bubble's full height (2 x 40 = 80); up-right holds a
-    // small block (4 x 4 = 16). The block covers less, whatever its aspect.
-    const leftWall = { x: -600, y: -600, w: 690, h: 1200 }
-    const strip = { x: 100 + D + 10, y: 100 + D, w: 2, h: SIZE.h }
-    const block = { x: 100 + D + 10, y: 100 - D - 10, w: 4, h: 4 }
-    expect(placeCommentBubble({ x: 100, y: 100 }, SIZE, [leftWall, strip, block])).toEqual({
+  // The quadrants still lead, which is what keeps a board with room drawing
+  // exactly as it did: a clean down-right beats every ring candidate on the
+  // tie at zero, because ties go to the earliest.
+  it('prefers a clean quadrant over the ring', () => {
+    const farAway = { x: 5000, y: 5000, w: 10, h: 10 }
+    expect(placeCommentBubble({ x: 100, y: 100 }, SIZE, [farAway])).toEqual({
       x: 100 + D,
-      y: 100 - D - SIZE.h,
+      y: 100 + D,
       ...SIZE,
     })
   })
 
-  // The placer is a search over four candidates, so its whole contract is
-  // "the least-covered one, ties to the earlier". An oracle that scores the
-  // candidates from the definition of overlap shares nothing with it.
+  // Boxed in past the ring's reach — a node larger than 180px around the
+  // anchor — the placer has nowhere clean and is back to picking the
+  // least-covered. The ring bounds the escape rather than guaranteeing one,
+  // and that fallback is what keeps a bubble on screen at all.
+  it('still takes the least-covered candidate when the ring is blocked too', () => {
+    const sea = { x: -2000, y: -2000, w: 4000, h: 4000 }
+    const placed = placeCommentBubble({ x: 200, y: 200 }, SIZE, [sea])
+    const scores = commentBubbleCandidates({ x: 200, y: 200 }, SIZE).map((c) =>
+      totalOverlap(c, [sea]),
+    )
+    expect(totalOverlap(placed, [sea])).toBe(Math.min(...scores))
+  })
+
+  // The placer is a search over its candidate list, so its whole contract is
+  // "the least-covered one, ties to the earlier" — which is what makes the
+  // examples above illustrations rather than the guard. An oracle that
+  // scores the candidates from the definition of overlap shares nothing
+  // with the placer, and widening the list does not weaken it: the property
+  // reads the same list the placer searches.
   const box = fc.record({
     x: fc.integer({ min: -300, max: 300 }),
     y: fc.integer({ min: -300, max: 300 }),
