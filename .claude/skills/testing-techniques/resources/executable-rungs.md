@@ -22,6 +22,8 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `tools/checks/src/vitest-projects.mjs` (+ `ci-verify-coverage`, `docs-contract`) | `mcp-node` | a vitest project CI never runs; a project without `name:` |
 | `.claude/scripts/quarantine.test.mjs`, `biome-plugin.test.mjs` | `pnpm test:scripts` | quarantine cap/age/undeclared skips; a GritQL pattern that stopped matching |
 | `apps/web/vitest.setup.ts`, `src/test-utils/browser-setup.ts`, `vitest.browser.shared.ts` | setup guard | unmounted trees, leaked fake timers (fails the test by name), `localStorage`, missing stylesheet, 1000ms async budget, trace growth |
+| `src/test-utils/browser-setup.ts`'s `expectLoggedFailures` | setup guard (`web-browser`) | any `console.error`/`warn` in a browser test — a failure that was caught, logged and swallowed. Strict, no allowlist; opt in per test to claim one |
+| `apps/web/vitest.setup.ts`'s act guard | setup guard (`web-jsdom`) | React's act complaints — `act` inside a `waitFor`/`findBy*`, or imported from `react` rather than RTL |
 | `background-work-costs.test.ts` + `loop-availability.ts` | `mcp-node` | a declared stall ceiling no test asserts |
 
 ## Adding a GritQL shape
@@ -94,6 +96,136 @@ The rung for "every test in this project, at runtime". `apps/web/vitest.setup.ts
 exercise it directly (throw + restore), and reporting the offending test BY NAME rather than
 restoring silently. Order matters inside it — unmount first, so a file that also leaks fake
 timers still gets its trees torn down.
+
+## The swallowed failure, and why one project is guarded and the other is not
+
+A caught-and-logged exception is the worst failure shape a suite has: the run
+keeps going and breaks somewhere unrelated. The measured case — a
+`@codemirror/view` ViewPlugin crash that disabled the CRDT binding for the life
+of the view, surfacing ten seconds later as `expected 'untitled' to be 'Weekly
+review'`, an assertion about a document NAME in a different panel.
+
+Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
+
+| project | records | over | verdict |
+|---|---|---|---|
+| `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
+| `web-jsdom` | **43**, across 35 tests | 377 files, 3947 tests | a ledger of ~35 claims, not yet written |
+
+`web-jsdom` started at 219, and two thirds of that was never a judgement call:
+
+| | records | tests | what it was |
+|---|---|---|---|
+| measured | 219 | 70 | |
+| after the act fixes | 82 | 63 | React's act-environment complaint, 138 of them (below) |
+| after mocking the fold | **43** | **35** | jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws; the production path catches it and continues, and the guarded warn on the way was 36 records over 29 tests in six files |
+
+Neither reduction weakened a test. The fold one is behaviour-identical — those
+tests already ran under the guarded continue, and the mock returns the same
+outcome the throw produced — so it removes noise rather than coverage.
+
+What is left is a ledger of ~35 claims: tests driving a failure path
+deliberately (`canvas exploded`, `network down`, a refused tool registration),
+where logging is the right behaviour and each needs an entry saying so. Real
+work, worth doing on its own merits rather than as a side effect. The act
+family is guarded already, because that part became free.
+
+The order generalises: **before writing a ledger, subtract the entries that are
+the environment rather than a decision.** Two thirds of this one dissolved, and
+the remainder is small enough to write honestly.
+
+### Take this measurement with a RECORDER, never a throwing guard
+
+The obvious way to size it — install the strict guard and read what turns red —
+is wrong here, and wrong in both directions at once. Throwing in `afterEach`
+breaks the shared teardown: React trees stay mounted, and every later test in
+the file cascades. Measured, same suite, same commit:
+
+|  | throwing guard | file recorder |
+|---|---|---|
+| records | ~100 | **219** |
+| tests reporting | 73 | **70** |
+| un-acted React updates | 878 | **0** |
+
+It under-reported the records (each test aborts at its FIRST one) while
+inventing 878 un-acted updates that do not exist — the cascade from its own
+broken teardown. A throwing guard is the right SHIPPING shape and the wrong
+measuring instrument.
+
+Two traps beside it, both of which produced a confident wrong number here:
+
+- **Vitest's terminal output carries no test console records in these runs.**
+  Grepping the run's stdout for a warning returns 0 whether or not it happened.
+  Every count above comes from a recorder appending to a file, with
+  `expect.getState().currentTestName` for attribution.
+- **A `console.error` format string is recorded raw.** The message is
+  `An update to %s inside a test was not wrapped in act(...)`; grepping for the
+  formatted component name finds nothing.
+
+### The act flag, measured and rejected — and what worked instead
+
+`IS_REACT_ACT_ENVIRONMENT` was set nowhere, so React logged
+`The current testing environment is not configured to support act(...)` 138
+times. Setting it in the jsdom setup looks like the obvious fix. Measured over
+the full project:
+
+| | config warning | un-acted updates | total records |
+|---|---|---|---|
+| flag off | 138, in 8 tests | 0 reported | 219 |
+| flag on | 103 | **502** | 689 |
+
+It fails to clear the noise it targets and triples the channel. **Rejected.**
+
+The real causes were two, with no syntax in common, and three mechanical fixes
+took all 138 to **0**:
+
+- **`act()` wrapping an RTL async utility** (103). `@testing-library/react`
+  sets the flag to FALSE around `waitFor`/`findBy*` on purpose, so an `act`
+  call inside one warns — measured at the warning itself, `flag=false`. The
+  wrapper is also unnecessary: those utilities manage `act` themselves. Both
+  call sites wrapped a HELPER that used `findBy*` internally, which is why
+  neither a reader nor a lint rule looking at one file could see it. Five
+  wrappers deleted, tests unchanged and still passing.
+- **`act` imported from `react`** (35). RTL's `act` sets the environment flag
+  itself; React's bare one does not, so every call warns. Two files, import
+  changed.
+
+That left the guard FREE, which is the point — it is in
+`apps/web/vitest.setup.ts` and fails any test React complains about, narrow to
+the act family rather than `console.error` at large. Mutation-checked: putting
+one wrapper back fails that test with `React complained about act() in this
+test.`
+
+Records over the whole project: **219 to 82**, over 70 tests to 63.
+
+### What the measurement found
+
+Neither of these was found by reading code. Both fell out of asking a suite to
+stop swallowing:
+
+- **502 un-acted React updates**, invisible until the flag is set, over 26
+  distinct components — about a quarter of them Radix internals (Tooltip,
+  Presence, Popper) rather than this repo's own hygiene.
+- **`[document-sync] backfilling thread marks failed Index out of bound. The
+  given pos is 20, but the length is 19`, in three PASSING tests.** Two
+  defects, one throw. `resolveTextAnchor`'s stored-offsets shortcut compared
+  `body.slice(anchor.start, anchor.end) === exact` — and `slice` CLAMPS, so on
+  a body shorter than the stored `end` it returns the tail rather than
+  nothing, and a stored range whose width disagrees with its own quote MATCHES
+  and is answered verbatim. `markThreadPassages` then handed that `end`
+  straight to `LoroText.mark`, which throws from inside the CRDT naming
+  neither the thread nor the document, into a catch that logs and carries on.
+  Consequence: those conversations never got their passage marks.
+
+  Worth recording as a diagnosis, because two confident explanations came
+  first and both were wrong. "It measures offsets against `readMarkdownBody`
+  and applies them to the text container" does not fit the numbers — a
+  non-empty container makes those the same string. "Loro indexes text by code
+  point while JS counts UTF-16" was refuted by probing the installed version:
+  `text.length` is 18 for a body JS also calls 18. The mechanism only came out
+  by reading what produces the range, and the fixture confirms it — the anchor
+  is `{ exact: 'is this still true?', start: 0, end: 20 }`, and that quote is
+  19 characters.
 
 ## Adding a source-scan test
 

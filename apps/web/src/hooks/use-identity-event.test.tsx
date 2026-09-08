@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 
-import { renderHook } from '@testing-library/react'
-import { act } from 'react'
+import { act, renderHook } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { DOCUMENT_SYNC_VERSION_SAVED_EVENT } from '../lib/document-sync-types.js'
 import { useIdentityEvent } from './use-identity-event.js'

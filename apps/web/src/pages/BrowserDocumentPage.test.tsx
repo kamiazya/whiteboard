@@ -259,9 +259,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     const cancelBtn = screen.getByRole('button', { name: /cancel/i })
     await act(async () => {
@@ -556,9 +554,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
@@ -589,9 +585,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()

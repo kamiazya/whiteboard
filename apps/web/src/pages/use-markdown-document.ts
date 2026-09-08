@@ -400,6 +400,43 @@ async function openLegacyHost(loro: LoroStoreLike, documentId: string): Promise<
   }
 }
 
+/**
+ * Which text container a document's body lives in — a WORKSPACE document's is
+ * on its tree node, a legacy one's is the doc's own root.
+ *
+ * Takes its host as an ARGUMENT and closes over it, which is the whole point.
+ * It used to read `hostRef.current` on every call, and a resolver handed to a
+ * long-lived binding must never be able to change its answer: `LoroSyncPlugin`
+ * maps the mounted editor's offsets onto whatever this returns at that moment,
+ * so a swap leaves those offsets addressing text the new container never had.
+ *
+ * The window was not exotic. The load effect sets `hostRef.current = null`
+ * SYNCHRONOUSLY on every re-run — a document switch, or `enabled` flipping as
+ * the kind resolves — while the editor stays mounted with its plugin installed.
+ * For the whole of the next load the resolver therefore took the legacy branch
+ * and answered the workspace doc's ROOT container, which for a workspace
+ * document is empty. The editor still held the text, so the next keystroke
+ * addressed a position that container did not have.
+ *
+ * Observed on CI as `CodeMirror plugin crashed: Index out of bound. The given
+ * pos is 1, but the length is 0`. `@codemirror/view` catches a ViewPlugin
+ * exception and DISABLES the plugin for the life of the view, so every later
+ * keystroke reached CodeMirror and nothing else — no deltas, no commits, no
+ * save — and the run failed ten seconds later on a document's NAME.
+ *
+ * A parameter rather than a rule, so the mistake stops being available.
+ */
+export function bodyTextResolver(
+  host: ContentHost | null,
+  documentId: string | null,
+): (target: Loro) => LoroText {
+  const workspaceScoped = host !== null && host.mode === 'workspace' && documentId !== null
+  return (target: Loro): LoroText =>
+    workspaceScoped
+      ? documentContainers(target, documentId).getText(MARKDOWN_BODY_KEY)
+      : target.getText(MARKDOWN_BODY_KEY)
+}
+
 export function useMarkdownDocument(
   loro: LoroStoreLike,
   documentId: string | null,
@@ -419,6 +456,10 @@ export function useMarkdownDocument(
   currentDocumentIdRef.current = documentId
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
+  // Beside `doc` rather than read from `hostRef` when needed: `bodyTextResolver`
+  // must capture the host that owns the doc it is asked about, and a ref is
+  // cleared out from under an already-installed binding. See its doc comment.
+  const [contentHost, setContentHost] = useState<ContentHost | null>(null)
   const [annotations, setAnnotations] = useState<readonly CommentThread[]>(NO_ANNOTATIONS)
   const [threadMarks, setThreadMarks] = useState<ReadonlyMap<string, PassageRange>>(NO_THREAD_MARKS)
   const hostRef = useRef<ContentHost | null>(null)
@@ -447,6 +488,7 @@ export function useMarkdownDocument(
     // is not its own. Measured: typing under c2 while c2 loaded produced
     // `save('c1', …)`.
     hostRef.current = null
+    setContentHost(null)
     setDoc(null)
     setBodyState(null)
     setCoreMetaState(null)
@@ -513,6 +555,7 @@ export function useMarkdownDocument(
           publishAnnotations()
           if (event.by === 'local') scheduleSaveRef.current?.()
         })
+        setContentHost(host)
         setDoc(host.doc)
         // A document written before the writers were unified stores its body
         // as a text NODE, and reading it is not enough: `LoroSyncPlugin`
@@ -729,15 +772,9 @@ export function useMarkdownDocument(
     }
   }, [])
 
-  const bodyTextOf = useCallback(
-    (target: Loro): LoroText => {
-      const host = hostRef.current
-      if (host !== null && host.mode === 'workspace' && documentId !== null) {
-        return documentContainers(target, documentId).getText(MARKDOWN_BODY_KEY)
-      }
-      return target.getText(MARKDOWN_BODY_KEY)
-    },
-    [documentId],
+  const bodyTextOf = useMemo(
+    () => bodyTextResolver(contentHost, documentId),
+    [contentHost, documentId],
   )
 
   return {

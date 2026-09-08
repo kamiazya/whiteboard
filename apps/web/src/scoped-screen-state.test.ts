@@ -301,6 +301,12 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
   body: 'cleared on switch',
   coreFacets: 'cleared on switch',
   hostRef: 'cleared on switch',
+  // The same host `hostRef` holds, kept as STATE because `bodyTextResolver`
+  // has to capture it: a resolver handed to a mounted CRDT binding must not be
+  // able to change which container it answers, and a ref is cleared out from
+  // under one. Cleared on switch for the same reason every entry above is —
+  // it names the departed document's content.
+  contentHost: 'cleared on switch',
 
   saveState: 'cleared on switch',
   // The conversations on THIS document. Left standing across a switch it

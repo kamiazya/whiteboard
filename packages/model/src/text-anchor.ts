@@ -116,7 +116,17 @@ export function resolveTextAnchor(
   // only: 8KB body 0.5ms vs 12.3ms (24x), 48KB 0.4ms vs 61.0ms (170x), 200KB
   // 0.1ms vs 228.1ms (2016x). The search scans the whole body once per
   // anchor; this compares `exact.length` characters and stops.
-  if (body.slice(anchor.start, anchor.end) === exact) {
+  //
+  // The length check is not redundant with the comparison: `slice` CLAMPS, so
+  // on a body shorter than the stored `end` it returns the tail rather than
+  // nothing, and a stored range whose width disagrees with its own quote then
+  // MATCHES and is answered verbatim — an `end` the body does not have.
+  // Measured: `'hello world'.slice(6, 20)` is `'world'`. Reached in practice
+  // by an anchor stored with `end - start !== exact.length`, which is ordinary
+  // once a quote and its offsets are written by different paths; observed as
+  // `Index out of bound. The given pos is 20, but the length is 19` thrown
+  // from inside Loro by `markThreadPassages`, and swallowed by a catch.
+  if (anchor.end <= body.length && body.slice(anchor.start, anchor.end) === exact) {
     return { kind: 'placed', start: anchor.start, end: anchor.end }
   }
 
