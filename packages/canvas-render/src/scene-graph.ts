@@ -193,14 +193,25 @@ export interface ShapeSceneNode {
    * an outline where a change would land, and the bubble that counts them.
    * Ids are `${change.id}/outline` and `${proposalId}/bubble`.
    *
-   * A second boolean rather than a value on one field, because the editor
-   * hit-tests the two SEPARATELY — a comment's chrome answers to the comment
-   * verbs and a proposal's to Adopt/Dismiss — so they have to be tellable
-   * apart wherever they are read, not merely excluded together. A third kind
-   * is the point to collapse the pair into one `chrome` discriminator; two
-   * did not earn the rename across the ten call sites `commentChrome` has.
+   * A separate field from `commentChrome` rather than one `chrome`
+   * discriminator, because the editor hit-tests the two SEPARATELY — a
+   * comment's chrome answers to the comment verbs and a proposal's to
+   * Adopt/Dismiss — so they have to be tellable apart wherever they are
+   * read, not merely excluded together. A third kind is the point to
+   * collapse the pair; two did not earn the rename across the ten call
+   * sites `commentChrome` has.
+   *
+   * It carries the PROPOSAL ID rather than a bare `true` because a reader
+   * grouping chrome by proposal cannot get there from the ids: an outline's
+   * names its CHANGE, only the bubble's names the proposal, and this field's
+   * neighbour above says why id shape is not a sound thing to infer from.
+   * Revealing a proposal wants its whole chrome — the bubble alone framed
+   * the affordance with the change it is about cut off at the viewport edge.
+   *
+   * A payload on the marker, not a sibling `proposalId`, so a chrome node
+   * cannot exist without saying which proposal it belongs to.
    */
-  readonly proposalChrome?: true
+  readonly proposalChrome?: { readonly proposalId: string }
   /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely.
    * Applies to the rect form only — ignored when `shape` is set. */
   readonly radius?: number

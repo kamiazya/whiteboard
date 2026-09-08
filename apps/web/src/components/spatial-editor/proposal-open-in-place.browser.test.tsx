@@ -96,6 +96,17 @@ it('opens a proposal where it sits, and answers whether it could', async () => {
   const card = (await page.getByTestId('proposal-card').element()).getBoundingClientRect()
   expect(card.left).toBeGreaterThan(surface.left)
   expect(card.top).toBeGreaterThan(surface.top)
+
+  // And so is the change's OUTLINE — the illustration, drawn beside the
+  // bubble. Framing the bubble alone put the affordance in view with the
+  // thing it is about cut off at the edge, which is the half of the figure
+  // the inset did not fix.
+  const outline = container
+    .querySelector('[data-wb-key="node:far/outline"]')
+    ?.getBoundingClientRect()
+  expect(outline).toBeDefined()
+  expect((outline as DOMRect).left).toBeGreaterThan(surface.left)
+  expect((outline as DOMRect).top).toBeGreaterThan(surface.top)
 })
 
 // The guard, not a signal: a panel's list can outrun the scene by a frame,

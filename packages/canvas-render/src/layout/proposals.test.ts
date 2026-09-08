@@ -68,7 +68,9 @@ function proposalOf(changes: Proposal['changes']): Proposal {
 describe('drawing a proposal in place', () => {
   it('draws nothing at all when there is no proposal', () => {
     const bare = layout(BOARD, [])
-    expect(bare.filter((node) => node.kind === 'shape' && node.proposalChrome === true)).toEqual([])
+    expect(
+      bare.filter((node) => node.kind === 'shape' && node.proposalChrome !== undefined),
+    ).toEqual([])
   })
 
   // An addition is outlined where it WOULD be, which is why the change
@@ -210,7 +212,9 @@ describe('drawing a proposal in place', () => {
         { id: 'node:b', status: 'open', op: 'node.remove', nodeId: 'b', assumed: NODE_B },
       ]),
     ])
-    expect(shapeById(nodes, 'node:b/outline')?.proposalChrome).toBe(true)
-    expect(shapeById(nodes, 'p1/bubble')?.proposalChrome).toBe(true)
+    // The outline's own id names its CHANGE, so the proposal it belongs to is
+    // carried as data — which is what lets a reveal frame the whole chrome.
+    expect(shapeById(nodes, 'node:b/outline')?.proposalChrome).toEqual({ proposalId: 'p1' })
+    expect(shapeById(nodes, 'p1/bubble')?.proposalChrome).toEqual({ proposalId: 'p1' })
   })
 })

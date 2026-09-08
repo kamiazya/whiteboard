@@ -282,7 +282,7 @@ function collectEntries(scene: Scene): {
     node.kind === 'shape' &&
     node.id !== undefined &&
     node.commentChrome !== true &&
-    node.proposalChrome !== true
+    node.proposalChrome === undefined
       ? [
           {
             id: node.id,
