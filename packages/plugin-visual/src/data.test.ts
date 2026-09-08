@@ -5,7 +5,9 @@ import { describe, expect, it } from 'vitest'
 import {
   bundledPlugins,
   resolveCanvasEdgeStyle,
+  resolveCanvasSymbol,
   resolveNodeShape,
+  resolveDocumentSymbol,
   resolveNodeSymbol,
   resolveNodeTextAlign,
   VISUAL_EDGES_KEY,
@@ -161,9 +163,13 @@ describe('visual.symbol/v0', () => {
       ...(extension === undefined ? {} : { 'x-whiteboard': extension }),
     }) as SpatialCanvas['nodes'][number]
 
-  it('registers with the visual plugin, node-targeted, under the fixed key', () => {
+  it('registers on all three targets: a node, a canvas, and a document', () => {
+    // The question is the same wherever it is asked — "what symbolises this
+    // object" — so it stays ONE facet and the value space is untouched
+    // (ADR-0013's growth rule). Only where it may attach widens, and
+    // `targets` is not payload, so `v0` does not move.
     expect(VISUAL_SYMBOL_KEY).toBe('visual.symbol/v0')
-    expect(registry.targetsOf(VISUAL_SYMBOL_KEY)).toEqual(['node'])
+    expect(registry.targetsOf(VISUAL_SYMBOL_KEY)).toEqual(['node', 'canvas', 'document'])
   })
 
   it('the payload is a union: an icon by name or an emoji by character', () => {
@@ -212,6 +218,38 @@ describe('visual.symbol/v0', () => {
     expect(
       resolveNodeSymbol(nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { bogus: true } } }), registry),
     ).toBeUndefined()
+  })
+
+  it('resolveCanvasSymbol reads the canvas-level bucket, the way the edges facet does', () => {
+    expect(
+      resolveCanvasSymbol(
+        canvasWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '📌' } } }),
+        registry,
+      ),
+    ).toEqual({ kind: 'emoji', char: '📌' })
+    expect(resolveCanvasSymbol(canvasWith(undefined), registry)).toBeUndefined()
+    expect(resolveCanvasSymbol(canvasWith({ facets: {} }), registry)).toBeUndefined()
+  })
+
+  it('resolveDocumentSymbol reads an OKF frontmatter facets bucket', () => {
+    // A bucket rather than a document: this package has no way to open a
+    // stored document, and the caller already holds the frontmatter it
+    // parsed.
+    expect(
+      resolveDocumentSymbol({ [VISUAL_SYMBOL_KEY]: { kind: 'icon', name: 'star' } }, registry),
+    ).toEqual({ kind: 'icon', name: 'star' })
+    expect(resolveDocumentSymbol(undefined, registry)).toBeUndefined()
+    expect(resolveDocumentSymbol({}, registry)).toBeUndefined()
+  })
+
+  it('a payload the schema refuses answers undefined on every target', () => {
+    // One reader under all three, so a surface cannot invent its own idea
+    // of what a broken payload means. `✅🔥` is two graphemes — the exact
+    // case the schema exists to refuse.
+    const broken = { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '✅🔥' } }
+    expect(resolveNodeSymbol(nodeWith({ facets: broken }), registry)).toBeUndefined()
+    expect(resolveCanvasSymbol(canvasWith({ facets: broken }), registry)).toBeUndefined()
+    expect(resolveDocumentSymbol(broken, registry)).toBeUndefined()
   })
 })
 

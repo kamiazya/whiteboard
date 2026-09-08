@@ -1,6 +1,6 @@
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ExtensionFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
@@ -161,7 +161,11 @@ export const visualPlugin = definePlugin({
       name: 'symbol',
       displayName: 'Symbol',
       version: 'v0',
-      targets: ['node'],
+      // All three: a symbol answers "what symbolises this object", and the
+      // object may be a node, a spatial document's canvas, or a markdown
+      // document. Widening `targets` is a change to WHERE a payload may
+      // attach, never to the payload — so the version does not move.
+      targets: ['node', 'canvas', 'document'],
       schema: visualSymbolFacetSchema,
     }),
   ],
@@ -229,18 +233,53 @@ export function resolveNodeShape(
 }
 
 /**
- * The one read path for "what badge does this node wear": the
- * `visual.symbol/v0` facet when it resolves, else undefined — no badge.
+ * The one read path for "what symbol does this object wear", over the facets
+ * bucket the object stores. Every surface that draws a symbol — the node
+ * badge, the minimap, the favicon, a file row — goes through here, so an
+ * unresolvable payload means the same thing everywhere: no symbol, never a
+ * different fallback per surface. An unknown icon NAME still resolves here
+ * (the schema only checks non-emptiness) and degrades where it is drawn.
  */
+function readSymbol(
+  facets: ExtensionFacets | undefined,
+  registry: FacetRegistry,
+): VisualSymbolFacet | undefined {
+  const stored = facets?.[VISUAL_SYMBOL_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_SYMBOL_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  // Re-parse rather than cast: the registry resolved through this very
+  // schema, so this cannot fail — it keeps the type honest, and a throw
+  // here would mean the registry and this schema had come apart.
+  return visualSymbolFacetSchema.parse(resolution.value)
+}
+
+/** The badge a NODE wears. */
 export function resolveNodeSymbol(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_SYMBOL_KEY]
-  if (stored === undefined) return undefined
-  const resolution = registry.resolveFacetPayload(VISUAL_SYMBOL_KEY, stored)
-  if (resolution.kind !== 'resolved') return undefined
-  return visualSymbolFacetSchema.parse(resolution.value)
+  return readSymbol(node['x-whiteboard']?.facets, registry)
+}
+
+/** The symbol a SPATIAL document wears, stored on its canvas envelope. */
+export function resolveCanvasSymbol(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualSymbolFacet | undefined {
+  return readSymbol(canvas['x-whiteboard']?.facets, registry)
+}
+
+/**
+ * The symbol a MARKDOWN document wears, from its OKF frontmatter facets.
+ * Takes the bucket rather than a document: this package cannot open stored
+ * content, and every caller has already parsed the frontmatter it holds.
+ */
+export function resolveDocumentSymbol(
+  facets: ExtensionFacets | undefined,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualSymbolFacet | undefined {
+  return readSymbol(facets, registry)
 }
 
 /**
