@@ -4,12 +4,14 @@
  *
  * It exists because the first message was special everywhere and should not
  * have been. The rail drew `messages[0]` by hand — its own stamp line, its
- * own Edit — and `ThreadReplies` drew `slice(1)`, so the two halves of one
- * conversation were two pieces of markup that could drift, and a verb added
- * to the top one reached no reply. What was special about the opening
- * message is a fact about the THREAD (it is the one a row summarises, and
- * on a spatial canvas its text is the flat comment's), never about how a
- * message is drawn.
+ * own Edit — and a `ThreadReplies` component drew `slice(1)`, so the two
+ * halves of one conversation were two pieces of markup that could drift,
+ * and a verb added to the top one reached no reply. Both hosts map this
+ * over every message now, and that second component is gone.
+ *
+ * What was special about the opening message is a fact about the THREAD (it
+ * is the one a row summarises, and on a spatial canvas its text is the flat
+ * comment's), never about how a message is drawn.
  *
  * A `<li>`, because a host draws these in the `<ol>` that is the
  * conversation.

@@ -581,7 +581,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       hitTestComment,
       commentById,
       toggleCommentCard,
-      openCommentEditor,
       commentCompose,
       setCommentCompose,
       openCommentId,
@@ -589,7 +588,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
+    } = useCommentState({ canvasRef, commentChromeBoxes })
     /**
      * The proposal opened in place — at most one, for the reason a
      * conversation is: a card is where ONE thing is decided.
@@ -2066,11 +2065,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     commands: [{ kind: 'set-comment-resolved', id: thread.id, resolved } as const],
                   })
                 }
-                onEdit={() => {
-                  const comment = commentById(thread.id)
-                  if (comment === undefined) return
-                  setOpenCommentId(null)
-                  openCommentEditor(comment)
+                onEditMessage={(messageId, body) => {
+                  // Rebuilt from the message the card holds rather than from
+                  // the body alone: the write upserts by id and would
+                  // otherwise drop the author and the original stamp.
+                  const message = thread.messages.find((entry) => entry.id === messageId)
+                  if (message === undefined) return
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [
+                      {
+                        kind: 'edit-thread-message',
+                        threadId: thread.id,
+                        message: { ...message, body, editedAt: new Date().toISOString() },
+                        // Only the opening message is drawn on the canvas, so
+                        // only its edit repaints the pin.
+                        opening: thread.messages[0]?.id === messageId,
+                      } as const,
+                    ],
+                  })
                 }}
                 onClose={() => setOpenCommentId(null)}
               />
@@ -2290,7 +2303,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setContextMenu={setContextMenu}
               canvas={canvas}
               canvasRef={canvasRef}
-              edgePathOf={edgePathOf}
               theme={theme}
               gestureState={gestureState}
               isEdgeLocked={isEdgeLocked}
@@ -2649,7 +2661,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 compose={commentCompose}
                 canvas={canvas}
                 edgePathOf={edgePathOf}
-                obstacles={commentPlacementObstacles(commentCompose.editing?.id)}
+                obstacles={commentPlacementObstacles()}
                 createId={createId}
                 zoom={viewport.zoom}
                 theme={theme}

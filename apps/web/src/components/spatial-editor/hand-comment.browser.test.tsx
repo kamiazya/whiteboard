@@ -209,7 +209,7 @@ it('a stationary touch long-press under the hand tool opens the comment verbs, a
   // spent on the menu.
   touch(root, 'pointerdown', BUBBLE.x, BUBBLE.y)
   // Waited on as a condition: the menu is what the delay produces.
-  await vi.waitFor(() => expect(menuLabels(container)).toEqual(['Edit comment', 'Resolve']), {
+  await vi.waitFor(() => expect(menuLabels(container)).toEqual(['Resolve']), {
     timeout: 2000,
   })
   touch(root, 'pointerup', BUBBLE.x, BUBBLE.y)

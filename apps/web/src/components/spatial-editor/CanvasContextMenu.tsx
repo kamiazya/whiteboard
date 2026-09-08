@@ -1,6 +1,5 @@
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
-import type { EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   AnnotationAnchor,
@@ -82,13 +81,6 @@ export interface CommentComposeState {
    * the selection's top-right corner for a set.
    */
   readonly threadAnchor?: AnnotationAnchor
-  /**
-   * Present when the bubble edits an EXISTING comment rather than drafting
-   * a new one: the commit rewrites that comment's text instead of creating.
-   * `point` is then the comment's own anchor, so the bubble opens exactly
-   * over the drawn one.
-   */
-  readonly editing?: { readonly id: string; readonly initialText: string }
 }
 
 /**
@@ -140,7 +132,6 @@ export interface CanvasContextMenuProps {
   readonly setContextMenu: (target: ContextMenuTarget | null) => void
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
-  readonly edgePathOf: EdgePathLookup
   readonly theme: ResolvedTheme
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
@@ -163,7 +154,6 @@ export function CanvasContextMenu({
   setContextMenu,
   canvas,
   canvasRef,
-  edgePathOf,
   theme,
   gestureState,
   isEdgeLocked,
@@ -253,7 +243,7 @@ export function CanvasContextMenu({
             : {}),
         })
       : comment !== undefined
-        ? commentMenuItems({ comment, canvasRef, edgePathOf, setCommentCompose, applyResult })
+        ? commentMenuItems({ comment, applyResult })
         : contextMenu.verbs === 'annotation'
           ? annotationVerbItems({
               node,

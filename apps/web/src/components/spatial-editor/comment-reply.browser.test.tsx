@@ -180,9 +180,11 @@ it('the context menu drops Reply, since the card is where a reply is written', a
   const labels = [...container.querySelectorAll('[data-testid="context-menu"] button')].map(
     (el) => el.textContent,
   )
-  // Kept: reachable without opening the card, and by keyboard.
-  expect(labels).toContain('Edit comment')
+  // The conversation's lifecycle, and only that. Editing left this menu
+  // when every message became editable: what it opened could rewrite the
+  // opening message alone, since it wrote the flat comment's `text`.
   expect(labels).toContain('Resolve')
+  expect(labels).not.toContain('Edit comment')
   expect(labels).not.toContain('Reply')
 })
 

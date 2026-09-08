@@ -193,12 +193,6 @@ export type EditorLeafCommand =
       readonly y: number
     }
   | {
-      // Rewrites one comment's text. A missing id is a no-op.
-      readonly kind: 'set-comment-text'
-      readonly id: string
-      readonly text: string
-    }
-  | {
       /**
        * Appends a message to an existing conversation (ADR-0026 decision 2).
        *
@@ -758,8 +752,6 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setCommentResolved(canvas, command.id, command.resolved)
     case 'move-comment':
       return patchComment(canvas, command.id, { x: command.x, y: command.y })
-    case 'set-comment-text':
-      return patchComment(canvas, command.id, { text: command.text })
     case 'create-thread': {
       const projected = canvasCommentFromThread(command.thread, (id) =>
         canvas.nodes.find((node) => node.id === id),

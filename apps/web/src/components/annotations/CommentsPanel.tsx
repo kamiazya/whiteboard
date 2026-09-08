@@ -240,7 +240,6 @@ export function CommentsPanel({
    */
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const composeRef = useRef<SourcePaneApi | null>(null)
-  const editRef = useRef<SourcePaneApi | null>(null)
 
   // The ROW's toggle rather than its reply box: it is the conversation's
   // heading, and Tab continues from it into the verbs, the replies and the
@@ -256,16 +255,6 @@ export function CommentsPanel({
     if (composeAnchor === null) return
     composeRef.current?.focus()
   }, [composeAnchor])
-
-  // Keyed on the MESSAGE rather than on `editing`, which changes on every
-  // keystroke — the focus belongs to opening the editor, not to typing in
-  // it. The message and not the thread, so moving the edit from one message
-  // of a conversation to another takes the caret with it.
-  const editingMessageId = editing?.messageId ?? null
-  useEffect(() => {
-    if (editingMessageId === null) return
-    editRef.current?.focus()
-  }, [editingMessageId])
 
   /**
    * The compose box's commit, named because two things now reach it: the
@@ -646,9 +635,9 @@ export function CommentsPanel({
                   >
                     {/* Every message, drawn the same way. The first one
                         used to be built here by hand and the rest by
-                        `ThreadReplies`, which is why only the first could be
-                        edited: the verb was in the half that only ever held
-                        one message. What is special about the opening
+                        a replies-only component, which is why only the
+                        first could be edited: the verb was in the half that
+                        only ever held one message. What is special about the opening
                         message belongs to the THREAD — a row summarises it,
                         and on a canvas its text is the flat comment's — not
                         to how a message is drawn. */}
@@ -696,7 +685,7 @@ export function CommentsPanel({
                                 }}
                               >
                                 <CommentComposer
-                                  apiRef={editRef}
+                                  autoFocus
                                   label="Edit message text"
                                   value={editing.body}
                                   onChange={(body) =>

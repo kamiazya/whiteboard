@@ -84,7 +84,7 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
     'not modelled: pinned to an edge id, gated on finding that edge in the render. Nothing here drives the label editor itself',
   groupLabelEditId: 'not modelled: pinned to a node id, gated on finding that group in the render',
   commentCompose:
-    'not modelled: an open compose bubble holding only its anchor; the draft text lives in the bubble. Its commit writes create-comment or set-comment-text, covered by comment-create / comment-edit.browser.test.tsx',
+    'not modelled: an open compose bubble holding only its anchor; the draft text lives in the bubble. Its commit writes create-comment or create-thread, covered by comment-create.browser.test.tsx',
   showResolvedComments:
     'not modelled: a per-user view toggle (ADR-0025 decision 2) read by the render paths only; it writes nothing. Covered by comment-resolve.browser.test.tsx',
   commentDrag:
