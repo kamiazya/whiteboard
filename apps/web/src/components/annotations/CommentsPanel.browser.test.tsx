@@ -6,6 +6,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
+import { THREAD_MESSAGE_ACTION_CLASS } from './ThreadMessage.js'
 
 afterEach(cleanup)
 
@@ -756,4 +757,65 @@ it('lines the message verbs up in one column rather than following each stamp', 
   // And each still shares the line of the stamp it acts on.
   expect(sharedRows(verbs[0]!, stamps[0]!)).toBeGreaterThan(8)
   expect(sharedRows(verbs[1]!, stamps[1]!)).toBeGreaterThan(8)
+})
+
+/**
+ * On a device with a pointer that can hover, a message's verb waits for it.
+ *
+ * A verb per message is a verb per message ALWAYS drawn, and four pencils
+ * down a short column is a lot of chrome for prose. Where a mouse exists
+ * the row can answer to it; where one does not — a phone, the surface this
+ * rail is a sheet on — nothing hovers, so the verb has to stay.
+ *
+ * `opacity`, not `hidden`: the button keeps its box, so the stamp line does
+ * not reflow as the pointer crosses it, and the button keeps its place in
+ * the tab order (the focus case below is what a keyboard reader gets).
+ */
+it('waits for the pointer before showing a message verb, where a pointer can hover', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const verb = await page.getByTestId('edit-m1').element()
+  // This runner has a real mouse: `(pointer: fine)` holds, which is the
+  // branch under test.
+  expect(window.matchMedia('(pointer: fine)').matches).toBe(true)
+  // What a READER can see, not what one element's own style says: the
+  // opacity is carried by the box around the button, so reading the
+  // button's own `opacity` answers 1 either way and the test would pass
+  // over the defect.
+  expect(verb.checkVisibility({ opacityProperty: true })).toBe(false)
+
+  // Hovering the PROSE, not the button: nobody aims at a control they
+  // cannot see, so a reveal that needed the pointer on the button itself
+  // would be an affordance no reader could find.
+  await page.getByText('tighten the copy here').nth(1).hover()
+  await vi.waitFor(() => expect(verb.checkVisibility({ opacityProperty: true })).toBe(true))
+
+  // And only that message's. A column that lit up whole would be back to
+  // always-drawn with extra steps.
+  const other = await page.getByTestId('edit-m2').element()
+  expect(other.checkVisibility({ opacityProperty: true })).toBe(false)
+})
+
+it('shows a message verb the keyboard reached, since a caret cannot hover', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const verb = (await page.getByTestId('edit-m1').element()) as HTMLElement
+  expect(verb.checkVisibility({ opacityProperty: true })).toBe(false)
+  verb.focus()
+  await vi.waitFor(() => expect(verb.checkVisibility({ opacityProperty: true })).toBe(true))
+})
+
+it('keeps a message verb drawn where nothing can hover, which no runner here can emulate', () => {
+  // The coarse-pointer branch, asserted on the RULE rather than on a
+  // render: vitest's browser mode exposes no way to emulate `pointer:
+  // coarse` (the same limit `dock-button.ts` records for its 44px step), so
+  // a test that rendered and read an opacity would be reading the fine
+  // branch again and passing for the wrong reason. What is checkable is
+  // that the hiding is gated on the fine pointer at all — an ungated
+  // `opacity-0` would take the verb away from every phone.
+  const cls = THREAD_MESSAGE_ACTION_CLASS
+  expect(cls).toContain('pointer-fine:opacity-0')
+  expect(cls).not.toMatch(/(^|\s)opacity-0(\s|$)/)
 })

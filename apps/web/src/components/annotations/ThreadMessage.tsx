@@ -22,6 +22,28 @@ import { cn } from '../../lib/utils.js'
 import { CommentBody } from './CommentBody.js'
 import { MessageBy } from './message-meta.js'
 
+/**
+ * How a message's verb waits for a pointer that can hover.
+ *
+ * A verb per message is a verb per message always drawn, and a column of
+ * pencils is a lot of chrome for prose. Where a mouse exists the row
+ * answers to it; where one does not — a phone, which is where this rail is
+ * a sheet — nothing hovers, so `pointer-fine:` gates the hiding and a touch
+ * device keeps the verb drawn.
+ *
+ * `opacity`, never `hidden`: the button keeps its box, so the stamp line
+ * does not reflow as the pointer crosses it, and it keeps its place in the
+ * tab order — which is what `group-focus-within` then makes visible for a
+ * reader with no pointer at all.
+ *
+ * Exported because the coarse-pointer half cannot be rendered here: vitest's
+ * browser mode exposes no way to emulate `pointer: coarse` (the limit
+ * `dock-button.ts` records for its own 44px step), so the guard reads the
+ * rule instead of a computed style it would have taken from the fine branch.
+ */
+export const THREAD_MESSAGE_ACTION_CLASS =
+  'transition-opacity duration-(--motion-duration-fast) pointer-fine:opacity-0 pointer-fine:group-hover/message:opacity-100 pointer-fine:group-focus-within/message:opacity-100'
+
 export interface ThreadMessageProps {
   readonly message: CommentMessage
   /** The panel's dense typography; the card inherits the bubble's own. */
@@ -49,10 +71,12 @@ export interface ThreadMessageProps {
 
 export function ThreadMessage({ message, compact = false, action, editor }: ThreadMessageProps) {
   return (
-    <li className="flex flex-col gap-0.5">
+    <li className="group/message flex flex-col gap-0.5">
       <div className="flex min-h-4 items-center justify-between gap-2">
         <MessageBy message={message} />
-        {action}
+        {action === undefined || action === null ? null : (
+          <span className={THREAD_MESSAGE_ACTION_CLASS}>{action}</span>
+        )}
       </div>
       {editor ?? (
         <CommentBody
