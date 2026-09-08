@@ -99,3 +99,28 @@ it('answers failed for bytes that will not decode', async () => {
 
   expect(reply.type).toBe('failed')
 })
+
+// The symbol rides the SAME reply as the rectangles. It comes out of the
+// decode the worker just did, so asking for it separately would put that
+// decode back on the thread this whole path exists to keep free.
+it("carries a spatial document's own symbol back with its outline", async () => {
+  const marked: SpatialCanvas = {
+    ...canvas,
+    'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+  }
+  const reply = await ask({ snapshot: snapshotOf(marked) })
+
+  expect(reply.type).toBe('outlined')
+  if (reply.type !== 'outlined') return
+  expect(reply.symbol).toEqual({ kind: 'emoji', char: '📌' })
+  // ...and the shape still comes back: the symbol is what a row DRAWS, not a
+  // reason to stop reading the document's arrangement.
+  expect(reply.rects).toHaveLength(2)
+})
+
+it('leaves the symbol absent for a document that declares none', async () => {
+  const reply = await ask({ snapshot: snapshotOf(canvas) })
+  expect(reply.type).toBe('outlined')
+  if (reply.type !== 'outlined') return
+  expect(reply.symbol).toBeUndefined()
+})

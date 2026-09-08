@@ -23,12 +23,14 @@
  * so a per-row fetch is affordable and both modes keep one code path.
  */
 
+import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { FileText, LayoutGrid } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import { fitMinimap, projectBox } from '../../lib/spatial/minimap.js'
+import type { RowOutline } from './load-row-outline.js'
 
 /**
  * The icon's own box, in percent-of-element units.
@@ -57,7 +59,7 @@ export interface DocumentMinimapProps {
    * component stays free of the daemon client — and so a test can answer
    * without a network or a worker.
    */
-  readonly loadOutline: (document: WorkspaceDocumentEntry) => Promise<readonly FaviconRect[] | null>
+  readonly loadOutline: (document: WorkspaceDocumentEntry) => Promise<RowOutline | null>
 }
 
 /** The largest few rects, fitted to the whole icon box. */
@@ -83,14 +85,16 @@ function projectForIcon(
 
 export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
-  const [rects, setRects] = useState<readonly FaviconRect[] | null>(null)
+  const [outline, setOutline] = useState<RowOutline | null>(null)
 
   useEffect(() => {
     if (!onScreen) return
     let live = true
     loadOutline(document)
       .then((loaded) => {
-        if (live && loaded !== null && loaded.length > 0) setRects(loaded)
+        if (live && loaded !== null && (loaded.rects.length > 0 || loaded.symbol !== undefined)) {
+          setOutline(loaded)
+        }
       })
       // A row that cannot be read keeps its kind icon. A miniature is a
       // convenience; failing to draw one must not cost the row itself.
@@ -100,7 +104,15 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
     }
   }, [onScreen, document, loadOutline])
 
-  const projected = rects === null ? null : projectForIcon(rects)
+  // The document's own mark outranks its shape: a symbol is what somebody
+  // deliberately put on this document, and at 24px the derived miniature is
+  // an arrangement of smudges. `SymbolMark` answers null for an icon name
+  // this build does not carry, which is why this is a value to test rather
+  // than a branch — an unknown name falls through to the shape, and the
+  // shape falls through to the kind icon, one chain with no dead end.
+  const symbol = outline?.symbol
+  const drawsSymbol = symbol !== undefined && canDrawSymbol(symbol)
+  const projected = drawsSymbol || outline === null ? null : projectForIcon(outline.rects)
 
   return (
     <span
@@ -109,7 +121,11 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
       aria-hidden="true"
       className="relative inline-block size-6 shrink-0 overflow-hidden"
     >
-      {projected === null || projected.length === 0 ? (
+      {drawsSymbol && symbol !== undefined ? (
+        <span className="flex size-6 items-center justify-center text-[0.95rem] leading-none">
+          <SymbolMark symbol={symbol} />
+        </span>
+      ) : projected === null || projected.length === 0 ? (
         document.kind === 'spatial' ? (
           <LayoutGrid data-kind="spatial" className="text-muted-foreground size-6" />
         ) : (

@@ -31,7 +31,7 @@ describe('DocumentMinimap', () => {
   // fit, and each miniature costs a fetch of that document's bytes.
   it('does not read a document nobody has scrolled to', () => {
     installObserver()
-    const loadOutline = vi.fn(async () => rects)
+    const loadOutline = vi.fn(async () => ({ rects }))
     render(<DocumentMinimap document={doc} loadOutline={loadOutline} />)
     expect(loadOutline).not.toHaveBeenCalled()
   })
@@ -39,7 +39,7 @@ describe('DocumentMinimap', () => {
   it('draws the document’s shape once the row is seen', async () => {
     const observers = installObserver()
     const { getByTestId } = render(
-      <DocumentMinimap document={doc} loadOutline={async () => rects} />,
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects })} />,
     )
     act(() => observers[0]?.fire())
     await waitFor(() =>
@@ -78,7 +78,9 @@ describe('DocumentMinimap', () => {
 
   it('keeps the kind icon for an empty document rather than an empty box', async () => {
     const observers = installObserver()
-    const { getByTestId } = render(<DocumentMinimap document={doc} loadOutline={async () => []} />)
+    const { getByTestId } = render(
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects: [] })} />,
+    )
     act(() => observers[0]?.fire())
     await waitFor(() =>
       expect(getByTestId('document-minimap').querySelector('[data-kind]')).not.toBeNull(),
@@ -88,8 +90,43 @@ describe('DocumentMinimap', () => {
   it('is hidden from assistive technology — the row’s name already says which document it is', () => {
     installObserver()
     const { getByTestId } = render(
-      <DocumentMinimap document={doc} loadOutline={async () => rects} />,
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects })} />,
     )
     expect(getByTestId('document-minimap').getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('DocumentMinimap with a document symbol', () => {
+  it("draws the document's own mark instead of its shape", async () => {
+    // A symbol is what a person put there; the miniature is derived. At 24px
+    // the derived picture is an arrangement of smudges, so the deliberate
+    // mark wins.
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentMinimap
+        document={doc}
+        loadOutline={async () => ({ rects, symbol: { kind: 'emoji', char: '📌' } })}
+      />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => expect(getByTestId('document-minimap').textContent).toBe('📌'))
+    // ...and the shape is not drawn underneath it.
+    expect(getByTestId('document-minimap').querySelectorAll('span.absolute').length).toBe(0)
+  })
+
+  it('falls back to the shape when the icon name is not one this build carries', async () => {
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentMinimap
+        document={doc}
+        loadOutline={async () => ({ rects, symbol: { kind: 'icon', name: 'no-such-icon' } })}
+      />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() =>
+      expect(getByTestId('document-minimap').querySelectorAll('span.absolute').length).toBe(
+        rects.length,
+      ),
+    )
   })
 })
