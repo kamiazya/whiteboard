@@ -92,12 +92,25 @@ export function DocumentMinimap({ document, loadOutline }: DocumentMinimapProps)
     let live = true
     loadOutline(document)
       .then((loaded) => {
-        if (live && loaded !== null && (loaded.rects.length > 0 || loaded.symbol !== undefined)) {
-          setOutline(loaded)
-        }
+        if (!live) return
+        // A read that ANSWERS with nothing renderable clears what is drawn.
+        // The panel rebuilds its entries on every refresh, so this effect
+        // re-runs for a document already on screen — and holding the last
+        // good value there means a mark somebody REMOVED keeps being drawn
+        // until the row happens to unmount.
+        //
+        // The clearing is deliberately here and not before the load: the
+        // same rebuilt entries would blank every visible miniature on every
+        // refresh and fetch it back, which trades a stale mark for a flicker.
+        setOutline(
+          loaded !== null && (loaded.rects.length > 0 || loaded.symbol !== undefined)
+            ? loaded
+            : null,
+        )
       })
-      // A row that cannot be read keeps its kind icon. A miniature is a
-      // convenience; failing to draw one must not cost the row itself.
+      // A row that cannot be read keeps what it has, falling back to its kind
+      // icon. A miniature is a convenience; a failed read must not cost the
+      // row itself, and unlike an answer it says nothing about the document.
       .catch(() => undefined)
     return () => {
       live = false

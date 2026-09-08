@@ -1,6 +1,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentMinimap } from './DocumentMinimap.js'
+import type { RowOutline } from './load-row-outline.js'
 
 afterEach(cleanup)
 
@@ -112,6 +113,30 @@ describe('DocumentMinimap with a document symbol', () => {
     await waitFor(() => expect(getByTestId('document-minimap').textContent).toBe('📌'))
     // ...and the shape is not drawn underneath it.
     expect(getByTestId('document-minimap').querySelectorAll('span.absolute').length).toBe(0)
+  })
+
+  // A re-read that answers nothing renderable is an ANSWER, not a gap. The
+  // effect re-runs whenever the entry object is rebuilt — which the panel
+  // does on every refresh — so holding the last good value means a mark that
+  // was removed keeps being drawn until something unmounts the row.
+  it('stops drawing a mark the document no longer carries', async () => {
+    const observers = installObserver()
+    let answer: RowOutline | null = { rects, symbol: { kind: 'emoji', char: '📌' } }
+    const loadOutline = async () => answer
+    const { getByTestId, rerender } = render(
+      <DocumentMinimap document={doc} loadOutline={loadOutline} />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => expect(getByTestId('document-minimap').textContent).toBe('📌'))
+
+    answer = { rects: [] }
+    // A fresh entry for the same document, the way a refreshed list hands
+    // one over — the row is not remounted, so nothing resets its state.
+    rerender(<DocumentMinimap document={{ ...doc }} loadOutline={loadOutline} />)
+    await waitFor(() =>
+      expect(getByTestId('document-minimap').querySelector('[data-kind]')).not.toBeNull(),
+    )
+    expect(getByTestId('document-minimap').textContent).toBe('')
   })
 
   it('falls back to the shape when the icon name is not one this build carries', async () => {
