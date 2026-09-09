@@ -204,11 +204,19 @@ describe('an unchanged document', () => {
     clearCache()
   })
 
-  /** The trigger is a debounce even at 0ms; let its tick land. */
-  const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
-
   it('takes no second checkpoint when the newest version already holds this state', async () => {
     const store = new FileVersionStore()
+    // The decision point, observed rather than waited out. "No row appeared"
+    // is a claim about something that does not happen, and the only way to
+    // wait for that on a clock is to guess how long; counting the question
+    // the scheduler asks turns it into a positive one — the keeper WAS
+    // consulted, and the list is still what it was.
+    let asked = 0
+    const askedInner = store.isUnchangedSinceLastVersion.bind(store)
+    store.isUnchangedSinceLastVersion = async (workspaceId, path) => {
+      asked += 1
+      return askedInner(workspaceId, path)
+    }
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
     const map = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
@@ -229,15 +237,19 @@ describe('an unchanged document', () => {
 
     const first = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
     expect((await post(first)).status).toBe(200)
-    await settle()
-    expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+    await vi.waitFor(async () => {
+      expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+    })
 
     // A FRESH router, so a fresh trigger with an empty diff check — which is
     // what a daemon restart leaves behind. The same bytes again: a
     // reconnecting client replaying ops the record already carries.
+    const askedBefore = asked
     const second = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
     expect((await post(second)).status).toBe(200)
-    await settle()
+    await vi.waitFor(() => {
+      expect(asked).toBeGreaterThan(askedBefore)
+    })
 
     expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
   })
