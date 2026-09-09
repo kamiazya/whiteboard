@@ -147,13 +147,9 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
     cacheKey: string | undefined,
   ): Promise<DocumentRender | null> => {
     if (renderedKind(document) === 'markdown') {
-      const markdown = await deps.source.loadMarkdown(document)
-      if (markdown.trim() === '') return null
-      return await (deps.renderMarkdown ?? renderMarkdownInPool)(
-        markdown,
-        ROW_LAYOUT_WIDTH,
-        cacheKey,
-      )
+      const { body } = await deps.source.loadMarkdown(document)
+      if (body.trim() === '') return null
+      return await (deps.renderMarkdown ?? renderMarkdownInPool)(body, ROW_LAYOUT_WIDTH, cacheKey)
     }
 
     const snapshot = await deps.source.loadSpatialSnapshot(document)

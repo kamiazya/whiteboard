@@ -52,7 +52,7 @@ export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): 
         }),
     ),
     setDocumentName: vi.fn(overrides.setDocumentName ?? (async () => {})),
-    loadMarkdown: vi.fn(overrides.loadMarkdown ?? (async () => '')),
+    loadMarkdown: vi.fn(overrides.loadMarkdown ?? (async () => ({ body: '' }))),
     loadSpatialSnapshot: vi.fn(overrides.loadSpatialSnapshot ?? (async () => new Uint8Array())),
     ...(overrides.setPinned === undefined ? {} : { setPinned: vi.fn(overrides.setPinned) }),
   } as FakeFilesSource

@@ -7,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-codec'
 import {
   readCoreFacets,
+  readFacets,
   readMarkdownBody,
   readSpatialCanvas,
   writeMarkdownBody,
@@ -22,7 +23,11 @@ import {
 import { Loro } from 'loro-crdt'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
-import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
+import {
+  type LoadedMarkdown,
+  type WorkspaceFilesSource,
+  WorkspaceMissingError,
+} from './files-source.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import {
   type ContentClock,
@@ -294,11 +299,15 @@ export function createLocalFilesSource(
       })
     },
 
-    async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<string> {
+    async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<LoadedMarkdown> {
       // The BODY, not an OKF serialization: the reads behind this method feed
       // the thumbnail and preview renderers, which draw markdown — a
       // frontmatter block would be drawn as text on every card.
-      return readMarkdownBody(await loadCurrentDoc(entry))
+      //
+      // The facets come off the SAME decoded document. Reading them from a
+      // second load would be a second decode per visible row.
+      const doc = await loadCurrentDoc(entry)
+      return { body: readMarkdownBody(doc), facets: readFacets(doc) }
     },
 
     async loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {

@@ -19,6 +19,7 @@ import {
   writeCanvasComment,
   writeCommentThread,
   writeDocumentKind,
+  writeFacets,
   writeMarkdownBody,
   writeProposal,
   writeSpatialCanvas,
@@ -2709,5 +2710,53 @@ describe('adopting a proposed passage (ADR-0029 decision 6)', () => {
     // that stayed open would ask them again every time they opened the note.
     expect(session.getMarkdownBody()).toBe('The plan changed entirely.\n')
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
+  })
+})
+
+// A markdown document's own mark is a facet, and a facet is no canvas value —
+// so a page reading only the canvas cannot see one. This is the reading that
+// lets both document pages draw it, and it is one seam rather than two
+// because both pages run this same session.
+describe('extension facets', () => {
+  it('answers an empty bucket before the first snapshot', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    expect(session.getFacets()).toEqual({})
+  })
+
+  it('reads the document’s facets once it has hydrated', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, '# Plan\n')
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getFacets()).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+  })
+
+  // The same signal the body and the core facets ride: a remote peer marking
+  // a document changes no canvas value, so nothing else would republish it.
+  it('republishes on the body signal when a remote peer marks the document', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, '# Plan\n')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const listener = vi.fn(() => session.getFacets())
+    const unsubscribe = session.subscribeMarkdownBody(listener)
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'icon', name: 'lock' } })
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(listener).toHaveBeenCalled()
+    expect(session.getFacets()).toEqual({ 'visual.symbol/v0': { kind: 'icon', name: 'lock' } })
+    unsubscribe()
   })
 })

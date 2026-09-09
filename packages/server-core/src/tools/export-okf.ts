@@ -28,8 +28,16 @@ export const exportOkfInputSchema = z
   .strict()
 export type ExportOkfInput = z.infer<typeof exportOkfInputSchema>
 
+/**
+ * `body` repeats bytes `markdown` already carries, and that is the point:
+ * the two answer different questions. `markdown` is the OKF projection —
+ * what a file of this document would contain. `body` is what a renderer
+ * draws, and every caller that wants it either re-parses the serialization
+ * this function built from a body it had in hand, or forgets to and draws
+ * the frontmatter block as prose.
+ */
 export const exportOkfOutputSchema = z
-  .object({ markdown: z.string(), frontmatter: okfMarkdownFrontmatterSchema })
+  .object({ markdown: z.string(), body: z.string(), frontmatter: okfMarkdownFrontmatterSchema })
   .strict()
 export type ExportOkfOutput = z.infer<typeof exportOkfOutputSchema>
 
@@ -77,5 +85,5 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
     facets,
   }
   const markdown = serializeOkf({ frontmatter, body })
-  return { markdown, frontmatter }
+  return { markdown, body, frontmatter }
 }
