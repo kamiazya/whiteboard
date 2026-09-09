@@ -133,9 +133,10 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
               label: 'Clients',
               x: 0,
               y: 600,
-              // Three auto-placed boxes need the width; at 700 the third
-              // lands outside and the whole batch is refused.
-              width: 1200,
+              // Too narrow for three default-size boxes in a row on purpose:
+              // the third wraps and the group grows to hold it, which is
+              // the path a model without geometry actually takes.
+              width: 700,
               height: 300,
             },
           },

@@ -206,16 +206,16 @@ describe('what an errand costs in tool calls', () => {
         responseBytes: 1316,
       },
       // Axis A on `region.set`, the baseline any change to that op's shape
-      // is judged against. Request 426 is what three geometry-less boxes
-      // and their group cost to declare; response 1,954 is the placed
-      // result echoed back. What the price column cannot show: at a group
-      // width of 700 this SAME call is refused whole — the third auto-placed
-      // box lands outside and the text says so, without saying how wide the
-      // group would have to be.
+      // is judged against. Request 425 is what three geometry-less boxes
+      // and a group too narrow for them cost to declare. Response 1,954 ->
+      // 2,060 when the group started growing to hold what was placed in it
+      // (+106: the group's new size, reported under `geometry` beside the
+      // placed boxes); before that, this same call at width 700 was refused
+      // whole and the row could only be pinned at 1200.
       'make a group hold exactly three boxes': {
         calls: 1,
-        requestBytes: 426,
-        responseBytes: 1954,
+        requestBytes: 425,
+        responseBytes: 2060,
       },
     })
   })

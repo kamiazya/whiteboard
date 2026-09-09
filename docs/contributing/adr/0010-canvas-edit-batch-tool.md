@@ -185,7 +185,15 @@ Two further rules keep it usable:
 Coordinate-less declared nodes are placed INSIDE the group rather than through
 the board-level cursor, which places below all existing content — that would
 land a node outside the region it was declared in, and therefore out of scope
-on the next call, breaking idempotence.
+on the next call, breaking idempotence. When that placement does not fit — the
+third default-size box in a 700-wide group wraps to a row the group has no
+room for — the GROUP GROWS to hold it, gutter included, and reports its new
+size under `geometry`; a locked group refuses instead. It used to refuse the
+whole batch, and the lane showed what a model does with that: declare full
+geometry for every box, which is the arithmetic optional geometry exists to
+spare it ([ADR-0030 §4](0030-tool-surface-criteria.md)). A position the CALLER
+chose is still held to the boundary, and that refusal now says which edge is
+over by how much and the three ways out.
 
 **Keeping `wb_canvas_tidy` as a standalone tool.** It is the most likely one-shot
 call and the only pre-existing declarative-ish tool. Retired anyway: a special

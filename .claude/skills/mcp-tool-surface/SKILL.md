@@ -126,6 +126,13 @@ with every tool call, tool-error text, token and cost figure.
   whole question a change to one arm's shape is judged on. The `--out`
   JSON keeps each call's `inputs` beside it, so whether the model declared
   geometry or left it to placement can be read rather than guessed.
+- **A call AFTER the write is the lane grading the write's result.** The
+  group-contents task passed every trial, and after a description got the
+  model to leave geometry to placement, every trial then spent one more
+  `node.patch` moving the placed box — placement had been putting it on
+  top of what the group already held, since the op shipped. Read
+  `inputs` for what the extra call undid; a pass with a repair call in it
+  is a product finding, not a model one.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1

@@ -251,7 +251,11 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .object({
       op: z.literal('region.set'),
       within: nodeIdSchema,
-      nodes: z.array(regionNodeSchema),
+      nodes: z
+        .array(regionNodeSchema)
+        .describe(
+          'Everything the group contains, by id; a node inside it that is not listed is removed. Omit x/y and a node is placed inside, and the group grows to fit.',
+        ),
       edges: z.array(canvasEdgeSchema),
     })
     .strict(),
@@ -454,37 +458,98 @@ class PlacementCursor {
   }
 }
 
+type Rect = { x: number; y: number; width: number; height: number }
+
+/** Two boxes closer than the gutter count as touching, so packing keeps it. */
+function crowds(a: Rect, b: Rect): boolean {
+  return (
+    a.x < b.x + b.width + PLACEMENT_GUTTER_PX &&
+    b.x < a.x + a.width + PLACEMENT_GUTTER_PX &&
+    a.y < b.y + b.height + PLACEMENT_GUTTER_PX &&
+    b.y < a.y + a.height + PLACEMENT_GUTTER_PX
+  )
+}
+
 /**
- * Lays coordinate-less nodes out INSIDE a box, wrapping at its right edge.
+ * Lays coordinate-less nodes out INSIDE a box, in rows from its top-left,
+ * around what the box already holds.
  *
  * `region.set` cannot use the board-level cursor: that one places below all
  * existing content, which for a region op lands the node outside the very
  * region it was declared in — and therefore out of scope on the next call,
  * so the op would not be idempotent.
  *
- * ponytail: rows from the box's top-left, and a node wider than the box
- * overflows it rather than being shrunk. Pack properly if regions turn out to
- * be used for dense layouts.
+ * `occupied` is what the region keeps. Without it the first placement
+ * started from the top-left as if the group were empty and landed on the
+ * box already there; measured on the lane, a model then spent a call moving
+ * it. Each row is walked past whatever crowds the candidate, and when the
+ * row is full the next starts under the lowest of what blocked it.
+ *
+ * ponytail: a node wider than the box overflows it rather than being shrunk
+ * (the caller grows the box). Pack properly if regions turn out to be used
+ * for dense layouts.
  */
 function placeWithin(
-  box: { x: number; y: number; width: number; height: number },
+  box: Rect,
   sizes: readonly { width: number; height: number }[],
+  occupied: readonly Rect[],
 ): { x: number; y: number }[] {
+  const taken: Rect[] = [...occupied]
+  const left = box.x + PLACEMENT_GUTTER_PX
+  const right = box.x + box.width
   const out: { x: number; y: number }[] = []
-  let x = box.x + PLACEMENT_GUTTER_PX
-  let y = box.y + PLACEMENT_GUTTER_PX
-  let rowHeight = 0
   for (const size of sizes) {
-    if (x !== box.x + PLACEMENT_GUTTER_PX && x + size.width > box.x + box.width) {
-      x = box.x + PLACEMENT_GUTTER_PX
-      y += rowHeight + PLACEMENT_GUTTER_PX
-      rowHeight = 0
+    let y = box.y + PLACEMENT_GUTTER_PX
+    for (;;) {
+      let x = left
+      let nextRow: number | undefined
+      let at: Rect | undefined
+      for (;;) {
+        const candidate = { x, y, ...size }
+        const hit = taken.find((rect) => crowds(candidate, rect))
+        if (hit === undefined) {
+          at = candidate
+          break
+        }
+        const below = hit.y + hit.height + PLACEMENT_GUTTER_PX
+        nextRow = nextRow === undefined ? below : Math.min(nextRow, below)
+        x = hit.x + hit.width + PLACEMENT_GUTTER_PX
+        if (x + size.width > right) break
+      }
+      if (at !== undefined) {
+        out.push({ x: at.x, y: at.y })
+        taken.push(at)
+        break
+      }
+      // Every hit sits at or below y with the gutter, so this strictly
+      // advances and the walk ends once y is under everything taken.
+      y = nextRow ?? y + size.height + PLACEMENT_GUTTER_PX
     }
-    out.push({ x, y })
-    x += size.width + PLACEMENT_GUTTER_PX
-    rowHeight = Math.max(rowHeight, size.height)
   }
   return out
+}
+
+/**
+ * Why a declared node is outside its region, with the way out. A model that
+ * was told only "would not be inside" shrank every box in the group to fit
+ * (lane, 2026-09); the number it is over by and the cheaper repairs are what
+ * it needed.
+ */
+function outsideDetail(
+  id: string,
+  node: { x: number; y: number; width: number; height: number },
+  bounds: { id: string; x: number; y: number; width: number; height: number },
+): string {
+  const over: string[] = []
+  if (node.x < bounds.x) over.push(`left edge ${node.x} is before the group's ${bounds.x}`)
+  if (node.y < bounds.y) over.push(`top edge ${node.y} is above the group's ${bounds.y}`)
+  const right = node.x + node.width
+  const groupRight = bounds.x + bounds.width
+  if (right > groupRight) over.push(`right edge ${right} is past the group's ${groupRight}`)
+  const bottom = node.y + node.height
+  const groupBottom = bounds.y + bounds.height
+  if (bottom > groupBottom) over.push(`bottom edge ${bottom} is past the group's ${groupBottom}`)
+  return `node "${id}" would not be inside "${bounds.id}": ${over.join(', ')}. Widen "${bounds.id}" with node.patch, move the node, or omit its x/y to have it placed inside (the group grows to fit what is placed)`
 }
 
 function mintId(taken: ReadonlySet<string>, prefix: string): string {
@@ -797,7 +862,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 `"${op.within}" is not a group on the canvas; region.set needs one to bound the region`,
               )
             }
-            const bounds = group
+            // Reassigned once if placement grows the group, below; every
+            // read of the boundary goes through it so the grown size is what
+            // the rest of the op is held to.
+            let bounds = group
             const encloses = (node: SpatialNode): boolean =>
               node.id !== bounds.id &&
               node.x >= bounds.x &&
@@ -858,16 +926,71 @@ export function createCanvasEditTool(deps: ServerDeps) {
               (node) =>
                 nodeAt(node.id) === undefined && (node.x === undefined || node.y === undefined),
             )
-            const placements = placeWithin(
-              bounds,
-              needPlacing.map((node) => ({
-                width: node.width ?? DEFAULT_SIZE[node.type].width,
-                height: node.height ?? DEFAULT_SIZE[node.type].height,
-              })),
-            )
+            const sizeOf = (node: (typeof op.nodes)[number]) => ({
+              width: node.width ?? nodeAt(node.id)?.width ?? DEFAULT_SIZE[node.type].width,
+              height: node.height ?? nodeAt(node.id)?.height ?? DEFAULT_SIZE[node.type].height,
+            })
+            // What the region will hold at a known position: kept nodes as
+            // declared over what they were, and new ones that name a spot.
+            const occupied = op.nodes.flatMap((node): Rect[] => {
+              const existing = nodeAt(node.id)
+              const x = node.x ?? existing?.x
+              const y = node.y ?? existing?.y
+              return x === undefined || y === undefined ? [] : [{ x, y, ...sizeOf(node) }]
+            })
+            const placements = placeWithin(bounds, needPlacing.map(sizeOf), occupied)
             const placementFor = new Map(
               needPlacing.map((node, at) => [node.id, placements[at]] as const),
             )
+            // A placement is this op's own arithmetic, so a placement that
+            // lands outside is this op's to fix, not the caller's: the group
+            // grows to hold it, gutter included. Only a position the CALLER
+            // chose is held to the boundary, below. Growth is grow-only,
+            // only on an actual overflow, and keeps the top-left, so
+            // re-applying the same region stays a no-op; what it can do is
+            // enclose a neighbour that sat just past the old edge, which the
+            // NEXT region.set will then see in scope — geometry is geometry,
+            // and the result reports the size.
+            const needed = needPlacing.reduce(
+              (acc, node, at) => {
+                const placed = placements[at]
+                if (placed === undefined) return acc
+                const size = sizeOf(node)
+                const right = placed.x + size.width
+                const bottom = placed.y + size.height
+                return {
+                  width:
+                    right > bounds.x + bounds.width
+                      ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
+                      : acc.width,
+                  height:
+                    bottom > bounds.y + bounds.height
+                      ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
+                      : acc.height,
+                }
+              },
+              { width: bounds.width, height: bounds.height },
+            )
+            if (needed.width > bounds.width || needed.height > bounds.height) {
+              if (nodeLocks.has(bounds.id)) {
+                fail(
+                  index,
+                  op.op,
+                  `"${bounds.id}" is locked and too small for what was placed in it (needs ${needed.width}x${needed.height}); unlock it, or give each node x/y inside it`,
+                )
+              }
+              const grown: SpatialNode = { ...bounds, width: needed.width, height: needed.height }
+              nodes = nodes.map((node) => (node.id === grown.id ? grown : node))
+              bounds = grown
+              touchedNodes.add(grown.id)
+              geometry.set(grown.id, {
+                id: grown.id,
+                x: grown.x,
+                y: grown.y,
+                width: grown.width,
+                height: grown.height,
+              })
+            }
 
             for (const declared of op.nodes) {
               const existing = nodeAt(declared.id)
@@ -897,11 +1020,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               // move any node on the board — and since the lock preflight only
               // walks what is in scope, a locked one at that.
               if (!encloses(next)) {
-                fail(
-                  index,
-                  op.op,
-                  `node "${declared.id}" would not be inside "${bounds.id}"; region.set declares what the region contains`,
-                )
+                fail(index, op.op, outsideDetail(declared.id, next, bounds))
               }
               nodes =
                 existing === undefined

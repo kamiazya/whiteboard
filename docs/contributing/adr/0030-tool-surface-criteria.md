@@ -370,8 +370,31 @@ anything is retired.
   box and not how wide the group would have to be. So the op is reached
   a third of the time on its own errand, costs a third of the tool to
   offer, and its refusal has no repair advice — three findings, none of
-  which yet says which shape to change to; the candidates and their
-  before/after are the next increment, judged on this baseline.
+  which yet says which shape to change to.
+
+  Landed first, because it is the cheapest and changes no shape: the
+  group GROWS to hold what placement put in it (a locked one refuses and
+  says the size it would need), the refusal for a caller-chosen position
+  names the edge and the overrun and the three ways out, and `nodes`
+  carries one description saying geometry can be omitted (+168 bytes,
+  the tool's first described parameter). Three lane steps, three trials
+  each, same task: growth and the refusal text alone — reached 2 of 3,
+  the one refusal repaired the way the text said (widen with
+  `node.patch`, in the same batch) instead of by shrinking every box;
+  still full geometry on every node. The description added — reached 3
+  of 3 and the new box left to placement in all three, **and every trial
+  then spent a fourth call moving it**: placement had started from the
+  group's top-left as if it were empty and put the new box on the first
+  one. A follow-up call after a write is the lane grading the write's
+  RESULT, and that one was a product bug the op had carried since it
+  shipped. Placement made to pack around what the region keeps — reached
+  3 of 3, no follow-up call, one trial declaring no geometry at all, the
+  one refusal repaired by omitting x/y as advised. Rung 2 pins the op at
+  700 wide now (1 call, 425 in, 2,060 out; the +106 is the grown group
+  reported under `geometry`). What this did not move: the arm's 3,930
+  bytes, and the model's habit of writing x/y/width/height for a box that
+  already has them — the shape candidates (membership-only, or lighter
+  node declarations) are judged against THIS surface, not the baseline.
 - **What a call answers with**, the errand scoreboard's `responseBytes`
   column, is the other half of what a model reads and was untouched until
   the version tools stopped answering the History panel's row (1,948 ->
