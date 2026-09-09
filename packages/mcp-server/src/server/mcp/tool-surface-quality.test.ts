@@ -118,7 +118,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 601,
-        wireBytes: 16601,
+        wireBytes: 14851,
         descriptionWords: 39,
         parameters: 2,
         undescribed: 2,
@@ -126,20 +126,23 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_body_edit: {
-        visibleBytes: 1900,
-        wireBytes: 18512,
+        visibleBytes: 1846,
+        wireBytes: 16764,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 18,
         strays: 'refused',
         names: [],
       },
-      // 45% of everything the model reads, in one tool: the ops union
+      // 41% of everything the model reads, in one tool: the ops union
       // carries the full node and edge schemas once per arm, and not one
-      // of its 207 properties says what it is for.
+      // of its 207 properties says what it is for. -1,640 bytes when the
+      // model's integers stopped emitting safe-integer bounds (sixty
+      // `minimum: -9007199254740991, maximum: 9007199254740991` pairs on
+      // one tool; `integerSchema` in packages/model).
       wb_canvas_edit: {
-        visibleBytes: 15858,
-        wireBytes: 36477,
+        visibleBytes: 14218,
+        wireBytes: 33033,
         descriptionWords: 169,
         parameters: 207,
         undescribed: 207,
@@ -148,7 +151,7 @@ describe('what the tool table costs to read', () => {
       },
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 4045,
+        wireBytes: 3935,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -231,8 +234,8 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_thread_edit: {
-        visibleBytes: 3044,
-        wireBytes: 3611,
+        visibleBytes: 2826,
+        wireBytes: 3393,
         descriptionWords: 122,
         parameters: 32,
         undescribed: 32,
@@ -320,8 +323,11 @@ describe('what the tool table costs to read', () => {
       // already registered the object unchanged), +379 for a search filter
       // that stands alone (see wb_document_search). Under the ~40,000 at
       // which ADR-0030 §5 says to reconsider loading the table upfront.
-      visibleBytes: 36483,
-      wireBytes: 103702,
+      // -1,912 when the model's integer fields stopped emitting safe-integer
+      // bounds (see wb_canvas_edit): the first cut that took nothing away
+      // from what a model can do.
+      visibleBytes: 34571,
+      wireBytes: 96432,
       parameters: 325,
       undescribed: 291,
     })

@@ -23,6 +23,7 @@ import {
   edgePatchFieldsSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
+  nonnegativeIntegerSchema,
   proposalSchema,
   type SpatialCanvas,
   type SpatialNode,
@@ -147,8 +148,8 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .object({
       op: z.literal('node.splice'),
       id: nodeIdSchema,
-      startLine: z.number().int().nonnegative(),
-      endLine: z.number().int().nonnegative(),
+      startLine: nonnegativeIntegerSchema,
+      endLine: nonnegativeIntegerSchema,
       replacement: z.string(),
     })
     .strict()

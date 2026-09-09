@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { annotationIdSchema, textAnchorSchema } from './annotation.js'
 import { nodeIdSchema } from './ids.js'
+import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import { canvasColorSchema, canvasEdgeSchema, spatialNodeSchema } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
@@ -63,10 +64,10 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
  */
 export const nodePatchFieldsSchema = z
   .object({
-    x: z.number().int().optional(),
-    y: z.number().int().optional(),
-    width: z.number().int().nonnegative().optional(),
-    height: z.number().int().nonnegative().optional(),
+    x: integerSchema.optional(),
+    y: integerSchema.optional(),
+    width: nonnegativeIntegerSchema.optional(),
+    height: nonnegativeIntegerSchema.optional(),
     color: canvasColorSchema.optional(),
     // Per-type content. `id` and `type` are deliberately absent: a patch
     // changes what a node SAYS, never which node it is or what kind.

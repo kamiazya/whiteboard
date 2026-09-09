@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { nodeIdSchema } from './ids.js'
+import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import type { CanvasComment } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
@@ -45,8 +46,8 @@ export const textAnchorSchema = z
     /** The text node whose text the passage is in; absent, the document's own body. */
     nodeId: nodeIdSchema.optional(),
     quote: textQuoteSelectorSchema,
-    start: z.number().int().nonnegative(),
-    end: z.number().int().nonnegative(),
+    start: nonnegativeIntegerSchema,
+    end: nonnegativeIntegerSchema,
   })
   .strict()
   .refine((anchor) => anchor.end >= anchor.start, {
@@ -107,11 +108,11 @@ export const annotationAnchorSchema = z.discriminatedUnion('kind', [
       // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
       // fractional anchor taken from a zoomed viewport survives the session
       // and then vanishes, because the next read drops what fails the schema.
-      x: z.number().int(),
-      y: z.number().int(),
+      x: integerSchema,
+      y: integerSchema,
       /** With `height`: the anchor is a REGION with `x`/`y` its top-left corner. */
-      width: z.number().int().nonnegative().optional(),
-      height: z.number().int().nonnegative().optional(),
+      width: nonnegativeIntegerSchema.optional(),
+      height: nonnegativeIntegerSchema.optional(),
     })
     .strict()
     .refine(
