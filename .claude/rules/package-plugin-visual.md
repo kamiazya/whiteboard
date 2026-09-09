@@ -118,7 +118,9 @@ Follow the README's recipe when adding one, and keep the table alphabetical.
   the theme). `themes.test.ts` holds every half to the bundled palettes'
   floors — strokes 3:1 against the surface, label text 4.5:1 against every
   fill it can sit on, syntax 4.5:1 — so a theme may change every colour and
-  none of the guarantees. Sketch names `Patrick Hand` as its family; the
+  none of the guarantees. Sketch names `Yomogi` as its family — a Japanese
+  handwriting face that also covers Latin, so a mixed-script label is one
+  hand (user decision, 2026-09-09, from a thirteen-face specimen); the
   face is ADR-0011/0012's to provide, and a surface without it declares
   the bundled family and reports `font-missing`.
 - `render.ts` hands the SAME asset objects to canvas-render as

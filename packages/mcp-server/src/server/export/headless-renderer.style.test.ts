@@ -33,7 +33,7 @@ describe('export style', () => {
   it('a sketch export declares the bundled family, not the handwriting one it cannot measure', async () => {
     const sketch = await renderSpatialCanvasToSvg(themed('visual.sketch'), { style: 'document' })
     expect(sketch.svg).toContain('stroke-linecap="round"')
-    expect(sketch.svg).not.toContain('Patrick Hand')
+    expect(sketch.svg).not.toContain('Yomogi')
     expect(sketch.svg).toContain('font-family="Roboto"')
     expect(sketch.unresolvedFamilies).toEqual([])
   })

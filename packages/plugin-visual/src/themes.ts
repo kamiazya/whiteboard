@@ -80,10 +80,16 @@ const SKETCH_DARK: PaletteTokens = {
  * face where one is installed (ADR-0011/0012 provide it by family name; a
  * surface without it declares the bundled family and says so), curved
  * routing and a dashed group frame by default.
+ *
+ * Yomogi (OFL) rather than a Latin-only handwriting face: a label on this
+ * product's boards mixes Japanese and English, and a family that covers
+ * only one script hands the other to the system font, so one label is
+ * written by two hands. Chosen from a thirteen-face specimen of the same
+ * canvas; the runner-up, Zen Kurenaido, is thinner and quieter.
  */
 export const VISUAL_THEME_SKETCH: ThemeTokens = {
   ink: 'sketch',
-  fontFamily: 'Patrick Hand',
+  fontFamily: 'Yomogi',
   palette: { light: SKETCH_LIGHT, dark: SKETCH_DARK },
   defaults: {
     edgeRouting: 'curved',

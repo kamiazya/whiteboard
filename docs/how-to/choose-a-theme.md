@@ -49,7 +49,8 @@ The web editor's own export draws what you see, theme included.
 
 ## Fonts
 
-The sketch theme names a handwriting family. It is declared in the SVG only where the renderer
+The sketch theme names the Yomogi family, a handwriting face that covers Japanese and Latin in
+one hand. It is declared in the SVG only where the renderer
 can measure it — the vendored face, or one installed through the daemon (see
 [install-fonts-for-export](install-fonts-for-export.md)) — and otherwise the bundled family
 is used, so the coordinates and the face always agree.
