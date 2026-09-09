@@ -23,7 +23,14 @@ catalog:
   zod: "^4.4.2"
   loro-crdt: "1.13.6"
   # shared build/test tooling
-  typescript: "^6.0.3"
+  # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
+  # NO JS compiler API (the root export is `lib/version.cjs`), so a package
+  # that parses ASTs or emits .d.ts takes `@typescript/typescript6` instead —
+  # the 6.x API republished to sit beside this. Two do: tools/arch-lint (its
+  # scans), and packages/mcp-server, which pins 6 outright because tsup
+  # bundles rollup-plugin-dts 6.1.1 and nothing here can redirect a vendored
+  # resolution.
+  typescript: "^7.0.2"
   vite: "^8.2.0"
   vitest: "^5.0.0"
   "@vitest/browser-playwright": "^5.0.0"
