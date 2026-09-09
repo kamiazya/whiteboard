@@ -4,7 +4,7 @@
  * leave the bytes on disk with nothing left that could ever name them, which
  * is the shape an operator finds years later and cannot explain.
  */
-import { mkdir, mkdtemp, readdir, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readdir, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Kysely, type MigrationProvider, Migrator, SqliteDialect, sql } from 'kysely'
@@ -26,6 +26,7 @@ interface Handle {
   db: Kysely<Record<string, Record<string, unknown>>>
   migrateTo(name: string): Promise<void>
   migrateToHead(): Promise<void>
+  migrateToHeadRaw(): Promise<unknown>
 }
 
 async function openDb(): Promise<Handle> {
@@ -48,6 +49,9 @@ async function openDb(): Promise<Handle> {
     async migrateToHead() {
       const { error } = await migrator.migrateToLatest()
       expect(error).toBeUndefined()
+    },
+    async migrateToHeadRaw() {
+      return (await migrator.migrateToLatest()).error
     },
   }
 }
@@ -144,4 +148,29 @@ it('runs against a data directory with no blobs at all', async () => {
   await handle.migrateTo(PRE_0024)
   await handle.migrateToHead()
   expect(await versionColumns(handle.db)).not.toContain('hasThumbnail')
+})
+
+// Swallowing this would drop the column while the pictures stayed on disk —
+// the unnameable-bytes state the two halves exist to prevent, and with the
+// schema change recorded there is nothing left that could collect them. So
+// the migration must abort UNRECORDED and retry on the next start.
+//
+// A self-referential symlink rather than an unreadable directory: `readdir`
+// answers ELOOP for every user, so this runs as root too. The permission
+// case is the same branch, and a test only CI can execute is one nobody
+// watches fail.
+it('aborts unrecorded on an unexpected filesystem error instead of dropping the column anyway', async () => {
+  const handle = await openDb()
+  await handle.migrateTo(PRE_0024)
+  await seedVersionRow(handle, 'v-1', 'ws-1')
+  await mkdir(join(dataDir, 'blobs', 'ws-1'), { recursive: true })
+  await symlink('versions', join(dataDir, 'blobs', 'ws-1', 'versions'))
+
+  const error = await handle.migrateToHeadRaw()
+
+  expect((error as NodeJS.ErrnoException | undefined)?.code).toBe('ELOOP')
+  // Unrecorded, so the next start runs it again. A migration that reported
+  // success here would have retired the only thing that knows the pictures
+  // it failed to delete exist.
+  expect(await versionColumns(handle.db)).toContain('hasThumbnail')
 })

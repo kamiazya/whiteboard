@@ -1,8 +1,9 @@
-import { readdir, rm } from 'node:fs/promises'
+import { rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type { Kysely, Migration } from 'kysely'
 import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
+import { readDirSafe } from './0011-import-fs-blobs.js'
 
 const log = getLogger('migration-0024')
 
@@ -23,33 +24,34 @@ const log = getLogger('migration-0024')
 // The path segments are FROZEN literals rather than an import of
 // `version-store.ts`'s join, which this migration deletes: a recorded
 // migration must not depend on living code that can change out from under it
-// (0011's rule, and its worked example).
+// (0011's rule, and its worked example). `readDirSafe` is the exception the
+// same rule allows and 0011 states at its export — a migration is itself
+// frozen, so depending on one is not depending on living code.
 const BLOBS_DIR = 'blobs'
 const VERSIONS_SEGMENT = 'versions'
 
-/** Every `blobs/<workspaceId>/versions` tree, whatever the deployment holds. */
+/**
+ * Every `blobs/<workspaceId>/versions` tree, whatever the deployment holds.
+ *
+ * Absence is the normal state of a deployment that never saved a bookmark, so
+ * `readDirSafe` answers it with an empty list. Any OTHER filesystem error —
+ * a permission, an I/O failure — propagates and aborts the migration
+ * UNRECORDED, so the next start retries it. Swallowing those would drop the
+ * column while the pictures stayed on disk: exactly the unnameable-bytes
+ * state the two halves go together to prevent, and with the schema change
+ * recorded there would be nothing left to collect them.
+ */
 async function removeVersionPictureTrees(): Promise<number> {
   const blobs = join(getDataDir(), BLOBS_DIR)
-  let workspaces: string[]
-  try {
-    workspaces = await readdir(blobs)
-  } catch {
-    // No blobs at all is the normal state of a deployment that never saved a
-    // bookmark, and a migration that throws on it is a daemon that will not
-    // start.
-    return 0
-  }
   let removed = 0
-  for (const workspaceId of workspaces) {
+  for (const workspaceId of await readDirSafe(blobs)) {
     const tree = join(blobs, workspaceId, VERSIONS_SEGMENT)
-    try {
-      const files = await readdir(tree)
-      await rm(tree, { recursive: true, force: true })
-      removed += files.length
-    } catch {
-      // A workspace with no pictures, or an entry that is not a directory.
-      // Neither is a reason to fail the upgrade.
-    }
+    // A workspace with no pictures, or an entry under `blobs/` that is not a
+    // directory, both answer empty here; `force` makes the removal a no-op on
+    // the same absence.
+    const files = await readDirSafe(tree)
+    await rm(tree, { recursive: true, force: true })
+    removed += files.length
   }
   return removed
 }
