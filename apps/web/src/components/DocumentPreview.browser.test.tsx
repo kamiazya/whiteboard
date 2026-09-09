@@ -31,12 +31,25 @@ function mount(theme: 'light' | 'dark') {
 const chromeStroke = (container: HTMLElement): string | null =>
   container.querySelector('svg rect')?.getAttribute('stroke') ?? null
 
-function pointer(type: string, pointerId: number, x: number, y: number): void {
+function pointer(
+  type: string,
+  pointerId: number,
+  x: number,
+  y: number,
+  init: PointerEventInit = {},
+): void {
   page
     .getByTestId('document-preview')
     .element()
     .dispatchEvent(
-      new PointerEvent(type, { bubbles: true, clientX: x, clientY: y, pointerId, button: 0 }),
+      new PointerEvent(type, {
+        bubbles: true,
+        clientX: x,
+        clientY: y,
+        pointerId,
+        button: 0,
+        ...init,
+      }),
     )
 }
 
@@ -102,6 +115,47 @@ describe('DocumentPreview', () => {
     await userEvent.click(reset)
     await expect.poll(() => transformOf(container)).toBe('scale(1) translate(0px, 0px)')
     expect(container.querySelector('[data-testid="preview-reset-view"]')).toBeNull()
+  })
+
+  // Pointer capture is best-effort (a browser refuses it for a pointerId the
+  // platform has no record of), so a release OUTSIDE the surface can deliver
+  // no `pointerup` at all. A press the surface never saw end must not leave a
+  // drag armed: the button is up, and the next hover is not a pan.
+  it('drops a mouse drag whose release the surface never saw', async () => {
+    const { container } = mount('dark')
+    await expect
+      .poll(() => container.querySelector('svg')?.getAttribute('width'))
+      .toBe(String(SURFACE_PX))
+
+    pointer('pointerdown', 1, 200, 200, { pointerType: 'mouse', buttons: 1 })
+    pointer('pointermove', 1, 260, 240, { pointerType: 'mouse', buttons: 1 })
+    await expect.poll(() => transformOf(container)).toBe('scale(1) translate(60px, 40px)')
+
+    // The release landed off the surface. These are hovers, not a drag.
+    pointer('pointermove', 1, 340, 340, { pointerType: 'mouse', buttons: 0 })
+    pointer('pointermove', 1, 380, 380, { pointerType: 'mouse', buttons: 0 })
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(transformOf(container)).toBe('scale(1) translate(60px, 40px)')
+  })
+
+  // The other way a press ends without an up: the platform takes the capture
+  // away mid-drag. The editor answers this the same way (`onLostPointerCapture`).
+  it('drops a drag whose capture the platform revoked', async () => {
+    const { container } = mount('dark')
+    await expect
+      .poll(() => container.querySelector('svg')?.getAttribute('width'))
+      .toBe(String(SURFACE_PX))
+
+    pointer('pointerdown', 1, 200, 200)
+    pointer('pointermove', 1, 260, 240)
+    await expect.poll(() => transformOf(container)).toBe('scale(1) translate(60px, 40px)')
+
+    pointer('lostpointercapture', 1, 260, 240)
+    pointer('pointermove', 1, 340, 340)
+
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(transformOf(container)).toBe('scale(1) translate(60px, 40px)')
   })
 
   // The screen this surface is most often read on has no wheel and no

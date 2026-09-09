@@ -89,6 +89,7 @@ export interface PreviewViewportControls {
     readonly onPointerMove: (e: ReactPointerEvent<HTMLElement>) => void
     readonly onPointerUp: (e: ReactPointerEvent<HTMLElement>) => void
     readonly onPointerCancel: (e: ReactPointerEvent<HTMLElement>) => void
+    readonly onLostPointerCapture: (e: ReactPointerEvent<HTMLElement>) => void
   }
 }
 
@@ -129,6 +130,16 @@ export function usePreviewViewport(): PreviewViewportControls {
   const onPointerMove = useCallback((e: ReactPointerEvent<HTMLElement>) => {
     const live = pointers.current
     if (!live.has(e.pointerId)) return
+    // A press can end without this surface ever hearing it: capture above is
+    // best-effort, so a release OUTSIDE the element delivers no `pointerup`
+    // here at all. The entry would then outlive the drag — and cost twice,
+    // because the next hover pans with no button down, and the stale entry
+    // plus one real finger reads as a pinch. The button state on the move is
+    // what the surface still knows, so a mouse reporting none ends the drag.
+    if (e.pointerType === 'mouse' && e.buttons === 0) {
+      live.delete(e.pointerId)
+      return
+    }
     const before = [...live.values()]
     live.set(e.pointerId, clientPoint(e))
     const after = [...live.values()]
@@ -172,6 +183,10 @@ export function usePreviewViewport(): PreviewViewportControls {
       onPointerMove,
       onPointerUp: releasePointer,
       onPointerCancel: releasePointer,
+      // The other way a press ends unheard: the platform revokes the capture
+      // mid-drag. Touch reports no `buttons`, so the guard above cannot cover
+      // it — this is what does. The editor answers the same event the same way.
+      onLostPointerCapture: releasePointer,
     },
   }
 }
