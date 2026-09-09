@@ -17,11 +17,24 @@ export class WorkspaceDocumentNotFoundError extends Error {
   }
 }
 
+/**
+ * What the caller was doing decides the advice: a create can carry
+ * `createWorkspace: true` on the call it just made, while a read has no
+ * such parameter, and naming one it does not take sends a model to the
+ * wrong tool.
+ */
+export type WorkspaceNotFoundIntent = 'create' | 'read'
+
 export class WorkspaceNotFoundError extends Error {
-  constructor(readonly workspaceId: string) {
+  constructor(
+    readonly workspaceId: string,
+    intent: WorkspaceNotFoundIntent = 'read',
+  ) {
     super(
       `Workspace not found: "${workspaceId}". ` +
-        'Pass createWorkspace: true to create it along with the canvas.',
+        (intent === 'create'
+          ? 'Pass createWorkspace: true on this wb_workspace_edit call to create it along with the document.'
+          : 'Check the id against the workspaces you know, or create one with wb_workspace_edit (createWorkspace: true).'),
     )
     this.name = 'WorkspaceNotFoundError'
   }
