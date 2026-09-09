@@ -281,6 +281,26 @@ describe('embedded canvases', () => {
     expect(inner?.appearance?.stroke).toBe('#123456')
   })
 
+  it("a child naming a theme this build lacks draws clean — it does not keep the host's ink", () => {
+    const events: SpatialLayoutDegradation[] = []
+    const scene = layoutSpatialCanvas(
+      host(),
+      baseOptions({
+        style: 'document',
+        renderContributions: contributions,
+        expandFileNode: () => true,
+        resolveReference: () => ({ canvas: child('nobody.home') }),
+        onDegrade: (event) => events.push(event),
+      }),
+    )
+    const inner = embedded(scene)?.children.find(
+      (n): n is ShapeSceneNode => n.kind === 'shape' && n.id === 'c1',
+    )
+    expect(inner?.appearance?.stroke).not.toBe('#123456')
+    expect(inner?.ink).toBeUndefined()
+    expect(events).toContainEqual({ kind: 'unknown-theme', theme: 'nobody.home' })
+  })
+
   it('a child with its own theme keeps it', () => {
     const scene = layoutSpatialCanvas(
       host(),

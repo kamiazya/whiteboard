@@ -112,6 +112,11 @@ export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<V
     }
   })()
   registeredByBytes.set(family, pending)
+  // A face that did not load is forgotten, so the next pass — after an
+  // install, say — registers afresh instead of answering the old failure.
+  void pending.then((status) => {
+    if (status !== 'loaded') registeredByBytes.delete(family)
+  })
   return pending
 }
 

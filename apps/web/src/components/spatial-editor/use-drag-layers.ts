@@ -185,6 +185,7 @@ export function useDragLayers({
     lockedNodeIds,
     resolvedMeasure,
     theme,
+    style,
     fileSeamOptions,
     gestureCommitted,
     showResolved,
@@ -267,6 +268,7 @@ export function useDragLayers({
     lockedNodeIds,
     resolvedMeasure,
     theme,
+    style,
     fileSeamOptions,
     showResolved,
   ])
@@ -459,7 +461,7 @@ export function useDragLayers({
       },
     )
     return { svg: rendered.svg, bounds: rendered.bounds }
-  }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
+  }, [gestureState, dragPreview, dragStatic, canvas, theme, style, fileSeamOptions])
 
   return { dragContentSvg, dragStatic, dragPreview, liveEdges, liveNode, canvasContentRef }
 }

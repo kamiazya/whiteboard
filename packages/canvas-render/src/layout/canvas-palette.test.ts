@@ -26,6 +26,20 @@ describe('resolveCanvasPalette', () => {
     expect(light.surface).toBe('#f8fafc')
   })
 
+  it('follows the style the canvas is drawn under: clean is the bundled palette, a theme id that theme', () => {
+    // The paper and the swatches preview what the layout DRAWS, and under a
+    // session override that is not the saved theme.
+    expect(resolveCanvasPalette(canvasIn('visual.neon'), 'dark', { style: 'clean' })).toBe(
+      SPATIAL_DARK_PALETTE,
+    )
+    expect(
+      resolveCanvasPalette(canvasIn(undefined), 'dark', { style: 'visual.neon' }).surface,
+    ).toBe('#030711')
+    expect(
+      resolveCanvasPalette(canvasIn('visual.neon'), 'dark', { style: 'document' }).surface,
+    ).toBe('#030711')
+  })
+
   it('a theme nothing registered falls back to the bundled palette, like the layout does', () => {
     expect(resolveCanvasPalette(canvasIn('nobody.home'), 'light')).toBe(SPATIAL_LIGHT_PALETTE)
   })

@@ -229,6 +229,19 @@ describe('registerFontBytes', () => {
     await expect(second).resolves.toBe('loaded')
   })
 
+  it('a registration that did not load is retried by the next call, not answered again', async () => {
+    const { added } = installFakeFontApis()
+    const { registerFontBytes, hasLoadedFace } = await importFreshFontLoading()
+    const first = registerFontBytes('Yomogi', new Uint8Array([1]).buffer)
+    added[0]?.loadDeferred.reject(new Error('not a font'))
+    await expect(first).resolves.toBe('degraded')
+    const second = registerFontBytes('Yomogi', new Uint8Array([2]).buffer)
+    expect(added).toHaveLength(2)
+    added[1]?.loadDeferred.resolve()
+    await expect(second).resolves.toBe('loaded')
+    expect(hasLoadedFace('Yomogi')).toBe(true)
+  })
+
   it('answers degraded, never throws, where FontFace is unavailable', async () => {
     uninstallFakeFontApis()
     const { registerFontBytes } = await importFreshFontLoading()

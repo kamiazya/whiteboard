@@ -187,6 +187,10 @@ export function useWorkerScene(
       showResolved: options.showResolved,
       threads: options.threads,
       proposals: options.proposals,
+      // Not sent to the worker — it asks `hasLoadedFace` itself — but a
+      // change here is what makes an OFFLOADED scene lay out again once a
+      // theme's face lands; the synchronous path re-runs off `options`.
+      fontsGeneration: options.fontsGeneration,
     }),
     [
       canvas,
@@ -200,6 +204,7 @@ export function useWorkerScene(
       options.showResolved,
       options.threads,
       options.proposals,
+      options.fontsGeneration,
     ],
   )
 

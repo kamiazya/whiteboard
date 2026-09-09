@@ -108,6 +108,8 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
+/** Every theme face posted so far, settled — what a layout waits on before it measures. */
+let facesReady: Promise<unknown> = Promise.resolve()
 
 /**
  * Answers from the persistent tier when it holds this key, and says whether
@@ -154,12 +156,16 @@ self.onmessage = async (
 ) => {
   const request = event.data
   if (request.type === 'register-face') {
-    // Awaited before any later layout reads `hasLoadedFace`: a message
-    // handler runs to completion per message, and `registerFontBytes`
-    // records the family only once the face is usable.
-    await registerFontBytes(request.family, request.bytes)
+    // Chained, and awaited by every later message below: an async handler
+    // returns at its first await, so the next message would otherwise run
+    // while `face.load()` is still pending and measure with the bundled
+    // family — `registerFontBytes` records the family only once the face
+    // is usable.
+    facesReady = facesReady.then(() => registerFontBytes(request.family, request.bytes))
+    await facesReady
     return
   }
+  await facesReady
   // Before the font gate and before any work: a stored answer is the answer,
   // and the gate exists to stop a render being MEASURED with the wrong face
   // rather than to re-check one already drawn with the right one.

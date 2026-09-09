@@ -1613,24 +1613,31 @@ export function resolveThemeTable(
 }
 
 /**
- * The palette ONE canvas is drawn in under `style: 'document'` — the theme
- * it names, resolved for the mode, else the bundled palette for that mode.
+ * The palette ONE canvas is drawn in under a style — the theme the style
+ * resolves to (`pickThemeId`: the canvas's own under `'document'`, a named
+ * one, none under `'clean'`), for the mode, else the bundled palette for
+ * that mode. `style` defaults to `'document'`, the editor's look.
  *
- * For an editor chrome that previews paint rather than painting: a colour
- * picker's swatches show the strokes a pick will produce, and a themed
- * board's strokes are the theme's, not the bundled ones. Resolved here so
- * the preview and the layout read the same table; a caller re-deriving it
- * is a caller that can disagree with the render.
+ * For an editor chrome that previews paint rather than painting: the paper
+ * under the canvas, and a colour picker's swatches showing the strokes a
+ * pick will produce. Resolved here so the preview and the layout read the
+ * same table AND the same style; a chrome reading the saved theme while
+ * the session draws clean showed neon's night under a clean board.
  */
 export function resolveCanvasPalette(
   canvas: SpatialCanvas,
   mode: SpatialThemeMode,
-  contributions: readonly RenderContribution[] = [visualRenderContribution],
+  options: {
+    readonly style?: SpatialRenderStyle
+    readonly contributions?: readonly RenderContribution[]
+  } = {},
 ): SpatialPalette {
+  const contributions = options.contributions ?? [visualRenderContribution]
   const own = contributions
     .map((contribution) => contribution.readTheme?.(canvas))
     .find((id) => id !== undefined)
-  const tokens = own === undefined ? undefined : resolveThemeTable(contributions)[own]
+  const themeId = pickThemeId(options.style ?? 'document', own, undefined)
+  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
   if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
   return paletteFromTokens(tokens.palette[mode])
 }
@@ -1688,8 +1695,12 @@ function withCanvasTheme(
       fontFamily: available && wanted !== undefined ? wanted : SPATIAL_THEME_FONT_FAMILY,
     })
   }
+  // The inherited theme is REPLACED, never merged under: a child naming a
+  // theme this build does not carry draws clean, so it must not keep the
+  // host's ink and routing defaults beside its own clean paint.
+  const { activeTheme: _inherited, ...rest } = resolved
   return {
-    ...resolved,
+    ...rest,
     appearance,
     ...(activeTheme === undefined ? {} : { activeTheme }),
     nodeOutlines: resolveNodeOutlines(

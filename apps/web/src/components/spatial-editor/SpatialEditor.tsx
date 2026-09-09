@@ -1924,7 +1924,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // The paper is the palette's surface for the UI mode (ADR-0030):
             // a theme carries one per mode, and the bundled palette's is the
             // page background, so an unthemed canvas looks exactly as before.
-            backgroundColor: resolveCanvasPalette(canvas, theme).surface,
+            backgroundColor: resolveCanvasPalette(canvas, theme, { style }).surface,
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
@@ -2287,6 +2287,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )}
           {contextMenu !== null && (
             <CanvasContextMenu
+              style={style}
               commands={{
                 applyResult,
                 applyBoxMoves,
