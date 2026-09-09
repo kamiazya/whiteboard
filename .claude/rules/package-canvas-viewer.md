@@ -139,6 +139,14 @@ paths:
   export could not, and a face the two sides disagree on moves every
   wrapped line.
 
+- `registerFontBytes(family, bytes)` registers a face from bytes in THIS
+  realm — a window's document or a worker's global — and records the family
+  so `hasLoadedFace` answers from the record rather than by scanning a face
+  set that is not iterable everywhere. Memoised per family; never rejects.
+  `withViewerFontEmbedded(svg, extraFaces)` carries such faces into a PNG
+  export beside the vendored one, and still carries them when the vendored
+  face cannot be read.
+
 ## Common mistakes (append as review finds them)
 
 - Redeclaring a spatial-canvas schema here instead of re-exporting

@@ -29,7 +29,10 @@ import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-
 // `document is not defined` before a single message is handled.
 
 import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
-import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
+import {
+  ensureViewerFontLoaded,
+  registerFontBytes,
+} from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
@@ -46,6 +49,7 @@ import {
   type MarkdownRenderResponse,
   type OutlineRequest,
   type OutlineResponse,
+  type RegisterFaceRequest,
 } from './layout-worker-protocol.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
@@ -140,9 +144,22 @@ function remember(
 }
 
 self.onmessage = async (
-  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest>,
+  event: MessageEvent<
+    | LayoutRequest
+    | MarkdownRailRequest
+    | MarkdownRenderRequest
+    | OutlineRequest
+    | RegisterFaceRequest
+  >,
 ) => {
   const request = event.data
+  if (request.type === 'register-face') {
+    // Awaited before any later layout reads `hasLoadedFace`: a message
+    // handler runs to completion per message, and `registerFontBytes`
+    // records the family only once the face is usable.
+    await registerFontBytes(request.family, request.bytes)
+    return
+  }
   // Before the font gate and before any work: a stored answer is the answer,
   // and the gate exists to stop a render being MEASURED with the wrong face
   // rather than to re-check one already drawn with the right one.

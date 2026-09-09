@@ -134,6 +134,18 @@ So a font is not a boolean. Each surface reports what it resolved, the same
 discipline `undrawable` already follows for the export path: a missing font is
 a **declared degradation**, never silence.
 
+**2026-09-09 (ADR-0030):** the browser half of decision 4 exists now, for the
+families a registered theme names and only those. `GET /api/fonts/:id/file`
+serves an installed font's bytes (an id matched against the font directory,
+never joined into a path), and the web app fetches them once a daemon is
+known, registers the face on the page AND in every layout worker, and embeds
+it in its PNG export beside the vendored one. The catalogue gained `Yomogi`
+— the sketch theme's family, a look rather than a script — and the trigger
+stays human: the app fetches what is installed, it never installs. Other
+installed families still reach only the export, by choice: the theme case is
+the one where a face the editor lacks changes what the document LOOKS like,
+not merely whether a glyph is drawn.
+
 ## Consequences
 
 - **The daemon makes outbound requests for the first time.** That is a change

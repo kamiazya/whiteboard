@@ -44,6 +44,17 @@ export type FontCatalogueEntry = z.infer<typeof fontCatalogueEntrySchema>
  * coverage, and all of it is OFL-1.1.
  */
 export const FONT_CATALOGUE: readonly FontCatalogueEntry[] = [
+  // The one entry that is a LOOK rather than a script: the family the
+  // bundled `visual.sketch` theme names (ADR-0030). Japanese and Latin in
+  // one hand, which is why it was chosen over a Latin-only handwriting face.
+  {
+    id: 'yomogi',
+    family: 'Yomogi',
+    scripts: ['Japanese', 'Latin'],
+    license: 'OFL-1.1',
+    approxBytes: 4_045_904,
+    path: 'ofl/yomogi/Yomogi-Regular.ttf',
+  },
   {
     id: 'noto-sans-jp',
     family: 'Noto Sans JP',

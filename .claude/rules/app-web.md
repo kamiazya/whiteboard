@@ -133,3 +133,35 @@ own `editor` spec, writing through `set-canvas-facet`. Registering a theme is
 registering an asset; nothing on this side changes. `canvas-theme-row.test.tsx`
 (jsdom) and `canvas-settings.browser.test.tsx` cover the row and the pick.
 
+### A theme's family reaches this app from the daemon
+
+`lib/theme-fonts.ts` is ADR-0012's browser half, scoped to the families a
+registered theme names (`themeFontFamilies`, read off the facet registry's
+theme assets) and nothing else — an installed CJK face stays an export
+concern. `App` triggers `loadThemeFonts` when `daemonShellTarget` becomes
+known, and `FontsCard` triggers it again after an install. A face lands
+three ways at once, and each is a seam the next change must keep:
+
+- **the main thread**, through canvas-viewer's `registerFontBytes`, so
+  `hasLoadedFace` — the `fontAvailable` the composition passes — answers
+  true;
+- **every layout worker**, through `attachThemeFaces` on BOTH creators
+  (the shared pool's `createWorker` and the editor's `createLayoutWorker`),
+  which posts each held face now and each later one as it lands, and is
+  detached with the worker's `terminate`. The worker handles
+  `register-face` before any layout reads the face set. Missing either
+  creator is the parity defect the worker exists to avoid: one realm would
+  declare the theme family and the other the bundled one, and the two
+  scenes would differ in every wrapped line. `layout-worker-theme-face.browser.test.tsx`
+  pins the worker half in a real browser;
+- **the scene**, through `useThemeFontsGeneration` in the editor's
+  `useWorkerScene` inputs — the layout asks `hasLoadedFace` itself, so the
+  generation is only what makes it ask again.
+
+The PNG export carries a held face the same way it carries the vendored
+one (`withViewerFontEmbedded(svg, themeFacesNamedBy(svg))`), and only the
+faces the SVG names, since each is megabytes. A daemon that cannot be
+listed is `log.info`, not a warning: it is the routine first render while a
+connection settles, and the jsdom failure guard would otherwise fail every
+App test that mounts a daemon target.
+

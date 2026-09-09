@@ -35,6 +35,7 @@ import {
 import { type RenderCanvasOptions, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
 import type { RenderedCanvas } from '../../lib/spatial/scene-render-core.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { attachThemeFaces } from '../../lib/theme-fonts.js'
 
 /**
  * Below this, layout is not worth a round trip.
@@ -58,7 +59,20 @@ function worthOffloading(canvas: SpatialCanvas): boolean {
 
 function createLayoutWorker(): Worker | null {
   try {
-    return new Worker(new URL('../../lib/layout-worker.ts', import.meta.url), { type: 'module' })
+    const worker = new Worker(new URL('../../lib/layout-worker.ts', import.meta.url), {
+      type: 'module',
+    })
+    // The worker holds the theme faces this realm holds, now and as they
+    // land, or it would declare the bundled family where the main thread
+    // declares the theme's. Detached with the worker: every retirement
+    // below goes through `terminate`, so the subscription cannot outlive it.
+    const detachFaces = attachThemeFaces(worker)
+    const terminate = worker.terminate.bind(worker)
+    worker.terminate = () => {
+      detachFaces()
+      terminate()
+    }
+    return worker
   } catch {
     // No module-worker support, or a bundler that could not produce the
     // chunk: the synchronous path below is the whole of the fallback.
@@ -87,6 +101,13 @@ export function useWorkerScene(
     readonly threads?: readonly CommentThread[]
     /** This document's open proposals, drawn in place (ADR-0029 decision 1). */
     readonly proposals?: readonly Proposal[]
+    /**
+     * How many theme faces have landed in this tab (`useThemeFontsGeneration`).
+     * Not read by the layout — it asks `hasLoadedFace` itself — but a change
+     * here is what makes the scene lay out again once a family a theme
+     * names becomes measurable.
+     */
+    readonly fontsGeneration?: number
   },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'>,
   /**
@@ -116,6 +137,7 @@ export function useWorkerScene(
       base.showResolved,
       base.threads,
       base.proposals,
+      base.fontsGeneration,
       fileSeamOptions,
     ],
   )

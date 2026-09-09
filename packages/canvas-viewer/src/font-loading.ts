@@ -63,6 +63,10 @@ function resolveFontFaceSet(): FontFaceSet | undefined {
  */
 export function hasLoadedFace(family: string): boolean {
   if (family === VIEWER_FONT_FAMILY) return true
+  // A face this module registered from bytes and saw load: answered from
+  // the record rather than by scanning, since a face set is not iterable
+  // in every realm that can still register one.
+  if (loadedByBytes.has(family)) return true
   const faceSet = resolveFontFaceSet()
   if (faceSet === undefined || typeof faceSet[Symbol.iterator] !== 'function') return false
   for (const face of faceSet) {
@@ -73,6 +77,42 @@ export function hasLoadedFace(family: string): boolean {
     }
   }
   return false
+}
+
+/**
+ * Faces registered from BYTES in this realm, by family — a theme's family
+ * the daemon holds and the app fetched (ADR-0012's browser half, for the
+ * families a theme names). Memoised per family: two surfaces asking for
+ * the same face register it once and share the settle.
+ */
+const registeredByBytes = new Map<string, Promise<ViewerFontStatus>>()
+const loadedByBytes = new Set<string>()
+
+/**
+ * Registers a face from its bytes in this realm's face set — the document's
+ * on a window, the worker global's on a worker — and resolves once it is
+ * usable, so `hasLoadedFace(family)` answers true from then on. Never
+ * rejects: a realm without `FontFace`, or bytes that are not a font, answer
+ * `'degraded'` and the layout keeps declaring the bundled family.
+ */
+export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<ViewerFontStatus> {
+  const existing = registeredByBytes.get(family)
+  if (existing !== undefined) return existing
+  const pending = (async (): Promise<ViewerFontStatus> => {
+    const faceSet = resolveFontFaceSet()
+    if (typeof FontFace === 'undefined' || faceSet === undefined) return 'degraded'
+    try {
+      const face = new FontFace(family, bytes)
+      faceSet.add(face)
+      await face.load()
+      loadedByBytes.add(family)
+      return 'loaded'
+    } catch {
+      return 'degraded'
+    }
+  })()
+  registeredByBytes.set(family, pending)
+  return pending
 }
 
 /** Whether this realm can register the vendored face at all. */
@@ -163,6 +203,8 @@ export function subscribeViewerFontReady(callback: () => void): () => void {
 /** Test-only: clears the memoized promise/subscribers between test cases. */
 export function resetViewerFontLoadingForTests(): void {
   fontLoadPromise = undefined
+  registeredByBytes.clear()
+  loadedByBytes.clear()
   // Orphans any still-pending load from a previous case, so its late result
   // cannot write into the next one.
   loadGeneration += 1

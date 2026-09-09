@@ -78,6 +78,7 @@ import {
   useState,
 } from 'react'
 import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
+import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -547,6 +548,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       facetPanelOpen,
       setFacetPanelOpen,
     } = useEditSessionState({ canvas, selectedId })
+    const fontsGeneration = useThemeFontsGeneration()
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {
@@ -556,6 +558,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         showResolved: showResolvedComments,
         threads,
         proposals,
+        fontsGeneration,
       },
       fileSeamOptions,
       { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },

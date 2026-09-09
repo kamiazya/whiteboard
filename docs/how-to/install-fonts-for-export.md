@@ -54,6 +54,14 @@ sandboxes — the daemon falls back to `<temp>/.whiteboard`.)
 `.woff2` is deliberately **not** accepted: the export renderer cannot decode it, so a file
 dropped in that format would sit there and never draw anything.
 
+## A theme's font reaches the editor too
+
+One family works differently: the handwriting family the sketch theme names (Yomogi). Once it
+is installed on the daemon, the web app fetches the same bytes and draws with them on screen,
+in thumbnails and in its own PNG export — see [choose-a-theme](choose-a-theme.md). The other
+families in the list are export fonts: they fix a PNG's tofu and do not change what the editor
+shows.
+
 ## Why the app does not just download the font it needs
 
 Installing reaches the network, and the daemon is also driven by AI agents that act on

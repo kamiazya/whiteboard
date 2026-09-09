@@ -266,6 +266,20 @@ export type OutlineResponse =
     }
   | { readonly type: 'failed'; readonly id: number; readonly reason: string }
 
+/**
+ * A face this realm should hold, as bytes — a theme's family the main
+ * thread fetched from the daemon (`lib/theme-fonts.ts`). Fire-and-forget:
+ * no id and no reply, because it is not a request for work but a change to
+ * what every later layout measures with. Posted by `attachThemeFaces` to
+ * every worker this app starts, so the worker's answer to `fontAvailable`
+ * never differs from the main thread's.
+ */
+export type RegisterFaceRequest = {
+  readonly type: 'register-face'
+  readonly family: string
+  readonly bytes: ArrayBuffer
+}
+
 export type LayoutResponse =
   | {
       readonly type: 'laid-out'

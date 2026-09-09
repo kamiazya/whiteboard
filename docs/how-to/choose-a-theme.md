@@ -49,10 +49,19 @@ The web editor's own export draws what you see, theme included.
 
 ## Fonts
 
-The sketch theme names the Yomogi family, a handwriting face that covers Japanese and Latin in
-one hand. It is declared in the SVG only where the renderer
-can measure it — the vendored face, or one installed through the daemon (see
-[install-fonts-for-export](install-fonts-for-export.md)) — and otherwise the bundled family
-is used, so the coordinates and the face always agree.
+The sketch theme names the **Yomogi** handwriting family (Japanese and Latin in one hand, OFL).
+It is not bundled — it is 4 MB — so it draws only where it has been installed:
+
+1. Open **Settings → Fonts** while connected to a daemon and install **Yomogi**. The daemon
+   keeps the file, and from then on `wb_scene_render` and the export routes measure and declare
+   it.
+2. The web app fetches the same bytes from the daemon and registers the face on the page and in
+   its layout workers, so the editor, the row thumbnails and the browser's own PNG export draw
+   the same glyphs. Nothing to reload: a board already open redraws when the face lands.
+
+Where the face is not available — a browser-kept workspace with no daemon, or a daemon where
+nobody installed it — the theme still draws its hand-drawn strokes, and the lettering uses the
+bundled family. The SVG names the family that was actually measured, never one that was not,
+so the coordinates and the face always agree.
 
 ← Back to [how-to guides](README.md)

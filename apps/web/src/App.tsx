@@ -422,6 +422,22 @@ export function App({ providerState }: AppProps) {
     [forcedBrowser, shellDaemonBaseUrl, shellDaemonToken],
   )
 
+  // The families a theme names are fetched from whichever daemon this
+  // branch talks to, once it is known, and again only when it changes: the
+  // faces are held for the tab (`lib/theme-fonts.ts`), so a second pass is
+  // a list and nothing else. Dynamic imports keep the shell's font machinery
+  // out of App's static closure, like the switcher source below.
+  useEffect(() => {
+    if (daemonShellTarget === undefined) return
+    void Promise.all([import('./lib/theme-fonts.js'), import('./lib/daemon-api-client.js')]).then(
+      ([fonts, client]) =>
+        fonts.loadThemeFonts({
+          fetchFn: client.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+          daemonBaseUrl: daemonShellTarget.baseUrl,
+        }),
+    )
+  }, [daemonShellTarget])
+
   // The daemon keeper's switcher source, built from whichever daemon this
   // branch is talking to. Dynamic import for the same reason the browser's
   // is: the shell is lazy, App is not.

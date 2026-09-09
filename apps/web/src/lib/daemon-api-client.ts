@@ -440,6 +440,22 @@ export function installFont(
   )
 }
 
+/**
+ * The bytes of an installed font, so this realm can register the face the
+ * daemon exports with (ADR-0012 decision 4's browser half).
+ */
+export async function fetchFontFile(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  fontId: string,
+): Promise<ArrayBuffer> {
+  const res = await fetchFn(`${daemonBaseUrl}/api/fonts/${encodeURIComponent(fontId)}/file`)
+  if (!res.ok) {
+    throw new DaemonApiError(await parseProblemDetails(res), res.status)
+  }
+  return await res.arrayBuffer()
+}
+
 // ---- pairing-grant flow (daemon-origin consent page) ----
 
 export type CreatePairingGrantResponse = z.infer<typeof createGrantResponseSchema>
