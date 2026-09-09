@@ -51,3 +51,16 @@ pre-push:
     # the diff that adds it, not for whoever reads the report months later.
     mutation-lane:
       run: pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts
+    # Costs the gate nothing: measured on a real `lefthook run pre-push`, this
+    # took 10.71s of the run's 75.30s, and the run's total equalled typecheck's
+    # own 75.30s. (Its vitest duration alone is ~1.9s — the rest is process
+    # start and six-way contention, which is why the hook's own summary is the
+    # number to quote, not a solo run's.)
+    #
+    # Unlike mutation-lane, CI would catch this one anyway — the reason it is
+    # here is WHERE it lives: the guard scans `apps/web/src` from mcp-server, so
+    # running the web projects for a web change does not run it, and the failure
+    # arrives a push later. `file-size-budget.test.ts` asserts this line exists,
+    # and derives the path from its own location.
+    file-size-budget:
+      run: pnpm vitest run --project mcp-node packages/mcp-server/src/server/file-size-budget.test.ts

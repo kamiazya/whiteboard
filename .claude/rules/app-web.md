@@ -79,9 +79,16 @@ Three things a mechanical move does not see, and what catches each now:
 - `purity-guard.test.ts` (apps/web) and `file-size-budget.test.ts`
   (mcp-server) hold files by explicit path on purpose and check the path
   still exists, so a move fails them loudly — the second in CI, because the
-  local area run for an `apps/web` move had not included `mcp-node`. It
-  does now: a move runs `--project mcp-node file-size-budget` alongside the
-  web guards.
+  local area run for an `apps/web` move had not included `mcp-node`.
+  `file-size-budget` is worse than a path list: it SCANS `apps/web/src`
+  wholesale, so any web file crossing 800 lines fails a project no web
+  command runs. Telling readers to add `--project mcp-node file-size-budget`
+  was this rule's answer for a while, and a prose rung cannot notice being
+  forgotten — the same push went out twice. **lefthook's pre-push block now
+  runs it** — 10.7s of a measured 75.3s run whose total was exactly the
+  typecheck's own, so the gate is no slower — and the guard asserts that
+  line exists. So a web change is covered without remembering
+  anything; run it by hand only to shorten the loop.
 
 ## What the other guards already cover
 
