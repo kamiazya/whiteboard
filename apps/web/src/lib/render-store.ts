@@ -24,6 +24,35 @@
 /** Everything this store owns lives under one directory, so a sweep is cheap. */
 const ROOT_DIR = 'render'
 
+/**
+ * How long a render has to take before storing it is worth the write.
+ *
+ * Measured in a real browser, medians of 15 interleaved rounds: an OPFS write
+ * costs 2.2-3.1ms whatever the payload, while a render ranges from 2.0ms (a
+ * 12-node spatial canvas) to 67.2ms (a 60-section markdown body). Below this
+ * floor the store makes the FIRST visit slower to save less than a
+ * millisecond on the second; above it the saving is the whole render.
+ *
+ * A floor rather than a per-pipeline rule because the cost is not a property
+ * of the pipeline: a 400-node spatial canvas (19.9ms) clears it and a
+ * four-section markdown body barely does. Timing the work that actually ran
+ * is the only thing that stays true as either pipeline changes.
+ */
+export const STORE_FLOOR_MS = 5
+
+/**
+ * Whether a reply that took `elapsedMs` to produce is worth a write.
+ *
+ * Beside the store rather than inside the worker that calls it, so the rule
+ * can be exercised without a real render on a machine fast enough for the
+ * answer to come out the intended way. A non-finite measurement answers
+ * `false`: a clock that reports nonsense must not become a store that fills
+ * up, and it is the one input where `>=` and `!(<)` disagree.
+ */
+export function worthStoring(elapsedMs: number): boolean {
+  return Number.isFinite(elapsedMs) && elapsedMs >= STORE_FLOOR_MS
+}
+
 function storageDirectory(): Promise<FileSystemDirectoryHandle> | null {
   // `navigator.storage` is absent in some contexts and `getDirectory` in
   // others; asking for the method rather than the object is what tells the

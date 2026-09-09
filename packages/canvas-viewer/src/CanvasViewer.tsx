@@ -3,6 +3,7 @@ import {
   createSpatialTheme,
   layoutSpatialCanvas,
   renderSceneToSvg,
+  type SpatialAppearanceResolver,
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -10,11 +11,25 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
 
-// This viewer is read-only and has no theme switch of its own, so it always
-// renders through canvas-render's shared light theme
-// (`@kamiazya/whiteboard-canvas-render`'s `createSpatialTheme`) — see
-// package-canvas-render.md decision #8.
-const VIEWER_APPEARANCE = createSpatialTheme({ mode: 'light' })
+/** Which of canvas-render's two shared spatial palettes a viewer draws in. */
+export type ViewerTheme = 'light' | 'dark'
+
+/**
+ * The viewer has no theme switch of its own — it draws in whichever mode its
+ * HOST says it is in, through canvas-render's shared `createSpatialTheme`
+ * (package-canvas-render.md decision #8). Both resolvers are built once at
+ * module scope: they are pure lookup tables, and rebuilding one per render
+ * would re-run every layout.
+ *
+ * `light` is the default because it is the mode a surface with no theme of
+ * its own wants — the MCP Apps widget, and anything embedding a scene into a
+ * document — and because export must never vary with a person's UI theme
+ * (see apps/web's `editor-appearance.ts`).
+ */
+const VIEWER_APPEARANCES = {
+  light: createSpatialTheme({ mode: 'light' }),
+  dark: createSpatialTheme({ mode: 'dark' }),
+} as const satisfies Record<ViewerTheme, SpatialAppearanceResolver>
 
 export interface CanvasViewerProps {
   canvas: SpatialCanvas
@@ -43,6 +58,18 @@ export interface CanvasViewerProps {
    * The pins still come from the canvas's own projection.
    */
   threads?: readonly CommentThread[]
+  /**
+   * Which shared palette to draw in. Defaults to `light`, so a host that
+   * says nothing renders exactly the bytes it always has.
+   *
+   * A read-only surface inside a themed app has to be told: the SVG is
+   * injected markup, so CSS cannot reach the fills and strokes
+   * canvas-render resolved at layout time. Body text runs are the one
+   * exception — canvas-render assigns them no `fill`, so they inherit it
+   * from the host element (see apps/web's preview and editor, which both
+   * set one).
+   */
+  theme?: ViewerTheme
   testId?: string
   /**
    * Accessible name for the rendered canvas. The viewer cannot derive one:
@@ -65,6 +92,7 @@ export function CanvasViewer({
   measure,
   references,
   threads,
+  theme = 'light',
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
@@ -112,7 +140,7 @@ export function CanvasViewer({
   const svg = useMemo(() => {
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
-      appearance: VIEWER_APPEARANCE,
+      appearance: VIEWER_APPEARANCES[theme],
       // A viewer has no zoom to gate a miniature by: a referenced canvas
       // draws at the node's intrinsic size, export's policy.
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
@@ -148,6 +176,7 @@ export function CanvasViewer({
     background,
     references,
     threads,
+    theme,
     fontReady,
   ])
 
