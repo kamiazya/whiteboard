@@ -97,7 +97,6 @@ overrides:
 packageExtensionsChecksum: sha256-zefmQpf8vEPc7SN/0sawRR9byMnf0hIcDSosyOFP5TM=
 
 patchedDependencies:
-  loro-codemirror@0.3.3: 679b124ba092227317c3e2bc381af94783d179fe822e0c27b7f4ebffdae7bceb
   mdast-util-gfm-task-list-item@2.0.0: 46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47
 
 importers:
@@ -242,9 +241,6 @@ importers:
       clsx:
         specifier: ^2.1.1
         version: 2.1.1
-      loro-codemirror:
-        specifier: ^0.3.3
-        version: 0.3.3(patch_hash=679b124ba092227317c3e2bc381af94783d179fe822e0c27b7f4ebffdae7bceb)(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6)
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6
@@ -6143,13 +6139,6 @@ packages:
 
   longest-streak@3.1.0:
     resolution: {integrity: sha512-9Ri+o0JYgehTaVBBDoMqIl8GXtbWg711O3srftcHhZ0dqnETqLaoIK0x17fUw9rFSlK/0NlsKe0Ahhyl5pXE2g==}
-
-  loro-codemirror@0.3.3:
-    resolution: {integrity: sha512-C6qAUmDjMTyoXVeDxKWixvr/TSTo/jXFrvgGW+wn6RAHeIzNFovBDLQNi/Sary4Ahx8DaYADTCm9eCaRAjvWtw==}
-    peerDependencies:
-      '@codemirror/state': ^6.0.0
-      '@codemirror/view': ^6.7.0
-      loro-crdt: ^1.8.2
 
   loro-crdt@1.13.6:
     resolution: {integrity: sha512-OsnKW64J+1XdCMafAqR+aASn/wQEgDzwcDwu6dDOVSxxbLPFgnU6LX8ja+hd5PnEcT+kuz9eXSagvlYXsRbQIw==}
@@ -13515,12 +13504,6 @@ snapshots:
   long@5.3.2: {}
 
   longest-streak@3.1.0: {}
-
-  loro-codemirror@0.3.3(patch_hash=679b124ba092227317c3e2bc381af94783d179fe822e0c27b7f4ebffdae7bceb)(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6):
-    dependencies:
-      '@codemirror/state': 6.7.1
-      '@codemirror/view': 6.43.7
-      loro-crdt: 1.13.6
 
   loro-crdt@1.13.6: {}
 

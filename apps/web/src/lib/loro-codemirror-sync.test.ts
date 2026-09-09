@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 /**
- * What `patches/loro-codemirror@0.3.3.patch` is for.
+ * The spec `loro-codemirror-sync.ts` is written against.
  *
- * `LoroSyncPluginValue` arms an `isInitDispatch` flag so that its own seeding
- * dispatch is not echoed back into the container as a local edit. Upstream
- * arms it BEFORE the early return that skips the seeding when the view and
- * the container already agree — which is every empty new note — so the flag
- * is left standing with no dispatch to pair with, and `update()` consumes it
- * on the user's first keystroke instead.
+ * These cases are all defects the `loro-codemirror` package shipped, kept as
+ * the reason each rule in the module exists rather than as history. The one
+ * below cost the most: upstream armed an `isInitDispatch` flag BEFORE the
+ * early return that skips seeding when the view and the container already
+ * agree — every empty new note — so the flag stood with no dispatch to pair
+ * with and `update()` consumed it on the user's first keystroke.
  *
  * The consequence is not a lost character. The editor is then one character
  * ahead of the container, so the second keystroke asks a length-0 `LoroText`
@@ -28,9 +28,9 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroSyncPlugin } from 'loro-codemirror'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it } from 'vitest'
+import { loroTextSync } from './loro-codemirror-sync.js'
 
 const views: EditorView[] = []
 
@@ -42,7 +42,7 @@ function bind(doc: LoroDoc, initial = ''): EditorView {
   const view = new EditorView({
     state: EditorState.create({
       doc: initial,
-      extensions: [LoroSyncPlugin(doc, (d) => d.getText('body'))],
+      extensions: [loroTextSync(doc, (d) => d.getText('body'))],
     }),
     parent: document.body,
   })
@@ -127,7 +127,7 @@ describe('content that reaches the container from outside this editor', () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: '',
-        extensions: [LoroSyncPlugin(doc, workspaceBody)],
+        extensions: [loroTextSync(doc, workspaceBody)],
       }),
       parent: document.body,
     })
@@ -246,7 +246,7 @@ describe('undo over content that arrived from elsewhere', () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: '',
-        extensions: [history(), LoroSyncPlugin(doc, workspaceBody)],
+        extensions: [history(), loroTextSync(doc, workspaceBody)],
       }),
       parent: document.body,
     })
@@ -302,5 +302,72 @@ describe('undo over content that arrived from elsewhere', () => {
 
     expect(view.state.doc.toString()).toBe('written by somebody else')
     expect(workspaceBody(doc).toString()).toBe('written by somebody else')
+  })
+})
+
+/**
+ * Teardown, which the deferred seeding outlives.
+ *
+ * The seeding cannot run in the constructor — a ViewPlugin is built DURING a
+ * state update and CodeMirror refuses a dispatch from inside one — so it is
+ * queued, and a view destroyed before that microtask runs still gets it.
+ *
+ * A destroyed view is not itself the hazard: CodeMirror tolerates both a
+ * `state` read and a `dispatch` after `destroy()` (measured — no throw, the
+ * state simply updates with no DOM to show it). The hazard is the RESOLVER.
+ * This app's is `documentContainers`, which throws `No document "<id>" in
+ * this workspace` once the node is gone — so deleting the open document
+ * raises an unhandled error from a microtask nobody is waiting on.
+ */
+describe('a view torn down before the deferred seeding runs', () => {
+  it('does not read the container once the view is gone', async () => {
+    const doc = new LoroDoc()
+    doc.getText('body').insert(0, 'seeded content')
+    doc.commit()
+
+    const reads: string[] = []
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          loroTextSync(doc, (d) => {
+            reads.push('read')
+            return d.getText('body')
+          }),
+        ],
+      }),
+      parent: document.body,
+    })
+    view.destroy()
+    await settleInit()
+
+    // Asserted directly rather than left to the runner noticing an unhandled
+    // error: a resolver that throws is only ONE consequence of reading after
+    // teardown, and the rule is that there is nothing left to do at all.
+    expect(reads).toEqual([])
+  })
+
+  it('survives a resolver that throws once the document is gone', async () => {
+    const doc = new LoroDoc()
+    let documentGone = false
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          loroTextSync(doc, (d) => {
+            if (documentGone) throw new Error('No document "01ABC" in this workspace')
+            return d.getText('body')
+          }),
+        ],
+      }),
+      parent: document.body,
+    })
+    documentGone = true
+    view.destroy()
+    await settleInit()
+
+    // Reaching here without the file failing is the assertion: an unhandled
+    // error from a microtask fails the whole file, passing tests and all.
+    expect(documentGone).toBe(true)
   })
 })

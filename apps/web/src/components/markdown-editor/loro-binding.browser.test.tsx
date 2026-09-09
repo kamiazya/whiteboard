@@ -11,10 +11,10 @@
  *   minimalChange reconcile path can only approximate.
  */
 import { cleanup, render } from '@testing-library/react'
-import { LoroSyncPlugin } from 'loro-codemirror'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { loroTextSync } from '../../lib/loro-codemirror-sync.js'
 import { expectLoggedFailures } from '../../test-utils/browser-setup.js'
 import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -25,7 +25,7 @@ function mountBound(initialBody: string) {
   const doc = new Loro()
   doc.getText('body').insert(0, initialBody)
   doc.commit()
-  const binding = [LoroSyncPlugin(doc as LoroDoc, (d) => d.getText('body'))]
+  const binding = [loroTextSync(doc as LoroDoc, (d) => d.getText('body'))]
   const utils = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
@@ -83,7 +83,7 @@ it('a remote edit merges into the editor and shifts the caret exactly', async ()
  * answers with a different container under an already-mounted view kills the
  * binding outright.
  *
- * `LoroSyncPlugin` maps CodeMirror positions onto whatever the accessor hands
+ * `loroTextSync` maps CodeMirror positions onto whatever the accessor hands
  * it at that moment, so an answer that changes identity leaves the view's
  * offsets addressing text that container never had. loro-crdt throws
  * `Index out of bound`, `@codemirror/view` catches it, logs
@@ -103,7 +103,7 @@ it('reports a binding whose container changes under the mounted view', async () 
   doc.getText('body').insert(0, 'hello ')
   doc.commit()
   let key = 'body'
-  const binding = [LoroSyncPlugin(doc as LoroDoc, (d) => d.getText(key))]
+  const binding = [loroTextSync(doc as LoroDoc, (d) => d.getText(key))]
   const { container } = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
