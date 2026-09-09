@@ -331,20 +331,4 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
       return structuredJsonResult(result)
     },
   )
-
-  registerToolWithAnnotations(
-    server,
-    tools.documentResolve.name,
-    {
-      description: tools.documentResolve.description,
-      inputSchema: tools.documentResolve.inputSchema,
-      outputSchema: tools.documentResolve.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentResolve.execute(
-        tools.documentResolve.inputSchema.parse(args),
-      )
-      return structuredJsonResult(result)
-    },
-  )
 }

@@ -17,7 +17,7 @@ assuming a full-featured drawing-app tool set.
 Use these tools:
 
 - `wb_workspace_edit` — create, replace and delete documents in one call (`document.create` / `document.set` / `document.delete` ops)
-- `wb_document_list` / `wb_document_resolve` — find documents
+- `wb_document_list` — find documents (each row carries the id and the path, so an id needs no second call to place)
 - `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction. **Pass `mode: "apply"`**: the default proposes content changes for a person to adopt, because nobody watches an agent type — but somebody just asked you to draw this, and they are looking at it
 - `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)

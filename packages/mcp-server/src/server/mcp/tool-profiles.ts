@@ -60,7 +60,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Create, replace and delete documents in a workspace',
   },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
-  wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },
   wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
   wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
   wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },

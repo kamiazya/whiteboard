@@ -26,13 +26,11 @@ import {
 } from './tools/document-crud.js'
 import {
   WB_DOCUMENT_LIST_DESCRIPTION,
-  WB_DOCUMENT_RESOLVE_DESCRIPTION,
   wbDocumentCreateInputSchema,
   wbDocumentDeleteInputSchema,
   wbDocumentListInputSchema,
   wbDocumentListOutputSchema,
   wbDocumentResolveInputSchema,
-  wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
@@ -258,14 +256,6 @@ export function createServer(deps: ServerDeps) {
       inputSchema: wbDocumentListInputSchema,
       outputSchema: wbDocumentListOutputSchema,
       execute: (input: z.infer<typeof wbDocumentListInputSchema>) => wbDocumentList(deps, input),
-    },
-    documentResolve: {
-      name: 'wb_document_resolve' as const,
-      description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
-      inputSchema: wbDocumentResolveInputSchema,
-      outputSchema: wbDocumentResolveOutputSchema,
-      execute: (input: z.infer<typeof wbDocumentResolveInputSchema>) =>
-        wbDocumentResolve(deps, input),
     },
     workspaceEdit: createWorkspaceEditTool(deps),
     facetList: createFacetListTool(deps),

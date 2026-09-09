@@ -208,7 +208,6 @@ const EXPECTED_TOOLS = [
   'wb_version_restore',
   'wb_version_save',
   'wb_workspace_edit',
-  'wb_document_resolve',
   'wb_document_list',
   'wb_pairing_link_create',
 ]
@@ -524,15 +523,15 @@ async function main() {
   }
   console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
 
-  // wb_document_resolve: id → placement, through the real outputSchema.
-  const resolved = await callTool('wb_document_resolve', {
-    workspaceId: WORKSPACE_ID,
-    documentId: named.documentId,
-  })
-  if (resolved.documentId !== named.documentId || resolved.path !== named.path) {
-    throw new Error(`wb_document_resolve returned unexpected shape: ${JSON.stringify(resolved)}`)
+  // id → placement is a row of wb_document_list now; the standalone
+  // wb_document_resolve is retired (ADR-0030 §4).
+  const resolvedRow = namedList.documents.find((d) => d.documentId === named.documentId)
+  if (resolvedRow === undefined || resolvedRow.path !== named.path) {
+    throw new Error(
+      `wb_document_list does not place ${named.documentId}: ${JSON.stringify(namedList)}`,
+    )
   }
-  console.log(`[e2e] wb_document_resolve → ${resolved.documentId} at ${resolved.path}`)
+  console.log(`[e2e] wb_document_list places ${resolvedRow.documentId} at ${resolvedRow.path}`)
 
   // document.delete: a throwaway document, deleted and gone from the list.
   const doomed = await createDocument({ path: 'doomed', kind: 'spatial' })

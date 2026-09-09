@@ -266,9 +266,12 @@ anything is retired.
   threads, a UI tool by ADR-0009 point 7), `wb_scene_render` (SVG). C5.
   The "roadmap item with an open comment" task is the probe: only one of
   the three data reads answers it.
-- **Four tools on the document noun** — `wb_document_list`,
-  `wb_document_search`, `wb_document_resolve`, `wb_document_get`. C5.
-  `resolve` is one-to-one with an index row `list` already returns.
+- ~~Four tools on the document noun~~ — `wb_document_resolve` is
+  retired: its one answer, an id's path, is a column of every
+  `wb_document_list` row, so no errand lost a way to be done and the table
+  lost 442 bytes. The lane's baseline had it reached once, by a model
+  wandering. `list`, `search` and `get` stay: a listing, a filter and a
+  read are three errands.
 - ~~A question the surface cannot answer in one call~~ — "how many
   documents carry tag X", found by the lane's first run: `wb_document_search`
   required a non-empty `query` and its `tags` filter only narrowed text

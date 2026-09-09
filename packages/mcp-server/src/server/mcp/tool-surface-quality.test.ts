@@ -173,15 +173,6 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      wb_document_resolve: {
-        visibleBytes: 442,
-        wireBytes: 980,
-        descriptionWords: 12,
-        parameters: 2,
-        undescribed: 2,
-        strays: 'refused',
-        names: [],
-      },
       // Re-pinned when the filter learned to stand alone (ADR-0030 §4):
       // `query` is optional now, and +379 visible bytes say so on the
       // parameter and in the description, with the last two undescribed
@@ -319,16 +310,20 @@ describe('what the tool table costs to read', () => {
         return c.parameters - c.described
       }),
     }).toEqual({
-      tools: 18,
+      // 17: wb_document_resolve retired (ADR-0030 §4) — its one answer, an
+      // id's path, is a column of every wb_document_list row, so the table
+      // lost 442 bytes and no errand lost a way to be done. Rung 3 after:
+      // see the ADR's baseline.
+      tools: 17,
       // +1,122 for wb_facet_set's tags (see its row), +464 for every tool
       // refusing a stray key (see canvas_view; sixteen tools, the two that
       // already registered the object unchanged), +379 for a search filter
       // that stands alone (see wb_document_search). Under the ~40,000 at
       // which ADR-0030 §5 says to reconsider loading the table upfront.
-      visibleBytes: 36925,
-      wireBytes: 104682,
-      parameters: 327,
-      undescribed: 293,
+      visibleBytes: 36483,
+      wireBytes: 103702,
+      parameters: 325,
+      undescribed: 291,
     })
   })
 
