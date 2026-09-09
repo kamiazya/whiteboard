@@ -106,16 +106,21 @@ closes.
 there: a person editing a board sees the theme it names, and every surface
 that pictures a document — the editor, its drag layers, the row thumbnail,
 the preview pane, the export — pictures the same look. The layout worker
-runs the same composition, so the two threads cannot default apart and the
-worker protocol carries no style field at all; `'clean'` is a session
-override a caller passes, and nothing passes one today.
+runs the same composition, so the two threads cannot default apart. The
+session override (decision 6) is the one thing that crosses: `DocumentPage`
+holds it per tab and document, the Display panel's **Draw as** row sets it
+(`onStyleChange`, offered only where a host passes one; the theme ids come
+from the registry's `assetIds('themes')`, never a facet key), and it threads
+`SpatialEditor` → `useWorkerScene` → the `LayoutRequest.style` field and
+the drag layers alike. Absent means `'document'` on both threads.
 
 Three consequences, each with its guard:
 
 - **The render key gains no axis.** The theme is a canvas facet, so a
   document's content digest already changes when its theme does, and the
-  registered assets are part of the build id. A style axis would only be
-  needed if one surface drew a document in two looks, and none does.
+  registered assets are part of the build id. The session override reaches
+  the editor alone — never the list surfaces — so no keyed surface draws a
+  document in two looks, which is what would need an axis.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an

@@ -23,7 +23,11 @@
  * note), so an offloaded commit costs this thread nothing but the postMessage.
  */
 
-import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MeasureText,
+  ReferenceWire,
+  SpatialRenderStyle,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import {
@@ -91,6 +95,8 @@ export function useWorkerScene(
   base: {
     readonly measure: MeasureText
     readonly theme: ResolvedTheme
+    /** The session's look override; absent draws the document's theme. */
+    readonly style?: SpatialRenderStyle
     /** Node ids whose body an editor overlay owns (see RenderCanvasOptions).
      *  Must be referentially stable across renders, like the seams object —
      *  it participates in the memo below. */
@@ -133,6 +139,7 @@ export function useWorkerScene(
     [
       base.measure,
       base.theme,
+      base.style,
       base.suppressedBodyNodeIds,
       base.showResolved,
       base.threads,
@@ -171,6 +178,7 @@ export function useWorkerScene(
     () => ({
       canvas,
       theme: options.theme,
+      style: options.style,
       fileRefLabels,
       missingFileRefs,
       references,
@@ -183,6 +191,7 @@ export function useWorkerScene(
     [
       canvas,
       options.theme,
+      options.style,
       fileRefLabels,
       missingFileRefs,
       references,
@@ -254,6 +263,7 @@ export function useWorkerScene(
       id,
       canvas: inputs.canvas,
       theme: inputs.theme,
+      style: inputs.style,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
       references: inputs.references,

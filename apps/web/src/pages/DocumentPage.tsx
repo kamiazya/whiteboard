@@ -1,3 +1,4 @@
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   lazy,
   type ReactNode,
@@ -117,6 +118,11 @@ function DocumentPageBody({
   versionRefreshSignal: number
 }) {
   const { sync, documentKind, documentKey, versions, files, threads } = model
+  // The session's look override (ADR-0030 decision 6): what THIS tab draws
+  // this document as, never written to it. Per document: a preview chosen
+  // for one board must not follow the reader to the next.
+  const [drawAs, setDrawAs] = useState<SpatialRenderStyle | undefined>(undefined)
+  useEffect(() => setDrawAs(undefined), [documentKey])
 
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render. Owned here rather than threaded down from
@@ -357,7 +363,16 @@ function DocumentPageBody({
         // gear of their own — the row's only VIEW control, against width
         // the title wanted.
         {...(documentKind === 'spatial'
-          ? { display: <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} /> }
+          ? {
+              display: (
+                <CanvasDisplaySettings
+                  canvas={sync.canvas}
+                  onChange={sync.onChange}
+                  style={drawAs}
+                  onStyleChange={setDrawAs}
+                />
+              ),
+            }
           : {})}
         {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
@@ -570,6 +585,7 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
+                  style={drawAs}
                   // File-node reference = the target's immutable id; the
                   // same rows the link picker offers (open document
                   // excluded), so the two pickers cannot label one

@@ -21,6 +21,7 @@
  * owns dismissal (outside click, Escape) and returns focus to the kebab the
  * popover is anchored on, so a keyboard user never falls to <body>.
  */
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
@@ -37,6 +38,22 @@ export interface CanvasDisplaySettingsProps {
   readonly facetRegistry?: FacetRegistry
   /** Widget lookup; a test seam — production uses the registered widgets. */
   readonly widgets?: Readonly<Record<string, CanvasSettingsWidget>>
+  /**
+   * The session's look override (ADR-0030 decision 6), held by the host for
+   * this tab: absent draws what the document says. The row is offered only
+   * where a host passes `onStyleChange`, since a setting nobody can hold is
+   * a control that does nothing.
+   */
+  readonly style?: SpatialRenderStyle
+  readonly onStyleChange?: (style: SpatialRenderStyle | undefined) => void
+}
+
+const OPTION_CLASS =
+  'flex h-7 min-w-7 items-center justify-center rounded px-2 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none text-muted-foreground aria-pressed:font-medium aria-pressed:bg-accent aria-pressed:text-foreground'
+
+/** A theme id's bare name, read for a person: `visual.sketch` → `sketch`. */
+function themeLabel(id: string): string {
+  return id.slice(id.indexOf('.') + 1)
 }
 
 export function CanvasDisplaySettings({
@@ -44,6 +61,8 @@ export function CanvasDisplaySettings({
   onChange,
   facetRegistry = bundledFacetRegistry,
   widgets = CANVAS_SETTINGS_WIDGETS,
+  style,
+  onStyleChange,
 }: CanvasDisplaySettingsProps) {
   // Eager command chaining: two picks from the same open popover can land
   // before a slow parent commits the first, and the second must build on
@@ -102,6 +121,34 @@ export function CanvasDisplaySettings({
       {active?.widgets.map(({ key, widget }) => (
         <Fragment key={key}>{widget({ canvas, run })}</Fragment>
       ))}
+      {onStyleChange !== undefined && (
+        // This tab's look, apart from the document's: the one row here that
+        // writes nothing. The theme ids come from the registry's assets, so
+        // a plugin that registers a theme gets its preview without this
+        // surface naming it.
+        <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2">
+          <span className="text-xs text-muted-foreground">Draw as</span>
+          <span className="flex flex-wrap items-center justify-end gap-0.5">
+            {[
+              { value: undefined, label: 'As saved' },
+              { value: 'clean' as const, label: 'Clean' },
+              ...facetRegistry
+                .assetIds('themes')
+                .map((id) => ({ value: id, label: `Preview ${themeLabel(id)}` })),
+            ].map(({ value, label }) => (
+              <button
+                key={label}
+                type="button"
+                aria-pressed={style === value}
+                onClick={() => onStyleChange(value)}
+                className={OPTION_CLASS}
+              >
+                {label}
+              </button>
+            ))}
+          </span>
+        </div>
+      )}
     </>
   )
 }

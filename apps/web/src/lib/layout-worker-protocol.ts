@@ -36,6 +36,7 @@ import type {
   EdgeAnchorPair,
   ReferenceWire,
   Scene,
+  SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
@@ -81,6 +82,12 @@ export type LayoutRequest = LayoutSubject & {
   /** Echoed back so a late reply for a superseded canvas can be dropped. */
   readonly id: number
   readonly theme: ResolvedTheme
+  /**
+   * The session's look override (ADR-0030 decision 6), when the host holds
+   * one. Absent means the document's own theme — the same default the main
+   * thread's composition takes, so the two realms cannot default apart.
+   */
+  readonly style?: SpatialRenderStyle
   readonly fileRefLabels?: readonly FileRefLabel[]
   /**
    * What the canvas points at, as data: the loaded graph and the alias,

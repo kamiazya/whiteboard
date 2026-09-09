@@ -330,6 +330,7 @@ self.onmessage = async (
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
+      style: request.style,
       references,
       resolveReference: overlayReferences({
         content: references?.resolveReference,
