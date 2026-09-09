@@ -60,7 +60,11 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
+import {
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  layoutCommentBody,
+  PROPOSAL_TEXT_MAX_WIDTH_PX,
+} from './comment-body.js'
 import {
   commentLeaderEnd,
   nearestPointOnPolyline,
@@ -1684,28 +1688,51 @@ function composeComments(
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()
+  const visible = comments.filter(
+    (comment) => comment.resolved !== true || options.showResolved === true,
+  )
+  const anchorOf = (comment: (typeof visible)[number]): { x: number; y: number } => {
+    // A node set's pin stands at the corner of the box its LIVE nodes
+    // occupy, read from the thread: the flat projection's point is where
+    // that box was when it was last projected, and the nodes move.
+    const region = options.regionsByThread.get(comment.id)
+    return region !== undefined
+      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+      : commentAnchor(comment, canvas, edgePathOf)
+  }
   const obstacles: BoundingBox[] = [
     ...canvas.nodes
       .filter((node) => node.type !== 'group')
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
     ...(options.commentObstacles ?? []),
+    // EVERY pin, up front — not each one as its comment is drawn. A pin is
+    // what its comment is about, so a bubble covering one hides exactly what
+    // a reader followed the leader to find. Seeding them all is what makes
+    // that true for a comment drawn BEFORE the pin it would have covered;
+    // pushing each pin as it is emitted only protects the ones after it.
+    //
+    // This did not matter while the placer had four candidates a fixed 14px
+    // from the anchor, which clear their own pin and reach no other. It
+    // matters now: measured on the crowded forty-comment board, the ring
+    // put 3948 square pixels of bubble over other comments' pins.
+    ...visible.map((comment) => {
+      const anchor = anchorOf(comment)
+      return {
+        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
+        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
+        w: COMMENT_PIN_SIZE_PX,
+        h: COMMENT_PIN_SIZE_PX,
+      }
+    }),
   ]
   const out: SceneNode[] = []
-  for (const comment of comments) {
-    if (comment.resolved === true && options.showResolved !== true) continue
+  for (const comment of visible) {
     // Assigned, never invented: a resolved comment's muting comes only from
     // the theme's `resolvedOverlay`, never from an opacity literal here. A
     // bare resolver (no `resolveComment`) still composes full geometry with
     // no appearance at all, resolved or not.
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    // A node set's pin stands at the corner of the box its LIVE nodes
-    // occupy, read from the thread: the flat projection's point is where
-    // that box was when it was last projected, and the nodes move.
-    const region = options.regionsByThread.get(comment.id)
-    const anchor =
-      region !== undefined
-        ? { x: region.rect.x + region.rect.width, y: region.rect.y }
-        : commentAnchor(comment, canvas, edgePathOf)
+    const anchor = anchorOf(comment)
 
     // Through `layoutCommentBody`, which is the ONE producer of a comment's
     // prose — so the card and rail that draw this same body in the web app
@@ -1858,7 +1885,7 @@ function composeProposals(
         out.push({
           kind: 'shape',
           id: `${change.id}/outline`,
-          proposalChrome: true,
+          proposalChrome: { proposalId: proposal.id },
           bbox: box,
           radius: COMMENT_BUBBLE_RADIUS_PX,
           ...paint,
@@ -1891,7 +1918,8 @@ function composeProposals(
     // no count. This bubble borrows the comment layer's grammar throughout;
     // borrowing its producer is what keeps that true.
     const laid = layoutCommentBody(label, {
-      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      ...mdastOptionsFor(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
+      density: 'compact',
       parseBody: options.parseBody,
       onParseFailure: (err) =>
         options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
@@ -1924,7 +1952,7 @@ function composeProposals(
     out.push({
       kind: 'shape',
       id: `${proposal.id}/bubble`,
-      proposalChrome: true,
+      proposalChrome: { proposalId: proposal.id },
       bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(chrome === undefined ? {} : { appearance: chrome.bubble }),

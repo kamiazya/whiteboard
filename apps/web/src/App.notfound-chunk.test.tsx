@@ -15,6 +15,7 @@ vi.mock('./components/status/NotFoundPage.js', () => {
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { ProviderState } from './lib/provider.js'
+import { expectLoggedFailure } from './test-utils/logged-failures.js'
 
 afterEach(cleanup)
 
@@ -32,5 +33,6 @@ describe('App not-found chunk failure', () => {
     )
     expect(await screen.findByRole('alert')).toBeTruthy()
     reportSpy.mockRestore()
+    await expectLoggedFailure('error when mocking a module')
   })
 })

@@ -31,6 +31,7 @@ export async function goodAwaited() {
   await expect.element(page.getByRole('menu')).not.toBeInTheDocument()
   await expect.poll(() => 1).toBe(1)
   await expect.poll(() => 1).not.toBe(2)
+  await expectLoggedFailure('a claim that is awaited')
 }
 
 export function goodReturned() {
