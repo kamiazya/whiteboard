@@ -10,11 +10,7 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
-import {
-  VERSION_THUMBNAILS_STORE,
-  VERSIONS_BY_DOCUMENT_INDEX,
-  VERSIONS_STORE,
-} from './browser-idb.js'
+import { VERSIONS_BY_DOCUMENT_INDEX, VERSIONS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 
 /**
@@ -38,8 +34,8 @@ const versionRowSchema = z
     /**
      * Whether a checkpoint took this point rather than a person.
      *
-     * Optional for the reason `hasThumbnail` is, and it is the load-bearing
-     * reason on this schema: it is `.strict()` and its reader SKIPS a row
+     * Optional for a load-bearing reason: this schema is `.strict()` and
+     * its reader SKIPS a row
      * that fails to parse, so making either of these REQUIRED would silently
      * delete the whole history of anyone who has rows from before them.
      * Absent reads as `false`, which is what every existing row is.
@@ -48,11 +44,12 @@ const versionRowSchema = z
     /** The variation HEAD was on when the point was taken; absent reads as `main`. */
     branchName: z.string().min(1).optional(),
     /**
-     * Whether `versionThumbnails` holds a picture for this point. Optional
-     * because rows written before v17 have none — and because this schema is
-     * `.strict()` over rows the reader SKIPS when they fail to parse, so a
-     * newly-required field would delete a reader's whole history rather than
-     * fail loudly.
+     * A leftover from the retired row miniature (v17-v18), tolerated rather
+     * than stripped. Nothing reads it: this schema is `.strict()` over rows
+     * the reader SKIPS when they fail to parse, so dropping the key here
+     * would make every already-bookmarked point unreadable. See
+     * `browser-idb.ts`'s note at the deleted store for why the rewrite that
+     * would remove it was refused.
      */
     hasThumbnail: z.boolean().optional(),
     frontiers: z.instanceof(Uint8Array),
@@ -155,21 +152,10 @@ export class BrowserVersionStore {
     )
     const toRemove = autoVersionsOverCap(autosNewestFirst, referenced)
     if (toRemove.length === 0) return
-    await inTransaction(
-      this.deps.dbName,
-      [VERSIONS_STORE, VERSION_THUMBNAILS_STORE],
-      'readwrite',
-      async (tx) => {
-        const versions = tx.objectStore(VERSIONS_STORE)
-        const thumbnails = tx.objectStore(VERSION_THUMBNAILS_STORE)
-        for (const id of toRemove) {
-          await request(versions.delete(id))
-          // A point with no picture deletes nothing, which IndexedDB treats
-          // as success — so this needs no existence check.
-          await request(thumbnails.delete(id))
-        }
-      },
-    )
+    await inTransaction(this.deps.dbName, [VERSIONS_STORE], 'readwrite', async (tx) => {
+      const versions = tx.objectStore(VERSIONS_STORE)
+      for (const id of toRemove) await request(versions.delete(id))
+    })
   }
 
   /** Newest first, as the History panel lists them. */
@@ -201,53 +187,10 @@ export class BrowserVersionStore {
   }
 
   /**
-   * Keep the picture drawn for a saved point, and record on the row that
-   * there is one.
-   *
-   * Two stores in one transaction, so a row can never claim a picture the
-   * other store does not hold. The daemon's twin is a PUT to
-   * `versions/:id/thumbnail`; what differs is only where the bytes land.
-   */
-  async putThumbnail(
-    workspaceId: string,
-    path: string,
-    versionId: string,
-    blob: Blob,
-  ): Promise<void> {
-    const row = await this.ownedRow(workspaceId, path, versionId)
-    if (row === null) throw new Error(`no such version: ${versionId}`)
-    await inTransaction(
-      this.deps.dbName,
-      [VERSIONS_STORE, VERSION_THUMBNAILS_STORE],
-      'readwrite',
-      async (tx) => {
-        await request(tx.objectStore(VERSION_THUMBNAILS_STORE).put(blob, versionId))
-        await request(
-          tx
-            .objectStore(VERSIONS_STORE)
-            .put(versionRowSchema.parse({ ...row, hasThumbnail: true })),
-        )
-      },
-    )
-  }
-
-  /** The picture, or null when there is none — or when the version is not this document's. */
-  async loadThumbnail(workspaceId: string, path: string, versionId: string): Promise<Blob | null> {
-    if ((await this.ownedRow(workspaceId, path, versionId)) === null) return null
-    const blob = await inTransaction(
-      this.deps.dbName,
-      [VERSION_THUMBNAILS_STORE],
-      'readonly',
-      async (tx) => request(tx.objectStore(VERSION_THUMBNAILS_STORE).get(versionId)),
-    )
-    return blob instanceof Blob ? blob : null
-  }
-
-  /**
    * The row, but only if `path` is the document whose history it belongs to
-   * — the refusal `loadPast` makes, in the one place both it and the picture
-   * reads can share, so an id alone can never reach another document's
-   * history through whichever of them was written second.
+   * — the refusal `loadPast` makes, kept in one place so an id alone can
+   * never reach another document's history through whichever reader was
+   * written second.
    */
   private async ownedRow(
     workspaceId: string,
@@ -309,7 +252,6 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     createdAt: new Date(row.createdAt).toISOString(),
     elementCount: row.elementCount,
     auto: row.auto === true,
-    hasThumbnail: row.hasThumbnail === true,
     branchName: row.branchName ?? 'main',
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),

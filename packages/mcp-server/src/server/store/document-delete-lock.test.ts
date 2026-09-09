@@ -4,16 +4,14 @@
  *
  * The HTTP path wraps its whole sequence in `withWorkspaceWriteLock`. The
  * agent path does not: only the index's row delete takes the lock, from
- * inside. That leaves the teardown's capture OUTSIDE it, so a version saved
- * by a concurrent writer after the capture has its row cascaded away by the
- * delete while its thumbnail was never in the captured set — the orphaned
- * file the teardown seam exists to prevent, on the one path the seam was
- * added for.
+ * inside. Without the teardown taking the lock around the WHOLE sequence, a
+ * version saved by a concurrent writer lands after the sweep and outlives
+ * the document it belongs to — a row nothing can reach, since 0016 dropped
+ * the cascade that used to collect it.
  *
  * Deterministic rather than racy: the writer holds the lock across the
  * whole window, so the interleaving is imposed instead of hoped for.
  */
-import { existsSync } from 'node:fs'
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -32,7 +30,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
-const { FileVersionStore, thumbnailPath } = await import('./version-store.js')
+const { FileVersionStore } = await import('./version-store.js')
 const { getDb } = await import('./db/index.js')
 const { prepareDataDir } = await import('./db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../di/container.js')
@@ -48,7 +46,7 @@ describe('wbDocumentDelete', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('leaves no thumbnail behind for a version saved while the delete is in flight', async () => {
+  it('leaves no version row behind for a version saved while the delete is in flight', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     const deps = resolveServerDeps(
@@ -81,7 +79,6 @@ describe('wbDocumentDelete', () => {
       writerAcquired()
       await mayWrite
       const entry = await versions.save('ws-1', 'doomed', new LoroDoc(), { auto: false })
-      await versions.saveThumbnail('ws-1', 'doomed', entry.id, new Uint8Array([1, 2, 3]))
       return entry.id
     })
     await lockHeld
@@ -98,6 +95,11 @@ describe('wbDocumentDelete', () => {
     const versionId = await writer
     await deleted
 
-    expect(existsSync(thumbnailPath('ws-1', versionId))).toBe(false)
+    const survivors = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('id', '=', versionId)
+      .execute()
+    expect(survivors).toEqual([])
   })
 })

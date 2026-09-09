@@ -13,7 +13,6 @@ import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
 import { createRestoreRouter } from './document/restore.js'
-import { createThumbnailsRouter } from './document/thumbnails.js'
 import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
@@ -105,7 +104,6 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createVersionsRouter({ versionStore }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
-  app.route('/', createThumbnailsRouter({ versionStore }))
   // Restore progress goes out over the WS surface; same dynamic import as
   // setAutoVersionTrigger above, for the same eval-order reason.
   const restoreProgress: RestoreProgress = async (event) => {

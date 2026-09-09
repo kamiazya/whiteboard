@@ -24,7 +24,6 @@ import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import type { UseDocumentSyncResult } from '../hooks/useDocumentSync.js'
 import type { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { linkTargets } from '../lib/link-entries.js'
-import type { VersionsBackend } from '../lib/versions-backend.js'
 
 export interface DocumentPageModel {
   /**
@@ -102,8 +101,6 @@ export interface DocumentPageModel {
     readonly enabled: boolean
     readonly workspaceId: string
     readonly path: string
-    /** Where a bookmark's picture goes; null when this keeper has no history for the document. */
-    readonly backend: Pick<VersionsBackend, 'putThumbnail'> | null
     readonly save: (
       label: string,
     ) => Promise<{ workspaceId: string; path: string; versionId: string }>

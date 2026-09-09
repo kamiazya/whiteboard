@@ -1,73 +1,54 @@
-import { mkdtemp, rm } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
+/**
+ * The second line of defence behind the id validators: whatever a caller
+ * builds a path out of, it must still land inside the directory it named.
+ *
+ * Exercised directly. It used to be reached through
+ * `version-store.loadThumbnail` with the validators mocked out of the way, so
+ * that the guard rather than the validator would be the thing to fire — and
+ * when the version thumbnail was retired, the one caller that test knew went
+ * with it and the guard was left with no coverage at all. Nothing about
+ * `assertPathWithinDir` needed a store to state, so it no longer has one.
+ */
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { assertPathWithinDir } from './path-guard.js'
 
-let tempDir: string
+const ROOT = '/data/blobs'
 
-async function importWithRelaxedValidators<T>(modulePath: string): Promise<T> {
-  vi.doMock('../config.js', () => ({
-    get DATA_DIR() {
-      return tempDir
-    },
-    getDataDir: () => tempDir,
-    WHITEBOARD_ROOT: '/tmp',
-    REPO_ROOT: '/tmp',
-  }))
-  vi.doMock('../validators.js', async (importOriginal) => {
-    const actual = await importOriginal<typeof import('../validators.js')>()
-    return {
-      ...actual,
-      validateWorkspaceId: (value: string) => value,
-      validateDocumentPath: (value: string) => value,
-      validateVersionId: (value: string) => value,
+describe('assertPathWithinDir', () => {
+  it('returns the path it was given when it resolves inside the directory', () => {
+    // The PATH is returned, not the resolved form: callers pass this straight
+    // to `readFile`, and handing back a resolved copy would quietly change
+    // what a relative caller opens.
+    const inside = join(ROOT, 'ws-1', 'ab', 'cdef')
+    expect(assertPathWithinDir(inside, ROOT, 'blob path')).toBe(inside)
+    expect(assertPathWithinDir(ROOT, ROOT, 'blob path')).toBe(ROOT)
+  })
+
+  it('refuses a path that climbs out, however it is spelled', () => {
+    for (const climbing of [
+      join(ROOT, '..', 'secrets'),
+      join(ROOT, 'ws-1', '..', '..', 'secrets'),
+      '/etc/passwd',
+    ]) {
+      expect(() => assertPathWithinDir(climbing, ROOT, 'blob path')).toThrowError(
+        expect.objectContaining({ name: 'ValidationError', error: 'invalid_path' }),
+      )
     }
   })
-  return (await import(modulePath)) as T
-}
 
-async function captureError<T>(promise: Promise<T>): Promise<unknown> {
-  try {
-    await promise
-    return null
-  } catch (error) {
-    return error
-  }
-}
-
-describe('store path guards', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'store-path-guard-test-'))
-    vi.resetModules()
+  // `/data/blobs-other` starts with `/data/blobs` as a STRING and is a
+  // different directory. A prefix check without the separator lets it
+  // through, which is the classic way this guard is written wrong.
+  it('refuses a sibling directory whose name merely starts with the same characters', () => {
+    expect(() => assertPathWithinDir('/data/blobs-other/x', ROOT, 'blob path')).toThrowError(
+      expect.objectContaining({ error: 'invalid_path' }),
+    )
   })
 
-  afterEach(async () => {
-    vi.doUnmock('../config.js')
-    vi.doUnmock('../validators.js')
-    vi.resetModules()
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
-  // names-store no longer constructs filesystem paths from workspaceId; the
-  // path-traversal vector is fully covered by validateWorkspaceId, exercised
-  // independently in validators.test.ts.
-
-  it('returns ValidationError for version-store thumbnail escape attempts', async () => {
-    const { FileVersionStore } =
-      await importWithRelaxedValidators<typeof import('./version-store.js')>('./version-store.js')
-    const { validationErrorBody } = await import('../validators.js')
-    const store = new FileVersionStore()
-
-    // Version metadata now lives in the DB, but thumbnail blobs still hit the
-    // filesystem, so the path guard remains the second-line defense behind
-    // validateVersionId. Relaxing the validators forces the assertPathWithinDir
-    // guard to fire when the id would otherwise build a path outside blobs/.
-    const error = await captureError(store.loadThumbnail('sess-1', 'canvas-a', '../escape'))
-
-    expect(error).toMatchObject({ name: 'ValidationError', error: 'invalid_path' })
-    expect(validationErrorBody(error)).toEqual({
-      error: 'invalid_path',
-      message: expect.stringMatching(/outside/i),
-    })
+  it('names the label and both paths, so a refusal says what was refused', () => {
+    expect(() => assertPathWithinDir('/etc/passwd', ROOT, 'version path')).toThrowError(
+      /Invalid version path.*\/etc\/passwd.*outside.*\/data\/blobs/,
+    )
   })
 })

@@ -15,7 +15,6 @@ import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
@@ -497,12 +496,6 @@ function useDaemonDocument(
     return () => setShellConnection(null)
   }, [authError, syncStatus, daemonBaseUrl])
 
-  // The keeper this page's history belongs to. No provider is mounted here,
-  // so this is the daemon backend over `DaemonApiContext`'s fetch — the
-  // picture rides to the same route it always did, by the seam both pages
-  // share rather than by a URL only this one could build.
-  const versionsBackend = useVersionsBackend()
-
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one
   // already in this workspace; naming happens afterwards in the canvas's top bar.
@@ -669,7 +662,6 @@ function useDaemonDocument(
       enabled: canvas !== null,
       workspaceId: canvas?.workspaceId ?? '',
       path: canvas?.path ?? '',
-      backend: versionsBackend,
       save: async (label) => {
         if (canvas === null) throw new Error('saveVersion: no canvas')
         const res = await daemonFetch(

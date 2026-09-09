@@ -9,7 +9,6 @@ const VALID_VERSION_CREATED = {
     createdAt: '2026-07-30T00:00:00.000Z',
     elementCount: 42,
     auto: false,
-    hasThumbnail: true,
     branchName: 'main',
   },
 }

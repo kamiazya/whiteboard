@@ -891,7 +891,6 @@ function useBrowserDocument(
       enabled: versionsEnabled,
       workspaceId,
       path: loadedPath,
-      backend: versionsBackend,
       save: async (label) => {
         if (versionsBackend === null) {
           throw new Error('saveVersionFromPanel: no versions backend')

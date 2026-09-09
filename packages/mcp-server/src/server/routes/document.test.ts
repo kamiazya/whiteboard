@@ -84,9 +84,9 @@ describe('createDocumentRouter composition', () => {
 
   it('drives the whole documents family against a nested document path', async () => {
     // The second legacy family (already workspace-first, but :path could not
-    // match a nested path): versions, thumbnails, restore, compact, name,
-    // pin, rename, delete. One scenario, so a regression in ANY of them on a
-    // nested path is loud.
+    // match a nested path): versions, restore, compact, name, pin, rename,
+    // delete. One scenario, so a regression in ANY of them on a nested path
+    // is loud.
     const app = createDocumentRouter()
     const create = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -116,7 +116,7 @@ describe('createDocumentRouter composition', () => {
       ).status,
     ).toBe(200)
 
-    // versions: create → list → thumbnail PUT/GET → restore
+    // versions: create → list → restore
     const created = await app.request(`${P}/versions`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -128,15 +128,6 @@ describe('createDocumentRouter composition', () => {
 
     const list = await app.request(`${P}/versions`)
     expect(list.status).toBe(200)
-
-    const putThumb = await app.request(`${P}/versions/${versionId}/thumbnail`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'image/png' },
-      body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10]),
-    })
-    expect(putThumb.status).toBe(200)
-    expect((await app.request(`${P}/versions/${versionId}/thumbnail`)).status).toBe(200)
-    expect((await app.request(`${P}/latest-thumbnail`)).status).toBe(200)
 
     const restore = await app.request(`${P}/versions/${versionId}/restore`, { method: 'POST' })
     expect(restore.status).toBe(200)

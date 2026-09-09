@@ -10,7 +10,6 @@ import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { type PastDocument, VersionsRequestError } from '../lib/versions-backend.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
-import { VersionThumbnail } from './VersionThumbnail.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
 const log = getAppLogger('VersionTimeline')
@@ -437,16 +436,6 @@ export default function VersionTimeline({
                       void openPreview(v)
                     }}
                   >
-                    {v.hasThumbnail && (
-                      <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
-                        <VersionThumbnail
-                          workspaceId={workspaceId}
-                          path={path}
-                          versionId={v.id}
-                          hasThumbnail={v.hasThumbnail}
-                        />
-                      </div>
-                    )}
                     <CardContent className="px-3 flex items-center justify-between gap-2">
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs font-medium truncate">{versionTitle(v)}</span>

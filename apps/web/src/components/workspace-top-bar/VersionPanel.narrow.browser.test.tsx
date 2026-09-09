@@ -14,7 +14,6 @@ function mkVersionsResponse(): Response {
     elementCount: 3,
     label: `Version ${index + 1}`,
     auto: true,
-    hasThumbnail: false,
     branchName: 'main',
   }))
   return new Response(JSON.stringify({ versions }), {

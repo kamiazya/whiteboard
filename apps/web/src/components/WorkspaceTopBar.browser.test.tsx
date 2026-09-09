@@ -46,7 +46,6 @@ function mkVersionsResponse(count = 24): Response {
     elementCount: 58 + index,
     label: `Version ${index + 1}`,
     auto: index % 2 === 0,
-    hasThumbnail: false,
     branchName: 'main',
     operator: {
       kind: index % 3 === 0 ? ('human' as const) : ('system' as const),

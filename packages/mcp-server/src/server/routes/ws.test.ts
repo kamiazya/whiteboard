@@ -255,7 +255,6 @@ describe('handleWsUpgrade auto-version corruption', () => {
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 1,
       auto: true,
-      hasThumbnail: false,
       operator: {
         kind: 'system' as const,
         peerId: doc.peerIdStr,
