@@ -620,6 +620,28 @@ describe('layoutSpatialCanvas', () => {
     expect(sceneNoLabel.nodes.every((n) => n.kind !== 'textRun')).toBe(true)
   })
 
+  it('paints a group behind the nodes its box contains, whatever order the canvas lists them in', () => {
+    // Stored order is the id order of a map, not the order a caller wrote,
+    // so a group whose id sorts AFTER a member's used to paint over it: a
+    // coloured layer swallowed four of the eleven boxes in a diagram the
+    // lane drew, and the grader (which reads the store) passed it.
+    const member = textNode({ id: 'a-member', x: 40, y: 40, width: 120, height: 60, text: 'in' })
+    const group: Extract<SpatialNode, { type: 'group' }> = {
+      id: 'z-group',
+      type: 'group',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      color: '5',
+    }
+    const scene = layoutSpatialCanvas(canvas([member, group]), baseOptions())
+    const at = (id: string) => scene.nodes.findIndex((n) => 'id' in n && n.id === id)
+    expect(at('z-group')).toBeGreaterThanOrEqual(0)
+    expect(at('a-member')).toBeGreaterThanOrEqual(0)
+    expect(at('z-group')).toBeLessThan(at('a-member'))
+  })
+
   it('renders an empty canvas as an empty scene without throwing', () => {
     expect(layoutSpatialCanvas(canvas([]), baseOptions())).toEqual({ nodes: [] })
   })

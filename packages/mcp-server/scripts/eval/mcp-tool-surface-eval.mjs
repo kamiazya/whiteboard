@@ -257,6 +257,25 @@ async function runOnce(task, trial) {
     const wb = await connectWhiteboard(join(dir, 'data'))
     try {
       verdict = await task.verify(wb, ids)
+      // What the board LOOKS like after a write task is evidence the
+      // verdict cannot carry: a layout can pass every property and still
+      // read badly. Rendered through the same pipeline a person sees,
+      // beside `--out`, one SVG per board the task names.
+      if (OUT !== undefined && Array.isArray(task.boards)) {
+        const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
+        for (const path of task.boards) {
+          const entry = listed.documents.find((d) => d.path === path)
+          if (entry === undefined) continue
+          const rendered = await wb.call('wb_scene_render', {
+            workspaceId: WORKSPACE_ID,
+            documentId: entry.documentId,
+          })
+          const figures = `${OUT.replace(/\.json$/, '')}-boards`
+          mkdirSync(figures, { recursive: true })
+          const file = `${task.name}-${trial}-${path}`.replace(/[^a-z0-9]+/gi, '-')
+          writeFileSync(join(figures, `${file}.svg`), rendered.svg)
+        }
+      }
     } finally {
       await wb.close()
     }

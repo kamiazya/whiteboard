@@ -440,6 +440,34 @@ anything is retired.
   the selector unprompted. What would take the colour errand to two calls
   is a selector by LABEL, which is a lookup with no uniqueness behind it;
   left as the next candidate rather than added on the same evidence.
+- **The use-case axis, measured with pictures.** "Can the surface draw
+  what a person actually asks for" is C5, and no task had asked for a
+  LAYOUT. Two now do: a three-layer architecture diagram (groups stacked
+  in order, members inside and lined up, nothing overlapping, eight
+  connections) and a sequence diagram (participants as columns, messages
+  between their two participants, each lower than the last). Both pass
+  six of six, one edit call each, every coordinate written by hand —
+  around 3k output tokens for the architecture drawing, and the numbers
+  right. The runner now keeps a rendering of every board a write task
+  names beside `--out`, because a verdict cannot carry what a drawing
+  looks like, and the first pictures found two product bugs the grader
+  (which reads the store) had passed: `wb_scene_render`'s SVG had no
+  viewBox, so a layer drawn at y=0 lost its label off the top; and a
+  coloured group whose id sorted after a member's painted OVER it — four
+  of eleven boxes gone from a diagram that scored as correct. Both fixed
+  in canvas-render's envelope and paint order.
+
+  On the same tasks, the push-then-arrange idea was given its cheapest
+  form — `below` and `rightOf` on `node.add`, a position the server
+  computes from a node an earlier op placed, so a grid needs no
+  arithmetic — and REVERTED: six trials of six wrote every coordinate by
+  hand with the relations in the table and described, zero reached for
+  either, for +261 bytes. A model drawing a whole diagram plans the
+  picture globally and writes it in one pass; a chain of relations is
+  the incremental style, and it did not want it. Recorded so the shape
+  is not re-proposed on the same evidence; a different shape (a whole
+  `layout` op that takes rows of members, say) would need its own
+  measurement, and the diagram tasks are where to take it.
 - **A stray key inside a node draft is accepted silently** (C10, one
   level down). A trial wrote `"height80": true` beside `"height": 80`,
   and the write succeeded: the per-type node schemas are non-strict so a

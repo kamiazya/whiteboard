@@ -22,11 +22,43 @@ import { WORKSPACE_ID } from './fixture.mjs'
  *   prompt: string,
  *   answer?: string,
  *   verify?: (wb: { call: (name: string, args: Record<string, unknown>) => Promise<any> }, ids: Record<string, string>) => Promise<{ ok: boolean, detail: string }>,
+ *   boards?: readonly string[],
  * }} Task
  */
 
 const snapshot = (wb, ids, path) =>
   wb.call('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId: ids[path] })
+
+/** A board the AGENT created, found by the path the prompt named. */
+const boardAt = async (wb, path) => {
+  const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
+  const entry = listed.documents.find((d) => d.path === path)
+  if (entry === undefined) return undefined
+  return wb.call('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId: entry.documentId })
+}
+
+const text = (n) => (n.text ?? '').trim()
+const byText = (board, t) => board.nodes.find((n) => text(n).toLowerCase() === t.toLowerCase())
+const strictlyInside = (n, g) =>
+  n.id !== g.id &&
+  n.x >= g.x &&
+  n.y >= g.y &&
+  n.x + n.width <= g.x + g.width &&
+  n.y + n.height <= g.y + g.height
+const boxesOverlap = (a, b) =>
+  a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+const firstOverlap = (nodes) => {
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      if (boxesOverlap(nodes[i], nodes[j])) return [nodes[i], nodes[j]]
+    }
+  }
+  return undefined
+}
+const linked = (board, a, b) =>
+  board.edges.some(
+    (e) => (e.fromNode === a.id && e.toNode === b.id) || (e.fromNode === b.id && e.toNode === a.id),
+  )
 
 /** @type {readonly Task[]} */
 export const TASKS = [
@@ -85,6 +117,7 @@ export const TASKS = [
   },
   {
     name: 'add a box and connect it',
+    boards: ['boards/architecture'],
     prompt:
       'I am looking at the architecture board right now. Add a box that says "Observability" and connect the daemon to it.',
     verify: async (wb, ids) => {
@@ -188,6 +221,7 @@ export const TASKS = [
     // does it cost? Graded on what the group encloses afterwards, however
     // the model got there.
     name: 'make a group contain exactly these',
+    boards: ['boards/architecture'],
     prompt:
       'On the architecture board there is a group called Clients. Make it contain exactly three boxes — CLI, Web app, and Mobile app — and nothing else. Leave the rest of the board as it is. Apply it directly; I am looking at the board.',
     verify: async (wb, ids) => {
@@ -227,6 +261,7 @@ export const TASKS = [
     // inside a group with that label, none overlapping, and the rest of the
     // roadmap untouched.
     name: 'wrap a new chain in a group',
+    boards: ['boards/roadmap'],
     prompt:
       'On the roadmap board, add three boxes in a row — Ingest, Transform, Publish — connected in that order with arrows, and put the three of them inside a group labelled Pipeline. Leave the existing items where they are. Apply it directly; I am looking at the board.',
     verify: async (wb, ids) => {
@@ -281,6 +316,7 @@ export const TASKS = [
     // before it can act — a selector or a batch-scoped set would let the
     // edit name the condition instead.
     name: 'colour every box inside a group',
+    boards: ['boards/architecture'],
     prompt:
       'On the architecture board, give every box inside the Clients group colour 5. Change nothing else on the board. Apply it directly; I am looking at the board.',
     verify: async (wb, ids) => {
@@ -317,6 +353,137 @@ export const TASKS = [
         detail:
           loose.length === 0 ? `${board.nodes.length} locked` : `unlocked: ${loose.join(', ')}`,
       }
+    },
+  },
+  {
+    // The use-case axis (C5): a layout a person would actually ask for.
+    // Not one op or one call — a layered architecture diagram, graded on
+    // the layout properties a reader needs: every box inside its layer,
+    // layers stacked in order and apart, boxes in a layer lined up, nothing
+    // overlapping, and the connections drawn. What the model does to get
+    // there — coordinates by hand, placement, tidy — is the diagnostic.
+    name: 'draw a layered architecture diagram',
+    boards: ['boards/system'],
+    prompt:
+      'Create a board at boards/system and draw the system architecture on it as three layers from top to bottom: a group labelled "Clients" holding boxes CLI, Web app and Mobile app; a group labelled "Services" holding API gateway, Auth and Search; a group labelled "Storage" holding SQLite and Blob store. Every box sits inside its layer, boxes in a layer are lined up side by side, and layers do not overlap. Connect CLI, Web app and Mobile app to API gateway; API gateway to Auth and to Search; Auth and Search to SQLite; Search to Blob store. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/system')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/system' }
+      const layers = [
+        ['Clients', ['CLI', 'Web app', 'Mobile app']],
+        ['Services', ['API gateway', 'Auth', 'Search']],
+        ['Storage', ['SQLite', 'Blob store']],
+      ]
+      const groups = []
+      for (const [label, members] of layers) {
+        const group = board.nodes.find(
+          (n) => n.type === 'group' && (n.label ?? '').trim() === label,
+        )
+        if (group === undefined) return { ok: false, detail: `no group ${label}` }
+        const boxes = members.map((m) => byText(board, m))
+        const missing = members.filter((_, i) => boxes[i] === undefined)
+        if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+        const outside = boxes.filter((b) => !strictlyInside(b, group)).map(text)
+        if (outside.length > 0)
+          return { ok: false, detail: `outside ${label}: ${outside.join(', ')}` }
+        const ys = boxes.map((b) => b.y)
+        if (Math.max(...ys) - Math.min(...ys) > 2) {
+          return { ok: false, detail: `${label} boxes not lined up (y ${ys.join(', ')})` }
+        }
+        groups.push(group)
+      }
+      for (let i = 1; i < groups.length; i++) {
+        if (groups[i - 1].y + groups[i - 1].height > groups[i].y) {
+          return { ok: false, detail: `${layers[i - 1][0]} is not above ${layers[i][0]}` }
+        }
+      }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      const wanted = [
+        ['CLI', 'API gateway'],
+        ['Web app', 'API gateway'],
+        ['Mobile app', 'API gateway'],
+        ['API gateway', 'Auth'],
+        ['API gateway', 'Search'],
+        ['Auth', 'SQLite'],
+        ['Search', 'SQLite'],
+        ['Search', 'Blob store'],
+      ]
+      const unlinked = wanted.filter(([a, b]) => !linked(board, byText(board, a), byText(board, b)))
+      if (unlinked.length > 0) {
+        return {
+          ok: false,
+          detail: `not connected: ${unlinked.map((p) => p.join('-')).join(', ')}`,
+        }
+      }
+      return { ok: true, detail: 'three layers, lined up, connected' }
+    },
+  },
+  {
+    // A sequence diagram on a spatial canvas: participants as columns,
+    // messages as boxes between their two participants, each lower than
+    // the one before. Graded on those three orderings and on nothing
+    // overlapping.
+    name: 'draw a sequence diagram',
+    boards: ['boards/open-flow'],
+    prompt:
+      'Create a board at boards/open-flow and draw a sequence diagram of opening a document. Participants Browser, Daemon and SQLite are columns from left to right, headed by a box each. The messages, in order from top to bottom, are: "open document" from Browser to Daemon; "load snapshot" from Daemon to SQLite; "rows" from SQLite to Daemon; "render" from Daemon to Browser. Draw each message as a box placed horizontally between its two participants and lower on the board than the message before it, connected to the participant it goes to. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/open-flow')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/open-flow' }
+      const participants = ['Browser', 'Daemon', 'SQLite'].map((p) => byText(board, p))
+      if (participants.some((p) => p === undefined)) {
+        return { ok: false, detail: 'a participant is missing' }
+      }
+      const centre = (n) => n.x + n.width / 2
+      for (let i = 1; i < participants.length; i++) {
+        if (centre(participants[i - 1]) >= centre(participants[i])) {
+          return { ok: false, detail: 'participants are not left to right' }
+        }
+      }
+      const headY = participants.map((p) => p.y)
+      if (Math.max(...headY) - Math.min(...headY) > 2) {
+        return { ok: false, detail: `participant heads not lined up (y ${headY.join(', ')})` }
+      }
+      const steps = [
+        ['open document', 'Browser', 'Daemon'],
+        ['load snapshot', 'Daemon', 'SQLite'],
+        ['rows', 'SQLite', 'Daemon'],
+        ['render', 'Daemon', 'Browser'],
+      ]
+      const messages = steps.map(([label]) =>
+        board.nodes.find(
+          (n) =>
+            n.type !== 'group' &&
+            text(n).toLowerCase().includes(label) &&
+            !['Browser', 'Daemon', 'SQLite'].includes(text(n)),
+        ),
+      )
+      const missing = steps.filter((_, i) => messages[i] === undefined).map((s) => s[0])
+      if (missing.length > 0)
+        return { ok: false, detail: `missing messages: ${missing.join(', ')}` }
+      for (let i = 0; i < steps.length; i++) {
+        const [label, from, to] = steps[i]
+        const a = centre(byText(board, from))
+        const b = centre(byText(board, to))
+        const m = centre(messages[i])
+        if (m < Math.min(a, b) || m > Math.max(a, b)) {
+          return { ok: false, detail: `"${label}" is not between ${from} and ${to}` }
+        }
+        if (i > 0 && messages[i].y <= messages[i - 1].y) {
+          return { ok: false, detail: `"${label}" is not below "${steps[i - 1][0]}"` }
+        }
+        if (messages[0].y <= Math.max(...headY)) {
+          return { ok: false, detail: 'first message is not below the participant heads' }
+        }
+      }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: 'columns, messages in order and between their participants' }
     },
   },
   {

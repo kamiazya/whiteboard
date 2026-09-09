@@ -139,6 +139,14 @@ with every tool call, tool-error text, token and cost figure.
   of three — the model had done what the description said it could. When
   a parameter's description names a behaviour, grep the refusals on that
   path for the case the description covers.
+- **Look at the boards, not only the verdicts.** A write task that
+  declares `boards: ['boards/x']` gets each named board rendered through
+  `wb_scene_render` into `<out>-boards/` beside `--out`; rasterise with
+  resvg from `packages/mcp-server` (it owns the binding) and read the
+  PNGs. The first look found two rendering bugs — a cropped group label
+  and a coloured group painted over its members — on drawings the grader
+  had passed, because the grader reads the store and a person reads the
+  picture. A layout task without its picture has been half-graded.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1

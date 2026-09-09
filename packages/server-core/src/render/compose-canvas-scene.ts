@@ -5,6 +5,7 @@ import type {
   SpatialLayoutDegradation,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  type BoundingBox,
   createSpatialTheme,
   layoutSpatialCanvas,
   sceneBounds,
@@ -81,23 +82,20 @@ export function composeCanvasScene(
 }
 
 /**
- * How far the drawing extends from the origin — the size a consumer needs to
- * show all of `wb_scene_render`'s SVG.
+ * The box `wb_scene_render`'s SVG is drawn in: the scene's own bounds, so
+ * the viewBox starts where the drawing starts. A container's label sits
+ * ABOVE its frame, and an SVG anchored at 0,0 cropped every label of a layer
+ * drawn at y=0 — the lane's architecture diagram came back without its
+ * first layer's name.
  *
  * Measured from the SCENE, not the canvas's nodes. The two agree only while
  * nothing is drawn outside a node's own box, and the router deliberately
  * breaks that: an edge steps AROUND a node it would otherwise cut through,
- * and that step lands beyond every node's geometry. Measuring the nodes
- * reported a size that clipped the very detours the routing work added.
- *
- * Right/bottom extent rather than `sceneBounds`' width/height, because the
- * SVG this describes is the bodyless-root form with no `viewBox`: its user
- * space starts at the origin whatever the content does, so a consumer needs
- * the far edge, not the span. An empty scene has no geometry to measure and
- * reports zero rather than `sceneBounds`' non-degenerate 1x1 fallback.
+ * and that step lands beyond every node's geometry. An empty scene has no
+ * geometry to measure and reports an empty box rather than `sceneBounds`'
+ * non-degenerate 1x1 fallback.
  */
-export function computeSceneDimensions(scene: Scene): { width: number; height: number } {
-  if (scene.nodes.length === 0) return { width: 0, height: 0 }
-  const bounds = sceneBounds(scene)
-  return { width: bounds.x + bounds.w, height: bounds.y + bounds.h }
+export function sceneEnvelope(scene: Scene): BoundingBox {
+  if (scene.nodes.length === 0) return { x: 0, y: 0, w: 0, h: 0 }
+  return sceneBounds(scene)
 }
