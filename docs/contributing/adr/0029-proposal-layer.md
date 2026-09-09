@@ -255,17 +255,44 @@ tool:
   give `Xf`), and a whole-proposal Adopt applies exactly that set — later,
   and further from the call that caused it.
 
-Still open: the in-place adopt surface, and what becomes of `wb_body_patch`.
+Still open: the in-place adopt surface.
 
-**`wb_body_patch` cannot simply be retired into `wb_canvas_edit`.** The plan
-said its text-node job would move to `node.patch`, and that destination does
-not exist: `nodePatchFieldsSchema` carries geometry, colour and the shared
-label — deliberately "not the per-type content fields", since the per-type
-node schemas are non-strict and an unrecognised key is stripped rather than
-rejected, so a `text` in a patch would be a silent no-op. Retiring the tool
-today would remove the only way to edit a text node's text through MCP.
-Closing it needs a decision first: teach `node.patch` (and therefore the
-proposal vocabulary) about a node's content, or keep a separate verb for it.
+**`wb_body_patch` is retired into `wb_canvas_edit`** (project owner's
+decision, 2026-09-09), taking the first of the two options this section left
+open: teach `node.patch` about a node's content.
+
+The blocker recorded here was **imprecise, and measuring it is what unlocked
+the decision**. It said "a `text` in a patch would be a silent no-op". Probed
+directly against `spatialNodeSchema`, a `text` patched onto a TEXT node
+works — `text` is a key that type has, so the re-parse does not strip it.
+What is silently dropped is a key the TARGET's type does not have: `label`
+onto a text node (which the tool did, and a test pinned, calling it
+"surprising enough that a reader would otherwise call it a bug"), or `url`
+onto a group. The hazard is per-TYPE, not per-field.
+
+That distinction is what makes the fix small. The patch site compares the
+keys it was handed against the node the re-parse produced and refuses the
+difference by name — one check covering every key and every type, rather
+than four per-type schemas. The stored schemas stay non-strict, which they
+must: JSON Canvas 1.0 lets a document carry another tool's extension keys,
+and `x-whiteboard` is already handled with `.catch` for exactly that reason,
+so making them strict would trade a silent no-op for unreadable documents.
+
+Two consequences beyond the call count:
+
+- **Node text comes under decision 7.** `wb_body_patch`'s `mode` was `full`
+  vs `range` and it had no `propose`, so editing a node's text was the one
+  content write that escaped the proposal layer entirely. As `node.patch` it
+  is proposed by default like every other content change.
+- **The proposal vocabulary widened for free.** `canvas-propose.ts` derives
+  its patchable fields from `nodePatchFieldsSchema.shape`, so a proposed
+  change can carry content without a second edit — which is what the
+  parenthetical "(and therefore the proposal vocabulary)" above was warning
+  would be needed.
+
+`mode: 'range'` had a real user — the smoke drives it — so it moves too, as a
+`node.splice` op. Being an op rather than a tool, it gains what
+`wb_body_patch` could not do: several nodes spliced in one call.
 
 ### 6b. The bubble borrows the comment layer's grammar, but not its WIDTH
 

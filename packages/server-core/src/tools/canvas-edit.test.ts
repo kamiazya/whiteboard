@@ -560,29 +560,6 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     ).toBe(true)
   })
 
-  test('drops a label patched onto a text node instead of storing it (from wb_node_patch)', async () => {
-    // `label` is a group-only field and the per-type node schemas are not
-    // strict, so an unrecognized key is stripped on re-parse rather than
-    // rejected. Existing schema behaviour, pinned here because it is
-    // surprising enough that a reader would otherwise call it a bug.
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' }],
-      edges: [],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [{ op: 'node.patch', id: 'a', patch: { label: 'not for a text node' } }],
-    })
-
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes[0]).not.toHaveProperty('label')
-  })
-
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
@@ -1325,5 +1302,240 @@ describe('wb_canvas_edit — a node created without a height', () => {
     const { node } = await addAndMeasure('short')
 
     expect(node.height).toBe(DEFAULT_TEXT_HEIGHT)
+  })
+})
+
+describe('node.patch and a node type that does not have the key', () => {
+  const TEXT_NODE = {
+    id: 'n1',
+    type: 'text' as const,
+    x: 0,
+    y: 0,
+    width: 100,
+    height: 50,
+    text: 'hello',
+  }
+
+  test("refuses a key the target node's type does not have, rather than dropping it", async () => {
+    // `label` is on the patch allowlist because a GROUP has one. A text node
+    // does not, and the per-type schemas are non-strict, so the merge's
+    // re-parse strips the key and the write reports success over a document
+    // it did not change. Named, because a silent no-op is the one failure a
+    // caller cannot see.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, { nodes: [TEXT_NODE], edges: [] })
+
+    await expect(
+      createCanvasEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', id: 'n1', patch: { label: 'a label' } }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      // The message has to name BOTH the key and the type: "label is not
+      // valid" leaves a caller guessing which of its nodes was wrong.
+      message: expect.stringMatching(/label/),
+    })
+    await expect(
+      createCanvasEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', id: 'n1', patch: { label: 'a label' } }],
+      }),
+    ).rejects.toThrow(/text/)
+  })
+
+  test('the INPUT SCHEMA accepts every per-type content key, and only those', () => {
+    // The schema is where the MCP boundary validates (document-tools.ts
+    // parses before execute), so `execute` alone does not exercise it —
+    // measured: removing `text` from nodePatchFieldsSchema left every
+    // behavioural test in this file green, because they call execute
+    // directly. This is the test that fails for that.
+    const patch = (fields: Record<string, unknown>) =>
+      canvasEditInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', id: 'n1', patch: fields }],
+      }).success
+
+    expect(patch({ text: 'a text node' })).toBe(true)
+    expect(patch({ file: 'a/file.md' })).toBe(true)
+    expect(patch({ subpath: '#heading' })).toBe(true)
+    expect(patch({ url: 'https://example.com' })).toBe(true)
+    expect(patch({ label: 'a group' })).toBe(true)
+    expect(patch({ background: 'a/bg.png' })).toBe(true)
+    expect(patch({ backgroundStyle: 'cover' })).toBe(true)
+
+    // A patch changes what a node SAYS, never which node it is or what
+    // kind — so these two stay out however wide the content half gets.
+    expect(patch({ id: 'renamed' })).toBe(false)
+    expect(patch({ type: 'group' })).toBe(false)
+    // `.strict()`, so an invented key is refused at the boundary rather
+    // than reaching the drop guard.
+    expect(patch({ nonsense: 1 })).toBe(false)
+    // Still validated, not just allowed through.
+    expect(patch({ subpath: 'no-hash' })).toBe(false)
+    expect(patch({ url: 'not-a-url' })).toBe(false)
+  })
+
+  test('the INPUT SCHEMA accepts node.splice and checks its range', () => {
+    const splice = (fields: Record<string, unknown>) =>
+      canvasEditInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.splice', id: 'n1', ...fields }],
+      }).success
+
+    expect(splice({ startLine: 0, endLine: 2, replacement: 'x' })).toBe(true)
+    expect(splice({ startLine: 2, endLine: 0, replacement: 'x' })).toBe(false)
+    expect(splice({ startLine: -1, endLine: 0, replacement: 'x' })).toBe(false)
+    expect(splice({ startLine: 0, endLine: 0 })).toBe(false)
+  })
+
+  test("changes a text node's text, which is what retires wb_body_patch", async () => {
+    // The capability wb_body_patch(mode:'full') had and node.patch did not.
+    // It arrives as an ordinary op, so it batches with the rest of a
+    // drawing AND falls under wb_canvas_edit's propose-by-default rule —
+    // which wb_body_patch, having no propose mode, escaped entirely.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, { nodes: [TEXT_NODE], edges: [] })
+
+    await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'n1', patch: { text: '# Rewritten' } }],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]).toMatchObject({ type: 'text', text: '# Rewritten' })
+  })
+
+  test('several nodes change their text in ONE call', async () => {
+    // wb_body_patch took one nodeId, so three nodes were three calls. The
+    // ops array is the axis-A answer the tool already had.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, {
+      nodes: [
+        TEXT_NODE,
+        { ...TEXT_NODE, id: 'n2', text: 'second' },
+        { ...TEXT_NODE, id: 'n3', text: 'third' },
+      ],
+      edges: [],
+    })
+
+    await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.patch', id: 'n1', patch: { text: 'one' } },
+        { op: 'node.patch', id: 'n2', patch: { text: 'two' } },
+        { op: 'node.patch', id: 'n3', patch: { text: 'three' } },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((node) => (node.type === 'text' ? node.text : undefined))).toEqual([
+      'one',
+      'two',
+      'three',
+    ])
+  })
+
+  test('splices a line range of a text node, one op per node', async () => {
+    // wb_body_patch(mode:'range')'s job, as an op. A caller editing one line
+    // of a long body sends that line rather than the whole text, and — the
+    // part wb_body_patch could not do — several nodes in one call.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, {
+      nodes: [
+        { ...TEXT_NODE, text: 'one\ntwo\nthree' },
+        { ...TEXT_NODE, id: 'n2', text: 'alpha\nbeta' },
+      ],
+      edges: [],
+    })
+
+    await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.splice', id: 'n1', startLine: 1, endLine: 1, replacement: 'TWO' },
+        { op: 'node.splice', id: 'n2', startLine: 0, endLine: 0, replacement: 'A\nB' },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((node) => (node.type === 'text' ? node.text : undefined))).toEqual([
+      'one\nTWO\nthree',
+      'A\nB\nbeta',
+    ])
+  })
+
+  test('refuses a line range past the end rather than clamping it', async () => {
+    // Clamping would partial-apply the splice without saying so, which is
+    // the failure the codec's own parsers refuse to degrade into.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, { nodes: [{ ...TEXT_NODE, text: 'one\ntwo' }], edges: [] })
+
+    await expect(
+      createCanvasEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.splice', id: 'n1', startLine: 0, endLine: 5, replacement: 'x' }],
+      }),
+    ).rejects.toThrow(/2-line/)
+  })
+
+  test('refuses to splice a node that holds no text', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, {
+      nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+
+    await expect(
+      createCanvasEditTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.splice', id: 'g1', startLine: 0, endLine: 0, replacement: 'x' }],
+      }),
+    ).rejects.toThrow(/group/)
+  })
+
+  test('a group takes the same key, since a group really has one', async () => {
+    // The other side of the guard: `label` is refused BECAUSE of the target
+    // type, not because the key is suspect.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedCanvas(store, {
+      nodes: [{ id: 'g1', type: 'group', x: 0, y: 0, width: 100, height: 50 }],
+      edges: [],
+    })
+
+    await createCanvasEditTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'g1', patch: { label: 'a label' } }],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]).toMatchObject({ label: 'a label' })
   })
 })

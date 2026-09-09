@@ -150,7 +150,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decide whether it is content, and most of the growth is the note saying
   // why that line and not "propose unless told otherwise" — the widget's
   // comment box is a caller a refusing default would have broken.
-  'packages/server-core/src/tools/canvas-edit.ts': 1021,
+  // +77 for absorbing wb_body_patch: `node.splice` (its range arm, now an op
+  // that batches) and the dropped-key guard that had to exist before
+  // `node.patch` could carry content at all. This file grew and the REPO
+  // shrank — body-patch.ts (134) and its two test files (165 + 106) are
+  // deleted, so 14 files come to 295 insertions against 541 deletions.
+  'packages/server-core/src/tools/canvas-edit.ts': 1098,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
