@@ -190,7 +190,7 @@ export function registerPairingLinkTool(
         PAIRING_LINK_CREDENTIAL_NOTE,
       // The OBJECT, strict, not the shape: handed a shape, the SDK rebuilds
       // a non-strict object around it and a misspelt optional parameter is
-      // dropped rather than refused (ADR-0030 C10).
+      // dropped rather than refused (ADR-0031 C10).
       inputSchema: z.object(pairingLinkInputShape).strict(),
       outputSchema: pairingLinkOutputSchema,
     },

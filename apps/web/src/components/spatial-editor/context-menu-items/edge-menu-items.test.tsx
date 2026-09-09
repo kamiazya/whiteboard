@@ -1,3 +1,4 @@
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 // @vitest-environment node
 // The edge branch's composition rules, pinned as plain function calls: items
 // are data, so presence/order/label assertions and handler-spy assertions
@@ -20,7 +21,7 @@ describe('edgeMenuItems', () => {
       edge: baseEdge,
       point: { x: 0, y: 0 },
       setCommentCompose: vi.fn(),
-      theme: 'light',
+      palette: SPATIAL_LIGHT_PALETTE,
       isEdgeLocked: () => true,
       edgeLockEnabled: true,
       applyResult: vi.fn(),
@@ -38,7 +39,7 @@ describe('edgeMenuItems', () => {
       edge: baseEdge,
       point: { x: 0, y: 0 },
       setCommentCompose: vi.fn(),
-      theme: 'light',
+      palette: SPATIAL_LIGHT_PALETTE,
       isEdgeLocked: () => false,
       edgeLockEnabled: true,
       applyResult: vi.fn(),
@@ -73,7 +74,7 @@ describe('edgeMenuItems', () => {
       edge: baseEdge,
       point: { x: 0, y: 0 },
       setCommentCompose: vi.fn(),
-      theme: 'light',
+      palette: SPATIAL_LIGHT_PALETTE,
       isEdgeLocked: () => false,
       edgeLockEnabled: false,
       applyResult: vi.fn(),
@@ -91,7 +92,7 @@ describe('edgeMenuItems', () => {
       edge: baseEdge,
       point: { x: 0, y: 0 },
       setCommentCompose: vi.fn(),
-      theme: 'light',
+      palette: SPATIAL_LIGHT_PALETTE,
       isEdgeLocked: () => false,
       edgeLockEnabled: false,
       applyResult,

@@ -111,7 +111,7 @@ describe('wb_document_search', () => {
   // "Which documents carry this tag" is a question a tag is FOR, and a tag
   // is not searchable text: a query that names it matches nothing, so the
   // filter has to be able to stand alone. Found by the tool-surface eval
-  // lane (ADR-0030 §3), where a model asked to count tagged documents
+  // lane (ADR-0031 §3), where a model asked to count tagged documents
   // searched for the tag, was answered nothing, and believed it.
   it('answers every document carrying the tag when no query is given', async () => {
     const deps = makeDeps()

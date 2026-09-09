@@ -1,9 +1,7 @@
 /** Swatch/custom-hex color row shared by the edge and node context menus. */
-import type { SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
-import { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasColor } from '@kamiazya/whiteboard-model'
 import { SquareDashed } from 'lucide-react'
-import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { ContextMenuOptionsItem } from '../ContextMenu.js'
 
 export const presetEntries: readonly {
@@ -19,14 +17,16 @@ export const presetEntries: readonly {
 ]
 
 export function colorRow(
-  theme: ResolvedTheme,
+  /** The palette the canvas is DRAWN in — the theme's for the mode, else the bundled one. */
+  palette: SpatialPalette,
   current: CanvasColor | undefined,
   apply: (color: CanvasColor | undefined) => void,
 ): ContextMenuOptionsItem {
-  // The swatch chips preview the CURRENT mode's preset strokes so
-  // the picker shows what will actually render; the stored value
-  // stays the semantic slot ('1'..'6'), never a resolved hex.
-  const presetSwatches = (theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE).presets
+  // The swatch chips preview the preset strokes the canvas will actually
+  // paint — the current mode's, and the theme's when the board names one —
+  // so the picker shows what a pick renders; the stored value stays the
+  // semantic slot ('1'..'6'), never a resolved hex.
+  const presetSwatches = palette.presets
   return {
     kind: 'options' as const,
     label: 'Color',

@@ -1,4 +1,8 @@
-import { type LoadedReference, referenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type LoadedReference,
+  referenceSeams,
+  type SpatialRenderStyle,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { createElement } from 'react'
 import { flushSync } from 'react-dom'
@@ -40,6 +44,11 @@ export interface MountCanvasViewerOptions {
    * boundary as data.
    */
   threads?: readonly CommentThread[]
+  /**
+   * Which look to draw (ADR-0030 decision 6); see `CanvasViewerProps.style`.
+   * Absent is the bundled look, whatever the scene's own theme facet says.
+   */
+  style?: SpatialRenderStyle
 }
 
 export interface CanvasViewerHandle {
@@ -120,6 +129,7 @@ export function mountCanvasViewer(
         testId: opts.testId,
         label: opts.label,
         ...(opts.threads === undefined ? {} : { threads: opts.threads }),
+        ...(opts.style === undefined ? {} : { style: opts.style }),
         ...viewerReferences(opts.references),
       }),
     )

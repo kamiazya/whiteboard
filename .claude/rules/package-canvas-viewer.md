@@ -123,6 +123,30 @@ paths:
 - `smoke:widget` (`scripts/smoke-widget.mjs`) exercises the built
   single-file widget in a real browser.
 
+## Render style (ADR-0030)
+
+- `CanvasViewer` and `mountCanvasViewer` take `style` (`'clean' | 'document' |
+  <theme id>`), forwarded to `layoutSpatialCanvas`. Absent is `'clean'`: the
+  MCP Apps widget and any embedding host never pay for a theme's jitter or
+  glow unasked, the same default as the headless export. A host that wants
+  the document's look passes `'document'`.
+- `font-loading.ts`'s `hasLoadedFace(family)` is the layout's `fontAvailable`
+  seam for a browser realm: the vendored family always, any other only while
+  this realm holds a LOADED face for it. It is what the viewer passes, and
+  what `apps/web`'s composition passes on both threads through the
+  `./font-loading` subpath. A family only the operating system provides
+  answers false on purpose — Canvas 2D would draw it and the daemon's
+  export could not, and a face the two sides disagree on moves every
+  wrapped line.
+
+- `registerFontBytes(family, bytes)` registers a face from bytes in THIS
+  realm — a window's document or a worker's global — and records the family
+  so `hasLoadedFace` answers from the record rather than by scanning a face
+  set that is not iterable everywhere. Memoised per family; never rejects.
+  `withViewerFontEmbedded(svg, extraFaces)` carries such faces into a PNG
+  export beside the vendored one, and still carries them when the vendored
+  face cannot be read.
+
 ## Common mistakes (append as review finds them)
 
 - Redeclaring a spatial-canvas schema here instead of re-exporting

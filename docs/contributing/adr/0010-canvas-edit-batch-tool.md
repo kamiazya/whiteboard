@@ -177,7 +177,7 @@ second time, 3,930 of the tool's 11,431 op bytes — and the lane showed what
 a model did with that shape: wrote x/y/width/height for every box, the ones
 already there included, and reached the op a third of the time on the errand
 it was built for. Membership by id is what was left once the declaration went
-([ADR-0030 §4](0030-tool-surface-criteria.md) carries the before/after).
+([ADR-0031 §4](0031-tool-surface-criteria.md) carries the before/after).
 
 Scope is STRICT containment in `within`'s stored box. A node straddling the
 group's edge is not enclosed, so it is out of scope and survives untouched —
@@ -214,7 +214,7 @@ measurement rather than a design: "lock every item on the roadmap" and
 purpose was to learn the ids the edit would then name one by one. With the
 selector, the lock errand skipped that read in two trials of three, and the
 colour errand became one op; every trial reached for it unprompted
-([ADR-0030 §4](0030-tool-surface-criteria.md)). Locks bind the whole
+([ADR-0031 §4](0031-tool-surface-criteria.md)). Locks bind the whole
 selection before any of it changes, and a selector that matches nothing is
 refused so an errand cannot silently do nothing. What it is NOT: a
 batch-scoped named set an op pushes into. That was proposed alongside and

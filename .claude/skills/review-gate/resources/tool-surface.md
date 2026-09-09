@@ -5,7 +5,7 @@ description, input schema, annotations or existence — anything under
 `packages/server-core/src/tools/**` or `packages/mcp-server/src/server/mcp/**`
 that a model reads. `notApplicable` otherwise.
 
-A tool definition is in the model's context on every turn. ADR-0030 fixes
+A tool definition is in the model's context on every turn. ADR-0031 fixes
 the criteria (C1–C14) and two scoreboards pin what they measure; this
 dimension asks whether the diff moved them honestly and whether what it
 says to a model is true of what it does. The `mcp-tool-surface` skill is
@@ -50,7 +50,7 @@ Check:
   cannot be given one honest value is two tools (C6).
 - Is the Zod object registered rather than its `.shape`, so a stray key is
   refused by name (C10)? A new tool that strips is a finding; an existing
-  one is the debt ADR-0030 §6 files, not this diff's.
+  one is the debt ADR-0031 §6 files, not this diff's.
 - Does every refusal the diff adds or changes name the right parameter on
   the right tool, in `vocabulary.md`'s words (C11)? A message that sends
   the caller to another tool's parameter is a finding.

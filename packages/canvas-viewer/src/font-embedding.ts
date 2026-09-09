@@ -28,18 +28,29 @@ export function viewerFontDataUri(): Promise<string | null> {
 
 async function readFontAsDataUri(): Promise<string | null> {
   try {
-    const bytes = new Uint8Array(await (await fetch(robotoFontUrl)).arrayBuffer())
-    // Chunked because `String.fromCharCode(...bytes)` on a 349 KB array blows
-    // the argument limit rather than being slow.
-    let binary = ''
-    const CHUNK = 0x8000
-    for (let i = 0; i < bytes.length; i += CHUNK) {
-      binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
-    }
-    return `data:font/ttf;base64,${btoa(binary)}`
+    return fontBytesToDataUri(await (await fetch(robotoFontUrl)).arrayBuffer())
   } catch {
     return null
   }
+}
+
+/** A font's bytes as a `data:` URI a rasteriser can read without a resource load. */
+export function fontBytesToDataUri(buffer: ArrayBuffer): string {
+  const bytes = new Uint8Array(buffer)
+  // Chunked because `String.fromCharCode(...bytes)` on a 349 KB array blows
+  // the argument limit rather than being slow.
+  let binary = ''
+  const CHUNK = 0x8000
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + CHUNK))
+  }
+  return `data:font/ttf;base64,${btoa(binary)}`
+}
+
+/** A face the host holds as bytes — a theme's family fetched from the daemon. */
+export interface EmbeddableFace {
+  readonly family: string
+  readonly bytes: ArrayBuffer
 }
 
 /** Test seam: the memo would otherwise carry one test's stubbed fetch into the next. */
@@ -60,9 +71,28 @@ export function _resetViewerFontEmbeddingForTests(): void {
  * with Roboto already has, and one without it is exactly the reader who wants
  * a small file.
  */
-export async function withViewerFontEmbedded(svg: string): Promise<string> {
+export async function withViewerFontEmbedded(
+  svg: string,
+  /**
+   * Faces to carry beside the vendored one — the theme families the host
+   * fetched from the daemon, already filtered to what this SVG names. Each
+   * is megabytes, so a caller passes only the faces the picture uses.
+   */
+  extraFaces: readonly EmbeddableFace[] = [],
+): Promise<string> {
   const dataUri = await viewerFontDataUri()
-  if (dataUri === null) return svg
+  const rules = [
+    ...(dataUri === null
+      ? []
+      : [
+          `@font-face{font-family:'${VIEWER_FONT_FAMILY}';src:url('${dataUri}') format('truetype');}`,
+        ]),
+    ...extraFaces.map(
+      (face) =>
+        `@font-face{font-family:'${face.family}';src:url('${fontBytesToDataUri(face.bytes)}') format('truetype');}`,
+    ),
+  ]
+  if (rules.length === 0) return svg
 
   // After the opening tag, so the rule is in scope for every element below it.
   //
@@ -74,6 +104,6 @@ export async function withViewerFontEmbedded(svg: string): Promise<string> {
   // real scan rather than this.
   const openTagEnd = svg.indexOf('>')
   if (openTagEnd === -1) return svg
-  const style = `<defs><style>@font-face{font-family:'${VIEWER_FONT_FAMILY}';src:url('${dataUri}') format('truetype');}</style></defs>`
+  const style = `<defs><style>${rules.join('')}</style></defs>`
   return svg.slice(0, openTagEnd + 1) + style + svg.slice(openTagEnd + 1)
 }

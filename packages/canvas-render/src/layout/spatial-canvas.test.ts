@@ -856,6 +856,27 @@ describe('layoutSpatialEdges', () => {
     expect(edgesOnly.length).toBeGreaterThan(0)
     expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
   })
+
+  it('resolves the canvas theme the way the full layout does: ink, routing default, paint', () => {
+    // The theme is resolved PER CANVAS inside the layout (ADR-0030 decision
+    // 5), and the edge-only producer is a second entry point into it. Left
+    // out, a live drag drew every edge crisp and straight on a board whose
+    // committed render pencilled and curved them.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 300, y: 120, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+    const options = baseOptions({ style: 'document' })
+    const full = layoutSpatialCanvas(canvas, options).nodes
+    const edgesOnly = layoutSpatialEdges(canvas, options)
+    const edge = edgesOnly.find((node) => node.kind === 'edge')
+    expect(edge?.kind === 'edge' ? edge.ink?.style : undefined).toBe('sketch')
+    expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
+  })
 })
 
 describe('a text node keeps its body inside its own box', () => {

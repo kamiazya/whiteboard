@@ -1,3 +1,4 @@
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   lazy,
   type ReactNode,
@@ -117,6 +118,10 @@ function DocumentPageBody({
   versionRefreshSignal: number
 }) {
   const { sync, documentKind, documentKey, versions, files, threads } = model
+  // The session's look override (ADR-0030 decision 6): what THIS tab draws
+  // this document as, never written to it. Per document: a preview chosen
+  // for one board must not follow the reader to the next.
+  const [drawAs, setDrawAs] = useState<SpatialRenderStyle | undefined>(undefined)
 
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render. Owned here rather than threaded down from
@@ -185,6 +190,7 @@ function DocumentPageBody({
   useEffect(() => {
     setBookmarkArmed(0)
     setPreview(null)
+    setDrawAs(undefined)
   }, [model.scopeKey])
 
   // Mirrors the scope itself, rewritten every render: an async save that
@@ -341,8 +347,11 @@ function DocumentPageBody({
     <>
       {inspectorSegment}
       {/* The one divider in the row: inspect on the left of it, act on the
-          right. Before this the act menu sat BETWEEN two inspect toggles. */}
-      <span aria-hidden="true" className="bg-border mx-0.5 h-4 w-px shrink-0" />
+          right. Before this the act menu sat BETWEEN two inspect toggles.
+          Its margin is what makes the segment read as one group now that
+          the segment draws no box: 2px between its members, 6px out to
+          here, so proximity does the work the outline used to. */}
+      <span aria-hidden="true" className="bg-border mx-1.5 h-4 w-px shrink-0" />
       {model.slots.rowAlerts}
       {exportError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">
@@ -357,7 +366,16 @@ function DocumentPageBody({
         // gear of their own — the row's only VIEW control, against width
         // the title wanted.
         {...(documentKind === 'spatial'
-          ? { display: <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} /> }
+          ? {
+              display: (
+                <CanvasDisplaySettings
+                  canvas={sync.canvas}
+                  onChange={sync.onChange}
+                  style={drawAs}
+                  onStyleChange={setDrawAs}
+                />
+              ),
+            }
           : {})}
         {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
@@ -570,6 +588,7 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
+                  style={drawAs}
                   // File-node reference = the target's immutable id; the
                   // same rows the link picker offers (open document
                   // excluded), so the two pickers cannot label one

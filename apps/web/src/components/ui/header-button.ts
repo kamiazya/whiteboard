@@ -46,3 +46,26 @@ export const HEADER_TOGGLE_CLASS = `${HEADER_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}
 
 /** `HEADER_WIDE_BUTTON_CLASS` for a control that opens something and must look open. */
 export const HEADER_WIDE_TOGGLE_CLASS = `${HEADER_WIDE_BUTTON_CLASS} ${TOGGLE_STATE_CLASS}`
+
+/**
+ * The same two heights in pixels, for a layout test that must reason about
+ * the COARSE row without being able to render it.
+ *
+ * The runner exposes no way to emulate `pointer: coarse` (`dock-button.ts`
+ * says the same, for the same reason), and coarse is the size that
+ * collides: a 44px control wrapped in anything with chrome of its own no
+ * longer fits the 48px chrome row, while the 32px fine one leaves room to
+ * spare and hides the defect. Derived from the class string rather than
+ * restated, so editing the heights above moves this with them.
+ */
+export function headerControlSizesPx(): { readonly fine: number; readonly coarse: number } {
+  const TAILWIND_SPACING_STEP_PX = 4
+  const steps = [...HEADER_BUTTON_HEIGHT_CLASS.matchAll(/h-(\d+)/g)].map((m) => Number(m[1]))
+  const [fine, coarse] = steps
+  if (fine === undefined || coarse === undefined) {
+    throw new Error(
+      `HEADER_BUTTON_HEIGHT_CLASS lost one of its two sizes: ${HEADER_BUTTON_HEIGHT_CLASS}`,
+    )
+  }
+  return { fine: fine * TAILWIND_SPACING_STEP_PX, coarse: coarse * TAILWIND_SPACING_STEP_PX }
+}

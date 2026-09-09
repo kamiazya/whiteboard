@@ -1,4 +1,8 @@
-import type { MeasureText, ReferenceSeams } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MeasureText,
+  ReferenceSeams,
+  SpatialRenderStyle,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
   layoutSpatialCanvas,
@@ -8,6 +12,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { hasLoadedFace } from './font-loading.js'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
 
@@ -59,6 +64,13 @@ export interface CanvasViewerProps {
    */
   threads?: readonly CommentThread[]
   /**
+   * Which look to draw (ADR-0030 decision 6). Absent is `'clean'`: a widget
+   * or an embedding host never pays for a theme's jittered geometry or glow
+   * unasked. `'document'` draws the theme the canvas names; a theme id
+   * previews one.
+   */
+  style?: SpatialRenderStyle
+  /**
    * Which shared palette to draw in. Defaults to `light`, so a host that
    * says nothing renders exactly the bytes it always has.
    *
@@ -92,6 +104,7 @@ export function CanvasViewer({
   measure,
   references,
   threads,
+  style,
   theme = 'light',
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
@@ -141,6 +154,10 @@ export function CanvasViewer({
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
       appearance: VIEWER_APPEARANCES[theme],
+      ...(style === undefined ? {} : { style }),
+      // A theme's family is declared only where this realm can measure it,
+      // so the SVG names the face its coordinates came from.
+      fontAvailable: hasLoadedFace,
       // A viewer has no zoom to gate a miniature by: a referenced canvas
       // draws at the node's intrinsic size, export's policy.
       ...(references === undefined ? {} : { references, expandFileNode: () => true }),
@@ -176,6 +193,7 @@ export function CanvasViewer({
     background,
     references,
     threads,
+    style,
     theme,
     fontReady,
   ])

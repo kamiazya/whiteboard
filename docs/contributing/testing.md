@@ -297,7 +297,7 @@ Both `ERROR_PATH_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every 
 
 **Adding a new MCP tool**: Update `mcp-smoke-coverage.ts` first. If you skip this step, both the meta-property test and the smoke SET guard fail.
 
-### MCP tool-surface scoreboards (ADR-0030)
+### MCP tool-surface scoreboards (ADR-0031)
 
 Two pinned scoreboards judge the MCP tool table itself, beside the smoke that
 proves each tool works:

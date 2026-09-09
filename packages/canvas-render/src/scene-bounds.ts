@@ -1,8 +1,11 @@
 import { edgeArrowPolygons } from './edge-arrows.js'
+import { glowReachPx } from './layout/ink/glow.js'
+import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 import type {
   BoundingBox,
   ListItemNode,
   Scene,
+  SceneInk,
   SceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
@@ -116,6 +119,9 @@ function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
  * rather than NaN/Infinity/a zero-area box — see MIN_SCENE_EXTENT_PX and
  * FALLBACK_BOUNDS.
  */
+const inkReach = (ink: SceneInk | undefined): number =>
+  ink?.style === 'sketch' ? SKETCH_INK_REACH_PX : 0
+
 export function sceneBounds(scene: Scene): BoundingBox {
   let extent: Extent | null = null
   // Each frame carries the accumulated x-shift of its ancestors' transforms,
@@ -128,11 +134,18 @@ export function sceneBounds(scene: Scene): BoundingBox {
   while (stack.length > 0) {
     const { node, offsetX } = stack.pop()!
 
+    // Ink is decoration bounded by a declared constant (decision #10): an
+    // inked node or edge widens the envelope by exactly that much, so a
+    // derived viewBox never clips a pencil stroke, and nothing else moves.
+    const reach = Math.max(
+      node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
+      'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
+    )
     if (node.kind === 'edge') {
       for (const p of node.path) {
         if (isFinitePoint(p.x, p.y)) {
           const x = p.x + offsetX
-          extent = widen(extent, x, p.y, x, p.y)
+          extent = widen(extent, x - reach, p.y - reach, x + reach, p.y + reach)
         }
       }
       // Arrowhead wings reach beyond the polyline's own envelope; the
@@ -149,7 +162,13 @@ export function sceneBounds(scene: Scene): BoundingBox {
     } else {
       const edges = bboxEdges(node.bbox)
       if (edges) {
-        extent = widen(extent, edges.x0 + offsetX, edges.y0, edges.x1 + offsetX, edges.y1)
+        extent = widen(
+          extent,
+          edges.x0 + offsetX - reach,
+          edges.y0 - reach,
+          edges.x1 + offsetX + reach,
+          edges.y1 + reach,
+        )
       }
     }
 

@@ -1,3 +1,4 @@
+import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 // @vitest-environment node
 // The node branch's composition rules, pinned as plain function calls: items
 // are data, so presence/order/label assertions and handler-spy assertions
@@ -58,7 +59,7 @@ function baseInput(
     node,
     canvas,
     canvasRef: { current: canvas },
-    theme: 'light',
+    palette: SPATIAL_LIGHT_PALETTE,
     gestureState: { kind: 'idle' },
     isLocked: () => false,
     lockEnabled: false,

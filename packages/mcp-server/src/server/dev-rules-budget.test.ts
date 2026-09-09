@@ -170,10 +170,17 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // shipped VACUOUS — plain nodes on both sides, agreeing about canvases that
 // carried no facets at all, while the bug it exists to catch was live. A
 // reader who does not know that will write the next generator the same way.
-// 82 since the paint-order rule (groups behind what they hold, whatever the
+// 88 since the render theme layer (ADR-0030): the in-layout resolution
+// that lets an embed read its own facet before the host's, the sketch ink
+// decomposition and why it is seeded from ids, the glow filter's
+// `userSpaceOnUse` region, the `style` default that keeps unstyled output
+// byte-identical, and the second time the live-drag parity property
+// shipped vacuous — nodes with facets, a canvas with none — each a
+// decision the next theme has to keep.
+// Plus the paint-order rule (groups behind what they hold, whatever the
 // stored order says) — a bug a person saw in a rendered diagram and no test
 // had caught.
-const CANVAS_RENDER_BUDGET = 82
+const CANVAS_RENDER_BUDGET = 88
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

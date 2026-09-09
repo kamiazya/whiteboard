@@ -3,6 +3,7 @@ import type {
   ReferenceSeams,
   Scene,
   SpatialLayoutDegradation,
+  SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   type BoundingBox,
@@ -28,6 +29,8 @@ const DEGRADATION_MESSAGE: Record<SpatialLayoutDegradation['kind'], string> = {
   'body-parse-failed': 'text node body failed to parse as markdown; falling back to literal text',
   'unsupported-background-style': 'group backgroundStyle not supported; rendering as cover',
   'unknown-node-kind': 'unrecognized spatial node kind; emitting chrome only',
+  'unknown-theme': 'canvas names a theme no plugin registered; drawing the bundled look',
+  'font-missing': 'theme names a font family this daemon cannot measure; declaring the bundled one',
 }
 
 /** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
@@ -45,6 +48,12 @@ export interface ComposeCanvasSceneOptions {
   readonly references?: ReferenceSeams
   /** The document's conversations, for passage highlights inside text nodes. */
   readonly threads?: readonly CommentThread[]
+  /**
+   * Which look to draw (ADR-0030 decision 6). Absent is `'clean'` — the
+   * layout's own default, kept explicit here because this composer serves
+   * the digest too, and a digest must never move because a theme did.
+   */
+  readonly style?: SpatialRenderStyle
 }
 
 /**
@@ -73,6 +82,7 @@ export function composeCanvasScene(
     measure,
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
+    ...(options?.style === undefined ? {} : { style: options.style }),
     ...(options?.threads === undefined ? {} : { threads: options.threads }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's

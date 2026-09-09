@@ -22,7 +22,7 @@ This repository splits verification targets into two categories.
   - Do not treat daemon watch mode as sufficient
   - If the change is to what a model READS (a name, description, schema, annotation), the smoke
     proves the tool still works and says nothing about whether a model still finds it: that is
-    the `mcp-tool-surface` skill and ADR-0030's scoreboards, run beside this one
+    the `mcp-tool-surface` skill and ADR-0031's scoreboards, run beside this one
 
 ## Procedure
 

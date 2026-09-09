@@ -53,6 +53,29 @@ paths:
 - Vitest project: `server-core-node` (registered in root `vitest.config.ts`).
 - Smoke: `createServer` returns an app whose `fetch` is callable.
 
+## Render style and canvas-target facets (ADR-0030)
+
+- `wb_scene_render` and the daemon's export routes take `style`, parsed by
+  `spatialRenderStyleSchema` from `canvas-render` — `'clean'`, `'document'`,
+  or a registered theme id. The tool DEFAULTS it to `'clean'` in the schema
+  (so `z.infer` makes it required on `execute`, and a test calling the tool
+  directly passes it), the export contracts leave it optional and the layout
+  supplies the same default. Absent never means "the document's theme": an
+  agent reading SVG pays for a theme's jitter or glow only when it asks.
+- `composeCanvasScene` forwards `style` and nothing else theme-shaped. The
+  digest goes through the same composer with no style, which is what keeps
+  `wb_canvas_snapshot`'s layout analysis from moving because a theme did.
+- `wb_facet_set`'s `target: 'canvas'` writes `x-whiteboard.facets` on a
+  spatial document with the web editor's canonical emptiness (an empty
+  bucket disappears, and an empty envelope with it). It is an enum of two,
+  not three: `nodeId` already says "a node", and `nodeId` beside
+  `target: 'canvas'` is refused at execute time
+  (`NodeAndCanvasTargetError`) rather than by a schema `.refine`, because a
+  refined schema loses the `.shape` MCP registration reads.
+- A theme id in a clean render is asserted by the glow's filter id
+  (`wb-glow`), never by the word `filter`: a drop shadow is a filter too,
+  and the e2e smoke failed on exactly that substring once.
+
 ## Common mistakes (append as review finds them)
 
 - Importing a store/sync implementation directly instead of taking it via
@@ -60,12 +83,12 @@ paths:
 - Importing `node:*` or DOM globals in this shared-layer package.
 - Adding a hand-written interface next to a Zod schema instead of `z.infer`.
 
-## Tool surface criteria (ADR-0030)
+## Tool surface criteria (ADR-0031)
 
 A tool definition here is read by a model on every turn, so its cost and its
 clarity are measured, not argued. Before changing a tool's name, description,
 schema or existence, load the `mcp-tool-surface` skill (the procedure) and
-read `docs/contributing/adr/0030-tool-surface-criteria.md`
+read `docs/contributing/adr/0031-tool-surface-criteria.md`
 — the numbered criteria, and which instrument checks each — and expect
 `packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts` to fail
 until its pinned row is updated with a line saying why it moved. A retirement

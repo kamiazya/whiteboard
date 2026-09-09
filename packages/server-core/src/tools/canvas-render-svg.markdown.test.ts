@@ -71,6 +71,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('plan body')
@@ -88,6 +89,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('LAUNCH-NODE')
@@ -104,6 +106,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(result.svg).not.toContain('LAUNCH-NODE')
@@ -119,6 +122,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: NOTE_ID,
       embedReferences: false,
+      style: 'clean',
       fragment: 'Plan',
     })
 
@@ -146,6 +150,7 @@ describe('wb_scene_render on a markdown document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: READER_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('beta body')
@@ -163,6 +168,7 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
       workspaceId: WORKSPACE_ID,
       documentId: BOARD_ID,
       embedReferences: false,
+      style: 'clean',
       fragment: 'Launch',
     })
 
@@ -180,6 +186,7 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
         workspaceId: WORKSPACE_ID,
         documentId: BOARD_ID,
         embedReferences: false,
+        style: 'clean',
         fragment: 'Nowhere',
       }),
     ).rejects.toThrow(/Nowhere/)
@@ -188,6 +195,7 @@ describe('wb_scene_render `fragment` on a spatial document', () => {
         workspaceId: WORKSPACE_ID,
         documentId: NOTE_ID,
         embedReferences: false,
+        style: 'clean',
         fragment: 'Nowhere',
       }),
     ).rejects.toThrow(/Nowhere/)

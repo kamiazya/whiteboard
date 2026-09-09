@@ -1,5 +1,5 @@
 // The tool-surface scoreboard: what the tool TABLE costs a model to read,
-// and how much of it explains itself (ADR-0030).
+// and how much of it explains itself (ADR-0031).
 //
 // `tool-call-count-quality.test.ts` prices an errand once a model has chosen
 // a tool. This prices the choosing. Every definition below is in the model's
@@ -106,7 +106,7 @@ describe('what the tool table costs to read', () => {
 
     expect(rows).toEqual({
       // Every tool refuses a stray key since every registration hands the
-      // SDK the Zod OBJECT rather than its `.shape` (ADR-0030 C10): handed
+      // SDK the Zod OBJECT rather than its `.shape` (ADR-0031 C10): handed
       // a shape, the SDK rebuilt a non-strict object around it, and a
       // misspelt optional parameter was dropped with the call reporting
       // success — 15 of 18 tools, and wb_facet_list, every parameter of
@@ -117,18 +117,18 @@ describe('what the tool table costs to read', () => {
       // The MCP Apps UI tool. Nearly all of its wire size is an OUTPUT
       // schema (the whole scene), which the model never reads.
       canvas_view: {
-        visibleBytes: 601,
-        wireBytes: 15400,
+        visibleBytes: 733,
+        wireBytes: 15664,
         descriptionWords: 39,
-        parameters: 2,
-        undescribed: 2,
+        parameters: 3,
+        undescribed: 3,
         strays: 'refused',
         names: [],
       },
       // +817 when the text anchor's fields were described: the lane's one
       // refusal on this tool was a model omitting `start`/`end`, and the
       // anchor is emitted here and in wb_thread_edit's anchor union. The
-      // C3 case ADR-0030 §3b pays for: described because a model guessed,
+      // C3 case ADR-0031 §3b pays for: described because a model guessed,
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
@@ -153,7 +153,7 @@ describe('what the tool table costs to read', () => {
       // and a member is created by `node.add` with `within` (+1 parameter,
       // described). The lane placed the change: on the errand the op was
       // built for, the old shape had a model writing x/y/width/height for
-      // every box, the ones already there included (ADR-0030 §4).
+      // every box, the ones already there included (ADR-0031 §4).
       // +1,095 for a SELECTOR where an id goes — `within` (every node
       // inside a group) and `all` on patch, remove and lock, `within` on
       // tidy; eleven parameters, every one described. Placed by the lane:
@@ -197,7 +197,7 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      // Re-pinned when the filter learned to stand alone (ADR-0030 §4):
+      // Re-pinned when the filter learned to stand alone (ADR-0031 §4):
       // `query` is optional now, and +379 visible bytes say so on the
       // parameter and in the description, with the last two undescribed
       // parameters described. Rung 3 on "count the tagged documents", three
@@ -221,18 +221,18 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      // Re-pinned when the tool learned to tag (ADR-0030 §4): +1,122
+      // Re-pinned when the tool learned to tag (ADR-0031 §4): +1,122
       // visible bytes buy `tags.add` / `tags.remove` — three parameters, all
       // described, and the four that were not now are — and a description
       // that says "tags", which three trials of "tag this note" had never
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 1925,
-        wireBytes: 2744,
-        descriptionWords: 80,
-        parameters: 7,
-        undescribed: 0,
+        visibleBytes: 2176,
+        wireBytes: 2995,
+        descriptionWords: 108,
+        parameters: 8,
+        undescribed: 1,
         strays: 'refused',
         names: ['wb_facet_list'],
       },
@@ -246,10 +246,10 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_scene_render: {
-        visibleBytes: 1632,
-        wireBytes: 1979,
+        visibleBytes: 2189,
+        wireBytes: 2536,
         descriptionWords: 51,
-        parameters: 4,
+        parameters: 5,
         undescribed: 2,
         strays: 'refused',
         names: [],
@@ -334,7 +334,7 @@ describe('what the tool table costs to read', () => {
         return c.parameters - c.described
       }),
     }).toEqual({
-      // 17: wb_document_resolve retired (ADR-0030 §4) — its one answer, an
+      // 17: wb_document_resolve retired (ADR-0031 §4) — its one answer, an
       // id's path, is a column of every wb_document_list row, so the table
       // lost 442 bytes and no errand lost a way to be done. Rung 3 after:
       // see the ADR's baseline.
@@ -343,7 +343,7 @@ describe('what the tool table costs to read', () => {
       // refusing a stray key (see canvas_view; sixteen tools, the two that
       // already registered the object unchanged), +379 for a search filter
       // that stands alone (see wb_document_search). Under the ~40,000 at
-      // which ADR-0030 §5 says to reconsider loading the table upfront.
+      // which ADR-0031 §5 says to reconsider loading the table upfront.
       // -1,912 when the model's integer fields stopped emitting safe-integer
       // bounds (see wb_canvas_edit): the first cut that took nothing away
       // from what a model can do.
@@ -353,10 +353,13 @@ describe('what the tool table costs to read', () => {
       // 31,394 is the first reading under 32,000 since the table was
       // first pinned at 34,960.
       // +1,095 for selectors where an id goes (see wb_canvas_edit).
-      visibleBytes: 32489,
-      wireBytes: 97027,
-      parameters: 265,
-      undescribed: 199,
+      // +940 when the render theme layer landed on main (ADR-0030): `style`
+      // on canvas_view and wb_scene_render, `target` on wb_facet_set; the
+      // two new undescribed parameters are that layer's, not this sweep's.
+      visibleBytes: 33429,
+      wireBytes: 98099,
+      parameters: 268,
+      undescribed: 201,
     })
   })
 

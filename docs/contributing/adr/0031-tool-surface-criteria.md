@@ -1,4 +1,4 @@
-# ADR-0030: The tool surface is judged by an instrument, not by its count
+# ADR-0031: The tool surface is judged by an instrument, not by its count
 
 **Status:** Accepted
 

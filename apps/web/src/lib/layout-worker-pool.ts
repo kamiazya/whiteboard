@@ -18,6 +18,8 @@
  * actually on screen.
  */
 
+import { attachThemeFaces } from './theme-fonts.js'
+
 /** The part of `Worker` this pool uses; a test supplies its own. */
 export interface PoolWorker {
   postMessage(request: unknown): void
@@ -320,9 +322,16 @@ export function sharedLayoutWorkerPool(): LayoutWorkerPool {
       // receive it — and the pool only ever reads `data`. Forwarding keeps
       // the pool's interface describing what it actually needs, which is
       // also what lets a test supply a plain object.
+      // Every worker this pool starts holds the theme faces the main
+      // thread holds, from its first message on, so a thumbnail measures
+      // a theme's family the way the editor does.
+      const detachFaces = attachThemeFaces(worker)
       const adapter: PoolWorker = {
         postMessage: (request) => worker.postMessage(request),
-        terminate: () => worker.terminate(),
+        terminate: () => {
+          detachFaces()
+          worker.terminate()
+        },
         onmessage: null,
         onerror: null,
       }

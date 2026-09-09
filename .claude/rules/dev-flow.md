@@ -106,7 +106,7 @@ worked measurements live.** Load it before the work, not after:
   can read, which is a `--body`/`--body-file` argument; it fails open on stdin, an editor, or
   `--fill`.
 - **`mcp-tool-surface`** — a tool's name, description, schema or existence is read by a model
-  on every turn, and a change to it passes every test either way. ADR-0030's criteria, two
+  on every turn, and a change to it passes every test either way. ADR-0031's criteria, two
   pinned scoreboards, and an opt-in LLM-driven lane (`pnpm eval:tool-surface`) graded by
   outcome, with its boards rendered so a drawing is looked at and not only scored. The
   `tool-surface` review dimension (opt-in) judges a diff by the same criteria.

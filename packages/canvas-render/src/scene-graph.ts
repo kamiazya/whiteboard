@@ -79,6 +79,16 @@ export interface Appearance {
    * bbox, and the blur never exceeds the hit tolerance).
    */
   readonly dropShadow?: true
+  /**
+   * A soft halo around the element in its OWN paint (ADR-0030 decision 8):
+   * the SVG backend blurs the element and merges the blur under it, with a
+   * filter region declared in user space over the whole scene — a region
+   * relative to the element's box drops an axis-aligned straight edge,
+   * whose box has zero area (measured on resvg; the specification's
+   * behaviour). `radiusPx` is the visible halo; `glowReachPx` says how far
+   * it reaches, which `sceneBounds` adds like the arrowhead wings.
+   */
+  readonly glow?: { readonly radiusPx: number }
 }
 
 /** A single styled run of inline text, positioned within its parent block. */
@@ -224,6 +234,27 @@ export interface ShapeSceneNode {
    */
   readonly shape?: ShapeId
   readonly appearance?: Appearance
+  /**
+   * How this chrome is INKED, when a theme says other than crisp (ADR-0030
+   * decision 7). A kind plus a seed, never coordinates: the SVG backend
+   * derives the strokes from `bbox`/`shape` through the shared decomposition
+   * (`layout/ink/sketch.ts`), so translate/scale need no knowledge of it and
+   * `sceneDigest`/hit-testing keep reading the box. Absent = the crisp
+   * chrome, byte-identical to before this field existed.
+   */
+  readonly ink?: SceneInk
+}
+
+/**
+ * A style's ink assignment on a scene node. `seed` is `seedFromId` of the
+ * node's or edge's id, so the same document draws the same strokes twice
+ * and a moved node keeps its wobble. `fill: 'hatch'` asks for hatch lines
+ * in place of the flat fill — what a coloured node gets under a pencil.
+ */
+export interface SceneInk {
+  readonly style: 'sketch'
+  readonly seed: number
+  readonly fill?: 'hatch'
 }
 
 /**
@@ -470,6 +501,8 @@ export interface ResolvedEdgeNode {
    * (see its `<path>` construction), which is what makes that safe.
    */
   readonly rounded?: true
+  /** Inked other than crisp — see `ShapeSceneNode.ink`. Absent = the crisp line. */
+  readonly ink?: SceneInk
   /**
    * This edge is comment-layer chrome (a leader from a pin to its bubble),
    * never a document edge — the same marker `ShapeSceneNode` carries and for

@@ -11,15 +11,15 @@ import { mkdtempSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { extname, join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
-import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import {
   FONT_CATALOGUE,
   FONT_SOURCE_ORIGIN,
   fontCatalogueEntry,
   fontDownloadUrl,
-} from './font-catalogue.js'
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { FontInstallError, installFont, MAX_FONT_BYTES } from './install-font.js'
 import { FONT_EXTENSIONS, installedFontDir, installedFontFiles } from './installed-fonts.js'
 

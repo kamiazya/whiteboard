@@ -1,3 +1,4 @@
+import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 /**
  * The edge branch: the locked-edge [Unlock] short-circuit, then arrows/
  * side/color rows, label/lock/delete.
@@ -16,7 +17,6 @@ import {
 } from 'lucide-react'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
-import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { commentOnEdgeItem } from './annotation-verbs.js'
@@ -27,7 +27,8 @@ export interface EdgeMenuItemsInput {
   /** Where the menu was opened, in canvas coordinates — the comment's stored point. */
   readonly point: Point
   readonly setCommentCompose: CanvasCommands['setCommentCompose']
-  readonly theme: ResolvedTheme
+  /** The palette the canvas is drawn in, for the colour row's swatches. */
+  readonly palette: SpatialPalette
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly edgeLockEnabled: boolean
   readonly applyResult: CanvasCommands['applyResult']
@@ -40,7 +41,7 @@ export function edgeMenuItems({
   edge,
   point,
   setCommentCompose,
-  theme,
+  palette,
   isEdgeLocked,
   edgeLockEnabled,
   applyResult,
@@ -124,7 +125,7 @@ export function edgeMenuItems({
     },
     sideRow('from'),
     sideRow('to'),
-    colorRow(theme, edge.color, (color) =>
+    colorRow(palette, edge.color, (color) =>
       applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
     ),
     { kind: 'separator' as const },

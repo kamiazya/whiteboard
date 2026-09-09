@@ -14,6 +14,7 @@ const NotFoundPage = lazy(() =>
 import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import { useDaemonThemeFonts } from './hooks/useDaemonThemeFonts.js'
 import {
   browserWorkspaceIdentitySnapshot,
   browserWorkspaceMatches,
@@ -421,6 +422,8 @@ export function App({ providerState }: AppProps) {
         : { baseUrl: shellDaemonBaseUrl, token: shellDaemonToken },
     [forcedBrowser, shellDaemonBaseUrl, shellDaemonToken],
   )
+
+  useDaemonThemeFonts(daemonShellTarget)
 
   // The daemon keeper's switcher source, built from whichever daemon this
   // branch is talking to. Dynamic import for the same reason the browser's

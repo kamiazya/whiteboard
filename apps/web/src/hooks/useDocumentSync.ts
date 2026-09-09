@@ -23,12 +23,12 @@ import {
   type DocumentSyncSession,
 } from '../lib/document-sync-session.js'
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
-
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
+import { themeFacesNamedBy } from '../lib/theme-fonts.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
 
@@ -468,7 +468,9 @@ export function useDocumentSync(
       // page's fonts, so without this the exported PNG is drawn in whatever
       // system font the browser picks — not the one on screen.
       const png = await rasterizeSvgToPng(
-        await withViewerFontEmbedded(svg),
+        // The theme's family travels the same way the vendored face does,
+        // and only when this picture names it: a held face is megabytes.
+        await withViewerFontEmbedded(svg, themeFacesNamedBy(svg)),
         Math.max(1, Math.round(bounds.w)),
         Math.max(1, Math.round(bounds.h)),
       )

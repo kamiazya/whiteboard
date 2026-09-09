@@ -1,6 +1,6 @@
 ---
 name: mcp-tool-surface
-description: How to change the whiteboard MCP tool table — rename, re-describe, reshape, add, consolidate or retire a tool — with the two scoreboards and the LLM-driven lane that ADR-0030 makes the evidence. Use before touching a tool's name, description, input schema, annotations or existence under packages/server-core/src/tools/** or packages/mcp-server/src/server/mcp/**, when a consolidation is proposed, when someone says "too many tools", or when adding an eval task. Not for the daemon's HTTP routes or the web app.
+description: How to change the whiteboard MCP tool table — rename, re-describe, reshape, add, consolidate or retire a tool — with the two scoreboards and the LLM-driven lane that ADR-0031 makes the evidence. Use before touching a tool's name, description, input schema, annotations or existence under packages/server-core/src/tools/** or packages/mcp-server/src/server/mcp/**, when a consolidation is proposed, when someone says "too many tools", or when adding an eval task. Not for the daemon's HTTP routes or the web app.
 ---
 
 # The tool surface is judged by an instrument
@@ -12,7 +12,7 @@ by whether the tests pass — they pass either way — but by four numbers
 nobody sees in the diff: what the table costs to read, how much of it
 explains itself, what an errand costs in calls, and whether a real model
 still completes the errands. The criteria are
-[ADR-0030](../../../docs/contributing/adr/0030-tool-surface-criteria.md)
+[ADR-0031](../../../docs/contributing/adr/0031-tool-surface-criteria.md)
 §1 (C1–C14, each tagged with the rung that checks it); this skill is the
 procedure.
 
@@ -194,7 +194,7 @@ Beside the four-place list and the smoke call that
 
 ## Where the bytes go, and which cuts were free
 
-Measured on the current table (ADR-0030 §3b): descriptions are ~30% of
+Measured on the current table (ADR-0031 §3b): descriptions are ~30% of
 what a model reads and are the useful bytes; the rest is schema, and the
 schema carries three kinds of dead weight a `z.toJSONSchema` emits by
 default. Check these before designing a bigger cut:

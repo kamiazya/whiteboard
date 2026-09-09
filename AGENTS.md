@@ -107,7 +107,7 @@ test for `/mcp` behaviour and verify against the running endpoint with a real cl
 mocked unit tests.
 
 Changing what a MODEL reads of a tool (name, description, schema, existence) is the
-`mcp-tool-surface` skill: ADR-0030's criteria, two pinned scoreboards, and the LLM-driven
+`mcp-tool-surface` skill: ADR-0031's criteria, two pinned scoreboards, and the LLM-driven
 lane's before/after in the PR body. The tool count is not a criterion.
 
 Everything else — how each client registers the stdio proxy, the SessionStart hook that ensures

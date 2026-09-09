@@ -26,6 +26,7 @@ import type {
   MeasureText,
   Scene,
   SpatialLayoutDegradation,
+  SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   createSpatialTheme,
@@ -71,6 +72,13 @@ export interface HeadlessExportOptions {
   // equivalent (no frame grouping, no per-element fontSize to clamp) — this
   // renderer never reads them.
   theme?: 'light' | 'dark'
+  /**
+   * Which look to draw (ADR-0030 decision 6): `'clean'` — the default, so
+   * an export never picks up a theme unasked — `'document'` for the theme
+   * the canvas names, or a theme id to preview one. Explicit per request,
+   * like `theme`.
+   */
+  style?: SpatialRenderStyle
 }
 
 // The mode surfaces come from the shared palette — the same color the
@@ -151,6 +159,18 @@ function onDegrade(event: SpatialLayoutDegradation): void {
         'unrecognized spatial node kind; emitting chrome only',
       )
       return
+    case 'unknown-theme':
+      log.warning(
+        { theme: event.theme },
+        'canvas names a theme no plugin registered; drawing the bundled look',
+      )
+      return
+    case 'font-missing':
+      log.warning(
+        { family: event.family },
+        'theme names a font family this export cannot measure; declaring the bundled one',
+      )
+      return
   }
 }
 
@@ -166,11 +186,15 @@ export function buildSpatialScene(
   canvas: SpatialCanvas,
   measure: MeasureText,
   mode: ExportThemeMode = 'light',
+  style?: SpatialRenderStyle,
+  fontAvailable?: (family: string) => boolean,
 ): Scene {
   return layoutSpatialCanvas(canvas, {
     measure,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
     onDegrade,
+    ...(style === undefined ? {} : { style }),
+    ...(fontAvailable === undefined ? {} : { fontAvailable }),
   })
 }
 
@@ -184,11 +208,12 @@ function buildSvg(
   canvas: SpatialCanvas,
   options: HeadlessExportOptions,
   measure: MeasureText,
+  fontAvailable: (family: string) => boolean,
 ): { svg: string; scene: Scene } {
   // `theme` is an explicit per-request argument — the invariant that a
   // user's ambient UI theme never changes exported bytes is untouched.
   const mode: ExportThemeMode = options.theme === 'dark' ? 'dark' : 'light'
-  const scene = buildSpatialScene(canvas, measure, mode)
+  const scene = buildSpatialScene(canvas, measure, mode, options.style, fontAvailable)
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background: themeBackground(options),
@@ -249,10 +274,18 @@ async function buildExporter(): Promise<HeadlessExporter> {
   const fontOption = faces.regular
     ? { fontFiles, loadSystemFonts: false, defaultFontFamily: EXPORT_FONT_FAMILY }
     : { loadSystemFonts: true }
+  // A theme may name a family; it is DECLARED only where this exporter can
+  // MEASURE it (the vendored faces), so the family in the SVG is always the
+  // family the coordinates came from. A user-installed face (ADR-0012) is
+  // registered with resvg for drawing but not with the measurer, which is
+  // why it is not enough to declare on its own — the layout reports the
+  // family as missing and falls back to the bundled one.
+  const measurable = new Set([EXPORT_FONT_FAMILY, ...(await availableFamilies())])
+  const fontAvailable = (family: string): boolean => measurable.has(family)
 
   return {
     async render(canvas, options) {
-      const { svg, scene } = buildSvg(canvas, options, measure)
+      const { svg, scene } = buildSvg(canvas, options, measure, fontAvailable)
       const scale = options.scale ?? 1
       // A non-finite, zero, or negative scale is not a valid zoom factor for
       // resvg (it throws on a zero/negative target size) — degrade to an
@@ -278,7 +311,7 @@ async function buildExporter(): Promise<HeadlessExporter> {
       }
     },
     async renderSvg(canvas, options) {
-      const { svg, scene } = buildSvg(canvas, options, measure)
+      const { svg, scene } = buildSvg(canvas, options, measure, fontAvailable)
       return {
         svg,
         undrawable: await reportUndrawable(canvas),

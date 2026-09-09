@@ -103,3 +103,28 @@ nothing at all.
 Geometry rather than the `lucide-react` package because the renderer has no
 React: lucide-react ships components, and only the symbol picker can use them.
 Follow the README's recipe when adding one, and keep the table alphabetical.
+
+## The theme facet and the bundled theme assets (ADR-0030)
+
+- `visual.theme/v0` (canvas target, `data.ts`) names a registered theme
+  ASSET by id — `visual.sketch`, `visual.neon`, or one another plugin
+  registers. The payload carries no raw style; `assetRefs: { theme:
+  'themes' }` makes `validateFacetWrite` refuse an id nobody registered,
+  and the tier-2 segmented picker's `null` segment is the bundled look (an
+  absent facet, never a stored `'default'`). `resolveCanvasTheme` answers
+  the ID only; an id this deployment lacks degrades in the renderer.
+- `themes.ts` holds the two assets as values of the engine's token
+  contract, each with BOTH mode palettes (the surface follows the UI, never
+  the theme). `themes.test.ts` holds every half to the bundled palettes'
+  floors — strokes 3:1 against the surface, label text 4.5:1 against every
+  fill it can sit on, syntax 4.5:1 — so a theme may change every colour and
+  none of the guarantees. Sketch names `Yomogi` as its family — a Japanese
+  handwriting face that also covers Latin, so a mixed-script label is one
+  hand (user decision, 2026-09-09, from a thirteen-face specimen); the
+  face is ADR-0011/0012's to provide, and a surface without it declares
+  the bundled family and reports `font-missing`.
+- `render.ts` hands the SAME asset objects to canvas-render as
+  `themes`, beside `readTheme`, so the renderer's table and the registry
+  cannot disagree about what `visual.sketch` is. Nothing in `ui.tsx`
+  changes for a canvas facet: the canvas-settings vessel in apps/web is
+  where a tier-2 canvas facet is rendered.

@@ -128,11 +128,36 @@ above does not describe them. A daemon with no Japanese face and a browser with
 one disagree about the same canvas — which is why installing a font is worth
 doing even when the on-screen canvas looks fine.
 
+## Themes and `style`
+
+A canvas may name a theme in its `visual.theme/v0` facet (bundled: `visual.sketch`,
+`visual.neon`; see [choose-a-theme](../how-to/choose-a-theme.md)). Whether a render honours it
+is the caller's choice, through one `style` field with one meaning everywhere it appears:
+
+| `style` | draws |
+| --- | --- |
+| `clean` (default) | the bundled look, whatever the document says |
+| `document` | the theme the canvas names, if any |
+| a theme id, e.g. `visual.sketch` | that theme, without storing it — a preview |
+
+It appears on `wb_scene_render`, and on the daemon's `POST …/export` (PNG) and
+`POST …/export-svg` request bodies. The default is `clean` so an agent reading SVG never pays
+for a theme's jittered geometry or glow unasked, and a `wb_canvas_snapshot` layout analysis
+never moves because a theme did. A theme id nothing registered draws clean and is reported as a
+degradation, never an error.
+
+A theme's font family is declared in the SVG only where the daemon can measure it — the
+vendored face or an installed one — and otherwise the bundled family is declared, so the face
+named and the coordinates measured always agree. `unresolvedFamilies` reports nothing in that
+case, because nothing is missing from the page.
+
 ## Web app exports
 
 The web editor's canvas row (More actions → Export) saves the current canvas as
-SVG or PNG, rendered with the light theme regardless of the UI theme so an
-export's bytes never depend on a display preference.
+SVG or PNG, rendered with the light palette regardless of the UI mode so an
+export's bytes never depend on a display preference — and with the document's
+theme, if it names one, since that is part of the document rather than of the
+display.
 
 The PNG a browser export produces carries the editor's own font inside the
 image data it rasterises from, so it draws the text the editor showed rather

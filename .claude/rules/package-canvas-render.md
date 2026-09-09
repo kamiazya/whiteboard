@@ -117,7 +117,9 @@ the table alone.
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
-  one implementation shared by Node/browser/Workers.
+  one implementation shared by Node/browser/Workers. `svg/shapes.ts` draws a
+  node's silhouette and an edge's line (crisp or pencilled, with the glow
+  either takes); `svg/paint.ts` holds the presence-only paint helpers.
 - `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
   Zod-schematized output of this package. It reports one entry per
   ADDRESSABLE node — the chrome shapes carrying a document `id` — because
@@ -135,8 +137,9 @@ the table alone.
 - MathJax (or any math typesetting engine) invocation — composition roots
   own that; this package only defines the SVG-fragment node type and the
   seam for a composition root to inject an already-rendered fragment.
-- The theme/design-token layer (deferred to a later slice) — layout uses a
-  small set of fixed geometry constants, not a token system.
+- The theme TOKEN CONTRACT itself — that is facet-engine's
+  (`themeTokensSchema`, ADR-0030 decision 3); this package maps tokens onto
+  its palette (`theme/theme-asset.ts`) and never re-declares them.
 - A Canvas-API rendering backend, PNG/resvg rasterization, opentype.js /
   font loading — those are composition-root concerns that supply the
   `measure` callback, not something this package imports.
@@ -150,8 +153,10 @@ the table alone.
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
   `parseBody`; every consumer already bundled it to pass that same function
-  in), `css-line-break` (UAX #14 break opportunities) and `zod` (via
-  `catalog:`), for `sceneDigestSchema` only.
+  in), `@kamiazya/whiteboard-plugin-visual` (the default render
+  contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
+  contract, zod-only), `css-line-break` (UAX #14 break opportunities) and
+  `zod` (via `catalog:`), for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -964,6 +969,83 @@ the table alone.
     `reference-seams-check.test.ts` refuses a seam defined outside this
     directory.
 
+15. **A canvas's theme is resolved IN LAYOUT, per canvas** (ADR-0030
+    decisions 4-6; `withCanvasTheme` in `layout/spatial-canvas.ts`,
+    `theme/theme-asset.ts`). A `RenderContribution` may register `themes`
+    (token bundles by bare name, namespaced like `shapes`) and a `readTheme`
+    that answers the id the CANVAS names; `SpatialLayoutOptions.style`
+    decides whether that is honoured — `'clean'` (the DEFAULT: decision #10's
+    agent never pays unasked) ignores it, `'document'` draws it, and a theme
+    id draws that theme unsaved (the session override). Resolution happens at
+    the top of `layoutSpatialCanvasInternal`, so an embedded canvas reads its
+    OWN facet first and inherits the host's only when it names none — the
+    same side of the line `visual.edges`/`visual.shape` already stand on in
+    an embed, and deliberately NOT a layout option spread downward through
+    `...options`, which is the shape that lets an outer document's setting
+    win over an embedded canvas's own.
+    What a theme changes: the appearance resolver (the token palette for the
+    base resolver's `mode`, through `createSpatialTheme`'s once-unused
+    `palette` swap point — so `SpatialAppearanceResolver.mode` exists and
+    `createSpatialTheme` stamps it), the label/body font family (declared
+    only where `fontAvailable` says a face exists, else the bundled family
+    plus a `font-missing` report — the declared family must be the measured
+    one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
+    `visual.edges` is silent, `nodeShape` where a node's own facet is silent
+    (never a group, which is a frame), `groupFrame` on group chrome. An
+    unknown id draws clean and reports `unknown-theme`; nothing throws.
+    `createThemedAppearance` is memoized per (tokens, mode, family) so a
+    themed canvas keeps the frozen-singleton property the editor's `useMemo`
+    relies on. The content cache key carries the label family, because two
+    themes on one cache must not hand each other the other's wrapped lines.
+    `naturalNodeContentSize` goes through the same resolution; a caller
+    sizing a node under a theme passes the theme id as `style`, since a
+    single-node canvas carries no facet to read. So does
+    `layoutSpatialEdges` — it shipped without it, and a drag drew every
+    edge crisp and straight over a pencilled, curved committed render.
+    `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
+    that PREVIEWS paint rather than painting — the editor's paper and its
+    colour swatches — so a picker and the render read one table; it answers
+    the bundled palette for the mode wherever layout would draw clean.
+    **Ink** (decision #10's geometry half, `layout/ink/sketch.ts`): a theme
+    whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
+    every DOCUMENT shape and edge the layout composes — a kind plus
+    `seedFromId(id)`, never coordinates, so translate/scale carry it
+    untouched and `sceneDigest` sees nothing. Comment and proposal chrome
+    are built elsewhere and stay crisp on purpose: the annotation layer has
+    to keep reading as chrome. `sketchShape` (rect, ellipse, polygon, the
+    cylinder's caps+sides+lid) and `sketchEdge` (the SAME flattened polyline
+    the hit-test uses, arrowheads as wing strokes instead of markers) are
+    the one decomposition the SVG backend draws from; a coloured node is
+    hatched (`fill: 'hatch'`) rather than tinted. Two contracts, both
+    property-tested and in the mutation lane: every named coordinate lies
+    within the semantic bounds plus `SKETCH_INK_REACH_PX`, which
+    `sceneBounds` adds for an inked node (a quadratic never leaves the
+    triangle of its three points, so checking the named points checks the
+    curve); and the randomness is `styleRandomFromSeed(seed)` with no
+    positional input, so a moved box draws the same ink moved. Curves are
+    inked from chords whose control point sits on the TRUE arc — measured
+    before that, per-vertex jitter on a 24-sample ellipse read as tick
+    marks. Ink amplitude is in canvas units and is NOT scaled by
+    `scaleScene`, the same class as arrowheads: a miniature's pencil line is
+    relatively bolder, by design.
+    **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
+    is a radius; the backend blurs the element (σ = half the radius) and
+    merges the blur twice under the element itself, so the halo is the
+    element's OWN paint and no flood colour is invented. The filter's
+    region is declared `userSpaceOnUse` over the scene bounds, one
+    definition per (radius, region) with the id derived from both — a
+    region relative to the element's box drops an AXIS-ALIGNED STRAIGHT
+    EDGE entirely, because its box has zero area; measured on resvg 2.6.2
+    and the specification's behaviour, so a browser does the same.
+    `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
+    for a glowing node and what sizes the region, one constant with two
+    readers. `filter` is a paint attribute on every painted element (a path,
+    a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
+    it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
+    claim only a rasterizer can check — resvg paints the halo beside a
+    horizontal edge — because an unlit export would otherwise read as a
+    working one.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
@@ -1026,18 +1108,23 @@ the table alone.
   and never calls the wrapping code.
 - `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
   keeps `layoutSpatialEdges` equal to the edge suffix of
-  `layoutSpatialCanvas`. Its node generator reads the facet REGISTRY
+  `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
   (`test-utils/facet-arbitraries.ts` over facet-engine's
-  `facetPayloadSamples`) rather than a list of facet names, because what it
-  guards is a second entry point folding over FEWER facets than the
-  committed layout — which a named list cannot cover for a facet registered
-  later. It shipped that way: plain generated nodes, no silhouettes on
-  either side, the property agreeing vacuously while every edge into a
-  shaped node floated off it for a whole drag. Two guards keep it honest — one fails naming a
-  registered node facet whose schema yields no payloads, one fails when the
-  drawn facets stop changing the layout being compared. Adding a node facet
-  needs no edit here; adding one `deriveFacetForm` cannot express fails the
-  first guard, which is the decision point.
+  `facetPayloadSamples`) for the nodes' facets AND the canvas's, rather
+  than a list of facet names, because what it guards is a second entry
+  point folding over FEWER facets than the committed layout — which a named
+  list cannot cover for a facet registered later. It shipped that way
+  twice: plain generated nodes, no silhouettes on either side, the property
+  agreeing vacuously while every edge into a shaped node floated off it for
+  a whole drag; then nodes with facets and a canvas with none, agreeing
+  again while a themed board's edges dragged crisp and straight. The second
+  is why the scenario also draws `style`: a theme is drawn under
+  `'document'` and never under the library's clean default. Three guards
+  keep it honest — one fails naming a registered node or canvas facet whose
+  schema yields no payloads, two fail when the drawn node facets, or the
+  drawn canvas facets, stop changing the layout being compared. Adding a
+  facet needs no edit here; adding one `deriveFacetForm` cannot express
+  fails the first guard, which is the decision point.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

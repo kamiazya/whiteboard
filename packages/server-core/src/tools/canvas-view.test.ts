@@ -309,3 +309,21 @@ describe('canvas_view tool', () => {
     })
   })
 })
+
+describe('canvas_view style (ADR-0030 decision 6)', () => {
+  test('echoes the style the caller asked for, so the widget draws that look', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store)
+    const tool = createCanvasViewTool(makeDeps(store))
+    const themed = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      style: 'document',
+    })
+    expect(themed.style).toBe('document')
+    expect(canvasViewOutputSchema.parse(themed).style).toBe('document')
+    // Absent stays absent: the widget's own default (clean) decides.
+    const plain = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    expect(plain.style).toBeUndefined()
+  })
+})

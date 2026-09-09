@@ -4,6 +4,7 @@ import {
   type Scene,
   selectCanvasFragment,
   selectMarkdownSection,
+  spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
 import {
@@ -42,6 +43,11 @@ export const canvasRenderSvgInputSchema = z
       .optional()
       .describe(
         "Render one PART of the document rather than the whole: a heading's text for a markdown document (that section, through the next heading of the same or a higher level), or a group's label for a canvas (the group, the nodes inside its box, and the edges between them). The same names `[[path#...]]` uses; `^` followed by a node id addresses a node durably. Unknown → an error naming it.",
+      ),
+    style: spatialRenderStyleSchema
+      .default('clean')
+      .describe(
+        "Which look a canvas is drawn in. 'clean' (the default) is the bundled look whatever the document says, so an agent reading the SVG never pays for a theme's jittered geometry or glow unasked. 'document' draws the theme the canvas names in its visual.theme/v0 facet. A theme id such as 'visual.sketch' draws that theme without the document naming it — a preview. Markdown documents ignore it.",
       ),
   })
   .strict()
@@ -110,6 +116,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
           : undefined
         scene = composeCanvasScene(part, measure, {
           references,
+          style: input.style,
           // The export draws what the editor draws: a thread about a passage
           // of a node's text is a highlight behind those words, a node set
           // an outline around them.
