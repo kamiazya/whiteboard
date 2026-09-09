@@ -1,8 +1,109 @@
 diff --git a/dist/sync.js b/dist/sync.js
-index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..2173a2e2b63fce3f9227db49d762227658c09cda 100644
+index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..7ac35821fdc108dca76f4acb1eebeab1cd522e5a 100644
 --- a/dist/sync.js
 +++ b/dist/sync.js
-@@ -66,12 +66,24 @@ export class LoroSyncPluginValue {
+@@ -8,70 +8,74 @@ export class LoroSyncPluginValue {
+         this.doc = doc;
+         this.getTextFromDoc = getTextFromDoc;
+         this.isInitDispatch = false;
+-        this.onRemoteUpdate = (e) => {
+-            if (e.by === "local") {
++        // Reconcile the view against the container, whatever moved it.
++        //
++        // Upstream keyed on `e.by`: `local` returned early and `import`
++        // walked the batch's text deltas. Both are wrong for a container that
++        // lives on a workspace document rather than at the root.
++        //
++        //   - `local` is not only THIS editor. A version restore splices the
++        //     same container in place (writeWorkspaceDocumentContent), and
++        //     the editor kept showing the pre-restore draft while the
++        //     document already held the restored one.
++        //   - the `import` walk aborted the WHOLE batch on the first event
++        //     that was not this text container -- `return` where it meant
++        //     `continue`. A workspace import always carries tree and node
++        //     meta events too, and measured, they come first: the order is
++        //     `map,map,text`, so the body change was never reached. Daemon
++        //     propagation arrives exactly this way (cacheDaemonWorkspace
++        //     imports the daemon's bytes into this very document), and the
++        //     resulting drift is also how an edit comes to address a
++        //     position the container does not have.
++        //
++        // Diffing the two strings is what makes this total: it cannot
++        // double-apply (it compares against actual state rather than
++        // replaying a delta), it needs no event filtering, and the batch this
++        // editor's own `update()` produced is a no-op because the two already
++        // agree by then. A minimal splice rather than a whole-document
++        // replace, so the selection maps through instead of collapsing.
++        this.onRemoteUpdate = () => {
++            const next = this.getTextFromDoc(this.doc).toString();
++            const current = this.view.state.doc.toString();
++            if (current === next) {
+                 return;
+             }
+-            if (e.by === "checkout") {
+-                // TODO: better handle checkout
+-                this.view.dispatch({
+-                    changes: [
+-                        {
+-                            from: 0,
+-                            to: this.view.state.doc.length,
+-                            insert: this.getTextFromDoc(this.doc).toString(),
+-                        },
+-                    ],
+-                    annotations: [loroSyncAnnotation.of(this)],
+-                });
+-                return;
++            const shorter = Math.min(current.length, next.length);
++            let from = 0;
++            while (from < shorter && current[from] === next[from]) {
++                from++;
+             }
+-            if (e.by === "import") {
+-                let changes = [];
+-                let pos = 0;
+-                for (let { diff, target } of e.events) {
+-                    const text = this.getTextFromDoc(this.doc);
+-                    // Skip if the event is not a text event
+-                    if (diff.type !== "text")
+-                        return;
+-                    // Skip if the event is not for the current document
+-                    if (target !== text.id)
+-                        return;
+-                    const textDiff = diff.diff;
+-                    for (const delta of textDiff) {
+-                        if (delta.insert) {
+-                            changes.push({
+-                                from: pos,
+-                                to: pos,
+-                                insert: delta.insert,
+-                            });
+-                        }
+-                        else if (delta.delete) {
+-                            changes.push({
+-                                from: pos,
+-                                to: pos + delta.delete,
+-                            });
+-                            pos += delta.delete;
+-                        }
+-                        else if (delta.retain != null) {
+-                            pos += delta.retain;
+-                        }
+-                    }
+-                    this.view.dispatch({
+-                        changes,
+-                        annotations: [loroSyncAnnotation.of(this)],
+-                    });
+-                }
++            let to = current.length;
++            let end = next.length;
++            while (to > from && end > from && current[to - 1] === next[end - 1]) {
++                to--;
++                end--;
+             }
++            this.view.dispatch({
++                changes: [{ from, to, insert: next.slice(from, end) }],
++                annotations: [loroSyncAnnotation.of(this)],
++            });
          };
          this.sub = doc.subscribe(this.onRemoteUpdate);
          Promise.resolve().then(() => {
