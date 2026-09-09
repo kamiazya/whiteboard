@@ -237,10 +237,20 @@ function useBrowserDocument(
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
   // Binds CodeMirror straight to the document's 'body' text container:
-  // edits land in the CRDT with real deltas (not the wholesale replace
-  // setBody does), and an external change moves the local caret exactly.
-  // The hook's doc subscription keeps body state and the save schedule in
-  // step with the binding's commits, so onChange has nothing left to do.
+  // each change is written at its OWN position, and an external change moves
+  // the local caret exactly. The hook's doc subscription keeps body state and
+  // the save schedule in step with the binding's commits, so onChange has
+  // nothing left to do.
+  //
+  // The contrast is with `setBody`, which diffs whole strings — not, as this
+  // said until it was measured, a wholesale replace. For one keystroke the two
+  // are identical (`minimalChange('hello world', 'hello Xworld')` is
+  // `{from:6, to:6, insert:'X'}`). They part company on a transaction that
+  // edits two places at once, where a prefix/suffix diff collapses to one span
+  // covering both: `'AAA keep-me BBB'` -> `'XXX keep-me YYY'` becomes
+  // `{from:0, to:15}`, so the untouched middle is deleted and re-inserted —
+  // and the annotation layer's passages are rich-text marks on exactly those
+  // characters.
   const markdownBinding = useMemo(
     () =>
       markdownDoc.doc === null
