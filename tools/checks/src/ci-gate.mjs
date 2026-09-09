@@ -115,18 +115,38 @@ export const SETTLE_ATTEMPTS = 6
 export const SETTLE_DELAY_MS = 2000
 
 /**
+ * Whether this job alone already condemns the run.
+ *
+ * `completed` with anything but `success` or a DECLARED skip: the endpoint
+ * will not revise a `failure` or a `cancelled` into a success, and an
+ * UNDECLARED `skipped` is settled too — the gate refuses it either way, and
+ * no later read turns it into a declared one.
+ */
+function jobCondemnsTheRun(job) {
+  if (job.status !== 'completed') return false
+  if (job.conclusion === 'success') return false
+  if (job.conclusion === 'skipped' && baseJobName(job.name) in SKIPPABLE_JOBS) return false
+  return true
+}
+
+/**
  * Whether a problem the gate just found could still be the API catching up.
  *
  * Deliberately narrow: a non-terminal status, or a job `needs` named that
  * the listing has not published yet. A `failure` or a `cancelled` conclusion
  * is a settled answer the endpoint will never revise, so waiting on one only
- * delays the red.
+ * delays the red — and that holds however many OTHER jobs are still lagging,
+ * which is the part this first got wrong. A settled failure beside one
+ * unfinished job made the gate wait out its whole budget before reporting a
+ * red it already held.
  *
  * @param {{jobs: unknown, needed: string[], gateJobName: string}} input
  */
 export function stillSettling({ jobs, needed, gateJobName }) {
   if (!Array.isArray(jobs)) return false
   const others = jobs.filter((job) => baseJobName(job.name) !== gateJobName)
+  // A verdict already in hand ends the wait, whatever else is lagging.
+  if (others.some(jobCondemnsTheRun)) return false
   if (others.some((job) => job.status !== 'completed')) return true
   const present = new Set(others.map((job) => baseJobName(job.name)))
   return needed.some((name) => !present.has(name))
