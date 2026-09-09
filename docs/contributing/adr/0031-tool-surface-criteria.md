@@ -536,6 +536,37 @@ its evidence:
 - C3, in the order §4 gives.
 - The §4 retirements, each with a rung-3 before/after.
 
+### 7. The drawing score (2026-09-09)
+
+§3 grades a layout task by the state read back — every box inside its
+layer, no two overlapping — and the lane passed drawings a reader would
+not have: the two rendering bugs §4 records were found by looking, on
+boards the verifier had accepted. A verdict plus a picture leaves the
+distance between "passes" and "usable" to whoever opens the SVG, and a
+sweep that moves that distance has nothing to report.
+
+So the lane now records, per board a write task names, canvas-render's
+`scoreDrawing` (`packages/canvas-render/src/quality/drawing-score.ts`):
+debt columns that each name a mistake a reader would see — boxes over
+boxes, a box across a frame, an edge through a box it does not connect, a
+label over a box or under a frame, cut content, a cramped member, a box
+a few pixels off its row — and price columns for what a clean drawing
+costs in crossings, bends, ink, gaps and envelope. Calibrated by planting
+one defect and reading one; pinned in `drawing-quality.test.ts` over the
+two diagrams the lane asks for, each as a reference, a first attempt and
+the attempt after tidy. That last pair is the reason the instrument is
+worth having before the next surface change rather than after: the first
+reading showed tidy leaves every mistake INSIDE a frame where it was,
+because a frame and its members move as one unit — a product finding no
+verifier and no pass column could have surfaced.
+
+What the column does not do is gate: a task passes or fails on its
+verifier as before, and the score is read beside it the way `calls` is,
+as a diagnostic that says where the surface let the model draw badly. A
+rung for "the model's drawings read well" — pass^k over a debt of zero —
+is the honest next criterion, and it waits for a baseline reading over
+several trials before anyone pins it.
+
 ## Consequences
 
 - A retirement is no longer argued from the count. Its PR carries the

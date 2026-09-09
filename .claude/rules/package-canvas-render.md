@@ -1302,3 +1302,29 @@ lane's grader, reading the store, passed it. The one test that pins this
 lists the member before the group and asserts the group's chrome comes first
 in the scene. A z-order a document actually stores would be the honest
 dissolution; until JSON Canvas gives one, containers-behind is the rule.
+
+## The drawing score judges the board, not a mechanism
+
+`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, exported) reads
+a laid-out board as a person would: boxes over boxes, a box across a
+frame's edge, an edge's ink through a box it does not connect, a label
+over a box or under a frame, content cut to fit, a member jammed against
+its frame, a box a few pixels off its row — each a DEBT column that
+targets zero — beside crossings, bends, ink, uneven gaps, envelope and
+density as PRICE. The other instruments here each judge one mechanism on
+its own terms; this one judges what any of them, or a model through the
+tool surface, actually drew, and the MCP eval lane records it per board
+as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting
+one defect and reading one; pinned in `drawing-quality.test.ts` over
+`test-utils/drawing-corpus.ts`, where each diagram the lane asks for is
+drawn as a reference, as a first attempt, and after tidy. It shares no
+code with the routing oracle, on purpose: that file is the routing
+scoreboard's independent witness. A scene links a label to what it names
+through `TextRunNode.annotates`, set by the layout and read by nothing
+that paints; the flat scene has no other way back from a label's box.
+
+The first reading found what tidy leaves: a frame and what it holds move
+as ONE unit, so an overlap or a near miss INSIDE a frame survives a tidy
+that clears the straddle and the hidden label beside it. `tidy-quality`
+cannot see this — its grouped corpus never plants a defect among a
+frame's members — and the scoreboard pins it until tidy tidies inside.

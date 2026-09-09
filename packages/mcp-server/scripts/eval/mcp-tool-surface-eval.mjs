@@ -24,10 +24,19 @@ import { randomUUID } from 'node:crypto'
 import { cpSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { register } from 'tsx/esm/api'
 import { isCliAvailable } from '../smoke/lib/cli-available.mjs'
 import { seed, WORKSPACE_ID } from './fixture.mjs'
 import { connectWhiteboard, LAUNCHER } from './lib/whiteboard-client.mjs'
 import { TASKS } from './tasks.mjs'
+
+// The drawing score reads a laid-out scene, and both packages that build
+// one are source-only; `tsx` resolves them the way the server launcher
+// resolves the server.
+register()
+const { constantRatioMeasureText, createSpatialTheme, layoutSpatialCanvas, scoreDrawing } =
+  await import('@kamiazya/whiteboard-canvas-render')
+const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
 const arg = (name, fallback) => {
   const found = process.argv.find((a) => a.startsWith(`--${name}=`))
@@ -54,6 +63,67 @@ if (tasks.length === 0) {
   process.exit(2)
 }
 
+const DRAWING_APPEARANCE = createSpatialTheme({ mode: 'light' })
+const DEBT_COLUMNS = [
+  'nodeOverlaps',
+  'straddles',
+  'edgeThroughNode',
+  'labelOverNode',
+  'labelOverLabel',
+  'labelCovered',
+  'textOverflow',
+  'crampedMembers',
+  'nearMisses',
+]
+
+/** The non-zero debt columns by name, or the word for none — the line a reader scans. */
+function debtLine(score) {
+  const debt = DEBT_COLUMNS.filter((c) => score[c] > 0).map((c) => `${c} ${score[c]}`)
+  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; crossings ${score.crossings}, bends ${score.bends}`
+}
+
+/**
+ * What the boards a write task names LOOK like and how they SCORE, after
+ * the task: a layout can pass every property the verifier asks and still
+ * read badly. Rendered through the pipeline a person sees into
+ * `<out>-boards/`, one SVG per board, and scored by canvas-render's
+ * drawing instrument on the same ratio measurer every machine has, so a
+ * score compares across runs. Only with `--out`: the boards are evidence
+ * for a reading someone keeps.
+ */
+async function captureBoards(wb, task, trial) {
+  if (OUT === undefined || !Array.isArray(task.boards)) return []
+  const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
+  const figures = `${OUT.replace(/\.json$/, '')}-boards`
+  const drawing = []
+  for (const path of task.boards) {
+    const entry = listed.documents.find((d) => d.path === path)
+    if (entry === undefined) continue
+    const rendered = await wb.call('wb_scene_render', {
+      workspaceId: WORKSPACE_ID,
+      documentId: entry.documentId,
+    })
+    mkdirSync(figures, { recursive: true })
+    const file = `${task.name}-${trial}-${path}`.replace(/[^a-z0-9]+/gi, '-')
+    writeFileSync(join(figures, `${file}.svg`), rendered.svg)
+    const read = await wb.call('wb_document_get', {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [entry.documentId],
+    })
+    const content = read.documents[0]?.content
+    if (content === undefined) continue
+    const parsed = parseSpatial(content)
+    if (!parsed.ok) continue
+    const canvas = parsed.value
+    const scene = layoutSpatialCanvas(canvas, {
+      measure: constantRatioMeasureText,
+      appearance: DRAWING_APPEARANCE,
+    })
+    drawing.push({ board: path, score: scoreDrawing(canvas, scene) })
+  }
+  return drawing
+}
+
 const scratch = mkdtempSync(join(tmpdir(), 'whiteboard-tool-surface-eval-'))
 const template = join(scratch, 'template')
 const cleanup = () => rmSync(scratch, { recursive: true, force: true })
@@ -71,7 +141,12 @@ if (DRY_RUN) {
     cpSync(template, dir, { recursive: true })
     const wb = await connectWhiteboard(dir)
     const verdict = await task.verify(wb, ids)
+    // The boards a task names, scored off the untouched fixture: the one
+    // way to exercise the capture with no model call.
+    const drawing = await captureBoards(wb, task, 0)
     await wb.close()
+    for (const { board, score } of drawing)
+      console.log(`[eval]   drawing ${board}: ${debtLine(score)}`)
     // The fixture is untouched, so a verifier that passes here would pass
     // a model that did nothing.
     const line = verdict.ok ? 'FAIL (passes on the untouched fixture)' : 'ok (fails as it should)'
@@ -239,6 +314,8 @@ async function runOnce(task, trial) {
   }
 
   let verdict
+  /** @type {{ board: string, score: Record<string, unknown> }[]} */
+  let drawing = []
   if (task.answer !== undefined) {
     const answered =
       result?.structured_output?.answer ??
@@ -261,25 +338,7 @@ async function runOnce(task, trial) {
     const wb = await connectWhiteboard(join(dir, 'data'))
     try {
       verdict = await task.verify(wb, ids)
-      // What the board LOOKS like after a write task is evidence the
-      // verdict cannot carry: a layout can pass every property and still
-      // read badly. Rendered through the same pipeline a person sees,
-      // beside `--out`, one SVG per board the task names.
-      if (OUT !== undefined && Array.isArray(task.boards)) {
-        const listed = await wb.call('wb_document_list', { workspaceId: WORKSPACE_ID })
-        for (const path of task.boards) {
-          const entry = listed.documents.find((d) => d.path === path)
-          if (entry === undefined) continue
-          const rendered = await wb.call('wb_scene_render', {
-            workspaceId: WORKSPACE_ID,
-            documentId: entry.documentId,
-          })
-          const figures = `${OUT.replace(/\.json$/, '')}-boards`
-          mkdirSync(figures, { recursive: true })
-          const file = `${task.name}-${trial}-${path}`.replace(/[^a-z0-9]+/gi, '-')
-          writeFileSync(join(figures, `${file}.svg`), rendered.svg)
-        }
-      }
+      drawing = await captureBoards(wb, task, trial)
     } finally {
       await wb.close()
     }
@@ -297,6 +356,7 @@ async function runOnce(task, trial) {
     inputs,
     toolErrors: errorTexts.length,
     toolErrorTexts: errorTexts,
+    drawing,
     turns: result?.num_turns ?? null,
     inputTokens:
       (usage.input_tokens ?? 0) +
@@ -319,6 +379,8 @@ for (const task of tasks) {
       `[eval] ${mark} ${task.name} (trial ${trial}): ${run.calls} calls [${run.tools.join(' ')}], ${run.toolErrors} tool errors, ${run.turns} turns, $${(run.costUsd ?? 0).toFixed(3)}, ${(run.durationMs / 1000).toFixed(0)}s — ${run.detail}`,
     )
     for (const text of run.toolErrorTexts) console.log(`[eval]   tool error: ${text}`)
+    for (const { board, score } of run.drawing)
+      console.log(`[eval]   drawing ${board}: ${debtLine(score)}`)
     if (run.exitCode !== 0 && run.stderr)
       console.log(`[eval]   stderr: ${run.stderr.split('\n').at(-1)}`)
   }

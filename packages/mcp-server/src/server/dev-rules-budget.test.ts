@@ -180,7 +180,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // Plus the paint-order rule (groups behind what they hold, whatever the
 // stored order says) — a bug a person saw in a rendered diagram and no test
 // had caught.
-const CANVAS_RENDER_BUDGET = 88
+// 90 since the drawing score: the one instrument that judges the BOARD
+// rather than a mechanism, what it reads and where it is pinned, the
+// `annotates` link a scene needs to get from a label back to what it
+// names, and the first thing it found — tidy leaves every mistake inside a
+// frame where it was — which tidy's own scoreboard cannot see.
+const CANVAS_RENDER_BUDGET = 90
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
