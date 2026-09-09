@@ -30,9 +30,9 @@
  *   waiting and swallowed the user's first keystroke instead.
  */
 
-import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import { Annotation, type Extension, Transaction } from '@codemirror/state'
 import { type EditorView, type PluginValue, ViewPlugin, type ViewUpdate } from '@codemirror/view'
+import { minimalChange } from '@kamiazya/whiteboard-loro-adapter'
 import type { LoroDoc, LoroText, Subscription } from 'loro-crdt'
 
 /**
