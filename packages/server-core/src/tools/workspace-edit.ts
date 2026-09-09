@@ -1,4 +1,9 @@
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  okfActorSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
@@ -81,6 +86,23 @@ export const workspaceEditInputSchema = z
       .boolean()
       .optional()
       .describe('Set true to create the workspace if it does not exist yet.'),
+    /**
+     * ONE actor for the whole batch rather than one per op, because a batch
+     * has one producer and repeating the same string per op is the cost
+     * this shape exists to remove — the same reason `wb_facet_set` takes one
+     * shared `facets` and `wb_version_save` one shared `label`.
+     *
+     * Applies to the ops that write CONTENT (`document.create` with a body,
+     * `document.set`); a delete authors nothing to attribute. ADR-0016's
+     * rule still governs what happens to it: a document that already
+     * declares `generated` keeps its own, because that is provenance rather
+     * than a field this write owns.
+     */
+    actor: okfActorSchema
+      .optional()
+      .describe(
+        "Who is producing this batch's content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` on the documents this batch writes. Identify yourself here; omitted, the writes are attributed to the server rather than to you.",
+      ),
     ops: z
       .array(workspaceOpSchema)
       .min(1)
@@ -161,10 +183,18 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
             const created = await wbDocumentCreate(deps, {
               workspaceId,
               path: op.path,
+              // The actor rides only on the markdown arm. A spatial create
+              // authors no content — its canvas is built by `wb_canvas_edit`
+              // — so `wbDocumentCreateInputSchema`'s spatial arm has no
+              // `actor` field and, being `.strict()`, refuses one. Passing it
+              // unconditionally made a mixed-kind batch fail at the spatial
+              // op with an unrecognized-key error, which no test sending one
+              // kind at a time could see.
               ...(op.kind === 'markdown'
                 ? {
                     kind: 'markdown' as const,
                     ...(op.markdown === undefined ? {} : { markdown: op.markdown }),
+                    ...(input.actor === undefined ? {} : { actor: input.actor }),
                   }
                 : { kind: 'spatial' as const }),
               ...(op.name === undefined ? {} : { name: op.name }),
@@ -179,6 +209,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
               workspaceId,
               documentId: op.documentId,
               markdown: op.markdown,
+              ...(input.actor === undefined ? {} : { actor: input.actor }),
             })
             results.push({ op: op.op, documentId: op.documentId })
           } else {

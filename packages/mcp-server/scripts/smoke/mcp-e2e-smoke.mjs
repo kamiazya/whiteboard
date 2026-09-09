@@ -426,6 +426,10 @@ async function main() {
   // so no round trip is needed to learn them.
   const batch = await callTool('wb_workspace_edit', {
     workspaceId: WORKSPACE_ID,
+    // One actor for the whole batch. The SDK validates it against
+    // `okfActorSchema` at the boundary, so this also proves the batch did
+    // not widen the field to a plain string.
+    actor: 'reference_agent/e2e-smoke',
     ops: [
       {
         op: 'document.create',
@@ -442,7 +446,16 @@ async function main() {
   if (batch.results.some((r) => typeof r.documentId !== 'string')) {
     throw new Error(`wb_workspace_edit did not report the ids it minted: ${JSON.stringify(batch)}`)
   }
-  console.log('[e2e] wb_workspace_edit → two documents, ids returned')
+  const batchExport = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [batch.results[0].documentId],
+  })
+  if (!batchExport.documents[0].content.includes('reference_agent/e2e-smoke')) {
+    throw new Error(
+      `wb_workspace_edit did not stamp the batch actor: ${batchExport.documents[0].content}`,
+    )
+  }
+  console.log('[e2e] wb_workspace_edit → two documents, ids returned, batch actor stamped')
 
   // A failing op stops the run, and the message must say how far it got:
   // documents are separate CRDTs, so "nothing was written" would be false
