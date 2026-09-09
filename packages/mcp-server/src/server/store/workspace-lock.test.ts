@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   _resetWorkspaceLocksForTests,
   withDocumentWriteLock,
@@ -113,8 +113,10 @@ describe('withWorkspaceWriteLock', () => {
       events.push('holder-exit')
     })
 
-    // Give the holder a chance to actually acquire the lock first.
-    await new Promise((r) => setTimeout(r, 5))
+    // Wait for the holder to be INSIDE, which its own event says.
+    await vi.waitFor(() => {
+      expect(events).toEqual(['holder-enter'])
+    })
 
     let otherSettled = false
     const otherPromise = withWorkspaceWriteLock('ws_b', async () => {
@@ -123,7 +125,11 @@ describe('withWorkspaceWriteLock', () => {
       otherSettled = true
     })
 
-    await new Promise((r) => setTimeout(r, 5))
+    // Asserting a NEGATIVE — that the other caller has NOT run — so there is
+    // no condition to wait for. A zero-delay turn gives the runtime every
+    // chance to schedule it and waits for no duration; a fixed sleep here
+    // would be slower and prove exactly the same thing.
+    await new Promise((r) => setTimeout(r, 0))
     expect(otherSettled).toBe(false)
 
     releaseHolder()
@@ -134,25 +140,32 @@ describe('withWorkspaceWriteLock', () => {
 
 describe('withDocumentWriteLocks', () => {
   it('never runs two batches that share a document at the same time', async () => {
-    // Mutual exclusion, not an ORDER: which batch wins the shared document
-    // is a race the lock does not promise to settle either way, and a test
-    // that pins the order passes or fails on scheduling rather than on the
-    // property. What must hold is that neither body is entered while the
-    // other is inside.
+    // The first batch is held open by a promise this test resolves, rather
+    // than by a sleep: the second batch then either waits or it does not,
+    // and which happened is a fact rather than a race with a timer.
     const events: string[] = []
-    const body = (label: string, ms: number) => async () => {
-      events.push(`${label}-enter`)
-      await new Promise((resolve) => setTimeout(resolve, ms))
-      events.push(`${label}-exit`)
-    }
-    await Promise.all([
-      withDocumentWriteLocks(['doc-a', 'doc-b'], body('first', 20)),
-      withDocumentWriteLocks(['doc-b', 'doc-c'], body('second', 20)),
-    ])
+    let releaseFirst!: () => void
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
 
-    expect(events).toHaveLength(4)
-    // Whoever entered first must have exited before the other entered.
-    expect(events[1]).toBe(`${events[0]?.replace('-enter', '')}-exit`)
+    const first = withDocumentWriteLocks(['doc-a', 'doc-b'], async () => {
+      events.push('first-enter')
+      await firstHeld
+      events.push('first-exit')
+    })
+    await vi.waitFor(() => {
+      expect(events).toEqual(['first-enter'])
+    })
+
+    // Shares doc-b with the batch that is currently inside.
+    const second = withDocumentWriteLocks(['doc-b', 'doc-c'], async () => {
+      events.push('second-enter')
+    })
+    releaseFirst()
+    await Promise.all([first, second])
+
+    expect(events).toEqual(['first-enter', 'first-exit', 'second-enter'])
   })
 
   it('does not deadlock when two batches name the same documents in opposite orders', async () => {
@@ -160,9 +173,13 @@ describe('withDocumentWriteLocks', () => {
     // hold A waiting for B while the other holds B waiting for A, and
     // neither ever runs — the call simply never returns, which reads in CI
     // as a timeout on whatever test happened to be running.
+    //
+    // No sleep is needed to provoke it: each acquisition registers itself on
+    // its document's queue SYNCHRONOUSLY, before its first await, so calling
+    // both back to back is already enough for each to hold the other's next
+    // lock.
     const done: string[] = []
     const forwards = withDocumentWriteLocks(['doc-x', 'doc-y'], async () => {
-      await new Promise((resolve) => setTimeout(resolve, 10))
       done.push('forwards')
     })
     const backwards = withDocumentWriteLocks(['doc-y', 'doc-x'], async () => {
@@ -190,7 +207,9 @@ describe('withDocumentWriteLocks', () => {
       await held
       events.push('batch-exit')
     })
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    await vi.waitFor(() => {
+      expect(events).toEqual(['batch-enter'])
+    })
     await withDocumentWriteLock('doc-3', async () => {
       events.push('unrelated-ran')
     })
