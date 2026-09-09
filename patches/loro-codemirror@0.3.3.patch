@@ -1,8 +1,14 @@
 diff --git a/dist/sync.js b/dist/sync.js
-index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..7ac35821fdc108dca76f4acb1eebeab1cd522e5a 100644
+index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..2990b13c8a3fbc9a513b9d3a7f8fc3b63a6f0213 100644
 --- a/dist/sync.js
 +++ b/dist/sync.js
-@@ -8,70 +8,74 @@ export class LoroSyncPluginValue {
+@@ -1,4 +1,4 @@
+-import { Annotation } from "@codemirror/state";
++import { Annotation, Transaction } from "@codemirror/state";
+ import { EditorView, ViewUpdate } from "@codemirror/view";
+ import { LoroDoc, LoroText, } from "loro-crdt";
+ export const loroSyncAnnotation = Annotation.define();
+@@ -8,70 +8,81 @@ export class LoroSyncPluginValue {
          this.doc = doc;
          this.getTextFromDoc = getTextFromDoc;
          this.isInitDispatch = false;
@@ -102,7 +108,14 @@ index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..7ac35821fdc108dca76f4acb1eebeab1
              }
 +            this.view.dispatch({
 +                changes: [{ from, to, insert: next.slice(from, end) }],
-+                annotations: [loroSyncAnnotation.of(this)],
++                // Not this user's edit, so it must not enter the editor's own
++                // undo stack. Without this, one Ctrl-Z after a peer's change
++                // empties the document -- measured -- and the binding writes
++                // that deletion back into the CRDT, so the peer loses their
++                // text too. `history()` maps its stored inverse through every
++                // later change, and a reconcile looks like a change the user
++                // made.
++                annotations: [loroSyncAnnotation.of(this), Transaction.addToHistory.of(false)],
 +            });
          };
          this.sub = doc.subscribe(this.onRemoteUpdate);
@@ -129,3 +142,13 @@ index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..7ac35821fdc108dca76f4acb1eebeab1
              view.dispatch({
                  changes: [
                      {
+@@ -80,6 +91,9 @@ export class LoroSyncPluginValue {
+                         insert: text.toString(),
+                     },
+                 ],
++                // Seeding is not an edit either: undoing it would empty a
++                // document the user has not touched yet.
++                annotations: [Transaction.addToHistory.of(false)],
+             });
+         });
+     }

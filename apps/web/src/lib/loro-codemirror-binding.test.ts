@@ -21,6 +21,7 @@
  * the first one and silently reintroduce the echo the flag exists to stop.
  */
 
+import { history, undo } from '@codemirror/commands'
 import { EditorState } from '@codemirror/state'
 import { EditorView } from '@codemirror/view'
 import {
@@ -214,5 +215,92 @@ describe('content that reaches the container from outside this editor', () => {
 
     expect(view.state.doc.toString()).toBe('REMOTE alpha omega')
     expect(view.state.selection.main.anchor).toBe(13)
+  })
+})
+
+/**
+ * Undo must take back what THIS user did, and nothing else.
+ *
+ * `SourcePane` installs CodeMirror's own `history()`, which records every
+ * transaction it is not told to skip — including the ones this binding
+ * dispatches to bring in a peer's change or a restore. `history()` then maps
+ * its stored inverse through every later change, so one Ctrl-Z after a
+ * merge does not simply undo the user's keystroke: measured, it emptied the
+ * document outright, and the binding wrote that deletion straight back into
+ * the CRDT, so the peer lost their text too.
+ *
+ * The binding's dispatches therefore carry `Transaction.addToHistory.of(false)`.
+ * That is the collaborative-editing idiom, and it is why this stays on
+ * CodeMirror's history rather than swapping in `LoroUndoPlugin` — the
+ * document's own undo already belongs to the sync session's `UndoManager`,
+ * and a second CRDT-level undo stack beside it would be two owners for one
+ * question.
+ */
+describe('undo over content that arrived from elsewhere', () => {
+  const DOC_ID = '01M0P7D8CDZ5TP3C8ZYM8G275W'
+  const workspaceBody = (d: LoroDoc) => documentContainers(d, DOC_ID).getText('body')
+
+  function bindWithHistory(doc: LoroDoc): EditorView {
+    // The same order SourcePane uses: history() among the built-ins, the host
+    // binding appended last.
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [history(), LoroSyncPlugin(doc, workspaceBody)],
+      }),
+      parent: document.body,
+    })
+    views.push(view)
+    return view
+  }
+
+  function emptyWorkspaceDoc(): LoroDoc {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'notes/plan', documentId: DOC_ID, kind: 'markdown' })
+    doc.commit()
+    return doc
+  }
+
+  it("takes back this user's edit and leaves a peer's change standing", async () => {
+    const doc = emptyWorkspaceDoc()
+    const view = bindWithHistory(doc)
+    await settleInit()
+
+    view.dispatch({ changes: { from: 0, insert: 'mine' } })
+    await settleInit()
+
+    const peer = new LoroDoc()
+    peer.import(doc.export({ mode: 'snapshot' }))
+    workspaceBody(peer).insert(4, ' THEIRS')
+    peer.commit()
+    doc.import(peer.export({ mode: 'update' }))
+    await settleInit()
+    expect(workspaceBody(doc).toString()).toBe('mine THEIRS')
+
+    undo(view)
+    await settleInit()
+
+    // Only this user's four characters go. The peer's text is still there,
+    // and — because the binding writes the undo back — still there in the
+    // document the peer will read.
+    expect(view.state.doc.toString()).toBe(' THEIRS')
+    expect(workspaceBody(doc).toString()).toBe(' THEIRS')
+  })
+
+  // The seeding dispatch is not an edit either. Undo on a freshly opened
+  // document that the user has not touched must have nothing to take back.
+  it('has nothing to undo on a document this user has not edited', async () => {
+    const doc = emptyWorkspaceDoc()
+    workspaceBody(doc).insert(0, 'written by somebody else')
+    doc.commit()
+    const view = bindWithHistory(doc)
+    await settleInit()
+    expect(view.state.doc.toString()).toBe('written by somebody else')
+
+    undo(view)
+    await settleInit()
+
+    expect(view.state.doc.toString()).toBe('written by somebody else')
+    expect(workspaceBody(doc).toString()).toBe('written by somebody else')
   })
 })
