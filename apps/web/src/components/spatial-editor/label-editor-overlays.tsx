@@ -1,8 +1,4 @@
-import {
-  edgeLabelAnchor,
-  SPATIAL_THEME_FONT_FAMILY,
-  SPATIAL_THEME_GEOMETRY,
-} from '@kamiazya/whiteboard-canvas-render'
+import { edgeLabelAnchor, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasEdge, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -19,11 +15,14 @@ const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
  * background the object being edited (an edge line, the frame border)
  * shows through the draft.
  */
-function labelEditorStyle(theme: ResolvedTheme) {
+function labelEditorStyle(theme: ResolvedTheme, fontFamily: string) {
   return {
     background: theme === 'dark' ? 'oklch(0.145 0 0)' : '#ffffff',
     color: editorTextFill(theme),
-    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    // The family the scene declares under the canvas's look — the theme's
+    // where its face is held, the bundled one otherwise — so the draft and
+    // the label it becomes are written in one hand.
+    fontFamily,
     fontSize: SPATIAL_THEME_GEOMETRY.labelFontSizePx,
   }
 }
@@ -36,6 +35,7 @@ type ApplyResult = (result: ReturnType<typeof reduceGesture>) => void
 export function EdgeLabelEditorOverlay({
   editId,
   canvas,
+  fontFamily,
   edgePaths,
   zoom,
   theme,
@@ -44,6 +44,7 @@ export function EdgeLabelEditorOverlay({
 }: {
   readonly editId: string
   readonly canvas: SpatialCanvas
+  readonly fontFamily: string
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
   readonly theme: ResolvedTheme
@@ -66,7 +67,7 @@ export function EdgeLabelEditorOverlay({
       }}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
-      style={labelEditorStyle(theme)}
+      style={labelEditorStyle(theme, fontFamily)}
       onCommit={(label) => {
         applyResult({
           state: { kind: 'idle' },
@@ -84,6 +85,7 @@ export function EdgeLabelEditorOverlay({
 export function GroupLabelEditorOverlay({
   editId,
   canvas,
+  fontFamily,
   zoom,
   theme,
   applyResult,
@@ -91,6 +93,7 @@ export function GroupLabelEditorOverlay({
 }: {
   readonly editId: string
   readonly canvas: SpatialCanvas
+  readonly fontFamily: string
   readonly zoom: number
   readonly theme: ResolvedTheme
   readonly applyResult: ApplyResult
@@ -104,7 +107,7 @@ export function GroupLabelEditorOverlay({
       box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
       initialText={group.label ?? ''}
       testId="group-label-editor"
-      style={labelEditorStyle(theme)}
+      style={labelEditorStyle(theme, fontFamily)}
       onCommit={(label) => {
         applyResult({
           state: { kind: 'idle' },

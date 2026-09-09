@@ -82,7 +82,11 @@ import {
   useState,
 } from 'react'
 import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
-import { useThemeFaceFor, useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
+import {
+  useEditingFontFamily,
+  useThemeFaceFor,
+  useThemeFontsGeneration,
+} from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -562,6 +566,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     } = useEditSessionState({ canvas, selectedId })
     const fontsGeneration = useThemeFontsGeneration()
     useThemeFaceFor(canvas, style)
+    const editingFontFamily = useEditingFontFamily(canvas, style)
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {
@@ -2648,6 +2653,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <EdgeLabelEditorOverlay
                 editId={edgeLabelEditId}
                 canvas={canvas}
+                fontFamily={editingFontFamily}
                 edgePaths={edgePaths}
                 zoom={viewport.zoom}
                 theme={theme}
@@ -2659,6 +2665,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <GroupLabelEditorOverlay
                 editId={groupLabelEditId}
                 canvas={canvas}
+                fontFamily={editingFontFamily}
                 zoom={viewport.zoom}
                 theme={theme}
                 applyResult={applyResult}
@@ -2683,6 +2690,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               selection !== undefined && (
                 <MarkdownBodyEditorOverlay
                   node={selectedNode}
+                  fontFamily={editingFontFamily}
                   selectionBox={selection.box}
                   sceneNodes={scene.nodes}
                   sceneCurrent={sceneCurrent}

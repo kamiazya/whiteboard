@@ -168,7 +168,12 @@ face lands three ways at once, and each is a seam the next change must keep:
   pins the worker half in a real browser;
 - **the scene**, through `useThemeFontsGeneration` in the editor's
   `useWorkerScene` inputs — the layout asks `hasLoadedFace` itself, so the
-  generation is only what makes it ask again.
+  generation is only what makes it ask again;
+- **the in-place editors** (node body, edge label, group label), through
+  `useEditingFontFamily`: the family the scene DECLARES — the theme's where
+  the face is held, the bundled one otherwise — never the theme's wish, or
+  the draft moves on commit. Comment and proposal chrome stay bundled, as
+  the layout keeps them crisp.
 
 The PNG export carries a held face the same way it carries the vendored
 one (`withViewerFontEmbedded(svg, themeFacesNamedBy(svg))`), and only the

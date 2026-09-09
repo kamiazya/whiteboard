@@ -5,9 +5,10 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const registerFontBytes = vi.fn(async (_family: string, _bytes: ArrayBuffer) => 'loaded' as const)
+const hasLoadedFace = vi.fn((_family: string) => false)
 vi.mock('@kamiazya/whiteboard-canvas-viewer/font-loading', () => ({
   registerFontBytes: (family: string, bytes: ArrayBuffer) => registerFontBytes(family, bytes),
-  hasLoadedFace: () => false,
+  hasLoadedFace: (family: string) => hasLoadedFace(family),
 }))
 
 const bytesOf = (text: string) => new TextEncoder().encode(text).buffer as ArrayBuffer
@@ -137,6 +138,26 @@ describe('theme fonts', () => {
     expect(mod.themeFamilyFor(plain, undefined)).toBeUndefined()
     // Neon names no family: nothing to fetch.
     expect(mod.themeFamilyFor(plain, 'visual.neon')).toBeUndefined()
+  })
+
+  it('the family a text edit is typed in is the one the layout would declare', async () => {
+    // The in-place editor sits over the rendered node; typing in a family
+    // the scene does not draw makes the text move on commit. So it takes
+    // the theme's family exactly where the layout declares it — where the
+    // face is held — and the bundled family otherwise.
+    const mod = await import('./theme-fonts.js')
+    const sketched = {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+    hasLoadedFace.mockReturnValue(false)
+    expect(mod.editingFontFamilyFor(sketched, undefined)).toBe('Roboto')
+    hasLoadedFace.mockReturnValue(true)
+    expect(mod.editingFontFamilyFor(sketched, undefined)).toBe('Yomogi')
+    expect(mod.editingFontFamilyFor(sketched, 'clean')).toBe('Roboto')
+    expect(mod.editingFontFamilyFor({ nodes: [], edges: [] }, undefined)).toBe('Roboto')
+    hasLoadedFace.mockReturnValue(false)
   })
 
   it('names the held faces an SVG actually declares, for the PNG export to embed', async () => {

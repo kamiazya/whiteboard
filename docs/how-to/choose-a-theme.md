@@ -63,9 +63,9 @@ The sketch theme names the **Yomogi** handwriting family (Japanese and Latin in 
 It is not bundled — it is 4 MB — so the web app fetches it the first time a board you open draws
 in that theme, from the Google Fonts catalogue's own repository (the same file the daemon
 installs), and registers the face on the page and in its layout workers. The editor, the row
-thumbnails and the browser's own PNG export then draw the same glyphs; a board already open
-redraws when the face lands. Nothing is fetched for a board that names no theme, and the face is
-held for the tab.
+thumbnails and the browser's own PNG export then draw the same glyphs, and so does the in-place
+editor when you double-click a node or a label; a board already open redraws when the face lands.
+Nothing is fetched for a board that names no theme, and the face is held for the tab.
 
 For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
 Fonts** while connected and install **Yomogi**. The daemon keeps the file and measures and
