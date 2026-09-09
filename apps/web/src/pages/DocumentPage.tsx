@@ -341,8 +341,11 @@ function DocumentPageBody({
     <>
       {inspectorSegment}
       {/* The one divider in the row: inspect on the left of it, act on the
-          right. Before this the act menu sat BETWEEN two inspect toggles. */}
-      <span aria-hidden="true" className="bg-border mx-0.5 h-4 w-px shrink-0" />
+          right. Before this the act menu sat BETWEEN two inspect toggles.
+          Its margin is what makes the segment read as one group now that
+          the segment draws no box: 2px between its members, 6px out to
+          here, so proximity does the work the outline used to. */}
+      <span aria-hidden="true" className="bg-border mx-1.5 h-4 w-px shrink-0" />
       {model.slots.rowAlerts}
       {exportError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">

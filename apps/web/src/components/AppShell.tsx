@@ -419,16 +419,24 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
             state: { from: `${location.pathname}${location.search}` },
           })
         }
-        className={cn(HEADER_BUTTON_CLASS, 'relative')}
+        className={HEADER_BUTTON_CLASS}
       >
-        {nudge && (
-          <span
-            data-testid="settings-nudge"
-            aria-hidden="true"
-            className="absolute right-0.5 top-0.5 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
-          />
-        )}
-        <Settings className="size-4" />
+        {/* The dot hangs off the GLYPH, not off the button. The button is
+            32px on a mouse and 44px on a finger while the gear stays 16px,
+            so a dot pinned to the button's corner drifts away from the
+            thing it is about as the button grows — on a phone it sat 4px
+            clear of the gear and 3.5px from the row's top edge, reading as
+            a badge on the corner of the screen. */}
+        <span className="relative inline-flex">
+          <Settings className="size-4" />
+          {nudge && (
+            <span
+              data-testid="settings-nudge"
+              aria-hidden="true"
+              className="absolute -right-1 -top-1 size-2 rounded-full bg-[#3b6ecc] ring-2 ring-background"
+            />
+          )}
+        </span>
       </button>
     </header>
   )
