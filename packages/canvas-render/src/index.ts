@@ -64,6 +64,7 @@ export {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
+  paintOrderOf,
   resolveShapeTable,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'

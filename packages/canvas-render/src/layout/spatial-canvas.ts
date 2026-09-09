@@ -1524,13 +1524,13 @@ function composeDecorations(
  * Containers paint BEHIND what they hold, whatever order the canvas lists
  * them in: every group first, a larger one before a smaller (an outer group
  * before the one inside it), then everything else in stored order.
- *
  * Stored order is a map's id order, not the order a caller wrote, so a group
  * whose id sorted after a member's painted over it once it had a colour —
  * four of eleven boxes vanished from a diagram whose grader, reading the
- * store, passed it. Equal boxes keep their stored order (the sort is stable).
+ * store, passed it. Equal boxes keep their stored order (the sort is
+ * stable). Exported so the web app's hit-test index reads the same order.
  */
-function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
+export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
   const groups = nodes
     .filter((node) => node.type === 'group')
     .sort((a, b) => b.width * b.height - a.width * a.height)

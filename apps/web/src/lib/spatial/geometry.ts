@@ -5,6 +5,7 @@
  * selection and rendering can never disagree about where a node is. See
  * `scene-render.test.ts`'s drift guard.
  */
+import { paintOrderOf } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from './viewport.js'
 
@@ -24,7 +25,9 @@ export interface NodeBox {
 
 /** One box per node, in document order — the order the scene paints them. */
 export function indexNodeBoxes(canvas: SpatialCanvas): readonly NodeBox[] {
-  return canvas.nodes.map((node) => ({
+  // In PAINT order, not stored order: groups first, so "topmost is last"
+  // below reads the same picture the renderer draws.
+  return paintOrderOf(canvas.nodes).map((node) => ({
     id: node.id,
     ...(node.type === 'group' ? { container: true } : {}),
     box: { x: node.x, y: node.y, width: node.width, height: node.height },
@@ -47,12 +50,12 @@ export function boxContains(box: Box, point: Point): boolean {
  * nodes draw over earlier ones).
  */
 export function hitTest(boxes: readonly NodeBox[], point: Point): string | undefined {
-  // Container frames (groups) are unfilled, so a content node under the
-  // pointer is fully visible even when the frame paints later — the click
-  // lands on what the user sees. Membership is geometric in this app, so
-  // z-order between a member and its frame carries no occlusion meaning.
-  // A frame is hit only where no content node is (its padding area),
-  // topmost frame first when frames nest.
+  // Container frames (groups) paint behind their members, so a content node
+  // under the pointer is always visible — the click lands on what the user
+  // sees. Membership is geometric in this app, so z-order between a member
+  // and its frame carries no occlusion meaning. A frame is hit only where
+  // no content node is (its padding area), innermost frame first when
+  // frames nest.
   let containerHit: string | undefined
   for (let i = boxes.length - 1; i >= 0; i -= 1) {
     const candidate = boxes[i]
