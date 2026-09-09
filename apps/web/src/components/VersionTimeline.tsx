@@ -135,10 +135,13 @@ function versionAuthor(operator?: OperatorInfo): string | null {
  */
 function RowShell({
   interactive,
+  current,
   onActivate,
   children,
 }: {
   readonly interactive: boolean
+  /** This row is the state currently drawn on the document. */
+  readonly current: boolean
   readonly onActivate: () => void
   readonly children: ReactNode
 }) {
@@ -150,7 +153,16 @@ function RowShell({
   return (
     <button
       type="button"
-      className={`${shared} cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+      // `aria-current` rather than colour alone. Opening a version replaces
+      // the whole document and renames the top bar, but on a screen wide
+      // enough to show the list beside it the rows all still looked alike —
+      // and a ring reaches nobody who is not looking at it. Absent, not
+      // `false`, on the others: a mark every row carries says nothing about
+      // any of them.
+      {...(current ? { 'aria-current': true } : {})}
+      className={`${shared} cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        current ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-accent'
+      }`}
       onClick={onActivate}
     >
       {children}
@@ -432,6 +444,7 @@ export default function VersionTimeline({
                 <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
                   <RowShell
                     interactive
+                    current={previewing?.id === v.id}
                     onActivate={() => {
                       void openPreview(v)
                     }}

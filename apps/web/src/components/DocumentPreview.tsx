@@ -1,6 +1,7 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { Focus } from 'lucide-react'
 import { type JSX, useMemo } from 'react'
 import { editorTextFill } from '../lib/spatial/editor-appearance.js'
 import { viewportTransformCss } from '../lib/spatial/viewport.js'
@@ -93,15 +94,26 @@ function PastCanvasPreview({
           label="A past state of this document"
         />
       </div>
+      {/* The dock's own view control, said the dock's way: a glyph labelled
+          "Zoom to fit", no words drawn. This was a text button reading
+          "Reset view" — the one surface in the app that spelled a view
+          control out, and in a vocabulary the dock had already retired
+          ("there is nothing to reset to", ToolPalette).
+
+          The same operation, not merely the same name: the scene is
+          rendered to fit its box, so the untouched viewport IS the fitted
+          view and returning to it is the fit. Still only shown once
+          something has moved — before that, pressing it would do nothing. */}
       {moved && (
         <button
           type="button"
           onClick={reset}
           {...PREVIEW_CONTROL_PROPS}
-          data-testid="preview-reset-view"
-          className="bg-background/90 text-muted-foreground hover:text-foreground absolute right-2 bottom-2 rounded border px-2 py-1 text-xs"
+          data-testid="preview-fit-view"
+          aria-label="Zoom to fit"
+          className="bg-background/90 text-muted-foreground hover:text-foreground absolute right-2 bottom-2 inline-flex size-8 items-center justify-center rounded border"
         >
-          Reset view
+          <Focus aria-hidden="true" className="size-4" />
         </button>
       )}
     </div>

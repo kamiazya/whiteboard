@@ -103,18 +103,18 @@ describe('DocumentPreview', () => {
       .toEqual({ dx: 60, dy: 40 })
   })
 
-  it('offers a way back once the view has been moved', async () => {
+  it('offers the way back to the fitted view once it has been moved', async () => {
     const { container } = mount('dark')
     await expect
       .poll(() => container.querySelector('svg')?.getAttribute('width'))
       .toBe(String(SURFACE_PX))
-    expect(container.querySelector('[data-testid="preview-reset-view"]')).toBeNull()
+    expect(container.querySelector('[data-testid="preview-fit-view"]')).toBeNull()
     drag()
 
-    const reset = page.getByTestId('preview-reset-view')
-    await userEvent.click(reset)
+    const fit = page.getByTestId('preview-fit-view')
+    await userEvent.click(fit)
     await expect.poll(() => transformOf(container)).toBe('scale(1) translate(0px, 0px)')
-    expect(container.querySelector('[data-testid="preview-reset-view"]')).toBeNull()
+    expect(container.querySelector('[data-testid="preview-fit-view"]')).toBeNull()
   })
 
   // Pointer capture is best-effort (a browser refuses it for a pointerId the
@@ -185,5 +185,40 @@ describe('DocumentPreview', () => {
     pointer('pointerup', 2, 240, 200)
 
     await expect.poll(() => scaleOf(container)).toBeCloseTo(2, 1)
+  })
+})
+
+/**
+ * The dock states this operation without a word — a `Focus` glyph labelled
+ * "Zoom to fit" — and its own comment says there is nothing to reset to. The
+ * preview had a text button reading "Reset view", which is both the wrong
+ * vocabulary and the one surface that spells a view control out.
+ *
+ * The operation is the same one: the preview's untouched viewport IS the
+ * fitted view, since the scene is rendered to fit its box before any
+ * transform is applied.
+ */
+describe('the preview view control', () => {
+  it("says it the way the dock does — a glyph, no words, and the dock's own name", async () => {
+    const { container } = mount('light')
+    // The surface reflows once the scene is measured, and a drag dispatched
+    // at coordinates from before that lands somewhere else.
+    await expect
+      .poll(() => container.querySelector('svg')?.getAttribute('width'))
+      .toBe(String(SURFACE_PX))
+
+    // Move it, so the control is on screen at all.
+    drag()
+
+    await expect
+      .poll(() => container.querySelector('[data-testid="preview-fit-view"]'))
+      .not.toBeNull()
+    const fit = container.querySelector('[data-testid="preview-fit-view"]') as HTMLElement
+    expect(fit?.getAttribute('aria-label')).toBe('Zoom to fit')
+    // Non-verbal: the glyph carries it, and no words are drawn.
+    expect(fit?.querySelector('svg')).not.toBeNull()
+    expect(fit?.textContent?.trim()).toBe('')
+    // The retired vocabulary is gone rather than merely hidden.
+    expect(container.textContent).not.toContain('Reset view')
   })
 })
