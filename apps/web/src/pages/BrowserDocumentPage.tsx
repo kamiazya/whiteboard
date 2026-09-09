@@ -486,7 +486,8 @@ function useBrowserDocument(
   // the store saves. Keying on the content doc would compare a frontier
   // against a row taken from a different one, and never match.
   const checkpoints = useMemo(() => {
-    const scheduler = createCheckpointScheduler<VersionEntry>({
+    return createCheckpointScheduler<VersionEntry>({
+      alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
       save: (workspaceId, path) =>
         versionStore.save(workspaceId, path, {
           auto: true,
@@ -495,7 +496,6 @@ function useBrowserDocument(
         }),
       onError: (err) => log.warn('automatic checkpoint failed', err),
     })
-    return scheduler
   }, [backend, versionStore])
 
   // Bound to the record the backend holds, and a no-op until one is there.

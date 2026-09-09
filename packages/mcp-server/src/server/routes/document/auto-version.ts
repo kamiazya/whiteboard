@@ -83,6 +83,12 @@ export function createAutoVersionTrigger(
     ...(options.quietMs === undefined ? {} : { quietMs: options.quietMs }),
     ...(options.ceilingMs === undefined ? {} : { ceilingMs: options.ceilingMs }),
     ...(options.onSaved === undefined ? {} : { onSaved: options.onSaved }),
+    // The rows are the authority on "has anything changed since the last
+    // checkpoint" — a per-process memory is empty after a restart and stale
+    // after a save this scheduler did not make (a person's bookmark, a
+    // restore), and both write a row over an unchanged document.
+    alreadyCheckpointed: (workspaceId, path) =>
+      versionStore.isUnchangedSinceLastVersion(workspaceId, path),
     save: (workspaceId, path, doc) => {
       const opts: { auto: boolean; operator: OperatorInfo } = {
         auto: true,

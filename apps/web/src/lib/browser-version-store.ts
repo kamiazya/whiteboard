@@ -158,6 +158,32 @@ export class BrowserVersionStore {
     })
   }
 
+  /**
+   * Does the newest checkpoint already hold the state the record is in?
+   *
+   * Both halves in this store's own space — the frontier read exactly as
+   * `save` reads it, off the STORED record, against a row the same
+   * expression wrote. The scheduler asks rather than comparing frontiers
+   * itself: a version's frontier is the RECORD's, and a doc compared across
+   * that boundary is never equal.
+   *
+   * The frontier being the record's also means a sibling document's edit
+   * moves it, so this answers false for a document nothing touched. That
+   * costs at most one extra checkpoint, on a document that was signalled
+   * anyway, and errs toward recording where somebody stopped.
+   */
+  async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
+    const placement = await this.deps.index.resolveDocument({ workspaceId, path })
+    if (placement === null) return false
+    const record = await this.deps.docs.open(workspaceId)
+    if (record === null) return false
+    const rows = await this.rowsOf(workspaceId, placement.documentId)
+    const newest = rows.sort((a, b) => b.createdAt - a.createdAt || b.id.localeCompare(a.id))[0]
+    if (newest === undefined) return false
+    const now = new Uint8Array(encodeFrontiers(record.oplogFrontiers()))
+    return newest.frontiers.length === now.length && newest.frontiers.every((b, i) => b === now[i])
+  }
+
   /** Newest first, as the History panel lists them. */
   async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })

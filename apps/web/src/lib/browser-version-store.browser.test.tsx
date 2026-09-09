@@ -178,3 +178,46 @@ describe('automatic checkpoints', () => {
     expect(ids.has(named.id)).toBe(true)
   })
 })
+
+/**
+ * The question the checkpoint scheduler asks before writing a row, answered
+ * here rather than by comparing frontiers across the two — a version's
+ * frontier is the RECORD's, and the doc a scheduler holds is not, so a
+ * comparison spanning that boundary is never equal whatever the state.
+ */
+describe('has this state already been checkpointed', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  it('says no with no versions, yes right after one, and no again once the record moves', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'first')
+    const store = new BrowserVersionStore({ docs, index })
+
+    // Nothing saved yet: a document with no history has no point to
+    // duplicate, so the first checkpoint must always go through.
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
+
+    await store.save(workspaceId, 'canvas-a', { auto: true })
+    // Nothing has happened since, so a second row would hold what the first
+    // one holds. This is the reconnect and the after-a-bookmark case both:
+    // the store is asked, so no scheduler's memory is involved.
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+
+    await writeContent(docs, documentId, 'second')
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
+  })
+
+  it('answers a manual save the same way, since a bookmark is a point too', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'first')
+    const store = new BrowserVersionStore({ docs, index })
+
+    await store.save(workspaceId, 'canvas-a', { label: 'a point I named' })
+
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+  })
+})

@@ -15,7 +15,7 @@
  * when there is not, who did it is said once, and the fact that someone
  * marked this version deliberately is carried by the label existing.
  */
-import { cleanup, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import type { VersionsBackend } from '../lib/versions-backend.js'
@@ -155,5 +155,57 @@ describe('a version row is written from the content side', () => {
     // last true answer — but stops presenting them as current.
     await waitFor(() => expect(screen.getByTestId('version-list-stale')).toBeTruthy())
     expect(screen.getAllByTestId('version-row')).toHaveLength(3)
+  })
+})
+
+/**
+ * Which row is the one on screen.
+ *
+ * Opening a version swaps the whole document out for a past state and
+ * renames the top bar, but the LIST said nothing — so on a screen wide
+ * enough to show both, the history was a column of identical-looking rows
+ * with no mark on the one being looked at. `aria-current` rather than a
+ * colour alone: "the current item in a set" is exactly the fact, and it
+ * reaches a screen reader, which a ring cannot.
+ */
+describe('the row being looked at', () => {
+  function backendWithPast(): VersionsBackend {
+    const backend = backendOf(async () => ROWS)
+    backend.loadPast = vi.fn(async () => ({
+      kind: 'spatial' as const,
+      canvas: { nodes: [], edges: [] },
+    })) as never
+    return backend
+  }
+
+  it('is marked in the list, and it is the only one', async () => {
+    renderTimeline(backendWithPast())
+    const rows = await screen.findAllByTestId('version-row')
+
+    // Nothing is open yet, so nothing claims to be current — otherwise a
+    // mark that is always on some row says nothing about this one.
+    for (const row of rows) {
+      expect(within(row).getByRole('button').getAttribute('aria-current')).toBeNull()
+    }
+
+    fireEvent.click(within(rows[1] as HTMLElement).getByRole('button'))
+
+    await waitFor(() => {
+      expect(
+        within(rows[1] as HTMLElement)
+          .getByRole('button')
+          .getAttribute('aria-current'),
+      ).toBe('true')
+    })
+    expect(
+      within(rows[0] as HTMLElement)
+        .getByRole('button')
+        .getAttribute('aria-current'),
+    ).toBeNull()
+    expect(
+      within(rows[2] as HTMLElement)
+        .getByRole('button')
+        .getAttribute('aria-current'),
+    ).toBeNull()
   })
 })
