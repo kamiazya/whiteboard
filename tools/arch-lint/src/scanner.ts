@@ -1,5 +1,5 @@
 import { builtinModules } from 'node:module'
-import ts from 'typescript'
+import ts from '@typescript/typescript6'
 
 export type BoundaryViolationKind =
   | 'node-builtin-import'
