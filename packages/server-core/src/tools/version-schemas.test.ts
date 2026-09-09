@@ -15,7 +15,6 @@ const VALID_ENTRY = {
   elementCount: 3,
   label: 'Initial draft',
   auto: false,
-  hasThumbnail: false,
   branchName: 'main',
 }
 

@@ -493,22 +493,21 @@ describe('createApp daemon mutation auth', () => {
 
     await client.connect(transport)
     const tools = await client.listTools()
-    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_document_create')
+    const workspaceEditTool = tools.tools.find((tool) => tool.name === 'wb_workspace_edit')
     const createResult = await client.callTool({
-      name: 'wb_document_create',
+      name: 'wb_workspace_edit',
       arguments: {
         workspaceId: 'default',
-        path: 'via-mcp',
-        kind: 'spatial',
         createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'via-mcp', kind: 'spatial' }],
       },
     })
 
-    expect(canvasCreateTool).toBeDefined()
-    expect(canvasCreateTool?.outputSchema).toBeDefined()
+    expect(workspaceEditTool).toBeDefined()
+    expect(workspaceEditTool?.outputSchema).toBeDefined()
     expect(createResult.structuredContent).toMatchObject({
-      documentId: expect.any(String),
-      path: 'via-mcp',
+      applied: 1,
+      results: [{ documentId: expect.any(String), path: 'via-mcp' }],
     })
     expect(createResult.content).toEqual([
       {
@@ -542,19 +541,18 @@ describe('createApp daemon mutation auth', () => {
     await client.connect(transport)
     expect(client.getProtocolEra()).toBe('modern')
     const tools = await client.listTools()
-    expect(tools.tools.some((tool) => tool.name === 'wb_document_create')).toBe(true)
+    expect(tools.tools.some((tool) => tool.name === 'wb_workspace_edit')).toBe(true)
     const createResult = await client.callTool({
-      name: 'wb_document_create',
+      name: 'wb_workspace_edit',
       arguments: {
         workspaceId: 'default',
-        path: 'via-modern-mcp',
-        kind: 'spatial',
         createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'via-modern-mcp', kind: 'spatial' }],
       },
     })
     expect(createResult.structuredContent).toMatchObject({
-      documentId: expect.any(String),
-      path: 'via-modern-mcp',
+      applied: 1,
+      results: [{ documentId: expect.any(String), path: 'via-modern-mcp' }],
     })
     await transport.close()
   })

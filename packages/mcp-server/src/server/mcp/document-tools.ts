@@ -291,26 +291,15 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
   )
 
-  registerToolWithAnnotations(
-    server,
-    tools.documentSet.name,
-    {
-      description: tools.documentSet.description,
-      inputSchema: tools.documentSet.inputSchema.shape,
-      outputSchema: tools.documentSet.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.documentSet.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.documentSet.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  // One call for several documents. Separate from wb_document_create rather
-  // than replacing it: a single create is the common case and should not
-  // have to be wrapped in an ops array to happen.
+  // The ONE front door onto document create / set / delete. The standalone
+  // `wb_document_create`, `wb_document_set` and `wb_document_delete` tools
+  // were retired into its ops: two ways to do one thing is a tool table an
+  // agent reads twice, and the batch is the shape that stops a five-document
+  // errand costing five round trips. A single create pays for it in bytes,
+  // not in calls — measured at +32 request / +106 response on one create.
+  //
+  // The OPERATIONS survive: `wbDocumentCreate` and friends still back these
+  // ops and the `/api/v1` routes. Only the second front door is gone.
   registerToolWithAnnotations(
     server,
     tools.workspaceEdit.name,
@@ -325,25 +314,10 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
   )
 
-  // Document CRUD. These have no Hono route counterpart registered here, but
-  // they still come from `createServer`'s tool record rather than from the
-  // bare operations, so the handle resolution that record carries applies.
-  registerToolWithAnnotations(
-    server,
-    tools.documentCreate.name,
-    {
-      description: tools.documentCreate.description,
-      inputSchema: tools.documentCreate.inputSchema,
-      outputSchema: tools.documentCreate.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentCreate.execute(
-        tools.documentCreate.inputSchema.parse(args),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
+  // The read half of document CRUD. These have no Hono route counterpart
+  // registered here, but they still come from `createServer`'s tool record
+  // rather than from the bare operations, so the handle resolution that
+  // record carries applies.
   registerToolWithAnnotations(
     server,
     tools.documentList.name,
@@ -369,22 +343,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     async (args) => {
       const result = await tools.documentResolve.execute(
         tools.documentResolve.inputSchema.parse(args),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.documentDelete.name,
-    {
-      description: tools.documentDelete.description,
-      inputSchema: tools.documentDelete.inputSchema.shape,
-      outputSchema: tools.documentDelete.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentDelete.execute(
-        tools.documentDelete.inputSchema.parse(args),
       )
       return structuredJsonResult(result)
     },

@@ -72,7 +72,8 @@ class DocumentKindUnknownError extends Error {
         '(checked both the document itself and its index row). ' +
         'Documents created before kinds existed are affected. Editing one records a kind: ' +
         'wb_canvas_edit records it as spatial and keeps what it holds, ' +
-        'and wb_document_set records it as markdown — which replaces its content, so it is ' +
+        "and `wb_workspace_edit`'s `document.set` op records it as markdown — which replaces its " +
+        'content, so it is ' +
         'refused unless the document is empty.',
     )
     this.name = 'DocumentKindUnknownError'

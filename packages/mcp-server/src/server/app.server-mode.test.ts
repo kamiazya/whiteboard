@@ -670,38 +670,6 @@ describe('app — server-mode composition', () => {
       expect(res.status).toBe(403)
     })
 
-    it('GET /api/workspaces/:wid/documents/:path/latest-thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request('/api/workspaces/w1/documents/canvas-a/latest-thumbnail', {
-        headers: { authorization: BEARER },
-      })
-      expect(res.status).toBe(403)
-    })
-
-    it('GET /api/workspaces/:wid/documents/:path/versions/:id/thumbnail → 403 with workspace:read only (requires versions:read)', async () => {
-      const app = createApp(makeServerModeOptions(['workspace:read']))
-      const res = await app.request(
-        '/api/workspaces/w1/documents/canvas-a/versions/v-001/thumbnail',
-        {
-          headers: { authorization: BEARER },
-        },
-      )
-      expect(res.status).toBe(403)
-    })
-
-    it('PUT /api/workspaces/:wid/documents/:path/versions/:id/thumbnail → 403 with versions:read only (requires versions:write)', async () => {
-      const app = createApp(makeServerModeOptions(['versions:read']))
-      const res = await app.request(
-        '/api/workspaces/w1/documents/canvas-a/versions/v-001/thumbnail',
-        {
-          method: 'PUT',
-          headers: { authorization: BEARER, 'content-type': 'image/png' },
-          body: new Uint8Array([0x89, 0x50, 0x4e, 0x47]),
-        },
-      )
-      expect(res.status).toBe(403)
-    })
-
     it('POST /api/workspaces/:wid/documents/:path/compact → 403 with workspace:write only (requires versions:write)', async () => {
       const app = createApp(makeServerModeOptions(['workspace:write']))
       const res = await app.request('/api/workspaces/w1/documents/canvas-a/compact', {

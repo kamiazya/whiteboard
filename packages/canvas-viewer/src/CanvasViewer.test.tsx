@@ -1,4 +1,8 @@
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type MeasureText,
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -178,5 +182,23 @@ describe('CanvasViewer style (ADR-0030 decision 6)', () => {
       <CanvasViewer canvas={neon} measure={fakeMeasure} style="document" />,
     )
     expect(getByTestId('canvas-viewer').innerHTML).toContain('wb-glow')
+  })
+})
+
+describe('CanvasViewer draws in the theme its host says it is in', () => {
+  it('keeps the light palette by default and takes the dark one when the host asks', () => {
+    const { getByTestId } = render(
+      <CanvasViewer canvas={canvas} measure={fakeMeasure} testId="viewer-light" />,
+    )
+    const lightRect = getByTestId('viewer-light').querySelector('rect')
+    expect(lightRect?.getAttribute('stroke')).toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
+    cleanup()
+
+    const dark = render(
+      <CanvasViewer canvas={canvas} measure={fakeMeasure} theme="dark" testId="viewer-dark" />,
+    )
+    const darkRect = dark.getByTestId('viewer-dark').querySelector('rect')
+    expect(darkRect?.getAttribute('stroke')).toBe(SPATIAL_DARK_PALETTE.node.text.stroke)
+    expect(darkRect?.getAttribute('stroke')).not.toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
   })
 })

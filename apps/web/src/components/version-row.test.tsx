@@ -36,7 +36,6 @@ const ROWS = [
     auto: true,
     elementCount: 24,
     branchName: 'main',
-    hasThumbnail: false,
     operator: { kind: 'ai' as const, peerId: 'daemon-x', displayName: 'Claude' },
   },
   {
@@ -46,7 +45,6 @@ const ROWS = [
     auto: false,
     elementCount: 22,
     branchName: 'main',
-    hasThumbnail: false,
     operator: { kind: 'human' as const },
   },
   {
@@ -56,7 +54,6 @@ const ROWS = [
     auto: true,
     elementCount: 19,
     branchName: 'main',
-    hasThumbnail: false,
   },
 ]
 
@@ -66,8 +63,6 @@ function backendOf(list: () => Promise<typeof ROWS>): VersionsBackend {
     loadPast: vi.fn() as never,
     save: vi.fn() as never,
     restore: vi.fn() as never,
-    putThumbnail: vi.fn() as never,
-    loadThumbnail: vi.fn(async () => null) as never,
   }
 }
 

@@ -218,7 +218,6 @@ describe('versionEntrySchema', () => {
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 42,
     auto: false,
-    hasThumbnail: true,
     branchName: 'main',
   }
 
@@ -255,7 +254,6 @@ describe('listVersionsResponseSchema', () => {
     createdAt: '2024-01-01T00:00:00.000Z',
     elementCount: 1,
     auto: true,
-    hasThumbnail: false,
     branchName: 'main',
   }
   const valid: ListVersionsResponse = { versions: [entry] }
@@ -282,7 +280,6 @@ describe('saveVersionResponseSchema', () => {
     createdAt: '2024-06-01T00:00:00.000Z',
     elementCount: 5,
     auto: false,
-    hasThumbnail: true,
     branchName: 'feature',
   }
   const valid: SaveVersionResponse = { version: entry }

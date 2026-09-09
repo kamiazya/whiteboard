@@ -70,7 +70,7 @@ If the content really wants to become a structured table, such as a comparison m
 
 The working unit is a **section** — one coherent question and its answer — not necessarily a whole
 document. The whiteboard MCP surface has no frame/membership feature and no section-level render, so
-a section is either its own document (`wb_document_create`), or a loosely bounded region within one
+a section is either its own document (a `wb_workspace_edit` `document.create` op), or a loosely bounded region within one
 document marked with a `group` node (label + background only — it tracks no membership and cannot be
 exported on its own).
 

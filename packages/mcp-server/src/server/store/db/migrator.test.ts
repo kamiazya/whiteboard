@@ -163,7 +163,6 @@ describe('runMigrations', () => {
         operatorWorkspaceId: null,
         elementCount: 0,
         frontiers: '',
-        hasThumbnail: 0,
         createdAt: 1,
       })
       .execute()

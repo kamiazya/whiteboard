@@ -45,7 +45,6 @@ interface VersionsTable {
   operatorWorkspaceId: string | null
   elementCount: number
   frontiers: string
-  hasThumbnail: Bool
   createdAt: Timestamp
   // Set only on the point a restore produced; see `versionEntrySchema`.
   restoredFrom: string | null

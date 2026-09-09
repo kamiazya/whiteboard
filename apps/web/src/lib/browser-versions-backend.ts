@@ -75,10 +75,6 @@ export function createBrowserVersionsBackend(deps: {
         ? { kind: 'markdown', body: readMarkdownBody(past) }
         : { kind: 'spatial', canvas: readSpatialCanvas(past) }
     },
-    putThumbnail: (_workspaceId, path, versionId, blob) =>
-      deps.store.putThumbnail(getBrowserWorkspaceId(), path, versionId, blob),
-    loadThumbnail: (_workspaceId, path, versionId) =>
-      deps.store.loadThumbnail(getBrowserWorkspaceId(), path, versionId),
     async restore(_workspaceId, path, versionId) {
       const workspaceId = getBrowserWorkspaceId()
       const past = await deps.store.loadPast(workspaceId, path, versionId)

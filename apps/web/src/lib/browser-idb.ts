@@ -156,7 +156,7 @@ export function whiteboardDbName(): string {
  * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
  * rename-and-done.
  */
-export const DB_VERSION = 17
+export const DB_VERSION = 18
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -212,13 +212,20 @@ export const VERSIONS_BY_DOCUMENT_INDEX = 'byDocument'
 /**
  * The picture a saved point carries, keyed by version id. v17 adds this store.
  *
- * Its own store rather than a field on the row, for the reason the snapshot
- * chunks are split out above: a `get` answers with the whole record, so an
- * image on the row would be deserialized by every `list` the History panel
- * does, to draw a list that shows one picture at a time. The row keeps only
- * a boolean saying whether there is one.
+ * RETIRED at v18, and named only so the upgrade can delete it. The history
+ * row's miniature is gone — a saved point is looked at by opening it, which
+ * draws the document itself in the reader's own theme, where the stored PNG
+ * was baked light at save time and could never be anything else.
+ *
+ * The `hasThumbnail` boolean on existing version ROWS is deliberately left
+ * where it is. `versionRowSchema` is `.strict()` and its reader SKIPS a row
+ * that fails to parse, so a cursor rewrite that mis-ordered itself against
+ * the upgrade chain's other walks would not fail loudly — it would delete a
+ * reader's bookmarked history. Nothing reads the flag any more, so it costs
+ * one inert boolean per row; the pictures, which are what took the space,
+ * are what this deletes.
  */
-export const VERSION_THUMBNAILS_STORE = 'versionThumbnails'
+const RETIRED_VERSION_THUMBNAILS_STORE = 'versionThumbnails'
 
 /**
  * The chunk size the v12 migration writes its carried snapshots with.
@@ -697,8 +704,8 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
         const versions = db.createObjectStore(VERSIONS_STORE, { keyPath: 'id' })
         versions.createIndex(VERSIONS_BY_DOCUMENT_INDEX, ['workspaceId', 'documentId'])
       }
-      if (!db.objectStoreNames.contains(VERSION_THUMBNAILS_STORE)) {
-        db.createObjectStore(VERSION_THUMBNAILS_STORE)
+      if (db.objectStoreNames.contains(RETIRED_VERSION_THUMBNAILS_STORE)) {
+        db.deleteObjectStore(RETIRED_VERSION_THUMBNAILS_STORE)
       }
 
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.

@@ -16,7 +16,8 @@ assuming a full-featured drawing-app tool set.
 
 Use these tools:
 
-- `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
+- `wb_workspace_edit` — create, replace and delete documents in one call (`document.create` / `document.set` / `document.delete` ops)
+- `wb_document_list` / `wb_document_resolve` — find documents
 - `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction. **Pass `mode: "apply"`**: the default proposes content changes for a person to adopt, because nobody watches an agent type — but somebody just asked you to draw this, and they are looking at it
 - `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
@@ -66,7 +67,7 @@ The moment it feels like "drawing would be faster than prose," propose it and us
 
 **When in doubt, draw.**
 The cost of drawing is low; the cost of proceeding under false alignment is high.
-If the diagram turns out unnecessary, `wb_document_delete` it.
+If the diagram turns out unnecessary, delete it with a `wb_workspace_edit` `document.delete` op.
 
 ### Explicit User Triggers
 
@@ -102,7 +103,7 @@ Once the intent is fixed, choose the node shape that fits:
 ### Step 2: Create The Document
 
 ```js
-wb_document_create({ workspaceId, path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" })
+wb_workspace_edit({ workspaceId, ops: [{ op: "document.create", path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" }] })
 ```
 
 `kind: "spatial"` is required and cannot change later — a document is either a JSON Canvas (spatial) or OKF Markdown, decided at creation.
@@ -223,7 +224,7 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
-| structure or intent is wrong | create a fresh document with `wb_document_create` and redraw |
+| structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
 reconciles a group's contents to the list you give it, so anything strictly
@@ -286,7 +287,7 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;
-  `kind: "markdown"` gives you an OKF Markdown body — `wb_document_set` replaces the whole
+  `kind: "markdown"` gives you an OKF Markdown body — a `document.set` op replaces the whole
   document, `wb_body_edit` replaces individual passages of its body — and has no nodes or edges of
   its own. (A text NODE on a spatial canvas is edited with `wb_canvas_edit`'s `node.patch`
   — `text` replaces the whole body — or `node.splice` for a line range; neither can reach a

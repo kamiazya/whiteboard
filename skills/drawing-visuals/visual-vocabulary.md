@@ -60,7 +60,7 @@ That leaves two real choices when a discussion has multiple related questions:
 - **One document, multiple visually-separated regions**: use a `group` node per region and keep
   each region's nodes physically clustered together on the grid. Cheap, but the whole SVG renders
   every time — there is no way to inspect one region in isolation.
-- **Separate documents** (`wb_document_create` per question): each renders independently, can be
+- **Separate documents** (one `document.create` op per question): each renders independently, can be
   shared or exported on its own, and keeps unrelated revision history apart.
 
 Use one document with visually-separated regions when:

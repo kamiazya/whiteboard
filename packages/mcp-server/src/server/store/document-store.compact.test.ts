@@ -298,7 +298,7 @@ describe('compactDocument', () => {
 })
 
 // `document-store.deleteDocument` is gone: it was a second implementation of
-// `wb_document_delete`, and the HTTP route that called it is now an adapter
+// `wbDocumentDelete`, and the HTTP route that called it is now an adapter
 // over the operation (ADR-0018). These cases are storage-level — blobs,
 // thumbnails, rows, the descendant refusal — so they stay at this layer and
 // drive the surviving implementation instead.

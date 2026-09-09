@@ -34,6 +34,28 @@ describe('registerDocumentTools', () => {
     expect(names).toContain('wb_version_restore')
   })
 
+  /**
+   * The three standalone document-CRUD tools are RETIRED: `wb_workspace_edit`
+   * carries `document.create` / `document.set` / `document.delete` as ops, and
+   * two ways to do one thing is a tool table an agent has to read twice.
+   *
+   * The operations themselves are untouched — `wbDocumentCreate` and friends
+   * still back the batch's ops and the `/api/v1` routes. What is gone is the
+   * second, single-subject FRONT DOOR onto them.
+   */
+  it.each([
+    'wb_document_create',
+    'wb_document_set',
+    'wb_document_delete',
+  ])('no longer registers %s', (name) => {
+    const server = fakeServer()
+    registerDocumentTools(server, fakeDeps())
+
+    const names = vi.mocked(server.registerTool).mock.calls.map((call) => call[0])
+    expect(names).not.toContain(name)
+    expect(names).toContain('wb_workspace_edit')
+  })
+
   it.each(UI_LINKED_TOOLS)('%s is registered with the MCP Apps widget linkage', (name) => {
     // Without `_meta.ui.resourceUri` the widget resource stays registered
     // and unreachable — a host renders the tool's JSON instead of the

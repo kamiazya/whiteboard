@@ -24,12 +24,17 @@ const log = getLogger('backup-blob-mirror')
 
 // What `FsBlobStore` writes: `blobs/<first 2 hex>/<remaining 62 hex>`.
 //
-// `REST_OF_DIGEST` is the guard — it is what excludes a version thumbnail,
-// whose name is `<versionId>.png`. `SHARD_NAME` is an optimisation on top: it
-// stops the walk descending into a workspace's thumbnail tree at all, which
-// on a large store is most of the directories under `blobs/`. Removing it
+// `REST_OF_DIGEST` is the guard that keeps anything not named like a digest
+// out of the sharded half; `SHARD_NAME` is an optimisation on top that stops
+// the walk descending into a non-sharded tree at all. Removing the latter
 // changes no outcome, measured; do not mistake it for the thing keeping
 // non-content-addressed files out.
+//
+// Nothing WRITES a non-sharded tree under `blobs/` any more — version
+// thumbnails were the only one, and they are retired. The two halves stay
+// because backups already on disk still carry those pictures in their
+// `files` map, and a reader that no longer knows the shape would make a
+// retained backup partly unrestorable.
 const SHARD_NAME = /^[0-9a-f]{2}$/
 const REST_OF_DIGEST = /^[0-9a-f]{62}$/
 
@@ -55,9 +60,11 @@ const manifestSchema = z.object({
   blobs: z.array(z.string().regex(DIGEST)),
   /**
    * Everything else under `blobs/`, as `<relative path>` to the digest of
-   * what that path held AT THIS PASS. Version thumbnails are addressed by
-   * name, so the path alone does not say which bytes a backup needs — two
-   * backups can legitimately want different content at the same path.
+   * what that path held AT THIS PASS. A named file is addressed by its path
+   * rather than its content, so the path alone does not say which bytes a
+   * backup needs — two backups can legitimately want different content at
+   * the same path. Written by nothing today; read for backups that predate
+   * the version thumbnail's retirement.
    */
   files: z.record(z.string(), z.string().regex(DIGEST)),
   /**
@@ -105,10 +112,10 @@ export interface MirrorBlobsOptions {
  * an older backup still depends on.
  *
  * Everything under `blobs/` is mirrored, in one of two stores: the sharded
- * content-addressed layout by path, and everything else — today, version
- * thumbnails at `blobs/<workspaceId>/versions/<id>.png` — by the digest of
- * its own bytes. A workspace id is never two hex characters, which is what
- * makes the two layouts separable at all.
+ * content-addressed layout by path, and everything else by the digest of its
+ * own bytes. A workspace id is never two hex characters, which is what makes
+ * the two layouts separable at all. Only the sharded half has a producer
+ * now; see the note at `SHARD_NAME` for why the other is kept.
  */
 export async function mirrorBlobsIntoBackup(
   dataDir: string,
@@ -174,16 +181,15 @@ async function mirrorShard(
 }
 
 /**
- * Everything under `blobs/` that is not the sharded store — today, a
- * workspace's version thumbnails.
+ * Everything under `blobs/` that is not the sharded store. Nothing writes
+ * such a tree today; this reads the ones retained backups already hold.
  *
  * Keyed on CONTENT, not on path. Keying on path is what the old whole-tree
  * copy effectively did, and it is wrong here for a reason a size measurement
- * never shows: `saveThumbnail` writes to `<workspaceId>/versions/<id>.png`,
- * and nothing stops the same path being written again. Mirroring by path
- * would let a later pass overwrite bytes an older retained backup still
- * depends on — a backup that was restorable yesterday and is not today, with
- * no error anywhere.
+ * never shows: a named file's path can be written again with different
+ * bytes. Mirroring by path would let a later pass overwrite bytes an older
+ * retained backup still depends on — a backup that was restorable yesterday
+ * and is not today, with no error anywhere.
  *
  * Reading each file to hash it is the cost of that safety. It is paid against
  * the alternative of COPYING each file every night, which is what happens

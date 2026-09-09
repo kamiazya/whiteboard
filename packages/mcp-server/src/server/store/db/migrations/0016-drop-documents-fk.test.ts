@@ -88,7 +88,6 @@ async function seedVersion(db: Handle['db']): Promise<void> {
       operatorWorkspaceId: null,
       elementCount: 0,
       frontiers: 'AAECAw==',
-      hasThumbnail: 0,
       createdAt: Date.now(),
     })
     .execute()

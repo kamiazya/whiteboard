@@ -26,14 +26,18 @@ export type RenderSurfaceId =
   | 'editor-preview-pane'
   | 'tree-row-icon'
   | 'favicon'
-  | 'version-thumbnail'
 
 /**
  * `svg` is layout plus serialisation, the expensive one. `outline` is block
- * geometry only — cheaper, and the only thing legible at 24px. `png-raster`
- * is the SVG drawn into a canvas and read back as PNG.
+ * geometry only — cheaper, and the only thing legible at 24px.
+ *
+ * There was a third, `png-raster`, for the one surface that stored bytes
+ * instead of drawing: the version row's miniature. That surface is gone —
+ * a saved point is looked at by opening it — and rasterising survives only
+ * in export, which is a file a person asks for rather than a surface this
+ * ledger tallies.
  */
-export type RenderPipeline = BrokeredPipeline | 'png-raster'
+export type RenderPipeline = BrokeredPipeline
 
 type KindCoverage = 'covered' | `not covered: ${string}`
 type BrokerUse = 'through' | `not yet: ${string}`
@@ -74,14 +78,5 @@ export const RENDER_SURFACES = {
     pipeline: 'outline',
     kinds: { spatial: 'covered', markdown: 'covered' },
     broker: 'through',
-  },
-  'version-thumbnail': {
-    pipeline: 'png-raster',
-    kinds: {
-      spatial: 'covered',
-      markdown: 'covered',
-    },
-    broker:
-      'not yet: written once at save and read back as stored bytes, so there is no repeated render for an in-tab memo to join — and png-raster is deliberately outside brokeredPipelineSchema',
   },
 } satisfies Record<RenderSurfaceId, RenderSurface>

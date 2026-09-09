@@ -143,7 +143,7 @@ detail.
 No current MCP tool requires a connected browser client — canvas editing
 (`wb_canvas_edit` / `wb_facet_set`), reading
 (`wb_canvas_snapshot`), rendering (`wb_scene_render`), reading and
-writing content (`wb_document_get` / `wb_document_set`), and versioning
+writing content (`wb_document_get` / `wb_workspace_edit`), and versioning
 (`wb_version_save` / `wb_version_restore` / `wb_version_list`) all operate on the
 persisted document headlessly.
 

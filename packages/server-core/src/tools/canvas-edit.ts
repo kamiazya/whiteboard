@@ -504,7 +504,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
         throw new DocumentKindMismatchError(
           input.documentId,
           kind,
-          'This edits a JSON Canvas, and its only node holds its OKF body. Write its content through wb_document_set, or a passage of its body through wb_body_edit.',
+          "This edits a JSON Canvas, and its only node holds its OKF body. Write its content through `wb_workspace_edit`'s `document.set` op, or a passage of its body through wb_body_edit.",
         )
       }
 

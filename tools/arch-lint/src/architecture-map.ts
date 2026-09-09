@@ -355,7 +355,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
   'routes/document/metadata.ts -> names-store',
-  'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
   'routes/export.ts -> document-store',
@@ -381,15 +380,17 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * server-core instead. The ADR's scheduled burn-down is COMPLETE
  * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and ws.ts
  * are all translation-only over the LiveDocuments/WorkspaceDocuments
- * seams. The 19 edges left are the unscheduled adapters — each still a
+ * seams. The 18 edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
  *
  * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`
  * reached both `branch-merge` and `branches-store`, and the route no longer
- * exists. Debt paid by deletion rather than by relocation, which is the
- * cheapest way this number ever comes down.
+ * exists. A third went with the version row's thumbnail —
+ * `routes/document/thumbnails.ts` reached `version-store`, and the route is
+ * gone with the feature. Debt paid by deletion rather than by relocation,
+ * which is the cheapest way this number ever comes down.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 19
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 18
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
