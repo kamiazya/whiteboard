@@ -1,5 +1,12 @@
-import { useSyncExternalStore } from 'react'
-import { subscribeThemeFonts, themeFontsGeneration } from '../lib/theme-fonts.js'
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { useEffect, useSyncExternalStore } from 'react'
+import {
+  loadThemeFontFromSource,
+  subscribeThemeFonts,
+  themeFamilyFor,
+  themeFontsGeneration,
+} from '../lib/theme-fonts.js'
 
 /**
  * The number of theme faces that have landed in this tab. A scene keyed
@@ -8,4 +15,22 @@ import { subscribeThemeFonts, themeFontsGeneration } from '../lib/theme-fonts.js
  */
 export function useThemeFontsGeneration(): number {
   return useSyncExternalStore(subscribeThemeFonts, themeFontsGeneration, themeFontsGeneration)
+}
+
+/**
+ * Asks for the family the canvas draws in under this look, from the
+ * catalogue source, the first time a surface needs it — the daemon pass
+ * (`useDaemonThemeFonts`) may already hold it, in which case this is a
+ * no-op. Keyed on the FAMILY rather than the canvas, so an edit to the
+ * board never re-asks; the loader itself refuses a held or in-flight one.
+ */
+export function useThemeFaceFor(
+  canvas: SpatialCanvas,
+  style: SpatialRenderStyle | undefined,
+): void {
+  const family = themeFamilyFor(canvas, style)
+  useEffect(() => {
+    if (family === undefined) return
+    void loadThemeFontFromSource(family)
+  }, [family])
 }

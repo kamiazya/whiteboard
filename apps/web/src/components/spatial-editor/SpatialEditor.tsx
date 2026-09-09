@@ -82,7 +82,7 @@ import {
   useState,
 } from 'react'
 import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
-import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
+import { useThemeFaceFor, useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -561,6 +561,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setFacetPanelOpen,
     } = useEditSessionState({ canvas, selectedId })
     const fontsGeneration = useThemeFontsGeneration()
+    useThemeFaceFor(canvas, style)
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {

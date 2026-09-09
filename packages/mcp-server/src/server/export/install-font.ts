@@ -1,10 +1,14 @@
 import { randomUUID } from 'node:crypto'
 import { mkdir, rename, rm, writeFile } from 'node:fs/promises'
 import { extname, join } from 'node:path'
+import {
+  type FontCatalogueEntry,
+  fontCatalogueEntry,
+  fontDownloadUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { z } from 'zod'
 import { opentypeApi } from '../../shared/opentype.js'
 import { getLogger } from '../log.js'
-import { type FontCatalogueEntry, fontCatalogueEntry, fontDownloadUrl } from './font-catalogue.js'
 import { installedFontDir } from './installed-fonts.js'
 
 const log = getLogger('font-install')

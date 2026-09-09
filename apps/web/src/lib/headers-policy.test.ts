@@ -1,4 +1,5 @@
 // @vitest-environment node
+import { FONT_SOURCE_ORIGIN } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { describe, expect, it } from 'vitest'
 import appsWebPkgRaw from '../../package.json?raw'
 import headersContent from '../../public/_headers?raw'
@@ -64,6 +65,19 @@ describe('Content-Security-Policy directives', () => {
       const tokens = connectSrcMatch[1].trim().split(/\s+/)
       expect(tokens).not.toContain('*')
     }
+  })
+
+  it('connect-src admits the font catalogue source, and no other third-party origin', () => {
+    // The web app fetches a theme's family from the catalogue's pinned source
+    // when no daemon holds it (ADR-0012, 2026-09-09). The origin is read off
+    // the catalogue constant rather than spelled here, so the policy and the
+    // fetch cannot drift apart — and it is the ONLY https origin admitted:
+    // every other connect target is this origin or a loopback daemon.
+    const csp = extractCsp(headersContent)
+    const connectSrcMatch = /connect-src\s+([^;]*)/.exec(csp)
+    const tokens = connectSrcMatch?.[1]?.trim().split(/\s+/) ?? []
+    expect(tokens).toContain(FONT_SOURCE_ORIGIN)
+    expect(tokens.filter((t) => t.startsWith('https://'))).toEqual([FONT_SOURCE_ORIGIN])
   })
 
   it('connect-src does not contain preview-origin wildcard patterns', () => {

@@ -147,8 +147,12 @@ registering an asset; nothing on this side changes. `canvas-theme-row.test.tsx`
 registered theme names (`themeFontFamilies`, read off the facet registry's
 theme assets) and nothing else — an installed CJK face stays an export
 concern. `App` triggers `loadThemeFonts` when `daemonShellTarget` becomes
-known, and `FontsCard` triggers it again after an install. A face lands
-three ways at once, and each is a seam the next change must keep:
+known, `FontsCard` triggers it again after an install, and the editor asks
+`loadThemeFontFromSource` for the family its canvas draws in
+(`useThemeFaceFor`, keyed on the family) — the catalogue's pinned source,
+the same file the daemon installs, for the realm no daemon serves. The two
+sources share one in-flight map, so whichever asks first lands the face. A
+face lands three ways at once, and each is a seam the next change must keep:
 
 - **the main thread**, through canvas-viewer's `registerFontBytes`, so
   `hasLoadedFace` — the `fontAvailable` the composition passes — answers

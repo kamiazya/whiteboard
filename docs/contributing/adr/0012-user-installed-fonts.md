@@ -146,6 +146,21 @@ installed families still reach only the export, by choice: the theme case is
 the one where a face the editor lacks changes what the document LOOKS like,
 not merely whether a glyph is drawn.
 
+**2026-09-09, later the same day:** the browser also fetches a theme's family
+from the catalogue's pinned source itself (`raw.githubusercontent.com`, the
+same file the daemon installs) when no daemon holds it — a browser-kept
+workspace, or a daemon nobody installed it on. A theme picked with no daemon
+otherwise changed the strokes and not the lettering, which read as the theme
+not applying. Three things keep this inside the decisions above. The fetch is
+triggered by a canvas being DRAWN in that theme, never at startup and never by
+the widget, so ADR-0011's zero-network render and the widget's assertion hold.
+The URL is still built from a catalogue entry by the code, never taken from
+input: the catalogue moved to `daemon-client`'s fonts contract so both sides
+build it from one table, and the daemon's install API still takes an id. And
+the daemon's own rendering is unchanged — its export draws what the daemon
+holds, so a family seen in the editor and absent from `wb_scene_render` is
+the install decision 4 already describes, now visible from the other side.
+
 ## Consequences
 
 - **The daemon makes outbound requests for the first time.** That is a change

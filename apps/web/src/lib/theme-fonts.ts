@@ -6,16 +6,25 @@
  * module fetches the same bytes and registers them as a face — on the main
  * thread here, and in every layout worker through `attachThemeFaces` — so
  * the editor, the worker and the daemon's export measure the same glyphs.
- * Any other installed family stays where it was: an export concern.
+ * Where no daemon holds the family, `loadThemeFontFromSource` fetches the
+ * same file from the catalogue's pinned source, on a theme being USED —
+ * never at startup, and never from the widget. Any other installed family
+ * stays where it was: an export concern.
  *
  * A face is held once per family for the life of the tab. Nothing here is
  * awaited by a render: a layout asks `hasLoadedFace` and draws with the
  * bundled family until the answer changes, and `themeFontsGeneration` is
  * what tells a scene to lay out again when it does.
  */
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { registerFontBytes } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
+import {
+  fontCatalogueEntryByFamily,
+  fontDownloadUrl,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry, resolveCanvasTheme } from '@kamiazya/whiteboard-plugin-visual'
 import { getAppLogger } from './app-logger.js'
 import { fetchFontFile, listFonts } from './daemon-api-client.js'
 
@@ -116,6 +125,66 @@ export async function loadThemeFonts(options: {
     if (await pending) landed.push(font.family)
   }
   return landed
+}
+
+/**
+ * Fetches ONE theme family from the catalogue's pinned source — the same
+ * bytes the daemon installs, so the two measure alike — for a realm no
+ * daemon serves it to: a browser-kept workspace, or a daemon nobody
+ * installed the family on. Resolves true when the face landed in THIS
+ * call; false when it is already held, unknown to the catalogue, or failed
+ * (logged; the layout keeps declaring the bundled family).
+ *
+ * Shares `inFlight` with the daemon pass, so whichever source asks first
+ * is the one that lands and the other waits on it rather than fetching
+ * again. The daemon's own export still draws what the daemon holds: this
+ * reaches the editor, the workers and the browser's PNG export, and says
+ * nothing about a face the daemon lacks.
+ */
+export async function loadThemeFontFromSource(
+  family: string,
+  fetchFn: typeof globalThis.fetch = globalThis.fetch,
+): Promise<boolean> {
+  if (faces.has(family)) return false
+  const entry = fontCatalogueEntryByFamily(family)
+  if (entry === undefined) return false
+  const pending =
+    inFlight.get(family) ??
+    (async () => {
+      try {
+        const response = await fetchFn(fontDownloadUrl(entry))
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const bytes = await response.arrayBuffer()
+        if ((await registerFontBytes(family, bytes)) !== 'loaded') return false
+        hold(family, bytes)
+        return true
+      } catch (err) {
+        log.warn(`could not load the theme family ${family} from its source`, err)
+        return false
+      } finally {
+        inFlight.delete(family)
+      }
+    })()
+  inFlight.set(family, pending)
+  return pending
+}
+
+/**
+ * The family a canvas is drawn in under a style, or undefined when the look
+ * names none: `'clean'` never does, a theme id names that theme's, and the
+ * document look names the canvas's own theme's. What a surface asks
+ * `loadThemeFontFromSource` for — resolved here so the editor names no
+ * facet domain and reads the same registry the layout does.
+ */
+export function themeFamilyFor(
+  canvas: SpatialCanvas,
+  style: SpatialRenderStyle | undefined,
+  registry: FacetRegistry = bundledFacetRegistry,
+): string | undefined {
+  if (style === 'clean') return undefined
+  const themeId =
+    style === undefined || style === 'document' ? resolveCanvasTheme(canvas, registry) : style
+  return themeId === undefined ? undefined : registry.themeAsset(themeId)?.fontFamily
 }
 
 /**

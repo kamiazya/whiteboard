@@ -327,11 +327,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // where the earlier splits put this file's pure core. This guard is what
   // asked the question — the growth read as the feature's cost until it
   // turned out two thirds of it was misfiled.
-  // +20 for the session's look (ADR-0030 decision 6): the `style` prop and
-  // the theme-fonts generation are two more inputs the editor threads to
-  // its scene and its drag layers, and the paper it paints is the palette's
-  // surface. Threading is this file's job; there is nothing here to move.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2743,
+  // +21 for the session's look (ADR-0030 decision 6): the `style` prop, the
+  // theme-fonts generation and the ask for the theme's family are inputs
+  // the editor threads to its scene and its drag layers, and the paper it
+  // paints is the palette's surface. Threading is this file's job; there is
+  // nothing here to move.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2744,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

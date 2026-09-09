@@ -1,13 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  FONT_CATALOGUE,
   installFontResponseSchema,
   listFontsResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
-import { FONT_CATALOGUE } from '../export/font-catalogue.js'
 import { FontInstallError } from '../export/install-font.js'
 import { installedFontDir } from '../export/installed-fonts.js'
 import { withTempDataDir } from './_test-helpers.js'

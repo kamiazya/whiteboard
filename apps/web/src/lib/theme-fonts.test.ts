@@ -94,6 +94,51 @@ describe('theme fonts', () => {
     expect(mod.loadedThemeFaces()).toEqual([])
   })
 
+  it('fetches a theme family from the catalogue source when no daemon holds it, once', async () => {
+    // The browser keeper has no daemon, and a daemon nobody installed the
+    // family on answers nothing: the same bytes the daemon would install come
+    // straight from the catalogue's pinned source instead.
+    const mod = await import('./theme-fonts.js')
+    const calls: string[] = []
+    const fetchFn = vi.fn(async (input: Request | string | URL) => {
+      calls.push(String(input))
+      return new Response(bytesOf('font:yomogi'), { status: 200 })
+    }) as unknown as typeof globalThis.fetch
+    expect(await mod.loadThemeFontFromSource('Yomogi', fetchFn)).toBe(true)
+    expect(calls).toEqual([
+      'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf',
+    ])
+    expect(registerFontBytes).toHaveBeenCalledWith('Yomogi', bytesOf('font:yomogi'))
+    expect(mod.loadedThemeFaces().map((f) => f.family)).toEqual(['Yomogi'])
+
+    expect(await mod.loadThemeFontFromSource('Yomogi', fetchFn)).toBe(false)
+    expect(calls).toHaveLength(1)
+  })
+
+  it('fetches nothing for a family the catalogue does not carry', async () => {
+    const mod = await import('./theme-fonts.js')
+    const fetchFn = vi.fn() as unknown as typeof globalThis.fetch
+    expect(await mod.loadThemeFontFromSource('Comic Sans', fetchFn)).toBe(false)
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('answers the family a canvas draws in under a style, so a surface can ask for it', async () => {
+    const mod = await import('./theme-fonts.js')
+    const sketched = {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+    const plain = { nodes: [], edges: [] }
+    expect(mod.themeFamilyFor(sketched, undefined)).toBe('Yomogi')
+    expect(mod.themeFamilyFor(sketched, 'document')).toBe('Yomogi')
+    expect(mod.themeFamilyFor(sketched, 'clean')).toBeUndefined()
+    expect(mod.themeFamilyFor(plain, 'visual.sketch')).toBe('Yomogi')
+    expect(mod.themeFamilyFor(plain, undefined)).toBeUndefined()
+    // Neon names no family: nothing to fetch.
+    expect(mod.themeFamilyFor(plain, 'visual.neon')).toBeUndefined()
+  })
+
   it('names the held faces an SVG actually declares, for the PNG export to embed', async () => {
     const mod = await import('./theme-fonts.js')
     const { fetchFn } = daemonFetch([{ id: 'yomogi', family: 'Yomogi' }])

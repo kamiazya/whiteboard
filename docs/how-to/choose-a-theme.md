@@ -60,18 +60,20 @@ The web editor's own export draws what you see, theme included.
 ## Fonts
 
 The sketch theme names the **Yomogi** handwriting family (Japanese and Latin in one hand, OFL).
-It is not bundled — it is 4 MB — so it draws only where it has been installed:
+It is not bundled — it is 4 MB — so the web app fetches it the first time a board you open draws
+in that theme, from the Google Fonts catalogue's own repository (the same file the daemon
+installs), and registers the face on the page and in its layout workers. The editor, the row
+thumbnails and the browser's own PNG export then draw the same glyphs; a board already open
+redraws when the face lands. Nothing is fetched for a board that names no theme, and the face is
+held for the tab.
 
-1. Open **Settings → Fonts** while connected to a daemon and install **Yomogi**. The daemon
-   keeps the file, and from then on `wb_scene_render` and the export routes measure and declare
-   it.
-2. The web app fetches the same bytes from the daemon and registers the face on the page and in
-   its layout workers, so the editor, the row thumbnails and the browser's own PNG export draw
-   the same glyphs. Nothing to reload: a board already open redraws when the face lands.
+For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
+Fonts** while connected and install **Yomogi**. The daemon keeps the file and measures and
+declares it from then on; the web app takes the daemon's copy when it has one, and the catalogue
+source otherwise.
 
-Where the face is not available — a browser-kept workspace with no daemon, or a daemon where
-nobody installed it — the theme still draws its hand-drawn strokes, and the lettering uses the
-bundled family. The SVG names the family that was actually measured, never one that was not,
-so the coordinates and the face always agree.
+Offline, or where the source cannot be reached, the theme still draws its hand-drawn strokes and
+the lettering uses the bundled family. The SVG names the family that was actually measured,
+never one that was not, so the coordinates and the face always agree.
 
 ← Back to [how-to guides](README.md)
