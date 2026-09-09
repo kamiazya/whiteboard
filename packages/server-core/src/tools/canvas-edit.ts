@@ -149,19 +149,6 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
   groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
 ])
 
-/**
- * A node as `region.set` declares it: geometry still optional, but the id is
- * REQUIRED. Reconciliation is matching by id — a declared node with no id
- * could only ever be a create, which is `node.add`'s job, and would make the
- * op non-idempotent.
- */
-const regionNodeSchema = z.discriminatedUnion('type', [
-  textOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
-  fileOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
-  linkOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
-  groupOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
-])
-
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 
 /**
@@ -171,7 +158,15 @@ const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
  * delete anything used to be a whole-document replace.
  */
 const canvasOpSchema = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('node.add'), node: nodeDraftSchema }).strict(),
+  z
+    .object({
+      op: z.literal('node.add'),
+      node: nodeDraftSchema,
+      within: nodeIdSchema
+        .optional()
+        .describe('A group to place the node inside; the group grows to fit.'),
+    })
+    .strict(),
   z
     .object({ op: z.literal('node.patch'), id: nodeIdSchema, patch: nodePatchFieldsSchema })
     .strict(),
@@ -233,30 +228,33 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     })
     .strict(),
   /**
-   * "This group should look like this." The ONE declarative op, and so the
+   * "This group contains exactly these." The ONE declarative op, and so the
    * only one that deletes something it was not told about.
+   *
+   * It names MEMBERS by id and nothing else. The shape used to carry a full
+   * node declaration per member — the node union a second time, a third of
+   * this tool's bytes — and the lane showed what a model did with that:
+   * wrote x/y/width/height for every box, the ones already there included.
+   * Creating a member is `node.add` with `within`.
    *
    * Scope is STRICT containment in `within`'s stored box. That rule is what
    * makes the boundary safe rather than a judgement call: a node straddling
    * the edge — a human mid-drag — is not enclosed, so it is out of scope and
-   * survives. Edges follow the same rule: in scope only when BOTH endpoints
-   * are.
-   *
-   * A declared node that already exists is MERGED, not replaced, so omitting
-   * geometry leaves it where it is and re-applying the same region is a
-   * no-op. The cost of that choice is that this op cannot clear a field;
-   * use `node.patch` for that.
+   * survives. A listed node that is elsewhere is moved in and placed.
    */
   z
     .object({
       op: z.literal('region.set'),
       within: nodeIdSchema,
       nodes: z
-        .array(regionNodeSchema)
+        .array(nodeIdSchema)
         .describe(
-          'Everything the group contains, by id; a node inside it that is not listed is removed. Omit x/y and a node is placed inside, and the group grows to fit.',
+          'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in. Create a new member with node.add and within.',
         ),
-      edges: z.array(canvasEdgeSchema),
+      edges: z
+        .array(nodeIdSchema)
+        .optional()
+        .describe('Edges to keep among the members; omitted keeps every edge whose ends survive.'),
     })
     .strict(),
 ])
@@ -530,26 +528,21 @@ function placeWithin(
 }
 
 /**
- * Why a declared node is outside its region, with the way out. A model that
- * was told only "would not be inside" shrank every box in the group to fit
- * (lane, 2026-09); the number it is over by and the cheaper repairs are what
- * it needed.
+ * Why a positioned node cannot go in the group it named, with the way out.
+ * Only a position before the group's top-left gets here — past the right or
+ * bottom edge the group grows instead. A model told only "would not be
+ * inside" shrank every box in the group to fit (lane, 2026-09); the number it
+ * is over by and the cheaper repairs are what it needed.
  */
 function outsideDetail(
   id: string,
-  node: { x: number; y: number; width: number; height: number },
-  bounds: { id: string; x: number; y: number; width: number; height: number },
+  node: { x: number; y: number },
+  bounds: { id: string; x: number; y: number },
 ): string {
   const over: string[] = []
   if (node.x < bounds.x) over.push(`left edge ${node.x} is before the group's ${bounds.x}`)
   if (node.y < bounds.y) over.push(`top edge ${node.y} is above the group's ${bounds.y}`)
-  const right = node.x + node.width
-  const groupRight = bounds.x + bounds.width
-  if (right > groupRight) over.push(`right edge ${right} is past the group's ${groupRight}`)
-  const bottom = node.y + node.height
-  const groupBottom = bounds.y + bounds.height
-  if (bottom > groupBottom) over.push(`bottom edge ${bottom} is past the group's ${groupBottom}`)
-  return `node "${id}" would not be inside "${bounds.id}": ${over.join(', ')}. Widen "${bounds.id}" with node.patch, move the node, or omit its x/y to have it placed inside (the group grows to fit what is placed)`
+  return `node "${id}" would not be inside "${bounds.id}": ${over.join(', ')}. The group grows to the right and down but keeps its top-left: move the node, or omit its x/y to have it placed inside`
 }
 
 function mintId(taken: ReadonlySet<string>, prefix: string): string {
@@ -644,6 +637,100 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)
       const edgeAt = (id: string) => edges.find((edge) => edge.id === id)
 
+      const groupNamed = (index: number, opName: string, id: string): SpatialNode => {
+        const group = nodeAt(id)
+        if (group === undefined || group.type !== 'group') {
+          fail(
+            index,
+            opName,
+            `"${id}" is not a group on the canvas; within names one to place inside`,
+          )
+        }
+        return group
+      }
+      /** Strict containment in a group's CURRENT box, the group itself excluded. */
+      const enclosedBy =
+        (group: SpatialNode) =>
+        (node: SpatialNode): boolean =>
+          node.id !== group.id &&
+          node.x >= group.x &&
+          node.y >= group.y &&
+          node.x + node.width <= group.x + group.width &&
+          node.y + node.height <= group.y + group.height
+      /**
+       * Grows a group so that every rect is inside it, gutter included.
+       * Grow-only, only on an actual overflow past the right or bottom
+       * edge, and the top-left stays put, so re-applying the same op stays
+       * a no-op; what it can do is enclose a neighbour that sat just past
+       * the old edge, which the next region.set will then see in scope —
+       * geometry is geometry, and the result reports the size. A rect
+       * before the top-left is the caller's to move; callers refuse it.
+       */
+      const growToHold = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        rects: readonly Rect[],
+      ): void => {
+        const bounds = nodeAt(group.id) ?? group
+        const needed = rects.reduce(
+          (acc, rect) => {
+            const right = rect.x + rect.width
+            const bottom = rect.y + rect.height
+            return {
+              width:
+                right > bounds.x + bounds.width
+                  ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
+                  : acc.width,
+              height:
+                bottom > bounds.y + bounds.height
+                  ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
+                  : acc.height,
+            }
+          },
+          { width: bounds.width, height: bounds.height },
+        )
+        if (needed.width <= bounds.width && needed.height <= bounds.height) return
+        if (nodeLocks.has(bounds.id)) {
+          fail(
+            index,
+            opName,
+            `"${bounds.id}" is locked and too small for what goes in it (needs ${needed.width}x${needed.height}); unlock it, or keep each node inside it`,
+          )
+        }
+        const grown: SpatialNode = { ...bounds, width: needed.width, height: needed.height }
+        nodes = nodes.map((node) => (node.id === grown.id ? grown : node))
+        touchedNodes.add(grown.id)
+        geometry.set(grown.id, {
+          id: grown.id,
+          x: grown.x,
+          y: grown.y,
+          width: grown.width,
+          height: grown.height,
+        })
+      }
+      /**
+       * Places sizes inside a group around what it already holds. A
+       * placement is this batch's own arithmetic, so a placement that lands
+       * outside is its to fix, not the caller's: the group grows.
+       */
+      const placeInside = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        sizes: readonly { width: number; height: number }[],
+      ): { x: number; y: number }[] => {
+        const bounds = nodeAt(group.id) ?? group
+        const placements = placeWithin(bounds, sizes, nodes.filter(enclosedBy(bounds)))
+        growToHold(
+          index,
+          opName,
+          bounds,
+          placements.map((at, i) => ({ ...at, ...(sizes[i] ?? { width: 0, height: 0 }) })),
+        )
+        return placements
+      }
+
       input.ops.forEach((op, index) => {
         const issues = (error: z.ZodError): string =>
           error.issues.map((issue) => issue.message).join('; ')
@@ -674,12 +761,25 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // y has no position, and guessing the other half would put it
             // somewhere the caller did not ask for either.
             const positioned = draft.x !== undefined && draft.y !== undefined
+            const group = op.within === undefined ? undefined : groupNamed(index, op.op, op.within)
             const at = positioned
               ? { x: draft.x as number, y: draft.y as number }
-              : cursor.next(nodes, width, height)
+              : group === undefined
+                ? cursor.next(nodes, width, height)
+                : placeInside(index, op.op, group, [{ width, height }])[0]
+            if (at === undefined) fail(index, op.op, 'no placement')
 
             const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            // A position the CALLER chose, in a group the caller named: both
+            // are explicit, and the group grows so both hold — except before
+            // its top-left, which growth keeps, so that one is refused.
+            if (positioned && group !== undefined) {
+              if (parsed.data.x < group.x || parsed.data.y < group.y) {
+                fail(index, op.op, outsideDetail(id, parsed.data, group))
+              }
+              growToHold(index, op.op, group, [parsed.data])
+            }
             nodes = [...nodes, parsed.data]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
@@ -854,209 +954,108 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'region.set': {
-            const group = nodeAt(op.within)
-            if (group === undefined || group.type !== 'group') {
-              fail(
-                index,
-                op.op,
-                `"${op.within}" is not a group on the canvas; region.set needs one to bound the region`,
-              )
-            }
-            // Reassigned once if placement grows the group, below; every
-            // read of the boundary goes through it so the grown size is what
-            // the rest of the op is held to.
-            let bounds = group
-            const encloses = (node: SpatialNode): boolean =>
-              node.id !== bounds.id &&
-              node.x >= bounds.x &&
-              node.y >= bounds.y &&
-              node.x + node.width <= bounds.x + bounds.width &&
-              node.y + node.height <= bounds.y + bounds.height
-
-            const inScope = nodes.filter(encloses)
+            const group = groupNamed(index, op.op, op.within)
+            const inScope = nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
-            const inScopeEdges = edges.filter(
-              (edge) => inScopeIds.has(edge.fromNode) && inScopeIds.has(edge.toNode),
-            )
-            // Refused up front, before anything is removed: this op deletes by
-            // OMISSION, and silently dropping a locked element would be the
-            // worst possible reading of that.
+            const members = new Set(op.nodes)
+            if (members.has(group.id)) {
+              fail(index, op.op, `"${group.id}" is the group itself, not one of its members`)
+            }
+            for (const id of members) {
+              if (nodeAt(id) === undefined) {
+                fail(
+                  index,
+                  op.op,
+                  `node "${id}" is not on the canvas; region.set names members that exist — create it with node.add and within "${group.id}"`,
+                )
+              }
+            }
+            // Refused up front, before anything is removed or moved: this op
+            // deletes by OMISSION, and silently dropping a locked element
+            // would be the worst possible reading of that. A listed node
+            // that is elsewhere is about to be moved, so its lock counts too.
             for (const node of inScope) {
               if (nodeLocks.has(node.id)) {
                 fail(index, op.op, `node "${node.id}" inside the region is locked`)
               }
             }
-            for (const edge of inScopeEdges) {
-              if (edgeLocks.has(edge.id)) {
-                fail(index, op.op, `edge "${edge.id}" inside the region is locked`)
+            for (const id of members) {
+              if (!inScopeIds.has(id) && nodeLocks.has(id)) {
+                fail(
+                  index,
+                  op.op,
+                  `node "${id}" is locked; unlock it before moving it into "${group.id}"`,
+                )
               }
             }
 
-            const declaredNodes = new Set(op.nodes.map((node) => node.id))
-            const declaredEdges = new Set(op.edges.map((edge) => edge.id))
-            const dropped = inScope.filter((node) => !declaredNodes.has(node.id))
+            const dropped = inScope.filter((node) => !members.has(node.id))
             const droppedIds = new Set(dropped.map((node) => node.id))
             for (const node of dropped) {
               touchedNodes.add(node.id)
               nodeLocks.delete(node.id)
             }
-            // An edge goes if it was in scope and undeclared, OR if either
-            // endpoint just went — a dangling edge stores a canvas the next
-            // read refuses.
+            nodes = nodes.filter((node) => !droppedIds.has(node.id))
+
+            // Members that are elsewhere come in, placed around the ones
+            // already inside; the group grows if it has no room.
+            const arriving = op.nodes.filter((id) => !inScopeIds.has(id))
+            const placements = placeInside(
+              index,
+              op.op,
+              group,
+              arriving.map((id) => {
+                const node = nodeAt(id)
+                return { width: node?.width ?? 0, height: node?.height ?? 0 }
+              }),
+            )
+            arriving.forEach((id, at) => {
+              const placed = placements[at]
+              const node = nodeAt(id)
+              if (placed === undefined || node === undefined) return
+              const moved = { ...node, ...placed }
+              nodes = nodes.map((candidate) => (candidate.id === id ? moved : candidate))
+              touchedNodes.add(id)
+              geometry.set(id, { id, ...placed, width: node.width, height: node.height })
+            })
+
+            // An edge goes if either endpoint just went — a dangling edge
+            // stores a canvas the next read refuses — or, when `edges` is
+            // given, if it runs between two members and is not listed.
             // Scoped to THIS op. `touchedEdges` spans the whole batch, so an
-            // edge an earlier op merely touched is not this region's to delete.
+            // edge an earlier op merely touched is not this region's to
+            // delete.
+            const keep = op.edges === undefined ? undefined : new Set(op.edges)
+            if (keep !== undefined) {
+              for (const id of keep) {
+                const edge = edgeAt(id)
+                if (edge === undefined) fail(index, op.op, `edge "${id}" is not on the canvas`)
+                for (const endpoint of [edge.fromNode, edge.toNode]) {
+                  if (!members.has(endpoint)) {
+                    fail(
+                      index,
+                      op.op,
+                      `edge "${id}" ends at "${endpoint}", which is not a member; an edge is in the region only when both ends are`,
+                    )
+                  }
+                }
+              }
+            }
             const removedEdges = new Set<string>()
             for (const edge of edges) {
               const strandedBy = droppedIds.has(edge.fromNode) || droppedIds.has(edge.toNode)
-              const undeclaredInRegion =
-                inScopeEdges.some((candidate) => candidate.id === edge.id) &&
-                !declaredEdges.has(edge.id)
-              if (strandedBy || undeclaredInRegion) {
+              const unlistedAmongMembers =
+                keep !== undefined &&
+                members.has(edge.fromNode) &&
+                members.has(edge.toNode) &&
+                !keep.has(edge.id)
+              if (strandedBy || unlistedAmongMembers) {
                 removedEdges.add(edge.id)
                 touchedEdges.add(edge.id)
                 edgeLocks.delete(edge.id)
               }
             }
-            nodes = nodes.filter((node) => !droppedIds.has(node.id))
             edges = edges.filter((edge) => !removedEdges.has(edge.id))
-
-            // Placement for the declared nodes that carry no position, all at
-            // once so they tile rather than stack.
-            const needPlacing = op.nodes.filter(
-              (node) =>
-                nodeAt(node.id) === undefined && (node.x === undefined || node.y === undefined),
-            )
-            const sizeOf = (node: (typeof op.nodes)[number]) => ({
-              width: node.width ?? nodeAt(node.id)?.width ?? DEFAULT_SIZE[node.type].width,
-              height: node.height ?? nodeAt(node.id)?.height ?? DEFAULT_SIZE[node.type].height,
-            })
-            // What the region will hold at a known position: kept nodes as
-            // declared over what they were, and new ones that name a spot.
-            const occupied = op.nodes.flatMap((node): Rect[] => {
-              const existing = nodeAt(node.id)
-              const x = node.x ?? existing?.x
-              const y = node.y ?? existing?.y
-              return x === undefined || y === undefined ? [] : [{ x, y, ...sizeOf(node) }]
-            })
-            const placements = placeWithin(bounds, needPlacing.map(sizeOf), occupied)
-            const placementFor = new Map(
-              needPlacing.map((node, at) => [node.id, placements[at]] as const),
-            )
-            // A placement is this op's own arithmetic, so a placement that
-            // lands outside is this op's to fix, not the caller's: the group
-            // grows to hold it, gutter included. Only a position the CALLER
-            // chose is held to the boundary, below. Growth is grow-only,
-            // only on an actual overflow, and keeps the top-left, so
-            // re-applying the same region stays a no-op; what it can do is
-            // enclose a neighbour that sat just past the old edge, which the
-            // NEXT region.set will then see in scope — geometry is geometry,
-            // and the result reports the size.
-            const needed = needPlacing.reduce(
-              (acc, node, at) => {
-                const placed = placements[at]
-                if (placed === undefined) return acc
-                const size = sizeOf(node)
-                const right = placed.x + size.width
-                const bottom = placed.y + size.height
-                return {
-                  width:
-                    right > bounds.x + bounds.width
-                      ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
-                      : acc.width,
-                  height:
-                    bottom > bounds.y + bounds.height
-                      ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
-                      : acc.height,
-                }
-              },
-              { width: bounds.width, height: bounds.height },
-            )
-            if (needed.width > bounds.width || needed.height > bounds.height) {
-              if (nodeLocks.has(bounds.id)) {
-                fail(
-                  index,
-                  op.op,
-                  `"${bounds.id}" is locked and too small for what was placed in it (needs ${needed.width}x${needed.height}); unlock it, or give each node x/y inside it`,
-                )
-              }
-              const grown: SpatialNode = { ...bounds, width: needed.width, height: needed.height }
-              nodes = nodes.map((node) => (node.id === grown.id ? grown : node))
-              bounds = grown
-              touchedNodes.add(grown.id)
-              geometry.set(grown.id, {
-                id: grown.id,
-                x: grown.x,
-                y: grown.y,
-                width: grown.width,
-                height: grown.height,
-              })
-            }
-
-            for (const declared of op.nodes) {
-              const existing = nodeAt(declared.id)
-              const size = DEFAULT_SIZE[declared.type]
-              const width = declared.width ?? existing?.width ?? size.width
-              const height = declared.height ?? existing?.height ?? size.height
-              const placed = placementFor.get(declared.id)
-              const at =
-                declared.x !== undefined && declared.y !== undefined
-                  ? { x: declared.x, y: declared.y }
-                  : existing !== undefined
-                    ? { x: existing.x, y: existing.y }
-                    : (placed ?? { x: bounds.x, y: bounds.y })
-              // MERGED over what is already there, not replaced: that is what
-              // makes re-applying the same region a no-op.
-              const parsed = spatialNodeSchema.safeParse({
-                ...(existing ?? {}),
-                ...declared,
-                ...at,
-                width,
-                height,
-              })
-              if (!parsed.success) fail(index, op.op, issues(parsed.error))
-              const next = parsed.data
-              // A declaration names what the region CONTAINS, so its result has
-              // to be inside it. Without this an op scoped to one group could
-              // move any node on the board — and since the lock preflight only
-              // walks what is in scope, a locked one at that.
-              if (!encloses(next)) {
-                fail(index, op.op, outsideDetail(declared.id, next, bounds))
-              }
-              nodes =
-                existing === undefined
-                  ? [...nodes, next]
-                  : nodes.map((node) => (node.id === declared.id ? next : node))
-              touchedNodes.add(declared.id)
-              if (placed !== undefined) {
-                geometry.set(declared.id, { id: declared.id, ...placed, width, height })
-              }
-            }
-
-            for (const declared of op.edges) {
-              for (const endpoint of [declared.fromNode, declared.toNode]) {
-                const node = nodeAt(endpoint)
-                if (node === undefined) {
-                  fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
-                }
-                // Same rule as the nodes above, and the same reason: an edge is
-                // in this region only when BOTH its endpoints are.
-                if (!encloses(node)) {
-                  fail(
-                    index,
-                    op.op,
-                    `endpoint "${endpoint}" is not inside "${bounds.id}"; an edge is in the region only when both ends are`,
-                  )
-                }
-              }
-              const parsed = canvasEdgeSchema.safeParse(declared)
-              if (!parsed.success) fail(index, op.op, issues(parsed.error))
-              const next = parsed.data
-              edges =
-                edgeAt(declared.id) === undefined
-                  ? [...edges, next]
-                  : edges.map((edge) => (edge.id === declared.id ? next : edge))
-              touchedEdges.add(declared.id)
-            }
             return
           }
 

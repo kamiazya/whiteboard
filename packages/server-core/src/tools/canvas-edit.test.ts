@@ -887,8 +887,16 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
 })
 
 /**
- * `region.set` — the one declarative op. "This group should look like this",
+ * `region.set` — the one declarative op. "This group contains exactly these",
  * which makes it the only op that deletes something it was not told about.
+ *
+ * It names MEMBERS, by id, and nothing else: a node inside the group that is
+ * not listed is removed, a listed node that is elsewhere is moved in and
+ * placed, and a node that does not exist is `node.add`'s job (with `within`
+ * to land it inside). The shape used to carry a full node declaration per
+ * member — the node union a second time, a third of the tool's bytes — and
+ * the lane showed what a model did with it: wrote x/y/width/height for every
+ * box, including the ones already there.
  *
  * Its scope rule is STRICT containment, and that is what makes the boundary
  * safe rather than a judgement call: a node straddling the group's edge — a
@@ -906,7 +914,7 @@ describe('wb_canvas_edit — region.set', () => {
     label: 'Phase 1',
   }
 
-  test('replaces what is inside the group and leaves the rest of the board alone', async () => {
+  test('removes what is inside the group and unlisted, and leaves the rest of the board alone', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
@@ -923,14 +931,8 @@ describe('wb_canvas_edit — region.set', () => {
       documentId: DOCUMENT_ID,
       mode: 'apply',
       ops: [
-        {
-          op: 'region.set',
-          within: 'g',
-          nodes: [
-            { id: 'inside-new', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'new' },
-          ],
-          edges: [],
-        },
+        { op: 'node.add', node: { id: 'inside-new', type: 'text', text: 'new' }, within: 'g' },
+        { op: 'region.set', within: 'g', nodes: ['inside-new'] },
       ],
     })
 
@@ -959,7 +961,7 @@ describe('wb_canvas_edit — region.set', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+      ops: [{ op: 'region.set', within: 'g', nodes: [] }],
     })
 
     expect(result.touched.nodes).not.toContain('straddling')
@@ -976,14 +978,14 @@ describe('wb_canvas_edit — region.set', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+      ops: [{ op: 'region.set', within: 'g', nodes: [] }],
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['g'])
   })
 
-  test('keeps an edge that leaves the region, and replaces one wholly inside it', async () => {
+  test('keeps an edge that leaves the region, and drops one stranded by a removed node', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
@@ -1003,20 +1005,41 @@ describe('wb_canvas_edit — region.set', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [
-        {
-          op: 'region.set',
-          within: 'g',
-          // 'a' survives (listed); 'b' does not; so 'internal' has nothing to
-          // connect and goes with it, while 'leaving' is out of scope.
-          nodes: [{ id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' }],
-          edges: [],
-        },
-      ],
+      // 'a' survives (listed); 'b' does not; so 'internal' has nothing to
+      // connect and goes with it, while 'leaving' is out of scope.
+      ops: [{ op: 'region.set', within: 'g', nodes: ['a'] }],
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
+  })
+
+  test('with `edges` given, keeps exactly those among the members', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'a', type: 'text', x: 20, y: 20, width: 80, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 200, y: 20, width: 80, height: 40, text: 'b' },
+        { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
+      ],
+      edges: [
+        { id: 'keep', fromNode: 'a', toNode: 'b' },
+        { id: 'drop', fromNode: 'b', toNode: 'a' },
+        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'region.set', within: 'g', nodes: ['a', 'b'], edges: ['keep'] }],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.edges.map((e) => e.id).sort()).toEqual(['keep', 'leaving'])
   })
 
   test('refuses when a locked node is inside the region', async () => {
@@ -1043,7 +1066,7 @@ describe('wb_canvas_edit — region.set', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'apply',
-        ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
+        ops: [{ op: 'region.set', within: 'g', nodes: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
@@ -1051,53 +1074,88 @@ describe('wb_canvas_edit — region.set', () => {
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'pinned'])
   })
 
-  test('places a listed node that carries no geometry INSIDE the group', async () => {
-    // The default placement puts a node below existing content, which for
-    // this op would land it outside the very region it was declared in — and
-    // therefore out of scope on the next call, which is not idempotent.
+  test('moves a listed node that is elsewhere into the group, and is idempotent', async () => {
     const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'one', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'one' },
+      ],
+      edges: [],
+    })
     const tool = createCanvasEditTool(makeDeps(store))
+    const op = { op: 'region.set' as const, within: 'g', nodes: ['one'] }
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [
-        {
-          op: 'region.set',
-          within: 'g',
-          nodes: [{ id: 'fresh', type: 'text', text: 'no coordinates' }],
-          edges: [],
-        },
-      ],
+      ops: [op],
     })
+    const moved = result.geometry.find((entry) => entry.id === 'one')
+    expect(moved).toBeDefined()
+    expect(moved?.x).toBeGreaterThanOrEqual(GROUP.x)
+    expect(moved?.y).toBeGreaterThanOrEqual(GROUP.y)
+    expect((moved?.x ?? 0) + (moved?.width ?? 0)).toBeLessThanOrEqual(GROUP.x + GROUP.width)
+    expect((moved?.y ?? 0) + (moved?.height ?? 0)).toBeLessThanOrEqual(GROUP.y + GROUP.height)
+    expect(result.touched.nodes).toContain('one')
 
-    const placed = result.geometry.find((entry) => entry.id === 'fresh')
-    expect(placed).toBeDefined()
-    expect(placed?.x).toBeGreaterThanOrEqual(GROUP.x)
-    expect(placed?.y).toBeGreaterThanOrEqual(GROUP.y)
-    expect((placed?.x ?? 0) + (placed?.width ?? 0)).toBeLessThanOrEqual(GROUP.x + GROUP.width)
-    expect((placed?.y ?? 0) + (placed?.height ?? 0)).toBeLessThanOrEqual(GROUP.y + GROUP.height)
+    const before = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const again = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [op],
+    })
+    const after = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(after.canvas).toEqual(before.canvas)
+    expect(again.touched.nodes).toEqual([])
   })
 
-  test('is idempotent: applying the same region twice changes nothing the second time', async () => {
+  test('refuses to move in a locked node, and refuses a member that does not exist', async () => {
     const store = new FakeDocumentStore()
-    await seedCanvas(store, { nodes: [GROUP], edges: [] })
-    const tool = createCanvasEditTool(makeDeps(store))
-    const op = {
-      op: 'region.set' as const,
-      within: 'g',
-      nodes: [{ id: 'one', type: 'text' as const, text: 'one' }],
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'outsider', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'keep me' },
+      ],
       edges: [],
-    }
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.lock', id: 'outsider', locked: true }],
+    })
 
-    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
-    const before = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
-    const after = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'region.set', within: 'g', nodes: ['outsider'] }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/locked/),
+    })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'outsider')).toMatchObject({ x: 900, y: 900 })
 
-    expect(after.canvas).toEqual(before.canvas)
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'region.set', within: 'g', nodes: ['ghost'] }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      // The way out is named: a member that does not exist is created by
+      // node.add, and `within` lands it inside.
+      message: expect.stringMatching(/node\.add.*within/),
+    })
   })
 
   test('refuses a `within` that is not a group on the canvas', async () => {
@@ -1115,7 +1173,7 @@ describe('wb_canvas_edit — region.set', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'apply',
-        ops: [{ op: 'region.set', within: 'plain', nodes: [], edges: [] }],
+        ops: [{ op: 'region.set', within: 'plain', nodes: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
@@ -1124,7 +1182,7 @@ describe('wb_canvas_edit — region.set', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'apply',
-        ops: [{ op: 'region.set', within: 'ghost', nodes: [], edges: [] }],
+        ops: [{ op: 'region.set', within: 'ghost', nodes: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
   })
@@ -1150,7 +1208,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [
         // Touches `outside` — and this edge is nowhere near `g`.
         { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
-        { op: 'region.set', within: 'g', nodes: [], edges: [] },
+        { op: 'region.set', within: 'g', nodes: [] },
       ],
     })
 
@@ -1158,17 +1216,15 @@ describe('wb_canvas_edit — region.set', () => {
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['outside'])
   })
 
-  // The lock preflight only walks the region, so a declaration naming
-  // something outside it is neither checked nor in scope — it would let a
-  // region edit reach any node on the board, locked ones included.
-  test('refuses to move a node that is not inside the region', async () => {
+  test('refuses a listed edge whose endpoints are not both members', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
         GROUP,
-        { id: 'outsider', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'keep me' },
+        { id: 'in', type: 'text', x: 20, y: 20, width: 10, height: 10, text: 'in' },
+        { id: 'far', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
       ],
-      edges: [],
+      edges: [{ id: 'smuggled', fromNode: 'in', toNode: 'far' }],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -1177,72 +1233,114 @@ describe('wb_canvas_edit — region.set', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'apply',
-        ops: [
-          {
-            op: 'region.set',
-            within: 'g',
-            nodes: [
-              {
-                id: 'outsider',
-                type: 'text',
-                x: 950,
-                y: 950,
-                width: 10,
-                height: 10,
-                text: 'moved',
-              },
-            ],
-            edges: [],
-          },
-        ],
+        ops: [{ op: 'region.set', within: 'g', nodes: ['in'], edges: ['smuggled'] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.nodes.find((node) => node.id === 'outsider')).toMatchObject({ x: 900, y: 900 })
+    expect(canvas.edges.map((edge) => edge.id)).toEqual(['smuggled'])
+  })
+})
+
+/**
+ * `node.add` with `within`: the node lands INSIDE that group, placed around
+ * what the group already holds, and the group grows when it has no room.
+ * This is where a member of a region is created; `region.set` only names
+ * members.
+ *
+ * Placement is what makes geometry optional, and a placement that landed
+ * outside the group used to refuse the whole batch — the third default-size
+ * box in a 700-wide group wraps to a row that does not fit. Measured on the
+ * lane: a model then declares full geometry for every box instead, which is
+ * the arithmetic the optional geometry exists to spare it.
+ */
+describe('wb_canvas_edit — node.add within a group', () => {
+  const GROUP = {
+    id: 'g',
+    type: 'group' as const,
+    x: 0,
+    y: 0,
+    width: 500,
+    height: 500,
+    label: 'Phase 1',
+  }
+
+  test('places a node that carries no geometry inside the group', async () => {
+    // The default placement puts a node below existing content, which would
+    // land it outside the very group it was meant for.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'fresh', type: 'text', text: 'no coordinates' },
+          within: 'g',
+        },
+      ],
+    })
+
+    const placed = result.geometry.find((entry) => entry.id === 'fresh')
+    expect(placed).toBeDefined()
+    expect(placed?.x).toBeGreaterThanOrEqual(GROUP.x)
+    expect(placed?.y).toBeGreaterThanOrEqual(GROUP.y)
+    expect((placed?.x ?? 0) + (placed?.width ?? 0)).toBeLessThanOrEqual(GROUP.x + GROUP.width)
+    expect((placed?.y ?? 0) + (placed?.height ?? 0)).toBeLessThanOrEqual(GROUP.y + GROUP.height)
   })
 
-  test('refuses an edge whose endpoints are not both inside the region', async () => {
+  test('places a geometry-less node clear of what the group already holds', async () => {
+    // The lane's fixture, and what the lane showed: the first placement in a
+    // group started from the group's top-left as if it were empty, so a
+    // third box landed on top of the first, and the model then spent a call
+    // moving it. Placement has to see the nodes the group keeps.
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [
-        GROUP,
-        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
-        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+        { ...GROUP, x: 0, y: 600, width: 700, height: 300 },
+        { id: 'cli', type: 'text', x: 40, y: 700, width: 200, height: 80, text: 'CLI' },
+        { id: 'web', type: 'text', x: 300, y: 700, width: 200, height: 80, text: 'Web app' },
       ],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [
-          {
-            op: 'region.set',
-            within: 'g',
-            nodes: [],
-            edges: [{ id: 'smuggled', fromNode: 'far1', toNode: 'far2' }],
-          },
-        ],
-      }),
-    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'mobile', type: 'text', text: 'Mobile app', width: 200, height: 80 },
+          within: 'g',
+        },
+      ],
+    })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    expect(canvas.edges).toEqual([])
+    const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
+    const mobile = byId.get('mobile')
+    const group = byId.get('g')
+    if (mobile === undefined || group === undefined) throw new Error('unreachable')
+    const overlaps = (a: SpatialNode, b: SpatialNode) =>
+      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+    for (const id of ['cli', 'web']) {
+      const kept = byId.get(id)
+      if (kept === undefined) throw new Error('unreachable')
+      expect(overlaps(mobile, kept)).toBe(false)
+    }
+    expect(mobile.x).toBeGreaterThanOrEqual(group.x)
+    expect(mobile.x + mobile.width).toBeLessThanOrEqual(group.x + group.width)
+    expect(mobile.y + mobile.height).toBeLessThanOrEqual(group.y + group.height)
+    // It fit in the room the group had, so the group did not grow.
+    expect(group).toMatchObject({ width: 700, height: 300 })
   })
 
-  /**
-   * Placement is what makes geometry optional, and a placement that lands
-   * outside the group used to refuse the whole batch — the third default-size
-   * box in a 700-wide group wraps to a row that does not fit. Measured on the
-   * lane: a model then declares full geometry for every box instead, which is
-   * the arithmetic the optional geometry exists to spare it. So the group
-   * GROWS to hold what was placed in it; only a position the caller chose is
-   * still held to the boundary.
-   */
   test('grows the group to hold the nodes it placed inside it', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
@@ -1256,18 +1354,11 @@ describe('wb_canvas_edit — region.set', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [
-        {
-          op: 'region.set',
-          within: 'g',
-          nodes: [
-            { id: 'a', type: 'text', text: 'A' },
-            { id: 'b', type: 'text', text: 'B' },
-            { id: 'c', type: 'text', text: 'C' },
-          ],
-          edges: [],
-        },
-      ],
+      ops: ['a', 'b', 'c'].map((id) => ({
+        op: 'node.add' as const,
+        node: { id, type: 'text' as const, text: id.toUpperCase() },
+        within: 'g',
+      })),
     })
 
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
@@ -1296,63 +1387,10 @@ describe('wb_canvas_edit — region.set', () => {
     })
   })
 
-  test('places a geometry-less node clear of what the group already holds', async () => {
-    // The lane's fixture, and what the lane showed: the first placement in a
-    // group started from the group's top-left as if it were empty, so a
-    // third box landed on top of the first, and the model then spent a call
-    // moving it. Placement has to see the nodes the region keeps.
-    const store = new FakeDocumentStore()
-    await seedCanvas(store, {
-      nodes: [
-        { ...GROUP, x: 0, y: 600, width: 700, height: 300 },
-        { id: 'cli', type: 'text', x: 40, y: 700, width: 200, height: 80, text: 'CLI' },
-        { id: 'web', type: 'text', x: 300, y: 700, width: 200, height: 80, text: 'Web app' },
-      ],
-      edges: [],
-    })
-    const tool = createCanvasEditTool(makeDeps(store))
-
-    await tool.execute({
-      workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
-      mode: 'apply',
-      ops: [
-        {
-          op: 'region.set',
-          within: 'g',
-          nodes: [
-            { id: 'cli', type: 'text', text: 'CLI' },
-            { id: 'web', type: 'text', text: 'Web app' },
-            { id: 'mobile', type: 'text', text: 'Mobile app', width: 200, height: 80 },
-          ],
-          edges: [],
-        },
-      ],
-    })
-
-    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
-    const byId = new Map(canvas.nodes.map((node) => [node.id, node]))
-    const mobile = byId.get('mobile')
-    const group = byId.get('g')
-    if (mobile === undefined || group === undefined) throw new Error('unreachable')
-    const overlaps = (a: SpatialNode, b: SpatialNode) =>
-      a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
-    for (const id of ['cli', 'web']) {
-      const kept = byId.get(id)
-      if (kept === undefined) throw new Error('unreachable')
-      expect(overlaps(mobile, kept)).toBe(false)
-    }
-    expect(mobile.x).toBeGreaterThanOrEqual(group.x)
-    expect(mobile.x + mobile.width).toBeLessThanOrEqual(group.x + group.width)
-    expect(mobile.y + mobile.height).toBeLessThanOrEqual(group.y + group.height)
-    // It fit in the room the group had, so the group did not grow.
-    expect(group).toMatchObject({ width: 700, height: 300 })
-  })
-
   test('refuses to grow a locked group, and says so', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
-      nodes: [{ ...GROUP, width: 300, height: 200 }],
+      nodes: [{ ...GROUP, width: 200, height: 100 }],
       edges: [],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1364,16 +1402,7 @@ describe('wb_canvas_edit — region.set', () => {
         mode: 'apply',
         ops: [
           { op: 'node.lock', id: 'g', locked: true },
-          {
-            op: 'region.set',
-            within: 'g',
-            nodes: [
-              { id: 'a', type: 'text', text: 'A' },
-              { id: 'b', type: 'text', text: 'B' },
-              { id: 'c', type: 'text', text: 'C' },
-            ],
-            edges: [],
-          },
+          { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'g' },
         ],
       }),
     ).rejects.toMatchObject({
@@ -1383,9 +1412,95 @@ describe('wb_canvas_edit — region.set', () => {
     })
   })
 
-  test('a refusal for a node declared outside the group says which edge and how to fix it', async () => {
+  test('grows the group for a node given a position past its right edge', async () => {
+    // What the lane did with `within` the moment it existed: named the group
+    // AND wrote the next slot in the row, 560 in a group 700 wide, three
+    // trials of three — and the description had promised the group grows
+    // to fit. Both intentions are explicit, and growing satisfies both.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ ...GROUP, x: 0, y: 600, width: 700, height: 300 }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: {
+            id: 'mobile',
+            type: 'text',
+            x: 560,
+            y: 700,
+            width: 200,
+            height: 80,
+            text: 'Mobile',
+          },
+          within: 'g',
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'mobile')).toMatchObject({ x: 560, y: 700 })
+    expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({
+      x: 0,
+      y: 600,
+      width: 800,
+      height: 300,
+    })
+    expect(result.touched.nodes).toContain('g')
+    expect(result.geometry.find((entry) => entry.id === 'g')).toMatchObject({ width: 800 })
+  })
+
+  test("a node given a position before the group's top-left is refused with the edge and the way out", async () => {
+    // The top-left is the one thing growth keeps, so this is the caller's
+    // to move — and the text says which edge, by how much, and how.
     const store = new FakeDocumentStore()
     await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+    const attempt = () =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'early',
+              type: 'text',
+              x: -30,
+              y: 20,
+              width: 200,
+              height: 40,
+              text: 'early',
+            },
+            within: 'g',
+          },
+        ],
+      })
+
+    await expect(attempt()).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/left edge -30 .*0/),
+    })
+    await expect(attempt()).rejects.toThrow(/move the node|omit its x\/y/)
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((node) => node.id)).toEqual(['g'])
+  })
+
+  test('refuses a `within` that is not a group', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'plain', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'plain' }],
+      edges: [],
+    })
     const tool = createCanvasEditTool(makeDeps(store))
 
     await expect(
@@ -1393,41 +1508,9 @@ describe('wb_canvas_edit — region.set', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         mode: 'apply',
-        ops: [
-          {
-            op: 'region.set',
-            within: 'g',
-            nodes: [
-              { id: 'wide', type: 'text', x: 400, y: 20, width: 200, height: 40, text: 'wide' },
-            ],
-            edges: [],
-          },
-        ],
+        ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'plain' }],
       }),
-    ).rejects.toMatchObject({
-      name: 'CanvasEditError',
-      opIndex: 0,
-      // The model read this text and shrank every box to fit (lane, 2026-09):
-      // it needs the number it is over by and the cheaper ways out.
-      message: expect.stringMatching(/right edge 600 .*500/),
-    })
-    await expect(
-      tool.execute({
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        mode: 'apply',
-        ops: [
-          {
-            op: 'region.set',
-            within: 'g',
-            nodes: [
-              { id: 'wide', type: 'text', x: 400, y: 20, width: 200, height: 40, text: 'wide' },
-            ],
-            edges: [],
-          },
-        ],
-      }),
-    ).rejects.toThrow(/widen .*"g"|omit its x\/y/)
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
   })
 })
 

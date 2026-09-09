@@ -1283,8 +1283,8 @@ async function main() {
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
 
   // region.set is the one op that deletes by OMISSION, so the smoke drives
-  // the full reconcile through the real wire: declare two, then declare one,
-  // and the other must be gone. The group sits far from everything else so
+  // the full reconcile through the real wire: add two inside, name both,
+  // then name one, and the other must be gone. The group sits far from everything else so
   // nothing already on this canvas is enclosed by it.
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
@@ -1295,15 +1295,9 @@ async function main() {
         op: 'node.add',
         node: { id: 'region', type: 'group', x: 5000, y: 5000, width: 900, height: 600 },
       },
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [
-          { id: 'in-1', type: 'text', text: 'first' },
-          { id: 'in-2', type: 'text', text: 'second' },
-        ],
-        edges: [],
-      },
+      { op: 'node.add', node: { id: 'in-1', type: 'text', text: 'first' }, within: 'region' },
+      { op: 'node.add', node: { id: 'in-2', type: 'text', text: 'second' }, within: 'region' },
+      { op: 'region.set', within: 'region', nodes: ['in-1', 'in-2'] },
     ],
     follow: false,
   })
@@ -1311,14 +1305,7 @@ async function main() {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'apply',
-    ops: [
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [{ id: 'in-1', type: 'text', text: 'first' }],
-        edges: [],
-      },
-    ],
+    ops: [{ op: 'region.set', within: 'region', nodes: ['in-1'] }],
     follow: false,
   })
   const survivors = reconciled.snapshot.nodes.map((node) => node.id)

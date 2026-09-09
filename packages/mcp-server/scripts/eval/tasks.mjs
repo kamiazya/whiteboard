@@ -219,6 +219,62 @@ export const TASKS = [
     },
   },
   {
+    // Server-decided geometry that a LATER op needs: the group's box depends
+    // on where the three nodes landed. Nothing in the surface lets an op
+    // name that, so what a model does instead — hand-written coordinates,
+    // or a second call after reading the result — is the measurement.
+    // Graded on the structure: three boxes, chained in order, strictly
+    // inside a group with that label, none overlapping, and the rest of the
+    // roadmap untouched.
+    name: 'wrap a new chain in a group',
+    prompt:
+      'On the roadmap board, add three boxes in a row — Ingest, Transform, Publish — connected in that order with arrows, and put the three of them inside a group labelled Pipeline. Leave the existing items where they are. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/roadmap')
+      const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Pipeline')
+      if (group === undefined) return { ok: false, detail: 'no Pipeline group' }
+      const inside = (n) =>
+        n.id !== group.id &&
+        n.x >= group.x &&
+        n.y >= group.y &&
+        n.x + n.width <= group.x + group.width &&
+        n.y + n.height <= group.y + group.height
+      const byText = (t) => board.nodes.find((n) => (n.text ?? '').trim() === t)
+      const chain = ['Ingest', 'Transform', 'Publish'].map(byText)
+      if (chain.some((n) => n === undefined)) return { ok: false, detail: 'a box is missing' }
+      const outside = chain.filter((n) => !inside(n)).map((n) => n.text)
+      if (outside.length > 0)
+        return { ok: false, detail: `outside the group: ${outside.join(', ')}` }
+      const linked = (a, b) => board.edges.some((e) => e.fromNode === a.id && e.toNode === b.id)
+      if (!linked(chain[0], chain[1]) || !linked(chain[1], chain[2])) {
+        return { ok: false, detail: 'chain not connected in order' }
+      }
+      const overlaps = (a, b) =>
+        a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+      for (let i = 0; i < chain.length; i++) {
+        for (let j = i + 1; j < chain.length; j++) {
+          if (overlaps(chain[i], chain[j])) {
+            return { ok: false, detail: `${chain[i].text} overlaps ${chain[j].text}` }
+          }
+        }
+      }
+      const enclosedOthers = board.nodes.filter(
+        (n) => inside(n) && !chain.some((c) => c.id === n.id),
+      )
+      if (enclosedOthers.length > 0) {
+        return {
+          ok: false,
+          detail: `group also holds ${enclosedOthers.map((n) => n.id).join(', ')}`,
+        }
+      }
+      for (const id of ['q3', 'q4', 'q1']) {
+        const item = board.nodes.find((n) => n.id === id)
+        if (item === undefined) return { ok: false, detail: `roadmap item ${id} is gone` }
+      }
+      return { ok: true, detail: 'chain wrapped' }
+    },
+  },
+  {
     name: 'checkpoint every board',
     prompt:
       'Save a version of every board (spatial document) in the workspace, labelled "pre-review".',

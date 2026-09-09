@@ -205,16 +205,16 @@ describe('what an errand costs in tool calls', () => {
         requestBytes: 223,
         responseBytes: 1316,
       },
-      // Axis A on `region.set`, the baseline any change to that op's shape
-      // is judged against. Request 425 is what three geometry-less boxes
-      // and a group too narrow for them cost to declare. Response 1,954 ->
-      // 2,060 when the group started growing to hold what was placed in it
-      // (+106: the group's new size, reported under `geometry` beside the
-      // placed boxes); before that, this same call at width 700 was refused
-      // whole and the row could only be pinned at 1200.
+      // Axis A on `region.set`. Request 425 -> 549 when the op stopped
+      // taking node declarations and the three boxes became `node.add`
+      // ops with `within` plus a member list: +124 bytes on the wire for
+      // the op wrappers, against -3,391 on the table every turn reads
+      // (see tool-surface-quality). Response 2,060 is unchanged — the
+      // placed boxes and the grown group, reported under `geometry`;
+      // before growth, this same call at width 700 was refused whole.
       'make a group hold exactly three boxes': {
         calls: 1,
-        requestBytes: 425,
+        requestBytes: 549,
         responseBytes: 2060,
       },
     })

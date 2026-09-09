@@ -162,9 +162,22 @@ optional geometry instead. Rejected as the primary shape because it cannot
 express a partial edit to an existing board, so a second tool would have been
 needed anyway.
 
-**Region-scoped declarative op** (`{ op: "region.set", within, nodes, edges }` —
-"this group should look like this"). Deferred at first and now SHIPPED, because
+**Region-scoped declarative op** (`{ op: "region.set", within, nodes, edges? }` —
+"this group contains exactly these"). Deferred at first and now SHIPPED, because
 the boundary question that deferred it turned out to answer itself.
+
+It names MEMBERS by id and nothing else. A node inside the group that is not
+listed is removed; a listed node that is elsewhere is moved in and placed; a
+node that does not exist is refused, naming `node.add` with `within` as the
+way to create one. `edges`, when given, is the set to keep among the members;
+omitted, every edge whose ends survive stays.
+
+It shipped carrying a full node declaration per member — the node union a
+second time, 3,930 of the tool's 11,431 op bytes — and the lane showed what
+a model did with that shape: wrote x/y/width/height for every box, the ones
+already there included, and reached the op a third of the time on the errand
+it was built for. Membership by id is what was left once the declaration went
+([ADR-0030 §4](0030-tool-surface-criteria.md) carries the before/after).
 
 Scope is STRICT containment in `within`'s stored box. A node straddling the
 group's edge is not enclosed, so it is out of scope and survives untouched —
@@ -174,26 +187,25 @@ endpoints are, so an edge leaving the region is never collateral.
 
 Two further rules keep it usable:
 
-- **A declared node that already exists is MERGED, not replaced.** Omitting
-  geometry leaves it where it is, which is what makes re-applying the same
-  region a no-op. The cost is that the op cannot clear a field; `node.patch`
-  can.
+- **Naming the same members twice changes nothing the second time.** A member
+  already inside stays where it is; only one that is elsewhere moves.
 - **A locked element anywhere in the region refuses the whole batch, up
-  front.** This op deletes by omission, and silently dropping a locked node
-  would be the worst possible reading of that.
+  front** — and so does a locked member that would have to move. This op
+  deletes by omission, and silently dropping a locked node would be the worst
+  possible reading of that.
 
-Coordinate-less declared nodes are placed INSIDE the group rather than through
-the board-level cursor, which places below all existing content — that would
-land a node outside the region it was declared in, and therefore out of scope
-on the next call, breaking idempotence. When that placement does not fit — the
-third default-size box in a 700-wide group wraps to a row the group has no
-room for — the GROUP GROWS to hold it, gutter included, and reports its new
-size under `geometry`; a locked group refuses instead. It used to refuse the
-whole batch, and the lane showed what a model does with that: declare full
-geometry for every box, which is the arithmetic optional geometry exists to
-spare it ([ADR-0030 §4](0030-tool-surface-criteria.md)). A position the CALLER
-chose is still held to the boundary, and that refusal now says which edge is
-over by how much and the three ways out.
+**`node.add` with `within`** is where a member is created: a node with no
+position is placed INSIDE that group, around what the group already holds,
+rather than through the board-level cursor — which places below all existing
+content and would land the node outside the very group it was meant for, and
+therefore out of scope on the next call. When the placement does not fit —
+the third default-size box in a 700-wide group wraps to a row the group has
+no room for — the GROUP GROWS to hold it, gutter included, and reports its
+new size under `geometry`; a locked group refuses instead. It used to refuse
+the whole batch, and the lane showed what a model does with that: declare
+full geometry for every box, which is the arithmetic optional geometry exists
+to spare it. A position the CALLER chose is still held to the group, and that
+refusal says which edge is over by how much and the three ways out.
 
 **Keeping `wb_canvas_tidy` as a standalone tool.** It is the most likely one-shot
 call and the only pre-existing declarative-ish tool. Retired anyway: a special

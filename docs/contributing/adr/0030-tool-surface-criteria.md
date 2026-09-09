@@ -389,12 +389,47 @@ anything is retired.
   RESULT, and that one was a product bug the op had carried since it
   shipped. Placement made to pack around what the region keeps — reached
   3 of 3, no follow-up call, one trial declaring no geometry at all, the
-  one refusal repaired by omitting x/y as advised. Rung 2 pins the op at
-  700 wide now (1 call, 425 in, 2,060 out; the +106 is the grown group
-  reported under `geometry`). What this did not move: the arm's 3,930
-  bytes, and the model's habit of writing x/y/width/height for a box that
-  already has them — the shape candidates (membership-only, or lighter
-  node declarations) are judged against THIS surface, not the baseline.
+  one refusal repaired by omitting x/y as advised. What this did not
+  move: the arm's 3,930 bytes, and the model's habit of writing
+  x/y/width/height for a box that already has them.
+
+  **Landed second: `region.set` names members by id, and a member is
+  created by `node.add` with `within`.** The node union left the arm
+  (rung 1: `wb_canvas_edit` 13,066 -> 9,675, the table 34,785 -> 31,394,
+  parameters 317 -> 254), and with it the place the habit lived. Rung 2:
+  the errand's request 425 -> 549 (three `node.add` wrappers instead of
+  one declaration list), response unchanged. Rung 3, the group task,
+  three trials: reached 3 of 3 — and every trial was refused once. The
+  model wrote `within` AND the next slot in the row (x 560, right edge
+  760 in a group of 700), which the description had promised the group
+  would grow for; the refusal contradicted the description. So growth
+  applies to a positioned node too, and only a position before the
+  group's top-left — the one thing growth keeps — is refused. After: 3
+  of 3 reached, 3 calls each, 0 refusals, $0.138 for three trials
+  against the baseline's $0.151. Two shapes stayed in the payloads a
+  reader should expect: the model still positions a new box by hand when
+  a row is visible to extend, and one trial closed with `tidy` on the
+  group.
+
+- **Server-decided geometry, measured and not acted on.** The hypothesis
+  that an op should be able to name an earlier op's OUTPUT — the group's
+  box depending on where three placed nodes landed — was given its own
+  task ("add three boxes in a row, chained, inside a group labelled
+  Pipeline"). Three trials, three passes, three calls, one edit each:
+  the model computed every coordinate itself, group included, in one
+  batch, and after `within` landed it did the same with `within` on each
+  box. No round trip to read a placement, no refusal. A reference syntax
+  would have saved output tokens on a task the surface already does in
+  one call, at the price of a mini-language the schema cannot validate
+  (C3, C11) — not a trade the lane can be made to show a gain on. Kept
+  as a task so a shape that WOULD need it is noticed when it appears.
+- **A stray key inside a node draft is accepted silently** (C10, one
+  level down). A trial wrote `"height80": true` beside `"height": 80`,
+  and the write succeeded: the per-type node schemas are non-strict so a
+  document may carry another tool's extension keys, and the draft
+  inherits that. The top-level strays test cannot see it. Worth a write-
+  side `.strict()` on the draft — this tool writes only what it knows —
+  judged by the refusal text a typo then gets.
 - **What a call answers with**, the errand scoreboard's `responseBytes`
   column, is the other half of what a model reads and was untouched until
   the version tools stopped answering the History panel's row (1,948 ->

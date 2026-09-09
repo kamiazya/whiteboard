@@ -114,9 +114,10 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
   },
   {
     // Axis A on the one DECLARATIVE op: a group's contents made to match a
-    // list. One call, because the group and its reconciliation ride the
-    // same batch; the price column is what a `region.set` payload costs,
-    // which is what any change to that op's shape is judged against.
+    // list. One call, because the group, its members (node.add with
+    // `within`) and the reconciliation ride the same batch; the price
+    // column is what that payload costs, which is what any change to the
+    // op's shape is judged against.
     name: 'make a group hold exactly three boxes',
     seedDocuments: 1,
     run: async (context) => {
@@ -140,16 +141,16 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
               height: 300,
             },
           },
-          {
-            op: 'region.set',
+          ...[
+            { id: 'cli', text: 'CLI' },
+            { id: 'web', text: 'Web app' },
+            { id: 'mobile', text: 'Mobile app' },
+          ].map((box) => ({
+            op: 'node.add' as const,
+            node: { id: box.id, type: 'text' as const, text: box.text },
             within: 'g',
-            nodes: [
-              { id: 'cli', type: 'text', text: 'CLI' },
-              { id: 'web', type: 'text', text: 'Web app' },
-              { id: 'mobile', type: 'text', text: 'Mobile app' },
-            ],
-            edges: [],
-          },
+          })),
+          { op: 'region.set', within: 'g', nodes: ['cli', 'web', 'mobile'] },
         ],
       })
     },

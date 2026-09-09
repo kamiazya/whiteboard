@@ -148,18 +148,18 @@ describe('what the tool table costs to read', () => {
       // -1,320 more when the node extension a WRITER sends became one
       // flat object narrowed on parse (nodeExtensionWriteSchema) instead of
       // the stored two-variant union inlined eight times.
-      // +168 for `region.set`'s `nodes` saying that geometry can be omitted
-      // and the group grows to fit. The one description on this tool's
-      // 199 parameters, and it was placed by the lane rather than by
-      // reading: nine trials without it declared full geometry for every
-      // box and reached the op a third of the time; three with it reached
-      // it every time and left the new box to placement (ADR-0030 §4).
+      // -3,391 (26% of the tool, 10% of the table) when `region.set` stopped
+      // carrying the node union a second time: it names members by id now,
+      // and a member is created by `node.add` with `within` (+1 parameter,
+      // described). The lane placed the change: on the errand the op was
+      // built for, the old shape had a model writing x/y/width/height for
+      // every box, the ones already there included (ADR-0030 §4).
       wb_canvas_edit: {
-        visibleBytes: 13066,
-        wireBytes: 33094,
+        visibleBytes: 9675,
+        wireBytes: 29703,
         descriptionWords: 169,
-        parameters: 199,
-        undescribed: 198,
+        parameters: 136,
+        undescribed: 133,
         strays: 'refused',
         names: [],
       },
@@ -342,11 +342,13 @@ describe('what the tool table costs to read', () => {
       // from what a model can do.
       // -1,320 for wb_canvas_edit's flat write-side extension; +1,366 for
       // the text anchor and the body change described (see wb_body_edit).
-      // +168 for region.set's nodes described (see wb_canvas_edit).
-      visibleBytes: 34785,
-      wireBytes: 99323,
-      parameters: 317,
-      undescribed: 264,
+      // -3,391 for region.set naming members by id (see wb_canvas_edit):
+      // 31,394 is the first reading under 32,000 since the table was
+      // first pinned at 34,960.
+      visibleBytes: 31394,
+      wireBytes: 95932,
+      parameters: 254,
+      undescribed: 199,
     })
   })
 

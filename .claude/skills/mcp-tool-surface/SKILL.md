@@ -133,6 +133,12 @@ with every tool call, tool-error text, token and cost figure.
   top of what the group already held, since the op shipped. Read
   `inputs` for what the extra call undid; a pass with a repair call in it
   is a product finding, not a model one.
+- **A description is a promise the refusal text has to keep.** `within`
+  said "the group grows to fit"; a node given `within` and a position past
+  the edge was still refused, and the lane hit that refusal three trials
+  of three — the model had done what the description said it could. When
+  a parameter's description names a behaviour, grep the refusals on that
+  path for the case the description covers.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1
