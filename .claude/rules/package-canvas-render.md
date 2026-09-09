@@ -1109,22 +1109,26 @@ the table alone.
 - `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
   keeps `layoutSpatialEdges` equal to the edge suffix of
   `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
-  (`test-utils/facet-arbitraries.ts` over facet-engine's
-  `facetPayloadSamples`) for the nodes' facets AND the canvas's, rather
-  than a list of facet names, because what it guards is a second entry
-  point folding over FEWER facets than the committed layout — which a named
-  list cannot cover for a facet registered later. It shipped that way
+  (`test-utils/facet-arbitraries.ts`, a thin shaping of facet-engine's
+  `facetsArbitrary`, which walks each facet's own Zod schema) for the
+  nodes' facets AND the canvas's, rather than a list of facet names,
+  because what it guards is a second entry point folding over FEWER facets
+  than the committed layout — which a named list cannot cover for a facet
+  registered later. It shipped that way
   twice: plain generated nodes, no silhouettes on either side, the property
   agreeing vacuously while every edge into a shaped node floated off it for
   a whole drag; then nodes with facets and a canvas with none, agreeing
   again while a themed board's edges dragged crisp and straight. The second
   is why the scenario also draws `style`: a theme is drawn under
   `'document'` and never under the library's clean default. Three guards
-  keep it honest — one fails naming a registered node or canvas facet whose
-  schema yields no payloads, two fail when the drawn node facets, or the
-  drawn canvas facets, stop changing the layout being compared. Adding a
-  facet needs no edit here; adding one `deriveFacetForm` cannot express
-  fails the first guard, which is the decision point.
+  keep it honest — one fails when a registered node or canvas facet is
+  never drawn, two fail when the drawn node facets, or the drawn canvas
+  facets, stop changing the layout being compared. Adding a facet needs no
+  edit here; a schema construct the walk cannot express throws at
+  construction naming the path, which is the decision point. The generator
+  drew from form-derived samples until 2026-09-09 — a finite list with no
+  shrinking and nothing the form could not express — and that is the
+  history behind the first guard's wording.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

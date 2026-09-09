@@ -1,11 +1,13 @@
 // @vitest-environment node
-// The generator's own honesty: every canvas facet the bundled registry holds
-// is actually produced, and nothing it produces is refused by the registry
-// — a generator that silently skipped a facet would leave a property green
-// over a surface it never reached.
+// The registry-drawn generator against the BUNDLED registry: every canvas
+// facet the `visual` plugin holds is actually produced, and nothing produced
+// is refused by the registry. facet-engine tests the mechanism over demo
+// facets; this is the check that the plugin this app ships has no facet the
+// walk cannot express — which would throw at construction — and none it
+// quietly skips.
+import { facetEntries, facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
-import { facetEntries, facetsArbitrary } from './facet-arbitrary.js'
 import { fc } from './fast-check.js'
 
 describe('facetsArbitrary over the bundled registry', () => {
