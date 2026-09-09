@@ -191,7 +191,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision has to reach two planes here.
   // +4: the decide-proposal arm moved inside `withDocumentBatch`, so its
   // three subjects land as one delta and one undo step instead of four.
-  'apps/web/src/lib/document-sync-session.ts': 1475,
+  // +18 for `getFacets`: a markdown document's own mark is a facet, which is
+  // no canvas value, so a page reading only the canvas cannot see one. One
+  // session serves both document pages, which is what keeps the two keepers
+  // from drifting on it — and most of the eighteen lines say that.
+  'apps/web/src/lib/document-sync-session.ts': 1493,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
