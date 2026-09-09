@@ -32,8 +32,11 @@ async function harness(deps: ReturnType<typeof makeDeps>) {
   const writeBody = (documentId: string, body: string) =>
     set.execute({ workspaceId: WS, documentId, markdown: `---\ntype: note\n---\n${body}` })
   const readBody = async (documentId: string) => {
-    const out = await createDocumentGetTool(deps).execute({ workspaceId: WS, documentId })
-    return out.content.split('---\n').slice(2).join('---\n')
+    const { documents } = await createDocumentGetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [documentId],
+    })
+    return (documents[0]?.content ?? '').split('---\n').slice(2).join('---\n')
   }
   const linkify = async (sourceId: string, targetDocumentId: string) => {
     const res = await app.request(
@@ -127,11 +130,11 @@ describe('POST /linkify-mentions', () => {
       ],
     })
     expect((await h.linkify(board.documentId, target.documentId)).body).toEqual({ linked: 1 })
-    const canvas = await createDocumentGetTool(deps).execute({
+    const { documents } = await createDocumentGetTool(deps).execute({
       workspaceId: WS,
-      documentId: board.documentId,
+      documentIds: [board.documentId],
     })
-    const parsed = JSON.parse(canvas.content)
+    const parsed = JSON.parse(documents[0]?.content ?? '{}')
     expect(parsed.nodes.find((n: { id: string }) => n.id === 'a').text).toBe(
       'we depend on [[target|Redis]] heavily',
     )

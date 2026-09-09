@@ -15,9 +15,10 @@ import type { Client } from '@modelcontextprotocol/client'
  *   A — many operations on ONE subject. `wb_canvas_edit`, `wb_workspace_edit`,
  *       `wb_thread_edit` and `wb_body_edit` already take an `ops` array, so
  *       an errand that stays inside one document is already cheap.
- *   B — many SUBJECTS in one call. Every write tool takes exactly one
- *       `documentId`, so an errand that touches N documents costs N calls
- *       whatever it does to each. This is where the count actually goes.
+ *   B — many SUBJECTS in one call. `wb_document_get` takes `documentIds`,
+ *       so the READ half is done; every WRITE tool still takes exactly one
+ *       `documentId`, so an errand that writes to N documents costs N calls
+ *       whatever it does to each. This is where the count still goes.
  */
 
 interface ErrandContext {
@@ -91,15 +92,17 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     },
   },
   {
-    // Axis B, reads: the list is one call and every document after it is
-    // another. Nothing here can be batched today.
+    // Axis B, reads. `wb_document_list` answers with METADATA only — id,
+    // path, name, kind, updatedAt, shadowed — so the content of five
+    // documents genuinely needs a second call; it no longer needs five.
     name: 'read every document in a workspace of 5',
     seedDocuments: 5,
     run: async (context) => {
       await call(context, 'wb_document_list', { workspaceId: context.workspaceId })
-      for (const documentId of context.documentIds) {
-        await call(context, 'wb_document_get', { workspaceId: context.workspaceId, documentId })
-      }
+      await call(context, 'wb_document_get', {
+        workspaceId: context.workspaceId,
+        documentIds: [...context.documentIds],
+      })
     },
   },
   {

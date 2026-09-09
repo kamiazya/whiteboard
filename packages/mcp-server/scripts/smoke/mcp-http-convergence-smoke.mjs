@@ -459,8 +459,14 @@ async function main() {
   }
   log('[e2e] wb_canvas_snapshot → nodes A, B, C all named by id')
 
-  const got = await callTool('wb_document_get', { workspaceId: WORKSPACE_ID, documentId })
-  const exportedCanvas = JSON.parse(got.content)
+  const got = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  if (got.documents.length !== 1) {
+    throw new Error(`wb_document_get refused the document: ${JSON.stringify(got.failed)}`)
+  }
+  const exportedCanvas = JSON.parse(got.documents[0].content)
   for (const node of [NODE_A, NODE_B, NODE_C]) {
     const found = exportedCanvas.nodes.find((n) => n.id === node.id)
     if (found?.text !== node.text) {

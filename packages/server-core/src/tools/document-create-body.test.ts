@@ -23,12 +23,12 @@ describe('creating a markdown document with its body', () => {
       createWorkspace: true,
       markdown: MARKDOWN,
     })
-    const read = await createDocumentGetTool(deps).execute({
+    const { documents } = await createDocumentGetTool(deps).execute({
       workspaceId: WS,
-      documentId: created.documentId,
+      documentIds: [created.documentId],
     })
-    expect(read.content).toContain('The body, written at creation time.')
-    expect(read.content).toContain('alpha')
+    expect(documents[0]?.content).toContain('The body, written at creation time.')
+    expect(documents[0]?.content).toContain('alpha')
   })
 
   it('still creates an empty document when no body is given', async () => {

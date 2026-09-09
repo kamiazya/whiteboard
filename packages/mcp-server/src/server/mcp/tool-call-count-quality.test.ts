@@ -120,14 +120,21 @@ describe('what an errand costs in tool calls', () => {
         requestBytes: 1500,
         responseBytes: 3066,
       },
-      // Axis B, and the floor rather than a lazily-written errand:
-      // `wb_document_list` answers with METADATA only — id, path, name,
-      // kind, updatedAt, shadowed — so a caller that wants the content of
-      // five documents genuinely needs five more calls.
+      // Axis B on a read, now consolidated. `wb_document_list` answers with
+      // METADATA only — id, path, name, kind, updatedAt, shadowed — so the
+      // CONTENT of five documents still needs a second call; it no longer
+      // needs five, because `wb_document_get` takes `documentIds`.
+      //
+      // Read the pair, not the calls alone. Calls 6 -> 2 and request bytes
+      // 601 -> 292, but response bytes went UP, 3042 -> 3310: each entry now
+      // names its own `documentId`, which five separate replies never had to
+      // say. +268 bytes for -4 round trips is the trade this consolidation
+      // actually makes, and it is worth stating rather than reporting the
+      // calls alone as a clean win.
       'read every document in a workspace of 5': {
-        calls: 6,
-        requestBytes: 601,
-        responseBytes: 3042,
+        calls: 2,
+        requestBytes: 292,
+        responseBytes: 3310,
       },
       // Axis B on a write. One facet write per document, because
       // `wb_facet_set` takes a single `documentId`.
