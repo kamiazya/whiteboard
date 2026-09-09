@@ -95,6 +95,27 @@ async function callTool(name, args) {
 }
 
 /**
+ * `wb_document_get` answers with a LIST since it took `documentIds`. Most
+ * steps here read one document, so this unwraps that case and refuses a
+ * `failed` entry rather than letting `undefined.content` report as a
+ * content mismatch three lines later.
+ */
+async function readDocument(documentId, options) {
+  const out = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    ...(options ? { options } : {}),
+  })
+  if (out.failed.length > 0) {
+    throw new Error(`wb_document_get refused ${documentId}: ${out.failed[0].reason}`)
+  }
+  if (out.documents.length !== 1) {
+    throw new Error(`wb_document_get answered ${out.documents.length} documents for one id`)
+  }
+  return out.documents[0]
+}
+
+/**
  * `expecting` is required, and checked against the error text: isError alone
  * says a call failed, not that it failed for the reason under test. Every
  * step here refuses on a guard, and a typo'd id or an unrelated regression
@@ -259,14 +280,39 @@ async function main() {
     name: 'created with its body',
     markdown: '---\ntype: note\ntags:\n  - e2e\n---\nWritten at creation time.',
   })
-  const readBack = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const readBack = await readDocument(withBody.documentId)
   if (!readBack.content.includes('Written at creation time.')) {
     throw new Error(`wb_document_create did not persist its body: ${readBack.content}`)
   }
   console.log('[e2e] wb_document_create → body written in one call')
+
+  // Axis B on a read: the two documents come back in ONE call, each in its
+  // own format, and an id nothing was created under lands in `failed`
+  // rather than taking the other two with it. Provable only through a
+  // client — the schema alone cannot say what the server does with a mix.
+  const bulk = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId, withBody.documentId, '01ZZZZZZZZZZZZZZZZZZZZZZZZ'],
+  })
+  if (
+    bulk.documents.map((entry) => entry.documentId).join() !==
+    [documentId, withBody.documentId].join()
+  ) {
+    throw new Error(
+      `wb_document_get did not answer in the order asked: ${JSON.stringify(bulk.documents.map((entry) => entry.documentId))}`,
+    )
+  }
+  if (bulk.documents.map((entry) => entry.kind).join() !== 'spatial,markdown') {
+    throw new Error(
+      `wb_document_get did not read each document in its own format: ${JSON.stringify(bulk.documents.map((entry) => entry.kind))}`,
+    )
+  }
+  if (bulk.failed.length !== 1 || bulk.failed[0].documentId !== '01ZZZZZZZZZZZZZZZZZZZZZZZZ') {
+    throw new Error(
+      `wb_document_get did not report the unreadable id: ${JSON.stringify(bulk.failed)}`,
+    )
+  }
+  console.log('[e2e] wb_document_get → two kinds in one call, the unreadable id reported not fatal')
 
   // wb_body_edit against a REAL markdown document, which is the thing
   // wb_body_patch cannot reach at all: its canvas read never sees the body's
@@ -299,10 +345,7 @@ async function main() {
   if (edited.applied !== 1 || !edited.body.includes('Written at the smoke.')) {
     throw new Error(`wb_body_edit returned unexpected shape: ${JSON.stringify(edited)}`)
   }
-  const afterEdit = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const afterEdit = await readDocument(withBody.documentId)
   if (!afterEdit.content.includes('Written at the smoke.')) {
     throw new Error(`wb_body_edit did not persist through the store: ${afterEdit.content}`)
   }
@@ -357,10 +400,7 @@ async function main() {
   if (proposedChange.op !== 'body.replace' || proposedChange.status !== 'open') {
     throw new Error(`proposed change has an unexpected shape: ${JSON.stringify(proposedChange)}`)
   }
-  const bodyAfterPropose = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const bodyAfterPropose = await readDocument(withBody.documentId)
   if (bodyAfterPropose.content.includes('a proposal nobody adopted')) {
     throw new Error(`a proposed passage reached the body: ${bodyAfterPropose.content}`)
   }
@@ -741,10 +781,7 @@ async function main() {
 
   // The lock is editor state, never canvas content: it must not appear in
   // an export. This is the runtime guard for the sidecar-map contract.
-  const exportedWithLocks = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-  })
+  const exportedWithLocks = await readDocument(documentId)
   const exportedCanvas = JSON.parse(exportedWithLocks.content)
   const leaked = [...exportedCanvas.nodes, ...exportedCanvas.edges].filter(
     (element) => 'locked' in element,
@@ -1434,10 +1471,7 @@ async function main() {
       `wb_version_restore(subtree) returned unexpected shape: ${JSON.stringify(rolledBack)}`,
     )
   }
-  const childAfter = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: treeChild.documentId,
-  })
+  const childAfter = await readDocument(treeChild.documentId)
   if (!childAfter.content.includes('child at the saved point')) {
     throw new Error(
       `subtree rollback did not reach the descendant: ${JSON.stringify(childAfter.content)}`,
@@ -1552,10 +1586,7 @@ async function main() {
   }
   console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
 
-  const exported = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: mdCanvasId,
-  })
+  const exported = await readDocument(mdCanvasId)
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
   }
