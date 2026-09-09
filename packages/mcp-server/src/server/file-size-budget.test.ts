@@ -264,7 +264,19 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a signature and a return that no longer fit one line each — and it buys
   // deleting the call site where `nodeOutlines` was resolved separately, which
   // is where `layoutSpatialEdges` came to be missing it.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2109,
+  // +5 for the proposal bubble's own width: the import that names it grew
+  // past one line, and the call site gained `density: 'compact'`. Nothing
+  // was misfiled this time — the constant and its measured rationale live
+  // in `comment-body.ts`, beside the comment width they are judged against,
+  // so what is left here is the two lines that actually use them.
+  //
+  // +23 more for seeding every comment PIN as a placement obstacle before
+  // the loop rather than pushing each as it is emitted: an anchor helper
+  // both the pre-pass and the loop call, and the pass itself. It is the fix
+  // for a real defect the widened candidate ring exposed — a bubble landing
+  // on a neighbour's pin — and it has to be a pre-pass, since pushing each
+  // pin as it is drawn protects only the comments after it.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2137,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card

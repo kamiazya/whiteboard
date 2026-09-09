@@ -16,9 +16,18 @@
  * `composeComments`): a comment inside a group would otherwise be pushed
  * out of the frame, past the members it is about.
  *
- * ponytail: four diagonal candidates; an anchor sitting inside a node has
- * no free quadrant and lands on the least-covered one. The upgrade path is
- * a second ring of candidates beside the containing node's edges.
+ * **Past the four quadrants there is a RING**, and it is what the four alone
+ * could not do: every one of them sits a single 14px offset from the anchor,
+ * so a boxed-in anchor had nowhere to go and the placer took the least bad
+ * quadrant and stayed put. Measured on the annotation-density corpus, that
+ * left one clean bubble in forty on a crowded board — for comments and
+ * proposals alike, since both are placed here.
+ *
+ * The four stay FIRST, and that is load-bearing rather than tidy: ties go to
+ * the earliest candidate, so wherever a quadrant is already clean the answer
+ * is the one it always was. An uncrowded board is unchanged by construction,
+ * which is what stops a ring bought for a crowded board from spending the
+ * uncrowded one.
  */
 
 import type { BoundingBox } from '../scene-graph.js'
@@ -36,19 +45,68 @@ export interface Size {
   readonly h: number
 }
 
-/** The candidate boxes in preference order: down-right, up-right, down-left, up-left. */
+/**
+ * How far out the ring reaches. A leader is the price of a clean bubble, and
+ * this is where the corpus stopped paying: measured at forty proposals on a
+ * crowded board, reaching 180px buys 22 clean bubbles of 40 for a mean
+ * leader of 193px, and reaching 440px buys all 40 for 279px mean and 536px
+ * worst — a bubble that far from what it is about is not obviously better
+ * than one that overlaps something.
+ *
+ * It is also what the search COSTS: 4 candidates become 68, and each is
+ * scored against every obstacle. Measured interleaved in both orders on the
+ * crowded forty-annotation boards, laying one out goes 0.55-0.64ms ->
+ * 1.97-2.14ms (proposals) and 0.42-0.47ms -> 2.18-2.34ms (comments) — about
+ * 3.4x, and under 2ms either way. A canvas with no annotation on it pays
+ * nothing, because the placer is not called.
+ */
+export const COMMENT_BUBBLE_RING_REACH_PX = 180
+
+/**
+ * Directions around the anchor, and the distances tried at each. The last
+ * distance IS the reach rather than being filtered against it: a guard
+ * comparing the two never fires while every distance is inside it, which is
+ * dead code wearing a constant's clothes — the mutation lane reported
+ * exactly that, as a survivor no test could kill.
+ *
+ * The ring closes on itself, so an off-by-one in the direction loop only
+ * repeats the first direction. That candidate ties with the one already
+ * there and loses on the earliest-wins rule, which is why it is unkillable
+ * too, and equivalent rather than a gap.
+ */
+const RING_DIRECTIONS = 16
+const RING_DISTANCES_PX = [40, 80, 120, COMMENT_BUBBLE_RING_REACH_PX] as const
+
+/**
+ * The candidate boxes in preference order: the four diagonal quadrants
+ * (down-right, up-right, down-left, up-left) first, then a ring outwards,
+ * nearest distance first. The quadrants lead so that a board with room
+ * answers exactly as it did before the ring existed.
+ */
 export function commentBubbleCandidates(anchor: Point, size: Size): readonly BoundingBox[] {
   const d = COMMENT_BUBBLE_OFFSET_PX
   const right = anchor.x + d
   const left = anchor.x - d - size.w
   const below = anchor.y + d
   const above = anchor.y - d - size.h
-  return [
+  const out: BoundingBox[] = [
     { x: right, y: below, ...size },
     { x: right, y: above, ...size },
     { x: left, y: below, ...size },
     { x: left, y: above, ...size },
   ]
+  // The ring is placed by its CENTRE on the ray, unlike the quadrants which
+  // hang a corner off the anchor: a direction has no corner to choose, and
+  // centring is what makes the sixteen evenly spaced rather than bunched.
+  for (const distance of RING_DISTANCES_PX) {
+    for (let k = 0; k < RING_DIRECTIONS; k += 1) {
+      const angle = (k / RING_DIRECTIONS) * 2 * Math.PI
+      const centerX = anchor.x + Math.cos(angle) * (distance + size.w / 2)
+      const centerY = anchor.y + Math.sin(angle) * (distance + size.h / 2)
+      out.push({ x: centerX - size.w / 2, y: centerY - size.h / 2, ...size })
+    }
+  }
+  return out
 }
 
 export function placeCommentBubble(

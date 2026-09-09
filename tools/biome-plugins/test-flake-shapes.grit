@@ -164,6 +164,29 @@ any {
       severity = "error"
     )
   },
+  // `expectLoggedFailure` is the jsdom claim (`test-utils/logged-failures.ts`),
+  // and it is a WORSE shape than the assertions above rather than another
+  // instance of them. It does two things: it claims the record, which silences
+  // the setup's unclaimed-record guard, and it waits for the record, which is
+  // the assertion. Without `await` the claim still lands and the assertion
+  // never runs — so a forgotten `await` does not merely skip a check, it
+  // disables the safety net for that test.
+  //
+  // Measured, and it is the worst case that passes: with the `await` dropped
+  // AND the provoked failure no longer happening, `celebrate.test.ts` reported
+  // `3 passed`. 25 call sites carry this today and every claimed test adds one.
+  //
+  // `expectLoggedFailures()` (browser, plural) is deliberately NOT matched: it
+  // is synchronous and returns the records for the test to assert on.
+  `expectLoggedFailure($args)` as $call where {
+    not $call <: within `await $_`,
+    not $call <: within `return $_`,
+    register_diagnostic(
+      span = $call,
+      message = "Unawaited logged-failure claim: `expectLoggedFailure(…)` returns a promise, and without `await` the claim still silences the unclaimed-record guard while its assertion never runs — the test goes green having checked nothing. `await` it (or `return` it).",
+      severity = "error"
+    )
+  },
   // A title is an identifier: flake-watch clusters failures by it, `-t`
   // filters on it, CI annotations carry it, and vitest 5 matches the whole
   // `suite > test` chain. A PR/issue number or a "pre-fix" in the title is
