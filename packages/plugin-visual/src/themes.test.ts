@@ -79,6 +79,10 @@ describe('bundled theme assets', () => {
 
   it('sketch inks and names a family; neon glows and keeps crisp geometry', () => {
     expect(VISUAL_THEMES.sketch.ink).toBe('sketch')
+    // A pencil line is drawn straight by default: the routing a person
+    // chooses on the Edge routing row is theirs, and the theme fills in only
+    // where they said nothing.
+    expect(VISUAL_THEMES.sketch.defaults.edgeRouting).toBe('straight')
     expect(VISUAL_THEMES.sketch.fontFamily).toBeDefined()
     expect(VISUAL_THEMES.neon.ink).toBe('clean')
     expect(VISUAL_THEMES.neon.glow?.radiusPx).toBeGreaterThan(0)

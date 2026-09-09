@@ -37,7 +37,11 @@ import {
   type SpatialNode,
   type StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveCanvasEdgeDefaults,
+  resolveCanvasEdgeStyle,
+  VISUAL_EDGES_KEY,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../clipboard-fragment.js'
 import type { Point } from './viewport.js'
 
@@ -444,12 +448,14 @@ function setEdgeEnds(
  */
 /**
  * Rebuilds the canvas envelope from the CANONICAL form of the visual.edges
- * facet: default values (routing straight, jumps none) are omitted, an
- * empty payload drops the facet key, an empty facets bucket disappears,
- * and an empty x-whiteboard disappears — so a canvas that chose a setting
- * and reverted serializes identically to one that never touched it.
- * Routing and jumps are independent fields of the same facet; writing one
- * must never erase the other.
+ * facet: values equal to the canvas's DEFAULTS are omitted, an empty
+ * payload drops the facet key, an empty facets bucket disappears, and an
+ * empty x-whiteboard disappears — so a canvas that chose a setting and
+ * reverted serializes identically to one that never touched it. The
+ * defaults are the canvas's, not the built-in's: under a theme that routes
+ * orthogonally, Straight is a choice and is recorded
+ * (`resolveCanvasEdgeDefaults`). Routing and jumps are independent fields
+ * of the same facet; writing one must never erase the other.
  */
 function withEdgeStyle(
   canvas: SpatialCanvas,
@@ -460,15 +466,16 @@ function withEdgeStyle(
   // fallback), so the first write on a legacy canvas carries its setting
   // into the facet — the write is where the migration persists.
   const current = resolveCanvasEdgeStyle(canvas)
+  const defaults = resolveCanvasEdgeDefaults(canvas)
   const merged = {
     routing: patch.routing ?? current.style,
     lineJumps: patch.lineJumps ?? current.lineJumps,
   }
   const canonical = {
-    ...(merged.routing !== undefined && merged.routing !== 'straight'
+    ...(merged.routing !== undefined && merged.routing !== defaults.style
       ? { routing: merged.routing }
       : {}),
-    ...(merged.lineJumps !== undefined && merged.lineJumps !== 'none'
+    ...(merged.lineJumps !== undefined && merged.lineJumps !== defaults.lineJumps
       ? { lineJumps: merged.lineJumps }
       : {}),
   }

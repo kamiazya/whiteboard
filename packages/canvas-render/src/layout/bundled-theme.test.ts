@@ -35,12 +35,15 @@ const shape = (scene: Scene, id: string) =>
 const edge = (scene: Scene) => scene.nodes.find((n): n is ResolvedEdgeNode => n.kind === 'edge')
 
 describe('the bundled themes, through the default contributions', () => {
-  it('visual.sketch inks every node and edge and routes curved', () => {
+  it('visual.sketch inks every node and edge and routes straight, like the bundled look', () => {
     const scene = layoutSpatialCanvas(canvasIn('visual.sketch'), options({ style: 'document' }))
     expect(shape(scene, 'a')?.ink).toMatchObject({ style: 'sketch', fill: 'hatch' })
     expect(shape(scene, 'b')?.ink).toMatchObject({ style: 'sketch' })
     expect(edge(scene)?.ink).toMatchObject({ style: 'sketch' })
-    expect(edge(scene)?.rounded).toBe(true)
+    // The pencil changes how a line is drawn, not where it goes: a straight
+    // edge under the theme follows the same path as under the bundled look.
+    const plain = layoutSpatialCanvas(canvasIn(undefined), options())
+    expect(edge(scene)?.path).toEqual(edge(plain)?.path)
     expect(renderSceneToSvg(scene)).toContain('stroke-linecap="round"')
   })
 

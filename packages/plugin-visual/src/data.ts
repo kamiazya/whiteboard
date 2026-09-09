@@ -5,7 +5,12 @@ import {
   definePlugin,
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
-import type { ExtensionFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type {
+  EdgeRoutingStyle,
+  ExtensionFacets,
+  LineJumps,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
@@ -259,6 +264,42 @@ export function resolveCanvasEdgeStyle(
     }
   }
   return extension?.edgeRouting ?? {}
+}
+
+/**
+ * What this canvas's edges default to where its facet is silent: the theme
+ * it names (ADR-0030 decision 4 — a theme's `edgeRouting` fills in only
+ * where `visual.edges` says nothing), else the built-in straight line, and
+ * never a jump. A theme the registry does not carry defaults like none, the
+ * way the renderer degrades on it.
+ *
+ * The write path canonicalises against THIS, not against the built-in: a
+ * choice equal to the canvas's default leaves no trace, and a choice that
+ * differs from it is recorded even when it is the built-in default. Judged
+ * against the built-in alone, choosing Straight on an orthogonal-by-theme
+ * board deleted the facet, and the theme drew orthogonal anyway.
+ */
+export function resolveCanvasEdgeDefaults(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const themeId = resolveCanvasTheme(canvas, registry)
+  const themed = themeId === undefined ? undefined : registry.themeAsset(themeId)
+  const routing = edgeRoutingStyleSchema.safeParse(themed?.defaults.edgeRouting)
+  return { style: routing.success ? routing.data : 'straight', lineJumps: 'none' }
+}
+
+/** The routing and jumps this canvas draws with under its own theme: the explicit facet, field by field, over `resolveCanvasEdgeDefaults`. */
+export function resolveEffectiveCanvasEdgeStyle(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const explicit = resolveCanvasEdgeStyle(canvas, registry)
+  const defaults = resolveCanvasEdgeDefaults(canvas, registry)
+  return {
+    style: explicit.style ?? defaults.style,
+    lineJumps: explicit.lineJumps ?? defaults.lineJumps,
+  }
 }
 
 /**

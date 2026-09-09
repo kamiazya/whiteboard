@@ -4,10 +4,12 @@ import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   bundledPlugins,
+  resolveCanvasEdgeDefaults,
   resolveCanvasEdgeStyle,
   resolveCanvasSymbol,
   resolveCanvasTheme,
   resolveDocumentSymbol,
+  resolveEffectiveCanvasEdgeStyle,
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
@@ -87,6 +89,50 @@ describe('resolveCanvasEdgeStyle', () => {
 
   it('answers an empty style for a canvas with neither', () => {
     expect(resolveCanvasEdgeStyle(canvasWith(undefined), registry)).toEqual({})
+  })
+})
+
+describe('resolveCanvasEdgeDefaults / resolveEffectiveCanvasEdgeStyle', () => {
+  const themed = (theme: string, facets: Record<string, unknown> = {}): SpatialCanvas => ({
+    nodes: [],
+    edges: [],
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme }, ...facets } },
+  })
+
+  it('a canvas with no theme defaults to straight routing and no jumps', () => {
+    expect(resolveCanvasEdgeDefaults({ nodes: [], edges: [] })).toEqual({
+      style: 'straight',
+      lineJumps: 'none',
+    })
+  })
+
+  it("the theme's routing default is the canvas's default (ADR-0030 decision 4)", () => {
+    expect(resolveCanvasEdgeDefaults(themed('visual.neon'))).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'none',
+    })
+    expect(resolveCanvasEdgeDefaults(themed('visual.sketch')).style).toBe('straight')
+  })
+
+  it('an unknown theme id defaults like no theme, the way the renderer degrades', () => {
+    expect(resolveCanvasEdgeDefaults(themed('visual.missing')).style).toBe('straight')
+  })
+
+  it('the effective style is the explicit facet over the defaults, field by field', () => {
+    expect(resolveEffectiveCanvasEdgeStyle(themed('visual.neon'))).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'none',
+    })
+    expect(
+      resolveEffectiveCanvasEdgeStyle(
+        themed('visual.neon', { 'visual.edges/v0': { routing: 'straight' } }),
+      ),
+    ).toEqual({ style: 'straight', lineJumps: 'none' })
+    expect(
+      resolveEffectiveCanvasEdgeStyle(
+        themed('visual.neon', { 'visual.edges/v0': { lineJumps: 'arc' } }),
+      ),
+    ).toEqual({ style: 'orthogonal', lineJumps: 'arc' })
   })
 })
 

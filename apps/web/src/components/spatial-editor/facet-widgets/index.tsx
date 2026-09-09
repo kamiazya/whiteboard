@@ -11,7 +11,7 @@
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import { DerivedFacetForm, type FacetEditor, type PluginUi } from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveEffectiveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -66,13 +66,14 @@ const EDGE_ROUTING_CHOICES: readonly { style: EdgeRoutingStyle; label: string }[
 const OPTION_CLASS =
   'flex h-7 min-w-7 items-center justify-center rounded px-2 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
 
-const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
-  // Facet-first (visual.edges/v0), legacy edgeRouting fallback — the same
-  // resolution the renderer defaults to, so the checked segment always
-  // matches what the canvas draws.
-  const current = resolveCanvasEdgeStyle(canvas)
-  const currentRouting = current.style ?? 'straight'
-  const currentJumps = current.lineJumps ?? 'none'
+const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) => {
+  // The EFFECTIVE style — the facet, else the theme's default, else the
+  // built-in — the same resolution the renderer applies, so the pressed
+  // segment always matches what the canvas draws. Under neon, nothing stored
+  // means Orthogonal is pressed, not Straight.
+  const current = resolveEffectiveCanvasEdgeStyle(canvas, facetRegistry)
+  const currentRouting = current.style
+  const currentJumps = current.lineJumps
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-3">

@@ -6,7 +6,7 @@ export that asks for it see the same look. Two themes ship with the bundled `vis
 
 | id | look |
 |---|---|
-| `visual.sketch` | hand-drawn: jittered strokes, hatched fills, curved edges, dashed group frames |
+| `visual.sketch` | hand-drawn: jittered strokes, hatched fills, dashed group frames; edges stay straight |
 | `visual.neon` | glowing strokes on a deep-navy night (light mode gets a pale paper and darker strokes) |
 
 The paper follows your UI mode: every theme carries a light and a dark palette, and the editor
@@ -26,6 +26,11 @@ row thumbnails in the document list keep drawing the saved look.
 
 The colour swatches in a node's or edge's menu preview the theme's own palette, so the chip you
 pick is the stroke you get.
+
+A theme can carry its own **Edge routing** default (neon routes orthogonally; sketch keeps
+straight lines). The routing row shows whichever is in force, and a routing you choose there
+beats the theme's — including choosing **Straight** on a board whose theme routes otherwise.
+Picking the theme's own default leaves nothing stored, so the row follows the theme again.
 
 ## From an agent
 

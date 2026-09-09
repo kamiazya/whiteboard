@@ -92,7 +92,11 @@ export const VISUAL_THEME_SKETCH: ThemeTokens = {
   fontFamily: 'Yomogi',
   palette: { light: SKETCH_LIGHT, dark: SKETCH_DARK },
   defaults: {
-    edgeRouting: 'curved',
+    // Straight, like the bundled look: a pencil changes how a line is drawn,
+    // not where it goes, and the routing a person picks on the Edge routing
+    // row stays theirs. Curved was tried and read as a second decision the
+    // theme was making on the author's behalf.
+    edgeRouting: 'straight',
     groupFrame: { strokeDasharray: '7 5' },
   },
 }
