@@ -989,10 +989,13 @@ importers:
 
   tools/arch-lint:
     dependencies:
+      '@typescript/typescript6':
+        specifier: ^6.0.2
+        version: 6.0.2
+    devDependencies:
       typescript:
         specifier: 'catalog:'
         version: 6.0.3
-    devDependencies:
       vitest:
         specifier: 'catalog:'
         version: 5.0.0(@opentelemetry/api@1.9.1)(@types/node@24.13.1)(@vitest/browser-playwright@5.0.0)(@vitest/coverage-v8@5.0.0)(@vitest/ui@5.0.0)(happy-dom@20.9.0)(jsdom@30.0.1(canvas@3.2.3))(msw@2.15.0(@types/node@24.13.1)(typescript@6.0.3))(vite@8.2.0(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))
@@ -4283,6 +4286,10 @@ packages:
 
   '@types/ws@8.18.1':
     resolution: {integrity: sha512-ThVF6DCVhA8kUGy+aazFQ4kXQ7E1Ty7A3ypFOe0IcJV8O/M511G99AW24irKrW56Wt44yG9+ij8FaqoBGkuBXg==}
+
+  '@typescript/typescript6@6.0.2':
+    resolution: {integrity: sha512-mbCddXd+jm7hfx7w2YU64/Av4/NqqeG3GoRZgxPcgoTxYjhrcfJRw9ULch71SS4G+Q3bOXFhRvPqjguN0Hyp5w==}
+    hasBin: true
 
   '@upsetjs/venn.js@2.0.0':
     resolution: {integrity: sha512-WbBhLrooyePuQ1VZxrJjtLvTc4NVfpOyKx0sKqioq9bX1C1m7Jgykkn8gLrtwumBioXIqam8DLxp88Adbue6Hw==}
@@ -11540,6 +11547,10 @@ snapshots:
   '@types/ws@8.18.1':
     dependencies:
       '@types/node': 24.12.2
+
+  '@typescript/typescript6@6.0.2':
+    dependencies:
+      '@typescript/old': typescript@6.0.3
 
   '@upsetjs/venn.js@2.0.0':
     optionalDependencies:
