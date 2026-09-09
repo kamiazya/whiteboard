@@ -49,7 +49,7 @@ it('draws the conversation verbs icon-only, with the name spoken rather than pri
   render(<CommentsPanel threads={[OPEN]} onResolve={vi.fn()} onEditMessage={vi.fn()} />)
   await userEvent.click(page.getByText('tighten the copy here'))
 
-  for (const name of ['Resolve', 'Edit comment']) {
+  for (const name of ['Resolve', 'Edit message']) {
     const el = page.getByRole('button', { name }).element()
     // A name it has; a label it draws. "No visible text" is a visual
     // statement only — the accessible name is non-negotiable.
@@ -64,7 +64,7 @@ it('gives every verb the 44px the rule names, which is the half that must not be
 
   // Reported as one object so a failure names WHICH verb is short and by how
   // much, rather than a bare "expected 22 to be >= 44".
-  const undersized = ['Resolve', 'Edit comment']
+  const undersized = ['Resolve', 'Edit message']
     .map((name) => ({ name, ...box(page.getByRole('button', { name }).element()) }))
     .filter((one) => one.w < MIN_TARGET || one.h < MIN_TARGET)
   expect(undersized).toEqual([])

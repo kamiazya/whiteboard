@@ -109,4 +109,39 @@ describe('MarkdownEditor (real browser)', () => {
     )
     expect(() => unmount()).not.toThrow()
   })
+
+  /**
+   * The preview draws a task list's checkboxes. Pinned HERE, on the surface
+   * a reader actually looks at, because the layout is shared: a node's body,
+   * a comment, the widget and the export all draw markdown through the same
+   * producer, and the marker was missing from all of them at once —
+   * `- [ ] ship it` rendered as bare prose, its bullet suppressed (right)
+   * and nothing put in the bullet's place (the defect).
+   *
+   * Asserted on the RECTS rather than on a glyph, which is what the layout
+   * draws and why: measured against the vendored export face, U+2713 and
+   * its neighbours carry the same ink as a code point that does not exist,
+   * so a character checkbox would export as a tofu box.
+   */
+  it('draws a checkbox in the preview for each task item, filled when it is ticked', async () => {
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="split"
+        value={'- [ ] ship the fix\n- [x] measure the font\n- an ordinary bullet\n'}
+        onChange={() => {}}
+      />,
+    )
+
+    const preview = getByTestId('markdown-preview-pane')
+    const boxes = await vi.waitFor(() => {
+      const found = preview.querySelectorAll('rect[stroke]')
+      // Two task items, and the plain bullet contributes none.
+      expect(found).toHaveLength(2)
+      return found
+    })
+    expect(boxes).toHaveLength(2)
+    // The ticked one carries a second, FILLED rect inside its frame; the
+    // unticked one is a frame alone. Ink, not a name, is what a reader sees.
+    expect(preview.querySelectorAll('rect[fill]:not([fill="none"])').length).toBeGreaterThan(0)
+  })
 })

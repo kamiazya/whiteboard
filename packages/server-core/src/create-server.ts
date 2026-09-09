@@ -9,7 +9,6 @@ import { ContentFactsCache } from './references/content-facts-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyEditTool } from './tools/body-edit.js'
-import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
@@ -282,7 +281,6 @@ export function createServer(deps: ServerDeps) {
     facetList: createFacetListTool(deps),
     facetSet: createFacetSetTool(deps),
     bodyEdit: createBodyEditTool(deps),
-    bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasView: createCanvasViewTool(deps),
     canvasSnapshot: createCanvasSnapshotTool(deps),

@@ -63,22 +63,6 @@ export class PatchValidationError extends Error {
 }
 
 /**
- * Thrown when `wb_body_patch` targets a node whose `type` is not `'text'`
- * — a distinct failure mode from `PatchValidationError` (wrong node kind
- * chosen by the caller, not a schema violation produced by a valid patch).
- */
-export class NotATextNodeError extends Error {
-  constructor(
-    public readonly documentId: string,
-    public readonly nodeId: string,
-    public readonly actualType: string,
-  ) {
-    super(`node ${nodeId} in canvas ${documentId} is not a text node (type: ${actualType})`)
-    this.name = 'NotATextNodeError'
-  }
-}
-
-/**
  * Thrown when `wb_facet_set` refuses a facet the registry knows: an invalid
  * payload for a registered facet, a non-current version key, or a target the
  * definition does not declare (ADR-0013 decision 6 — write-side validation).

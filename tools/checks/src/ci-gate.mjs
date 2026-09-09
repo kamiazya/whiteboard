@@ -95,6 +95,77 @@ export function gateFailures({ jobs, needed, gateJobName }) {
   return problems
 }
 
+/**
+ * How long the gate will wait for the Actions API to catch up with its own
+ * run, and how often it asks.
+ *
+ * `needs` lists every job below the gate, so the workflow engine has already
+ * made all of them terminal before this step runs — its own `toJSON(needs)`
+ * says so. An API answer of `in_progress`, or a needed job missing from the
+ * listing, can therefore only be the endpoint lagging, never work still
+ * going on. Measured on a real run: `dry-run-npm` and `dry-run-docker` read
+ * `in_progress` six SECONDS after they completed, and the gate failed a run
+ * whose 21 jobs had every one succeeded.
+ *
+ * `ATTEMPTS x DELAY_MS` is 10s, well inside the job's own
+ * `timeout-minutes: 5`, and the gate blocks rather than passes if the API
+ * never catches up.
+ */
+export const SETTLE_ATTEMPTS = 6
+export const SETTLE_DELAY_MS = 2000
+
+/**
+ * Whether a problem the gate just found could still be the API catching up.
+ *
+ * Deliberately narrow: a non-terminal status, or a job `needs` named that
+ * the listing has not published yet. A `failure` or a `cancelled` conclusion
+ * is a settled answer the endpoint will never revise, so waiting on one only
+ * delays the red.
+ *
+ * @param {{jobs: unknown, needed: string[], gateJobName: string}} input
+ */
+export function stillSettling({ jobs, needed, gateJobName }) {
+  if (!Array.isArray(jobs)) return false
+  const others = jobs.filter((job) => baseJobName(job.name) !== gateJobName)
+  if (others.some((job) => job.status !== 'completed')) return true
+  const present = new Set(others.map((job) => baseJobName(job.name)))
+  return needed.some((name) => !present.has(name))
+}
+
+/**
+ * Read the run until the API has caught up with it, then judge.
+ *
+ * The read is what retries, not the judgement: `gateFailures` runs on every
+ * answer and the loop stops the moment its problems are ones a later read
+ * cannot change.
+ *
+ * @param {{
+ *   fetchJobs: () => Promise<{name: string, status: string, conclusion: string | null}[]>,
+ *   sleep: (ms: number) => Promise<unknown>,
+ *   needed: string[],
+ *   gateJobName: string,
+ *   attempts?: number,
+ * }} input
+ */
+export async function readSettledJobs({
+  fetchJobs,
+  sleep,
+  needed,
+  gateJobName,
+  attempts = SETTLE_ATTEMPTS,
+}) {
+  let jobs = await fetchJobs()
+  let problems = gateFailures({ jobs, needed, gateJobName })
+  for (let attempt = 1; attempt < attempts; attempt++) {
+    if (problems.length === 0) break
+    if (!stillSettling({ jobs, needed, gateJobName })) break
+    await sleep(SETTLE_DELAY_MS)
+    jobs = await fetchJobs()
+    problems = gateFailures({ jobs, needed, gateJobName })
+  }
+  return { jobs, problems }
+}
+
 async function fetchRunJobs(repo, runId, token) {
   /** @type {{name: string, status: string, conclusion: string | null}[]} */
   const jobs = []
@@ -132,15 +203,20 @@ async function main() {
   }
 
   let jobs
+  let problems
   try {
-    jobs = await fetchRunJobs(repo, runId, token)
+    ;({ jobs, problems } = await readSettledJobs({
+      fetchJobs: () => fetchRunJobs(repo, runId, token),
+      sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+      needed: Object.keys(needed),
+      gateJobName,
+    }))
   } catch (err) {
     // A gate that cannot see the run must block, never wave the merge through.
     process.stderr.write(`[ci-gate] could not read this run's jobs: ${err}\n`)
     process.exit(1)
   }
 
-  const problems = gateFailures({ jobs, needed: Object.keys(needed), gateJobName })
   for (const job of jobs) {
     process.stdout.write(`  ${job.name}: ${job.conclusion ?? job.status}\n`)
   }

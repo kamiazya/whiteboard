@@ -150,7 +150,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decide whether it is content, and most of the growth is the note saying
   // why that line and not "propose unless told otherwise" — the widget's
   // comment box is a caller a refusing default would have broken.
-  'packages/server-core/src/tools/canvas-edit.ts': 1021,
+  // +77 for absorbing wb_body_patch: `node.splice` (its range arm, now an op
+  // that batches) and the dropped-key guard that had to exist before
+  // `node.patch` could carry content at all. This file grew and the REPO
+  // shrank — body-patch.ts (134) and its two test files (165 + 106) are
+  // deleted, so 14 files come to 295 insertions against 541 deletions.
+  'packages/server-core/src/tools/canvas-edit.ts': 1098,
   'apps/web/src/App.tsx': 973,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
@@ -186,7 +191,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision has to reach two planes here.
   // +4: the decide-proposal arm moved inside `withDocumentBatch`, so its
   // three subjects land as one delta and one undo step instead of four.
-  'apps/web/src/lib/document-sync-session.ts': 1475,
+  // +18 for `getFacets`: a markdown document's own mark is a facet, which is
+  // no canvas value, so a page reading only the canvas cannot see one. One
+  // session serves both document pages, which is what keeps the two keepers
+  // from drifting on it — and most of the eighteen lines say that.
+  'apps/web/src/lib/document-sync-session.ts': 1493,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -240,7 +249,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // every render instead of on a change to the document — and a `useMemo`
   // is two lines a call site cannot avoid paying.
   'apps/web/src/pages/BrowserDocumentPage.tsx': 1035,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
+  // +1 for a task list's checkbox, which is one import and one branch here:
+  // the geometry and the measurement behind it (the vendored export face
+  // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
+  // entered this file.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1675,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

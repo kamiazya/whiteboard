@@ -23,7 +23,7 @@
  * the SVG family's answer for the same document.
  */
 
-import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveDocumentSymbol, type VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { FaviconRect } from '../../lib/favicon.js'
@@ -121,13 +121,23 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
     cacheKey: string | undefined,
   ): Promise<RowOutline | null> => {
     if (outlinedKind(document) === 'markdown') {
-      const markdown = await deps.source.loadMarkdown(document)
-      if (markdown.trim() === '') return null
-      return await (deps.outlineMarkdown ?? outlineMarkdownInPool)(
-        markdown,
+      const { body, facets } = await deps.source.loadMarkdown(document)
+      // The mark comes off the frontmatter, which the same read carried —
+      // unlike a spatial document, whose symbol rides the canvas the worker
+      // decodes and so comes back from the worker instead.
+      const symbol = resolveDocumentSymbol(facets)
+      // A body with nothing in it has no shape to draw, and a document that
+      // wears a mark still has that. Answering null for both is how a
+      // document somebody marked and has not written yet shows a bare kind
+      // icon.
+      if (body.trim() === '') return symbol === undefined ? null : { rects: [], symbol }
+      const outline = await (deps.outlineMarkdown ?? outlineMarkdownInPool)(
+        body,
         ROW_LAYOUT_WIDTH,
         cacheKey,
       )
+      if (outline === null || symbol === undefined) return outline
+      return { ...outline, symbol }
     }
 
     const snapshot = await deps.source.loadSpatialSnapshot(document)

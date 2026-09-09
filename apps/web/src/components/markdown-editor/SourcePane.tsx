@@ -449,6 +449,14 @@ export function SourcePane({
     const holderIsTransient =
       holder === null || holder === document.body || holder.closest('[role="menu"]') !== null
     if (autoFocus && holderIsTransient) {
+      // The caret goes AFTER what the box was handed. CodeMirror's own
+      // default is offset 0, which is right for an empty box (a fresh note,
+      // a reply) and wrong for one opened on existing prose: pressing Edit
+      // and typing put the new words in front of the old ones. Measured on
+      // the canvas card — editing `noted` and typing ` twice` stored
+      // `twicenoted`. On an empty document the two positions are the same,
+      // so the fresh-note flows this flag was written for are unchanged.
+      view.dispatch({ selection: { anchor: view.state.doc.length } })
       view.focus()
     }
 

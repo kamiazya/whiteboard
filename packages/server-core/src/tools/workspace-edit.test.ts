@@ -42,9 +42,9 @@ describe('wb_workspace_edit', () => {
     const read = createDocumentGetTool(deps)
     const first = await read.execute({
       workspaceId: WS,
-      documentId: out.results[0]?.documentId ?? '',
+      documentIds: [out.results[0]?.documentId ?? ''],
     })
-    expect(first.content).toContain('one')
+    expect(first.documents[0]?.content).toContain('one')
   })
 
   it('stops at the failing op and says how far it got', async () => {
@@ -110,8 +110,11 @@ describe('wb_workspace_edit', () => {
         { op: 'document.create', path: 'doomed', kind: 'markdown' },
       ],
     })
-    const read = await createDocumentGetTool(deps).execute({ workspaceId: WS, documentId })
-    expect(read.content).toContain('after')
+    const read = await createDocumentGetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [documentId],
+    })
+    expect(read.documents[0]?.content).toContain('after')
 
     const listed = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const doomed = listed.find((d) => d.path === 'doomed')

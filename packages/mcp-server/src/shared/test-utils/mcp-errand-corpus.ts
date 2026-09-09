@@ -15,9 +15,12 @@ import type { Client } from '@modelcontextprotocol/client'
  *   A — many operations on ONE subject. `wb_canvas_edit`, `wb_workspace_edit`,
  *       `wb_thread_edit` and `wb_body_edit` already take an `ops` array, so
  *       an errand that stays inside one document is already cheap.
- *   B — many SUBJECTS in one call. Every write tool takes exactly one
- *       `documentId`, so an errand that touches N documents costs N calls
- *       whatever it does to each. This is where the count actually goes.
+ *   B — many SUBJECTS in one call. `wb_document_get`, `wb_facet_set` and
+ *       `wb_version_save` all take `documentIds`, so an errand that touches
+ *       N documents no longer costs N calls. What still takes exactly one
+ *       `documentId` is the per-document CONTENT verbs — `wb_canvas_edit`,
+ *       `wb_body_edit`, `wb_thread_edit` — where each document's payload is
+ *       its own and there is nothing to share.
  */
 
 interface ErrandContext {
@@ -91,45 +94,43 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     },
   },
   {
-    // Axis B, reads: the list is one call and every document after it is
-    // another. Nothing here can be batched today.
+    // Axis B, reads. `wb_document_list` answers with METADATA only — id,
+    // path, name, kind, updatedAt, shadowed — so the content of five
+    // documents genuinely needs a second call; it no longer needs five.
     name: 'read every document in a workspace of 5',
     seedDocuments: 5,
     run: async (context) => {
       await call(context, 'wb_document_list', { workspaceId: context.workspaceId })
-      for (const documentId of context.documentIds) {
-        await call(context, 'wb_document_get', { workspaceId: context.workspaceId, documentId })
-      }
+      await call(context, 'wb_document_get', {
+        workspaceId: context.workspaceId,
+        documentIds: [...context.documentIds],
+      })
     },
   },
   {
-    // Axis B, writes: one facet write per document, and `wb_facet_set` takes
-    // a single `documentId`.
+    // Axis B, writes: one call, because `wb_facet_set` takes `documentIds`
+    // and one shared payload.
     name: 'tag 5 documents',
     seedDocuments: 5,
     run: async (context) => {
-      for (const documentId of context.documentIds) {
-        await call(context, 'wb_facet_set', {
-          workspaceId: context.workspaceId,
-          documentId,
-          facets: { 'core/v1': { tags: ['reviewed'] } },
-        })
-      }
+      await call(context, 'wb_facet_set', {
+        workspaceId: context.workspaceId,
+        documentIds: [...context.documentIds],
+        facets: { 'core/v1': { tags: ['reviewed'] } },
+      })
     },
   },
   {
     // Axis B again, on a different verb — so the scoreboard shows the cost
-    // is the SUBJECT count rather than anything about facets.
+    // tracks the SUBJECT count rather than anything about facets.
     name: 'save a labelled version of 4 documents',
     seedDocuments: 4,
     run: async (context) => {
-      for (const documentId of context.documentIds.slice(0, 4)) {
-        await call(context, 'wb_version_save', {
-          workspaceId: context.workspaceId,
-          documentId,
-          label: 'before the edit',
-        })
-      }
+      await call(context, 'wb_version_save', {
+        workspaceId: context.workspaceId,
+        documentIds: context.documentIds.slice(0, 4),
+        label: 'before the edit',
+      })
     },
   },
 ]

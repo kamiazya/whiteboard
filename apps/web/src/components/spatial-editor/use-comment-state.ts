@@ -7,7 +7,6 @@
 // its whole hit-testing input.
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
-import { commentAnchor, type EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type MutableRefObject, useEffect, useRef, useState } from 'react'
 import type { Point } from '../../lib/spatial/viewport.js'
@@ -15,8 +14,6 @@ import type { CommentComposeState } from './CanvasContextMenu.js'
 
 export interface CommentStateInputs {
   readonly canvasRef: MutableRefObject<SpatialCanvas>
-  /** The routed edge paths, for a comment about an edge to open its editor on the path. */
-  readonly edgePathOf: EdgePathLookup
   readonly commentChromeBoxes: readonly {
     readonly commentId: string
     readonly part: string
@@ -24,7 +21,7 @@ export interface CommentStateInputs {
   }[]
 }
 
-export function useCommentState({ canvasRef, edgePathOf, commentChromeBoxes }: CommentStateInputs) {
+export function useCommentState({ canvasRef, commentChromeBoxes }: CommentStateInputs) {
   /**
    * What a comment's bubble is placed around — the same obstacle set
    * canvas-render's placer sees for it: every node that is not a group
@@ -69,13 +66,6 @@ export function useCommentState({ canvasRef, edgePathOf, commentChromeBoxes }: C
    */
   const toggleCommentCard = (commentId: string): void => {
     setOpenCommentId((current) => (current === commentId ? null : commentId))
-  }
-  /** Opens the compose bubble over an existing comment, pre-filled, to rewrite its text. */
-  const openCommentEditor = (comment: CanvasComment) => {
-    setCommentCompose({
-      point: commentAnchor(comment, canvasRef.current, edgePathOf),
-      editing: { id: comment.id, initialText: comment.text },
-    })
   }
   const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
   /**
@@ -146,7 +136,6 @@ export function useCommentState({ canvasRef, edgePathOf, commentChromeBoxes }: C
     hitTestComment,
     commentById,
     toggleCommentCard,
-    openCommentEditor,
     commentCompose,
     setCommentCompose,
     openCommentId,

@@ -135,6 +135,26 @@ const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object({ op: z.literal('node.patch'), id: nodeIdSchema, patch: nodePatchFieldsSchema })
     .strict(),
+  /**
+   * A line-range splice of a text node's body, `[startLine, endLine]`
+   * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
+   * this replaces part of it, so a caller editing one line of a long note
+   * sends that line. Retired `wb_body_patch` into this tool: as an op it
+   * batches with everything else, and it falls under the propose-by-default
+   * rule that tool had no mode for.
+   */
+  z
+    .object({
+      op: z.literal('node.splice'),
+      id: nodeIdSchema,
+      startLine: z.number().int().nonnegative(),
+      endLine: z.number().int().nonnegative(),
+      replacement: z.string(),
+    })
+    .strict()
+    .refine((value) => value.startLine <= value.endLine, {
+      message: 'startLine must be <= endLine',
+    }),
   z.object({ op: z.literal('node.remove'), id: nodeIdSchema }).strict(),
   z.object({ op: z.literal('edge.add'), edge: edgeDraftSchema }).strict(),
   z
@@ -484,7 +504,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
         throw new DocumentKindMismatchError(
           input.documentId,
           kind,
-          'This edits a JSON Canvas, and its only node holds its OKF body. Write its content through wb_document_set, or its body through wb_body_patch.',
+          'This edits a JSON Canvas, and its only node holds its OKF body. Write its content through wb_document_set, or a passage of its body through wb_body_edit.',
         )
       }
 
@@ -570,7 +590,64 @@ export function createCanvasEditTool(deps: ServerDeps) {
             const parsed = spatialNodeSchema.safeParse({ ...node, ...op.patch })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
             const updated = parsed.data
+            // The per-type node schemas are non-strict on purpose — JSON
+            // Canvas 1.0 lets a document carry another tool's extension keys,
+            // and refusing them would make those documents unreadable. The
+            // cost is that a patch key the TARGET's type does not have is
+            // stripped by the re-parse above rather than rejected, so the
+            // write would report success over a document it did not change.
+            // `label` on a text node is the case that exists today: it is on
+            // the patch allowlist because a group has one.
+            //
+            // Caught here rather than by narrowing the allowlist per type,
+            // because one check covers every key and every type — including
+            // whichever content field a later increment allows.
+            const dropped = Object.keys(op.patch).filter((key) => !(key in updated))
+            if (dropped.length > 0) {
+              fail(
+                index,
+                op.op,
+                `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
+                  'accepted and silently dropped, so it is refused instead',
+              )
+            }
             nodes = nodes.map((existing) => (existing.id === op.id ? updated : existing))
+            touchedNodes.add(op.id)
+            return
+          }
+
+          case 'node.splice': {
+            const node = nodeAt(op.id)
+            if (node === undefined) fail(index, op.op, `node "${op.id}" is not on the canvas`)
+            if (nodeLocks.has(op.id)) {
+              fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+            }
+            if (node.type !== 'text') {
+              fail(
+                index,
+                op.op,
+                `a ${node.type} node holds no text to splice; only a text node does`,
+              )
+            }
+            const lines = node.text.split('\n')
+            // Refused rather than clamped: clamping would apply part of the
+            // splice and report success, which is the failure the codec's
+            // own parsers refuse to degrade into.
+            if (op.startLine >= lines.length || op.endLine >= lines.length) {
+              fail(
+                index,
+                op.op,
+                `range [${op.startLine}, ${op.endLine}] is out of bounds for a ${lines.length}-line body`,
+              )
+            }
+            const spliced = [
+              ...lines.slice(0, op.startLine),
+              ...op.replacement.split('\n'),
+              ...lines.slice(op.endLine + 1),
+            ].join('\n')
+            const parsed = spatialNodeSchema.safeParse({ ...node, text: spliced })
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            nodes = nodes.map((existing) => (existing.id === op.id ? parsed.data : existing))
             touchedNodes.add(op.id)
             return
           }

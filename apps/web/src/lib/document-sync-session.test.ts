@@ -19,6 +19,7 @@ import {
   writeCanvasComment,
   writeCommentThread,
   writeDocumentKind,
+  writeFacets,
   writeMarkdownBody,
   writeProposal,
   writeSpatialCanvas,
@@ -780,7 +781,7 @@ describe('createDocumentSyncSession', () => {
 
   it('resolving and editing reach the thread for ANY anchor, which the flat path cannot', async () => {
     // A note's passage and a document-level thread have no projection in
-    // the canvas envelope, so `set-comment-resolved` / `set-comment-text`
+    // the canvas envelope, so `set-comment-resolved` / `move-comment`
     // — which travel through it — never reach them. These two write the
     // plane directly, and the canvas projection follows where one exists.
     const backend = makeFakeBackend()
@@ -1331,7 +1332,7 @@ describe('createDocumentSyncSession', () => {
     expect(comments).toEqual([{ ...comment, resolved: true }])
   })
 
-  it('debounce coalescing: move-comment then set-comment-text for the same id dedupes to one fine-grained write carrying both', async () => {
+  it('debounce coalescing: move-comment then set-comment-resolved for the same id dedupes to one fine-grained write carrying both', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
@@ -1348,7 +1349,7 @@ describe('createDocumentSyncSession', () => {
     const afterMove = applyCommand(initial, moveCmd)
     session.onChange(afterMove, moveCmd)
 
-    const textCmd: EditorCommand = { kind: 'set-comment-text', id: 'c-1', text: 'second pass' }
+    const textCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
     const afterText = applyCommand(afterMove, textCmd)
     session.onChange(afterText, textCmd)
 
@@ -1366,7 +1367,7 @@ describe('createDocumentSyncSession', () => {
       ...comment,
       x: 120,
       y: -30,
-      text: 'second pass',
+      resolved: true,
     })
     expect(comments.find((c) => c.id === 'c-2')).toEqual(other)
   })
@@ -1411,7 +1412,7 @@ describe('createDocumentSyncSession', () => {
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
-  it('a batch containing move-comment and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
+  it('a batch containing move-comment and set-comment-resolved commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
@@ -1434,7 +1435,7 @@ describe('createDocumentSyncSession', () => {
       kind: 'batch',
       commands: [
         { kind: 'move-comment', id: 'c-1', x: 120, y: -30 },
-        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
+        { kind: 'set-comment-resolved', id: 'c-2', resolved: true },
         { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
       ],
     }
@@ -1452,11 +1453,11 @@ describe('createDocumentSyncSession', () => {
     const comments = result['x-whiteboard']?.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ x: 120, y: -30 })
-    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ resolved: true })
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
-  it('a batch containing set-comment-resolved and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
+  it('a batch containing set-comment-resolved and move-comment commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
@@ -1481,7 +1482,7 @@ describe('createDocumentSyncSession', () => {
       kind: 'batch',
       commands: [
         { kind: 'set-comment-resolved', id: 'c-1', resolved: true },
-        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
+        { kind: 'move-comment', id: 'c-2', x: 60, y: 61 },
         { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
       ],
     }
@@ -1490,7 +1491,7 @@ describe('createDocumentSyncSession', () => {
       'x-whiteboard': {
         comments: [
           { ...toResolve, resolved: true },
-          { ...toEdit, text: 'edited' },
+          { ...toEdit, x: 60, y: 61 },
         ],
       },
     }
@@ -1507,7 +1508,7 @@ describe('createDocumentSyncSession', () => {
     const comments = result['x-whiteboard']?.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
-    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ x: 60, y: 61 })
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
@@ -2709,5 +2710,53 @@ describe('adopting a proposed passage (ADR-0029 decision 6)', () => {
     // that stayed open would ask them again every time they opened the note.
     expect(session.getMarkdownBody()).toBe('The plan changed entirely.\n')
     expect(session.getProposals()[0]?.changes[0]?.status).toBe('adopted')
+  })
+})
+
+// A markdown document's own mark is a facet, and a facet is no canvas value —
+// so a page reading only the canvas cannot see one. This is the reading that
+// lets both document pages draw it, and it is one seam rather than two
+// because both pages run this same session.
+describe('extension facets', () => {
+  it('answers an empty bucket before the first snapshot', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    expect(session.getFacets()).toEqual({})
+  })
+
+  it('reads the document’s facets once it has hydrated', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, '# Plan\n')
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getFacets()).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+  })
+
+  // The same signal the body and the core facets ride: a remote peer marking
+  // a document changes no canvas value, so nothing else would republish it.
+  it('republishes on the body signal when a remote peer marks the document', () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeMarkdownBody(doc, '# Plan\n')
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const listener = vi.fn(() => session.getFacets())
+    const unsubscribe = session.subscribeMarkdownBody(listener)
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'icon', name: 'lock' } })
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(listener).toHaveBeenCalled()
+    expect(session.getFacets()).toEqual({ 'visual.symbol/v0': { kind: 'icon', name: 'lock' } })
+    unsubscribe()
   })
 })

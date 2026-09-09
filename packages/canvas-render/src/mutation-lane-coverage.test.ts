@@ -67,9 +67,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutation-checked by hand (swapping in the document theme fails them
     // with `expected 30 to be 24`). The rest is delegation to
     // `layoutMdastBlocks`, which the lane already mutates.
+    //
+    // 58 since `layout/nodes/task-checkbox.ts`, and outside the lane for the
+    // same shape of reason: it is geometry with no branch worth mutating
+    // beyond ticked-vs-not, and that one IS pinned by name — removing the
+    // filled rect fails `fills the box for a ticked item` and returning no
+    // marker at all fails the preview guard in apps/web. What a mutation
+    // score would add here is a number over two rects.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 10,
-      production: 57,
+      production: 58,
     })
   })
 

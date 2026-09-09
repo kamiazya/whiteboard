@@ -1,5 +1,20 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentKind, ExtensionFacets } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+
+/**
+ * What one markdown read answers with: the body a renderer draws, and the
+ * extension facets stored beside it.
+ *
+ * One value rather than two reads. A document's own mark is a facet, and
+ * every surface that wants it — the tab, the file row, the overview — wants
+ * it at the moment it is already reading the body. A second read to fetch
+ * it would be a second HTTP round trip per row against the daemon, and a
+ * second decode per row against the browser's store.
+ */
+export interface LoadedMarkdown {
+  readonly body: string
+  readonly facets?: ExtensionFacets
+}
 
 /**
  * Everything `WorkspaceFilesPanel` asks of the world, as one seam.
@@ -56,10 +71,15 @@ export interface WorkspaceFilesSource {
    */
   searchDocuments(query: string, limit?: number): Promise<readonly DocumentSearchHit[]>
   /**
-   * The OKF markdown of a markdown document, for row thumbnails and the
-   * preview pane. Empty string when the document has no body yet.
+   * A markdown document's BODY and its facets, for row thumbnails, the
+   * preview pane and whatever draws the document's own mark. Empty body
+   * when the document has none yet.
+   *
+   * The body, never the OKF serialization: both are readable from one read,
+   * and a keeper that answered with the serialization drew its frontmatter
+   * block as prose on every card.
    */
-  loadMarkdown(entry: WorkspaceDocumentEntry): Promise<string>
+  loadMarkdown(entry: WorkspaceDocumentEntry): Promise<LoadedMarkdown>
   /**
    * The CURRENT Loro bytes of a spatial document — snapshot plus any delta
    * log folded in, because a thumbnail of the last snapshot is a thumbnail

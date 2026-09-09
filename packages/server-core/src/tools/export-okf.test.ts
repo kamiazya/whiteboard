@@ -60,4 +60,27 @@ describe('exportOkf', () => {
       }),
     ).rejects.toThrow(SnapshotNotFoundError)
   })
+
+  // The serialization and the body are two different answers, and a caller
+  // that wants to DRAW the document wants the second one. Handing over only
+  // `markdown` made every such caller either re-parse what this function
+  // already had in hand, or — which is what happened — draw the frontmatter
+  // block as prose.
+  test('answers the body on its own, beside the serialization that embeds it', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: '# Title' }],
+        edges: [],
+      })
+    })
+    const result = await exportOkf(makeDeps(store), {
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+    })
+
+    expect(result.body).toBe('# Title')
+    expect(result.markdown).toContain(result.body)
+    expect(result.markdown.startsWith('---\n')).toBe(true)
+  })
 })

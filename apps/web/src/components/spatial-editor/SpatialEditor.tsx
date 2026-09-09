@@ -76,6 +76,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -581,7 +582,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       hitTestComment,
       commentById,
       toggleCommentCard,
-      openCommentEditor,
       commentCompose,
       setCommentCompose,
       openCommentId,
@@ -589,7 +589,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
+    } = useCommentState({ canvasRef, commentChromeBoxes })
     /**
      * The proposal opened in place — at most one, for the reason a
      * conversation is: a card is where ONE thing is decided.
@@ -2066,11 +2066,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     commands: [{ kind: 'set-comment-resolved', id: thread.id, resolved } as const],
                   })
                 }
-                onEdit={() => {
-                  const comment = commentById(thread.id)
-                  if (comment === undefined) return
-                  setOpenCommentId(null)
-                  openCommentEditor(comment)
+                onEditMessage={(messageId, body) => {
+                  const command = editThreadMessageCommand(thread, messageId, body)
+                  if (command === null) return
+                  applyResult({ state: { kind: 'idle' }, commands: [command] })
                 }}
                 onClose={() => setOpenCommentId(null)}
               />
@@ -2290,7 +2289,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setContextMenu={setContextMenu}
               canvas={canvas}
               canvasRef={canvasRef}
-              edgePathOf={edgePathOf}
               theme={theme}
               gestureState={gestureState}
               isEdgeLocked={isEdgeLocked}
@@ -2649,7 +2647,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 compose={commentCompose}
                 canvas={canvas}
                 edgePathOf={edgePathOf}
-                obstacles={commentPlacementObstacles(commentCompose.editing?.id)}
+                obstacles={commentPlacementObstacles()}
                 createId={createId}
                 zoom={viewport.zoom}
                 theme={theme}

@@ -41,7 +41,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   // Titled for what it reaches, which is a text NODE on a spatial canvas —
   // a markdown document's body lives in a text container the canvas read
   // does not see, so this tool has never been able to touch one.
-  wb_body_patch: { profile: MUTATING, title: "Patch a text node's markdown body" },
   wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_viewport_set: {

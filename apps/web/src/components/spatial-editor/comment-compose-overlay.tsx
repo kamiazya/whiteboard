@@ -135,19 +135,12 @@ export function CommentComposeOverlay({
             ),
         obstacles,
       )}
-      initialText={compose.editing?.initialText ?? ''}
+      initialText=""
       testId="comment-compose"
       style={commentComposeStyle(theme)}
       onCommit={(draft) => {
         const text = draft.trim()
-        if (compose.editing !== undefined) {
-          if (text.length > 0 && text !== compose.editing.initialText) {
-            applyResult({
-              state: { kind: 'idle' },
-              commands: [{ kind: 'set-comment-text', id: compose.editing.id, text } as const],
-            })
-          }
-        } else if (text.length > 0 && compose.threadAnchor !== undefined) {
+        if (text.length > 0 && compose.threadAnchor !== undefined) {
           const id = (createId ?? defaultCreateId)()
           const createdAt = new Date().toISOString()
           applyResult({

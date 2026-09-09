@@ -24,11 +24,10 @@ import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
 import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
-import { CommentBody } from './CommentBody.js'
 import { CommentComposer } from './CommentComposer.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
 import { ReplyComposer } from './ReplyComposer.js'
-import { ThreadReplies } from './ThreadReplies.js'
+import { ThreadMessage } from './ThreadMessage.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -182,10 +181,14 @@ export function CommentsPanel({
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
-  // The opening message under edit, with its draft: at most one, and it
-  // belongs to the row, so opening another conversation abandons it.
+  // The MESSAGE under edit, with its draft: at most one in the panel, and
+  // it belongs to its row, so opening another conversation abandons it. It
+  // named only a thread until every message became editable, which is the
+  // same shape the rest of this surface had — one message per conversation
+  // was reachable because one message per conversation was addressable.
   const [editing, setEditing] = useState<{
     readonly threadId: string
+    readonly messageId: string
     readonly body: string
   } | null>(null)
 
@@ -237,7 +240,6 @@ export function CommentsPanel({
    */
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const composeRef = useRef<SourcePaneApi | null>(null)
-  const editRef = useRef<SourcePaneApi | null>(null)
 
   // The ROW's toggle rather than its reply box: it is the conversation's
   // heading, and Tab continues from it into the verbs, the replies and the
@@ -253,14 +255,6 @@ export function CommentsPanel({
     if (composeAnchor === null) return
     composeRef.current?.focus()
   }, [composeAnchor])
-
-  // Keyed on the thread rather than on `editing`, which changes on every
-  // keystroke — the focus belongs to opening the editor, not to typing in it.
-  const editingThreadId = editing?.threadId ?? null
-  useEffect(() => {
-    if (editingThreadId === null) return
-    editRef.current?.focus()
-  }, [editingThreadId])
 
   /**
    * The compose box's commit, named because two things now reach it: the
@@ -278,11 +272,11 @@ export function CommentsPanel({
   function commitEdit(thread: CommentThread): void {
     if (editing === null || onEditMessage === undefined) return
     const body = editing.body.trim()
-    const opening = thread.messages[0]
-    // An emptied subject is a cancel, not a blank message: the schema
-    // refuses an empty body.
-    if (body !== '' && opening !== undefined && body !== opening.body) {
-      onEditMessage(thread.id, opening.id, body)
+    const message = thread.messages.find((entry) => entry.id === editing.messageId)
+    // An emptied message is a cancel, not a blank one: the schema refuses an
+    // empty body.
+    if (body !== '' && message !== undefined && body !== message.body) {
+      onEditMessage(thread.id, message.id, body)
     }
     setEditing(null)
   }
@@ -639,86 +633,91 @@ export function CommentsPanel({
                     id={`thread-${thread.id}`}
                     className="mt-1 ml-[44px] flex flex-col gap-3 border-l-2 pl-2"
                   >
-                    <div className="flex flex-col gap-0.5">
-                      {/* The opening message's own stamp line, and the one
-                          verb that acts on it. Only Edit: Resolve moved ONTO
-                          the status dot on the row above, where the state
-                          and the verb are one object. */}
-                      {/* Next to the stamp, not at the message's trailing
-                          edge: on a full-width message that put 239px of
-                          nothing between the pencil and the only other thing
-                          on its line, and what it edits was a guess.
-                          Proximity is what names an unlabelled verb. */}
-                      <div className="flex min-h-4 items-center gap-1">
-                        <MessageBy message={thread.messages[0]} />
-                        {onEditMessage === undefined || editing?.threadId === thread.id ? null : (
-                          <button
-                            type="button"
-                            aria-label="Edit comment"
-                            title="Edit comment"
-                            onClick={() =>
-                              setEditing({
-                                threadId: thread.id,
-                                body: thread.messages[0]?.body ?? '',
-                              })
-                            }
-                            // Sunk into the stamp line rather than given a
-                            // row: `-my-3.5` spends the 44px tap target
-                            // across the 16px line it sits on, so the verb
-                            // is beside what it edits instead of a lone
-                            // pencil pushing the conversation down by 44px.
-                            className={cn(ICON_VERB_CLASS, '-my-3.5')}
-                          >
-                            <Pencil aria-hidden="true" className="size-4" />
-                          </button>
-                        )}
-                      </div>
-                      {onEditMessage !== undefined && editing?.threadId === thread.id ? (
-                        <form
-                          data-testid="comment-edit"
-                          className="flex items-end gap-1"
-                          onSubmit={(event) => {
-                            event.preventDefault()
-                            commitEdit(thread)
-                          }}
-                        >
-                          <CommentComposer
-                            apiRef={editRef}
-                            label="Edit comment text"
-                            value={editing.body}
-                            onChange={(body) => setEditing({ threadId: thread.id, body })}
-                            onSubmit={() => commitEdit(thread)}
-                            compact
-                            className="min-w-0 flex-1"
-                          />
-                          {/* No Cancel button: Escape already leaves the edit,
-                              and an X here would be the third meaning of that
-                              glyph in one panel. */}
-                          <button
-                            type="submit"
-                            aria-label="Save"
-                            title="Save"
-                            aria-disabled={editing.body.trim() === ''}
-                            className={cn(ICON_VERB_CLASS, '-my-2 aria-disabled:opacity-40')}
-                          >
-                            <Check aria-hidden="true" className="size-4" />
-                          </button>
-                        </form>
-                      ) : (
-                        // Always, not only when the row's summary dropped
-                        // something. The column's first entry is the opening
-                        // message on every conversation, so a reader never
-                        // has to work out whether they are looking at the
-                        // start of one or at a reply.
-                        <CommentBody
-                          body={thread.messages[0]?.body ?? ''}
+                    {/* Every message, drawn the same way. The first one
+                        used to be built here by hand and the rest by
+                        a replies-only component, which is why only the
+                        first could be edited: the verb was in the half that
+                        only ever held one message. What is special about the opening
+                        message belongs to the THREAD — a row summarises it,
+                        and on a canvas its text is the flat comment's — not
+                        to how a message is drawn. */}
+                    <ol className="flex flex-col gap-3">
+                      {thread.messages.map((message) => (
+                        <ThreadMessage
+                          key={message.id}
+                          message={message}
                           compact
-                          className="text-neutral-800 dark:text-neutral-200"
+                          action={
+                            onEditMessage === undefined ||
+                            editing?.messageId === message.id ? null : (
+                              <button
+                                type="button"
+                                data-testid={`edit-${message.id}`}
+                                aria-label="Edit message"
+                                title="Edit message"
+                                onClick={() =>
+                                  setEditing({
+                                    threadId: thread.id,
+                                    messageId: message.id,
+                                    body: message.body,
+                                  })
+                                }
+                                // Sunk into the stamp line rather than given
+                                // a row: `-my-3.5` spends the 44px tap
+                                // target across the 16px line it sits on, so
+                                // the verb is beside what it edits instead
+                                // of a lone pencil pushing the conversation
+                                // down by 44px.
+                                className={cn(ICON_VERB_CLASS, '-my-3.5')}
+                              >
+                                <Pencil aria-hidden="true" className="size-4" />
+                              </button>
+                            )
+                          }
+                          editor={
+                            editing?.messageId === message.id ? (
+                              <form
+                                data-testid="comment-edit"
+                                className="flex items-end gap-1"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  commitEdit(thread)
+                                }}
+                              >
+                                <CommentComposer
+                                  autoFocus
+                                  label="Edit message text"
+                                  value={editing.body}
+                                  onChange={(body) =>
+                                    setEditing({
+                                      threadId: thread.id,
+                                      messageId: message.id,
+                                      body,
+                                    })
+                                  }
+                                  onSubmit={() => commitEdit(thread)}
+                                  compact
+                                  className="min-w-0 flex-1"
+                                />
+                                {/* No Cancel button: Escape already leaves
+                                    the edit, and an X here would be the
+                                    third meaning of that glyph in one
+                                    panel. */}
+                                <button
+                                  type="submit"
+                                  aria-label="Save"
+                                  title="Save"
+                                  aria-disabled={editing.body.trim() === ''}
+                                  className={cn(ICON_VERB_CLASS, '-my-2 aria-disabled:opacity-40')}
+                                >
+                                  <Check aria-hidden="true" className="size-4" />
+                                </button>
+                              </form>
+                            ) : null
+                          }
                         />
-                      )}
-                    </div>
-
-                    <ThreadReplies thread={thread} compact />
+                      ))}
+                    </ol>
 
                     {onReply === undefined ? null : (
                       // Keyed by thread, which is what makes the draft belong

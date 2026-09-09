@@ -35,15 +35,31 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
  */
 
 /**
- * What `node.patch` may change. Deliberately limited to the geometry/style
- * fields every node type shares plus `label` (which only a group declares) —
- * not the per-type content fields. Patching `label` onto a text node is a
- * silent no-op after re-parse, because the per-type node schemas are not
- * strict and an unrecognized key is stripped rather than rejected.
+ * What `node.patch` may change: the geometry and style every node type
+ * shares, PLUS every per-type content field — a text node's `text`, a file
+ * node's `file` and `subpath`, a link node's `url`, a group's `label`,
+ * `background` and `backgroundStyle`.
+ *
+ * This is a UNION of what the four types accept, so it necessarily lists
+ * keys that any given node does not have — `label` on a text node, `url` on
+ * a group. Those are refused at the patch site by name, because the per-type
+ * node schemas are non-strict (JSON Canvas 1.0 lets a document carry another
+ * tool's extension keys, and refusing them would make those documents
+ * unreadable), so the merge's re-parse would otherwise strip the key and
+ * report a success that changed nothing. See `canvas-edit.ts`'s node.patch
+ * arm — one check there covers every key and every type, which is why this
+ * schema does not have to be split four ways.
+ *
+ * Content belongs here rather than in a separate verb so that a change to a
+ * node's text travels as a `node.patch` like any other, and therefore under
+ * ADR-0029 decision 7's propose-by-default rule. `wb_body_patch` was that
+ * separate verb, and having no propose mode it was the one content write
+ * that escaped the proposal layer entirely.
  *
  * Hand-written rather than derived, unlike the edge patch below, because
  * `spatialNodeSchema` is a union of four and there is no single object to
- * narrow: the shared subset is a judgement, and this is where it is recorded.
+ * narrow: which keys are patchable is a judgement, and this is where it is
+ * recorded.
  */
 export const nodePatchFieldsSchema = z
   .object({
@@ -52,7 +68,15 @@ export const nodePatchFieldsSchema = z
     width: z.number().int().nonnegative().optional(),
     height: z.number().int().nonnegative().optional(),
     color: canvasColorSchema.optional(),
+    // Per-type content. `id` and `type` are deliberately absent: a patch
+    // changes what a node SAYS, never which node it is or what kind.
+    text: z.string().optional(),
+    file: z.string().optional(),
+    subpath: z.string().startsWith('#').optional(),
+    url: z.url().optional(),
     label: z.string().optional(),
+    background: z.string().optional(),
+    backgroundStyle: z.enum(['cover', 'ratio', 'repeat']).optional(),
   })
   .strict()
 
