@@ -8,14 +8,15 @@ const spatial = { documentId: 'c1', path: 'a/b', kind: 'spatial' as const }
 const markdown = { documentId: 'c2', path: 'notes', kind: 'markdown' as const }
 
 const RECTS = [{ x: 0, y: 0, w: 200, h: 120 }]
+const OUTLINE = { rects: RECTS }
 
 /** A fresh broker per case, so one case's memo cannot answer another's. */
 function deps(over: Partial<RowOutlineDeps> = {}): RowOutlineDeps {
   return {
     source: fakeFilesSource(),
     broker: createInTabRenderBroker(),
-    outlineMarkdown: vi.fn(async () => RECTS),
-    outlineSpatial: vi.fn(async () => RECTS),
+    outlineMarkdown: vi.fn(async () => OUTLINE),
+    outlineSpatial: vi.fn(async () => OUTLINE),
     ...over,
   }
 }
@@ -62,7 +63,7 @@ describe('createRowOutlineLoader', () => {
     const widths: number[] = []
     const outlineMarkdown = async (_body: string, maxWidth: number) => {
       widths.push(maxWidth)
-      return blocks
+      return { rects: blocks }
     }
     const load = createRowOutlineLoader(
       deps({
@@ -71,7 +72,7 @@ describe('createRowOutlineLoader', () => {
       }),
     )
 
-    await expect(load(markdown)).resolves.toEqual(blocks)
+    await expect(load(markdown)).resolves.toEqual({ rects: blocks })
     // The width is fixed rather than measured: an icon has no pane, and a
     // shape that changed with the window would differ between two screens.
     expect(widths).toEqual([640])
@@ -95,7 +96,7 @@ describe('createRowOutlineLoader', () => {
     const snapshot = new Uint8Array([9, 8, 7])
     const d = deps({ source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }) })
 
-    await expect(createRowOutlineLoader(d)(spatial)).resolves.toEqual(RECTS)
+    await expect(createRowOutlineLoader(d)(spatial)).resolves.toEqual(OUTLINE)
     expect(d.outlineSpatial).toHaveBeenCalledWith(snapshot, undefined)
   })
 

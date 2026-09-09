@@ -38,6 +38,7 @@ import type {
   Scene,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { FaviconRect } from './favicon.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -255,6 +256,13 @@ export type OutlineResponse =
       readonly type: 'outlined'
       readonly id: number
       readonly rects: readonly FaviconRect[]
+      /**
+       * The document's own mark, when it declares one. It rides the outline
+       * reply because it comes from the same read: a spatial document's
+       * symbol is on the canvas the worker just decoded, and decoding that
+       * on the asking thread is the cost this whole path exists to avoid.
+       */
+      readonly symbol?: VisualSymbolFacet
     }
   | { readonly type: 'failed'; readonly id: number; readonly reason: string }
 

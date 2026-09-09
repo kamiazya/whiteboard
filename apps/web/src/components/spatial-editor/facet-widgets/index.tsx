@@ -172,6 +172,33 @@ export const NODE_FACET_EDITORS: Readonly<Record<string, FacetEditor>> = Object.
   ),
 )
 
+/**
+ * A canvas-target row built from the plugin's OWN editor for that facet —
+ * the same component the node inspector renders, writing to the envelope
+ * instead of to a node.
+ *
+ * Reusing it rather than declaring a second picker is what keeps the two
+ * places a symbol can be chosen from offering the same set: a canvas picker
+ * with its own list would drift from the node one on the first icon anybody
+ * adds.
+ */
+function canvasFacetRow(key: string, label: string): CanvasSettingsWidget {
+  const Editor = NODE_FACET_EDITORS[key]
+  return ({ canvas, run }) =>
+    Editor === undefined ? null : (
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-xs text-muted-foreground">{label}</span>
+        <Editor
+          value={canvas['x-whiteboard']?.facets?.[key]}
+          write={(payload) => run({ kind: 'set-canvas-facet', key, payload })}
+        />
+      </div>
+    )
+}
+
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {
   'visual.edges/v0': visualEdgesPanel,
+  // The document's own mark — what its tab, its file row and, where there is
+  // room, its overview draw instead of a picture derived from its contents.
+  'visual.symbol/v0': canvasFacetRow('visual.symbol/v0', 'Symbol'),
 }

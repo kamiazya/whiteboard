@@ -60,4 +60,33 @@ describe('buildMinimapNodes', () => {
       { x: 40, y: 0, width: 10, height: 10, color: SPATIAL_LIGHT_PALETTE.presets['1'].stroke },
     ])
   })
+
+  it("carries a node's own symbol, so the overview can say WHICH node a box is", () => {
+    // The overview is exactly where a node is too small to read — which is
+    // what `visual.symbol` was built for. Resolving it here keeps the
+    // component free of facets, the same way colour already is.
+    const n = nodes([
+      {
+        id: 'a',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 50,
+        text: 'hi',
+        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } },
+      },
+    ])
+    const boxes = indexNodeBoxes({ nodes: n, edges: [] })
+    expect(buildMinimapNodes(n, boxes, SPATIAL_LIGHT_PALETTE)[0]?.symbol).toEqual({
+      kind: 'emoji',
+      char: '📌',
+    })
+  })
+
+  it('leaves the symbol absent for a node that declares none', () => {
+    const n = nodes([{ id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }])
+    const boxes = indexNodeBoxes({ nodes: n, edges: [] })
+    expect(buildMinimapNodes(n, boxes, SPATIAL_LIGHT_PALETTE)[0]?.symbol).toBeUndefined()
+  })
 })

@@ -22,6 +22,15 @@ that want the shipped set, not a privileged registry.
 | entry | holds | may not hold |
 |---|---|---|
 | `.` (`src/index.ts`) | schemas, the plugin definition, resolvers, the icon geometry `visual.symbol` enumerates | React, `node:*`, DOM globals |
+
+`visual.symbol` attaches to all three targets, and the three resolvers
+(`resolveNodeSymbol` / `resolveCanvasSymbol` / `resolveDocumentSymbol`) are
+thin wrappers over ONE reader. That matters because the surfaces differ: a
+payload the schema refuses must mean "no symbol" on the badge, the minimap,
+the favicon and a file row alike, and a second reader is how one surface
+comes to draw a fallback the others do not. The document wrapper takes the
+facets BUCKET rather than a document — this package cannot open stored
+content, and every caller has already parsed the frontmatter it holds.
 | `./decorations` (`src/decorations.ts`) | what this plugin draws ON a node — today `visual.symbol`'s badge, with its size, margin and corner | React; anything that cannot run where a document is read |
 | `./ui` (`src/ui.tsx`) | the settings declaration and the one hand-written editor | anything the renderer needs |
 
