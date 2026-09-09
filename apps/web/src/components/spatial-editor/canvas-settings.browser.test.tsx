@@ -217,3 +217,33 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
   await openPanel(bare)
   expect(menu()?.querySelector('[role="tab"]')).toBeNull()
 })
+
+it('lets a person give the document its own mark, and take it back', async () => {
+  // The entry point everything else this facet feeds depends on: the tab,
+  // the file row and — where there is room — the overview all read what this
+  // writes. The picker is the plugin's OWN, so the canvas offers exactly the
+  // set a node does.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+
+  const pick = await vi.waitFor(() => {
+    const el = menu()?.querySelector('[aria-label="Emoji ⭐"]')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+  fireEvent.click(pick)
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toEqual({
+      kind: 'emoji',
+      char: '⭐',
+    }),
+  )
+
+  fireEvent.click(menu()?.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  // Removed without a trace: a canvas that chose and reverted serializes
+  // like one that never chose.
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toBeUndefined(),
+  )
+})

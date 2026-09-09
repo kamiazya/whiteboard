@@ -52,6 +52,24 @@ describe('useDocumentFavicon', () => {
     )
   })
 
+  it("forwards the document's own symbol as the mark", () => {
+    // A VALUE, not something this hook reads: where a symbol is stored
+    // differs by keeper and by kind, and only the page knows which it holds.
+    const symbol = { kind: 'emoji', char: '📌' } as const
+    renderHook(() =>
+      useDocumentFavicon({
+        settingsStore: settingsWith('minimap'),
+        documentId: 'doc-1',
+        kind: 'spatial',
+        revision: 'r1',
+        readSource: () => null,
+        status: 'quiet',
+        symbol,
+      }),
+    )
+    expect(useFaviconMock).toHaveBeenCalledWith(expect.objectContaining({ symbol }))
+  })
+
   it('defaults the style to minimap when settings carry none', () => {
     renderHook(() =>
       useDocumentFavicon({

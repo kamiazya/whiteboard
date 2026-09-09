@@ -8,6 +8,7 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
+import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
@@ -456,6 +457,20 @@ function useDaemonDocument(
   )
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
+  // The tab's mark. A SPATIAL document keeps its symbol on the canvas
+  // envelope, the same bucket the edge-style facet uses. A markdown
+  // document keeps its own in OKF frontmatter, which no keeper hands to
+  // this page yet — see `resolveDocumentSymbol`'s callers when it does.
+  // Memoised because the resolver PARSES: a fresh object every render
+  // would re-arm the favicon's debounce on every render rather than on
+  // a change to the document.
+  const documentSymbol = useMemo(
+    () =>
+      documentKind === 'spatial' && canvasValue !== null && canvasValue !== undefined
+        ? resolveCanvasSymbol(canvasValue)
+        : undefined,
+    [documentKind, canvasValue],
+  )
   useDocumentFavicon({
     settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
@@ -463,6 +478,7 @@ function useDaemonDocument(
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
     status: daemonFaviconStatus({ authError, syncStatus }),
+    symbol: documentSymbol,
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this

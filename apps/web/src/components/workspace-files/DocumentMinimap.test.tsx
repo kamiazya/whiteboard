@@ -1,6 +1,7 @@
 import { act, cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentMinimap } from './DocumentMinimap.js'
+import type { RowOutline } from './load-row-outline.js'
 
 afterEach(cleanup)
 
@@ -31,7 +32,7 @@ describe('DocumentMinimap', () => {
   // fit, and each miniature costs a fetch of that document's bytes.
   it('does not read a document nobody has scrolled to', () => {
     installObserver()
-    const loadOutline = vi.fn(async () => rects)
+    const loadOutline = vi.fn(async () => ({ rects }))
     render(<DocumentMinimap document={doc} loadOutline={loadOutline} />)
     expect(loadOutline).not.toHaveBeenCalled()
   })
@@ -39,7 +40,7 @@ describe('DocumentMinimap', () => {
   it('draws the document’s shape once the row is seen', async () => {
     const observers = installObserver()
     const { getByTestId } = render(
-      <DocumentMinimap document={doc} loadOutline={async () => rects} />,
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects })} />,
     )
     act(() => observers[0]?.fire())
     await waitFor(() =>
@@ -78,7 +79,9 @@ describe('DocumentMinimap', () => {
 
   it('keeps the kind icon for an empty document rather than an empty box', async () => {
     const observers = installObserver()
-    const { getByTestId } = render(<DocumentMinimap document={doc} loadOutline={async () => []} />)
+    const { getByTestId } = render(
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects: [] })} />,
+    )
     act(() => observers[0]?.fire())
     await waitFor(() =>
       expect(getByTestId('document-minimap').querySelector('[data-kind]')).not.toBeNull(),
@@ -88,8 +91,67 @@ describe('DocumentMinimap', () => {
   it('is hidden from assistive technology — the row’s name already says which document it is', () => {
     installObserver()
     const { getByTestId } = render(
-      <DocumentMinimap document={doc} loadOutline={async () => rects} />,
+      <DocumentMinimap document={doc} loadOutline={async () => ({ rects })} />,
     )
     expect(getByTestId('document-minimap').getAttribute('aria-hidden')).toBe('true')
+  })
+})
+
+describe('DocumentMinimap with a document symbol', () => {
+  it("draws the document's own mark instead of its shape", async () => {
+    // A symbol is what a person put there; the miniature is derived. At 24px
+    // the derived picture is an arrangement of smudges, so the deliberate
+    // mark wins.
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentMinimap
+        document={doc}
+        loadOutline={async () => ({ rects, symbol: { kind: 'emoji', char: '📌' } })}
+      />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => expect(getByTestId('document-minimap').textContent).toBe('📌'))
+    // ...and the shape is not drawn underneath it.
+    expect(getByTestId('document-minimap').querySelectorAll('span.absolute').length).toBe(0)
+  })
+
+  // A re-read that answers nothing renderable is an ANSWER, not a gap. The
+  // effect re-runs whenever the entry object is rebuilt — which the panel
+  // does on every refresh — so holding the last good value means a mark that
+  // was removed keeps being drawn until something unmounts the row.
+  it('stops drawing a mark the document no longer carries', async () => {
+    const observers = installObserver()
+    let answer: RowOutline | null = { rects, symbol: { kind: 'emoji', char: '📌' } }
+    const loadOutline = async () => answer
+    const { getByTestId, rerender } = render(
+      <DocumentMinimap document={doc} loadOutline={loadOutline} />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() => expect(getByTestId('document-minimap').textContent).toBe('📌'))
+
+    answer = { rects: [] }
+    // A fresh entry for the same document, the way a refreshed list hands
+    // one over — the row is not remounted, so nothing resets its state.
+    rerender(<DocumentMinimap document={{ ...doc }} loadOutline={loadOutline} />)
+    await waitFor(() =>
+      expect(getByTestId('document-minimap').querySelector('[data-kind]')).not.toBeNull(),
+    )
+    expect(getByTestId('document-minimap').textContent).toBe('')
+  })
+
+  it('falls back to the shape when the icon name is not one this build carries', async () => {
+    const observers = installObserver()
+    const { getByTestId } = render(
+      <DocumentMinimap
+        document={doc}
+        loadOutline={async () => ({ rects, symbol: { kind: 'icon', name: 'no-such-icon' } })}
+      />,
+    )
+    act(() => observers[0]?.fire())
+    await waitFor(() =>
+      expect(getByTestId('document-minimap').querySelectorAll('span.absolute').length).toBe(
+        rects.length,
+      ),
+    )
   })
 })

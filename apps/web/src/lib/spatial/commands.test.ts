@@ -1144,3 +1144,46 @@ describe('decide-proposal', () => {
     expect(next.nodes[0]?.x).toBe(40)
   })
 })
+
+describe('set-canvas-facet', () => {
+  // The canvas-envelope twin of set-node-facet, and facet-GENERIC for the
+  // same reason: the key comes from the widget, so this module never names a
+  // domain. `visual.symbol/v0` is the first caller.
+  const base: SpatialCanvas = { nodes: [], edges: [] }
+  const facetOf = (canvas: SpatialCanvas, key: string) => canvas['x-whiteboard']?.facets?.[key]
+
+  it('stores the payload in the canvas facets bucket', () => {
+    const next = applyCommand(base, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'emoji', char: '📌' },
+    })
+    expect(facetOf(next, 'visual.symbol/v0')).toEqual({ kind: 'emoji', char: '📌' })
+  })
+
+  it('undefined removes the facet, and a canvas that reverted serializes like one that never chose', () => {
+    const marked = applyCommand(base, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'icon', name: 'star' },
+    })
+    const reverted = applyCommand(marked, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: undefined,
+    })
+    expect(reverted).toEqual(base)
+    expect('x-whiteboard' in reverted).toBe(false)
+  })
+
+  it('leaves another facet in the bucket alone', () => {
+    const withEdges = applyCommand(base, { kind: 'set-edge-routing', style: 'curved' })
+    const both = applyCommand(withEdges, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'emoji', char: '⭐' },
+    })
+    expect(facetOf(both, 'visual.edges/v0')).toEqual({ routing: 'curved' })
+    expect(facetOf(both, 'visual.symbol/v0')).toEqual({ kind: 'emoji', char: '⭐' })
+  })
+})

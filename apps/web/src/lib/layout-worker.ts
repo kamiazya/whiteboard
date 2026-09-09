@@ -32,6 +32,7 @@ import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
@@ -201,10 +202,15 @@ self.onmessage = async (
       // belongs to a different document.
       const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
       const startedAt = performance.now()
+      // Read here rather than on the asking thread: this is the one place
+      // the canvas is already decoded, and decoding it again to read one
+      // facet is exactly the cost the snapshot travels here to avoid.
+      const symbol = resolveCanvasSymbol(canvas)
       const done: OutlineResponse = {
         type: 'outlined',
         id: request.id,
         rects: outlineFromSpatial(canvas),
+        ...(symbol === undefined ? {} : { symbol }),
       }
       self.postMessage(done)
       remember(request.cacheKey, performance.now() - startedAt, done)

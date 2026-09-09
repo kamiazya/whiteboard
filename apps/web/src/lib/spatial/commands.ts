@@ -109,6 +109,20 @@ export type EditorLeafCommand =
       readonly payload: unknown
     }
   | {
+      /**
+       * The canvas-envelope twin of set-node-facet, and facet-GENERIC for
+       * the same reason: the key comes from the caller, so this module
+       * never names a domain. `set-edge-routing` predates it and stays,
+       * because that facet has canonicalisation of its own (defaults are
+       * omitted, and the legacy `edgeRouting` key is absorbed) that a
+       * generic write cannot know about.
+       */
+      readonly kind: 'set-canvas-facet'
+      readonly key: string
+      /** undefined removes the facet, leaving no trace in the envelope. */
+      readonly payload: unknown
+    }
+  | {
       // Edits the canvas ENVELOPE rather than its contents, so it names no
       // node: routing style is a property of the canvas, and per-edge
       // overrides are a later, separate command.
@@ -458,14 +472,34 @@ function withEdgeStyle(
       ? { lineJumps: merged.lineJumps }
       : {}),
   }
-  // The legacy edgeRouting key is absorbed above and removed here — one
-  // facet, one version, no second place for the same answer to live.
-  const { edgeRouting: _legacy, facets, ...others } = extension ?? {}
-  const { [VISUAL_EDGES_KEY]: _previous, ...otherFacets } = facets ?? {}
-  const nextFacets =
-    Object.keys(canonical).length === 0
-      ? otherFacets
-      : { ...otherFacets, [VISUAL_EDGES_KEY]: canonical }
+  // The legacy edgeRouting key is absorbed above and dropped here — one
+  // facet, one version, no second place for the same answer to live. The
+  // envelope write itself is `withCanvasFacet`, so the canonical shape of a
+  // canvas that reverted is decided in exactly one place.
+  const { edgeRouting: _legacy, ...others } = extension ?? {}
+  const stripped: SpatialCanvas =
+    Object.keys(others).length === 0 ? rest : { ...rest, 'x-whiteboard': others }
+  return withCanvasFacet(
+    stripped,
+    VISUAL_EDGES_KEY,
+    Object.keys(canonical).length === 0 ? undefined : canonical,
+  )
+}
+
+/**
+ * Write one facet into the canvas envelope, or remove it with `undefined`.
+ *
+ * The canonical-emptiness rule lives here and nowhere else: an empty facets
+ * bucket disappears, and an empty `x-whiteboard` disappears with it — so a
+ * canvas that chose a setting and reverted serializes identically to one
+ * that never touched it. Two writers deciding that separately is how a
+ * reverted canvas comes to carry a redundant extension forever.
+ */
+function withCanvasFacet(canvas: SpatialCanvas, key: string, payload: unknown): SpatialCanvas {
+  const { 'x-whiteboard': extension, ...rest } = canvas
+  const { facets, ...others } = extension ?? {}
+  const { [key]: _previous, ...otherFacets } = facets ?? {}
+  const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
   const nextExtension = {
     ...others,
     ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
@@ -724,6 +758,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setNodeColor(canvas, command.id, command.color)
     case 'set-node-facet':
       return setNodeFacet(canvas, command.id, command.key, command.payload)
+    case 'set-canvas-facet':
+      return withCanvasFacet(canvas, command.key, command.payload)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
     case 'set-line-jumps':

@@ -11,6 +11,7 @@ import { definePluginUi, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
 import { Ban } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 import { type VisualSymbolFacet, visualSymbolFacetSchema } from './data.js'
+import type { LucideIconElement } from './icons/icons.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
@@ -126,6 +127,43 @@ function BuiltInIcon({ name }: { readonly name: string }) {
       })}
     </svg>
   )
+}
+
+/**
+ * A resolved symbol as DOM, for the surfaces that draw one outside a canvas
+ * — the picker's own rows, a file row, a document's settings.
+ *
+ * It lives here so every such surface draws from the geometry the RENDERER
+ * draws from: two producers of "what this symbol looks like" is how a row
+ * comes to show a mark the canvas does not.
+ *
+ * Answers null for an icon name this build does not carry, which is the one
+ * degradation every surface shares — the schema validates a name for
+ * non-emptiness only, so an unknown one reaches here from any document
+ * written elsewhere. What to show INSTEAD differs per surface (a file row
+ * has its kind icon, the favicon has the document's outline), so the
+ * decision stays with the caller and this only reports that it drew
+ * nothing.
+ */
+export function SymbolMark({ symbol }: { readonly symbol: VisualSymbolFacet }): ReactNode {
+  if (symbol.kind === 'emoji') return symbol.char
+  return geometryOf(symbol) === undefined ? null : <BuiltInIcon name={symbol.name} />
+}
+
+/**
+ * Whether `SymbolMark` will draw anything.
+ *
+ * A caller cannot ask the element: `<SymbolMark …/>` is a truthy value even
+ * when the component renders null, so a surface that chooses its fallback
+ * by testing the element renders an empty box for every unknown name. Both
+ * of these read `geometryOf`, so the answer and the drawing cannot drift.
+ */
+export function canDrawSymbol(symbol: VisualSymbolFacet): boolean {
+  return symbol.kind === 'emoji' || geometryOf(symbol) !== undefined
+}
+
+function geometryOf(symbol: VisualSymbolFacet): ReadonlyArray<LucideIconElement> | undefined {
+  return symbol.kind === 'icon' ? LUCIDE_ICONS[symbol.name] : undefined
 }
 
 export const visualUi = definePluginUi({

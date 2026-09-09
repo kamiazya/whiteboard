@@ -214,6 +214,16 @@ placement) landed after those and is the first facet to reach the editor
 with NO composition-root change at all — its whole UI comes from the
 tier-2 `editor` spec, which is the test of whether the tiers work.
 
+**2026-09-08:** `visual.symbol/v0` widened from `targets: ['node']` to all
+three. It was built for the surfaces where a thing is too small to read —
+a document's favicon, a minimap — and reached only the node badge, which is
+the one surface that does not need it. `targets` declares where a payload
+may attach and is not itself payload, so decision 2's version rule does not
+bite: the key stays `v0`, stored payloads keep their meaning, and no
+migration exists to write. This is the growth rule in decision 1 read the
+other way round — the same question ("what symbolises this object") asked
+of more kinds of object is one facet, not three.
+
 ## Consequences
 
 - Extension metadata has a governed growth path: schemas are agreed by

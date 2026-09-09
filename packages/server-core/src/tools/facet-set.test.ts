@@ -252,6 +252,33 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     ).rejects.toThrow(/ticket\.sample\/v0/)
   })
 
+  test('accepts visual.symbol on a markdown document, now that it targets one', async () => {
+    // The markdown half of "a document wears a symbol" is writable through
+    // this tool the moment the facet declares the target. The SPATIAL half
+    // is not: a symbol on a canvas is a canvas-target write, which this
+    // tool has no path for (see the rejection below, and the message it
+    // carries).
+    const tool = await setupWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
+    })
+    expect(result.facets).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+  })
+
+  test('still refuses a symbol payload the schema rejects', async () => {
+    const tool = await setupWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        // Two graphemes is not a badge.
+        facets: { 'visual.symbol/v0': { kind: 'emoji', char: '✅🔥' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
+  })
+
   test("rejects a canvas-target facet on a document (targets are the definition's to declare)", async () => {
     const tool = await setupWith()
     await expect(

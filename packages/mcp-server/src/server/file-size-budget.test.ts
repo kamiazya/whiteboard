@@ -96,7 +96,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +34 for `decide-proposal` (ADR-0029 decision 4): the union arm with the
   // reason its changes travel with the command, and a two-line fold over
   // `applyCanvasChange` — what adopting MEANS lives in model, not here.
-  'apps/web/src/lib/spatial/commands.ts': 960,
+  // +35 for `set-canvas-facet`: the union arm, and `withCanvasFacet` — the
+  // one place the canonical-emptiness rule for a canvas envelope lives, so
+  // a canvas that chose a setting and reverted serializes like one that
+  // never touched it. `withEdgeStyle` now delegates to it rather than
+  // repeating that rule, which is why the arm costs less than it reads.
+  'apps/web/src/lib/spatial/commands.ts': 995,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -230,7 +235,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +2 for the shared thread-write door: this page still chooses between the
   // markdown host and the spatial write per verb, so what it saves is the
   // command building rather than the branch.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
+  // +2: the tab's mark. The resolution is memoised because the resolver
+  // PARSES — a fresh object every render re-arms the favicon's debounce on
+  // every render instead of on a change to the document — and a `useMemo`
+  // is two lines a call site cannot avoid paying.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1035,
   // +1 for a task list's checkbox, which is one import and one branch here:
   // the geometry and the measurement behind it (the vendored export face
   // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
