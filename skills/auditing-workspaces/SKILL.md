@@ -16,7 +16,7 @@ For the main drawing workflow, see the drawing-visuals skill in `skills/drawing-
 ## When To Use It
 
 - When a workspace has been in heavy use and you want a sense of what is in it before adding more
-- When you want to check for a likely-duplicate path before calling `wb_document_create`
+- When you want to check for a likely-duplicate path before creating a document
 - When you want to know whether a spatial document is worth opening without rendering it
 
 ---
@@ -69,7 +69,7 @@ wb_canvas_snapshot({ workspaceId, documentId, layout: true })  // ...and whether
 A document with no recorded kind predates format tracking (`wb_document_get` reports it in
 `failed` rather than guessing; the digest still answers, misleadingly, from the empty spatial
 containers). The only way to give it a kind is
-to write to it (a `wb_canvas_edit` call records `spatial`, `wb_document_set` records `markdown`).
+to write to it (a `wb_canvas_edit` call records `spatial`, a `document.set` op records `markdown`).
 
 ### Step 3: Judge Staleness
 
@@ -78,7 +78,7 @@ structurally instead:
 
 | Signal | How To Check | Likely Meaning |
 | --- | --- | --- |
-| empty spatial document | `kind` is `spatial` (Step 2) AND digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for `wb_document_delete`. A zero-node digest ALONE proves nothing: markdown documents always digest empty |
+| empty spatial document | `kind` is `spatial` (Step 2) AND digest reports zero nodes | never drawn, or already redrawn elsewhere — candidate for a `document.delete` op. A zero-node digest ALONE proves nothing: markdown documents always digest empty |
 | near-duplicate path | two `wb_document_list` entries with similar `path`/`name` | probably one abandoned in favor of the other |
 | markdown document with an empty body | `content` is blank apart from frontmatter | scaffolded but never written |
 | document with no recorded kind | no `kind` in the Step 1 listing, and a `failed` entry from `wb_document_get` | predates format tracking; needs deciding, not deleting on sight |
@@ -100,13 +100,13 @@ No recorded kind: {list}
 ```
 
 Do **not** delete anything automatically. Always confirm with the user before calling
-`wb_document_delete`.
+a `wb_workspace_edit` `document.delete` op.
 
 ---
 
 ## Notes
 
-- `wb_document_delete` fails if other documents sit below the target's path — deletion is refused
+- `document.delete` fails if other documents sit below the target's path — deletion is refused
   rather than silently cascading, so report the blocker back to the user instead of retrying
   differently.
 - Deletion is not recoverable through these tools beyond a document's own saved versions

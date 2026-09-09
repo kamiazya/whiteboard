@@ -190,7 +190,7 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
 
 describe('POST /api/workspaces/:workspaceId/documents', () => {
   // Same reasoning as the delete below: creating a document twice over — once
-  // in the route, once in `wb_document_create` — is how the two drifted the
+  // in the route, once in `wbDocumentCreate` — is how the two drifted the
   // first time. Asserted through the index the operation writes through,
   // because the resulting row looks identical either way.
   it('creates through the injected operation rather than its own sequence', async () => {

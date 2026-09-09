@@ -115,10 +115,20 @@ describe('what an errand costs in tool calls', () => {
       // Axis A, and the shape to copy: fourteen elements of a drawing cost
       // ONE edit, because `wb_canvas_edit` takes an `ops` array. The other
       // call is the create.
+      //
+      // That create is `wb_workspace_edit` now that the standalone
+      // `wb_document_create` is retired, and this row is the PRICE of the
+      // retirement, measured rather than argued: calls unchanged at 2,
+      // request 1500 -> 1532 (+32, the op wrapped in an array), response
+      // 3066 -> 3172 (+106, a results list instead of one object). That is
+      // what one single create costs to route through the batch, and it is
+      // the whole cost — a second document, which used to cost a whole
+      // extra call, now costs one more op. The tool table an agent reads
+      // first goes 21 -> 18.
       'author a canvas of 8 nodes and 6 edges': {
         calls: 2,
-        requestBytes: 1500,
-        responseBytes: 3066,
+        requestBytes: 1532,
+        responseBytes: 3172,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

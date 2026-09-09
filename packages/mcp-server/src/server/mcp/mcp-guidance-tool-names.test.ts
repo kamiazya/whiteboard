@@ -77,8 +77,8 @@ describe('MCP guidance text', () => {
     for (const { where, text } of GUIDANCE) {
       expect(text.length, `${where} is empty`).toBeGreaterThan(50)
     }
-    expect('wb_document_create canvas_view'.match(TOOL_SHAPED)).toEqual([
-      'wb_document_create',
+    expect('wb_workspace_edit canvas_view'.match(TOOL_SHAPED)).toEqual([
+      'wb_workspace_edit',
       'canvas_view',
     ])
   })

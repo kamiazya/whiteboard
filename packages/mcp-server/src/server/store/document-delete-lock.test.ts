@@ -1,5 +1,5 @@
 /**
- * `wb_document_delete` must capture what it is going to clean up while
+ * `wbDocumentDelete` must capture what it is going to clean up while
  * holding the workspace write lock, the way the HTTP DELETE has always done.
  *
  * The HTTP path wraps its whole sequence in `withWorkspaceWriteLock`. The
@@ -39,7 +39,7 @@ const { createContainer, resolveServerDeps } = await import('../../di/container.
 const { createStoreLocalModule } = await import('../../di/store-local.module.js')
 const { wbDocumentCreate, wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
 
-describe('wb_document_delete', () => {
+describe('wbDocumentDelete', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-delete-lock-'))
   })

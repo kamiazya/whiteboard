@@ -7,7 +7,7 @@
 // without relying on prompts or conversation history from the parent client.
 //
 // Expected behavior:
-// Call wb_document_create -> wb_canvas_edit -> wb_version_save as one flow and succeed if
+// Call wb_workspace_edit -> wb_canvas_edit -> wb_version_save as one flow and succeed if
 // the last line prints a versionId.
 //
 // Notes:
@@ -55,8 +55,8 @@ writeFileSync(mcpConfigPath, JSON.stringify(mcpConfig))
 const prompt = [
   'Use the whiteboard MCP server.',
   'Do exactly these three steps in order, no extra work:',
-  '1. call wb_document_create with path="claude-smoke".',
-  '2. call wb_canvas_edit on the document id returned above with ops=[{op:"node.add",node:{id:"box",type:"text",text:"claude smoke"}}].',
+  '1. call wb_workspace_edit with ops=[{op:"document.create",path:"claude-smoke",kind:"spatial"}].',
+  '2. call wb_canvas_edit on the results[0].documentId that returned, with ops=[{op:"node.add",node:{id:"box",type:"text",text:"claude smoke"}}].',
   '3. call wb_version_save for that canvas id with label "claude-smoke".',
   'Return only the saved version id (the `version.id` field of the wb_version_save result) on the last line, nothing else.',
 ].join('\n')
@@ -68,7 +68,7 @@ const args = [
   mcpConfigPath,
   '--strict-mcp-config',
   '--allowedTools',
-  'mcp__whiteboard__wb_document_create mcp__whiteboard__wb_canvas_edit mcp__whiteboard__wb_version_save',
+  'mcp__whiteboard__wb_workspace_edit mcp__whiteboard__wb_canvas_edit mcp__whiteboard__wb_version_save',
   '--max-turns',
   '6',
   '--output-format',

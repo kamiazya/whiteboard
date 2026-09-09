@@ -727,7 +727,7 @@ async function unlinkIfExists(path: string): Promise<void> {
  * Everything about a document that is neither Libsql bytes nor a workspace
  * tree node: one thumbnail per version, and the cached doc instance.
  * server-core cannot name any of it, so it reaches this through
- * `ServerDeps.documentTeardown` — which is what makes `wb_document_delete`
+ * `ServerDeps.documentTeardown` — which is what makes `wbDocumentDelete`
  * clean up the way the HTTP DELETE does instead of leaving stale files and a
  * stale cache entry behind.
  *
@@ -783,7 +783,7 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   const documentId = await resolveDocumentIdAtPath(workspaceId, path)
   if (documentId === null) return false
 
-  // The same bracket wb_document_delete runs in (server-core's
+  // The same bracket wbDocumentDelete runs in (server-core's
   // document-crud.ts) — deliberately, because the two used to be separate
   // implementations and only one of them cleaned up. The bracket takes the
   // workspace write lock, captures thumbnail ids while the document is

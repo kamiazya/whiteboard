@@ -45,7 +45,7 @@ export class WorkspaceEditError extends Error {
  * `kind`, because only a markdown document takes a body. Zod refuses two
  * branches sharing a discriminator value, so the kind split is a nested
  * union rather than two flat `document.create` branches — the same rule
- * `wb_document_create` encodes, expressed where the outer discriminator
+ * `wbDocumentCreate` encodes, expressed where the outer discriminator
  * has already been spent.
  */
 const documentCreateOpSchema = z.discriminatedUnion('kind', [
@@ -71,7 +71,17 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
     .strict(),
 ])
 
-const workspaceOpSchema = z.union([
+/**
+ * Discriminated on `op`, not a plain `z.union`. A plain union reports a
+ * rejected op as `ops.0: Invalid input` and nothing else — it has no way to
+ * say which branch the caller meant, so the ONE thing an agent needs in
+ * order to repair the call is exactly what is missing. Discriminating picks
+ * the branch by `op` and reports that branch's own issue, naming the key.
+ *
+ * `documentCreateOpSchema` is itself a union (on `kind`), which is legal
+ * here because every one of its members carries the same `op` literal.
+ */
+const workspaceOpSchema = z.discriminatedUnion('op', [
   documentCreateOpSchema,
   z
     .object({ op: z.literal('document.set'), documentId: documentIdSchema, markdown: z.string() })
@@ -119,7 +129,7 @@ export const workspaceEditOutputSchema = z
      * caller that addressed an existing workspace by its segment learns the
      * id behind it, and a caller that created one learns what the server
      * minted. Without it a bootstrapping batch is unusable in the same way
-     * a bootstrapping `wb_document_create` was — the server picks an id,
+     * a bootstrapping create was — the server picks an id,
      * files the whole batch under it, and never says which.
      */
     workspaceId: workspaceIdSchema,

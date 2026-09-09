@@ -148,10 +148,15 @@ describe('canvas OKF read route', () => {
       body: JSON.stringify({ path: 'doc-a', kind: 'markdown', createWorkspace: true }),
     })
     const created = wbDocumentCreateOutputSchema.parse(await createRes.json())
-    await tools.documentSet.execute({
+    await tools.workspaceEdit.execute({
       workspaceId: 'ws-1',
-      documentId: created.documentId,
-      markdown: '---\ntype: note\ntitle: Doc A\n---\n\nHello tree',
+      ops: [
+        {
+          op: 'document.set',
+          documentId: created.documentId,
+          markdown: '---\ntype: note\ntitle: Doc A\n---\n\nHello tree',
+        },
+      ],
     })
 
     const res = await app.request(`/api/v1/workspaces/ws-1/documents/${created.documentId}/okf`)

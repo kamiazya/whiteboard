@@ -240,6 +240,24 @@ describe('wb_workspace_edit', () => {
     expect(exported.frontmatter.generated).toMatchObject({ by: 'reference_agent/mixed' })
   })
 
+  /**
+   * What a REJECTED op says. `ops` was a plain `z.union`, which reports
+   * `ops.0: Invalid input` and nothing more — it cannot know which branch
+   * the caller meant, so the one fact needed to repair the call is the one
+   * that is missing. Discriminating on `op` picks the branch and reports
+   * that branch's own issue. Measured against the offending payload: a
+   * spatial create carrying `markdown` now answers `Unrecognized key:
+   * "markdown"`.
+   */
+  it('names the offending key when an op is refused, not just "Invalid input"', () => {
+    const parsed = workspaceEditInputSchema.safeParse({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'diagram', kind: 'spatial', markdown: '# nope' }],
+    })
+    expect(parsed.success).toBe(false)
+    expect(JSON.stringify(parsed.error?.issues)).toContain('markdown')
+  })
+
   it('names the server when a batch does not identify itself', async () => {
     const deps = await makeDeps()
     const out = await createWorkspaceEditTool(deps).execute({
