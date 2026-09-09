@@ -3,7 +3,7 @@
  * three-pane browser serve local mode, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
-import { writeCoreFacets } from '@kamiazya/whiteboard-loro-adapter'
+import { writeCoreFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
@@ -143,7 +143,30 @@ describe('createLocalFilesSource', () => {
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const markdown = await source.loadMarkdown({ ...entry, kind: 'markdown' })
-    expect(markdown).toContain('Hello from local')
+    expect(markdown.body).toContain('Hello from local')
+  })
+
+  // The document's own mark, off the same read as the body. Both keepers
+  // answer this shape — `daemon-files-source.test.ts` holds the other half —
+  // because a feature written into one keeper and not the other is an absent
+  // test rather than a failing one (coverage-ledger.md).
+  it('reads a markdown document’s facets back with its body', async () => {
+    const source = createLocalFilesSource()
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'marked',
+      kind: 'markdown',
+    })
+    const doc = new Loro()
+    doc.getText('body').insert(0, '# Marked')
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+    await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+
+    const markdown = await source.loadMarkdown({ ...entry, kind: 'markdown' })
+    expect(markdown.body).toContain('Marked')
+    expect(markdown.facets).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
   })
 
   it('answers the CURRENT spatial bytes, deltas folded in', async () => {

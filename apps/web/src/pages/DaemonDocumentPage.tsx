@@ -8,7 +8,6 @@ import type { DocumentBackend } from '@kamiazya/whiteboard-daemon-client/documen
 import { selectDocumentTransport } from '@kamiazya/whiteboard-daemon-client/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-daemon-client/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
-import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsPanel.js'
@@ -32,6 +31,7 @@ import {
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
+import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
@@ -458,18 +458,16 @@ function useDaemonDocument(
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
   // The tab's mark. A SPATIAL document keeps its symbol on the canvas
-  // envelope, the same bucket the edge-style facet uses. A markdown
-  // document keeps its own in OKF frontmatter, which no keeper hands to
-  // this page yet — see `resolveDocumentSymbol`'s callers when it does.
+  // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
+  // keeps its own in the frontmatter facets, which are no canvas value and
+  // so arrive on the session's own `facets` reading.
   // Memoised because the resolver PARSES: a fresh object every render
   // would re-arm the favicon's debounce on every render rather than on
   // a change to the document.
   const documentSymbol = useMemo(
     () =>
-      documentKind === 'spatial' && canvasValue !== null && canvasValue !== undefined
-        ? resolveCanvasSymbol(canvasValue)
-        : undefined,
-    [documentKind, canvasValue],
+      resolveOpenDocumentSymbol({ kind: documentKind, canvas: canvasValue, facets: sync.facets }),
+    [documentKind, canvasValue, sync.facets],
   )
   useDocumentFavicon({
     settingsStore,

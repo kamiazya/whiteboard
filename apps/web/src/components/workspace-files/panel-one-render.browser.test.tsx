@@ -26,7 +26,7 @@ it('draws a document once, however many panes show it', async () => {
     updatedAt: '2026-09-03T00:00:00Z',
     contentDigest: 'c0ffee0000000006',
   }
-  const loadMarkdown = vi.fn(async () => '# Hello\n\nsome body to give it a shape')
+  const loadMarkdown = vi.fn(async () => ({ body: '# Hello\n\nsome body to give it a shape' }))
   const source = fakeFilesSource({ listDocuments: async () => [entry], loadMarkdown })
 
   render(<WorkspaceFilesPanel source={source} />)

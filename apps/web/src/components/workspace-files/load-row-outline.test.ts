@@ -67,7 +67,7 @@ describe('createRowOutlineLoader', () => {
     }
     const load = createRowOutlineLoader(
       deps({
-        source: fakeFilesSource({ loadMarkdown: async () => '# Title\n\nProse.\n' }),
+        source: fakeFilesSource({ loadMarkdown: async () => ({ body: '# Title\n\nProse.\n' }) }),
         outlineMarkdown,
       }),
     )
@@ -81,7 +81,7 @@ describe('createRowOutlineLoader', () => {
   it('answers null when the layout refuses', async () => {
     const load = createRowOutlineLoader(
       deps({
-        source: fakeFilesSource({ loadMarkdown: async () => '# Title\n' }),
+        source: fakeFilesSource({ loadMarkdown: async () => ({ body: '# Title\n' }) }),
         outlineMarkdown: async () => null,
       }),
     )
@@ -124,7 +124,7 @@ describe('createRowOutlineLoader', () => {
   })
 
   it('answers null rather than laying out an empty markdown document', async () => {
-    const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => '   \n' }) })
+    const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => ({ body: '   \n' }) }) })
     await expect(createRowOutlineLoader(d)(markdown)).resolves.toBeNull()
     expect(d.outlineMarkdown).not.toHaveBeenCalled()
   })
@@ -136,8 +136,14 @@ describe('createRowOutlineLoader', () => {
   it('outlines one document once, however many mounts ask', async () => {
     const broker = createInTabRenderBroker()
     const stamped = { ...markdown, contentDigest: 'c0ffee0000000005' }
-    const first = deps({ broker, source: fakeFilesSource({ loadMarkdown: async () => '# Hi' }) })
-    const second = deps({ broker, source: fakeFilesSource({ loadMarkdown: async () => '# Hi' }) })
+    const first = deps({
+      broker,
+      source: fakeFilesSource({ loadMarkdown: async () => ({ body: '# Hi' }) }),
+    })
+    const second = deps({
+      broker,
+      source: fakeFilesSource({ loadMarkdown: async () => ({ body: '# Hi' }) }),
+    })
 
     await createRowOutlineLoader(first)(stamped)
     await createRowOutlineLoader(second)(stamped)
@@ -145,5 +151,54 @@ describe('createRowOutlineLoader', () => {
     expect(first.outlineMarkdown).toHaveBeenCalledTimes(1)
     expect(second.outlineMarkdown).not.toHaveBeenCalled()
     expect(second.source.loadMarkdown).not.toHaveBeenCalled()
+  })
+})
+
+// A spatial document's mark rides back from the worker, because that is where
+// its canvas is decoded. A markdown document's is in the frontmatter the same
+// read already carried, so it is joined on here — which is the only reason
+// this branch differs from the one above it.
+describe('a markdown document’s own mark', () => {
+  const PIN = { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } } as const
+
+  it('rides the outline of the body it was read with', async () => {
+    const d = deps({
+      source: fakeFilesSource({ loadMarkdown: async () => ({ body: '# Title', facets: PIN }) }),
+    })
+
+    await expect(createRowOutlineLoader(d)(markdown)).resolves.toEqual({
+      ...OUTLINE,
+      symbol: { kind: 'emoji', char: '📌' },
+    })
+    // ...and reading it cost no second read of the document.
+    expect(d.source.loadMarkdown).toHaveBeenCalledOnce()
+  })
+
+  // The one case where a markdown document has something to draw and no
+  // shape to draw it from. Answering null here — which is what an empty body
+  // did before — is a row showing a bare kind icon for a document somebody
+  // deliberately marked.
+  it('answers on its own for a document marked but not yet written', async () => {
+    const d = deps({
+      source: fakeFilesSource({ loadMarkdown: async () => ({ body: '  \n', facets: PIN }) }),
+    })
+
+    await expect(createRowOutlineLoader(d)(markdown)).resolves.toEqual({
+      rects: [],
+      symbol: { kind: 'emoji', char: '📌' },
+    })
+    expect(d.outlineMarkdown).not.toHaveBeenCalled()
+  })
+
+  // An unresolvable payload is no symbol, never a different fallback — the
+  // rule `resolveDocumentSymbol` holds for every surface.
+  it('leaves the outline alone when the facet does not resolve', async () => {
+    const d = deps({
+      source: fakeFilesSource({
+        loadMarkdown: async () => ({ body: '# Title', facets: { 'visual.symbol/v0': {} } }),
+      }),
+    })
+
+    await expect(createRowOutlineLoader(d)(markdown)).resolves.toEqual(OUTLINE)
   })
 })

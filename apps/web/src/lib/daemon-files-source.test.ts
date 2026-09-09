@@ -267,3 +267,69 @@ describe('createDaemonFilesSource searchDocuments', () => {
     expect(hits.map((hit) => hit.semanticRank)).toEqual([3, 1])
   })
 })
+
+// The half that was missing, and the reason it was missing: nothing here
+// exercised `loadMarkdown` at all, so the daemon adapter answered with the
+// route's `markdown` — the whole OKF projection — and every row thumbnail
+// and preview drew the frontmatter block as prose. The browser adapter had
+// always answered with the body (`local-files-source.test.ts`), which is
+// exactly the shape a contract test cannot catch when only one side has one.
+describe('createDaemonFilesSource loadMarkdown', () => {
+  function okfFetchStub(payload: unknown): typeof globalThis.fetch {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/okf')) return Promise.resolve(jsonResponse(payload))
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+  }
+
+  const entry = {
+    documentId: '01M0P7D8CDZ5TP3C8ZYM8G275W',
+    path: 'notes/plan',
+    kind: 'markdown' as const,
+  }
+
+  it('answers the body, not the OKF serialization that wraps it', async () => {
+    const source = createDaemonFilesSource(
+      okfFetchStub({
+        markdown: '---\ntype: note\n---\n\n# Plan\n',
+        body: '# Plan\n',
+        frontmatter: { type: 'note' },
+      }),
+      BASE,
+      'ws',
+    )
+
+    const loaded = await source.loadMarkdown(entry)
+    expect(loaded.body).toBe('# Plan\n')
+    expect(loaded.body).not.toContain('---')
+  })
+
+  it('carries the document’s facets back with it', async () => {
+    const source = createDaemonFilesSource(
+      okfFetchStub({
+        markdown: '---\ntype: note\n---\n\n# Plan\n',
+        body: '# Plan\n',
+        frontmatter: {
+          type: 'note',
+          facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
+        },
+      }),
+      BASE,
+      'ws',
+    )
+
+    const loaded = await source.loadMarkdown(entry)
+    expect(loaded.facets).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+  })
+
+  it('leaves the facets absent for a document that declares none', async () => {
+    const source = createDaemonFilesSource(
+      okfFetchStub({ markdown: '---\ntype: note\n---\n', body: '', frontmatter: { type: 'note' } }),
+      BASE,
+      'ws',
+    )
+
+    expect(await source.loadMarkdown(entry)).toEqual({ body: '' })
+  })
+})
