@@ -30,7 +30,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
-import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
+import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type {
   AnchorRect,
   CanvasComment,
@@ -46,6 +46,7 @@ import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-m
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
@@ -147,8 +148,13 @@ export interface FacetCardData {
   readonly rows: readonly { readonly label: string; readonly value: string }[]
 }
 
-/** `'clean' | 'document' | <theme id>` — see `SpatialLayoutOptions.style`. */
-export type SpatialRenderStyle = 'clean' | 'document' | (string & {})
+/**
+ * `'clean' | 'document' | <theme id>` — see `SpatialLayoutOptions.style`. A
+ * Zod schema because it crosses process boundaries (an MCP tool input, the
+ * export routes' bodies); every consumer parses this and infers the type.
+ */
+export const spatialRenderStyleSchema = z.union([z.enum(['clean', 'document']), namespacedIdSchema])
+export type SpatialRenderStyle = z.infer<typeof spatialRenderStyleSchema>
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText

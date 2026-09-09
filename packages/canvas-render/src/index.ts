@@ -75,6 +75,7 @@ export {
   naturalNodeContentSize,
   resolveShapeTable,
   resolveThemeTable,
+  spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'

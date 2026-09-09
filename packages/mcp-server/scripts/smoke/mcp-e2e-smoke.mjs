@@ -824,6 +824,49 @@ async function main() {
   }
   console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
 
+  // A canvas-target facet (ADR-0030): the document names a theme through
+  // wb_facet_set's canvas target, the default render stays clean, and a
+  // styled render draws it — the whole agent path, end to end.
+  const themed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+  })
+  if (themed.updated[0]?.facets?.['visual.theme/v0']?.theme !== 'visual.neon') {
+    throw new Error(
+      `wb_facet_set(target: canvas) returned unexpected shape: ${JSON.stringify(themed)}`,
+    )
+  }
+  console.log("[e2e] wb_facet_set(target: 'canvas') → visual.theme set on the canvas")
+  const cleanByDefault = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  // The glow's filter id, not the bare word: a drop shadow is a filter too.
+  if (cleanByDefault.svg.includes('wb-glow')) {
+    throw new Error('wb_scene_render drew the document theme without being asked')
+  }
+  const styled = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (!styled.svg.includes('filterUnits="userSpaceOnUse"')) {
+    throw new Error(`wb_scene_render(style: document) drew no glow: ${styled.svg.slice(0, 300)}`)
+  }
+  console.log("[e2e] wb_scene_render(style: 'document') → the neon glow; the default stayed clean")
+  const unthemed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  if (Object.keys(unthemed.updated[0]?.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`canvas facet tombstone did not delete: ${JSON.stringify(unthemed)}`)
+  }
+  console.log("[e2e] wb_facet_set(target: 'canvas') → null tombstone clears the theme")
+
   // The opt-in reference path is a SECOND composition through the same
   // output schema, reached only when `embedReferences` is set — so the
   // default call above cannot cover it. This canvas has no file node, which
