@@ -85,9 +85,9 @@ Three things a mechanical move does not see, and what catches each now:
   command runs. Telling readers to add `--project mcp-node file-size-budget`
   was this rule's answer for a while, and a prose rung cannot notice being
   forgotten — the same push went out twice. **lefthook's pre-push block now
-  runs it** — 10.7s of a measured 75.3s run whose total was exactly the
-  typecheck's own, so the gate is no slower — and the guard asserts that
-  line exists. So a web change is covered without remembering
+  runs it** — 7.7–10.7s across two measured runs, each of whose total was
+  exactly the typecheck's own, so the gate is no slower — and the guard
+  asserts that line exists. So a web change is covered without remembering
   anything; run it by hand only to shorten the loop.
 
 ## What the other guards already cover

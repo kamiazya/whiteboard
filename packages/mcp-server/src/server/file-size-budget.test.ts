@@ -374,9 +374,11 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
  * `.claude/rules/app-web.md` had already said to run it by hand alongside the
  * web guards. That is a prose rung, and being written down is what it can do —
  * it cannot notice being forgotten. So pre-push runs it, and it costs the gate
- * nothing: on a measured `lefthook run pre-push` this took 10.71s of a 75.30s
- * run whose total was exactly the `pnpm -r typecheck` beside it. That is why a
- * guard whose failure CI would catch anyway is still worth a local rung.
+ * nothing: across two real `lefthook run pre-push` runs this took 10.71s and
+ * 7.74s, and each run's total equalled the `pnpm -r typecheck` beside it to the
+ * centisecond. The equality is the claim worth keeping — the reading itself
+ * swings ~40% with contention. That is why a guard whose failure CI would catch
+ * anyway is still worth a local rung.
  *
  * Asserted here rather than in a test about lefthook, because this is the file
  * that knows WHY the entry has to exist — and the path is derived from

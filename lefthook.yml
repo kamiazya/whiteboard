@@ -51,11 +51,12 @@ pre-push:
     # the diff that adds it, not for whoever reads the report months later.
     mutation-lane:
       run: pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts
-    # Costs the gate nothing: measured on a real `lefthook run pre-push`, this
-    # took 10.71s of the run's 75.30s, and the run's total equalled typecheck's
-    # own 75.30s. (Its vitest duration alone is ~1.9s — the rest is process
-    # start and six-way contention, which is why the hook's own summary is the
-    # number to quote, not a solo run's.)
+    # Costs the gate nothing. Across two real `lefthook run pre-push` runs this
+    # took 10.71s and 7.74s — and in BOTH the run's total equalled typecheck's
+    # own to the centisecond (75.30s, 68.87s). The invariant is the claim; the
+    # individual reading swings ~40% with contention, so quote the hook's own
+    # summary rather than either number, and never a solo run's (~1.9s of
+    # vitest, which omits process start entirely).
     #
     # Unlike mutation-lane, CI would catch this one anyway — the reason it is
     # here is WHERE it lives: the guard scans `apps/web/src` from mcp-server, so
