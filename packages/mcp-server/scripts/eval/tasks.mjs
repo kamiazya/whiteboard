@@ -130,6 +130,59 @@ export const TASKS = [
     },
   },
   {
+    // wb_body_edit had no task, and the lane's refusal texts showed models
+    // reaching for it with the wrong anchor shape; a passage edit is the
+    // errand it exists for.
+    name: 'change one sentence of a note',
+    prompt:
+      'In the style guide, buttons are described as one colour. Change that sentence so buttons are green instead, without touching anything else in the note. Apply it directly; I am looking at the note.',
+    verify: async (wb, ids) => {
+      const read = await wb.call('wb_document_get', {
+        workspaceId: WORKSPACE_ID,
+        documentIds: [ids['notes/style-guide']],
+      })
+      const content = String(read.documents[0]?.content ?? '')
+      const green = /buttons are always green/i.test(content)
+      const teal = /teal/i.test(content)
+      const amberKept = /amber/i.test(content)
+      const ok = green && !teal && amberKept
+      return {
+        ok,
+        detail: ok
+          ? 'sentence changed, rest kept'
+          : `green=${green} teal-gone=${!teal} amber-kept=${amberKept}`,
+      }
+    },
+  },
+  {
+    // wb_thread_edit's write half: replying to a thread a person opened.
+    name: 'reply to the open comment',
+    prompt:
+      "Someone left a comment on one of the roadmap board's items asking about a download. Reply to that comment, on the same thread, saying the download is fine.",
+    verify: async (wb, ids) => {
+      const view = await wb.call('canvas_view', {
+        workspaceId: WORKSPACE_ID,
+        documentId: ids['boards/roadmap'],
+      })
+      const threads = view.threads ?? []
+      const anchored = threads.find((t) => t.anchor?.nodeId === 'q4')
+      if (anchored === undefined) return { ok: false, detail: 'the seeded thread is gone' }
+      // canvas_view carries each thread's messages; wb_thread_edit's own
+      // reply carries a count. Read whichever this answer has.
+      const messages = anchored.messages?.length ?? anchored.messageCount ?? 0
+      const replied = messages >= 2
+      const extra = threads.length > 1
+      return {
+        ok: replied && !extra,
+        detail: replied
+          ? extra
+            ? 'replied, but also opened a new thread'
+            : 'replied on the same thread'
+          : `no reply (messages ${messages}, threads ${threads.length})`,
+      }
+    },
+  },
+  {
     name: 'checkpoint every board',
     prompt:
       'Save a version of every board (spatial document) in the workspace, labelled "pre-review".',

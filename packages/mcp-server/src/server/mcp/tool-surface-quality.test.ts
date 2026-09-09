@@ -134,18 +134,21 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      // 41% of everything the model reads, in one tool: the ops union
+      // 39% of everything the model reads, in one tool: the ops union
       // carries the full node and edge schemas once per arm, and not one
       // of its 207 properties says what it is for. -1,640 bytes when the
       // model's integers stopped emitting safe-integer bounds (sixty
       // `minimum: -9007199254740991, maximum: 9007199254740991` pairs on
       // one tool; `integerSchema` in packages/model).
+      // -1,320 more when the node extension a WRITER sends became one
+      // flat object narrowed on parse (nodeExtensionWriteSchema) instead of
+      // the stored two-variant union inlined eight times.
       wb_canvas_edit: {
-        visibleBytes: 14218,
-        wireBytes: 33033,
+        visibleBytes: 12898,
+        wireBytes: 31713,
         descriptionWords: 169,
-        parameters: 207,
-        undescribed: 207,
+        parameters: 199,
+        undescribed: 199,
         strays: 'refused',
         names: [],
       },
@@ -326,10 +329,11 @@ describe('what the tool table costs to read', () => {
       // -1,912 when the model's integer fields stopped emitting safe-integer
       // bounds (see wb_canvas_edit): the first cut that took nothing away
       // from what a model can do.
-      visibleBytes: 34571,
-      wireBytes: 96432,
-      parameters: 325,
-      undescribed: 291,
+      // -1,320 for wb_canvas_edit's flat write-side extension.
+      visibleBytes: 33251,
+      wireBytes: 95112,
+      parameters: 317,
+      undescribed: 283,
     })
   })
 

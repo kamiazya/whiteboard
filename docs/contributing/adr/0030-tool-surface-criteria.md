@@ -255,6 +255,63 @@ the errand scoreboard's cheapest path is two is not a failure of the
 model; it is C4 or C5 unmet on the tools it wandered through, and it says
 which.
 
+### 3b. The second reading, after one round of tuning (2026-09-09)
+
+Same lane, same twelve tasks, one trial, after the increments §6 records
+as landed (threads survive a restart; `wb_facet_set` tags; the search
+filter stands alone; every tool refuses a stray key; `wb_document_resolve`
+retired; integer bounds gone):
+
+| | baseline | after |
+|---|---|---|
+| tasks passed | 10 / 12 | **12 / 12** |
+| mean calls per task | 3.7 | **2.0** |
+| tool errors | 3 | **0** |
+| cost of the run | $0.70 | $0.56 |
+| tools | 18 | 17 |
+| model-visible bytes | 34,960 | 33,251 |
+| undescribed parameters | 299 | 283 |
+
+Every task that had wandered now takes the two calls its errand needs (a
+search to find the document, one read or write), and the table a model
+reads shrank while gaining two capabilities. Two more write tasks were
+added after this reading — a passage edit through `wb_body_edit` and a
+reply through `wb_thread_edit` — because those two tools had no task and
+the baseline's refusal texts showed a model reaching for `wb_body_edit`
+with the wrong anchor shape.
+
+**What the byte column was bought with, in order of size:**
+
+| cut | visible bytes | what it cost a model |
+|---|---|---|
+| safe-integer bounds off every `.int()` field (`integerSchema` in the model) | -1,912 | nothing: `{ "type": "integer" }` says what the bounds said |
+| the node extension a writer sends as one flat object, narrowed on parse | -1,320 | nothing, and a broken embed is now refused by name instead of silently dropped |
+| `wb_document_resolve` retired | -442 | nothing: a list row carries the id and the path |
+| `additionalProperties: false` on every tool (C10) | +464 | a stray key refused instead of dropped |
+| `tags` on `wb_facet_set`, all parameters described | +1,122 | a tool for "tag this note" |
+| the search filter standing alone, all parameters described | +379 | one call for "every document tagged X" |
+
+**What did not work, so nobody tries it twice.** `$ref`/`$defs`
+deduplication is the obvious cut for `wb_canvas_edit` (the node union is
+inlined once per op arm, and the SDK accepts a raw JSON Schema), but the
+SDK round-trips a raw schema through `z.fromJSONSchema` and emits it
+INLINED again: measured, a two-arm schema with one `$ref` listed with the
+definition copied into both arms. Dedup has to happen at the source
+schema, which is what the flat extension did. `multipleOf: 1` as an
+integer form emits 40 bytes less than `.int()` but accepts a denormal
+(`1.4e-45`), which the model's own property test caught; `.meta()`
+overriding the bounds keeps `.int()`'s validation.
+
+**C3 against C1, decided.** Describing the 283 undescribed parameters at
+the ~50 bytes a `.describe()` costs would add ~14,000 bytes — 42% of the
+table — most of it on JSON Canvas 1.0 fields (`x`, `y`, `width`, `text`,
+`fromNode`) whose meaning is the spec's and which the lane shows models
+writing correctly with no description at all. So C3 is paid down where
+the lane shows a model guessing wrong (a refusal text naming the
+parameter), tool by tool, and JSON Canvas fields inherit their spec's
+meaning. The `undescribed` column stays honest; it is a debt with a
+price, not a debt to clear blindly.
+
 ### 4. What the instrument is now pointed at
 
 These are questions for the lane, deliberately not decided here. Each
@@ -288,11 +345,12 @@ anything is retired.
 - **`wb_facet_list`** — a schema lookup with no required parameter, which
   answers an unfiltered list to any input (C10). Whether an agent ever
   needs it, or `wb_facet_set`'s refusal should carry the schema instead.
-- **`wb_canvas_edit` at 45%** (C2). The ops union repeats the full node
-  and edge schemas per arm. The candidates are a shared `$ref`-style
-  definition if the SDK's schema emitter can be made to produce one, or
-  a leaner node shape on the write side — and either is judged by C1
-  falling without C14 falling.
+- **`wb_canvas_edit` at 39%** (C2; was 45%). The ops union repeats the
+  full node and edge schemas per arm, and `$ref` is not available (§3b),
+  so what remains is the union itself: `region.set` carries the node
+  union a second time (~5,000 bytes) and `node.add` the first. Below a
+  third of the table would need one of them to change shape; neither
+  has a case yet.
 - **The description debt** (C3, C4). 299 parameters, and the four
   tools that have none owed are the shape to copy. Landed in increments
   that the rung-1 `undescribed` column counts down, and each increment

@@ -1539,3 +1539,40 @@ describe('node.patch and a node type that does not have the key', () => {
     expect(canvas.nodes[0]).toMatchObject({ label: 'a label' })
   })
 })
+
+describe('the node extension on the write side', () => {
+  // The stored schema `.catch`es a broken extension so a canvas stays
+  // readable; a WRITER sending one is told, not silently stripped.
+  test('refuses an embed that names no document, by name', () => {
+    const result = canvasEditInputSchema.safeParse({
+      workspaceId: 'ws',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'n', type: 'text', text: 'x', 'x-whiteboard': { kind: 'embed' } },
+        },
+      ],
+    })
+    expect(result.success).toBe(false)
+    expect(JSON.stringify(result.error?.issues)).toContain('an embed names the document')
+  })
+
+  test('narrows a flat extension to the stored shape: an embed, or facets alone', () => {
+    const parse = (extension: Record<string, unknown>) =>
+      canvasEditInputSchema.parse({
+        workspaceId: 'ws',
+        documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+        ops: [{ op: 'node.add', node: { type: 'text', text: 'x', 'x-whiteboard': extension } }],
+      }).ops[0]
+    const embed = parse({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8' })
+    expect(embed.op === 'node.add' && embed.node['x-whiteboard']).toEqual({
+      kind: 'embed',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V8',
+    })
+    const facets = parse({ facets: { 'example.kanban/v1': { status: 'todo' } } })
+    expect(facets.op === 'node.add' && facets.node['x-whiteboard']).toEqual({
+      facets: { 'example.kanban/v1': { status: 'todo' } },
+    })
+  })
+})

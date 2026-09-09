@@ -21,6 +21,7 @@ import {
   canvasEdgeSchema,
   documentIdSchema,
   edgePatchFieldsSchema,
+  extensionFacetsSchema,
   nodeIdSchema,
   nodePatchFieldsSchema,
   nonnegativeIntegerSchema,
@@ -30,6 +31,7 @@ import {
   spatialCanvasSchema,
   spatialNodeSchema,
   workspaceIdSchema,
+  type XWhiteboard,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
@@ -103,11 +105,48 @@ class CanvasEditError extends Error {
 const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
 const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
 const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
+
+/**
+ * The node extension as a WRITER declares it: one flat object instead of
+ * the stored two-variant union, narrowed to the stored shape on parse.
+ *
+ * Two reasons, one of them measured. The stored schema `.catch`es an
+ * unrecognised extension so a canvas stays readable, which on the write
+ * side would silently DROP a broken embed a caller just sent; here a
+ * `kind: "embed"` with no document is refused by name. And the stored
+ * union is emitted inline into the tool's input once per node type per op
+ * — eight times, 487 bytes each — where this shape is 290, on a table a
+ * model reads on every turn.
+ */
+const nodeExtensionWriteSchema = z
+  .object({
+    kind: z.literal('embed').optional(),
+    documentId: documentIdSchema.optional(),
+    versionRef: z.string().min(1).optional(),
+    facets: extensionFacetsSchema.optional(),
+  })
+  .strict()
+  .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
+    message: 'an embed names the document it embeds: kind "embed" and documentId go together',
+  })
+  .transform((value): XWhiteboard => {
+    if (value.kind === 'embed' && value.documentId !== undefined) {
+      return {
+        kind: 'embed',
+        documentId: value.documentId,
+        ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
+        ...(value.facets === undefined ? {} : { facets: value.facets }),
+      }
+    }
+    return value.facets === undefined ? {} : { facets: value.facets }
+  })
+const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
+
 const nodeDraftSchema = z.discriminatedUnion('type', [
-  textOption.partial(DRAFT_OPTIONAL),
-  fileOption.partial(DRAFT_OPTIONAL),
-  linkOption.partial(DRAFT_OPTIONAL),
-  groupOption.partial(DRAFT_OPTIONAL),
+  textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
 ])
 
 /**
@@ -117,10 +156,10 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
  * op non-idempotent.
  */
 const regionNodeSchema = z.discriminatedUnion('type', [
-  textOption.partial(GEOMETRY_OPTIONAL),
-  fileOption.partial(GEOMETRY_OPTIONAL),
-  linkOption.partial(GEOMETRY_OPTIONAL),
-  groupOption.partial(GEOMETRY_OPTIONAL),
+  textOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
+  fileOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
+  linkOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
+  groupOption.partial(GEOMETRY_OPTIONAL).extend(WRITE_EXTENSION),
 ])
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })

@@ -164,6 +164,34 @@ Beside the four-place list and the smoke call that
 - its rung-1 row, an errand in `mcp-errand-corpus.ts` if it changes what
   an errand costs, and a rung-3 task.
 
+## Where the bytes go, and which cuts were free
+
+Measured on the current table (ADR-0030 §3b): descriptions are ~30% of
+what a model reads and are the useful bytes; the rest is schema, and the
+schema carries three kinds of dead weight a `z.toJSONSchema` emits by
+default. Check these before designing a bigger cut:
+
+- **Safe-integer bounds.** `z.number().int()` emits `minimum:
+  -9007199254740991, maximum: 9007199254740991` on every field — sixty
+  times in one tool. Use the model's `integerSchema` /
+  `nonnegativeIntegerSchema` (`.int()` validation, `.meta()` strips the
+  bounds). `multipleOf(1)` is not the same integer: it accepts `1.4e-45`.
+- **A stored union inlined per op arm.** The SDK round-trips a raw JSON
+  Schema through `z.fromJSONSchema` and emits `$ref`s inlined, so dedup is
+  impossible on the wire; it has to be the SOURCE schema. A flat
+  write-side object narrowed on parse (`nodeExtensionWriteSchema`) cut
+  the node extension from 487 bytes x8 to 290 x8, and made a broken embed
+  a refusal instead of a silent drop.
+- **`$schema` and `additionalProperties: false`.** 55 and 28 bytes a tool.
+  The first is the SDK's and cannot be removed; the second is C10's price
+  and is kept.
+
+A description costs ~50 bytes each time it is emitted, and a field of the
+node union is emitted once per arm per op: describing every parameter
+would add ~40% to the table. Describe what the lane shows a model getting
+wrong (the refusal texts), and let JSON Canvas fields mean what the spec
+says.
+
 ## Traps, each paid for once
 
 - **Run the lane from an EMPTY directory.** The `claude` CLI loads the
