@@ -236,11 +236,15 @@ function useBrowserDocument(
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
-  // Binds CodeMirror straight to the document's 'body' text container:
-  // edits land in the CRDT with real deltas (not the wholesale replace
-  // setBody does), and an external change moves the local caret exactly.
-  // The hook's doc subscription keeps body state and the save schedule in
-  // step with the binding's commits, so onChange has nothing left to do.
+  // Binds CodeMirror straight to the document's 'body' text container: each
+  // change is written at its OWN position, and an external change moves the
+  // local caret exactly. The hook's doc subscription keeps body state and the
+  // save schedule in step, so onChange has nothing left to do.
+  //
+  // NOT, as this said until it was measured, "unlike setBody's wholesale
+  // replace": `minimalChange` is minimal, and identical for one keystroke.
+  // They differ on a transaction editing two places at once, where one span
+  // covers both — the untouched middle re-inserted, its passage marks gone.
   const markdownBinding = useMemo(
     () =>
       markdownDoc.doc === null
