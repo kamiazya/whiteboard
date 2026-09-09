@@ -231,7 +231,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // markdown host and the spatial write per verb, so what it saves is the
   // command building rather than the branch.
   'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
+  // +1 for a task list's checkbox, which is one import and one branch here:
+  // the geometry and the measurement behind it (the vendored export face
+  // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
+  // entered this file.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1675,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //

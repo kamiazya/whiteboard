@@ -76,6 +76,7 @@ import {
   useRef,
   useState,
 } from 'react'
+import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -2066,24 +2067,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   })
                 }
                 onEditMessage={(messageId, body) => {
-                  // Rebuilt from the message the card holds rather than from
-                  // the body alone: the write upserts by id and would
-                  // otherwise drop the author and the original stamp.
-                  const message = thread.messages.find((entry) => entry.id === messageId)
-                  if (message === undefined) return
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: [
-                      {
-                        kind: 'edit-thread-message',
-                        threadId: thread.id,
-                        message: { ...message, body, editedAt: new Date().toISOString() },
-                        // Only the opening message is drawn on the canvas, so
-                        // only its edit repaints the pin.
-                        opening: thread.messages[0]?.id === messageId,
-                      } as const,
-                    ],
-                  })
+                  const command = editThreadMessageCommand(thread, messageId, body)
+                  if (command === null) return
+                  applyResult({ state: { kind: 'idle' }, commands: [command] })
                 }}
                 onClose={() => setOpenCommentId(null)}
               />
