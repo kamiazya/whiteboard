@@ -213,4 +213,14 @@ allowBuilds:
   workerd: false
 
 patchedDependencies:
+  # Upstream arms `isInitDispatch` before the early return that skips the
+  # seeding dispatch, so with the view and the container already in step —
+  # an empty new note, the ordinary case — the flag is left standing and
+  # `update()` swallows the user's FIRST keystroke. The editor is then one
+  # character ahead of the container and the second keystroke throws
+  # `Index out of bound. The given pos is 1, but the length is 0` inside a
+  # ViewPlugin, which @codemirror/view answers by disabling the plugin for
+  # the life of the view: every later keystroke reaches CodeMirror and
+  # nothing else. Pinned to the version, so a bump has to re-check it.
+  loro-codemirror@0.3.3: patches/loro-codemirror@0.3.3.patch
   mdast-util-gfm-task-list-item@2.0.0: patches/mdast-util-gfm-task-list-item@2.0.0.patch

@@ -247,6 +247,52 @@ describe('the gate re-reads a run the API has not caught up with', () => {
     expect(reads).toBe(1)
   })
 
+  // The case the single-job test above could not reach, and the one the
+  // function's own doc comment already claimed: a settled `failure` is an
+  // answer the endpoint will never revise, so a lagging job BESIDE it is no
+  // reason to keep asking. Missing it cost a bounded delay on every red run
+  // whose last job finished late, and left the comment describing a property
+  // the code did not have.
+  it('does not re-read over a real failure that a lagging job sits beside', async () => {
+    const mixed: RunJob[] = [
+      { name: 'verify', status: 'completed', conclusion: 'failure' },
+      { name: 'build', status: 'in_progress', conclusion: null },
+    ]
+    expect(stillSettling({ jobs: mixed, needed: ['verify', 'build'], gateJobName: GATE_ID })).toBe(
+      false,
+    )
+
+    let reads = 0
+    const { problems } = await readSettledJobs({
+      fetchJobs: async () => {
+        reads += 1
+        return mixed
+      },
+      sleep: noSleep,
+      needed: ['verify', 'build'],
+      gateJobName: GATE_ID,
+    })
+    expect(problems).toEqual(['verify: failure', 'build: still in_progress when the gate ran'])
+    expect(reads).toBe(1)
+  })
+
+  // The other side of it: a skip this repo DECLARES is a success as far as
+  // the gate is concerned, so it must not be read as a settled failure that
+  // stops the wait for a job still lagging.
+  it('keeps waiting for a lagging job beside a declared skip', async () => {
+    const mixed: RunJob[] = [
+      { name: 'stress-changed-tests', status: 'completed', conclusion: 'skipped' },
+      { name: 'verify', status: 'in_progress', conclusion: null },
+    ]
+    expect(
+      stillSettling({
+        jobs: mixed,
+        needed: ['stress-changed-tests', 'verify'],
+        gateJobName: GATE_ID,
+      }),
+    ).toBe(true)
+  })
+
   it('gives up and reports rather than waiting for ever', async () => {
     let reads = 0
     const { problems } = await readSettledJobs({
