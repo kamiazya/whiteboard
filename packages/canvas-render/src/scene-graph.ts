@@ -79,6 +79,16 @@ export interface Appearance {
    * bbox, and the blur never exceeds the hit tolerance).
    */
   readonly dropShadow?: true
+  /**
+   * A soft halo around the element in its OWN paint (ADR-0030 decision 8):
+   * the SVG backend blurs the element and merges the blur under it, with a
+   * filter region declared in user space over the whole scene — a region
+   * relative to the element's box drops an axis-aligned straight edge,
+   * whose box has zero area (measured on resvg; the specification's
+   * behaviour). `radiusPx` is the visible halo; `glowReachPx` says how far
+   * it reaches, which `sceneBounds` adds like the arrowhead wings.
+   */
+  readonly glow?: { readonly radiusPx: number }
 }
 
 /** A single styled run of inline text, positioned within its parent block. */

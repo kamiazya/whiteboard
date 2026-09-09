@@ -1,4 +1,5 @@
 import { edgeArrowPolygons } from './edge-arrows.js'
+import { glowReachPx } from './layout/ink/glow.js'
 import { SKETCH_INK_REACH_PX } from './layout/ink/sketch.js'
 import type {
   BoundingBox,
@@ -136,7 +137,10 @@ export function sceneBounds(scene: Scene): BoundingBox {
     // Ink is decoration bounded by a declared constant (decision #10): an
     // inked node or edge widens the envelope by exactly that much, so a
     // derived viewBox never clips a pencil stroke, and nothing else moves.
-    const reach = node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0
+    const reach = Math.max(
+      node.kind === 'edge' || node.kind === 'shape' ? inkReach(node.ink) : 0,
+      'appearance' in node ? glowReachPx(node.appearance?.glow?.radiusPx ?? 0) : 0,
+    )
     if (node.kind === 'edge') {
       for (const p of node.path) {
         if (isFinitePoint(p.x, p.y)) {

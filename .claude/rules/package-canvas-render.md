@@ -1020,6 +1020,23 @@ the table alone.
     marks. Ink amplitude is in canvas units and is NOT scaled by
     `scaleScene`, the same class as arrowheads: a miniature's pencil line is
     relatively bolder, by design.
+    **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
+    is a radius; the backend blurs the element (σ = half the radius) and
+    merges the blur twice under the element itself, so the halo is the
+    element's OWN paint and no flood colour is invented. The filter's
+    region is declared `userSpaceOnUse` over the scene bounds, one
+    definition per (radius, region) with the id derived from both — a
+    region relative to the element's box drops an AXIS-ALIGNED STRAIGHT
+    EDGE entirely, because its box has zero area; measured on resvg 2.6.2
+    and the specification's behaviour, so a browser does the same.
+    `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
+    for a glowing node and what sizes the region, one constant with two
+    readers. `filter` is a paint attribute on every painted element (a path,
+    a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
+    it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
+    claim only a rasterizer can check — resvg paints the halo beside a
+    horizontal edge — because an unlit export would otherwise read as a
+    working one.
 
 ## Conventions
 

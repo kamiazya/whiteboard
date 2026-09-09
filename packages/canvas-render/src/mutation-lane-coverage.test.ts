@@ -84,9 +84,12 @@ describe('the mutation lane covers what it says it covers', () => {
     // 60 and 11 since `layout/ink/sketch.ts`, which the lane DOES cover: its
     // reach and determinism claims are properties, exactly what a survivor
     // would expose as decorative.
+    //
+    // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
+    // `glow.test.ts`'s bounds assertion, which fails on any other reach.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 60,
+      production: 61,
     })
   })
 

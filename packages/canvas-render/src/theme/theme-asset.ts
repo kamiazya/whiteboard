@@ -6,7 +6,7 @@
 // contract lives in the engine only so that ADR-0013 decision 8 can build on
 // it without moving anything.
 import type { PaletteTokens, ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
@@ -81,23 +81,32 @@ export function createThemedAppearance(
 
   const base = createSpatialTheme({ mode, palette: paletteFromTokens(tokens.palette[mode]) })
   const frame = tokens.defaults.groupFrame
+  // The halo rides every document appearance the theme resolves — node
+  // chrome, edges, labels — in the element's own paint; comment and
+  // proposal chrome come from the base resolver untouched.
+  const glow = tokens.glow === undefined ? {} : { glow: { radiusPx: tokens.glow.radiusPx } }
   const resolveNode = (node: SpatialNode): SpatialNodeAppearance => {
     const resolved = base.resolveNode(node)
-    if (node.type !== 'group' || frame === undefined) return resolved
-    return {
-      ...resolved,
-      appearance: {
-        ...resolved.appearance,
-        ...(frame.strokeDasharray === undefined ? {} : { strokeDasharray: frame.strokeDasharray }),
-        ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
-      },
-    }
+    const framed =
+      node.type === 'group' && frame !== undefined
+        ? {
+            ...(frame.strokeDasharray === undefined
+              ? {}
+              : { strokeDasharray: frame.strokeDasharray }),
+            ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
+          }
+        : {}
+    return { ...resolved, appearance: { ...resolved.appearance, ...framed, ...glow } }
   }
   const themed: SpatialAppearanceResolver = Object.freeze({
     ...base,
     mode,
     resolveNode,
-    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily }),
+    resolveEdge: (edge: CanvasEdge) => {
+      const resolved = base.resolveEdge(edge)
+      return resolved === undefined ? undefined : { ...resolved, ...glow }
+    },
+    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily, ...glow }),
   })
   perTokens.set(key, themed)
   return themed

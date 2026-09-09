@@ -98,3 +98,36 @@ describe('createSpatialTheme', () => {
     expect(createSpatialTheme({ mode: 'dark', palette: SPATIAL_LIGHT_PALETTE }).mode).toBe('dark')
   })
 })
+
+describe('glow tokens', () => {
+  it('a theme with glow puts a halo on nodes, edges and labels', () => {
+    const themed = createThemedAppearance({
+      tokens: { ...SAMPLE_THEME_TOKENS, glow: { radiusPx: 6 }, defaults: {} },
+      mode: 'dark',
+      fontFamily: 'Roboto',
+    })
+    const node = themed.resolveNode({
+      id: 'n',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      text: '',
+    })
+    expect(node.appearance?.glow).toEqual({ radiusPx: 6 })
+    const edge = themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })
+    expect(edge?.glow).toEqual({ radiusPx: 6 })
+    const label = themed.resolveLabel()
+    expect(label.glow).toEqual({ radiusPx: 6 })
+  })
+
+  it('a theme without glow assigns none', () => {
+    const themed = createThemedAppearance({
+      tokens: { ...SAMPLE_THEME_TOKENS, defaults: {} },
+      mode: 'dark',
+      fontFamily: 'Roboto',
+    })
+    expect(themed.resolveLabel().glow).toBeUndefined()
+  })
+})

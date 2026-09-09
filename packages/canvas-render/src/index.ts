@@ -12,6 +12,7 @@ export {
   routeEdge,
 } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
+export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
 export {
   SKETCH_INK_REACH_PX,
   type SketchEdgeOptions,

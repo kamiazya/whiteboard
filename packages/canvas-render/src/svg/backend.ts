@@ -3,6 +3,7 @@ import { ARROW_MARKER, edgeArrowEnds, edgeArrowPolygons } from '../edge-arrows.j
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
+import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
 import { sketchEdge, sketchShape } from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
@@ -25,7 +26,7 @@ import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 import { serializeSvg } from './serialize.js'
 import { applyOptimizationPasses } from './transform.js'
-import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
+import { el, rawXml, type SvgChild, type SvgDef, type SvgVNode, withDefs } from './vnode.js'
 
 /**
  * Decorative/presentational elements (backgrounds, dividers, group
@@ -221,8 +222,9 @@ function renderBackdrop(run: TextRunNode): SvgChild {
   })
 }
 
-function renderTextRun(run: TextRunNode): SvgChild {
+function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
   const halo = run.appearance?.halo
+  const glow = glowOf(run.appearance, tables)
   // A surface-colored pill under the whole text box (a glyph-outline halo
   // leaves the crossed line peeking through word spaces), so a label
   // sitting ON an edge stays readable end to end.
@@ -244,6 +246,7 @@ function renderTextRun(run: TextRunNode): SvgChild {
       y: textBaselineY(run),
       ...appearanceAttrs(run.appearance),
       ...emphasisAttrs(run),
+      filter: glow.filter,
       mask: run.truncated === true ? `url(#${FADE_MASK_ID})` : undefined,
       // A code run's whitespace is CONTENT: XML collapses it otherwise, and a
       // fenced line loses the indentation that says what nests inside what.
@@ -251,7 +254,7 @@ function renderTextRun(run: TextRunNode): SvgChild {
     },
     [run.text],
   )
-  const text = run.truncated === true ? withDefs(textEl, FADE_DEFS) : textEl
+  const text = withDefs(textEl, [...(run.truncated === true ? FADE_DEFS : []), ...glow.defs])
   // The backdrop is painted before the halo underlay so a run can carry both
   // without the panel hiding the halo; inline code uses this for its tinted
   // pill.
@@ -276,12 +279,67 @@ function renderTextRun(run: TextRunNode): SvgChild {
 interface ResolveTables {
   readonly icons?: IconTable
   readonly shapes?: ShapeTable
+  /**
+   * The user-space region every glow filter in this document declares —
+   * the scene's bounds, which already include each halo's reach. Lazy,
+   * because most scenes glow nowhere and the walk should cost them nothing.
+   */
+  readonly glowRegion?: () => BoundingBox
+}
+
+/**
+ * The filter a glowing element references, and its definition: a Gaussian
+ * blur of the element merged twice under the element itself (twice, so the
+ * halo has body without a flood colour — it is the element's own paint).
+ * One definition per (radius, region); the id derives from both, so a
+ * repeated id across inline-injected SVGs is byte-identical by construction.
+ */
+function glowOf(
+  appearance: Appearance | undefined,
+  tables: ResolveTables | undefined,
+): { readonly filter?: string; readonly defs: ReadonlyArray<SvgDef> } {
+  const radius = appearance?.glow?.radiusPx
+  if (!isNonNegativeLength(radius) || radius === 0 || tables?.glowRegion === undefined) {
+    return { defs: [] }
+  }
+  const region = tables.glowRegion()
+  const regionKey = [region.x, region.y, region.w, region.h].map(formatCoord).join(',')
+  const id = `wb-glow-${formatCoord(radius)}-${idToken(regionKey)}`
+  const def: SvgDef = {
+    id,
+    node: el(
+      'filter',
+      {
+        id,
+        filterUnits: 'userSpaceOnUse',
+        x: region.x,
+        y: region.y,
+        width: region.w,
+        height: region.h,
+      },
+      [
+        el('feGaussianBlur', { stdDeviation: radius * GLOW_STD_DEVIATION_RATIO, result: 'blur' }),
+        el('feMerge', undefined, [
+          el('feMergeNode', { in: 'blur' }),
+          el('feMergeNode', { in: 'blur' }),
+          el('feMergeNode', { in: 'SourceGraphic' }),
+        ]),
+      ],
+    ),
+  }
+  return { filter: `url(#${id})`, defs: [def] }
 }
 
 function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
   if (node.ink?.style === 'sketch') return renderSketchShape(node, node.ink, tables)
   return renderCrispShape(node, tables)
+}
+
+/** Presence-only: attach a glow's filter reference and definition to an element. */
+function withGlow(element: SvgVNode, glow: ReturnType<typeof glowOf>): SvgChild {
+  if (glow.filter === undefined) return element
+  return withDefs({ ...element, attrs: { ...element.attrs, filter: glow.filter } }, glow.defs)
 }
 
 /**
@@ -339,7 +397,7 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
     { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
     strokes.strokes.map((d) => el('path', { d, ...strokeAttrs })),
   )
-  return [underlay, outlineStrokes]
+  return [underlay, withGlow(outlineStrokes, glowOf(node.appearance, tables))]
 }
 
 const HATCH_STROKE_WIDTH = 0.9
@@ -356,21 +414,28 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
     // its rect. Drawing NOTHING was correct while ids came from a closed
     // union and null meant a degenerate box; once a document can name a
     // shape this build does not carry, it made the node disappear.
-    if (outline === null) return renderChromeRect(node)
+    if (outline === null) return renderChromeRect(node, tables)
+    const glow = glowOf(node.appearance, tables)
     switch (outline.kind) {
       case 'ellipse':
-        return el('ellipse', {
-          cx: outline.cx,
-          cy: outline.cy,
-          rx: outline.rx,
-          ry: outline.ry,
-          ...appearanceAttrs(node.appearance),
-        })
+        return withGlow(
+          el('ellipse', {
+            cx: outline.cx,
+            cy: outline.cy,
+            rx: outline.rx,
+            ry: outline.ry,
+            ...appearanceAttrs(node.appearance),
+          }),
+          glow,
+        )
       case 'polygon':
-        return el('polygon', {
-          points: pointsAttr(outline.points),
-          ...appearanceAttrs(node.appearance),
-        })
+        return withGlow(
+          el('polygon', {
+            points: pointsAttr(outline.points),
+            ...appearanceAttrs(node.appearance),
+          }),
+          glow,
+        )
       case 'cylinder': {
         const { x, y, w, h, ry } = outline
         const rx = w / 2
@@ -389,7 +454,7 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
         // ink INSIDE the silhouette, so bounds/hit keep reading the bbox.
         const lid = [`M ${formatCoord(x)} ${formatCoord(top)}`, arc(0, x + w, top)].join(' ')
         const paint = appearanceAttrs(node.appearance)
-        return [
+        const parts = [
           el('path', { d: silhouette, ...paint }),
           el('path', {
             d: lid,
@@ -399,10 +464,13 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
             'stroke-opacity': paint['stroke-opacity'],
           }),
         ]
+        // Two siblings, byte-for-byte as before, unless a glow needs the pair
+        // filtered as one — a halo per part would double up along the lid.
+        return glow.filter === undefined ? parts : withGlow(el('g', undefined, parts), glow)
       }
     }
   }
-  return renderChromeRect(node)
+  return renderChromeRect(node, tables)
 }
 
 /**
@@ -411,40 +479,45 @@ function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChil
  * each arrowhead as two wing strokes — no marker, since a crisp triangle on
  * a pencil line is the one thing that reads as two styles at once.
  */
-function renderSketchEdge(node: ResolvedEdgeNode, ink: SceneInk): SvgChild {
+function renderSketchEdge(node: ResolvedEdgeNode, ink: SceneInk, tables?: ResolveTables): SvgChild {
   const strokes = sketchEdge(node.path, ink.seed, {
     arrows: edgeArrowPolygons(node),
     rounded: node.rounded === true,
     jumps: node.jumps ?? [],
   })
   const paint = appearanceAttrs(node.appearance)
-  return el(
-    'g',
-    { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-    strokes.strokes.map((d) =>
-      el('path', {
-        d,
-        fill: 'none',
-        stroke: paint.stroke,
-        'stroke-width': paint['stroke-width'],
-        'stroke-opacity': paint['stroke-opacity'],
-        'stroke-dasharray': paint['stroke-dasharray'],
-        role: PRESENTATION,
-      }),
+  return withGlow(
+    el(
+      'g',
+      { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+      strokes.strokes.map((d) =>
+        el('path', {
+          d,
+          fill: 'none',
+          stroke: paint.stroke,
+          'stroke-width': paint['stroke-width'],
+          'stroke-opacity': paint['stroke-opacity'],
+          'stroke-dasharray': paint['stroke-dasharray'],
+          role: PRESENTATION,
+        }),
+      ),
     ),
+    glowOf(node.appearance, tables),
   )
 }
 
 /** The historic rect, byte-for-byte — also what a node falls back to when its
  *  shape id resolves to nothing. */
-function renderChromeRect(node: ShapeSceneNode): SvgChild {
+function renderChromeRect(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
+  const glow = glowOf(node.appearance, tables)
   const rect = el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,
     ...appearanceAttrs(node.appearance),
-    filter: node.appearance?.dropShadow === true ? `url(#${DROP_SHADOW_ID})` : undefined,
+    filter: node.appearance?.dropShadow === true ? `url(#${DROP_SHADOW_ID})` : glow.filter,
   })
-  return node.appearance?.dropShadow === true ? withDefs(rect, DROP_SHADOW_DEFS) : rect
+  if (node.appearance?.dropShadow === true) return withDefs(rect, DROP_SHADOW_DEFS)
+  return glow.filter === undefined ? rect : withDefs(rect, glow.defs)
 }
 
 function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {
@@ -456,16 +529,16 @@ function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {
   )
 }
 
-function renderTableCell(cell: TableCellSceneNode): SvgChild {
+function renderTableCell(cell: TableCellSceneNode, tables?: ResolveTables): SvgChild {
   const tx = cell.bbox.x
   return el(
     'g',
     tx !== 0 ? { transform: `translate(${formatCoord(tx)},0)` } : undefined,
-    cell.runs.map(renderTextRun),
+    cell.runs.map((run) => renderTextRun(run, tables)),
   )
 }
 
-function renderTableRow(row: TableRowSceneNode): SvgChild {
+function renderTableRow(row: TableRowSceneNode, tables?: ResolveTables): SvgChild {
   // A hairline on the row's bottom edge is the whole of a table's chrome —
   // no cell grid, no zebra wash. Drawn at the row's own y so it separates
   // this row from the next rather than boxing either.
@@ -477,7 +550,7 @@ function renderTableRow(row: TableRowSceneNode): SvgChild {
           role: PRESENTATION,
         })
       : []
-  return el('g', undefined, [separator, row.cells.map(renderTableCell)])
+  return el('g', undefined, [separator, row.cells.map((cell) => renderTableCell(cell, tables))])
 }
 
 /**
@@ -490,7 +563,7 @@ function renderTableRow(row: TableRowSceneNode): SvgChild {
  * before layout carried them, which still renders through the old path
  * rather than nothing.
  */
-function renderCodeBlock(node: CodeBlockNode): SvgChild {
+function renderCodeBlock(node: CodeBlockNode, tables?: ResolveTables): SvgChild {
   const panel: SvgChild =
     node.appearance !== undefined && isFiniteBox(node.bbox)
       ? el('rect', {
@@ -503,7 +576,7 @@ function renderCodeBlock(node: CodeBlockNode): SvgChild {
   if (node.runs === undefined) {
     return [panel, el('text', { ...rectAttrs(node.bbox), 'xml:space': 'preserve' }, [node.value])]
   }
-  return [panel, node.runs.map(renderTextRun)]
+  return [panel, node.runs.map((run) => renderTextRun(run, tables))]
 }
 
 type EdgePoint = { readonly x: number; readonly y: number }
@@ -701,11 +774,19 @@ function lookupIcon(name: string, icons: IconTable | undefined): IconContributio
 function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
   switch (node.kind) {
     case 'textRun':
-      return renderTextRun(node)
+      return renderTextRun(node, tables)
     case 'heading':
-      return el('g', undefined, node.runs.map(renderTextRun))
+      return el(
+        'g',
+        undefined,
+        node.runs.map((run) => renderTextRun(run, tables)),
+      )
     case 'paragraph':
-      return el('g', undefined, node.runs.map(renderTextRun))
+      return el(
+        'g',
+        undefined,
+        node.runs.map((run) => renderTextRun(run, tables)),
+      )
     case 'list':
       return el(
         'g',
@@ -713,7 +794,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         node.items.map((item) => renderListItem(item, tables)),
       )
     case 'codeBlock':
-      return renderCodeBlock(node)
+      return renderCodeBlock(node, tables)
     case 'blockquote':
       // `fill-opacity` on the group is INHERITED by every descendant text
       // run — which is how quoted prose reads muted without naming a text
@@ -738,7 +819,11 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         role: PRESENTATION,
       })
     case 'table':
-      return el('g', undefined, node.rows.map(renderTableRow))
+      return el(
+        'g',
+        undefined,
+        node.rows.map((row) => renderTableRow(row, tables)),
+      )
     case 'rawHtml':
       // Raw HTML has no independently-verifiable well-formedness guarantee
       // (it is caller-supplied Markdown-embedded HTML), so it is escaped as
@@ -782,7 +867,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         node.children.map((child) => renderNode(child, tables)),
       )
     case 'edge': {
-      if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink)
+      if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink, tables)
       const appearance = appearanceAttrs(node.appearance)
       // `fill="none"` is not decoration. SVG's initial fill is black and a
       // <polyline> fills the region its points enclose, so a bent edge would
@@ -838,11 +923,17 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
                 ...markers,
                 role: PRESENTATION,
               })
+      const glow = glowOf(node.appearance, tables)
       const defs = [
         ...(startDef === undefined ? [] : [startDef]),
         ...(endDef === undefined ? [] : [endDef]),
+        ...glow.defs,
       ]
-      return defs.length > 0 ? withDefs(polyline, defs) : polyline
+      const line =
+        glow.filter === undefined
+          ? polyline
+          : { ...polyline, attrs: { ...polyline.attrs, filter: glow.filter } }
+      return defs.length > 0 ? withDefs(line, defs) : line
     }
     case 'shape':
       return renderShape(node, tables)
@@ -865,6 +956,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         ]),
       }
       const paint = appearanceAttrs(node.appearance)
+      const glow = glowOf(node.appearance, tables)
       const use = el('use', {
         href: `#${id}`,
         x: node.bbox.x,
@@ -873,8 +965,9 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         height: node.bbox.h,
         stroke: paint.stroke,
         'stroke-opacity': paint['stroke-opacity'],
+        filter: glow.filter,
       })
-      return withDefs(use, [def])
+      return withDefs(use, [def, ...glow.defs])
     }
     case 'glyph': {
       if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
@@ -1041,8 +1134,17 @@ export function buildSvgDocumentParts(
   // they preserve `defs` declarations on rebuilt nodes, so the order is not
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
+  let region: BoundingBox | undefined
+  const tables: ResolveTables = {
+    icons: options?.icons,
+    shapes: options?.shapes,
+    glowRegion: () => {
+      region ??= sceneBounds(scene)
+      return region
+    },
+  }
   const body = scene.nodes
-    .map((node) => renderNode(node, { icons: options?.icons, shapes: options?.shapes }))
+    .map((node) => renderNode(node, tables))
     .map((node) => applyOptimizationPasses(node))
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
