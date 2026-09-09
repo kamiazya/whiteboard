@@ -361,7 +361,6 @@ describe('SseBackend workspace granularity', () => {
               createdAt: new Date(0).toISOString(),
               elementCount: 0,
               auto: true,
-              hasThumbnail: false,
               branchName: 'main',
             },
           }),

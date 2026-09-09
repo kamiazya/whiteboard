@@ -68,7 +68,6 @@ function mkVersionsResponse(): Response {
           createdAt: '2026-04-23T02:00:00Z',
           elementCount: 5,
           auto: true,
-          hasThumbnail: false,
           branchName: 'main',
           operator: {
             kind: 'ai',
@@ -82,7 +81,6 @@ function mkVersionsResponse(): Response {
           createdAt: '2026-04-23T01:00:00Z',
           elementCount: 3,
           auto: true,
-          hasThumbnail: false,
           branchName: 'main',
           operator: {
             kind: 'human',
@@ -96,7 +94,6 @@ function mkVersionsResponse(): Response {
           createdAt: '2026-04-23T01:30:00Z',
           elementCount: 4,
           auto: true,
-          hasThumbnail: false,
           branchName: 'feature', // hidden from the main branch view
         },
       ],
@@ -251,7 +248,6 @@ describe('VersionTimeline', () => {
                   createdAt: future,
                   elementCount: 1,
                   auto: true,
-                  hasThumbnail: false,
                   branchName: 'main',
                 },
               ],
@@ -311,7 +307,6 @@ describe('VersionTimeline', () => {
                   createdAt: '2026-04-23T02:00:00Z',
                   elementCount: 2,
                   auto: true,
-                  hasThumbnail: false,
                   branchName: 'main',
                 },
               ],
@@ -667,7 +662,6 @@ describe('formatRelative display branches (via rendered version rows)', () => {
             createdAt,
             elementCount: 1,
             auto: true,
-            hasThumbnail: false,
             branchName: 'main',
           },
         ],
@@ -759,26 +753,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
     cleanup()
   })
 
-  function mkThumbnailVersionsResponse(): Response {
-    return new Response(
-      JSON.stringify({
-        versions: [
-          {
-            id: 'v-thumb',
-            path: 'canvas-a',
-            createdAt: '2026-04-23T02:00:00Z',
-            elementCount: 5,
-            auto: true,
-            hasThumbnail: true,
-            branchName: 'main',
-            operator: { kind: 'ai', peerId: 'peer-ai', displayName: 'Assistant' },
-          },
-        ],
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
   it('resolves the versions request against the daemon origin with an Authorization header', async () => {
     const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -851,93 +825,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
     })
   })
 
-  it('fetches the thumbnail through the authorized daemon fetch and renders it via an objectURL, when a daemon provider is active', async () => {
-    const preview = capturePreview()
-    const createObjectURL = vi.fn(() => 'blob:mock-1')
-    const revokeObjectURL = vi.fn()
-    const originalCreateObjectURL = URL.createObjectURL
-    const originalRevokeObjectURL = URL.revokeObjectURL
-    URL.createObjectURL = createObjectURL
-    URL.revokeObjectURL = revokeObjectURL
-
-    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.includes('/versions/v-thumb/thumbnail')) {
-        return Promise.resolve(new Response(new Blob(['png']), { status: 200 }))
-      }
-      if (url.includes('/versions')) return Promise.resolve(mkThumbnailVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', underlyingFetch)
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
-
-    render(
-      <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
-      </DaemonApiContext.Provider>,
-    )
-
-    await screen.findByText(/Assistant/)
-    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
-    expect(document.querySelector('img')?.getAttribute('src')).toBe('blob:mock-1')
-    expect(
-      underlyingFetch.mock.calls.some(([reqInput]) =>
-        String(reqInput).includes('/versions/v-thumb/thumbnail'),
-      ),
-    ).toBe(true)
-
-    URL.createObjectURL = originalCreateObjectURL
-    URL.revokeObjectURL = originalRevokeObjectURL
-  })
-
-  it('a version with hasThumbnail=false renders the placeholder without fetching a thumbnail, in daemon mode', async () => {
-    const preview = capturePreview()
-    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', underlyingFetch)
-    const daemonFetch = createDaemonFetch(DAEMON_BASE_URL, 'test-token')
-
-    render(
-      <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
-      </DaemonApiContext.Provider>,
-    )
-
-    await screen.findByText(/Assistant/)
-    expect(document.querySelector('img')).toBeNull()
-    expect(
-      underlyingFetch.mock.calls.some(([reqInput]) => String(reqInput).includes('/thumbnail')),
-    ).toBe(false)
-  })
-
-  it('draws the picture the keeper answers with', async () => {
-    const preview = capturePreview()
-    const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkThumbnailVersionsResponse())
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', underlyingFetch)
-
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
-
-    await screen.findByText(/Assistant/)
-    // Awaited rather than read once: the picture arrives from the keeper on a
-    // later tick now, where it used to be an <img src> the first render
-    // already carried.
-    await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
-  })
-
   it('titles a version a person marked by the name they gave it', async () => {
     const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -957,7 +844,6 @@ describe('VersionTimeline via DaemonApiContext', () => {
                   createdAt: '2026-04-23T02:00:00Z',
                   elementCount: 5,
                   auto: false,
-                  hasThumbnail: false,
                   branchName: 'main',
                   operator: { kind: 'human', peerId: 'peer-human', displayName: 'Alice' },
                 },
@@ -1102,7 +988,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
             createdAt: '2026-04-23T03:00:00Z',
             elementCount: 5,
             auto: true,
-            hasThumbnail: false,
             branchName: 'main',
             restoredFrom: 'v-old',
           },
@@ -1112,7 +997,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
             createdAt: '2026-04-23T02:00:00Z',
             elementCount: 4,
             auto: true,
-            hasThumbnail: false,
             branchName: 'main',
           },
           {
@@ -1122,7 +1006,6 @@ describe('VersionTimeline draws where a restored state came from', () => {
             elementCount: 3,
             auto: false,
             label: 'first draft',
-            hasThumbnail: false,
             branchName: 'main',
           },
         ],

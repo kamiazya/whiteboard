@@ -36,7 +36,6 @@ import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
@@ -45,7 +44,6 @@ import { applyCommand } from '../lib/spatial/commands.js'
 import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
@@ -204,26 +202,17 @@ function DocumentPageBody({
   } = useVersionSaveFlow(currentScopeRef, model.scopeKey, async (label) => {
     // Narrowed by the precondition in `saveVersionFromPanel` below, which
     // never calls `run` (so never reaches this body) while history is off.
-    if (versions.backend === null) {
+    if (!versions.enabled) {
       throw new Error('saveVersionFromPanel: this keeper has no history for the document')
     }
-    // The shared body pins the beats: capture BEFORE the save, announce,
-    // thumbnail riding along unawaited, re-announce once the picture lands
-    // (see buildVersionSaveBody). Which pipeline draws the picture follows
-    // the KIND — asking the spatial exporter for a markdown document drew
-    // an empty box on every markdown version row.
-    return buildVersionSaveBody({
-      capture: () =>
-        captureBookmarkPicture(documentKind, {
-          exportScene: sync.exportScene,
-          body: model.markdown.body,
-        }),
-      save: versions.save,
-      backend: versions.backend,
-      announceRefresh: versions.announceRefresh,
-      ...(versions.announceOnce === undefined ? {} : { announceOnce: versions.announceOnce }),
-      onThumbnailFailed: () => log.warn('bookmark thumbnail failed'),
-    })(label)
+    await versions.save(label)
+    // Returned rather than fired here: `useVersionSaveFlow` runs it only
+    // once it has confirmed the saved document is still the one on screen,
+    // so a save that lands after the reader moved on refreshes nothing.
+    return () => {
+      versions.announceRefresh()
+      versions.announceOnce?.()
+    }
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (!versions.enabled) return

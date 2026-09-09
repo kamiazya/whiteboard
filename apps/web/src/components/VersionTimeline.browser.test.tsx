@@ -45,7 +45,6 @@ function mkVersionsResponse(count = 24): Response {
       elementCount: 12,
       label,
       auto: true,
-      hasThumbnail: false,
       branchName,
       operator: { kind: 'system' as const, peerId: 'peer-system', displayName: 'auto-save' },
     })
@@ -67,7 +66,6 @@ function mkVersionsResponse(count = 24): Response {
     elementCount: 58,
     label: `Version ${index + 1}`,
     auto: true,
-    hasThumbnail: false,
     branchName: 'main',
     operator: {
       kind: 'system' as const,

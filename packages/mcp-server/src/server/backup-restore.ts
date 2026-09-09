@@ -17,7 +17,6 @@ import { DB_FILENAME } from './store/db/location.js'
 //                                                           runtime)
 //   <data>/<workspaceId>/files/<fileId>.<ext>              binary file blobs (image attachments)
 //   <data>/blobs/<workspaceId>/document/<documentId>.loro      Loro canvas snapshot
-//   <data>/blobs/<workspaceId>/versions/<versionId>.png    optional version thumbnail
 // Per-version `.loro` files are NOT written — version state is captured by
 // frontiers in the DB plus the live canvas snapshot.
 //
