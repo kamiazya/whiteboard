@@ -269,14 +269,16 @@ anything is retired.
 - **Four tools on the document noun** — `wb_document_list`,
   `wb_document_search`, `wb_document_resolve`, `wb_document_get`. C5.
   `resolve` is one-to-one with an index row `list` already returns.
-- **A question the surface cannot answer in one call**, found by the
-  lane's first run: "how many documents carry tag X". `wb_document_search`
-  requires a non-empty `query` and its `tags` filter only narrows text
-  matches, and a tag is not searchable text — so `query: "process",
-  tags: ["process"]` answers nothing for two tagged documents, and the
-  model, having done the reasonable thing, answered 0. `wb_document_list`
-  carries no tags. Either the filter stands alone (a tags-only search) or
-  the list carries tags; C5 and C12, and a follow-up in §6.
+- ~~A question the surface cannot answer in one call~~ — "how many
+  documents carry tag X", found by the lane's first run: `wb_document_search`
+  required a non-empty `query` and its `tags` filter only narrowed text
+  matches, and a tag is not searchable text, so `query: "process",
+  tags: ["process"]` answered nothing for two tagged documents. Landed:
+  the filter stands alone (`query` optional; neither words nor a filter is
+  refused and points at `wb_document_list`). Rung 3 on the task, three
+  trials: 3 calls each before (a search that answered nothing, then a
+  list and a read of every document), **1 call each after**, pass^k 1
+  both times. Rung 1: +379 visible bytes, two fewer undescribed.
 - ~~`wb_facet_set` does not say "tags"~~ — it could not tag at all (C5,
   §3); landed as `tags: { add, remove }`, judged by the lane's tag-write
   task.
@@ -320,9 +322,8 @@ its evidence:
 - ~~C10: register the Zod object rather than its `.shape`~~ — landed for
   all 18, 464 visible bytes for the whole table.
 - ~~C11: `WorkspaceNotFoundError`'s message~~ — landed.
-- A tags-only query: `wb_document_search` with a filter and no text, or
-  tags on `wb_document_list`'s rows — the "count of process-tagged
-  documents" task is the regression test, and it fails today.
+- ~~A tags-only query~~ — landed; the "count of process-tagged documents"
+  task is the regression test.
 - C3, in the order §4 gives.
 - The §4 retirements, each with a rung-3 before/after.
 

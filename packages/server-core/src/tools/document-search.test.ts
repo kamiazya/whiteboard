@@ -4,7 +4,11 @@ import type { ServerDeps } from '../server-deps.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
-import { createDocumentSearchTool, documentSearchOutputSchema } from './document-search.js'
+import {
+  createDocumentSearchTool,
+  documentSearchOutputSchema,
+  SearchNeedsQueryOrFilterError,
+} from './document-search.js'
 import { createDocumentSetTool } from './document-set.js'
 
 const WS = 'ws-1'
@@ -102,6 +106,44 @@ describe('wb_document_search', () => {
     )
     const taggedOnly = await tool.execute({ workspaceId: WS, query: '検索語', tags: ['release'] })
     expect(taggedOnly.results.map((r) => r.documentId)).toEqual([tagged.documentId])
+  })
+
+  // "Which documents carry this tag" is a question a tag is FOR, and a tag
+  // is not searchable text: a query that names it matches nothing, so the
+  // filter has to be able to stand alone. Found by the tool-surface eval
+  // lane (ADR-0030 §3), where a model asked to count tagged documents
+  // searched for the tag, was answered nothing, and believed it.
+  it('answers every document carrying the tag when no query is given', async () => {
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    const a = await create('a', 'markdown')
+    const b = await create('b', 'markdown')
+    const c = await create('c', 'markdown')
+    await writeBody(a.documentId, 'type: note\ntags:\n  - process', 'one')
+    await writeBody(b.documentId, 'type: note\ntags:\n  - process\n  - people', 'two')
+    await writeBody(c.documentId, 'type: note\ntags:\n  - retro', 'three')
+
+    const tool = createDocumentSearchTool(deps)
+    const out = documentSearchOutputSchema.parse(
+      await tool.execute({ workspaceId: WS, tags: ['process'] }),
+    )
+    expect(out.results.map((r) => r.path)).toEqual(['a', 'b'])
+    // No keyword ranked these, and the shape says so the way a semantic-only
+    // hit does: no lexicalRank, and the opening of the text for context.
+    expect(out.results[0]?.lexicalRank).toBeUndefined()
+    expect(out.results[0]?.contexts[0]).toContain('one')
+    // A search with the tag as its query still finds nothing — the tag is
+    // frontmatter, not body — which is why the filter stands alone.
+    const byWord = await tool.execute({ workspaceId: WS, query: 'process' })
+    expect(byWord.results).toEqual([])
+  })
+
+  it('refuses a call with neither a query nor a filter, rather than listing everything', async () => {
+    const deps = makeDeps()
+    await seed(deps)
+    await expect(createDocumentSearchTool(deps).execute({ workspaceId: WS })).rejects.toThrow(
+      SearchNeedsQueryOrFilterError,
+    )
   })
 
   it('serves the same shape over GET /search and answers 404 for an unknown workspace', async () => {

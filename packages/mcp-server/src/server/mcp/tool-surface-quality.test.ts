@@ -182,12 +182,18 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
+      // Re-pinned when the filter learned to stand alone (ADR-0030 §4):
+      // `query` is optional now, and +379 visible bytes say so on the
+      // parameter and in the description, with the last two undescribed
+      // parameters described. Rung 3 on "count the tagged documents", three
+      // trials: 3 calls each before (a search that answered nothing, then
+      // a list and a read of every document), 1 after.
       wb_document_search: {
-        visibleBytes: 1031,
-        wireBytes: 1861,
-        descriptionWords: 42,
+        visibleBytes: 1410,
+        wireBytes: 2240,
+        descriptionWords: 68,
         parameters: 5,
-        undescribed: 2,
+        undescribed: 0,
         strays: 'refused',
         names: [],
       },
@@ -314,14 +320,15 @@ describe('what the tool table costs to read', () => {
       }),
     }).toEqual({
       tools: 18,
-      // +1,122 for wb_facet_set's tags (see its row) and +464 for every
-      // tool refusing a stray key (see canvas_view; sixteen tools, the two
-      // that already registered the object unchanged). Under the ~40,000 at
+      // +1,122 for wb_facet_set's tags (see its row), +464 for every tool
+      // refusing a stray key (see canvas_view; sixteen tools, the two that
+      // already registered the object unchanged), +379 for a search filter
+      // that stands alone (see wb_document_search). Under the ~40,000 at
       // which ADR-0030 §5 says to reconsider loading the table upfront.
-      visibleBytes: 36546,
-      wireBytes: 104303,
+      visibleBytes: 36925,
+      wireBytes: 104682,
       parameters: 327,
-      undescribed: 295,
+      undescribed: 293,
     })
   })
 

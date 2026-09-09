@@ -36,7 +36,11 @@ import {
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
-import { createDocumentSearchTool, documentSearchInputSchema } from './tools/document-search.js'
+import {
+  createDocumentSearchTool,
+  documentSearchInputSchema,
+  SearchNeedsQueryOrFilterError,
+} from './tools/document-search.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
@@ -302,6 +306,11 @@ function mapDocumentError(c: Context, err: unknown) {
   // segment (ADR-0019). 400, not 500: the request is well-formed and the
   // server is fine — the NAME is the problem, and only the caller can pick
   // another one.
+  // Same reason: a search naming neither words nor a filter is a request
+  // the schema admits and the tool has nothing to do with.
+  if (err instanceof SearchNeedsQueryOrFilterError) {
+    return c.json({ error: err.message }, 400)
+  }
   if (err instanceof WorkspaceSegmentUnusableError) {
     return c.json({ error: err.message }, 400)
   }
