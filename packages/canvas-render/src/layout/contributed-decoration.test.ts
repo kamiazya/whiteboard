@@ -148,14 +148,15 @@ describe('a contributed decoration', () => {
     expect(glyphs.map((g) => g.glyph)).toEqual(['A', 'B'])
   })
 
-  it('still paints visual’s badge with nothing wired, since it is the default', () => {
+  // The bundled plugin contributes no decoration any more — `visual.symbol`
+  // was its only one, and it is drawn on the surfaces where a node is too
+  // small to read rather than on the node. That the DEFAULT set is still
+  // visual's is pinned through a shape, in render-contribution.test.ts.
+  it('composes nothing when no contribution declares a decoration', () => {
     const scene = layoutSpatialCanvas(
       canvasOf({ 'visual.symbol/v0': { kind: 'emoji', char: '⭐' } }),
       baseOptions(),
     )
-    const glyphs = scene.nodes.filter(
-      (n): n is Extract<SceneNode, { kind: 'glyph' }> => n.kind === 'glyph',
-    )
-    expect(glyphs.map((g) => g.glyph)).toEqual(['⭐'])
+    expect(scene.nodes.some((n) => n.kind === 'glyph')).toBe(false)
   })
 })

@@ -1,12 +1,19 @@
 /**
  * Everything `visual` contributes to RENDERING, as one ordinary contribution:
- * its silhouettes, how it reads the facets that select them, where it wants a
- * node's text, and what it draws on top.
+ * its silhouettes, how it reads the facets that select them, and where it
+ * wants a node's text.
  *
- * This used to live inside `canvas-render`, which meant the renderer knew
- * what a badge is, how big it is and where it sits — all of them this
- * plugin's business, and none of them reachable by another plugin wanting a
- * mark of its own.
+ * This used to live inside `canvas-render`, which meant the renderer knew a
+ * plugin's business — what its silhouettes are and which facet selects one.
+ *
+ * It contributes no `decorations`. It did: `visual.symbol` was drawn as a
+ * badge on the node itself, removed once the surfaces the symbol was
+ * designed for existed (the tab's favicon, the file row, the canvas
+ * overview), where a node is too small to read and a mark is the only thing
+ * that can say which one it is. On the node at full size the badge repeated
+ * what the node already showed. The contribution POINT stays — it is how a
+ * plugin marks a node, and `contributed-decoration.test.ts` exercises it —
+ * with no bundled implementation today.
  *
  * The scene-node vocabulary is imported TYPE-ONLY. `canvas-render` depends on
  * this package at runtime (it supplies these as its default), so a runtime
@@ -20,59 +27,10 @@
  */
 import type {
   BoundingBox,
-  NodeDecoration,
   RenderContribution,
-  SceneNode,
   ShapeContribution,
 } from '@kamiazya/whiteboard-canvas-render'
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import {
-  resolveNodeShape,
-  resolveNodeSymbol,
-  resolveNodeTextAlign,
-  VISUAL_SHAPE_KEY,
-} from './data.js'
-
-const BADGE_SIZE_PX = 16
-const BADGE_MARGIN_PX = 4
-
-/**
- * `visual.symbol/v0` as a badge in the content box's top-right corner.
- *
- * The badge plus its margin must FIT: pricing the glyph alone let an 18px-wide
- * node place a 16px badge at x = -2, painting it outside the node the badge is
- * supposed to mark.
- */
-export const symbolBadge: NodeDecoration = (node: SpatialNode, context) => {
-  const symbol = resolveNodeSymbol(node)
-  if (symbol === undefined) return []
-  const { bounds } = context
-  if (bounds.w < BADGE_SIZE_PX + BADGE_MARGIN_PX || bounds.h < BADGE_SIZE_PX + BADGE_MARGIN_PX) {
-    return []
-  }
-  const bbox: BoundingBox = {
-    x: bounds.x + bounds.w - BADGE_MARGIN_PX - BADGE_SIZE_PX,
-    y: bounds.y + BADGE_MARGIN_PX,
-    w: BADGE_SIZE_PX,
-    h: BADGE_SIZE_PX,
-  }
-  if (symbol.kind === 'emoji') {
-    const glyph: SceneNode = { kind: 'glyph', bbox, glyph: symbol.char }
-    return [glyph]
-  }
-  const icon: SceneNode = {
-    kind: 'icon',
-    bbox,
-    icon: symbol.name,
-    // Matches the label ink, so a badge reads as part of the node's text
-    // rather than as chrome.
-    ...(context.label.fill === undefined ? {} : { appearance: { stroke: context.label.fill } }),
-  }
-  return [icon]
-}
-
-/** Everything this plugin draws on a node. */
-export const visualDecorations: readonly NodeDecoration[] = [symbolBadge]
+import { resolveNodeShape, resolveNodeTextAlign, VISUAL_SHAPE_KEY } from './data.js'
 
 /**
  * The silhouettes `visual.shape/v0` selects, under their BARE names — the
@@ -193,5 +151,4 @@ export const visualRenderContribution: RenderContribution = {
   shapes,
   readShape: resolveNodeShape,
   readTextPlacement: resolveNodeTextAlign,
-  decorations: visualDecorations,
 }

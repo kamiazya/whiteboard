@@ -12,7 +12,7 @@ describe('the visual plugin declares its own settings', () => {
     // Registry order is alphabetical by facet name (shape, symbol, text).
     // A plugin arranging its own panel is the whole point, so the
     // declaration decides — here Badge sits between them.
-    expect(visualUi.sections.map((s) => s.title)).toEqual(['Shape', 'Badge', 'Text placement'])
+    expect(visualUi.sections.map((s) => s.title)).toEqual(['Shape', 'Symbol', 'Text placement'])
     expect(visualUi.plugin).toBe('visual')
   })
 
