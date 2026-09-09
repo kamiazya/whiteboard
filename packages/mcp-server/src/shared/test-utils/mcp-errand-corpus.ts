@@ -113,6 +113,47 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     },
   },
   {
+    // Axis A on the one DECLARATIVE op: a group's contents made to match a
+    // list. One call, because the group and its reconciliation ride the
+    // same batch; the price column is what a `region.set` payload costs,
+    // which is what any change to that op's shape is judged against.
+    name: 'make a group hold exactly three boxes',
+    seedDocuments: 1,
+    run: async (context) => {
+      await call(context, 'wb_canvas_edit', {
+        workspaceId: context.workspaceId,
+        documentId: context.documentIds[0],
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'g',
+              type: 'group',
+              label: 'Clients',
+              x: 0,
+              y: 600,
+              // Three auto-placed boxes need the width; at 700 the third
+              // lands outside and the whole batch is refused.
+              width: 1200,
+              height: 300,
+            },
+          },
+          {
+            op: 'region.set',
+            within: 'g',
+            nodes: [
+              { id: 'cli', type: 'text', text: 'CLI' },
+              { id: 'web', type: 'text', text: 'Web app' },
+              { id: 'mobile', type: 'text', text: 'Mobile app' },
+            ],
+            edges: [],
+          },
+        ],
+      })
+    },
+  },
+  {
     // Axis B, reads. `wb_document_list` answers with METADATA only — id,
     // path, name, kind, updatedAt, shadowed — so the content of five
     // documents genuinely needs a second call; it no longer needs five.

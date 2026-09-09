@@ -114,6 +114,22 @@ export async function seed(wb) {
       box('daemon', 'Daemon', 400, 0),
       box('sqlite', 'SQLite', 800, 0),
       box('worker', 'Layout worker', 0, 300),
+      // A group with two members, for the errand that declares a group's
+      // contents: the group's box encloses the two boxes below it.
+      {
+        op: 'node.add',
+        node: {
+          id: 'clients',
+          type: 'group',
+          label: 'Clients',
+          x: 0,
+          y: 600,
+          width: 700,
+          height: 300,
+        },
+      },
+      box('cli', 'CLI', 40, 700),
+      box('webapp', 'Web app', 300, 700),
       {
         op: 'edge.add',
         edge: { id: 'ws', fromNode: 'browser', toNode: 'daemon', label: 'WebSocket' },

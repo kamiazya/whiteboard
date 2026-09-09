@@ -349,9 +349,29 @@ anything is retired.
 - **`wb_canvas_edit` at 39%** (C2; was 45%). The ops union repeats the
   full node and edge schemas per arm, and `$ref` is not available (§3b),
   so what remains is the union itself: `region.set` carries the node
-  union a second time (~5,000 bytes) and `node.add` the first. Below a
-  third of the table would need one of them to change shape; neither
-  has a case yet.
+  union a second time and `node.add` the first. Measured before deciding
+  anything about `region.set`'s shape (2026-09-09): the arm is 3,930 of
+  the ops union's 11,431 bytes (34%; `nodes` 3,126, `edges` 597), so it
+  is a third of the tool for one op. Rung 2 pins the op itself at one
+  call, 426 request bytes for a group plus three geometry-less boxes,
+  1,954 back. Rung 3 on the errand the op was built for ("make this
+  group contain exactly these three"), a fixture group 700 wide already
+  holding two boxes, nine trials over three runs: pass^k 1, 3 calls each
+  (search, snapshot, edit), and **the model reached `region.set` in two
+  of the six trials whose ops were recorded** — the other four got the
+  same outcome from `node.add`, once after widening the group with
+  `node.patch` and once after shifting a box over. Both `region.set`
+  calls declared full geometry for every box, none left a position to
+  placement; one was refused (`node "mobile" would not be inside
+  "clients"`, right edge 760 in a group of 700) and the retry shrank
+  everything to fit. Placement has the same edge: at 700 wide the
+  corpus's own three default-size boxes wrap to a second row that does
+  not fit, and the whole batch is refused with a text that says which
+  box and not how wide the group would have to be. So the op is reached
+  a third of the time on its own errand, costs a third of the tool to
+  offer, and its refusal has no repair advice — three findings, none of
+  which yet says which shape to change to; the candidates and their
+  before/after are the next increment, judged on this baseline.
 - **What a call answers with**, the errand scoreboard's `responseBytes`
   column, is the other half of what a model reads and was untouched until
   the version tools stopped answering the History panel's row (1,948 ->

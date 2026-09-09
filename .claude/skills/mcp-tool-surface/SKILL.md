@@ -119,6 +119,13 @@ with every tool call, tool-error text, token and cost figure.
   all: an errand step with no tool behind it (C5), which no description
   fixes. When a task wanders, read what each refusal told the model, then
   the description of the tool it should have reached, in that order.
+- **A batch tool's line names the ARM the model picked.** `tools` prints
+  `wb_canvas_edit[region.set]` or `wb_canvas_edit[node.add]`, because the
+  tool name alone cannot say whether a declarative op was reached or the
+  model got the same outcome with the imperative one — and that is the
+  whole question a change to one arm's shape is judged on. The `--out`
+  JSON keeps each call's `inputs` beside it, so whether the model declared
+  geometry or left it to placement can be read rather than guessed.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1

@@ -183,6 +183,42 @@ export const TASKS = [
     },
   },
   {
+    // The one declarative op, `region.set`: does a model reach for it when
+    // the errand is "this group should contain exactly these", and what
+    // does it cost? Graded on what the group encloses afterwards, however
+    // the model got there.
+    name: 'make a group contain exactly these',
+    prompt:
+      'On the architecture board there is a group called Clients. Make it contain exactly three boxes — CLI, Web app, and Mobile app — and nothing else. Leave the rest of the board as it is. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/architecture')
+      const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Clients')
+      if (group === undefined) return { ok: false, detail: 'the Clients group is gone' }
+      const inside = board.nodes.filter(
+        (n) =>
+          n.id !== group.id &&
+          n.x >= group.x &&
+          n.y >= group.y &&
+          n.x + n.width <= group.x + group.width &&
+          n.y + n.height <= group.y + group.height,
+      )
+      const texts = inside.map((n) => (n.text ?? '').trim()).sort()
+      const wanted = ['CLI', 'Mobile app', 'Web app']
+      const exact = JSON.stringify(texts) === JSON.stringify(wanted)
+      const restKept = ['Browser', 'Daemon', 'SQLite', 'Layout worker'].every((t) =>
+        board.nodes.some((n) => n.text === t),
+      )
+      return {
+        ok: exact && restKept,
+        detail: exact
+          ? restKept
+            ? 'group holds exactly the three'
+            : 'group right, but the rest of the board changed'
+          : `group holds [${texts.join(', ')}]`,
+      }
+    },
+  },
+  {
     name: 'checkpoint every board',
     prompt:
       'Save a version of every board (spatial document) in the workspace, labelled "pre-review".',

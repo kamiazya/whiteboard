@@ -198,13 +198,24 @@ async function runOnce(task, trial) {
   })
 
   const calls = []
+  const inputs = []
   const errorTexts = []
   let result
   for (const event of events.parsed) {
     if (event.type === 'assistant') {
       for (const block of event.message?.content ?? []) {
         if (block.type === 'tool_use' && block.name !== 'StructuredOutput') {
-          calls.push(block.name.replace(/^mcp__whiteboard__/, ''))
+          const name = block.name.replace(/^mcp__whiteboard__/, '')
+          // A batch tool's cost is decided by which arm the model picked,
+          // and the tool name alone cannot say: record `ops[].op` beside it.
+          const ops = Array.isArray(block.input?.ops)
+            ? block.input.ops.map((o) => o?.op).filter((o) => typeof o === 'string')
+            : []
+          calls.push(ops.length > 0 ? `${name}[${ops.join(',')}]` : name)
+          // The payload itself goes to `--out` only: whether a model
+          // declared geometry or left it to placement is the kind of
+          // question a before/after on a shape has to answer.
+          inputs.push({ tool: name, input: block.input })
         }
       }
     } else if (event.type === 'user') {
@@ -260,6 +271,7 @@ async function runOnce(task, trial) {
     exitCode: events.code,
     calls: calls.length,
     tools: calls,
+    inputs,
     toolErrors: errorTexts.length,
     toolErrorTexts: errorTexts,
     turns: result?.num_turns ?? null,
