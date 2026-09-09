@@ -109,7 +109,11 @@ overrides:
   # (dev path via babel <- stryker; the alert pair still shows in the tab).
   browserslist@<4.28.7: ^4.28.7
   ip-address@<=10.3.0: '>=10.3.1'
-  js-yaml@>=4.0.0 <4.3.1: ^4.3.1
+  # GHSA-2883-xcg3-v3hh (high): unbounded CPU on empty merge sources,
+  # cleared at 4.3.2. Reaches the published runtime via
+  # mcp-server <- cosmiconfig, so this is a real path and not only the SBOM
+  # tooling's.
+  js-yaml@>=4.0.0 <4.3.2: ^4.3.2
   ip-address@<=10.1.0: ^10.1.1
   body-parser@<2.3.0: ^2.3.0
   mermaid@<11.15.0: ^11.16.0
@@ -125,8 +129,22 @@ overrides:
   # is on a path this project enters: the embedder runs feature-extraction
   # over text, never sharp's image decoding or adm-zip's archive reading.
   # Drop each entry once transformers depends on a patched range itself.
-  sharp@<0.35.0: ^0.35.0
+  #
+  # adm-zip stays at 0.6.0 because there is nowhere else to go: the symlink
+  # advisory GHSA-vwc7-r8mq-g2x9 names >=0.6.1 and adm-zip has published no
+  # such version (latest is 0.6.0, and `^0.6.1` fails the install outright).
+  # It is moderate, so it does not reach the `--audit-level=high` gate; the
+  # entry still lifts the 0.5.x copies. Raise it when 0.6.1 ships.
+  sharp@<0.35.4: ^0.35.4
   adm-zip@<0.6.0: ^0.6.0
+  # GHSA-gqvv-2mrq-wpjv + GHSA-g6gw-c38x-mqfc + GHSA-crvj-82cr-hjcx
+  # (moderate x3), all cleared at 4.13.5. Unlike the entries above this one
+  # DOES reach the published runtime: hono is a declared dependency of both
+  # server-core and mcp-server, and the lockfile resolves one copy that the
+  # daemon and @hono/node-server share. The bump stays inside the ^4.12.34
+  # both manifests already ask for, so nothing is pinned off the range the
+  # app is built against.
+  hono@<4.13.5: ^4.13.5
 
 # Advisories acknowledged as not applicable to this codebase. Each entry needs a
 # reason and should be re-checked when the affected dependency is next touched.
