@@ -224,6 +224,16 @@ migration exists to write. This is the growth rule in decision 1 read the
 other way round — the same question ("what symbolises this object") asked
 of more kinds of object is one facet, not three.
 
+**2026-09-09:** the node badge is gone. Once the three surfaces existed, the
+badge was drawing a mark on the one surface that can already show what it
+marks — the node at full size, with its own content. `visual` therefore
+contributes NO `decorations`, and `RenderContribution.decorations` is an
+extension point with no bundled implementation: still typed, still exercised
+by `contributed-decoration.test.ts` through fake contributions, and still the
+way a plugin marks a node. Keeping the point while removing its only user is
+deliberate — it is the contract between the renderer and every plugin, not a
+convenience for this one.
+
 ## Consequences
 
 - Extension metadata has a governed growth path: schemas are agreed by

@@ -15,7 +15,7 @@ import type { LucideIconElement } from './icons/icons.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
- * The badge picker. Icons come from this plugin's own vendored set — the same
+ * The symbol picker. Icons come from this plugin's own vendored set — the same
  * table `visual.symbol`'s schema enumerates and the renderer draws from, so
  * the row can never offer a name the canvas would silently drop; the emoji arm
  * carries a small starter set — a free-entry field is the editor-spec tier's
@@ -23,7 +23,7 @@ import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons
  */
 const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
 
-const badgeEditor: FacetEditor = ({ value, write }) => {
+const symbolEditor: FacetEditor = ({ value, write }) => {
   const current = visualSymbolFacetSchema.safeParse(value)
   const selected = current.success ? current.data : undefined
   const option = (
@@ -106,7 +106,7 @@ const badgeEditor: FacetEditor = ({ value, write }) => {
 
 /**
  * Draws a vendored icon by name, from the SAME geometry the canvas renders,
- * so the picker cannot drift from the badge it produces.
+ * so the picker cannot drift from the mark the other surfaces draw.
  */
 function BuiltInIcon({ name }: { readonly name: string }) {
   return (
@@ -170,10 +170,10 @@ export const visualUi = definePluginUi({
   plugin: 'visual',
   sections: [
     // Order is the plugin's, and it is not the registry's alphabetical one:
-    // shape is what a person reaches for most, and the badge belongs beside
+    // shape is what a person reaches for most, and the symbol belongs beside
     // it rather than after the text setting.
     { title: 'Shape', facet: 'shape' },
-    { title: 'Badge', facet: 'symbol', component: badgeEditor },
+    { title: 'Symbol', facet: 'symbol', component: symbolEditor },
     { title: 'Text placement', facet: 'text' },
   ],
 })

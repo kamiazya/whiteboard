@@ -121,29 +121,29 @@ describe('a render contribution', () => {
     expect(yOf(centred.nodes)).toBeGreaterThan(yOf(topped.nodes) ?? 0)
   })
 
-  it('still ships visual’s shapes, badge and placement with nothing wired', () => {
+  it('still ships visual’s shapes and placement with nothing wired', () => {
     const scene = layoutSpatialCanvas(
-      canvasOf('n1', {
-        'visual.shape/v0': { kind: 'diamond' },
-        'visual.symbol/v0': { kind: 'emoji', char: '⭐' },
-      }),
+      canvasOf('n1', { 'visual.shape/v0': { kind: 'diamond' } }),
       baseOptions(),
     )
     expect(shapeOf(scene.nodes)?.shape).toBe('visual.diamond')
-    expect(scene.nodes.map((n) => n.kind)).toContain('glyph')
   })
 
   it('composes several contributions rather than letting one win', () => {
-    const scene = layoutSpatialCanvas(
-      canvasOf('n1', {
-        'demo.shape/v0': { kind: 'triangle' },
-        'visual.symbol/v0': { kind: 'emoji', char: '⭐' },
-      }),
-      baseOptions({ renderContributions: [VISUAL_FOR_TEST, DEMO] }),
-    )
-    // demo's silhouette AND visual's badge, from two contributions at once.
-    expect(shapeOf(scene.nodes)?.shape).toBe('demo.triangle')
-    expect(scene.nodes.map((n) => n.kind)).toContain('glyph')
+    // visual's SILHOUETTE and demo's TEXT PLACEMENT on one node, so neither
+    // contribution can be the only one consulted. An ellipse centres its text
+    // by default, and `topper` is the id demo answers 'start' for — so the
+    // same canvas laid out without demo puts the paragraph lower.
+    const canvas = canvasOf('topper', { 'visual.shape/v0': { kind: 'ellipse' } })
+    const paragraphY = (contributions: readonly RenderContribution[]) => {
+      const scene = layoutSpatialCanvas(canvas, baseOptions({ renderContributions: contributions }))
+      expect(shapeOf(scene.nodes)?.shape).toBe('visual.ellipse')
+      return scene.nodes.find((n) => n.kind === 'paragraph')?.bbox.y
+    }
+    const composed = paragraphY([VISUAL_FOR_TEST, DEMO])
+    const visualAlone = paragraphY([VISUAL_FOR_TEST])
+    expect(composed).toBeDefined()
+    expect(composed).toBeLessThan(visualAlone as number)
   })
 })
 

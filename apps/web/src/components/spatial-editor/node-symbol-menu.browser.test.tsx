@@ -1,7 +1,11 @@
 // The Symbol band reached the menu with NO core-surface edit — it is a
-// facet definition plus a widget registration. This locks the user flow:
-// a pick stores visual.symbol/v0 and the scene draws the badge; 'none'
-// removes it without a trace.
+// facet definition plus a widget registration. This locks the user flow: a
+// pick stores visual.symbol/v0 and 'none' removes it without a trace.
+//
+// It also pins that the pick draws NOTHING on the node. A symbol marks the
+// surfaces where a node is too small to read — the canvas overview here,
+// covered by minimap.browser.test.tsx — and the node at full size already
+// shows its own content.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
@@ -59,7 +63,7 @@ function openInspector(container: HTMLElement): HTMLElement {
   return opened
 }
 
-it('an icon pick stores the facet and the scene draws the badge', () => {
+it('an icon pick stores the facet and draws nothing on the node', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
@@ -67,12 +71,12 @@ it('an icon pick stores the facet and the scene draws the badge', () => {
   fireEvent.click(panel.querySelector('[aria-label="Icon star"]') as HTMLElement)
 
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'icon', name: 'star' })
-  // The badge is a <use> of the vendored icon symbol, drawn in the scene.
-  const badge = container.querySelector('[data-testid="spatial-editor"] svg use[href^="#wb-icon-"]')
-  expect(badge).not.toBeNull()
+  // A vendored icon would be a <use> of its symbol; the node draws none.
+  const drawn = container.querySelector('[data-testid="spatial-editor"] svg use[href^="#wb-icon-"]')
+  expect(drawn).toBeNull()
 })
 
-it('an emoji pick draws a glyph, and No symbol removes the facet', () => {
+it('an emoji pick is stored rather than drawn, and No symbol removes the facet', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
@@ -84,8 +88,8 @@ it('an emoji pick draws a glyph, and No symbol removes the facet', () => {
   const panel = openInspector(container)
   fireEvent.click(panel.querySelector('[aria-label="Emoji ⭐"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '⭐' })
-  // The badge is DRAWN, not merely stored.
-  expect(glyphText()).toHaveLength(1)
+  // Stored, and not painted on the node.
+  expect(glyphText()).toHaveLength(0)
 
   fireEvent.click(panel.querySelector('[aria-label="No symbol"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toBeUndefined()

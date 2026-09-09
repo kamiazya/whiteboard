@@ -26,12 +26,12 @@ that want the shipped set, not a privileged registry.
 `visual.symbol` attaches to all three targets, and the three resolvers
 (`resolveNodeSymbol` / `resolveCanvasSymbol` / `resolveDocumentSymbol`) are
 thin wrappers over ONE reader. That matters because the surfaces differ: a
-payload the schema refuses must mean "no symbol" on the badge, the minimap,
-the favicon and a file row alike, and a second reader is how one surface
-comes to draw a fallback the others do not. The document wrapper takes the
+payload the schema refuses must mean "no symbol" on the minimap, the favicon
+and a file row alike, and a second reader is how one surface comes to draw a
+fallback the others do not. The document wrapper takes the
 facets BUCKET rather than a document — this package cannot open stored
 content, and every caller has already parsed the frontmatter it holds.
-| `./decorations` (`src/decorations.ts`) | what this plugin draws ON a node — today `visual.symbol`'s badge, with its size, margin and corner | React; anything that cannot run where a document is read |
+| `./render` (`src/render.ts`) | the whole rendering contribution: silhouettes, the readers that select them, text placement | React; anything that cannot run where a document is read |
 | `./ui` (`src/ui.tsx`) | the settings declaration and the one hand-written editor | anything the renderer needs |
 
 The default entry is react-free because it runs wherever a document is read —
@@ -47,9 +47,10 @@ facet-engine ← facet-ui ← plugin-visual ← canvas-render
                               └───(types only)───┘
 ```
 
-**The edge back into `canvas-render` must stay type-only.** `/decorations`
-returns scene nodes — `canvas-render`'s vocabulary — while `canvas-render`
-imports those decorations as its default, so a value import back closes a
+**The edge back into `canvas-render` must stay type-only.** `/render` names
+`canvas-render`'s own vocabulary — `RenderContribution`, `ShapeContribution`,
+and the scene-node union any decoration would return — while `canvas-render`
+imports this contribution as its default, so a value import back closes a
 runtime cycle. `canvas-render` therefore sits in this package's
 **devDependencies**, and `canvas-render-type-only.test.ts` enforces it:
 nothing else does, verified by mutation (a value import left all 102 arch-lint
@@ -80,7 +81,7 @@ Two projects, because the halves run in different environments:
 
 - `plugin-visual-node` — `src/**/*.test.ts` (schemas, resolvers, icon catalog)
 - `plugin-visual-jsdom` — `src/**/*.test.tsx` (the settings declaration, the
-  badge editor)
+  symbol editor)
 
 Assertions about what `visual` DECLARES belong here, not in `facet-ui`. The
 split is the test-level form of the dependency rule above.
@@ -100,5 +101,5 @@ icon rendered into lucide's 24x24 box, and a fill-authored one rendered as
 nothing at all.
 
 Geometry rather than the `lucide-react` package because the renderer has no
-React: lucide-react ships components, and only the badge picker can use them.
+React: lucide-react ships components, and only the symbol picker can use them.
 Follow the README's recipe when adding one, and keep the table alphabetical.
