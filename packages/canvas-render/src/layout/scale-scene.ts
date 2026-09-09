@@ -114,10 +114,21 @@ function scaleNode(node: ScalableNode, f: number): ScalableNode {
         bbox: scaleBbox(node.bbox, f),
         children: node.children.map((child) => scaleNode(child, f) as SceneNode),
       } as ScalableNode
+    // Optional, unlike every other run list here: a fenced block whose
+    // whole value renders as one `<text>` carries none, and spreading an
+    // absent field back as `undefined` would change what the backend draws.
+    case 'codeBlock':
+      return {
+        ...node,
+        bbox: scaleBbox(node.bbox, f),
+        ...(node.runs !== undefined
+          ? { runs: node.runs.map((r) => scaleNode(r, f) as never) }
+          : {}),
+      }
     default:
-      // codeBlock, thematicBreak, rawHtml, unresolvedReference,
-      // svgFragment, embedPlaceholder: bbox-only nodes (their string
-      // payloads render verbatim — see the module comment).
+      // thematicBreak, rawHtml, unresolvedReference, svgFragment,
+      // embedPlaceholder: bbox-only nodes (their string payloads render
+      // verbatim — see the module comment).
       return { ...node, bbox: scaleBbox(node.bbox, f) }
   }
 }

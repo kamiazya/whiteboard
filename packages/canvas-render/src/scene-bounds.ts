@@ -102,6 +102,10 @@ function childrenOf(node: WalkNode): readonly WalkNode[] | undefined {
     case 'heading':
     case 'paragraph':
     case 'tableCell':
+    // A fenced block's runs are optional — absent when its whole value
+    // renders as one `<text>` — and `undefined` is already what this
+    // function says for a node with no children.
+    case 'codeBlock':
       return node.runs
     default:
       return undefined
