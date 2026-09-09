@@ -1,7 +1,7 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { versionEntrySchema } from '../versions/version-entry.js'
+import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument } from './document-io.js'
 
@@ -39,7 +39,9 @@ export const versionSaveOutputSchema = z
      * History panel lists it; `version.id` is what wb_version_restore takes.
      */
     saved: z
-      .array(z.object({ documentId: documentIdSchema, version: versionEntrySchema }).strict())
+      .array(
+        z.object({ documentId: documentIdSchema, version: versionEntryForAgentSchema }).strict(),
+      )
       .describe('One entry per document, in the order asked for.'),
   })
   .strict()
@@ -89,7 +91,7 @@ export function createVersionSaveTool(deps: ServerDeps) {
         const doc = await loadOrCreateDocument(deps, workspaceId, documentId)
         const version = await deps.versions.save(workspaceId, path, doc, { auto: false, label })
         deps.clientNotifier?.versionCreated({ workspaceId, documentId, version })
-        saved.push({ documentId, version })
+        saved.push({ documentId, version: versionEntryForAgent(version) })
       }
       return { saved }
     },

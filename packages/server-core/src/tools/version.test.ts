@@ -195,10 +195,13 @@ describe('wb_version_save', () => {
       { path: PATH, options: { auto: false, label: 'before the risky edit' } },
     ])
     expect(result.saved[0]?.documentId).toBe(DOCUMENT_ID)
-    expect(result.saved[0]?.version).toMatchObject({
+    // The row as an agent reads it: the id to restore by, the label, who
+    // saved it — not the path it already named, nor the panel's columns.
+    expect(result.saved[0]?.version).toEqual({
       id: 'v1',
-      path: PATH,
+      createdAt: '1970-01-01T00:00:01.000Z',
       label: 'before the risky edit',
+      auto: false,
     })
   })
 
@@ -211,9 +214,14 @@ describe('wb_version_save', () => {
       label: 'v1',
     })
 
-    expect(notifier.versions).toEqual([
-      { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, version: result.saved[0]?.version },
-    ])
+    // The client gets the WHOLE row (the History panel draws its columns);
+    // the agent gets the projection, and the two name the same version.
+    expect(notifier.versions).toHaveLength(1)
+    expect(notifier.versions[0]).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      version: { id: result.saved[0]?.version.id, path: PATH, branchName: 'main' },
+    })
   })
 
   test('refuses a workspaceId that does not own the document, before recording anything', async () => {

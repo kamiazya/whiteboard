@@ -254,7 +254,7 @@ describe('what the tool table costs to read', () => {
       // ones whose every parameter is described. They are the shape to copy.
       wb_version_list: {
         visibleBytes: 604,
-        wireBytes: 1684,
+        wireBytes: 1535,
         descriptionWords: 20,
         parameters: 2,
         undescribed: 0,
@@ -272,7 +272,7 @@ describe('what the tool table costs to read', () => {
       },
       wb_version_save: {
         visibleBytes: 982,
-        wireBytes: 2201,
+        wireBytes: 2052,
         descriptionWords: 54,
         parameters: 3,
         undescribed: 0,
@@ -337,7 +337,7 @@ describe('what the tool table costs to read', () => {
       // -1,320 for wb_canvas_edit's flat write-side extension; +1,366 for
       // the text anchor and the body change described (see wb_body_edit).
       visibleBytes: 34617,
-      wireBytes: 99453,
+      wireBytes: 99155,
       parameters: 317,
       undescribed: 265,
     })

@@ -197,10 +197,13 @@ describe('what an errand costs in tool calls', () => {
       // The same shape on a different verb, which is the point of having
       // it: the cost tracks the number of SUBJECTS, not anything about
       // facets.
+      // Response 1,948 -> 1,316 when the version tools stopped answering
+      // the History panel's row (path, counts, thumbnail, the retired
+      // branch column) and answered what an agent acts on.
       'save a labelled version of 4 documents': {
         calls: 1,
         requestBytes: 223,
-        responseBytes: 1948,
+        responseBytes: 1316,
       },
     })
   })

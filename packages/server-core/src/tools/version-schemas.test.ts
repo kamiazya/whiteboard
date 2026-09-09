@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { versionEntryForAgent } from '../versions/version-entry.js'
 import { versionListInputSchema, versionListOutputSchema } from './version-list.js'
 import {
   VersionNotFoundError,
@@ -77,19 +78,33 @@ describe('versionSaveInputSchema', () => {
 })
 
 describe('versionSaveOutputSchema', () => {
-  it('accepts the History panel row as the saved version', () => {
+  it('answers the version as an agent reads it, not as the History panel does', () => {
     const result = versionSaveOutputSchema.safeParse({
-      saved: [{ documentId: VALID_DOCUMENT_ID, version: VALID_ENTRY }],
+      saved: [{ documentId: VALID_DOCUMENT_ID, version: versionEntryForAgent(VALID_ENTRY) }],
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects a version missing the fields the panel relies on (branchName)', () => {
-    const { branchName: _dropped, ...partial } = VALID_ENTRY
+  it('refuses the panel row whole: path, counts and the retired branch column are not for an agent', () => {
     const result = versionSaveOutputSchema.safeParse({
-      saved: [{ documentId: VALID_DOCUMENT_ID, version: partial }],
+      saved: [{ documentId: VALID_DOCUMENT_ID, version: VALID_ENTRY }],
     })
     expect(result.success).toBe(false)
+  })
+
+  it('keeps who saved it, and drops the ids a person never types', () => {
+    expect(
+      versionEntryForAgent({
+        ...VALID_ENTRY,
+        operator: { kind: 'ai', peerId: 'p1', agentId: 'a1', displayName: 'Claude' },
+      }),
+    ).toEqual({
+      id: 'ver-1',
+      createdAt: '2026-07-30T00:00:00.000Z',
+      label: 'Initial draft',
+      auto: false,
+      operator: { kind: 'ai', displayName: 'Claude' },
+    })
   })
 })
 
@@ -124,13 +139,16 @@ describe('versionListOutputSchema', () => {
     const { label: _dropped, ...unlabelled } = VALID_ENTRY
     const result = versionListOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
-      versions: [VALID_ENTRY, { ...unlabelled, id: 'v2', auto: true }],
+      versions: [
+        versionEntryForAgent(VALID_ENTRY),
+        versionEntryForAgent({ ...unlabelled, id: 'v2', auto: true }),
+      ],
     })
     expect(result.success).toBe(true)
   })
 
   it('rejects a version entry missing its id', () => {
-    const { id: _dropped, ...noId } = VALID_ENTRY
+    const { id: _dropped, ...noId } = versionEntryForAgent(VALID_ENTRY)
     const result = versionListOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
       versions: [noId],
