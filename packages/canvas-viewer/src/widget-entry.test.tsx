@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { parseViewerScene } from './scene.js'
 
 // widget-entry.ts bootstraps immediately on import (`void bootstrap()`), so
@@ -100,6 +100,24 @@ class FakeFontFace {
 }
 
 describe('widget-entry MCP Apps bridge bootstrap', () => {
+  // Every case imports the entry FRESH (its bootstrap runs on import), and
+  // the first one used to pay the transform of the whole graph behind it —
+  // canvas-render, codec, the plugin — inside its own 5s budget, which the
+  // stress job's five parallel processes overran. Loading the graph here
+  // charges that to the collection phase; `vi.resetModules` only discards
+  // the evaluated instances, so each case's fresh import re-evaluates
+  // already-transformed modules. The entry itself is NOT imported here: its
+  // bootstrap would run against a document no case has set up yet.
+  beforeAll(async () => {
+    await Promise.all([
+      import('@kamiazya/whiteboard-canvas-render'),
+      import('./widget/canvas-point.js'),
+      import('./widget/comment-control.js'),
+      import('./widget/font-registration.js'),
+      import('./widget/refresh-control.js'),
+    ])
+  })
+
   beforeEach(async () => {
     document.body.innerHTML = '<div id="root"></div>'
     fakeAppInstances.length = 0

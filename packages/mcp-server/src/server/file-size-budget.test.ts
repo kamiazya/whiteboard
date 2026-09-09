@@ -298,15 +298,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // for a real defect the widened candidate ring exposed — a bubble landing
   // on a neighbour's pin — and it has to be a pre-pass, since pushing each
   // pin as it is drawn protects only the comments after it.
-  // +237 for the render theme layer (ADR-0030 decision 5): the theme is
+  // +248 for the render theme layer (ADR-0030 decision 5): the theme is
   // resolved PER CANVAS at every nesting level of the recursion this file
   // owns (`withCanvasTheme`), so an embed reads its own facet before the
   // host's, and the ink, the default shape and the default routing it
   // implies are read where each node and edge is composed. Raised rather
   // than split: the resolution reads and rewrites `ResolvedLayoutOptions`,
   // and a module holding it would import the recursion's private options
-  // type back from here.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2374,
+  // type back from here. The palette a chrome previews resolves through the
+  // same `pickThemeId`, so it sits here too.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2385,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
@@ -327,13 +328,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // where the earlier splits put this file's pure core. This guard is what
   // asked the question — the growth read as the feature's cost until it
   // turned out two thirds of it was misfiled.
-  // +29 for the session's look (ADR-0030 decision 6): the `style` prop, the
+  // +30 for the session's look (ADR-0030 decision 6): the `style` prop, the
   // theme-fonts generation, the ask for the theme's family and the family
   // the in-place editors type in are inputs the editor threads to its
   // scene, its drag layers and its overlays, and the paper it paints is the
   // palette's surface. Threading is this file's job; there is nothing here
   // to move.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2752,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2753,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
