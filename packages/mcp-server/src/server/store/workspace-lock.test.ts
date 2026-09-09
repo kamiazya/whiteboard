@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { _resetWorkspaceLocksForTests, withWorkspaceWriteLock } from './workspace-lock.js'
+import {
+  _resetWorkspaceLocksForTests,
+  withDocumentWriteLock,
+  withDocumentWriteLocks,
+  withWorkspaceWriteLock,
+} from './workspace-lock.js'
 
 afterEach(() => {
   _resetWorkspaceLocksForTests()
@@ -124,5 +129,74 @@ describe('withWorkspaceWriteLock', () => {
     releaseHolder()
     await Promise.all([holderPromise, otherPromise])
     expect(events).toEqual(['holder-enter', 'holder-exit', 'other-ran'])
+  })
+})
+
+describe('withDocumentWriteLocks', () => {
+  it('never runs two batches that share a document at the same time', async () => {
+    // Mutual exclusion, not an ORDER: which batch wins the shared document
+    // is a race the lock does not promise to settle either way, and a test
+    // that pins the order passes or fails on scheduling rather than on the
+    // property. What must hold is that neither body is entered while the
+    // other is inside.
+    const events: string[] = []
+    const body = (label: string, ms: number) => async () => {
+      events.push(`${label}-enter`)
+      await new Promise((resolve) => setTimeout(resolve, ms))
+      events.push(`${label}-exit`)
+    }
+    await Promise.all([
+      withDocumentWriteLocks(['doc-a', 'doc-b'], body('first', 20)),
+      withDocumentWriteLocks(['doc-b', 'doc-c'], body('second', 20)),
+    ])
+
+    expect(events).toHaveLength(4)
+    // Whoever entered first must have exited before the other entered.
+    expect(events[1]).toBe(`${events[0]?.replace('-enter', '')}-exit`)
+  })
+
+  it('does not deadlock when two batches name the same documents in opposite orders', async () => {
+    // The reason the helper sorts. Acquiring in caller order lets one batch
+    // hold A waiting for B while the other holds B waiting for A, and
+    // neither ever runs — the call simply never returns, which reads in CI
+    // as a timeout on whatever test happened to be running.
+    const done: string[] = []
+    const forwards = withDocumentWriteLocks(['doc-x', 'doc-y'], async () => {
+      await new Promise((resolve) => setTimeout(resolve, 10))
+      done.push('forwards')
+    })
+    const backwards = withDocumentWriteLocks(['doc-y', 'doc-x'], async () => {
+      done.push('backwards')
+    })
+
+    await Promise.all([forwards, backwards])
+
+    expect(done.sort()).toEqual(['backwards', 'forwards'])
+  })
+
+  it('takes a repeated document id once rather than deadlocking on itself', async () => {
+    const ran = await withDocumentWriteLocks(['doc-dup', 'doc-dup'], async () => 'ran')
+    expect(ran).toBe('ran')
+  })
+
+  it('leaves an unrelated document free while a batch runs', async () => {
+    const events: string[] = []
+    let release!: () => void
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const batch = withDocumentWriteLocks(['doc-1', 'doc-2'], async () => {
+      events.push('batch-enter')
+      await held
+      events.push('batch-exit')
+    })
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    await withDocumentWriteLock('doc-3', async () => {
+      events.push('unrelated-ran')
+    })
+    release()
+    await batch
+
+    expect(events).toEqual(['batch-enter', 'unrelated-ran', 'batch-exit'])
   })
 })

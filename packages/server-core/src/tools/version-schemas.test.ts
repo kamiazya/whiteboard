@@ -23,7 +23,7 @@ describe('versionSaveInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionSaveInputSchema.safeParse({
       workspaceId: 'default',
-      documentId: VALID_DOCUMENT_ID,
+      documentIds: [VALID_DOCUMENT_ID],
       label: 'Initial draft',
     })
     expect(result.success).toBe(true)
@@ -31,7 +31,8 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects empty label', () => {
     const result = versionSaveInputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
+      workspaceId: 'default',
+      documentIds: [VALID_DOCUMENT_ID],
       label: '',
     })
     expect(result.success).toBe(false)
@@ -39,7 +40,8 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects label exceeding 200 characters', () => {
     const result = versionSaveInputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
+      workspaceId: 'default',
+      documentIds: [VALID_DOCUMENT_ID],
       label: 'x'.repeat(201),
     })
     expect(result.success).toBe(false)
@@ -48,7 +50,7 @@ describe('versionSaveInputSchema', () => {
   it('accepts label at exactly 200 characters', () => {
     const result = versionSaveInputSchema.safeParse({
       workspaceId: 'default',
-      documentId: VALID_DOCUMENT_ID,
+      documentIds: [VALID_DOCUMENT_ID],
       label: 'x'.repeat(200),
     })
     expect(result.success).toBe(true)
@@ -56,7 +58,8 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects invalid documentId', () => {
     const result = versionSaveInputSchema.safeParse({
-      documentId: 'not-a-ulid',
+      workspaceId: 'default',
+      documentIds: ['not-a-ulid'],
       label: 'draft',
     })
     expect(result.success).toBe(false)
@@ -64,7 +67,8 @@ describe('versionSaveInputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = versionSaveInputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
+      workspaceId: 'default',
+      documentIds: [VALID_DOCUMENT_ID],
       label: 'draft',
       extra: true,
     })
@@ -75,8 +79,7 @@ describe('versionSaveInputSchema', () => {
 describe('versionSaveOutputSchema', () => {
   it('accepts the History panel row as the saved version', () => {
     const result = versionSaveOutputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
-      version: VALID_ENTRY,
+      saved: [{ documentId: VALID_DOCUMENT_ID, version: VALID_ENTRY }],
     })
     expect(result.success).toBe(true)
   })
@@ -84,8 +87,7 @@ describe('versionSaveOutputSchema', () => {
   it('rejects a version missing the fields the panel relies on (branchName)', () => {
     const { branchName: _dropped, ...partial } = VALID_ENTRY
     const result = versionSaveOutputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
-      version: partial,
+      saved: [{ documentId: VALID_DOCUMENT_ID, version: partial }],
     })
     expect(result.success).toBe(false)
   })

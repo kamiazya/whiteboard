@@ -262,24 +262,28 @@ export async function runE2eCheckpointSmoke({
     // version saved below has content to round-trip through restore.
     const facets = await callTool('wb_facet_set', {
       workspaceId: WORKSPACE_ID,
-      documentId,
+      documentIds: [documentId],
       facets: { 'e2e.check/v1': { note: 'before-save' } },
     })
-    if (facets.documentId !== documentId) {
+    const updatedFacets = facets.updated as Array<{ documentId?: string }> | undefined
+    if (updatedFacets?.[0]?.documentId !== documentId) {
       throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
     }
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
     const saved = await callTool('wb_version_save', {
       workspaceId: WORKSPACE_ID,
-      documentId,
+      documentIds: [documentId],
       label: 'e2e-version-1',
     })
-    const savedVersion = saved.version as
-      | { id?: string; label?: string; auto?: boolean }
-      | undefined
+    const savedRow = (
+      saved.saved as
+        | Array<{ documentId?: string; version?: { id?: string; label?: string; auto?: boolean } }>
+        | undefined
+    )?.[0]
+    const savedVersion = savedRow?.version
     if (
-      saved.documentId !== documentId ||
+      savedRow?.documentId !== documentId ||
       !savedVersion?.id ||
       savedVersion.label !== 'e2e-version-1' ||
       savedVersion.auto !== false

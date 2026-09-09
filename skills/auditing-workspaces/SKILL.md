@@ -112,8 +112,12 @@ Do **not** delete anything automatically. Always confirm with the user before ca
 - Deletion is not recoverable through these tools beyond a document's own saved versions
   (`wb_version_list` / `wb_version_restore`) — the same history the History panel shows — and
   those do not survive the document itself being deleted.
-- Reads batch, writes do not. `wb_document_get` takes up to 20 `documentIds` per call, so reading
-  a workspace's content costs `ceil(N / 20)` calls rather than N. `wb_canvas_snapshot` still takes
-  one document, and so does every write. The 20 is low because `wb_document_get` returns
-  UNTRUNCATED content — for a very large workspace, classify from Step 1's `kind` and sample the
-  content rather than reading every document whole.
+- **What batches, and what does not.** `wb_document_get` takes up to 20 `documentIds`, so reading
+  a workspace's content costs `ceil(N / 20)` calls rather than N. `wb_facet_set` and
+  `wb_version_save` take up to 50 each, with the payload — the facets, the label — SHARED across
+  every document named; that is what makes them cheap, and also what they are for. What still
+  takes exactly one document is `wb_canvas_snapshot` and the per-document content verbs
+  (`wb_canvas_edit`, `wb_body_edit`, `wb_thread_edit`), where each document's payload is its own
+  and there is nothing to share. `wb_document_get`'s 20 is lower than the writes' 50 because it
+  returns UNTRUNCATED content — for a very large workspace, classify from Step 1's `kind` and
+  sample the content rather than reading every document whole.
