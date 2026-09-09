@@ -4,6 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
+import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import {
   type CommentThread,
   commentThreadSchema,
@@ -155,6 +156,9 @@ const toolResultEnvelopeSchema = z.object({
       // was malformed.
       references: z.record(z.string(), z.unknown()).optional(),
       threads: z.array(z.unknown()).optional(),
+      // Parsed below, like the references: a style the schema does not know
+      // must cost the look, never the scene.
+      style: z.unknown().optional(),
     })
     .catchall(z.unknown())
     .optional(),
@@ -166,16 +170,19 @@ function extractCanvasIdAndScene(payload: unknown): {
   scene?: unknown
   references?: MountCanvasViewerOptions['references']
   threads?: MountCanvasViewerOptions['threads']
+  style?: MountCanvasViewerOptions['style']
 } {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
   const structuredContent = parsed.data.structuredContent
+  const style = spatialRenderStyleSchema.safeParse(structuredContent?.style)
   return {
     workspaceId: structuredContent?.workspaceId,
     documentId: structuredContent?.documentId,
     scene: structuredContent?.scene,
     references: parseReferences(structuredContent?.references),
     threads: parseThreads(structuredContent?.threads),
+    ...(style.success ? { style: style.data } : {}),
   }
 }
 
@@ -212,7 +219,8 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { workspaceId, documentId, scene, references, threads } = extractCanvasIdAndScene(payload)
+  const { workspaceId, documentId, scene, references, threads, style } =
+    extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
     // Surfaced for host-integration debugging: the widget deliberately
@@ -229,6 +237,7 @@ function applyToolResult(
       scene,
       ...(references === undefined ? {} : { references }),
       ...(threads === undefined ? {} : { threads }),
+      ...(style === undefined ? {} : { style }),
     }),
   )
   onValidResult(workspaceId, documentId, result.value)

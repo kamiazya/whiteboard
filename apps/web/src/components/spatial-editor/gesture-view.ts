@@ -62,10 +62,19 @@ export function commentExtensionFor(
   carried: boolean,
 ): SpatialCanvas['x-whiteboard'] {
   const extension = canvas['x-whiteboard']
-  if (extension?.comments === undefined) return carried ? undefined : extension
+  if (extension === undefined) return undefined
+  // Everything else in the envelope — the facets that say how the canvas is
+  // DRAWN (its theme, its edge routing) — rides every layer unchanged. Only
+  // the comments are split; a ghost without the envelope draws the bundled
+  // look for the length of the drag.
+  const { comments, ...rest } = extension
+  if (comments === undefined) {
+    if (!carried) return extension
+    return Object.keys(rest).length === 0 ? undefined : rest
+  }
   return {
-    ...extension,
-    comments: extension.comments.filter(
+    ...rest,
+    comments: comments.filter(
       (comment) =>
         (comment.targetNodeId !== undefined && carriedIds.has(comment.targetNodeId)) === carried,
     ),

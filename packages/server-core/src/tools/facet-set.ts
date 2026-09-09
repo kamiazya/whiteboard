@@ -45,6 +45,15 @@ export const facetSetInputSchema = z
      */
     nodeId: nodeIdSchema.optional(),
     /**
+     * Where a write without `nodeId` lands: the documents themselves
+     * (markdown frontmatter; the default), or the CANVAS envelope of a
+     * spatial document (`x-whiteboard.facets` — ADR-0013 decision 5's
+     * canvas slot, where `visual.theme/v0` and `visual.edges/v0` live).
+     * Two answers rather than three, because `nodeId` already says "a node"
+     * and saying it twice is how the two disagree.
+     */
+    target: z.enum(['document', 'canvas']).optional(),
+    /**
      * ONE payload for every document named, not one per document. "Tag
      * these as reviewed" is the thing a caller is actually doing; two
      * different payloads are two different writes and cost a call each.
@@ -87,16 +96,33 @@ export class NodeTargetNeedsOneDocumentError extends Error {
   }
 }
 
+/**
+ * `nodeId` names a node and `target: 'canvas'` names the canvas around it;
+ * a write cannot land on both. Refused, like the batch case above and for
+ * the same reason it is not a schema `.refine`.
+ */
+export class NodeAndCanvasTargetError extends Error {
+  constructor() {
+    super(
+      "nodeId targets one node and target: 'canvas' targets the canvas envelope; pass one or the other.",
+    )
+    this.name = 'NodeAndCanvasTargetError'
+  }
+}
+
 export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
     description:
-      'Set facets on a document, or — with nodeId — on one node of a spatial document. Merges by facet key: an omitted key keeps its stored value, a null value deletes the key. Registered facets are validated against their schema and their declared targets.',
+      "Set facets on a document, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme), or — with nodeId — on one node of a spatial document. Merges by facet key: an omitted key keeps its stored value, a null value deletes the key. Registered facets are validated against their schema, their declared targets, and the assets they name.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
       if (input.nodeId !== undefined && input.documentIds.length !== 1) {
         throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
+      }
+      if (input.nodeId !== undefined && input.target === 'canvas') {
+        throw new NodeAndCanvasTargetError()
       }
 
       // Write-side validation (ADR-0013 decision 6): a REGISTERED facet's
@@ -112,7 +138,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       // document and there is nothing to be gained by discovering it on the
       // third one after the first two were already written.
       const registry = deps.facetRegistry ?? bundledFacetRegistry
-      const requiredTarget = input.nodeId === undefined ? 'document' : 'node'
+      const requiredTarget = input.nodeId !== undefined ? 'node' : (input.target ?? 'document')
       const sets: Record<string, unknown> = {}
       const deletions: string[] = []
       for (const [key, payload] of Object.entries(input.facets)) {
@@ -201,6 +227,38 @@ async function setOne(
     return { documentId, facets: merged }
   }
 
+  if (input.target === 'canvas') {
+    // A markdown document has no canvas envelope; a document with no kind
+    // is allowed through and NOT declared, for the reason the document
+    // branch below gives — this replaces nothing, so it has neither
+    // something to lose nor any evidence to offer about the format.
+    if (kind === 'markdown') {
+      throw new DocumentKindMismatchError(
+        documentId,
+        kind,
+        "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
+      )
+    }
+    const canvas = readSpatialCanvas(doc)
+    const merged: ExtensionFacets = { ...canvas['x-whiteboard']?.facets, ...sets }
+    for (const key of deletions) delete merged[key]
+    // The same canonical emptiness the web editor's `withCanvasFacet`
+    // keeps: an empty bucket disappears, and an empty envelope with it, so
+    // a reverted canvas never carries a redundant extension forever.
+    const { facets: _replaced, ...extensionRest } = canvas['x-whiteboard'] ?? {}
+    const nextExtension =
+      Object.keys(merged).length === 0 ? extensionRest : { ...extensionRest, facets: merged }
+    const { 'x-whiteboard': _extension, ...canvasRest } = canvas
+    writeSpatialCanvas(
+      doc,
+      Object.keys(nextExtension).length === 0
+        ? canvasRest
+        : { ...canvasRest, 'x-whiteboard': nextExtension },
+    )
+    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+    return { documentId, facets: merged }
+  }
+
   // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
   // document has nodes and edges and no frontmatter to put one in, so a
   // facet stored on one is metadata no reader of that format can surface
@@ -213,7 +271,7 @@ async function setOne(
     throw new DocumentKindMismatchError(
       documentId,
       kind,
-      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass nodeId to set node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
+      "Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass target: 'canvas' for canvas-target facets (a theme, edge routing), nodeId for node-target facets, set them on the markdown document this one refers to, or write its content with `wb_workspace_edit`'s `document.set` op.",
     )
   }
 

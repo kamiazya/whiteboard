@@ -34,7 +34,7 @@ const log = getLogger('headless-export')
 // deliberately ignores both.
 export type HeadlessCanvasExportOptions = Pick<
   z.infer<typeof exportRequestSchema>,
-  'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme'
+  'padding' | 'scale' | 'frameId' | 'minFontPx' | 'theme' | 'style'
 >
 
 // `doc.getMovableList(name)` CREATES the root container as a side effect of
@@ -86,6 +86,7 @@ export async function exportCanvasHeadless(
     padding: args.options?.padding,
     scale: args.options?.scale,
     theme: args.options?.theme,
+    style: args.options?.style,
   })
 }
 
@@ -96,5 +97,6 @@ export async function exportCanvasHeadlessSvg(
   return renderSpatialCanvasToSvg(canvas, {
     padding: args.options?.padding,
     theme: args.options?.theme,
+    style: args.options?.style,
   })
 }

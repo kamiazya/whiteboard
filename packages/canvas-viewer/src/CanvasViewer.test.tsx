@@ -162,6 +162,29 @@ describe('CanvasViewer draws the conversations it is handed', () => {
   })
 })
 
+describe('CanvasViewer style (ADR-0030 decision 6)', () => {
+  const neon: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+      { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
+    ],
+    edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  }
+
+  it('draws the bundled look by default: a widget never pays for a theme unasked', () => {
+    const { getByTestId } = render(<CanvasViewer canvas={neon} measure={fakeMeasure} />)
+    expect(getByTestId('canvas-viewer').innerHTML).not.toContain('wb-glow')
+  })
+
+  it("style: 'document' draws the theme the canvas names", () => {
+    const { getByTestId } = render(
+      <CanvasViewer canvas={neon} measure={fakeMeasure} style="document" />,
+    )
+    expect(getByTestId('canvas-viewer').innerHTML).toContain('wb-glow')
+  })
+})
+
 describe('CanvasViewer draws in the theme its host says it is in', () => {
   it('keeps the light palette by default and takes the dark one when the host asks', () => {
     const { getByTestId } = render(

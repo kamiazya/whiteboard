@@ -234,6 +234,16 @@ way a plugin marks a node. Keeping the point while removing its only user is
 deliberate — it is the contract between the renderer and every plugin, not a
 convenience for this one.
 
+**2026-09-09 (ADR-0030):** decision 8's "theme assets" exist now, as a
+PREFIX of the layer it describes rather than the layer itself: a plugin
+registers `assets.themes` (engine-owned token bundles, never raw style in a
+payload), a facet declares `assetRefs` so a write naming an unregistered
+asset is refused at the write boundary (decision 6's fourth layer), and
+`visual.theme/v0` is the first facet to reach the `canvasSettings`
+contribution point through the derived form alone. Views, slots and
+per-kind resolved-value types stay unbuilt; [ADR-0030](0030-render-theme.md)
+records the constraints that keep this a prefix.
+
 ## Consequences
 
 - Extension metadata has a governed growth path: schemas are agreed by

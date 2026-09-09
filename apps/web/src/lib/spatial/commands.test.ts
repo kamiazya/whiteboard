@@ -786,6 +786,24 @@ describe('set-edge-routing', () => {
     expect(edgesFacet(next)).toEqual({ routing: 'orthogonal' })
   })
 
+  // Under a theme the DEFAULT is the theme's (ADR-0030 decision 4), so the
+  // no-trace rule is judged against that: a choice that differs from the
+  // theme's default is recorded even when it is the built-in default, and a
+  // choice equal to the theme's leaves no trace. Picking Straight on a neon
+  // board used to delete the facet, and the theme drew orthogonal anyway.
+  it('under a theme, choosing straight is recorded when the theme routes otherwise', () => {
+    const neon: SpatialCanvas = {
+      ...empty,
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    }
+    const straight = applyCommand(neon, { kind: 'set-edge-routing', style: 'straight' })
+    expect(edgesFacet(straight)).toEqual({ routing: 'straight' })
+
+    const back = applyCommand(straight, { kind: 'set-edge-routing', style: 'orthogonal' })
+    expect(edgesFacet(back)).toBeUndefined()
+    expect(back['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({ theme: 'visual.neon' })
+  })
+
   // Routing and jumps are fields of one facet but independent settings —
   // reverting one must never erase the other.
   it('reverting the style to straight keeps the line-jumps setting', () => {

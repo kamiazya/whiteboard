@@ -26,4 +26,10 @@ describe('exportRequestSchema', () => {
   it('rejects a theme outside the light/dark enum', () => {
     expect(() => exportRequestSchema.parse({ theme: 'sepia' })).toThrow()
   })
+
+  it("accepts style as 'clean', 'document' or a namespaced theme id, and nothing else", () => {
+    expect(exportRequestSchema.parse({ style: 'document' })).toEqual({ style: 'document' })
+    expect(exportRequestSchema.parse({ style: 'visual.neon' })).toEqual({ style: 'visual.neon' })
+    expect(() => exportRequestSchema.parse({ style: 'neon' })).toThrow()
+  })
 })

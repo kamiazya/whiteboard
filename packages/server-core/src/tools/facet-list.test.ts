@@ -54,7 +54,11 @@ describe('wb_facet_list', () => {
     // same question of a node, a canvas and a document, so it is one facet
     // attachable to all three rather than three facets.
     const canvasOnly = await tool().execute({ target: 'canvas' })
-    expect(canvasOnly.facets.map((f) => f.key)).toEqual(['visual.edges/v0', 'visual.symbol/v0'])
+    expect(canvasOnly.facets.map((f) => f.key)).toEqual([
+      'visual.edges/v0',
+      'visual.symbol/v0',
+      'visual.theme/v0',
+    ])
     const documentOnly = await tool().execute({ target: 'document' })
     expect(documentOnly.facets.map((f) => f.key)).toEqual(['planning.due/v0', 'visual.symbol/v0'])
   })

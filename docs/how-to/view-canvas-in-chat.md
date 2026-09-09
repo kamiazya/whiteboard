@@ -15,6 +15,9 @@ no need to switch to a browser tab to see what the agent drew.
 ## What you get
 
 - A read-only view of the current canvas document, rendered inline.
+- The document's **theme**, when asked for: with `style` omitted the widget draws `'clean'` (no theme), and
+  `canvas_view({ …, style: 'document' })` draws the theme the canvas names (or a theme id previews
+  one) — the same `style` `wb_scene_render` takes, see [choose-a-theme](choose-a-theme.md).
 - Its **file references resolved**: a node pointing at a markdown document in the
   same workspace shows that document's prose, and every reference is labelled with
   its readable name rather than its raw id. The widget has no store of its own, so

@@ -74,9 +74,26 @@ describe('the mutation lane covers what it says it covers', () => {
     // filled rect fails `fills the box for a ticked item` and returning no
     // marker at all fails the preview guard in apps/web. What a mutation
     // score would add here is a number over two rects.
+    //
+    // 59 since `theme/theme-asset.ts`, outside the lane: it is a field-by-
+    // field copy of the token contract onto the palette plus a memo, and both
+    // are pinned by name — the round-trip test fails on any dropped field and
+    // the memo test on a fresh object per call. A mutation score would count
+    // 30 property copies.
+    //
+    // 60 and 11 since `layout/ink/sketch.ts`, which the lane DOES cover: its
+    // reach and determinism claims are properties, exactly what a survivor
+    // would expose as decorative.
+    //
+    // 63 since `svg/paint.ts` and `svg/shapes.ts` left `svg/backend.ts`:
+    // the paint helpers and the shape/edge renderers it had grown past its
+    // line ceiling with. Not in the lane — their properties are the
+    // byte-identical SVG tests, which are examples.
+    // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
+    // `glow.test.ts`'s bounds assertion, which fails on any other reach.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 10,
-      production: 58,
+      mutated: 11,
+      production: 63,
     })
   })
 

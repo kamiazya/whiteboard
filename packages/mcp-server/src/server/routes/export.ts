@@ -151,6 +151,7 @@ async function renderHeadless(
       frameId: body.frameId,
       minFontPx: body.minFontPx,
       theme: body.theme,
+      style: body.style,
     },
   })
   return {

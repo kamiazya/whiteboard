@@ -82,3 +82,26 @@ describe('renderCanvasToSvg', () => {
     expect(dark.bounds).toEqual(light.bounds)
   })
 })
+
+describe('the editor draws the theme the document names (ADR-0030 decision 6)', () => {
+  const themed: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
+      { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' },
+    ],
+    edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  }
+
+  it("draws the document's theme by default: a person sees what the document says", () => {
+    const { svg } = renderCanvasToSvg(themed, { measure: fakeMeasure, theme: 'dark' })
+    expect(svg).toContain('wb-glow')
+    // The neon dark palette, since the paper follows the UI mode.
+    expect(svg).toContain('#a5b4c7')
+  })
+
+  it("style: 'clean' is the session override that draws the bundled look instead", () => {
+    const { svg } = renderCanvasToSvg(themed, { measure: fakeMeasure, style: 'clean' })
+    expect(svg).not.toContain('wb-glow')
+  })
+})

@@ -164,3 +164,87 @@ describe('ensureViewerFontLoaded', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('hasLoadedFace', () => {
+  afterEach(() => {
+    uninstallFakeFontApis()
+    delete (document as unknown as { fonts?: unknown }).fonts
+  })
+
+  function installFaceSet(faces: readonly { family: string; status: string }[]) {
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { [Symbol.iterator]: () => faces[Symbol.iterator]() },
+    })
+  }
+
+  it('the vendored family is always available: it is what layout measures with', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    const { VIEWER_FONT_FAMILY } = await import('./font.js')
+    expect(hasLoadedFace(VIEWER_FONT_FAMILY)).toBe(true)
+  })
+
+  it('a family is available only while this realm holds a LOADED face for it', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    installFaceSet([
+      { family: '"Patrick Hand"', status: 'loaded' },
+      { family: 'Caveat', status: 'loading' },
+    ])
+    expect(hasLoadedFace('Patrick Hand')).toBe(true)
+    expect(hasLoadedFace('Caveat')).toBe(false)
+    expect(hasLoadedFace('Nobody')).toBe(false)
+  })
+
+  it('answers false, never throws, in a realm with no face set', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    expect(hasLoadedFace('Patrick Hand')).toBe(false)
+  })
+})
+
+describe('registerFontBytes', () => {
+  afterEach(() => {
+    uninstallFakeFontApis()
+    delete (document as unknown as { fonts?: unknown }).fonts
+  })
+
+  it('registers a face from bytes in this realm, so hasLoadedFace answers true', async () => {
+    const { added } = installFakeFontApis()
+    const { registerFontBytes, hasLoadedFace } = await importFreshFontLoading()
+    const pending = registerFontBytes('Yomogi', new Uint8Array([1, 2, 3]).buffer)
+    expect(added).toHaveLength(1)
+    expect(added[0]?.family).toBe('Yomogi')
+    added[0]?.loadDeferred.resolve()
+    await expect(pending).resolves.toBe('loaded')
+    expect(hasLoadedFace('Yomogi')).toBe(true)
+  })
+
+  it('a second registration of the same family is a no-op that answers the first', async () => {
+    const { added } = installFakeFontApis()
+    const { registerFontBytes } = await importFreshFontLoading()
+    const first = registerFontBytes('Yomogi', new Uint8Array([1]).buffer)
+    const second = registerFontBytes('Yomogi', new Uint8Array([2]).buffer)
+    expect(added).toHaveLength(1)
+    added[0]?.loadDeferred.resolve()
+    await expect(first).resolves.toBe('loaded')
+    await expect(second).resolves.toBe('loaded')
+  })
+
+  it('a registration that did not load is retried by the next call, not answered again', async () => {
+    const { added } = installFakeFontApis()
+    const { registerFontBytes, hasLoadedFace } = await importFreshFontLoading()
+    const first = registerFontBytes('Yomogi', new Uint8Array([1]).buffer)
+    added[0]?.loadDeferred.reject(new Error('not a font'))
+    await expect(first).resolves.toBe('degraded')
+    const second = registerFontBytes('Yomogi', new Uint8Array([2]).buffer)
+    expect(added).toHaveLength(2)
+    added[1]?.loadDeferred.resolve()
+    await expect(second).resolves.toBe('loaded')
+    expect(hasLoadedFace('Yomogi')).toBe(true)
+  })
+
+  it('answers degraded, never throws, where FontFace is unavailable', async () => {
+    uninstallFakeFontApis()
+    const { registerFontBytes } = await importFreshFontLoading()
+    await expect(registerFontBytes('Yomogi', new Uint8Array([1]).buffer)).resolves.toBe('degraded')
+  })
+})

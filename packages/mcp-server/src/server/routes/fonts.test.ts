@@ -1,13 +1,13 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import {
+  FONT_CATALOGUE,
   installFontResponseSchema,
   listFontsResponseSchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
-import { FONT_CATALOGUE } from '../export/font-catalogue.js'
 import { FontInstallError } from '../export/install-font.js'
 import { installedFontDir } from '../export/installed-fonts.js'
 import { withTempDataDir } from './_test-helpers.js'
@@ -120,5 +120,35 @@ describe('POST /api/fonts/:id/install', () => {
     })
 
     expect(res.status).toBe(500)
+  })
+})
+
+describe('GET /api/fonts/:id/file', () => {
+  it('serves an installed font as bytes, so the browser can register the same face', async () => {
+    const target = FONT_CATALOGUE[0]!
+    await mkdir(installedFontDir(), { recursive: true })
+    await writeFile(join(installedFontDir(), `${target.id}.ttf`), 'font-bytes')
+
+    const res = await serve().request(`/api/fonts/${target.id}/file`)
+
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('font/ttf')
+    expect(await res.text()).toBe('font-bytes')
+  })
+
+  it('answers 404 for a font that is catalogued but not installed, and for an unknown id', async () => {
+    expect((await serve().request(`/api/fonts/${FONT_CATALOGUE[0]!.id}/file`)).status).toBe(404)
+    expect((await serve().request('/api/fonts/nobody/file')).status).toBe(404)
+    // The id is the only input, and it never becomes a path: a traversal
+    // shape is refused by the id pattern, not by a filesystem check.
+    expect((await serve().request('/api/fonts/..%2F..%2Fetc/file')).status).toBe(404)
+  })
+})
+
+describe('the catalogue carries the family the bundled sketch theme names', () => {
+  it('offers Yomogi, so the handwriting look can be installed where it is drawn', () => {
+    const yomogi = FONT_CATALOGUE.find((font) => font.family === 'Yomogi')
+    expect(yomogi).toMatchObject({ id: 'yomogi', license: 'OFL-1.1' })
+    expect(yomogi?.path).toBe('ofl/yomogi/Yomogi-Regular.ttf')
   })
 })

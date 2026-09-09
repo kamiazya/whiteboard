@@ -30,7 +30,13 @@ import type {
   RenderContribution,
   ShapeContribution,
 } from '@kamiazya/whiteboard-canvas-render'
-import { resolveNodeShape, resolveNodeTextAlign, VISUAL_SHAPE_KEY } from './data.js'
+import {
+  resolveCanvasTheme,
+  resolveNodeShape,
+  resolveNodeTextAlign,
+  VISUAL_SHAPE_KEY,
+} from './data.js'
+import { VISUAL_THEMES } from './themes.js'
 
 /**
  * The silhouettes `visual.shape/v0` selects, under their BARE names — the
@@ -151,4 +157,8 @@ export const visualRenderContribution: RenderContribution = {
   shapes,
   readShape: resolveNodeShape,
   readTextPlacement: resolveNodeTextAlign,
+  // The same objects the plugin registers as assets, so the renderer's
+  // table and the registry's cannot disagree about what `visual.sketch` is.
+  themes: VISUAL_THEMES,
+  readTheme: resolveCanvasTheme,
 }

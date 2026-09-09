@@ -105,3 +105,101 @@ Three things a mechanical move does not see, and what catches each now:
 
 None of them sees an edge INSIDE `src/`, which is the gap `layer-order`
 closes.
+
+## The document's theme (ADR-0030)
+
+`lib/spatial/scene-render-core.ts` is the ONE composition of
+`layoutSpatialCanvas` this app has, and it defaults `style` to `'document'`
+there: a person editing a board sees the theme it names, and every surface
+that pictures a document — the editor, its drag layers, the row thumbnail,
+the preview pane, the export — pictures the same look. The layout worker
+runs the same composition, so the two threads cannot default apart. The
+look, its resolver and where a theme's family counts as available are
+`editorLayoutBase`, which the edge overlay a drag re-routes per frame
+takes too — it used to build its own options and drew every edge clean. The
+session override (decision 6) is the one thing that crosses: `DocumentPage`
+holds it per tab and document, the Display panel's **Draw as** row sets it
+(`onStyleChange`, offered only where a host passes one; the theme ids come
+from the registry's `assetIds('themes')`, never a facet key), and it threads
+`SpatialEditor` → `useWorkerScene` → the `LayoutRequest.style` field and
+the drag layers alike. Absent means `'document'` on both threads.
+
+Three consequences, each with its guard:
+
+- **The render key gains no axis.** The theme is a canvas facet, so a
+  document's content digest already changes when its theme does, and the
+  registered assets are part of the build id. The session override reaches
+  the editor alone — never the list surfaces — so no keyed surface draws a
+  document in two looks, which is what would need an axis.
+- **The paper is the palette's surface for the UI mode**, painted by
+  `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
+  The bundled palette's surface IS the page background in both modes, so an
+  unthemed canvas is byte-identical to before; neon gets its night.
+  `SpatialEditor.test.tsx` pins both.
+- **Colour swatches preview the palette the canvas is drawn in.**
+  `colorRow` takes a `SpatialPalette` rather than a mode, and
+  `CanvasContextMenu` resolves it once with `resolveCanvasPalette` — a
+  canvas-render export, so the point-owning surfaces still name no facet
+  domain (`facet-wiring-guard.test.ts`).
+
+The Theme row in the Display panel is `derivedCanvasFacetRow` in
+`facet-widgets/index.tsx`: `facet-ui`'s `DerivedFacetForm` over the plugin's
+own `editor` spec, writing through `set-canvas-facet`. Registering a theme is
+registering an asset; nothing on this side changes. `canvas-theme-row.test.tsx`
+(jsdom) and `canvas-settings.browser.test.tsx` cover the row and the pick.
+
+### A theme's family reaches this app from the daemon
+
+`lib/theme-fonts.ts` is ADR-0012's browser half, scoped to the families a
+registered theme names (`themeFontFamilies`, read off the facet registry's
+theme assets) and nothing else — an installed CJK face stays an export
+concern. `App` triggers `loadThemeFonts` when `daemonShellTarget` becomes
+known, `FontsCard` triggers it again after an install, and the editor asks
+`loadThemeFontFromSource` for the family its canvas draws in
+(`useThemeFaceFor`, keyed on the family) — the catalogue's pinned source,
+the same file the daemon installs, for the realm no daemon serves. The two
+sources share one in-flight map, so whichever asks first lands the face. A
+face lands three ways at once, and each is a seam the next change must keep:
+
+- **the main thread**, through canvas-viewer's `registerFontBytes`, so
+  `hasLoadedFace` — the `fontAvailable` the composition passes — answers
+  true;
+- **every layout worker**, through `attachThemeFaces` on BOTH creators
+  (the shared pool's `createWorker` and the editor's `createLayoutWorker`),
+  which posts each held face now and each later one as it lands, and is
+  detached with the worker's `terminate`. The worker handles
+  `register-face` before any layout reads the face set. Missing either
+  creator is the parity defect the worker exists to avoid: one realm would
+  declare the theme family and the other the bundled one, and the two
+  scenes would differ in every wrapped line. `layout-worker-theme-face.browser.test.tsx`
+  pins the worker half in a real browser;
+- **the scene**, through `useThemeFontsGeneration` in the editor's
+  `useWorkerScene` inputs — the layout asks `hasLoadedFace` itself, so the
+  generation is only what makes it ask again;
+- **the in-place editors** (node body, edge label, group label), through
+  `useEditingFontFamily`: the family the scene DECLARES — the theme's where
+  the face is held, the bundled one otherwise — never the theme's wish, or
+  the draft moves on commit. Comment and proposal chrome stay bundled, as
+  the layout keeps them crisp.
+
+The PNG export carries a held face the same way it carries the vendored
+one (`withViewerFontEmbedded(svg, themeFacesNamedBy(svg))`), and only the
+faces the SVG names, since each is megabytes. A daemon that cannot be
+listed is `log.info`, not a warning: it is the routine first render while a
+connection settles, and the jsdom failure guard would otherwise fail every
+App test that mounts a daemon target.
+
+### A property over "a canvas with facets" draws them from the registry
+
+`test-utils/facet-arbitrary.ts` turns each facet the registry holds for a
+target into a fast-check arbitrary by walking its Zod schema (zod v4's
+`_zod.def`), substituting an `assetRefs` field with the registered asset
+ids, and filtering by the schema itself so a `.refine` the walk cannot see
+is still honoured. `facetsArbitrary(registry, 'canvas')` is what a property
+about envelopes uses (`gesture-view.property.test.ts`), so it follows a
+facet a plugin registers tomorrow without an edit. Two things keep it
+honest: a construct it has no generator for THROWS naming the path rather
+than yielding nothing for that facet, and `facet-arbitrary.test.ts` pins
+that every canvas facet in the bundled registry is produced and that
+nothing produced is refused by `validateFacetWrite`.
+

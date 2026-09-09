@@ -33,6 +33,10 @@ export const MUTATED = [
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',
+  // The sketch ink decomposition: reach, determinism and translation
+  // equivariance are properties over random boxes and seeds, and the
+  // silhouette per outline kind is pinned by example.
+  'src/layout/ink/sketch.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:

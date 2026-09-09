@@ -1,3 +1,4 @@
+import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 /**
  * The node branch: group label/background, file/link/text verbs, the
  * locked-node [Unlock] short-circuit, copy/cut/duplicate, recolor with
@@ -38,7 +39,6 @@ import {
 } from 'lucide-react'
 import type { MutableRefObject } from 'react'
 import type { FileRefOption } from '../../../lib/link-entries.js'
-import type { ResolvedTheme } from '../../../lib/theme.js'
 import type { AlignableBox } from '../align.js'
 import { alignBoxes, distributeBoxes } from '../align.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
@@ -52,7 +52,8 @@ export interface NodeMenuItemsInput {
   readonly node: SpatialNode
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
-  readonly theme: ResolvedTheme
+  /** The palette the canvas is drawn in, for the colour row's swatches. */
+  readonly palette: SpatialPalette
   readonly gestureState: GestureState
   readonly isLocked: (nodeId: string) => boolean
   readonly lockEnabled: boolean
@@ -88,7 +89,7 @@ export function nodeMenuItems({
   node,
   canvas,
   canvasRef,
-  theme,
+  palette,
   gestureState,
   isLocked,
   lockEnabled,
@@ -304,7 +305,7 @@ export function nodeMenuItems({
     },
   })
   properties.push(
-    colorRow(theme, node.color, (color) => {
+    colorRow(palette, node.color, (color) => {
       // Recoloring FROM a multi-selection styles the whole
       // selected AREA: every member, and every edge that runs
       // between two members — the closest executable reading of

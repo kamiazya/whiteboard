@@ -174,6 +174,11 @@ wb_scene_render({ workspaceId, documentId, embedReferences: true })
 // One part only: a group by its label on a canvas, or a heading's section of a
 // markdown document — the same names `[[path#...]]` addresses.
 wb_scene_render({ workspaceId, documentId, fragment: "Launch" })
+// The look. Default is the bundled one whatever the document says, so a read
+// never pays for a theme's jitter or glow unasked; "document" draws the theme
+// the canvas names (`visual.theme/v0`, set with wb_facet_set's canvas target);
+// a theme id such as "visual.sketch" previews one without storing it.
+wb_scene_render({ workspaceId, documentId, style: "document" })
 ```
 
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`

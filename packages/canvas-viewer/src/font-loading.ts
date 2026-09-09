@@ -52,6 +52,74 @@ function resolveFontFaceSet(): FontFaceSet | undefined {
   return (globalThis as { fonts?: FontFaceSet }).fonts
 }
 
+/**
+ * Whether a family a theme names can be MEASURED in this realm, which is
+ * the question layout's `fontAvailable` seam asks (ADR-0030 decision 9):
+ * the vendored family always, since it is what layout measures with by
+ * default; any other only while this realm holds a loaded face for it.
+ * A family only the operating system provides answers false — Canvas 2D
+ * would draw it, but an export of the same canvas could not, and a face
+ * the two sides disagree on puts every wrapped line somewhere else.
+ */
+export function hasLoadedFace(family: string): boolean {
+  if (family === VIEWER_FONT_FAMILY) return true
+  // A face this module registered from bytes and saw load: answered from
+  // the record rather than by scanning, since a face set is not iterable
+  // in every realm that can still register one.
+  if (loadedByBytes.has(family)) return true
+  const faceSet = resolveFontFaceSet()
+  if (faceSet === undefined || typeof faceSet[Symbol.iterator] !== 'function') return false
+  for (const face of faceSet) {
+    // A face constructed as `"Patrick Hand"` reports its family with the
+    // quotes it was given; the theme names it bare.
+    if (face.family.replace(/^["']|["']$/g, '') === family && face.status === 'loaded') {
+      return true
+    }
+  }
+  return false
+}
+
+/**
+ * Faces registered from BYTES in this realm, by family — a theme's family
+ * the daemon holds and the app fetched (ADR-0012's browser half, for the
+ * families a theme names). Memoised per family: two surfaces asking for
+ * the same face register it once and share the settle.
+ */
+const registeredByBytes = new Map<string, Promise<ViewerFontStatus>>()
+const loadedByBytes = new Set<string>()
+
+/**
+ * Registers a face from its bytes in this realm's face set — the document's
+ * on a window, the worker global's on a worker — and resolves once it is
+ * usable, so `hasLoadedFace(family)` answers true from then on. Never
+ * rejects: a realm without `FontFace`, or bytes that are not a font, answer
+ * `'degraded'` and the layout keeps declaring the bundled family.
+ */
+export function registerFontBytes(family: string, bytes: ArrayBuffer): Promise<ViewerFontStatus> {
+  const existing = registeredByBytes.get(family)
+  if (existing !== undefined) return existing
+  const pending = (async (): Promise<ViewerFontStatus> => {
+    const faceSet = resolveFontFaceSet()
+    if (typeof FontFace === 'undefined' || faceSet === undefined) return 'degraded'
+    try {
+      const face = new FontFace(family, bytes)
+      faceSet.add(face)
+      await face.load()
+      loadedByBytes.add(family)
+      return 'loaded'
+    } catch {
+      return 'degraded'
+    }
+  })()
+  registeredByBytes.set(family, pending)
+  // A face that did not load is forgotten, so the next pass — after an
+  // install, say — registers afresh instead of answering the old failure.
+  void pending.then((status) => {
+    if (status !== 'loaded') registeredByBytes.delete(family)
+  })
+  return pending
+}
+
 /** Whether this realm can register the vendored face at all. */
 export function canLoadViewerFont(): boolean {
   return typeof FontFace !== 'undefined' && resolveFontFaceSet() !== undefined
@@ -140,6 +208,8 @@ export function subscribeViewerFontReady(callback: () => void): () => void {
 /** Test-only: clears the memoized promise/subscribers between test cases. */
 export function resetViewerFontLoadingForTests(): void {
   fontLoadPromise = undefined
+  registeredByBytes.clear()
+  loadedByBytes.clear()
   // Orphans any still-pending load from a previous case, so its late result
   // cannot write into the next one.
   loadGeneration += 1

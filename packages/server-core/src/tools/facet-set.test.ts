@@ -1,5 +1,6 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
+  readDocumentKind,
   readFacets,
   readSpatialCanvas,
   writeDocumentKind,
@@ -22,6 +23,7 @@ import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError }
 import {
   createFacetSetTool,
   facetSetInputSchema,
+  NodeAndCanvasTargetError,
   NodeTargetNeedsOneDocumentError,
 } from './facet-set.js'
 
@@ -520,5 +522,151 @@ describe('several documents in one call', () => {
         facets: {},
       }),
     ).rejects.toThrow(NodeTargetNeedsOneDocumentError)
+  })
+})
+
+describe('wb_facet_set canvas target (ADR-0030)', () => {
+  const THEME_KEY = 'visual.theme/v0'
+
+  async function spatialStore() {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+        edges: [],
+      })
+    })
+    return store
+  }
+
+  test("target: 'canvas' writes a canvas-target facet into the canvas envelope", async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+    })
+    expect(result).toEqual({
+      updated: [{ documentId: DOCUMENT_ID, facets: { [THEME_KEY]: { theme: 'visual.neon' } } }],
+    })
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+      [THEME_KEY]: { theme: 'visual.neon' },
+    })
+  })
+
+  test('deleting the last canvas facet removes the bucket and the empty envelope', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.sketch' } },
+    })
+    const cleared = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: null },
+    })
+    expect(cleared.updated[0]?.facets).toEqual({})
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readSpatialCanvas(doc)['x-whiteboard']).toBeUndefined()
+  })
+
+  test('refuses a theme id no plugin registered, naming what is', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        target: 'canvas',
+        facets: { [THEME_KEY]: { theme: 'visual.chalk' } },
+      }),
+    ).rejects.toThrow(/visual\.sketch/)
+  })
+
+  test("a canvas-target facet without target: 'canvas' is refused by its targets", async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
+  })
+
+  test("target: 'canvas' on a markdown document is a kind mismatch", async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+    })
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        target: 'canvas',
+        facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test("target: 'canvas' on a kind-less document writes the envelope and declares nothing", async () => {
+    // The same stance the document branch takes on a fresh document: the
+    // write replaces nothing, so it neither fails nor guesses a kind — and
+    // the message can never read "is a markdown document" about a document
+    // that declared none.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, () => {})
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+    })
+    expect(result.updated[0]?.facets).toEqual({ [THEME_KEY]: { theme: 'visual.neon' } })
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readDocumentKind(doc)).toBeUndefined()
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+      [THEME_KEY]: { theme: 'visual.neon' },
+    })
+  })
+
+  test('nodeId and a canvas target together name two things at once and are refused', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'n1',
+        target: 'canvas',
+        facets: {},
+      }),
+    ).rejects.toThrow(NodeAndCanvasTargetError)
   })
 })

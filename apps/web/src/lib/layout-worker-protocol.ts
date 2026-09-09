@@ -36,6 +36,7 @@ import type {
   EdgeAnchorPair,
   ReferenceWire,
   Scene,
+  SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
@@ -81,6 +82,12 @@ export type LayoutRequest = LayoutSubject & {
   /** Echoed back so a late reply for a superseded canvas can be dropped. */
   readonly id: number
   readonly theme: ResolvedTheme
+  /**
+   * The session's look override (ADR-0030 decision 6), when the host holds
+   * one. Absent means the document's own theme — the same default the main
+   * thread's composition takes, so the two realms cannot default apart.
+   */
+  readonly style?: SpatialRenderStyle
   readonly fileRefLabels?: readonly FileRefLabel[]
   /**
    * What the canvas points at, as data: the loaded graph and the alias,
@@ -265,6 +272,20 @@ export type OutlineResponse =
       readonly symbol?: VisualSymbolFacet
     }
   | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+
+/**
+ * A face this realm should hold, as bytes — a theme's family the main
+ * thread fetched from the daemon (`lib/theme-fonts.ts`). Fire-and-forget:
+ * no id and no reply, because it is not a request for work but a change to
+ * what every later layout measures with. Posted by `attachThemeFaces` to
+ * every worker this app starts, so the worker's answer to `fontAvailable`
+ * never differs from the main thread's.
+ */
+export type RegisterFaceRequest = {
+  readonly type: 'register-face'
+  readonly family: string
+  readonly bytes: ArrayBuffer
+}
 
 export type LayoutResponse =
   | {
