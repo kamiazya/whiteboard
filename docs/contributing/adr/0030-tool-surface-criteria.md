@@ -423,6 +423,23 @@ anything is retired.
   one call, at the price of a mini-language the schema cannot validate
   (C3, C11) — not a trade the lane can be made to show a gain on. Kept
   as a task so a shape that WOULD need it is noticed when it appears.
+- **A set, measured as a selector.** Proposed: a batch-scoped named set
+  an op pushes into, then operated on in bulk. Two tasks were written for
+  the shape — "colour every box inside the Clients group" and "lock every
+  item on the roadmap" — and the baseline said what the cost actually
+  was: three calls each, the middle one a snapshot whose only purpose was
+  to learn the ids the edit would then name one by one. The accumulator
+  half could not move that (every id a model creates it also chooses, so
+  it never needs a set of its own outputs); the SELECTOR half could.
+  Landed as `within` and `all` where an op takes one id (+1,095 visible
+  bytes, eleven parameters, all described). After, three trials each: the
+  lock errand went 3 -> 2 calls in two of three (snapshot skipped, `all`
+  on nodes and edges in one batch), the colour errand stayed at 3 calls
+  but went from two ops to one — `within` needs the group's id, and the
+  snapshot is still where that comes from. Six of six trials reached for
+  the selector unprompted. What would take the colour errand to two calls
+  is a selector by LABEL, which is a lookup with no uniqueness behind it;
+  left as the next candidate rather than added on the same evidence.
 - **A stray key inside a node draft is accepted silently** (C10, one
   level down). A trial wrote `"height80": true` beside `"height": 80`,
   and the write succeeded: the per-type node schemas are non-strict so a

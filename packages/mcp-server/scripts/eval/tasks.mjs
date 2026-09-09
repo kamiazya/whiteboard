@@ -275,6 +275,51 @@ export const TASKS = [
     },
   },
   {
+    // Set-shaped errands: the same change to EVERY node that satisfies a
+    // condition. Today each node is one op and its id has to be known, so
+    // the measurement is whether a model pays a read to learn the ids
+    // before it can act — a selector or a batch-scoped set would let the
+    // edit name the condition instead.
+    name: 'colour every box inside a group',
+    prompt:
+      'On the architecture board, give every box inside the Clients group colour 5. Change nothing else on the board. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/architecture')
+      const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Clients')
+      if (group === undefined) return { ok: false, detail: 'the Clients group is gone' }
+      const inside = (n) =>
+        n.id !== group.id &&
+        n.x >= group.x &&
+        n.y >= group.y &&
+        n.x + n.width <= group.x + group.width &&
+        n.y + n.height <= group.y + group.height
+      const members = board.nodes.filter(inside)
+      const uncoloured = members.filter((n) => n.color !== '5').map((n) => n.id)
+      if (members.length < 2) return { ok: false, detail: `group holds ${members.length}` }
+      if (uncoloured.length > 0)
+        return { ok: false, detail: `not colour 5: ${uncoloured.join(', ')}` }
+      const bled = board.nodes.filter((n) => !inside(n) && n.color === '5').map((n) => n.id)
+      if (bled.length > 0)
+        return { ok: false, detail: `coloured outside the group: ${bled.join(', ')}` }
+      return { ok: true, detail: `${members.length} members coloured, nothing else` }
+    },
+  },
+  {
+    name: 'lock every item on a board',
+    prompt:
+      'Lock every item on the roadmap board so nobody can move any of them. Apply it directly.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/roadmap')
+      const loose = board.nodes.filter((n) => n.locked !== true).map((n) => n.id)
+      if (board.nodes.length < 3) return { ok: false, detail: `only ${board.nodes.length} nodes` }
+      return {
+        ok: loose.length === 0,
+        detail:
+          loose.length === 0 ? `${board.nodes.length} locked` : `unlocked: ${loose.join(', ')}`,
+      }
+    },
+  },
+  {
     name: 'checkpoint every board',
     prompt:
       'Save a version of every board (spatial document) in the workspace, labelled "pre-review".',

@@ -154,11 +154,18 @@ describe('what the tool table costs to read', () => {
       // described). The lane placed the change: on the errand the op was
       // built for, the old shape had a model writing x/y/width/height for
       // every box, the ones already there included (ADR-0030 §4).
+      // +1,095 for a SELECTOR where an id goes — `within` (every node
+      // inside a group) and `all` on patch, remove and lock, `within` on
+      // tidy; eleven parameters, every one described. Placed by the lane:
+      // "lock every item on the roadmap" went from three calls to two in
+      // two trials of three (the snapshot that only learned the ids was
+      // skipped), and "colour every box inside the Clients group" from two
+      // ops to one; six trials of six reached for the selector unprompted.
       wb_canvas_edit: {
-        visibleBytes: 9675,
-        wireBytes: 29703,
+        visibleBytes: 10770,
+        wireBytes: 30798,
         descriptionWords: 169,
-        parameters: 136,
+        parameters: 147,
         undescribed: 133,
         strays: 'refused',
         names: [],
@@ -345,9 +352,10 @@ describe('what the tool table costs to read', () => {
       // -3,391 for region.set naming members by id (see wb_canvas_edit):
       // 31,394 is the first reading under 32,000 since the table was
       // first pinned at 34,960.
-      visibleBytes: 31394,
-      wireBytes: 95932,
-      parameters: 254,
+      // +1,095 for selectors where an id goes (see wb_canvas_edit).
+      visibleBytes: 32489,
+      wireBytes: 97027,
+      parameters: 265,
       undescribed: 199,
     })
   })

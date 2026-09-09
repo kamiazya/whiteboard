@@ -157,6 +157,32 @@ const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
  * `node.remove` / `edge.remove`, which had no tool at all: the only way to
  * delete anything used to be a whole-document replace.
  */
+/**
+ * Where one id goes, a SELECTOR may go instead: every node inside a group,
+ * or every node on the canvas. Measured before it existed: "colour every box
+ * inside the Clients group" and "lock every item on the roadmap" each cost a
+ * read the errand did not need — the snapshot was there only to learn the
+ * ids the edit would then name one by one. Exactly one of the three.
+ */
+const NODE_TARGET = {
+  id: nodeIdSchema.optional(),
+  within: nodeIdSchema.optional().describe('Instead of id: every node inside this group.'),
+  all: z.literal(true).optional().describe('Instead of id: every node on the canvas.'),
+} as const
+const EDGE_TARGET = {
+  id: nodeIdSchema.optional(),
+  within: nodeIdSchema
+    .optional()
+    .describe('Instead of id: every edge with both ends inside this group.'),
+  all: z.literal(true).optional().describe('Instead of id: every edge on the canvas.'),
+} as const
+type Target = { id?: string; within?: string; all?: true }
+const exactlyOneTarget = {
+  check: (value: Target) =>
+    [value.id, value.within, value.all].filter((field) => field !== undefined).length === 1,
+  message: 'name exactly one of id, within and all',
+}
+
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object({
@@ -168,8 +194,9 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     })
     .strict(),
   z
-    .object({ op: z.literal('node.patch'), id: nodeIdSchema, patch: nodePatchFieldsSchema })
-    .strict(),
+    .object({ op: z.literal('node.patch'), ...NODE_TARGET, patch: nodePatchFieldsSchema })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
   /**
    * A line-range splice of a text node's body, `[startLine, endLine]`
    * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
@@ -190,15 +217,36 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .refine((value) => value.startLine <= value.endLine, {
       message: 'startLine must be <= endLine',
     }),
-  z.object({ op: z.literal('node.remove'), id: nodeIdSchema }).strict(),
+  z
+    .object({ op: z.literal('node.remove'), ...NODE_TARGET })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
   z.object({ op: z.literal('edge.add'), edge: edgeDraftSchema }).strict(),
   z
     .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
     .strict(),
-  z.object({ op: z.literal('edge.remove'), id: nodeIdSchema }).strict(),
-  z.object({ op: z.literal('node.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
-  z.object({ op: z.literal('edge.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
-  z.object({ op: z.literal('tidy'), scope: z.array(nodeIdSchema).min(1).optional() }).strict(),
+  z
+    .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({ op: z.literal('edge.lock'), ...EDGE_TARGET, locked: z.boolean() })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({
+      op: z.literal('tidy'),
+      scope: z.array(nodeIdSchema).min(1).optional(),
+      within: nodeIdSchema.optional().describe('Instead of scope: every node inside this group.'),
+    })
+    .strict()
+    .refine((value) => value.scope === undefined || value.within === undefined, {
+      message: 'scope and within are alternatives; pass one',
+    }),
   /**
    * The annotation layer (ADR-0024). A draft may omit the id (minted) and
    * the anchor point — a comment about a NODE names `targetNodeId` and the
@@ -458,6 +506,10 @@ class PlacementCursor {
 
 type Rect = { x: number; y: number; width: number; height: number }
 
+function overlaps(a: Rect, b: Rect): boolean {
+  return a.x < b.x + b.width && b.x < a.x + a.width && a.y < b.y + b.height && b.y < a.y + a.height
+}
+
 /** Two boxes closer than the gutter count as touching, so packing keeps it. */
 function crowds(a: Rect, b: Rect): boolean {
   return (
@@ -691,6 +743,21 @@ export function createCanvasEditTool(deps: ServerDeps) {
           { width: bounds.width, height: bounds.height },
         )
         if (needed.width <= bounds.width && needed.height <= bounds.height) return
+        // Never over a neighbour. Growth that swallows a node just past the
+        // old edge makes it a member the next region.set deletes by
+        // omission — so a node the old box did not overlap is a wall, and
+        // the refusal names it.
+        const grownBox = { ...bounds, width: needed.width, height: needed.height }
+        const wall = nodes.find(
+          (node) => node.id !== bounds.id && !overlaps(node, bounds) && overlaps(node, grownBox),
+        )
+        if (wall !== undefined) {
+          fail(
+            index,
+            opName,
+            `"${bounds.id}" would have to grow to ${needed.width}x${needed.height} and that reaches "${wall.id}"; move "${wall.id}" or place the node elsewhere`,
+          )
+        }
         if (nodeLocks.has(bounds.id)) {
           fail(
             index,
@@ -731,10 +798,82 @@ export function createCanvasEditTool(deps: ServerDeps) {
         return placements
       }
 
-      input.ops.forEach((op, index) => {
-        const issues = (error: z.ZodError): string =>
-          error.issues.map((issue) => issue.message).join('; ')
+      /** The node ids one target selects, in canvas order; never empty. */
+      const nodeTargets = (index: number, opName: string, target: Target): string[] => {
+        if (target.id !== undefined) {
+          if (nodeAt(target.id) === undefined) {
+            fail(index, opName, `node "${target.id}" is not on the canvas`)
+          }
+          return [target.id]
+        }
+        if (target.within !== undefined) {
+          const group = groupNamed(index, opName, target.within)
+          const ids = nodes.filter(enclosedBy(group)).map((node) => node.id)
+          if (ids.length === 0) fail(index, opName, `no node is inside "${group.id}"`)
+          return ids
+        }
+        if (nodes.length === 0) fail(index, opName, 'the canvas has no nodes')
+        return nodes.map((node) => node.id)
+      }
+      const edgeTargets = (index: number, opName: string, target: Target): string[] => {
+        if (target.id !== undefined) {
+          if (edgeAt(target.id) === undefined) {
+            fail(index, opName, `edge "${target.id}" is not on the canvas`)
+          }
+          return [target.id]
+        }
+        if (target.within !== undefined) {
+          const group = groupNamed(index, opName, target.within)
+          const inside = new Set(nodes.filter(enclosedBy(group)).map((node) => node.id))
+          const ids = edges
+            .filter((edge) => inside.has(edge.fromNode) && inside.has(edge.toNode))
+            .map((edge) => edge.id)
+          if (ids.length === 0) fail(index, opName, `no edge has both ends inside "${group.id}"`)
+          return ids
+        }
+        if (edges.length === 0) fail(index, opName, 'the canvas has no edges')
+        return edges.map((edge) => edge.id)
+      }
 
+      const issues = (error: z.ZodError): string =>
+        error.issues.map((issue) => issue.message).join('; ')
+      const patchNode = (
+        index: number,
+        opName: string,
+        id: string,
+        patch: z.infer<typeof nodePatchFieldsSchema>,
+      ): void => {
+        const node = nodeAt(id)
+        if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
+        const parsed = spatialNodeSchema.safeParse({ ...node, ...patch })
+        if (!parsed.success) fail(index, opName, issues(parsed.error))
+        const updated = parsed.data
+        // The per-type node schemas are non-strict on purpose — JSON
+        // Canvas 1.0 lets a document carry another tool's extension keys,
+        // and refusing them would make those documents unreadable. The
+        // cost is that a patch key the TARGET's type does not have is
+        // stripped by the re-parse above rather than rejected, so the
+        // write would report success over a document it did not change.
+        // `label` on a text node is the case that exists today: it is on
+        // the patch allowlist because a group has one.
+        //
+        // Caught here rather than by narrowing the allowlist per type,
+        // because one check covers every key and every type — including
+        // whichever content field a later increment allows.
+        const dropped = Object.keys(patch).filter((key) => !(key in updated))
+        if (dropped.length > 0) {
+          fail(
+            index,
+            opName,
+            `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
+              'accepted and silently dropped, so it is refused instead',
+          )
+        }
+        nodes = nodes.map((existing) => (existing.id === id ? updated : existing))
+        touchedNodes.add(id)
+      }
+
+      input.ops.forEach((op, index) => {
         switch (op.op) {
           case 'node.add': {
             const draft = op.node
@@ -787,37 +926,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'node.patch': {
-            const node = nodeAt(op.id)
-            if (node === undefined) fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (nodeLocks.has(op.id)) {
-              fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+            const ids = nodeTargets(index, op.op, op)
+            // Locks are checked for the whole selection before any of it
+            // changes, so a refusal leaves nothing half-applied.
+            for (const id of ids) {
+              if (nodeLocks.has(id)) {
+                fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+              }
             }
-            const parsed = spatialNodeSchema.safeParse({ ...node, ...op.patch })
-            if (!parsed.success) fail(index, op.op, issues(parsed.error))
-            const updated = parsed.data
-            // The per-type node schemas are non-strict on purpose — JSON
-            // Canvas 1.0 lets a document carry another tool's extension keys,
-            // and refusing them would make those documents unreadable. The
-            // cost is that a patch key the TARGET's type does not have is
-            // stripped by the re-parse above rather than rejected, so the
-            // write would report success over a document it did not change.
-            // `label` on a text node is the case that exists today: it is on
-            // the patch allowlist because a group has one.
-            //
-            // Caught here rather than by narrowing the allowlist per type,
-            // because one check covers every key and every type — including
-            // whichever content field a later increment allows.
-            const dropped = Object.keys(op.patch).filter((key) => !(key in updated))
-            if (dropped.length > 0) {
-              fail(
-                index,
-                op.op,
-                `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
-                  'accepted and silently dropped, so it is refused instead',
-              )
-            }
-            nodes = nodes.map((existing) => (existing.id === op.id ? updated : existing))
-            touchedNodes.add(op.id)
+            for (const id of ids) patchNode(index, op.op, id, op.patch)
             return
           }
 
@@ -858,22 +975,25 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'node.remove': {
-            if (nodeAt(op.id) === undefined)
-              fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (nodeLocks.has(op.id)) {
-              fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+            const ids = new Set(nodeTargets(index, op.op, op))
+            for (const id of ids) {
+              if (nodeLocks.has(id)) {
+                fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+              }
             }
             // Edges touching a removed node go with it. Left behind they are
             // a canvas spatialCanvasSchema refuses on the next read, so
             // "apply exactly the op I was handed" would store a board that
             // cannot be loaded.
             for (const edge of edges) {
-              if (edge.fromNode === op.id || edge.toNode === op.id) touchedEdges.add(edge.id)
+              if (ids.has(edge.fromNode) || ids.has(edge.toNode)) touchedEdges.add(edge.id)
             }
-            edges = edges.filter((edge) => edge.fromNode !== op.id && edge.toNode !== op.id)
-            nodes = nodes.filter((node) => node.id !== op.id)
-            nodeLocks.delete(op.id)
-            touchedNodes.add(op.id)
+            edges = edges.filter((edge) => !ids.has(edge.fromNode) && !ids.has(edge.toNode))
+            nodes = nodes.filter((node) => !ids.has(node.id))
+            for (const id of ids) {
+              nodeLocks.delete(id)
+              touchedNodes.add(id)
+            }
             return
           }
 
@@ -924,34 +1044,35 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'edge.remove': {
-            if (edgeAt(op.id) === undefined)
-              fail(index, op.op, `edge "${op.id}" is not on the canvas`)
-            if (edgeLocks.has(op.id)) {
-              fail(index, op.op, `edge "${op.id}" is locked; unlock it with an edge.lock op first`)
+            const ids = new Set(edgeTargets(index, op.op, op))
+            for (const id of ids) {
+              if (edgeLocks.has(id)) {
+                fail(index, op.op, `edge "${id}" is locked; unlock it with an edge.lock op first`)
+              }
             }
-            edges = edges.filter((edge) => edge.id !== op.id)
-            edgeLocks.delete(op.id)
-            touchedEdges.add(op.id)
+            edges = edges.filter((edge) => !ids.has(edge.id))
+            for (const id of ids) {
+              edgeLocks.delete(id)
+              touchedEdges.add(id)
+            }
             return
           }
 
-          case 'node.lock': {
-            if (nodeAt(op.id) === undefined)
-              fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (op.locked) nodeLocks.add(op.id)
-            else nodeLocks.delete(op.id)
-            touchedNodes.add(op.id)
+          case 'node.lock':
+            for (const id of nodeTargets(index, op.op, op)) {
+              if (op.locked) nodeLocks.add(id)
+              else nodeLocks.delete(id)
+              touchedNodes.add(id)
+            }
             return
-          }
 
-          case 'edge.lock': {
-            if (edgeAt(op.id) === undefined)
-              fail(index, op.op, `edge "${op.id}" is not on the canvas`)
-            if (op.locked) edgeLocks.add(op.id)
-            else edgeLocks.delete(op.id)
-            touchedEdges.add(op.id)
+          case 'edge.lock':
+            for (const id of edgeTargets(index, op.op, op)) {
+              if (op.locked) edgeLocks.add(id)
+              else edgeLocks.delete(id)
+              touchedEdges.add(id)
+            }
             return
-          }
 
           case 'region.set': {
             const group = groupNamed(index, op.op, op.within)
@@ -998,8 +1119,14 @@ export function createCanvasEditTool(deps: ServerDeps) {
             nodes = nodes.filter((node) => !droppedIds.has(node.id))
 
             // Members that are elsewhere come in, placed around the ones
-            // already inside; the group grows if it has no room.
-            const arriving = op.nodes.filter((id) => !inScopeIds.has(id))
+            // already inside; the group grows if it has no room. A member
+            // ACROSS the boundary is neither: that is the mid-drag case the
+            // scope rule protects, so it is left exactly where it is.
+            const arriving = op.nodes.filter((id) => {
+              if (inScopeIds.has(id)) return false
+              const node = nodeAt(id)
+              return node === undefined || !overlaps(node, group)
+            })
             const placements = placeInside(
               index,
               op.op,
@@ -1107,8 +1234,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
           case 'tidy': {
             // Locks bind tidy exactly as they bind the editor: a locked node
             // is a fixed obstacle it routes around, never one it moves.
+            const scope =
+              op.within !== undefined ? nodeTargets(index, op.op, { within: op.within }) : op.scope
             const moved = tidyNodes(nodes, {
-              scope: op.scope === undefined ? undefined : new Set(op.scope),
+              scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
             })
             const target = new Map(moved.map((move) => [move.id, move]))

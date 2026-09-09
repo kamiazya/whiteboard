@@ -207,6 +207,27 @@ full geometry for every box, which is the arithmetic optional geometry exists
 to spare it. A position the CALLER chose is still held to the group, and that
 refusal says which edge is over by how much and the three ways out.
 
+**A selector where an id goes** (`within`, `all` on `node.patch`, `node.remove`,
+`node.lock`, `edge.remove`, `edge.lock`; `within` on `tidy`). Added on a
+measurement rather than a design: "lock every item on the roadmap" and
+"colour every box inside the Clients group" each cost a read whose only
+purpose was to learn the ids the edit would then name one by one. With the
+selector, the lock errand skipped that read in two trials of three, and the
+colour errand became one op; every trial reached for it unprompted
+([ADR-0030 §4](0030-tool-surface-criteria.md)). Locks bind the whole
+selection before any of it changes, and a selector that matches nothing is
+refused so an errand cannot silently do nothing. What it is NOT: a
+batch-scoped named set an op pushes into. That was proposed alongside and
+measured against the same tasks — every id a model creates it also chooses,
+so an accumulator of its own outputs had no errand where a number moved.
+
+**Growth stops at a neighbour.** A group that grows to hold what was placed
+in it never grows over a node it did not already overlap: growth that
+swallowed a neighbour would make it a member the next `region.set` deletes by
+omission. The refusal names the node in the way. And a member ACROSS the
+boundary — the mid-drag case — is neither moved in nor removed by
+`region.set`; it is left exactly where it is.
+
 **Keeping `wb_canvas_tidy` as a standalone tool.** It is the most likely one-shot
 call and the only pre-existing declarative-ish tool. Retired anyway: a special
 case erodes the "one entry point" property that makes the surface easy to choose

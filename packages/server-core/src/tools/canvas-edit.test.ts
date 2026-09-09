@@ -969,6 +969,32 @@ describe('wb_canvas_edit — region.set', () => {
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'straddling'])
   })
 
+  test('leaves a straddling node where it is even when listed', async () => {
+    // Listed but not enclosed would otherwise mean "elsewhere, move it in"
+    // — and a node across the boundary is the mid-drag case the scope rule
+    // exists to protect. It is neither moved nor removed; it is left.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'straddling', type: 'text', x: 460, y: 20, width: 80, height: 40, text: 'moving' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'region.set', within: 'g', nodes: ['straddling'] }],
+    })
+
+    expect(result.touched.nodes).not.toContain('straddling')
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'straddling')).toMatchObject({ x: 460, y: 20 })
+  })
+
   test('never deletes the group it is scoped to', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, { nodes: [GROUP], edges: [] })
@@ -1495,6 +1521,53 @@ describe('wb_canvas_edit — node.add within a group', () => {
     expect(canvas.nodes.map((node) => node.id)).toEqual(['g'])
   })
 
+  test('refuses to grow into a neighbour, and names it', async () => {
+    // Growth that swallows a node just past the old edge makes that node a
+    // member the next region.set deletes by omission. So a group never
+    // grows over something it did not already overlap; the refusal says
+    // which node is in the way.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { ...GROUP, width: 200, height: 100 },
+        { id: 'neighbour', type: 'text', x: 220, y: 20, width: 80, height: 40, text: 'next door' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: { id: 'wide', type: 'text', x: 150, y: 20, width: 100, height: 40, text: 'wide' },
+            within: 'g',
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/"neighbour"/),
+    })
+    // The placed path hits the same wall: three default boxes in a 200x100
+    // group grow it right and down, and the neighbour sits to the right.
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'g' }],
+      }),
+    ).rejects.toThrow(/"neighbour"/)
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'g')).toMatchObject({ width: 200, height: 100 })
+  })
+
   test('refuses a `within` that is not a group', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
@@ -1511,6 +1584,145 @@ describe('wb_canvas_edit — node.add within a group', () => {
         ops: [{ op: 'node.add', node: { id: 'a', type: 'text', text: 'A' }, within: 'plain' }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+  })
+})
+
+/**
+ * A SELECTOR where an id goes: `within` (every node inside a group) or
+ * `all` (every node on the canvas) on the ops that take one target. Measured
+ * before it existed: "colour every box inside the Clients group" and "lock
+ * every item on the roadmap" each cost a read the errand did not need — the
+ * snapshot was there only to learn the ids the edit would name. A selector
+ * lets the edit name the condition instead.
+ */
+describe('wb_canvas_edit — a selector where an id goes', () => {
+  const GROUP = { id: 'g', type: 'group' as const, x: 0, y: 0, width: 500, height: 500 }
+  const BOARD = {
+    nodes: [
+      GROUP,
+      { id: 'a', type: 'text' as const, x: 20, y: 20, width: 80, height: 40, text: 'a' },
+      { id: 'b', type: 'text' as const, x: 200, y: 20, width: 80, height: 40, text: 'b' },
+      { id: 'far', type: 'text' as const, x: 900, y: 900, width: 80, height: 40, text: 'far' },
+    ],
+    edges: [
+      { id: 'ab', fromNode: 'a', toNode: 'b' },
+      { id: 'bfar', fromNode: 'b', toNode: 'far' },
+    ],
+  }
+
+  test('node.patch with `within` patches every node inside the group and nothing else', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', within: 'g', patch: { color: '5' } }],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const colour = (id: string) => canvas.nodes.find((node) => node.id === id)?.color
+    expect([colour('a'), colour('b')]).toEqual(['5', '5'])
+    expect(colour('far')).toBeUndefined()
+    expect(colour('g')).toBeUndefined()
+    expect(result.touched.nodes.sort()).toEqual(['a', 'b'])
+  })
+
+  test('node.lock with `all` locks every node on the canvas', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.lock', all: true, locked: true }],
+    })
+
+    const snapshot = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'edge.lock', within: 'g', locked: true }],
+    })
+    expect(snapshot.snapshot.nodes.every((node) => node.locked === true)).toBe(true)
+    // `within` on an edge op means both ends inside: `ab` yes, `bfar` no.
+    expect(snapshot.snapshot.edges.find((edge) => edge.id === 'ab')?.locked).toBe(true)
+    expect(snapshot.snapshot.edges.find((edge) => edge.id === 'bfar')?.locked).toBeUndefined()
+  })
+
+  test('a selector that matches nothing is refused, so an errand cannot silently do nothing', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [GROUP], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', within: 'g', patch: { color: '5' } }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/no node is inside "g"/),
+    })
+  })
+
+  test('a locked member refuses the whole selection, by name', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'node.lock', id: 'b', locked: true }],
+    })
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.remove', within: 'g' }],
+      }),
+    ).rejects.toMatchObject({
+      name: 'CanvasEditError',
+      opIndex: 0,
+      message: expect.stringMatching(/node "b" is locked/),
+    })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.map((node) => node.id).sort()).toEqual(['a', 'b', 'far', 'g'])
+  })
+
+  test('tidy with `within` moves only what is inside the group', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, BOARD)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'tidy', within: 'g' }],
+    })
+
+    expect(result.touched.nodes).not.toContain('far')
+    expect(result.touched.nodes).not.toContain('g')
+  })
+
+  test('exactly one of id, within and all, at the schema', () => {
+    const tool = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
+    const parse = (op: Record<string, unknown>) =>
+      tool.inputSchema.safeParse({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
+    expect(parse({ op: 'node.lock', locked: true }).success).toBe(false)
+    expect(parse({ op: 'node.lock', id: 'a', all: true, locked: true }).success).toBe(false)
+    expect(parse({ op: 'node.lock', within: 'g', locked: true }).success).toBe(true)
+    expect(parse({ op: 'edge.remove', all: true }).success).toBe(true)
+    expect(parse({ op: 'tidy', scope: ['a'], within: 'g' }).success).toBe(false)
   })
 })
 

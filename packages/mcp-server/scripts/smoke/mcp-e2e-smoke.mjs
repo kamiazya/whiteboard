@@ -1320,6 +1320,19 @@ async function main() {
     throw new Error(`region.set reached outside its region: ${JSON.stringify(survivors)}`)
   }
   console.log('[e2e] wb_canvas_edit(region.set) → region reconciled, rest of the board untouched')
+  // A selector where an id goes: `within` names the group, not its members.
+  const lockedRegion = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [{ op: 'node.lock', within: 'region', locked: true }],
+    follow: false,
+  })
+  const lockedIds = lockedRegion.snapshot.nodes.filter((node) => node.locked).map((node) => node.id)
+  if (!lockedIds.includes('in-1') || lockedIds.includes('lockable')) {
+    throw new Error(`node.lock within reached the wrong nodes: ${JSON.stringify(lockedIds)}`)
+  }
+  console.log("[e2e] wb_canvas_edit(node.lock within) → only the region's member locked")
 
   // wb_viewport_set with nobody watching. This smoke runs headless, so
   // delivered:false IS the success path — the point is that asking a
