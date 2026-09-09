@@ -78,20 +78,21 @@ describe('wb_version_* tools over the daemon history', () => {
     })
     await writeText(deps, documentId, 'original')
 
-    const saved = await createVersionSaveTool(deps).execute({
+    const { saved } = await createVersionSaveTool(deps).execute({
       workspaceId: WS,
-      documentId,
+      documentIds: [documentId],
       label: 'checkpoint',
     })
+    const savedRow = saved[0]
 
     // The History panel's own read sees what the agent saved.
     const panel = await new FileVersionStore().list(WS, 'canvas-a')
-    expect(panel.map((v) => v.id)).toEqual([saved.version.id])
+    expect(panel.map((v) => v.id)).toEqual([savedRow?.version.id])
     expect(panel[0]?.label).toBe('checkpoint')
     // Recorded as the daemon acting as an agent, so the panel can say who.
     expect(panel[0]?.operator?.kind).toBe('ai')
     const listed = await createVersionListTool(deps).execute({ workspaceId: WS, documentId })
-    expect(listed.versions.map((v) => v.id)).toEqual([saved.version.id])
+    expect(listed.versions.map((v) => v.id)).toEqual([savedRow?.version.id])
 
     await writeText(deps, documentId, 'modified')
     expect(await textOf(deps, documentId)).toBe('modified')
@@ -103,9 +104,9 @@ describe('wb_version_* tools over the daemon history', () => {
     const restored = await createVersionRestoreTool(reborn).execute({
       workspaceId: WS,
       documentId,
-      versionId: saved.version.id,
+      versionId: savedRow?.version.id,
     })
-    expect(restored).toMatchObject({ documentId, restoredVersionId: saved.version.id })
+    expect(restored).toMatchObject({ documentId, restoredVersionId: savedRow?.version.id })
     expect(await textOf(reborn, documentId)).toBe('original')
   })
 })

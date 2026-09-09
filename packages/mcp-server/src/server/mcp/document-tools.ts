@@ -5,7 +5,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
-import { withDocumentWriteLock } from '../store/workspace-lock.js'
+import { withDocumentWriteLock, withDocumentWriteLocks } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
@@ -75,7 +75,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
         tools.facetSet.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -232,7 +232,10 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
+      // Every document in the batch, held for the batch's whole duration:
+      // a caller asked for these as one checkpoint, so another writer must
+      // not land between two of them.
+      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
         tools.versionSave.execute(parsed),
       )
       return structuredJsonResult(result)

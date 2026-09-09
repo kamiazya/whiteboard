@@ -27,17 +27,28 @@ import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError }
  * the raw `facets` root key itself — those don't match the pattern and are
  * rejected at parse time rather than needing a separate namespace guard.
  */
+/**
+ * A ceiling on one request. Facet payloads are small, so this is not about
+ * size; it is about a batch big enough that a caller cannot read what it
+ * just did.
+ */
+const MAX_DOCUMENTS = 50
+
 export const facetSetInputSchema = z
   .object({
     workspaceId: workspaceIdSchema,
-    documentId: documentIdSchema,
+    documentIds: z.array(documentIdSchema).min(1).max(MAX_DOCUMENTS),
     /**
      * Present: the write targets this NODE of a spatial document (facets
      * land in the node's x-whiteboard facets bucket). Absent: the write
-     * targets the document itself (markdown only).
+     * targets the documents themselves (markdown only).
      */
     nodeId: nodeIdSchema.optional(),
     /**
+     * ONE payload for every document named, not one per document. "Tag
+     * these as reviewed" is the thing a caller is actually doing; two
+     * different payloads are two different writes and cost a call each.
+     *
      * A null value DELETES that facet; anything else sets it. Deletion is
      * an input-only tombstone — stored buckets never hold null.
      */
@@ -48,11 +59,33 @@ export type FacetSetInput = z.infer<typeof facetSetInputSchema>
 
 export const facetSetOutputSchema = z
   .object({
-    documentId: documentIdSchema,
-    facets: extensionFacetsSchema,
+    updated: z
+      .array(z.object({ documentId: documentIdSchema, facets: extensionFacetsSchema }).strict())
+      .describe('One entry per document, in the order asked for.'),
   })
   .strict()
 export type FacetSetOutput = z.infer<typeof facetSetOutputSchema>
+
+/**
+ * `nodeId` narrows to a node INSIDE one document, and two documents do not
+ * share a node id space — so "this node of these five documents" names
+ * nothing. Refused rather than applied to whichever documents happen to
+ * have a node by that name.
+ *
+ * Checked here rather than as a schema `.refine`: refining makes the input
+ * a ZodEffects, which has no `.shape`, and the MCP registration hands
+ * `.shape` to the SDK to build the tool's published JSON Schema.
+ */
+export class NodeTargetNeedsOneDocumentError extends Error {
+  constructor(count: number) {
+    super(
+      `nodeId names a node of ONE document, and ${count} documentIds were given. ` +
+        'Node ids are scoped to their own document, so the same nodeId in two documents ' +
+        'is two unrelated nodes. Call once per document.',
+    )
+    this.name = 'NodeTargetNeedsOneDocumentError'
+  }
+}
 
 export function createFacetSetTool(deps: ServerDeps) {
   return {
@@ -62,10 +95,9 @@ export function createFacetSetTool(deps: ServerDeps) {
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
-      await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
-      const kind = readDocumentKind(doc)
-      const registry = deps.facetRegistry ?? bundledFacetRegistry
+      if (input.nodeId !== undefined && input.documentIds.length !== 1) {
+        throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
+      }
 
       // Write-side validation (ADR-0013 decision 6): a REGISTERED facet's
       // payload must satisfy its schema, its key must be the current
@@ -74,6 +106,12 @@ export function createFacetSetTool(deps: ServerDeps) {
       // Unregistered facets pass through unvalidated (round-trip safety).
       // Registered payloads are stored as the schema's PARSED value. A null
       // payload deletes the key — deletion needs no target or schema check.
+      //
+      // Done ONCE for the whole batch, before any document is opened: the
+      // payload is shared, so a rejected facet is rejected for every
+      // document and there is nothing to be gained by discovering it on the
+      // third one after the first two were already written.
+      const registry = deps.facetRegistry ?? bundledFacetRegistry
       const requiredTarget = input.nodeId === undefined ? 'document' : 'node'
       const sets: Record<string, unknown> = {}
       const deletions: string[] = []
@@ -96,68 +134,94 @@ export function createFacetSetTool(deps: ServerDeps) {
         sets[key] = result.value
       }
 
-      if (input.nodeId !== undefined) {
-        const nodeId = input.nodeId
-        // A kind-less document (freshly created, nothing declared) has no
-        // canvas, so the node cannot exist — report THAT, rather than
-        // fabricating a kind for the mismatch message.
-        if (kind === undefined) {
-          throw new NodeNotFoundError(input.documentId, nodeId)
-        }
-        if (kind !== 'spatial') {
-          throw new DocumentKindMismatchError(
-            input.documentId,
-            kind,
-            "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document.",
-          )
-        }
-        const canvas = readSpatialCanvas(doc)
-        const node = canvas.nodes.find((candidate) => candidate.id === nodeId)
-        if (node === undefined) {
-          throw new NodeNotFoundError(input.documentId, nodeId)
-        }
-        const merged: ExtensionFacets = { ...node['x-whiteboard']?.facets, ...sets }
-        for (const key of deletions) delete merged[key]
-        const { facets: _replaced, ...extensionRest } = node['x-whiteboard'] ?? {}
-        const nextExtension =
-          Object.keys(merged).length === 0 ? extensionRest : { ...extensionRest, facets: merged }
-        const { 'x-whiteboard': _extension, ...nodeRest } = node
-        const nextNode = (
-          Object.keys(nextExtension).length === 0
-            ? nodeRest
-            : { ...nodeRest, 'x-whiteboard': nextExtension }
-        ) as SpatialNode
-        writeSpatialCanvas(doc, {
-          ...canvas,
-          nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
-        })
-        await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-        return { documentId: input.documentId, facets: merged }
+      // Every document is confirmed to be in the workspace before any of
+      // them is written. Each document is its own Loro doc with its own
+      // snapshot and there is no transaction across them, so writing as we
+      // go would leave a prefix of the batch tagged behind a thrown error —
+      // and the caller reading that error has no way to learn it happened.
+      for (const documentId of input.documentIds) {
+        await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, documentId)
       }
 
-      // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
-      // document has nodes and edges and no frontmatter to put one in, so a
-      // facet stored on one is metadata no reader of that format can surface
-      // — written, kept, and invisible.
-      //
-      // A document with no kind is allowed through and NOT declared: unlike
-      // an OKF content write this replaces nothing, so it has neither
-      // something to lose nor any evidence to offer about the format.
-      if (kind === 'spatial') {
-        throw new DocumentKindMismatchError(
-          input.documentId,
-          kind,
-          'Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass nodeId to set node-target facets, set them on the markdown document this one refers to, or write its content with wb_document_set.',
-        )
+      const updated: FacetSetOutput['updated'] = []
+      for (const documentId of input.documentIds) {
+        updated.push(await setOne(deps, input, documentId, sets, deletions))
       }
-
-      const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
-      for (const key of deletions) delete mergedFacets[key]
-      writeFacets(doc, mergedFacets)
-
-      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
-
-      return { documentId: input.documentId, facets: mergedFacets }
+      return { updated }
     },
   }
+}
+
+async function setOne(
+  deps: ServerDeps,
+  input: FacetSetInput,
+  documentId: string,
+  sets: Record<string, unknown>,
+  deletions: readonly string[],
+): Promise<FacetSetOutput['updated'][number]> {
+  const doc = await loadOrCreateDocument(deps, input.workspaceId, documentId)
+  const kind = readDocumentKind(doc)
+
+  if (input.nodeId !== undefined) {
+    const nodeId = input.nodeId
+    // A kind-less document (freshly created, nothing declared) has no
+    // canvas, so the node cannot exist — report THAT, rather than
+    // fabricating a kind for the mismatch message.
+    if (kind === undefined) {
+      throw new NodeNotFoundError(documentId, nodeId)
+    }
+    if (kind !== 'spatial') {
+      throw new DocumentKindMismatchError(
+        documentId,
+        kind,
+        "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document.",
+      )
+    }
+    const canvas = readSpatialCanvas(doc)
+    const node = canvas.nodes.find((candidate) => candidate.id === nodeId)
+    if (node === undefined) {
+      throw new NodeNotFoundError(documentId, nodeId)
+    }
+    const merged: ExtensionFacets = { ...node['x-whiteboard']?.facets, ...sets }
+    for (const key of deletions) delete merged[key]
+    const { facets: _replaced, ...extensionRest } = node['x-whiteboard'] ?? {}
+    const nextExtension =
+      Object.keys(merged).length === 0 ? extensionRest : { ...extensionRest, facets: merged }
+    const { 'x-whiteboard': _extension, ...nodeRest } = node
+    const nextNode = (
+      Object.keys(nextExtension).length === 0
+        ? nodeRest
+        : { ...nodeRest, 'x-whiteboard': nextExtension }
+    ) as SpatialNode
+    writeSpatialCanvas(doc, {
+      ...canvas,
+      nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
+    })
+    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+    return { documentId, facets: merged }
+  }
+
+  // A facet is OKF frontmatter (ADR-0009 decision 3). A JSON Canvas
+  // document has nodes and edges and no frontmatter to put one in, so a
+  // facet stored on one is metadata no reader of that format can surface
+  // — written, kept, and invisible.
+  //
+  // A document with no kind is allowed through and NOT declared: unlike
+  // an OKF content write this replaces nothing, so it has neither
+  // something to lose nor any evidence to offer about the format.
+  if (kind === 'spatial') {
+    throw new DocumentKindMismatchError(
+      documentId,
+      kind,
+      'Facets are OKF frontmatter, and a JSON Canvas document has none to hold them. Pass nodeId to set node-target facets, set them on the markdown document this one refers to, or write its content with wb_document_set.',
+    )
+  }
+
+  const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
+  for (const key of deletions) delete mergedFacets[key]
+  writeFacets(doc, mergedFacets)
+
+  await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+
+  return { documentId, facets: mergedFacets }
 }

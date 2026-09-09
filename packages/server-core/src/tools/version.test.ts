@@ -146,6 +146,19 @@ class RecordingNotifier implements CanvasClientNotifier {
   }
 }
 
+/** A second document in the same workspace, for the batch cases. */
+async function addDocument(deps: ServerDeps, documentId: string, path: string): Promise<string> {
+  const store = deps.documentStore as FakeDocumentStore
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, documentId, path)
+  await seedDoc(store, documentId, (doc) => {
+    writeSpatialCanvas(doc, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'other' }],
+      edges: [],
+    })
+  })
+  return documentId
+}
+
 async function setup(text = 'original') {
   const store = new FakeDocumentStore()
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID, PATH)
@@ -174,15 +187,19 @@ describe('wb_version_save', () => {
 
     const result = await createVersionSaveTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       label: 'before the risky edit',
     })
 
     expect(versions.saves).toEqual([
       { path: PATH, options: { auto: false, label: 'before the risky edit' } },
     ])
-    expect(result.documentId).toBe(DOCUMENT_ID)
-    expect(result.version).toMatchObject({ id: 'v1', path: PATH, label: 'before the risky edit' })
+    expect(result.saved[0]?.documentId).toBe(DOCUMENT_ID)
+    expect(result.saved[0]?.version).toMatchObject({
+      id: 'v1',
+      path: PATH,
+      label: 'before the risky edit',
+    })
   })
 
   test('tells a watching client, addressed by documentId, with the row it just saved', async () => {
@@ -190,12 +207,12 @@ describe('wb_version_save', () => {
 
     const result = await createVersionSaveTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       label: 'v1',
     })
 
     expect(notifier.versions).toEqual([
-      { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, version: result.version },
+      { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, version: result.saved[0]?.version },
     ])
   })
 
@@ -205,11 +222,49 @@ describe('wb_version_save', () => {
     await expect(
       createVersionSaveTool(deps).execute({
         workspaceId: 'ws-other',
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         label: 'v1',
       }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
     expect(versions.saves).toEqual([])
+  })
+
+  test('saves one version per document in a single call, in the order asked for', async () => {
+    // Axis B: the cost of checkpointing N documents was N calls, because the
+    // tool took one `documentId`. The label is shared rather than per
+    // document — one label across a set is what makes them ONE checkpoint,
+    // and a caller wanting different labels is asking for different saves.
+    const { deps, versions } = await setup()
+    const second = await addDocument(deps, '01H8XJZ9K5N4M3P2Q1R0S9T8V8', 'notes/other')
+
+    const result = await createVersionSaveTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID, second],
+      label: 'before the risky edit',
+    })
+
+    expect(versions.saves.map((save) => save.path)).toEqual([PATH, 'notes/other'])
+    expect(result.saved.map((entry) => entry.documentId)).toEqual([DOCUMENT_ID, second])
+  })
+
+  test('one document outside the workspace records NOTHING, not a prefix', async () => {
+    // The payoff of resolving every document before saving any. Without it
+    // the good document is checkpointed and the call still fails, so a
+    // caller who retries gets two rows for it — and cannot tell from the
+    // error that it happened.
+    const { deps, versions, notifier } = await setup()
+    const stranger = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+
+    await expect(
+      createVersionSaveTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, stranger],
+        label: 'v1',
+      }),
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
+
+    expect(versions.saves).toEqual([])
+    expect(notifier.versions).toEqual([])
   })
 })
 
@@ -217,8 +272,8 @@ describe('wb_version_list', () => {
   test("answers the history's rows for the document's path, newest first", async () => {
     const { deps } = await setup()
     const save = createVersionSaveTool(deps)
-    await save.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'first' })
-    await save.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'second' })
+    await save.execute({ workspaceId: WORKSPACE_ID, documentIds: [DOCUMENT_ID], label: 'first' })
+    await save.execute({ workspaceId: WORKSPACE_ID, documentIds: [DOCUMENT_ID], label: 'second' })
 
     const result = await createVersionListTool(deps).execute({
       workspaceId: WORKSPACE_ID,

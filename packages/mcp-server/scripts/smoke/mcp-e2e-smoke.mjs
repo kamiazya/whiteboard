@@ -510,17 +510,21 @@ async function main() {
   // spatial one refuses it.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId: named.documentId,
+    documentIds: [named.documentId],
     facets: { 'e2e.check/v1': { note: 'before-save' } },
   })
-  if (facets.documentId !== named.documentId) {
+  if (facets.updated[0]?.documentId !== named.documentId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
   console.log('[e2e] wb_facet_set → set on the markdown document')
 
   await expectToolError(
     'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e.check/v1': { note: 'nope' } } },
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      facets: { 'e2e.check/v1': { note: 'nope' } },
+    },
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
@@ -536,7 +540,7 @@ async function main() {
     'wb_facet_set',
     {
       workspaceId: WORKSPACE_ID,
-      documentId: named.documentId,
+      documentIds: [named.documentId],
       facets: { 'visual.edges/v0': { routing: 'spiral' } },
     },
     'with a canvas-target registered facet',
@@ -670,21 +674,21 @@ async function main() {
   // spatial document, then delete it with the null tombstone.
   const nodeFacet = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': { kind: 'hexagon' } },
   })
-  if (nodeFacet.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
+  if (nodeFacet.updated[0]?.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
     throw new Error(`wb_facet_set(nodeId) returned unexpected shape: ${JSON.stringify(nodeFacet)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → visual.shape set on a node')
   const nodeFacetCleared = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': null },
   })
-  if (Object.keys(nodeFacetCleared.facets ?? { leftover: true }).length !== 0) {
+  if (Object.keys(nodeFacetCleared.updated[0]?.facets ?? { leftover: true }).length !== 0) {
     throw new Error(`null tombstone did not delete: ${JSON.stringify(nodeFacetCleared)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → null tombstone deletes the facet')
@@ -692,33 +696,45 @@ async function main() {
   // replacing the bucket, which is what a second plugin's facet depends on.
   await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': { kind: 'ellipse' } },
   })
   const bothFacets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.symbol/v0': { kind: 'icon', name: 'star' } },
   })
   if (
-    bothFacets.facets?.['visual.symbol/v0']?.name !== 'star' ||
-    bothFacets.facets?.['visual.shape/v0']?.kind !== 'ellipse'
+    bothFacets.updated[0]?.facets?.['visual.symbol/v0']?.name !== 'star' ||
+    bothFacets.updated[0]?.facets?.['visual.shape/v0']?.kind !== 'ellipse'
   ) {
     throw new Error(`node facets did not merge: ${JSON.stringify(bothFacets)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → visual.symbol merges beside visual.shape')
   const bothCleared = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': null, 'visual.symbol/v0': null },
   })
-  if (Object.keys(bothCleared.facets ?? { leftover: true }).length !== 0) {
+  if (Object.keys(bothCleared.updated[0]?.facets ?? { leftover: true }).length !== 0) {
     throw new Error(`combined null tombstones did not delete: ${JSON.stringify(bothCleared)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → one call deletes both node facets')
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId, named.documentId],
+      nodeId: 'target',
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    },
+    'with a nodeId and several documentIds',
+    'nodeId names a node of ONE document',
+  )
+  console.log('[e2e] wb_facet_set → a nodeId across several documents is refused')
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(
@@ -1351,27 +1367,49 @@ async function main() {
   // answer is the panel's row shape.
   const saved = await callTool('wb_version_save', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     label: 'e2e',
   })
+  const savedRow = saved.saved[0]
   if (
-    saved.documentId !== documentId ||
-    !saved.version?.id ||
-    saved.version.label !== 'e2e' ||
-    saved.version.auto !== false ||
-    !saved.version.createdAt ||
-    saved.version.operator?.kind !== 'ai'
+    savedRow?.documentId !== documentId ||
+    !savedRow.version?.id ||
+    savedRow.version.label !== 'e2e' ||
+    savedRow.version.auto !== false ||
+    !savedRow.version.createdAt ||
+    savedRow.version.operator?.kind !== 'ai'
   ) {
     throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
   }
-  console.log(`[e2e] wb_version_save → ${saved.version.id}`)
+  console.log(`[e2e] wb_version_save → ${savedRow.version.id}`)
+
+  // Axis B on a write: one call, one shared label, two documents. The
+  // batch also proves the write lock nests without deadlocking, which no
+  // unit test of the tool alone can show.
+  const batchSaved = await callTool('wb_version_save', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId, named.documentId],
+    label: 'one checkpoint, two documents',
+  })
+  if (
+    batchSaved.saved.map((entry) => entry.documentId).join() !==
+    [documentId, named.documentId].join()
+  ) {
+    throw new Error(
+      `wb_version_save did not answer in the order asked: ${JSON.stringify(batchSaved.saved.map((entry) => entry.documentId))}`,
+    )
+  }
+  if (batchSaved.saved.some((entry) => entry.version.label !== 'one checkpoint, two documents')) {
+    throw new Error(`wb_version_save did not share the label: ${JSON.stringify(batchSaved.saved)}`)
+  }
+  console.log('[e2e] wb_version_save → two documents, one label, one call')
 
   // wb_version_list
   const listed = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
   if (
     listed.documentId !== documentId ||
     !Array.isArray(listed.versions) ||
-    !listed.versions.some((v) => v.id === saved.version.id)
+    !listed.versions.some((v) => v.id === savedRow.version.id)
   ) {
     throw new Error(`wb_version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
@@ -1381,12 +1419,12 @@ async function main() {
   const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    versionId: saved.version.id,
+    versionId: savedRow.version.id,
   })
   if (
     restored.mode !== 'in-place' ||
     restored.documentId !== documentId ||
-    restored.restoredVersionId !== saved.version.id ||
+    restored.restoredVersionId !== savedRow.version.id ||
     restored.label !== 'e2e'
   ) {
     throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
@@ -1398,7 +1436,7 @@ async function main() {
   const copied = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    versionId: saved.version.id,
+    versionId: savedRow.version.id,
     targetPath: 'e2e-restored-copy',
   })
   if (
@@ -1415,7 +1453,7 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      versionId: saved.version.id,
+      versionId: savedRow.version.id,
       targetPath: 'e2e-restored-copy',
     },
     'into a targetPath that already exists',
@@ -1448,7 +1486,7 @@ async function main() {
   })
   const treeVersion = await callTool('wb_version_save', {
     workspaceId: WORKSPACE_ID,
-    documentId: treeRoot.documentId,
+    documentIds: [treeRoot.documentId],
     label: 'e2e-subtree-point',
   })
   // Move the DESCENDANT away from the saved state. Asserting the rollback
@@ -1463,7 +1501,7 @@ async function main() {
   const rolledBack = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId: treeRoot.documentId,
-    versionId: treeVersion.version.id,
+    versionId: treeVersion.saved[0].version.id,
     subtree: true,
   })
   if (rolledBack.mode !== 'subtree' || rolledBack.restoredCount !== 2) {
@@ -1482,7 +1520,7 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId: treeRoot.documentId,
-      versionId: treeVersion.version.id,
+      versionId: treeVersion.saved[0].version.id,
       subtree: true,
       targetPath: 'e2e-tree-elsewhere',
     },

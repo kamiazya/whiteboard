@@ -136,19 +136,30 @@ describe('what an errand costs in tool calls', () => {
         requestBytes: 292,
         responseBytes: 3310,
       },
-      // Axis B on a write. One facet write per document, because
-      // `wb_facet_set` takes a single `documentId`.
+      // Axis B on a write, and the CONTRAST with the read above is the
+      // thing to read here. Both went down, hard:
+      //
+      //   tag 5:   calls 5 -> 1, request 735 -> 266, response 1135 -> 227
+      //   save 4:  calls 4 -> 1, request 532 -> 223, response  424 -> 106
+      //
+      // A bulk READ pays to say which document each answer belongs to, so
+      // its bytes went UP. A bulk WRITE with a SHARED payload — one label,
+      // one facets object — stops repeating that payload N times and its
+      // envelope collapses to one, so its bytes go down with its calls.
+      // The shape of the batch decides which happens, not the fact of
+      // batching, and that is exactly what the price column is for.
       'tag 5 documents': {
-        calls: 5,
-        requestBytes: 735,
-        responseBytes: 1135,
+        calls: 1,
+        requestBytes: 266,
+        responseBytes: 227,
       },
-      // Axis B on a different verb, which is the point of having it: the
-      // cost tracks the number of SUBJECTS, not anything about facets.
+      // The same shape on a different verb, which is the point of having
+      // it: the cost tracks the number of SUBJECTS, not anything about
+      // facets.
       'save a labelled version of 4 documents': {
-        calls: 4,
-        requestBytes: 532,
-        responseBytes: 424,
+        calls: 1,
+        requestBytes: 223,
+        responseBytes: 106,
       },
     })
   })
