@@ -118,19 +118,24 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 601,
-        wireBytes: 14851,
+        wireBytes: 15400,
         descriptionWords: 39,
         parameters: 2,
         undescribed: 2,
         strays: 'refused',
         names: [],
       },
+      // +817 when the text anchor's fields were described: the lane's one
+      // refusal on this tool was a model omitting `start`/`end`, and the
+      // anchor is emitted here and in wb_thread_edit's anchor union. The
+      // C3 case ADR-0030 §3b pays for: described because a model guessed,
+      // not because a column said so.
       wb_body_edit: {
-        visibleBytes: 1846,
-        wireBytes: 16764,
+        visibleBytes: 2663,
+        wireBytes: 18794,
         descriptionWords: 112,
         parameters: 18,
-        undescribed: 18,
+        undescribed: 7,
         strays: 'refused',
         names: [],
       },
@@ -145,7 +150,7 @@ describe('what the tool table costs to read', () => {
       // the stored two-variant union inlined eight times.
       wb_canvas_edit: {
         visibleBytes: 12898,
-        wireBytes: 31713,
+        wireBytes: 32926,
         descriptionWords: 169,
         parameters: 199,
         undescribed: 199,
@@ -237,11 +242,11 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_thread_edit: {
-        visibleBytes: 2826,
-        wireBytes: 3393,
+        visibleBytes: 3375,
+        wireBytes: 3942,
         descriptionWords: 122,
         parameters: 32,
-        undescribed: 32,
+        undescribed: 25,
         strays: 'refused',
         names: [],
       },
@@ -329,11 +334,12 @@ describe('what the tool table costs to read', () => {
       // -1,912 when the model's integer fields stopped emitting safe-integer
       // bounds (see wb_canvas_edit): the first cut that took nothing away
       // from what a model can do.
-      // -1,320 for wb_canvas_edit's flat write-side extension.
-      visibleBytes: 33251,
-      wireBytes: 95112,
+      // -1,320 for wb_canvas_edit's flat write-side extension; +1,366 for
+      // the text anchor and the body change described (see wb_body_edit).
+      visibleBytes: 34617,
+      wireBytes: 99453,
       parameters: 317,
-      undescribed: 283,
+      undescribed: 265,
     })
   })
 

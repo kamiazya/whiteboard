@@ -110,7 +110,7 @@ export type ProposedChangeStatus = z.infer<typeof proposedChangeStatusSchema>
 /** What every change carries regardless of verb: its own identity and its verdict. */
 const changeIdentity = {
   /** The change's own id — what an Adopt or a Dismiss names. */
-  id: annotationIdSchema,
+  id: annotationIdSchema.describe('Your id for this change; any short unique string.'),
   status: proposedChangeStatusSchema,
 } as const
 
@@ -171,9 +171,13 @@ export const bodyReplaceChangeSchema = z
   .object({
     ...changeIdentity,
     op: z.literal('body.replace'),
-    anchor: textAnchorSchema,
-    text: z.string(),
-    assumed: z.string(),
+    anchor: textAnchorSchema.describe('Which passage to replace.'),
+    text: z.string().describe('What the passage becomes; empty deletes it.'),
+    assumed: z
+      .string()
+      .describe(
+        'What the passage said when you wrote this; refused by name if it has changed since.',
+      ),
   })
   .strict()
 

@@ -269,8 +269,8 @@ retired; integer bounds gone):
 | tool errors | 3 | **0** |
 | cost of the run | $0.70 | $0.56 |
 | tools | 18 | 17 |
-| model-visible bytes | 34,960 | 33,251 |
-| undescribed parameters | 299 | 283 |
+| model-visible bytes | 34,960 | 33,251 (34,617 once the text anchor was described, below) |
+| undescribed parameters | 299 | 283 (265) |
 
 Every task that had wandered now takes the two calls its errand needs (a
 search to find the document, one read or write), and the table a model
@@ -290,6 +290,7 @@ with the wrong anchor shape.
 | `additionalProperties: false` on every tool (C10) | +464 | a stray key refused instead of dropped |
 | `tags` on `wb_facet_set`, all parameters described | +1,122 | a tool for "tag this note" |
 | the search filter standing alone, all parameters described | +379 | one call for "every document tagged X" |
+| the text anchor and the body change described (`wb_body_edit`, and `wb_thread_edit`'s anchor union) | +1,366 | the passage-edit task: 1 refusal in 2 trials before, 0 in 3 after — the first C3 payment made on evidence |
 
 **What did not work, so nobody tries it twice.** `$ref`/`$defs`
 deduplication is the obvious cut for `wb_canvas_edit` (the node union is
