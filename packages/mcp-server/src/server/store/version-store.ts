@@ -1,5 +1,4 @@
-import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import {
   autoVersionsOverCap,
   MAX_AUTO_PER_DOCUMENT,
@@ -15,19 +14,17 @@ import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
 import { getDataDir } from '../config.js'
-import { getLogger } from '../log.js'
 import {
   validateBranchName,
   validateDocumentPath,
   validateVersionId,
   validateWorkspaceId,
 } from '../validators.js'
-import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
+import { corruptStoredData } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
-import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Loro-native versioning, backed by the sqlite metadata DB.
@@ -40,8 +37,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 // and returns an independent past-state doc without touching the live cache
 // entry. CRDT history cannot be forgotten, so route-level restore writes
 // reverse ops on top of the live doc rather than overwriting it.
-
-const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 
 // z.infer of the shared wire schema, not a hand-written twin: a separately
 // written interface beside a Zod schema is the drift recipe the Zod
@@ -82,8 +77,6 @@ export interface VersionStore {
   // version another document owns — the refusal `loadPast` and restore
   // already make, for the same reason: an id alone must not reach a history
   // that is not this document's.
-  saveThumbnail(workspaceId: string, path: string, id: string, bytes: Uint8Array): Promise<void>
-  loadThumbnail(workspaceId: string, path: string, id: string): Promise<Uint8Array | null>
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -93,6 +86,13 @@ export interface VersionStore {
   // Public API used when creating branches from a version id.
   // Returns null only when the version is missing.
   getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
+  // Does the newest checkpoint of this document already hold the state the
+  // record is in? The scheduler asks the keeper rather than comparing
+  // frontiers itself, because a version's frontier is taken in THIS store's
+  // space (the workspace record's) and the doc a scheduler holds is the
+  // document's own projection — compared across that boundary they are
+  // never equal. False where there is no version yet, or no such document.
+  isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean>
   // Rewrite branchName from oldName to newName for all versions of the given
   // path. Returns the number of rewritten rows.
   renameBranchInVersions(
@@ -112,22 +112,8 @@ export interface VersionStore {
   ): Promise<{ deletedCount: number; deletedIds: string[] }>
 }
 
-function blobsRoot(): string {
+function _blobsRoot(): string {
   return join(getDataDir(), 'blobs')
-}
-
-function versionsBlobDir(workspaceId: string): string {
-  validateWorkspaceId(workspaceId)
-  const dir = join(blobsRoot(), workspaceId, 'versions')
-  return assertPathWithinDir(dir, blobsRoot(), 'version path')
-}
-
-// Exported so document-store's deleteDocument can unlink a canvas's version
-// thumbnails without duplicating this path join.
-export function thumbnailPath(workspaceId: string, id: string): string {
-  validateVersionId(id)
-  const dir = versionsBlobDir(workspaceId)
-  return assertPathWithinDir(join(dir, `${id}.png`), dir, 'version path')
 }
 
 function bytesToBase64(bytes: Uint8Array): string {
@@ -156,7 +142,6 @@ interface VersionRow {
   operatorWorkspaceId: string | null
   elementCount: number
   frontiers: string
-  hasThumbnail: number
   createdAt: number
   restoredFrom: string | null
   // The store hydrates this from the documents row at list time so callers
@@ -182,7 +167,6 @@ function rowToEntry(row: VersionRow): VersionEntry {
     elementCount: row.elementCount,
     auto: row.auto === 1,
     branchName: row.branchName,
-    hasThumbnail: row.hasThumbnail === 1,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
     ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
@@ -264,13 +248,12 @@ export class FileVersionStore implements VersionStore {
           operatorWorkspaceId: operator?.workspaceId ?? null,
           elementCount,
           frontiers,
-          hasThumbnail: 0,
           createdAt,
           restoredFrom: opts.restoredFrom ?? null,
         })
         .execute()
 
-      await this.prune(workspaceId, documentId)
+      await this.prune(documentId)
 
       return {
         id,
@@ -279,7 +262,6 @@ export class FileVersionStore implements VersionStore {
         elementCount,
         auto: opts.auto,
         branchName,
-        hasThumbnail: false,
         ...(opts.label !== undefined ? { label: opts.label } : {}),
         ...(operator !== undefined ? { operator } : {}),
         ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
@@ -367,73 +349,6 @@ export class FileVersionStore implements VersionStore {
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
 
-  /**
-   * Whether `id` is a version of the document at `path` — the one place the
-   * picture routes ask it, so a read and a write cannot come to different
-   * answers about who owns a version.
-   */
-  private async ownsVersion(workspaceId: string, path: string, id: string): Promise<boolean> {
-    validateWorkspaceId(workspaceId)
-    validateDocumentPath(path)
-    const db = await dbReady()
-    const documentId = await this.resolveDocumentId(db, workspaceId, path)
-    if (!documentId) return false
-    const row = await db
-      .selectFrom('versions')
-      .select(['id'])
-      .where('workspaceId', '=', workspaceId)
-      .where('documentId', '=', documentId)
-      .where('id', '=', id)
-      .executeTakeFirst()
-    return row !== undefined
-  }
-
-  async saveThumbnail(
-    workspaceId: string,
-    path: string,
-    id: string,
-    bytes: Uint8Array,
-  ): Promise<void> {
-    validateVersionId(id)
-    if (bytes.byteLength > MAX_THUMBNAIL_BYTES) {
-      throw new Error(`Thumbnail exceeds ${MAX_THUMBNAIL_BYTES} byte limit (${bytes.byteLength})`)
-    }
-    // Verify the version belongs to this DOCUMENT before writing the PNG.
-    // Doing it the other way around would leave an orphan blob on disk for
-    // any id that doesn't match (wrong document, deleted version, hostile
-    // input) — the UPDATE would simply match zero rows and resolve while the
-    // file sat at blobs/{ws}/versions/{id}.png with no DB pointer.
-    if (!(await this.ownsVersion(workspaceId, path, id))) {
-      throw new Error(`version "${id}" not found at "${path}" in workspace "${workspaceId}"`)
-    }
-    const db = await dbReady()
-    const blobPath = thumbnailPath(workspaceId, id)
-    await mkdir(dirname(blobPath), { recursive: true })
-    await writeFile(blobPath, bytes)
-    await db.updateTable('versions').set({ hasThumbnail: 1 }).where('id', '=', id).execute()
-  }
-
-  async loadThumbnail(workspaceId: string, path: string, id: string): Promise<Uint8Array | null> {
-    // The path is built FIRST, because building it is what asserts the id
-    // cannot escape `blobs/` — the second line of defence behind
-    // validateVersionId, and it has to fire on a hostile id whether or not
-    // any version owns it.
-    const blobPath = thumbnailPath(workspaceId, id)
-    // Absent, not refused: a picture this document does not own reads the
-    // same to a caller as one that was never taken, which is what
-    // `loadPast`'s `null` already says for the state itself.
-    if (!(await this.ownsVersion(workspaceId, path, id))) return null
-    try {
-      const bytes = await readFile(blobPath)
-      return new Uint8Array(bytes)
-    } catch (error) {
-      if (isMissingFileError(error)) {
-        return null
-      }
-      throw corruptStoredData(blobPath, `failed to read version thumbnail (${errorMessage(error)})`)
-    }
-  }
-
   async renameBranchInVersions(
     workspaceId: string,
     path: string,
@@ -486,19 +401,6 @@ export class FileVersionStore implements VersionStore {
       .where('documentId', '=', documentId)
       .where('id', 'in', toDelete)
       .execute()
-    for (const id of toDelete) {
-      const blobPath = thumbnailPath(workspaceId, id)
-      try {
-        await unlink(blobPath)
-      } catch (err) {
-        if (!isMissingFileError(err)) {
-          getLogger('version-store prune-sandwiched').error(
-            { path, err: err as Error },
-            'failed to remove thumbnail',
-          )
-        }
-      }
-    }
     return { deletedCount: toDelete.length, deletedIds: toDelete }
   }
 
@@ -513,6 +415,44 @@ export class FileVersionStore implements VersionStore {
       .where('id', '=', id)
       .executeTakeFirst()
     return row?.frontiers ?? null
+  }
+
+  /**
+   * Both halves in this store's own space, which is what makes the answer
+   * mean anything: the frontier is read the same way `save` reads it, off
+   * the STORED workspace record, and compared against a row this same
+   * expression wrote.
+   *
+   * The frontier is the WORKSPACE record's, so an edit to a sibling
+   * document moves it too and this answers false for a document nothing
+   * touched. That costs at most one extra checkpoint, and only for a
+   * document that was signalled anyway — the error runs toward taking one,
+   * which is the safe direction for a question about whether to record
+   * where somebody stopped.
+   */
+  async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
+    validateWorkspaceId(workspaceId)
+    validateDocumentPath(path)
+    const db = await dbReady()
+    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
+      workspaceId,
+    )
+    if (storedWorkspace === null) return false
+    const documentId = resolveWorkspaceDocument(storedWorkspace, path)?.documentId
+    if (documentId === undefined) return false
+    const row = await db
+      .selectFrom('versions')
+      .select(['frontiers'])
+      // Newest first, with the id as the tie-break the rest of this store
+      // already orders by — two rows can share a millisecond.
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst()
+    if (row === undefined) return false
+    return row.frontiers === bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
   }
 
   async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {
@@ -552,7 +492,7 @@ export class FileVersionStore implements VersionStore {
     return resolveWorkspaceDocument(storedWorkspace, path)?.documentId ?? null
   }
 
-  private async prune(workspaceId: string, documentId: string): Promise<void> {
+  private async prune(documentId: string): Promise<void> {
     const db = await dbReady()
     const autos = await db
       .selectFrom('versions')
@@ -583,18 +523,5 @@ export class FileVersionStore implements VersionStore {
       .where('documentId', '=', documentId)
       .where('id', 'in', toRemove)
       .execute()
-    for (const id of toRemove) {
-      const blobPath = thumbnailPath(workspaceId, id)
-      try {
-        await unlink(blobPath)
-      } catch (error) {
-        if (!isMissingFileError(error)) {
-          getLogger('version-store prune').error(
-            { path: blobPath, err: error as Error },
-            'failed to remove thumbnail',
-          )
-        }
-      }
-    }
   }
 }

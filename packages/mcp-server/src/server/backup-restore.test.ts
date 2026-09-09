@@ -68,19 +68,12 @@ async function seedDataDir(dir: string): Promise<{
   const fileBytes = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
   await writeFile(join(dir, 'session1', 'files', 'file-001.png'), fileBytes)
 
-  // Version metadata + thumbnail.
+  // Version metadata.
   const versions = new FileVersionStore()
   const created = await versions.save('session1', 'canvas-a', doc, {
     auto: false,
     label: 'drill-seed',
   })
-  await versions.saveThumbnail(
-    'session1',
-    'canvas-a',
-    created.id,
-    new Uint8Array([0x01, 0x02, 0x03]),
-  )
-
   return {
     canvasElements: list.toJSON() as { id: string; type: string }[],
     fileBytes,
@@ -130,9 +123,6 @@ describe('backup-restore drill', () => {
       const versions = new FileVersionStore()
       const list = await versions.list('session1', 'canvas-a')
       expect(list.find((v) => v.id === seeded.versionId)?.label).toBe('drill-seed')
-      const thumb = await versions.loadThumbnail('session1', 'canvas-a', seeded.versionId)
-      expect(thumb).not.toBeNull()
-      expect(Array.from(thumb ?? new Uint8Array())).toEqual([0x01, 0x02, 0x03])
     } finally {
       await rm(roots.root, { recursive: true, force: true })
     }

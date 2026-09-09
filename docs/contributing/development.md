@@ -172,7 +172,7 @@ Default regression triple after a change:
 
 ```bash
 pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
-pnpm typecheck   # tsc --noEmit (~10s)
+pnpm typecheck   # tsc --noEmit (~21s across all 17 packages)
 pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 ```
 

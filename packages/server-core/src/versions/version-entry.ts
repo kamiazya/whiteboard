@@ -29,7 +29,6 @@ export const versionEntrySchema = z.object({
   label: z.string().optional(),
   auto: z.boolean(),
   operator: operatorInfoSchema.optional(),
-  hasThumbnail: z.boolean(),
   branchName: z.string(),
   /**
    * The version this point was produced by RESTORING, when it was.

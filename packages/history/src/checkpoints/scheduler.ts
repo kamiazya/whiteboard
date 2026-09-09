@@ -41,6 +41,31 @@ export interface CheckpointSchedulerOptions<Entry> {
   /** Writes the checkpoint. */
   readonly save: (workspaceId: string, path: string, doc: LoroDoc) => Promise<Entry>
   /**
+   * Does the newest STORED checkpoint already hold this document's state?
+   *
+   * Asked of the keeper rather than computed here, and that is the whole
+   * point of the seam. A version's frontier is taken in the KEEPER's space
+   * — the daemon records the workspace record's, while the doc handed to
+   * this scheduler is the document's own projection — so a frontier
+   * compared across that boundary is never equal, and a check built that
+   * way silences nothing while looking exactly like a fix. Measured:
+   * `AYPC6OzMtsaDwwEE` against `Af+cpbverqm6Tyo=` for one unchanged
+   * document.
+   *
+   * Why the in-memory answer below cannot stand alone: it is EMPTY after a
+   * restart or a reload, so a reconnecting client replaying ops the record
+   * already carries (a CRDT no-op, and the update path signals on every
+   * message regardless) takes a checkpoint over a document nothing changed
+   * in. And it is STALE after any save this scheduler did not make — a
+   * person's own bookmark, a restore — so the next checkpoint duplicates
+   * it. Neither row is a point anybody could come back to; both are noise
+   * in the list they read.
+   *
+   * Optional because only a keeper can answer it and a caller may have no
+   * store at all; absent, the in-memory check is all there is, as before.
+   */
+  readonly alreadyCheckpointed?: (workspaceId: string, path: string) => Promise<boolean>
+  /**
    * Called when a checkpoint actually lands. The trigger does not answer its
    * caller with an entry — the save happens long after the update that
    * signalled it — so this is how a broadcast reaches the surfaces watching.
@@ -79,12 +104,35 @@ export function createCheckpointScheduler<Entry>(
   const savedAt = new Map<string, string>()
   const inFlight = new Set<Promise<unknown>>()
 
+  /**
+   * A keeper that cannot answer must not silence the checkpoint: a thrown
+   * read answers "no" and the save goes ahead, because a duplicate row is a
+   * smaller harm than the pause a person stopped at going unrecorded.
+   */
+  async function alreadyCheckpointed(workspaceId: string, path: string): Promise<boolean> {
+    if (options.alreadyCheckpointed === undefined) return false
+    try {
+      return await options.alreadyCheckpointed(workspaceId, path)
+    } catch {
+      return false
+    }
+  }
+
   async function take(workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
     const key = `${workspaceId}/${path}`
     // Encoding a frontier is free (measured at 0ms), so the "has anything
     // changed" question costs nothing and a quiet document writes no row.
     const now = frontiersToBase64(doc.oplogFrontiers())
     if (savedAt.get(key) === now) return
+
+    // Memory said nothing, so ask the rows. A read per checkpoint is
+    // nothing beside the save it guards — checkpoints land at a pause, not
+    // per edit — and it is the only answer that survives a restart or a
+    // save some other path made.
+    if (await alreadyCheckpointed(workspaceId, path)) {
+      savedAt.set(key, now)
+      return
+    }
 
     const entry = await options.save(workspaceId, path, doc)
     // Recorded only after the save succeeded: a failed checkpoint must leave

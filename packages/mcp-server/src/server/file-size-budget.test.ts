@@ -363,3 +363,47 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
     expect(missing).toEqual([])
   })
 })
+
+/**
+ * This guard scans `apps/web/src` (and every `packages/*` and `tools/*`) while
+ * living in mcp-server, so the natural local run for a web change — the
+ * `web-jsdom` / `web-browser` projects — does not include it. Twice in one
+ * session that produced the same push: green locally, red in CI on a file
+ * this guard had been watching all along.
+ *
+ * `.claude/rules/app-web.md` had already said to run it by hand alongside the
+ * web guards. That is a prose rung, and being written down is what it can do —
+ * it cannot notice being forgotten. So pre-push runs it, and it costs the gate
+ * nothing: across two real `lefthook run pre-push` runs this took 10.71s and
+ * 7.74s, and each run's total equalled the `pnpm -r typecheck` beside it to the
+ * centisecond. The equality is the claim worth keeping — the reading itself
+ * swings ~40% with contention. That is why a guard whose failure CI would catch
+ * anyway is still worth a local rung.
+ *
+ * Asserted here rather than in a test about lefthook, because this is the file
+ * that knows WHY the entry has to exist — and the path is derived from
+ * `import.meta.url` so moving this file fails loudly instead of leaving the
+ * lefthook line pointing at nothing.
+ */
+describe('the budget guard is reachable before a push, not only in CI', () => {
+  function prePushCommands(): string[] {
+    const text = readFileSync(join(REPO_ROOT, 'lefthook.yml'), 'utf8')
+    const start = text.indexOf('\npre-push:')
+    if (start === -1) throw new Error('lefthook.yml has no `pre-push:` block')
+    const rest = text.slice(start + 1)
+    const nextTopLevel = rest.slice('pre-push:'.length).search(/\n(?=[A-Za-z_-]+:)/)
+    const block = nextTopLevel === -1 ? rest : rest.slice(0, 'pre-push:'.length + nextTopLevel)
+    return [...block.matchAll(/^ {6}run: (.+)$/gm)].map((match) => match[1].trim())
+  }
+
+  // A scan that stops matching reports its subject as satisfied — the same
+  // shape as a passing run. Checked before anything is concluded from it.
+  it('reads the pre-push block', () => {
+    expect(prePushCommands().length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('is run by a pre-push command', () => {
+    const self = relativeToRepo(fileURLToPath(import.meta.url))
+    expect(prePushCommands().filter((command) => command.includes(self))).toHaveLength(1)
+  })
+})

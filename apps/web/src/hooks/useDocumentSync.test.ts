@@ -115,7 +115,6 @@ function versionCreatedPayload(
     createdAt: '2026-01-01T00:00:00.000Z',
     elementCount: 3,
     auto: false,
-    hasThumbnail: false,
     branchName: 'main',
     ...overrides,
   }

@@ -70,7 +70,6 @@ class FakeVersionHistory implements VersionHistory {
       createdAt: new Date(this.next * 1000).toISOString(),
       elementCount: readSpatialCanvas(doc).nodes.length,
       auto: options.auto,
-      hasThumbnail: false,
       branchName: options.branchName ?? 'main',
       ...(options.label === undefined ? {} : { label: options.label }),
       ...(options.operator === undefined ? {} : { operator: options.operator }),

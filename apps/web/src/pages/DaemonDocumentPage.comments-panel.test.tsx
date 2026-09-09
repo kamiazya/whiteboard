@@ -343,8 +343,6 @@ describe('DaemonDocumentPage comments panel', () => {
         throw new Error('not exercised by this test')
       },
       restore: async () => {},
-      putThumbnail: async () => {},
-      loadThumbnail: async () => null,
     }
     await act(async () => {
       render(
@@ -424,8 +422,6 @@ describe('DaemonDocumentPage comments panel', () => {
         throw new Error('not exercised by this test')
       },
       restore: async () => {},
-      putThumbnail: async () => {},
-      loadThumbnail: async () => null,
     }
     await act(async () => {
       render(

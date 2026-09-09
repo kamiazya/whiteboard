@@ -48,7 +48,7 @@ import {
   type OutlineResponse,
 } from './layout-worker-protocol.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
-import { readRenderEntry, writeRenderEntry } from './render-store.js'
+import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -106,22 +106,6 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 const fontReady = ensureViewerFontLoaded()
 
 /**
- * How long a render has to take before storing it is worth the write.
- *
- * Measured in a real browser, medians of 15 interleaved rounds: an OPFS write
- * costs 2.2-3.1ms whatever the payload, while a render ranges from 2.0ms (a
- * 12-node spatial canvas) to 67.2ms (a 60-section markdown body). Below this
- * floor the store makes the FIRST visit slower to save less than a
- * millisecond on the second; above it the saving is the whole render.
- *
- * A floor rather than a per-pipeline rule because the cost is not a property
- * of the pipeline: a 400-node spatial canvas (19.9ms) clears it and a
- * four-section markdown body barely does. Timing the work that actually ran
- * is the only thing that stays true as either pipeline changes.
- */
-const STORE_FLOOR_MS = 5
-
-/**
  * Answers from the persistent tier when it holds this key, and says whether
  * it did.
  *
@@ -147,7 +131,7 @@ function remember(
   elapsedMs: number,
   reply: { readonly type: string; readonly id: number },
 ): void {
-  if (cacheKey === undefined || elapsedMs < STORE_FLOOR_MS) return
+  if (cacheKey === undefined || !worthStoring(elapsedMs)) return
   const { id: _id, ...rest } = reply
   // Not awaited: the reply is already posted, and a caller must never wait on
   // a cache. A write that loses its race with page teardown costs one

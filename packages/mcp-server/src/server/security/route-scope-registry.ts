@@ -106,11 +106,9 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['canvas:read'] }
   }
 
-  // Version history, thumbnails, restore, compact — version-control
-  // operations scoped to a single canvas.
-  if (
-    /^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|latest-thumbnail|compact)/.test(path)
-  ) {
+  // Version history, restore, compact — version-control operations scoped
+  // to a single canvas.
+  if (/^\/api\/workspaces\/[^/]+\/documents\/[^/]+\/(versions|compact)/.test(path)) {
     return { kind: 'scoped', scopes: [isWrite ? 'versions:write' : 'versions:read'] }
   }
 

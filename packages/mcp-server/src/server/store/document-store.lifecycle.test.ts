@@ -99,26 +99,21 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
   })
 
-  it('removes the tree entry, deletes version rows explicitly, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('removes the tree entry and deletes version rows explicitly, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
-    const { stat } = await import('node:fs/promises')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'canvas-a', doc)
     await saveDocument('session1', 'canvas-b', doc)
     const store = new FileVersionStore()
-    const version = await store.save('session1', 'canvas-a', doc, { auto: true })
-    await store.saveThumbnail('session1', 'canvas-a', version.id, new Uint8Array([1, 2, 3]))
+    await store.save('session1', 'canvas-a', doc, { auto: true })
 
     const db = await getDb(tempDir)
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
     const documentId = await resolveDocumentIdAtPath('session1', 'canvas-a')
     if (documentId === null) throw new Error('document missing from the tree')
     const libsqlStore = new LibsqlDocumentStore(db)
-
-    const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
-    await expect(stat(thumbPath)).resolves.toBeDefined()
 
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
 
@@ -139,7 +134,6 @@ describe('deleting a document', () => {
     expect(stored).not.toBeNull()
     expect(resolveWorkspaceDocumentById(stored!, documentId)).toBeNull()
     expect(readTrashEntries(stored!).map((t) => t.documentId)).toContain(documentId)
-    await expect(stat(thumbPath)).rejects.toThrow()
 
     const wsRow = await db
       .selectFrom('workspaces')
@@ -154,13 +148,12 @@ describe('deleting a document', () => {
 
   // The defect this closes: wbDocumentDelete removed the index row and the
   // Libsql bytes and stopped there, so a document an agent deleted left its
-  // thumbnails, its blob and a cached doc instance behind — while the same
-  // document deleted through the HTTP route did not. Both paths now run the
-  // same teardown, and this asserts on the FILES, not on the tool answering
+  // version rows and a cached doc instance behind — while the same document
+  // deleted through the HTTP route did not. Both paths now run the same
+  // teardown, and this asserts on what is LEFT, not on the tool answering
   // { deleted: true }, which it did throughout the whole defect.
   it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
-    const { stat } = await import('node:fs/promises')
     const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
     const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
     const { FsBlobStore } = await import('./fs/fs-blob-store.js')
@@ -174,7 +167,6 @@ describe('deleting a document', () => {
     await saveDocument('session1', 'agent-deleted', doc)
     const store = new FileVersionStore()
     const version = await store.save('session1', 'agent-deleted', doc, { auto: true })
-    await store.saveThumbnail('session1', 'agent-deleted', version.id, new Uint8Array([1, 2, 3]))
     // Populate the doc cache the way a read would, so eviction has something
     // to evict — otherwise this half of the assertion passes vacuously.
     // getDoc, not loadDocument: only the former goes through the LRU.
@@ -186,9 +178,6 @@ describe('deleting a document', () => {
     const documentId = await resolveDocumentIdAtPath('session1', 'agent-deleted')
     expect(documentId).not.toBeNull()
     if (documentId === null) throw new Error('unreachable')
-    const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
-    await expect(stat(thumbPath)).resolves.toBeDefined()
-
     await wbDocumentDelete(
       {
         documentStore: new LibsqlDocumentStore(db),
@@ -202,7 +191,12 @@ describe('deleting a document', () => {
       { workspaceId: 'session1', documentId },
     )
 
-    await expect(stat(thumbPath)).rejects.toThrow()
+    const survivors = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('id', '=', version.id)
+      .execute()
+    expect(survivors).toEqual([])
     expect(peekDoc('session1', 'agent-deleted')).toBeUndefined()
     expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
   })

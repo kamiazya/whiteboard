@@ -22,6 +22,7 @@ import { migration as snapshotGeneration } from './0020-snapshot-generation.js'
 import { migration as leases } from './0021-leases.js'
 import { migration as versionRestoredFrom } from './0022-version-restored-from.js'
 import { migration as dropBranches } from './0023-drop-branches.js'
+import { migration as dropVersionThumbnails } from './0024-drop-version-thumbnails.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -55,4 +56,5 @@ export const migrations: Record<string, Migration> = {
   '0021-leases': leases,
   '0022-version-restored-from': versionRestoredFrom,
   '0023-drop-branches': dropBranches,
+  '0024-drop-version-thumbnails': dropVersionThumbnails,
 }
