@@ -6,6 +6,7 @@ import {
   bundledPlugins,
   resolveCanvasEdgeStyle,
   resolveCanvasSymbol,
+  resolveCanvasTheme,
   resolveDocumentSymbol,
   resolveNodeShape,
   resolveNodeSymbol,
@@ -14,6 +15,7 @@ import {
   VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
   VISUAL_TEXT_KEY,
+  VISUAL_THEME_KEY,
   visualPlugin,
   visualSymbolFacetSchema,
 } from './data.js'
@@ -299,5 +301,43 @@ describe('visual.text/v0', () => {
         registry,
       ),
     ).toBeUndefined()
+  })
+})
+
+describe('visual.theme/v0', () => {
+  it('is a canvas-target facet whose payload names a registered theme asset', () => {
+    expect(VISUAL_THEME_KEY).toBe('visual.theme/v0')
+    expect(registry.targetsOf(VISUAL_THEME_KEY)).toEqual(['canvas'])
+    expect(registry.assetIds('themes')).toEqual(['visual.sketch', 'visual.neon'])
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.sketch' }).ok).toBe(true)
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.neon' }).ok).toBe(true)
+  })
+
+  it('refuses a theme no plugin registered, and a bare name', () => {
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.chalk' }).ok).toBe(false)
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'sketch' }).ok).toBe(false)
+  })
+
+  it('resolveCanvasTheme reads the facet and answers undefined without one', () => {
+    expect(
+      resolveCanvasTheme(
+        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'visual.neon' } } }),
+        registry,
+      ),
+    ).toBe('visual.neon')
+    expect(resolveCanvasTheme(canvasWith(undefined), registry)).toBeUndefined()
+    // A stored id from elsewhere is data: resolved, and left to the renderer to degrade.
+    expect(
+      resolveCanvasTheme(
+        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'infra.aws' } } }),
+        registry,
+      ),
+    ).toBe('infra.aws')
+  })
+
+  it('declares a segmented picker whose null segment is the bundled look', () => {
+    const facet = visualPlugin.facets.find((f) => f.name === 'theme')
+    const options = facet?.editor?.fields.theme?.options ?? []
+    expect(options.map((o) => o.value)).toEqual([null, 'visual.sketch', 'visual.neon'])
   })
 })
