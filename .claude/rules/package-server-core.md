@@ -59,3 +59,19 @@ paths:
   `ServerDeps`.
 - Importing `node:*` or DOM globals in this shared-layer package.
 - Adding a hand-written interface next to a Zod schema instead of `z.infer`.
+
+## Tool surface criteria (ADR-0030)
+
+A tool definition here is read by a model on every turn, so its cost and its
+clarity are measured, not argued. Before changing a tool's name, description,
+schema or existence, read `docs/contributing/adr/0030-tool-surface-criteria.md`
+— the numbered criteria, and which instrument checks each — and expect
+`packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts` to fail
+until its pinned row is updated with a line saying why it moved. A retirement
+or a consolidation also runs the LLM-driven lane
+(`pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface`) before and after.
+
+Two of the criteria are debt this package owns today: every input parameter
+carries a `.describe()` (299 do not), and a tool is registered with its Zod
+OBJECT rather than its `.shape`, so `.strict()` reaches the boundary and a
+typo'd key is refused rather than stripped (15 tools strip).
