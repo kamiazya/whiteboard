@@ -6,6 +6,7 @@ import { cleanup, render } from '@testing-library/react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { CommentsPanel } from './CommentsPanel.js'
+import { THREAD_MESSAGE_ACTION_CLASS } from './ThreadMessage.js'
 
 afterEach(cleanup)
 
@@ -367,8 +368,8 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
     />,
   )
   await userEvent.click(page.getByText('tighten the copy here'))
-  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
-  const box = page.getByRole('textbox', { name: 'Edit comment text' })
+  await userEvent.click(page.getByTestId('edit-m1'))
+  const box = page.getByRole('textbox', { name: 'Edit message text' })
   // `textContent`, not `toHaveValue`: the box is a CodeMirror view, so what
   // it holds is the text of its rendered lines and not a form value. Still
   // the load-bearing assertion of this test's first half — the editor has
@@ -379,8 +380,8 @@ it('rewrites the opening message from the rail, and an unchanged or emptied draf
   await userEvent.click(page.getByRole('button', { name: 'Save' }))
   expect(edits).toEqual([['t-open', 'm1', 'tighten the copy here, and the heading']])
 
-  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
-  await userEvent.fill(page.getByRole('textbox', { name: 'Edit comment text' }), '   ')
+  await userEvent.click(page.getByTestId('edit-m1'))
+  await userEvent.fill(page.getByRole('textbox', { name: 'Edit message text' }), '   ')
   // Emptying the subject no longer SAVES-as-cancel by accident: Save goes
   // inert, and the way out is Escape — the same key the reply draft and the
   // panel itself answer to.
@@ -397,7 +398,7 @@ it('offers neither verb on a host with no write path', async () => {
   render(<CommentsPanel threads={[OPEN]} />)
   await userEvent.click(page.getByText('tighten the copy here'))
   expect(page.getByRole('button', { name: 'Resolve' }).query()).toBeNull()
-  expect(page.getByRole('button', { name: 'Edit comment' }).query()).toBeNull()
+  expect(page.getByTestId('edit-m1').query()).toBeNull()
 })
 
 /**
@@ -557,18 +558,16 @@ it('keeps Edit on the opening message stamp line, not on a row of its own', asyn
   render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
   await userEvent.click(page.getByText('tighten the copy here'))
 
-  const edit = (
-    await page.getByRole('button', { name: 'Edit comment' }).element()
-  ).getBoundingClientRect()
+  // By id: every message carries this verb now, so a query by name matches
+  // one per message.
+  const edit = (await page.getByTestId('edit-m1').element()).getBoundingClientRect()
   const stamp = rectOf('#thread-t-open time')
-  // Beside the stamp it acts on, sharing its line — a 44px tap target sunk
-  // into an 11px row rather than pushing the conversation down by 44px.
+  // On the line of the stamp it acts on — a 44px tap target sunk into an
+  // 11px row rather than pushing the conversation down by 44px. WHERE on
+  // that line is the column claim below; what matters here is that the verb
+  // shares a line with its message instead of owning a row.
   expect(edit.left).toBeGreaterThan(stamp.right)
   expect(sharedRows(edit, stamp)).toBeGreaterThan(8)
-  // And NEXT to it. Pushed to the trailing edge of a full-width message the
-  // pencil stood 239px from the stamp with nothing in between, and what it
-  // acts on was anybody's guess — proximity is the only thing saying so.
-  expect(edit.left - stamp.right).toBeLessThan(24)
 })
 
 it('puts the reply field and its Send on one line', async () => {
@@ -669,4 +668,154 @@ it('leaves an open row unfilled, since the conversation under it is the state', 
   // failing in its own file.
   await page.getByRole('button', { name: 'All' }).hover()
   expect(getComputedStyle(row).backgroundColor).toBe('rgba(0, 0, 0, 0)')
+})
+
+/**
+ * A conversation is a list of messages and the first one is not special.
+ *
+ * The write door has taken a message id from the start
+ * (`onEditMessage(threadId, messageId, body)`) and the rail passed
+ * `messages[0].id` to it every time, so a reply — the thing a reader most
+ * often wants back, since it is the one they just typed — could not be
+ * corrected from any surface at all.
+ */
+it('rewrites any message in a conversation, not only the one that opened it', async () => {
+  const edits: { threadId: string; messageId: string; body: string }[] = []
+  render(
+    <CommentsPanel
+      threads={[OPEN]}
+      onEditMessage={(threadId, messageId, body) => edits.push({ threadId, messageId, body })}
+    />,
+  )
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  await userEvent.click(page.getByTestId('edit-m2'))
+  await userEvent.fill(page.getByRole('textbox', { name: 'Edit message text' }), 'agreed, and done')
+  await userEvent.click(page.getByRole('button', { name: 'Save' }))
+
+  expect(edits).toEqual([{ threadId: 't-open', messageId: 'm2', body: 'agreed, and done' }])
+})
+
+it('offers the same verb on every message, so none of them is the special one', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const verbs = document.querySelectorAll('#thread-t-open [data-testid^="edit-"]')
+  expect(verbs).toHaveLength(OPEN.messages.length)
+})
+
+it('rewrites one message at a time, leaving the rest of the conversation readable', async () => {
+  // Two editors open at once would be two drafts of one conversation, and
+  // the Escape that leaves an edit could only unwind one of them.
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  await userEvent.click(page.getByTestId('edit-m1'))
+  await userEvent.click(page.getByTestId('edit-m2'))
+
+  expect(document.querySelectorAll('[data-testid="comment-edit"]')).toHaveLength(1)
+})
+
+/**
+ * The verbs line up in a column.
+ *
+ * Beside its stamp is where this started, and with ONE message that was
+ * right — pushed to the trailing edge of a full-width message the pencil
+ * stood 239px from the only other thing on its line, and what it edited was
+ * a guess. Every message carries one now, and the stamps are different
+ * widths (`4s ago` against `9/5 21:29`), so following the stamp put the
+ * verbs at four different x positions down one short column. A column of
+ * per-row actions at the trailing edge is what a reader already knows from
+ * every list of rows with actions on them, and the row it belongs to is
+ * said by the line it shares.
+ */
+it('lines the message verbs up in one column rather than following each stamp', async () => {
+  const wide: CommentThread = {
+    ...OPEN,
+    id: 't-wide',
+    messages: [
+      // Stamps of deliberately different widths: an absolute date for the
+      // old one, a relative label for the fresh one.
+      { id: 'w1', body: 'started this a while back', createdAt: '2026-01-02T03:04:00.000Z' },
+      { id: 'w2', body: 'answered just now', createdAt: new Date().toISOString() },
+    ],
+  }
+  render(<CommentsPanel threads={[wide]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('started this a while back'))
+
+  const verbs = [...document.querySelectorAll('#thread-t-wide [data-testid^="edit-"]')].map(
+    (node) => node.getBoundingClientRect(),
+  )
+  expect(verbs).toHaveLength(2)
+  const stamps = [...document.querySelectorAll('#thread-t-wide time')].map((node) =>
+    node.getBoundingClientRect(),
+  )
+  // The stamps really do differ, or this test would pass over the defect.
+  expect(Math.abs((stamps[0]?.width ?? 0) - (stamps[1]?.width ?? 0))).toBeGreaterThan(4)
+  // The verbs do not.
+  expect(verbs[1]?.left ?? 0).toBeCloseTo(verbs[0]?.left ?? 0, 0)
+  // And each still shares the line of the stamp it acts on.
+  expect(sharedRows(verbs[0]!, stamps[0]!)).toBeGreaterThan(8)
+  expect(sharedRows(verbs[1]!, stamps[1]!)).toBeGreaterThan(8)
+})
+
+/**
+ * On a device with a pointer that can hover, a message's verb waits for it.
+ *
+ * A verb per message is a verb per message ALWAYS drawn, and four pencils
+ * down a short column is a lot of chrome for prose. Where a mouse exists
+ * the row can answer to it; where one does not — a phone, the surface this
+ * rail is a sheet on — nothing hovers, so the verb has to stay.
+ *
+ * `opacity`, not `hidden`: the button keeps its box, so the stamp line does
+ * not reflow as the pointer crosses it, and the button keeps its place in
+ * the tab order (the focus case below is what a keyboard reader gets).
+ */
+it('waits for the pointer before showing a message verb, where a pointer can hover', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const verb = await page.getByTestId('edit-m1').element()
+  // This runner has a real mouse: `(pointer: fine)` holds, which is the
+  // branch under test.
+  expect(window.matchMedia('(pointer: fine)').matches).toBe(true)
+  // What a READER can see, not what one element's own style says: the
+  // opacity is carried by the box around the button, so reading the
+  // button's own `opacity` answers 1 either way and the test would pass
+  // over the defect.
+  expect(verb.checkVisibility({ opacityProperty: true })).toBe(false)
+
+  // Hovering the PROSE, not the button: nobody aims at a control they
+  // cannot see, so a reveal that needed the pointer on the button itself
+  // would be an affordance no reader could find.
+  await page.getByText('tighten the copy here').nth(1).hover()
+  await vi.waitFor(() => expect(verb.checkVisibility({ opacityProperty: true })).toBe(true))
+
+  // And only that message's. A column that lit up whole would be back to
+  // always-drawn with extra steps.
+  const other = await page.getByTestId('edit-m2').element()
+  expect(other.checkVisibility({ opacityProperty: true })).toBe(false)
+})
+
+it('shows a message verb the keyboard reached, since a caret cannot hover', async () => {
+  render(<CommentsPanel threads={[OPEN]} onEditMessage={() => {}} />)
+  await userEvent.click(page.getByText('tighten the copy here'))
+
+  const verb = (await page.getByTestId('edit-m1').element()) as HTMLElement
+  expect(verb.checkVisibility({ opacityProperty: true })).toBe(false)
+  verb.focus()
+  await vi.waitFor(() => expect(verb.checkVisibility({ opacityProperty: true })).toBe(true))
+})
+
+it('keeps a message verb drawn where nothing can hover, which no runner here can emulate', () => {
+  // The coarse-pointer branch, asserted on the RULE rather than on a
+  // render: vitest's browser mode exposes no way to emulate `pointer:
+  // coarse` (the same limit `dock-button.ts` records for its 44px step), so
+  // a test that rendered and read an opacity would be reading the fine
+  // branch again and passing for the wrong reason. What is checkable is
+  // that the hiding is gated on the fine pointer at all — an ungated
+  // `opacity-0` would take the verb away from every phone.
+  const cls = THREAD_MESSAGE_ACTION_CLASS
+  expect(cls).toContain('pointer-fine:opacity-0')
+  expect(cls).not.toMatch(/(^|\s)opacity-0(\s|$)/)
 })

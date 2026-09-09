@@ -49,7 +49,7 @@ type Capability =
   | 'compose-on-document'
   | 'reply'
   | 'resolve-reopen'
-  | 'edit-opening-message'
+  | 'edit-message'
   | 'passage-drawn-in-place'
   | 'set-outline-drawn'
   | 'pin-drawn'
@@ -225,14 +225,19 @@ const PARITY = {
         'packages/server-core/src/tools/thread-edit.test.ts#resolves and reopens, and offers no way to remove — the ADR-0025 symmetry',
     },
   },
-  'edit-opening-message': {
+  // Named for the message rather than for the FIRST one since 2026-09-08:
+  // both writing surfaces edit any message of a conversation now. The
+  // opening message was special because the flat comment's `text` carries
+  // it and nothing else — a fact about the canvas projection, never about
+  // which messages a reader may correct.
+  'edit-message': {
     canvas: {
       pinnedBy:
-        'apps/web/src/components/spatial-editor/comment-edit.browser.test.tsx#the card Edit opens the compose bubble pre-filled; Ctrl+Enter commits set-comment-text',
+        'apps/web/src/components/spatial-editor/comment-edit.browser.test.tsx#rewrites a REPLY from the card, the message this surface could not reach',
     },
     rail: {
       pinnedBy:
-        'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx#rewrites the opening message from the rail, and an unchanged or emptied draft writes nothing',
+        'apps/web/src/components/annotations/CommentsPanel.browser.test.tsx#rewrites any message in a conversation, not only the one that opened it',
     },
     'markdown-source': { absent: RAIL_ANSWERS },
     'markdown-preview': { absent: RAIL_ANSWERS },

@@ -1255,3 +1255,76 @@ describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () 
     expect(table.bbox.y + table.bbox.h).toBeGreaterThanOrEqual(last.bbox.y + last.bbox.h)
   })
 })
+
+/**
+ * A task list draws a CHECKBOX where a bullet would go.
+ *
+ * It drew nothing at all: `checked` suppressed the bullet (right — a bullet
+ * beside a checkbox is two glyphs for one marker) and put nothing in its
+ * place, so `- [ ] ship it` rendered as bare prose with no marker on every
+ * surface that draws markdown through this layout — a node's body, the
+ * preview pane, a comment, the widget, and the export.
+ *
+ * Rects, not a glyph: measured against the vendored export face (ADR-0011),
+ * U+2713 / U+2714 / U+2610 / U+2611 each render with exactly the ink of a
+ * private-use code point that certainly does not exist (296 against a blank
+ * control of 0 and an `A` of 363) — the face has none of them, so a
+ * character checkbox exports as a tofu box. A path would scale wrongly
+ * instead: `scaleScene` deliberately leaves `svgFragment` content alone.
+ */
+describe('layoutMdastBlocks — task list markers', () => {
+  const taskList = (checked: boolean | undefined): MdastRoot => ({
+    type: 'root',
+    children: [
+      {
+        type: 'list',
+        ordered: false,
+        children: [
+          {
+            type: 'listItem',
+            ...(checked === undefined ? {} : { checked }),
+            children: [{ type: 'paragraph', children: [{ type: 'text', value: 'ship it' }] }],
+          },
+        ],
+      },
+    ],
+  })
+
+  const itemOf = (root: MdastRoot) => {
+    const blocks = layoutMdastBlocks(root, options).nodes
+    const list = blocks.find((block) => block.kind === 'list')
+    if (list?.kind !== 'list') throw new Error('no list')
+    const item = list.items[0]
+    if (item === undefined) throw new Error('no item')
+    return item
+  }
+
+  const shapesOf = (item: ReturnType<typeof itemOf>) =>
+    item.children.filter((child) => child.kind === 'shape')
+  const markerText = (item: ReturnType<typeof itemOf>) =>
+    item.children
+      .filter((child) => child.kind === 'textRun')
+      .map((child) => (child.kind === 'textRun' ? child.text : ''))
+
+  it('draws an empty box for an unticked item, in the gutter a bullet would use', () => {
+    const item = itemOf(taskList(false))
+    const shapes = shapesOf(item)
+    expect(shapes).toHaveLength(1)
+    // Left of the content edge, like the bullet it replaces.
+    expect(shapes[0]?.bbox.x).toBeLessThan(0)
+    // And no bullet beside it: one marker per item.
+    expect(markerText(item)).not.toContain('•')
+  })
+
+  it('fills the box for a ticked item, so the two states differ in ink and not only in name', () => {
+    const unticked = shapesOf(itemOf(taskList(false)))
+    const ticked = shapesOf(itemOf(taskList(true)))
+    expect(ticked.length).toBeGreaterThan(unticked.length)
+  })
+
+  it('leaves an ordinary bullet alone', () => {
+    const item = itemOf(taskList(undefined))
+    expect(shapesOf(item)).toHaveLength(0)
+    expect(markerText(item)).toContain('•')
+  })
+})

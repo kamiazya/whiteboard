@@ -76,27 +76,9 @@ it('"Comment here" beside a node opens the draft in a free quadrant, not over th
   expect(origin).toEqual({ x: expected.x, y: expected.y })
 })
 
-it('editing a comment opens the draft over its drawn bubble, in the same quadrant', async () => {
-  const { container } = render(<Host canvas={start} />)
-  const root = rootOf(container)
-  await waitForContent(container, 'about this spot')
-  const bubble = container.querySelector(
-    '[data-testid="canvas-content"] [data-wb-key="c-free/bubble"] rect',
-  ) as SVGRectElement
-  const bubbleTop = Number.parseFloat(bubble.getAttribute('y') ?? 'NaN')
-  // The drawn bubble is above the anchor (the node holds down-right)...
-  expect(bubbleTop).toBeLessThan(300)
-
-  // Through the context menu, which reaches the editor without opening the
-  // card first — the subject here is where the DRAFT lands, and the card
-  // would only add a step between the press and it.
-  const r = root.getBoundingClientRect()
-  fireEvent.contextMenu(root, { clientX: r.left + 300, clientY: r.top + 300, button: 2 })
-  await userEvent.click(page.getByRole('menuitem', { name: 'Edit comment' }))
-  await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
-  // ...and so is the draft that replaces it.
-  expect(composeOrigin().y).toBeLessThan(300)
-})
+// The case that asked where an EDIT bubble opens went with the edit bubble
+// itself (2026-09-08): a comment's text is rewritten on its message now, in
+// the card, so nothing opens a draft over a drawn bubble any more.
 
 it('the drag preview starts exactly on the drawn chrome, so pressing a pin does not jump the bubble', async () => {
   const { container } = render(<Host canvas={start} />)

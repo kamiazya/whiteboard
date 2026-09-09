@@ -101,7 +101,6 @@ function commandTargetKey(command: EditorCommand): string {
       return `comment:${command.comment.id}`
     case 'set-comment-resolved':
     case 'move-comment':
-    case 'set-comment-text':
       return `comment:${command.id}`
     case 'reply-to-thread':
       // Keyed by MESSAGE, not by thread. Every other key here dedupes to the
@@ -407,8 +406,7 @@ function writeCommandTarget(
     }
     case 'create-comment':
     case 'set-comment-resolved':
-    case 'move-comment':
-    case 'set-comment-text': {
+    case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (!comment) return false
@@ -541,7 +539,6 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.comment.id) ?? false
     case 'set-comment-resolved':
     case 'move-comment':
-    case 'set-comment-text':
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
@@ -582,8 +579,7 @@ function writeSubCommand(
     }
     case 'create-comment':
     case 'set-comment-resolved':
-    case 'move-comment':
-    case 'set-comment-text': {
+    case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (comment) writer.writeComment(comment)
