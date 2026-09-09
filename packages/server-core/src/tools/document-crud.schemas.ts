@@ -54,7 +54,7 @@ export const wbDocumentCreateInputSchema = z
           .string()
           .optional()
           .describe(
-            'The document, as OKF Markdown — frontmatter and body. Optional; without it the document is created empty, which is what a caller wants when the content comes from somewhere else. Supplying it here saves the separate `wb_document_set` that every "create a note" flow otherwise needs.',
+            'The document, as OKF Markdown — frontmatter and body. Optional; without it the document is created empty, which is what a caller wants when the content comes from somewhere else. Supplying it here saves the separate `document.set` op that every "create a note" flow otherwise needs.',
           ),
         actor: okfActorSchema
           .optional()

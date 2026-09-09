@@ -77,7 +77,7 @@ A wall of LOWs buries the HIGHs — do not inflate. A false HIGH wastes triage; 
 
 For each `triaged.items[i]`:
 - `track: "task"` → `TaskCreate` on the live board (set `blockedBy`/`relatedTo` from the item). Do soon.
-- `track: "issue"` → a whiteboard document with `type: issue` (`wb_document_create` + `wb_document_set`; see the `ticketing` skill). Durable backlog.
+- `track: "issue"` → a whiteboard document with `type: issue` (`wb_workspace_edit`'s `document.create` op; see the `ticketing` skill). Durable backlog.
 - **Skip dupes** of existing Tasks / tmp-issues (the triage agent flags `relatedTo`, but check the board yourself — it can't see it).
 - Quick wins (effort `S`, a few lines) that are safe and in-scope: per the resolve-on-the-spot discipline, just fix them now instead of filing.
 

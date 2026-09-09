@@ -147,7 +147,7 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `wb_document_create({ workspaceId: "default", path: "smoke", kind: "spatial" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/d/smoke` in a browser tab to see it.
+In your agent session, ask it to call `wb_workspace_edit({ workspaceId: "default", ops: [{ op: "document.create", path: "smoke", kind: "spatial" }] })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/d/smoke` in a browser tab to see it.
 
 ## Pair with your local daemon
 
@@ -193,8 +193,8 @@ Three opinionated `SKILL.md` packs ship with the **plugin**, which wires them up
 You    Use whiteboard to sketch the request flow for our auth service:
        client → API gateway → token service → DB. Highlight where caching lives.
 
-Agent  { canvasId } = wb_document_create({ workspaceId: "default",
-                                          path: "auth-flow", kind: "spatial" })
+Agent  { results: [{ documentId }] } = wb_workspace_edit({ workspaceId: "default",
+         ops: [{ op: "document.create", path: "auth-flow", kind: "spatial" }] })
        wb_canvas_edit({ canvasId, ops: [
          /* 4 service boxes, the arrows between them, and: */
          { op: "node.add", node: { id: "cache-note", type: "text",

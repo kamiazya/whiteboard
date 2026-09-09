@@ -95,14 +95,6 @@ async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
   return Object.fromEntries(nodes.map((node) => [node.id, node.x]))
 }
 
-/** Text bodies of both nodes as actually stored. */
-async function storedTexts(deps: Awaited<ReturnType<typeof makeDeps>>) {
-  const { nodes } = await storedCanvas(deps)
-  return Object.fromEntries(
-    nodes.map((node) => [node.id, node.type === 'text' ? node.text : undefined]),
-  )
-}
-
 beforeEach(() => {
   _resetWorkspaceLocksForTests()
 })

@@ -152,13 +152,13 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['canvas-b'])
   })
 
-  // The defect this closes: wb_document_delete removed the index row and the
+  // The defect this closes: wbDocumentDelete removed the index row and the
   // Libsql bytes and stopped there, so a document an agent deleted left its
   // thumbnails, its blob and a cached doc instance behind — while the same
   // document deleted through the HTTP route did not. Both paths now run the
   // same teardown, and this asserts on the FILES, not on the tool answering
   // { deleted: true }, which it did throughout the whole defect.
-  it('leaves the same state when the delete comes through wb_document_delete as through the HTTP path', async () => {
+  it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
     const { stat } = await import('node:fs/promises')
     const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')

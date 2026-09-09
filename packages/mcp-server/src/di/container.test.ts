@@ -89,7 +89,7 @@ describe('resolveServerDeps document teardown', () => {
   // field is required on ServerDeps, so its absence is a compile error and
   // that assertion could not fail. What can still fail is wiring an inert
   // stub in place of the composition root's own teardown — which would put
-  // wb_document_delete back to leaving thumbnails, blobs and a cached doc
+  // wbDocumentDelete back to leaving thumbnails, blobs and a cached doc
   // behind, silently, with the tool still answering { deleted: true }.
   // Wired in the CONTAINER, not in the HTTP route registration. The old
   // saved-listener was installed from createDocumentRouter, so stdio MCP —

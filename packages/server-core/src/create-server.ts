@@ -25,14 +25,10 @@ import {
   wbDocumentResolve,
 } from './tools/document-crud.js'
 import {
-  WB_DOCUMENT_CREATE_DESCRIPTION,
-  WB_DOCUMENT_DELETE_DESCRIPTION,
   WB_DOCUMENT_LIST_DESCRIPTION,
   WB_DOCUMENT_RESOLVE_DESCRIPTION,
   wbDocumentCreateInputSchema,
-  wbDocumentCreateOutputSchema,
   wbDocumentDeleteInputSchema,
-  wbDocumentDeleteOutputSchema,
   wbDocumentListInputSchema,
   wbDocumentListOutputSchema,
   wbDocumentResolveInputSchema,
@@ -41,7 +37,6 @@ import {
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
 import { createDocumentSearchTool, documentSearchInputSchema } from './tools/document-search.js'
-import { createDocumentSetTool } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
@@ -238,7 +233,7 @@ export function createServer(deps: ServerDeps) {
   })
 
   const tools = {
-    // The document CRUD operations are exposed HERE as tool objects, not only
+    // The document READ operations are exposed HERE as tool objects, not only
     // as the bare functions the routes above call. An MCP registration that
     // reaches for the operation instead sits OUTSIDE the record
     // `withResolvedWorkspaceHandles` wraps — so it never resolves a segment,
@@ -246,14 +241,13 @@ export function createServer(deps: ServerDeps) {
     // the same string, and becomes "workspace not found" the moment ADR-0019's
     // mint makes them differ. The routes are unaffected: they resolve once in
     // the middleware above and pass the canonical id straight to the operation.
-    documentCreate: {
-      name: 'wb_document_create' as const,
-      description: WB_DOCUMENT_CREATE_DESCRIPTION,
-      inputSchema: wbDocumentCreateInputSchema,
-      outputSchema: wbDocumentCreateOutputSchema,
-      execute: (input: z.infer<typeof wbDocumentCreateInputSchema>) =>
-        wbDocumentCreate(deps, input),
-    },
+    //
+    // Create, set and delete have no entry of their own: `wb_workspace_edit`
+    // is the single front door onto them and carries each as an op, so the
+    // record holds the batch rather than the batch AND three singletons.
+    // The operations themselves are unchanged — the routes above still call
+    // `wbDocumentCreate` / `wbDocumentDelete` directly, and the batch calls
+    // them plus `createDocumentSetTool`.
     documentList: {
       name: 'wb_document_list' as const,
       description: WB_DOCUMENT_LIST_DESCRIPTION,
@@ -269,14 +263,6 @@ export function createServer(deps: ServerDeps) {
       execute: (input: z.infer<typeof wbDocumentResolveInputSchema>) =>
         wbDocumentResolve(deps, input),
     },
-    documentDelete: {
-      name: 'wb_document_delete' as const,
-      description: WB_DOCUMENT_DELETE_DESCRIPTION,
-      inputSchema: wbDocumentDeleteInputSchema,
-      outputSchema: wbDocumentDeleteOutputSchema,
-      execute: (input: z.infer<typeof wbDocumentDeleteInputSchema>) =>
-        wbDocumentDelete(deps, input),
-    },
     workspaceEdit: createWorkspaceEditTool(deps),
     facetList: createFacetListTool(deps),
     facetSet: createFacetSetTool(deps),
@@ -289,7 +275,6 @@ export function createServer(deps: ServerDeps) {
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSearch: createDocumentSearchTool(deps, factsCache),
-    documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),

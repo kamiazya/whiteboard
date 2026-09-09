@@ -50,20 +50,24 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
   {
     // Axis A, and already cheap: `ops` carries every node and edge, so the
     // count is create + one edit however big the drawing is.
+    //
+    // The create goes through `wb_workspace_edit` because the standalone
+    // `wb_document_create` is retired. It costs bytes and not calls — the
+    // op has to be wrapped in an array and the reply is a results list —
+    // which is exactly the trade the scoreboard's price column is for.
     name: 'author a canvas of 8 nodes and 6 edges',
     seedDocuments: 0,
     run: async (context) => {
       const created = await context.client.callTool({
-        name: 'wb_document_create',
+        name: 'wb_workspace_edit',
         arguments: {
           workspaceId: context.workspaceId,
-          path: 'drawing',
-          kind: 'spatial',
           // Workspaces are never materialised implicitly, so a first
           // document in a fresh workspace carries this flag rather than
           // costing a separate call. Without it the create fails loudly,
           // which is the design and not a quirk of the fixture.
           createWorkspace: true,
+          ops: [{ op: 'document.create', path: 'drawing', kind: 'spatial' }],
         },
       })
       const documentId = documentIdOf(created)
@@ -136,8 +140,9 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
 ]
 
 function documentIdOf(result: unknown): string {
-  const structured = (result as { structuredContent?: { documentId?: unknown } }).structuredContent
-  const id = structured?.documentId
-  if (typeof id !== 'string') throw new Error('wb_document_create returned no documentId')
+  const structured = (result as { structuredContent?: { results?: { documentId?: unknown }[] } })
+    .structuredContent
+  const id = structured?.results?.[0]?.documentId
+  if (typeof id !== 'string') throw new Error('wb_workspace_edit returned no documentId')
   return id
 }

@@ -172,7 +172,7 @@ Default regression triple after a change:
 ```bash
 pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
 pnpm typecheck   # tsc --noEmit (~10s)
-pnpm smoke:e2e   # stdio MCP subprocess: wb_document_create -> wb_canvas_edit -> version save/list/restore -> wb_document_set -> wb_document_get
+pnpm smoke:e2e   # stdio MCP subprocess: wb_workspace_edit -> wb_canvas_edit -> version save/list/restore -> document.set -> wb_document_get
 ```
 
 For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-four configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, daemon-client node, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, workspace-index node, history node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all three browser projects (canvas-render-browser, canvas-viewer-browser, web-browser)):

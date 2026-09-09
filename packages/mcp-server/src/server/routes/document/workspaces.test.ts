@@ -314,7 +314,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // A dialog that collects a name has to apply it in the SAME request. Split
   // across create-then-PUT-name, the second half can fail on its own and
   // leave a document the user named sitting in the list as untitled-N, with
-  // nothing on screen explaining which half went wrong. wb_document_create
+  // nothing on screen explaining which half went wrong. wbDocumentCreate
   // has taken a name in one call since it shipped; this is the HTTP surface
   // catching up.
   it('applies an optional name in the same request that creates the document', async () => {

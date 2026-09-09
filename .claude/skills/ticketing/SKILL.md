@@ -28,17 +28,19 @@ Issues and notes are stored as documents in the whiteboard's `default` workspace
 
 ### Creating an issue
 
-One call. `kind` is required, and `markdown` at create time is what saves the
-separate `wb_document_set` this flow used to need.
+One call. `kind` is required, and `markdown` on the create op is what saves the
+separate `document.set` this flow used to need.
 
 ```
-wb_document_create → { workspaceId: "default", path: "issues/my-issue",
-  kind: "markdown", name: "My Issue",
-  markdown: "---\ntype: issue\ntitle: My Issue\n---\n\nDescription here." }
+wb_workspace_edit → { workspaceId: "default", ops: [
+  { op: "document.create", path: "issues/my-issue",
+    kind: "markdown", name: "My Issue",
+    markdown: "---\ntype: issue\ntitle: My Issue\n---\n\nDescription here." } ] }
 ```
 
-Several at once — seeding a triage pass, say — go through one
-`wb_workspace_edit` rather than one call per document.
+Several at once — seeding a triage pass, say — are more ops in the same call,
+not more calls. `wb_workspace_edit` is the ONLY tool for create / set / delete;
+the standalone ones are retired.
 
 ### Reading issues
 
@@ -52,7 +54,8 @@ wb_document_get   → { workspaceId: "default", documentId }  # read it as OKF m
 Re-import with updated OKF markdown (overwrites facets + body):
 
 ```
-wb_document_set   → { workspaceId: "default", documentId, markdown: "<updated OKF>" }
+wb_workspace_edit → { workspaceId: "default",
+  ops: [{ op: "document.set", documentId, markdown: "<updated OKF>" }] }
 ```
 
 ### Updating facets only
@@ -67,7 +70,7 @@ wb_facet_set → { workspaceId: "default", documentId, facets: { "<namespace>.<n
 document with the type changed, the name prefixed `RESOLVED — `, and a line
 in the body saying what resolved it.
 
-**Read it first.** `wb_document_set` replaces core facets, extension facets and
+**Read it first.** `document.set` replaces core facets, extension facets and
 body together — it does not merge — so a resolution that names only `type` and
 `title` silently drops `tags`, `facets`, and any root key the document arrived
 with (`status`, `sources`, `stale_after`, all preserved verbatim since
@@ -81,7 +84,8 @@ wb_document_get → { workspaceId: "default", documentId }
 #   type:  issue -> note
 #   title: prefixed "RESOLVED — "
 #   body:  a line at the top saying what closed it
-wb_document_set → { workspaceId: "default", documentId, markdown: <the edited whole> }
+wb_workspace_edit → { workspaceId: "default",
+  ops: [{ op: "document.set", documentId, markdown: <the edited whole> }] }
 ```
 
 Both halves earn their place, and neither invents a schema:
@@ -103,7 +107,8 @@ Deletion is for a document that was never worth keeping — a scratch probe, a
 duplicate, a mistake. It is **not** how work is closed.
 
 ```
-wb_document_delete → { workspaceId: "default", documentId }
+wb_workspace_edit → { workspaceId: "default",
+  ops: [{ op: "document.delete", documentId }] }
 ```
 
 Resolution used to be deletion, and that was carried over from when issues
@@ -191,8 +196,8 @@ Delete artifacts from `tmp/` when they're no longer useful.
 
 - **Session start**: `TaskList` to see live state; for open issues you intend to work this session, `TaskCreate` a task with `metadata.documentPath = "<path>"`.
 - **In flight**: `TaskUpdate` status/owner/blockedBy as work moves.
-- **New finding** (from review / dogfood-triage / reconcile): create a document via `wb_document_create` + `wb_document_set`; `TaskCreate` only if you're acting on it now.
-- **Resolve**: `wb_document_set` the document to `type: note` FIRST (read it back first — see Resolving), then `TaskUpdate status=completed` once that write has succeeded. The other order leaves the Task list saying done while the issue is still open if the write fails. Do not delete the document.
+- **New finding** (from review / dogfood-triage / reconcile): create a document via one `wb_workspace_edit` `document.create` op (the body rides on it); `TaskCreate` only if you're acting on it now.
+- **Resolve**: a `document.set` op writes the document to `type: note` FIRST (read it back first — see Resolving), then `TaskUpdate status=completed` once that write has succeeded. The other order leaves the Task list saying done while the issue is still open if the write fails. Do not delete the document.
 - Workflows can't call the Task tools or AskUserQuestion; they RETURN findings/openQuestions and the main session records them as tickets/tasks and asks the human.
 
 ## When to use which

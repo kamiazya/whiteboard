@@ -4,7 +4,7 @@ import type { Database } from './index.js'
 /**
  * `segment`/`displayName` are ADR-0019's identity layers, claimed only on
  * the INITIAL insert — the `onConflict('id').doNothing()` below means a
- * bare call on an already-existing workspace (every `wb_document_create
+ * bare call on an already-existing workspace (every `wbDocumentCreate
  * createWorkspace: true` call, for one) never touches them, so a name or
  * segment set elsewhere is never clobbered by a follow-up child write.
  */
