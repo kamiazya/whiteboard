@@ -86,6 +86,13 @@ export interface VersionStore {
   // Public API used when creating branches from a version id.
   // Returns null only when the version is missing.
   getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
+  // Does the newest checkpoint of this document already hold the state the
+  // record is in? The scheduler asks the keeper rather than comparing
+  // frontiers itself, because a version's frontier is taken in THIS store's
+  // space (the workspace record's) and the doc a scheduler holds is the
+  // document's own projection — compared across that boundary they are
+  // never equal. False where there is no version yet, or no such document.
+  isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean>
   // Rewrite branchName from oldName to newName for all versions of the given
   // path. Returns the number of rewritten rows.
   renameBranchInVersions(
@@ -408,6 +415,44 @@ export class FileVersionStore implements VersionStore {
       .where('id', '=', id)
       .executeTakeFirst()
     return row?.frontiers ?? null
+  }
+
+  /**
+   * Both halves in this store's own space, which is what makes the answer
+   * mean anything: the frontier is read the same way `save` reads it, off
+   * the STORED workspace record, and compared against a row this same
+   * expression wrote.
+   *
+   * The frontier is the WORKSPACE record's, so an edit to a sibling
+   * document moves it too and this answers false for a document nothing
+   * touched. That costs at most one extra checkpoint, and only for a
+   * document that was signalled anyway — the error runs toward taking one,
+   * which is the safe direction for a question about whether to record
+   * where somebody stopped.
+   */
+  async isUnchangedSinceLastVersion(workspaceId: string, path: string): Promise<boolean> {
+    validateWorkspaceId(workspaceId)
+    validateDocumentPath(path)
+    const db = await dbReady()
+    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
+      workspaceId,
+    )
+    if (storedWorkspace === null) return false
+    const documentId = resolveWorkspaceDocument(storedWorkspace, path)?.documentId
+    if (documentId === undefined) return false
+    const row = await db
+      .selectFrom('versions')
+      .select(['frontiers'])
+      // Newest first, with the id as the tie-break the rest of this store
+      // already orders by — two rows can share a millisecond.
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .orderBy('createdAt', 'desc')
+      .orderBy('id', 'desc')
+      .limit(1)
+      .executeTakeFirst()
+    if (row === undefined) return false
+    return row.frontiers === bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
   }
 
   async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {

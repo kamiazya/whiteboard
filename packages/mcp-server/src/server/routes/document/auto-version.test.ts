@@ -23,6 +23,7 @@ const { clearCache } = await import('../../store/doc-cache.js')
 const { loadDocument } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
 const wsModule = await import('../ws.js')
+const { FileVersionStore } = await import('../../store/version-store.js')
 
 describe('auto-version', () => {
   it('exports a quiet period, and a ceiling longer than it', () => {
@@ -180,5 +181,64 @@ describe('auto-version corruption handling', () => {
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['e1'])
+  })
+})
+
+/**
+ * A checkpoint is a point somebody could come back to, so a second row
+ * holding the state the first one already holds is not one — it is noise in
+ * the list a person reads.
+ *
+ * The scheduler's diff check was in-memory only, keyed per process. Every
+ * way that memory can be empty or stale while the ROWS say otherwise gives a
+ * checkpoint over a document nothing changed in, and a reconnect is the
+ * cheapest of them: a client re-sending ops the server already has is a CRDT
+ * no-op, and the update route signals the trigger on every POST regardless.
+ */
+describe('an unchanged document', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+  })
+  afterEach(() => {
+    clearCache()
+  })
+
+  /** The trigger is a debounce even at 0ms; let its tick land. */
+  const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
+
+  it('takes no second checkpoint when the newest version already holds this state', async () => {
+    const store = new FileVersionStore()
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    const map = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
+    map.set('id', 'e1')
+    map.set('type', 'rectangle')
+    clientDoc.commit()
+    const update = clientDoc.export({ mode: 'update', from: prevVV })
+
+    const post = async (app: { request: (...args: never[]) => Promise<Response> }) =>
+      (app.request as unknown as (url: string, init: RequestInit) => Promise<Response>)(
+        '/api/w/session1/document/canvas-a/update',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: update,
+        },
+      )
+
+    const first = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    expect((await post(first)).status).toBe(200)
+    await settle()
+    expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+
+    // A FRESH router, so a fresh trigger with an empty diff check — which is
+    // what a daemon restart leaves behind. The same bytes again: a
+    // reconnecting client replaying ops the record already carries.
+    const second = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    expect((await post(second)).status).toBe(200)
+    await settle()
+
+    expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
   })
 })
