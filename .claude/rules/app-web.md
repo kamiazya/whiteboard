@@ -191,15 +191,20 @@ App test that mounts a daemon target.
 
 ### A property over "a canvas with facets" draws them from the registry
 
-`test-utils/facet-arbitrary.ts` turns each facet the registry holds for a
-target into a fast-check arbitrary by walking its Zod schema (zod v4's
-`_zod.def`), substituting an `assetRefs` field with the registered asset
-ids, and filtering by the schema itself so a `.refine` the walk cannot see
-is still honoured. `facetsArbitrary(registry, 'canvas')` is what a property
-about envelopes uses (`gesture-view.property.test.ts`), so it follows a
-facet a plugin registers tomorrow without an edit. Two things keep it
-honest: a construct it has no generator for THROWS naming the path rather
-than yielding nothing for that facet, and `facet-arbitrary.test.ts` pins
-that every canvas facet in the bundled registry is produced and that
-nothing produced is refused by `validateFacetWrite`.
+`facetsArbitrary(registry, 'canvas')` from facet-engine's `/testing`
+subpath is what a property about envelopes uses
+(`gesture-view.property.test.ts`): each facet the registry holds for the
+target, drawn by walking its own Zod schema, an `assetRefs` field drawing
+the registered asset ids, and every payload filtered by
+`validateFacetWrite` itself so a `.refine` the walk cannot see is still
+honoured. It follows a facet a plugin registers tomorrow without an edit.
+The generator's own honesty is facet-engine's to test; what this app keeps
+is `test-utils/facet-arbitrary.test.ts`, which pins that every canvas facet
+in the BUNDLED registry is produced and nothing produced is refused — the
+check that the plugin this app ships has no facet the walk throws on at
+construction and none it quietly skips. It used to be a walker of its own
+here, beside a second one in canvas-render that drew from form samples; two
+properties on one PR passed over the defect they exist to catch because
+each generator had a schema it had never met, and one generator in the
+engine is the permanent answer.
 
