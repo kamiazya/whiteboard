@@ -76,8 +76,12 @@ const DEBT_COLUMNS = [
   'nearMisses',
 ]
 
-/** The non-zero debt columns by name, or the word for none — the line a reader scans. */
-function debtLine(score) {
+/**
+ * The non-zero debt columns by name, or the word for none — the line a
+ * reader scans; a board the score could not read says so instead.
+ */
+function debtLine({ score, error }) {
+  if (score === undefined) return `not scored — ${error}`
   const debt = DEBT_COLUMNS.filter((c) => score[c] > 0).map((c) => `${c} ${score[c]}`)
   return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; crossings ${score.crossings}, bends ${score.bends}`
 }
@@ -106,20 +110,28 @@ async function captureBoards(wb, task, trial) {
     mkdirSync(figures, { recursive: true })
     const file = `${task.name}-${trial}-${path}`.replace(/[^a-z0-9]+/gi, '-')
     writeFileSync(join(figures, `${file}.svg`), rendered.svg)
-    const read = await wb.call('wb_document_get', {
-      workspaceId: WORKSPACE_ID,
-      documentIds: [entry.documentId],
-    })
-    const content = read.documents[0]?.content
-    if (content === undefined) continue
-    const parsed = parseSpatial(content)
-    if (!parsed.ok) continue
-    const canvas = parsed.value
-    const scene = layoutSpatialCanvas(canvas, {
-      measure: constantRatioMeasureText,
-      appearance: DRAWING_APPEARANCE,
-    })
-    drawing.push({ board: path, score: scoreDrawing(canvas, scene) })
+    // The score is a diagnostic beside the verdict: a board it cannot read
+    // is recorded as such, not a reason to abandon a run that has already
+    // spent its quota. The SVG above is already on disk either way.
+    try {
+      const read = await wb.call('wb_document_get', {
+        workspaceId: WORKSPACE_ID,
+        documentIds: [entry.documentId],
+      })
+      const content = read.documents[0]?.content
+      if (content === undefined) throw new Error('the document has no content')
+      const parsed = parseSpatial(content)
+      if (!parsed.ok)
+        throw new Error(`the document does not parse as a canvas: ${parsed.error.message}`)
+      const canvas = parsed.value
+      const scene = layoutSpatialCanvas(canvas, {
+        measure: constantRatioMeasureText,
+        appearance: DRAWING_APPEARANCE,
+      })
+      drawing.push({ board: path, score: scoreDrawing(canvas, scene) })
+    } catch (error) {
+      drawing.push({ board: path, error: error instanceof Error ? error.message : String(error) })
+    }
   }
   return drawing
 }
@@ -145,8 +157,7 @@ if (DRY_RUN) {
     // way to exercise the capture with no model call.
     const drawing = await captureBoards(wb, task, 0)
     await wb.close()
-    for (const { board, score } of drawing)
-      console.log(`[eval]   drawing ${board}: ${debtLine(score)}`)
+    for (const entry of drawing) console.log(`[eval]   drawing ${entry.board}: ${debtLine(entry)}`)
     // The fixture is untouched, so a verifier that passes here would pass
     // a model that did nothing.
     const line = verdict.ok ? 'FAIL (passes on the untouched fixture)' : 'ok (fails as it should)'
@@ -314,7 +325,7 @@ async function runOnce(task, trial) {
   }
 
   let verdict
-  /** @type {{ board: string, score: Record<string, unknown> }[]} */
+  /** @type {{ board: string, score?: Record<string, unknown>, error?: string }[]} */
   let drawing = []
   if (task.answer !== undefined) {
     const answered =
@@ -379,8 +390,8 @@ for (const task of tasks) {
       `[eval] ${mark} ${task.name} (trial ${trial}): ${run.calls} calls [${run.tools.join(' ')}], ${run.toolErrors} tool errors, ${run.turns} turns, $${(run.costUsd ?? 0).toFixed(3)}, ${(run.durationMs / 1000).toFixed(0)}s — ${run.detail}`,
     )
     for (const text of run.toolErrorTexts) console.log(`[eval]   tool error: ${text}`)
-    for (const { board, score } of run.drawing)
-      console.log(`[eval]   drawing ${board}: ${debtLine(score)}`)
+    for (const entry of run.drawing)
+      console.log(`[eval]   drawing ${entry.board}: ${debtLine(entry)}`)
     if (run.exitCode !== 0 && run.stderr)
       console.log(`[eval]   stderr: ${run.stderr.split('\n').at(-1)}`)
   }

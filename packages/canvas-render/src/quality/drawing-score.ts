@@ -304,11 +304,21 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   pairs(edgeLabels, (a, b) => {
     if (overlapArea(a.bbox, b.bbox) > 0) labelOverLabel++
   })
+  // A frame's name is drawn above its frame, which for a nested frame is
+  // inside the frame that holds it — painted first, so the name lies over
+  // its fill and under nothing. Only a box the frame is NOT inside can hide it.
   let labelCovered = 0
   for (const label of runs) {
     if (label.annotates?.kind !== 'node') continue
-    const own = label.annotates.id
-    if (nodes.some((n) => n.id !== own && overlapArea(label.bbox, rectOf(n)) > 0)) labelCovered++
+    const own = byId.get(label.annotates.id)
+    if (own === undefined) continue
+    const hidden = nodes.some(
+      (n) =>
+        n.id !== own.id &&
+        !(n.type === 'group' && contains(rectOf(n), rectOf(own))) &&
+        overlapArea(label.bbox, rectOf(n)) > 0,
+    )
+    if (hidden) labelCovered++
   }
 
   let textOverflow = 0

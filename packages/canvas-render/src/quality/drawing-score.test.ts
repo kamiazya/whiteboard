@@ -238,6 +238,28 @@ describe('scoreDrawing: labels', () => {
     expect(covered.labelCovered).toBe(1)
     expect(free.labelCovered).toBe(0)
   })
+
+  it("a nested frame's label sits inside the frame that holds it, and is not covered", () => {
+    // The outer frame is painted before the inner one, so the inner
+    // frame's name drawn above it lies OVER the outer frame's fill, not
+    // under anything. A box beside the inner frame, placed over its name,
+    // still covers it.
+    const nested = score(
+      canvasOf([
+        group('outer', 0, 0, 600, 400, 'Outer'),
+        group('inner', 40, 80, 300, 200, 'Inner'),
+      ]),
+    )
+    const covered = score(
+      canvasOf([
+        group('outer', 0, 0, 600, 400, 'Outer'),
+        group('inner', 40, 80, 300, 200, 'Inner'),
+        box('a', 40, 40, 200, 40),
+      ]),
+    )
+    expect(nested.labelCovered).toBe(0)
+    expect(covered.labelCovered).toBe(1)
+  })
 })
 
 describe('scoreDrawing: fit and spacing', () => {
