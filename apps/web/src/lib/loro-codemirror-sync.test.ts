@@ -304,3 +304,70 @@ describe('undo over content that arrived from elsewhere', () => {
     expect(workspaceBody(doc).toString()).toBe('written by somebody else')
   })
 })
+
+/**
+ * Teardown, which the deferred seeding outlives.
+ *
+ * The seeding cannot run in the constructor — a ViewPlugin is built DURING a
+ * state update and CodeMirror refuses a dispatch from inside one — so it is
+ * queued, and a view destroyed before that microtask runs still gets it.
+ *
+ * A destroyed view is not itself the hazard: CodeMirror tolerates both a
+ * `state` read and a `dispatch` after `destroy()` (measured — no throw, the
+ * state simply updates with no DOM to show it). The hazard is the RESOLVER.
+ * This app's is `documentContainers`, which throws `No document "<id>" in
+ * this workspace` once the node is gone — so deleting the open document
+ * raises an unhandled error from a microtask nobody is waiting on.
+ */
+describe('a view torn down before the deferred seeding runs', () => {
+  it('does not read the container once the view is gone', async () => {
+    const doc = new LoroDoc()
+    doc.getText('body').insert(0, 'seeded content')
+    doc.commit()
+
+    const reads: string[] = []
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          loroTextSync(doc, (d) => {
+            reads.push('read')
+            return d.getText('body')
+          }),
+        ],
+      }),
+      parent: document.body,
+    })
+    view.destroy()
+    await settleInit()
+
+    // Asserted directly rather than left to the runner noticing an unhandled
+    // error: a resolver that throws is only ONE consequence of reading after
+    // teardown, and the rule is that there is nothing left to do at all.
+    expect(reads).toEqual([])
+  })
+
+  it('survives a resolver that throws once the document is gone', async () => {
+    const doc = new LoroDoc()
+    let documentGone = false
+    const view = new EditorView({
+      state: EditorState.create({
+        doc: '',
+        extensions: [
+          loroTextSync(doc, (d) => {
+            if (documentGone) throw new Error('No document "01ABC" in this workspace')
+            return d.getText('body')
+          }),
+        ],
+      }),
+      parent: document.body,
+    })
+    documentGone = true
+    view.destroy()
+    await settleInit()
+
+    // Reaching here without the file failing is the assertion: an unhandled
+    // error from a microtask fails the whole file, passing tests and all.
+    expect(documentGone).toBe(true)
+  })
+})

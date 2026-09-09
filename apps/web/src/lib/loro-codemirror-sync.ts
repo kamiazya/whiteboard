@@ -52,6 +52,7 @@ export type ReadBoundText = (doc: LoroDoc) => LoroText
 
 class LoroTextSync implements PluginValue {
   private readonly unsubscribe: Subscription
+  private disposed = false
 
   constructor(
     private readonly view: EditorView,
@@ -61,12 +62,24 @@ class LoroTextSync implements PluginValue {
     this.unsubscribe = doc.subscribe(() => this.reconcile())
     // Deferred because a ViewPlugin is constructed DURING a state update, and
     // CodeMirror refuses a dispatch from inside one. A microtask is the first
-    // moment the view will accept the seeding.
+    // moment the view will accept the seeding — and a view can be destroyed
+    // before it arrives, which is what `disposed` below is for.
     queueMicrotask(() => this.reconcile())
   }
 
   /** Make the view say what the container says, in one minimal splice. */
   private reconcile(): void {
+    // Nothing to do for a view nobody will look at, and reading the container
+    // for one is not merely wasted: the RESOLVER can throw. This app's is
+    // `documentContainers`, which answers `No document "<id>" in this
+    // workspace` once the node is gone — so deleting the open document would
+    // raise an unhandled error out of a microtask nobody is awaiting.
+    //
+    // The destroyed VIEW is not itself the hazard; CodeMirror tolerates both
+    // a `state` read and a `dispatch` after `destroy()` (measured). The
+    // resolver is, which is why this guards the whole method rather than the
+    // dispatch.
+    if (this.disposed) return
     const next = this.readText(this.doc).toString()
     const current = this.view.state.doc.toString()
     // The batch our own `update()` just produced lands here too, and by now
@@ -122,6 +135,9 @@ class LoroTextSync implements PluginValue {
   }
 
   destroy(): void {
+    // Before unsubscribing, because the flag is also what stops the QUEUED
+    // seeding — unsubscribing only closes the ongoing channel.
+    this.disposed = true
     this.unsubscribe()
   }
 }
