@@ -280,7 +280,9 @@ search over its own tools", and that is a new ADR, not a bigger cut.
 
 Lands: the criteria above; the rung-1 scoreboard and its oracle,
 calibrated; the rung-3 lane, its fixture and twelve tasks, and the
-baseline in §3.
+baseline in §3; the `mcp-tool-surface` skill, which is the procedure a
+change to the table follows, and the opt-in `tool-surface` review
+dimension, which judges the diff by the same criteria.
 
 Filed as follow-ups, each its own increment with the scoreboards as
 its evidence:

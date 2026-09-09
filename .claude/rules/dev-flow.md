@@ -43,7 +43,7 @@ Stack only when each lower layer is worth reviewing on its own. One layer, or la
 Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arrives as a JSON **string** → `JSON.parse` it (see `workflow-authoring` skill). Composition nesting is one level (dev-loop → review only).
 
 - **dev-loop**: design → PlanReview gate → TDD implement → simplify → review (composed) → triage/fix → (optional) docs sync. Returns `needsHumanGate`.
-- **review**: multi-dimension review + adversarial verify + QA (+ optional live dogfood). Composable child of dev-loop. Two of its default dimensions are default for one reason and no other — what they catch is CORRECT code, so no other lane has cause to look: `reachability` (built but never wired) and `background-work` (a worker that runs on every instance instead of one, or blocks the loop that answers requests; criteria in `review-gate/resources/background-work.md`, registry at `server/background-work.ts`).
+- **review**: multi-dimension review + adversarial verify + QA (+ optional live dogfood). Composable child of dev-loop. Two of its default dimensions are default for one reason and no other — what they catch is CORRECT code, so no other lane has cause to look: `reachability` (built but never wired) and `background-work` (a worker that runs on every instance instead of one, or blocks the loop that answers requests; criteria in `review-gate/resources/background-work.md`, registry at `server/background-work.ts`). Two more are OPT-IN because most diffs cannot touch them: `accessibility` for a UI surface, and `tool-surface` for a change to what a model reads of an MCP tool (`review-gate/resources/tool-surface.md`, the `mcp-tool-surface` skill) — a dev-loop over such a change passes it through `reviewArgs: { dimensions: [...defaults, { name: 'tool-surface', content }] }`.
 - **dogfood-triage**: persona browser dogfooding → triage into whiteboard canvases (issue type).
 - **reconcile**: textual + intent conflict detection across branches → serial merge plan (judgement only; integrator does the fold).
 - **plan-initiative**: expert panel → synthesize sliced plan → gate → visualize on the local whiteboard. Returns `openQuestions` for the main session to ask via AskUserQuestion.
@@ -86,7 +86,7 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Simplicity already has two executable rungs — reach for them before writing a prose rule.** `tools/arch-lint`'s allowed-third-party-dependency check fails the build on a dependency added outside a package's allowlist, and `pnpm knip` fails on the unused export a deleted feature left behind. Those are the "don't add a dependency" and "delete it" rungs made mechanical. What the `simplifier` agent and its `ponytail` ladder add on top is only the judgement-shaped rungs (does this need to exist, is this one line) — inherently prose, and the weakest rung by design.
 
-**Three things you cannot see by reading a diff each have a skill, and the skill is where the
+**Four things you cannot see by reading a diff each have a skill, and the skill is where the
 worked measurements live.** Load it before the work, not after:
 
 - **`measured-change`** — a heuristic, a cost model, a search or an optimisation is
@@ -105,6 +105,16 @@ worked measurements live.** Load it before the work, not after:
   a stated decision (`Visual evidence: none — <reason>`) rather than an omission — for a body it
   can read, which is a `--body`/`--body-file` argument; it fails open on stdin, an editor, or
   `--fill`.
+- **`mcp-tool-surface`** — a tool's name, description, schema or existence is read by a model
+  on every turn, and a change to it passes every test either way. ADR-0030's criteria are
+  checked by two pinned scoreboards (what the table costs to read and how much of it explains
+  itself; what an errand costs in calls) and an opt-in LLM-driven lane (`pnpm eval:tool-surface`,
+  a real model on a seeded fixture, graded by outcome). A rename, consolidation or retirement
+  carries the lane's before/after at `--trials=3`, and is decided by the columns, not by the
+  count — the count could not see one tool being 45% of the table. Its first run found two
+  product bugs the transcript read as model mistakes, which is why a failure is probed against
+  the store before it is believed. The `tool-surface` review dimension (opt-in) judges the diff
+  by the same criteria.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 
@@ -116,7 +126,7 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 ## Skills (load for detail)
 
-`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `testing-techniques`, `measured-change`, `diagnosis-evidence`, `visual-evidence`, `docs-sync`, `whiteboard-mcp-smoke`, `loro-crdt-usage`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`, `steward`, `react-best-practices`.
+`ticketing`, `workflow-authoring`, `zod-schema-discipline`, `test-layer-selection`, `testing-techniques`, `measured-change`, `diagnosis-evidence`, `visual-evidence`, `mcp-tool-surface`, `docs-sync`, `whiteboard-mcp-smoke`, `loro-crdt-usage`, `review-gate`, `audit-triage`, `ci-triage`, `dependabot-review`, `stacking-pull-requests`, `steward`, `react-best-practices`.
 
 `steward` is the one with a load-bearing PATH: the harness reads `.claude/skills/steward/SKILL.md` on a PR event and lets it override the generic drive-to-green rules on conventions and on how proactive to be. Its `reference/failure-modes.md` is an INDEX into `integrator-flow.md`'s CI-flakes section — symptom to verdict — so the reasoning and the measurements stay there, in one place, and keep covering a flake that has no PR attached.
 

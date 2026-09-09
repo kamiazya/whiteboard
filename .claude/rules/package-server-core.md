@@ -64,7 +64,8 @@ paths:
 
 A tool definition here is read by a model on every turn, so its cost and its
 clarity are measured, not argued. Before changing a tool's name, description,
-schema or existence, read `docs/contributing/adr/0030-tool-surface-criteria.md`
+schema or existence, load the `mcp-tool-surface` skill (the procedure) and
+read `docs/contributing/adr/0030-tool-surface-criteria.md`
 — the numbered criteria, and which instrument checks each — and expect
 `packages/mcp-server/src/server/mcp/tool-surface-quality.test.ts` to fail
 until its pinned row is updated with a line saying why it moved. A retirement

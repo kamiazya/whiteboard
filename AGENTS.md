@@ -106,6 +106,13 @@ When changing transport, routing, or tool registration, add or update a nearest-
 test for `/mcp` behaviour and verify against the running endpoint with a real client, not only
 mocked unit tests.
 
+When changing what a MODEL reads — a tool's name, description, input schema, annotations or
+existence — load the `mcp-tool-surface` skill first. ADR-0030 fixes the criteria, two pinned
+scoreboards (`tool-surface-quality.test.ts`, `tool-call-count-quality.test.ts`) go red until
+their moved rows are re-pinned with a reason, and a rename, consolidation or retirement ships
+with the LLM-driven lane's before/after (`pnpm eval:tool-surface --trials=3`) in the PR body.
+The tool count is not a criterion.
+
 Everything else — how each client registers the stdio proxy, the SessionStart hook that ensures
 the daemon, its per-worktree port and spawn lock, and the failure modes — is
 `docs/contributing/mcp-debugging.md` and `docs/contributing/development.md`, which carry it in
