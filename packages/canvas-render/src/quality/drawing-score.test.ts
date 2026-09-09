@@ -6,12 +6,14 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
+import { constantRatioMeasureText } from '../measure.js'
 import type { Scene, SceneNode } from '../scene-graph.js'
-import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 
-const measure = createFakeMeasure()
+// The measurer the lane and `wb_scene_render` fall back to, so a pin here
+// and a `drawing` column there are the same number for the same board.
+const measure = constantRatioMeasureText
 const appearance = createSpatialTheme({ mode: 'light' })
 const layout = (canvas: SpatialCanvas): Scene =>
   layoutSpatialCanvas(canvas, { measure, appearance })
@@ -133,7 +135,7 @@ describe('scoreDrawing: edges', () => {
     expect(s.throughInkPx).toBe(200)
   })
 
-  it('an edge inside its own endpoints is not counted', () => {
+  it('an edge anchored strictly inside a box is not charged that box', () => {
     const canvas = canvasOf(nodes, [edge('e', 'a', 'b')])
     const s = scoreDrawing(
       canvas,
@@ -145,6 +147,26 @@ describe('scoreDrawing: edges', () => {
       ),
     )
     expect(s.edgeThroughNode).toBe(0)
+  })
+
+  it('an edge that leaves its source and comes back through it is charged its own box', () => {
+    const canvas = canvasOf(nodes, [edge('e', 'a', 'b')])
+    const s = scoreDrawing(
+      canvas,
+      sceneOf(
+        pathEdge('e', [
+          { x: 100, y: 80 },
+          { x: 100, y: 120 },
+          { x: 300, y: 120 },
+          { x: 300, y: -40 },
+          { x: 150, y: -40 },
+          { x: 150, y: 40 },
+          { x: 400, y: 40 },
+        ]),
+      ),
+    )
+    expect(s.edgeThroughNode).toBe(1)
+    expect(s.throughInkPx).toBe(90)
   })
 
   it('an edge crossing a group frame it connects into is not counted', () => {

@@ -267,20 +267,22 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
 
   // Edges the canvas owns, by id; chrome edges (a comment's leader) are not
   // the drawing's. A frame is never "through": an edge between two members
-  // legitimately runs inside it.
+  // legitimately runs inside it. An edge's OWN endpoint boxes are not
+  // exempt — only a box that strictly contains an anchor is, since no
+  // detour can avoid the point inside it. An edge that leaves its source
+  // and comes back through it is the picture the first live reading
+  // showed, and a reader calls it wrong before anything else on the board.
   const edges = scene.nodes
     .filter(isEdge)
     .map((e) => ({ edge: edgeById.get(e.id), path: e.path }))
     .filter((e): e is { edge: CanvasEdge; path: readonly Point[] } => e.edge !== undefined)
   let edgeThroughNode = 0
   let throughInkPx = 0
-  for (const { edge, path } of edges) {
+  for (const { path } of edges) {
     for (const box of boxes) {
-      if (box.id === edge.fromNode || box.id === edge.toNode) continue
       const rect = rectOf(box)
       const start = path[0]
       const end = path[path.length - 1]
-      // An anchor strictly inside a box cannot be routed around.
       if (start !== undefined && strictlyInside(rect, start)) continue
       if (end !== undefined && strictlyInside(rect, end)) continue
       const ink = interiorInk(path, rect)

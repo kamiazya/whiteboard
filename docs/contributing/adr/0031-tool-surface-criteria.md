@@ -560,6 +560,27 @@ reading showed tidy leaves every mistake INSIDE a frame where it was,
 because a frame and its members move as one unit — a product finding no
 verifier and no pass column could have surfaced.
 
+The first reading over the two diagram tasks (one trial each, both
+passed in two calls with no tool error, $0.19 together) split the debt by
+who owes it. The model's part was clean on both boards: not one box
+overlapping, straddling, cramped or off its row. The sequence board had
+no debt at all. The architecture board had two edges through a box for
+174px and one crossing, and the recorded inputs say whose: the model
+wrote `fromSide: 'bottom', toSide: 'top'` on all eight edges — the sides
+that suit a layer-to-layer edge — including API gateway's two to the
+boxes beside it on the same row, and the router honours a pinned side.
+Those two leave from the bottom, loop under and back over, tunnel
+through API gateway itself and cross the Web app edge. The same board
+with the sides removed owes no debt at all, at the router's own price of
+two crossings — which is how the cause was found, since a first
+reconstruction of the board had dropped the sides. So the first surface
+question the column raises is
+what `edge.add` says about sides: a description that leaves them to the
+router unless the drawing needs one, or a router that treats a pinned
+side as a preference it may overrule. The board is in the corpus as
+`lane/architecture`, sides included, so either fix is measured against
+it.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

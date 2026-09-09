@@ -177,6 +177,55 @@ const fixtureArchitecture: SpatialCanvas = {
   ],
 }
 
+/**
+ * The architecture board a model drew through the tool surface on the
+ * lane's first drawing-column run (2026-09-09), verbatim. Every box is in
+ * place, and every edge carries `fromSide: 'bottom', toSide: 'top'` — the
+ * model wrote the sides that suit a layer-to-layer edge onto ALL eight,
+ * including API gateway's two to the boxes beside it on the same row. The
+ * router honours a pinned side, so those two leave from the bottom, loop
+ * under and back over, tunnel through API gateway itself and cross the
+ * Web app edge. Without the sides the board owes no debt, at the router's
+ * own price of two crossings. A finding about what `edge.add` lets a model
+ * pin, kept here so whichever fix lands — a description that leaves sides
+ * to the router, or a router that treats a side as a preference — is
+ * measured against it.
+ */
+const laneArchitecture: SpatialCanvas = {
+  nodes: [
+    group('g-clients', 'Clients', 0, 0, 820, 200),
+    group('g-services', 'Services', 0, 300, 820, 200),
+    group('g-storage', 'Storage', 0, 580, 820, 200),
+    box('cli', 'CLI', 40, 50, 220, 100),
+    box('web', 'Web app', 300, 50, 220, 100),
+    box('mobile', 'Mobile app', 560, 50, 220, 100),
+    box('apigw', 'API gateway', 40, 350, 220, 100),
+    box('auth', 'Auth', 300, 350, 220, 100),
+    box('search', 'Search', 560, 350, 220, 100),
+    box('sqlite', 'SQLite', 40, 630, 220, 100),
+    box('blob', 'Blob store', 300, 630, 220, 100),
+  ],
+  edges: (
+    [
+      ['e1', 'cli', 'apigw'],
+      ['e2', 'web', 'apigw'],
+      ['e3', 'mobile', 'apigw'],
+      ['e4', 'apigw', 'auth'],
+      ['e5', 'apigw', 'search'],
+      ['e6', 'auth', 'sqlite'],
+      ['e7', 'search', 'sqlite'],
+      ['e8', 'search', 'blob'],
+    ] as const
+  ).map(([id, fromNode, toNode]) => ({
+    id,
+    fromNode,
+    toNode,
+    fromSide: 'bottom' as const,
+    toSide: 'top' as const,
+    toEnd: 'arrow' as const,
+  })),
+}
+
 /** The draft after `tidyNodes`, every move applied. */
 function tidied(canvas: SpatialCanvas): SpatialCanvas {
   const moves = new Map(tidyNodes(canvas.nodes, {}).map((m) => [m.id, m] as const))
@@ -197,4 +246,5 @@ export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'sequence/drafted', canvas: sequenceDrafted },
   { name: 'sequence/tidied', canvas: tidied(sequenceDrafted) },
   { name: 'fixture/architecture', canvas: fixtureArchitecture },
+  { name: 'lane/architecture', canvas: laneArchitecture },
 ]

@@ -17,12 +17,14 @@
 // as loud as a regression, and whoever moves a number says why in the diff.
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
-import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
-import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { constantRatioMeasureText } from '../measure.js'
+import { DRAWING_CORPUS, type DrawingCase } from '../test-utils/drawing-corpus.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 
-const measure = createFakeMeasure()
+// The measurer the lane and `wb_scene_render` fall back to, so a pin here
+// and a `drawing` column there are the same number for the same board.
+const measure = constantRatioMeasureText
 const appearance = createSpatialTheme({ mode: 'light' })
 
 const scores = new Map(
@@ -171,7 +173,45 @@ describe('drawing quality across the corpus', () => {
         envelopePx: { w: 1000, h: 900 },
         density: 0.11,
       },
+      'lane/architecture': {
+        nodes: 11,
+        edges: 8,
+        // The same numbers the lane's `drawing` column printed for this
+        // board, which is the point of scoring both with one measurer.
+        ...DEBT_FREE,
+        // API gateway's two edges to the boxes beside it, pinned to leave
+        // from its bottom and arrive from their top, tunnel back through
+        // API gateway on the way round.
+        edgeThroughNode: 2,
+        throughInkPx: 174,
+        // One of them across the Web app edge.
+        crossings: 1,
+        bends: 6,
+        edgeLengthPx: 3266,
+        // The layers sit 300 and 280 apart.
+        unevenGaps: 2,
+        envelopePx: { w: 820, h: 800 },
+        density: 0.27,
+      },
     })
+  })
+
+  it('the lane board owes its debt to the sides the model pinned, not to its boxes', () => {
+    const lane = scores.get('lane/architecture') as DrawingScore
+    const unpinned = DRAWING_CORPUS.find((c) => c.name === 'lane/architecture') as DrawingCase
+    const withoutSides = {
+      ...unpinned.canvas,
+      edges: unpinned.canvas.edges.map(({ fromSide: _from, toSide: _to, ...edge }) => edge),
+    }
+    const free = scoreDrawing(
+      withoutSides,
+      layoutSpatialCanvas(withoutSides, { measure, appearance }),
+    )
+    expect([lane.edgeThroughNode, lane.crossings]).toEqual([2, 1])
+    // Debt-free without them; what the router then draws on its own for
+    // eight edges converging on one box is price, and pinned as such.
+    expect(free).toMatchObject(DEBT_FREE)
+    expect([free.crossings, free.bends]).toEqual([2, 7])
   })
 
   it('every reference carries no debt', () => {
