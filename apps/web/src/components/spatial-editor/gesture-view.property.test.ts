@@ -5,7 +5,9 @@
 // facet (ADR-0030), so dropping the envelope on one layer is a board that
 // changes look for the length of a drag.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect } from 'vitest'
+import { facetsArbitrary } from '../../test-utils/facet-arbitrary.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { commentExtensionFor } from './gesture-view.js'
 
@@ -22,10 +24,9 @@ const commentArb = fc.record(
   },
   { requiredKeys: ['id', 'x', 'y', 'text'] },
 )
-const facetsArb = fc.dictionary(
-  fc.constantFrom('visual.theme/v0', 'visual.edges/v0', 'demo.one/v0'),
-  fc.record({ theme: fc.constantFrom('visual.sketch', 'visual.neon') }),
-)
+// Drawn from the registry, so the property follows every canvas facet a
+// plugin registers — the theme today, whatever comes next without an edit.
+const facetsArb = facetsArbitrary(bundledFacetRegistry, 'canvas')
 const envelopeArb = fc.option(
   fc.record(
     { facets: facetsArb, comments: fc.array(commentArb, { maxLength: 6 }) },

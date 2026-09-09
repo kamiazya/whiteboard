@@ -170,3 +170,17 @@ listed is `log.info`, not a warning: it is the routine first render while a
 connection settles, and the jsdom failure guard would otherwise fail every
 App test that mounts a daemon target.
 
+### A property over "a canvas with facets" draws them from the registry
+
+`test-utils/facet-arbitrary.ts` turns each facet the registry holds for a
+target into a fast-check arbitrary by walking its Zod schema (zod v4's
+`_zod.def`), substituting an `assetRefs` field with the registered asset
+ids, and filtering by the schema itself so a `.refine` the walk cannot see
+is still honoured. `facetsArbitrary(registry, 'canvas')` is what a property
+about envelopes uses (`gesture-view.property.test.ts`), so it follows a
+facet a plugin registers tomorrow without an edit. Two things keep it
+honest: a construct it has no generator for THROWS naming the path rather
+than yielding nothing for that facet, and `facet-arbitrary.test.ts` pins
+that every canvas facet in the bundled registry is produced and that
+nothing produced is refused by `validateFacetWrite`.
+
