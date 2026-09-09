@@ -466,4 +466,9 @@ it('a themed board keeps its look while a node is carried: ghost and backdrop al
   expect(ghost?.innerHTML ?? '').toContain('wb-glow')
   const backdrop = container.querySelector('[data-testid="canvas-content"]')
   expect(backdrop?.innerHTML ?? '').toContain('wb-glow')
+  // The edge re-routed per frame floats between them, and it is the theme's
+  // edge too: it went through the edge-only producer, which used to skip
+  // the canvas's theme resolution.
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live?.innerHTML ?? '').toContain('wb-glow')
 })

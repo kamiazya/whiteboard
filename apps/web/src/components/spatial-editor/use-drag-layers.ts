@@ -22,10 +22,9 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
-import { createEditorAppearance } from '../../lib/spatial/editor-appearance.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
-import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
+import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
@@ -383,8 +382,7 @@ export function useDragLayers({
     const nodes = layoutSpatialEdges(
       { ...canvas, nodes: liveNodes },
       {
-        measure: dragStatic.measure,
-        appearance: createEditorAppearance(theme),
+        ...editorLayoutBase({ measure: dragStatic.measure, theme, style }),
         edgeSideOverrides: overrides,
       },
     )
@@ -410,7 +408,7 @@ export function useDragLayers({
       ),
       bounds: liveBounds,
     }
-  }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
+  }, [gestureState, dragPreview, dragStatic, canvas, theme, style, gestureCommitted])
 
   /**
    * The resized node's own content, re-rendered at its PREVIEW size each

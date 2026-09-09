@@ -6,7 +6,7 @@
 // A real browser: the subject is a Worker's FontFaceSet.
 import { withViewerFontEmbedded } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { afterAll, expect, it } from 'vitest'
+import { afterEach, beforeEach, expect, it } from 'vitest'
 import type { LayoutResponse, RegisterFaceRequest } from './layout-worker-protocol.js'
 
 const sketched: SpatialCanvas = {
@@ -15,8 +15,14 @@ const sketched: SpatialCanvas = {
   'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
 }
 
-const worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })
-afterAll(() => worker.terminate())
+// A worker PER RUN, not per file: its face set is the subject, and a face
+// registered in one run would be the "before" of the next — CI's
+// `--repeats` runs this body three times in one process.
+let worker: Worker
+beforeEach(() => {
+  worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })
+})
+afterEach(() => worker.terminate())
 
 let nextId = 1
 function layout(): Promise<LayoutResponse> {

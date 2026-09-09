@@ -107,6 +107,9 @@ there: a person editing a board sees the theme it names, and every surface
 that pictures a document — the editor, its drag layers, the row thumbnail,
 the preview pane, the export — pictures the same look. The layout worker
 runs the same composition, so the two threads cannot default apart. The
+look, its resolver and where a theme's family counts as available are
+`editorLayoutBase`, which the edge overlay a drag re-routes per frame
+takes too — it used to build its own options and drew every edge clean. The
 session override (decision 6) is the one thing that crosses: `DocumentPage`
 holds it per tab and document, the Display panel's **Draw as** row sets it
 (`onStyleChange`, offered only where a host passes one; the theme ids come

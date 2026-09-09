@@ -4,6 +4,7 @@ import {
   type IconAsset,
   iconAssetSchema,
   type ThemeTokens,
+  type ThemeTokensInput,
   themeTokensSchema,
 } from './theme-tokens.js'
 
@@ -77,7 +78,7 @@ export type AssetKind = 'themes' | 'icons'
  * `<plugin>.<name>`, the same way silhouettes are namespaced.
  */
 export interface FacetPluginAssets {
-  readonly themes?: Readonly<Record<string, ThemeTokens>>
+  readonly themes?: Readonly<Record<string, ThemeTokensInput>>
   readonly icons?: Readonly<Record<string, IconAsset>>
 }
 
@@ -269,7 +270,9 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   const icons = new Map<string, IconAsset>()
   for (const plugin of plugins) {
     for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
-      themes.set(`${plugin.id}.${name}`, tokens)
+      // The PARSED tokens, never the plugin's own object: the schema fills
+      // `defaults` in, and every reader of `themeAsset` dereferences it.
+      themes.set(`${plugin.id}.${name}`, themeTokensSchema.parse(tokens))
     }
     for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
       icons.set(`${plugin.id}.${name}`, icon)

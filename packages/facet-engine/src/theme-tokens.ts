@@ -133,6 +133,8 @@ export const themeTokensSchema = z.object({
 })
 
 export type ThemeTokens = z.infer<typeof themeTokensSchema>
+/** What a plugin WRITES: `defaults` may be omitted, and the registry fills it in. */
+export type ThemeTokensInput = z.input<typeof themeTokensSchema>
 
 /**
  * An icon set entry a plugin may register as an asset. Structural: the

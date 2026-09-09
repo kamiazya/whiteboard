@@ -122,7 +122,6 @@ function DocumentPageBody({
   // this document as, never written to it. Per document: a preview chosen
   // for one board must not follow the reader to the next.
   const [drawAs, setDrawAs] = useState<SpatialRenderStyle | undefined>(undefined)
-  useEffect(() => setDrawAs(undefined), [documentKey])
 
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render. Owned here rather than threaded down from
@@ -191,6 +190,7 @@ function DocumentPageBody({
   useEffect(() => {
     setBookmarkArmed(0)
     setPreview(null)
+    setDrawAs(undefined)
   }, [model.scopeKey])
 
   // Mirrors the scope itself, rewritten every render: an async save that

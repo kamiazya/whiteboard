@@ -1,99 +1,37 @@
 import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
-import { ARROW_MARKER, edgeArrowEnds, edgeArrowPolygons } from '../edge-arrows.js'
+import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
-import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
-import { sketchEdge, sketchShape } from '../layout/ink/sketch.js'
-import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
+import type { ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
-  Appearance,
   BoundingBox,
   CodeBlockNode,
   ListItemNode,
-  ResolvedEdgeNode,
   Scene,
-  SceneInk,
   SceneNode,
-  ShapeSceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
 import { collectDefs } from './defs.js'
-import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
+import type { SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
+import {
+  appearanceAttrs,
+  idToken,
+  isFiniteBox,
+  isNonNegativeLength,
+  isPositiveLength,
+  PRESENTATION,
+  pointsAttr,
+  rectAttrs,
+} from './paint.js'
 import { serializeSvg } from './serialize.js'
+import { glowOf, type ResolveTables, renderShape, renderSketchEdge } from './shapes.js'
 import { applyOptimizationPasses } from './transform.js'
-import { el, rawXml, type SvgChild, type SvgDef, type SvgVNode, withDefs } from './vnode.js'
-
-/**
- * Decorative/presentational elements (backgrounds, dividers, group
- * wrappers) that carry no independently-meaningful semantics get
- * `role="presentation"` so a screen reader does not announce them; text
- * runs and links keep their natural implicit role.
- */
-const PRESENTATION = 'presentation'
-
-function rectAttrs(bbox: BoundingBox): SvgBoxAttrs {
-  // Fixed declaration order: x, y, width, height.
-  return { x: bbox.x, y: bbox.y, width: bbox.w, height: bbox.h }
-}
-
-function isFiniteBox(box: BoundingBox): boolean {
-  return [box.x, box.y, box.w, box.h].every(Number.isFinite)
-}
-
-function isNonEmptyString(value: string | undefined): value is string {
-  return typeof value === 'string' && value.length > 0
-}
-
-/** Non-finite or negative is dropped; zero is a legitimate stroke-width/font-size. */
-function isNonNegativeLength(value: number | undefined): value is number {
-  return typeof value === 'number' && Number.isFinite(value) && value >= 0
-}
-
-/** SVG treats a negative `rx` as an error and `rx="0"` is noise, so both are omitted. */
-function isPositiveLength(value: number | undefined): value is number {
-  return isNonNegativeLength(value) && value > 0
-}
-
-/**
- * Presence-only presentation attributes for a shape/text-run/edge, in the
- * fixed order `fill stroke stroke-width font-family font-size`. An absent
- * or unusable field is omitted rather than defaulted — see the
- * `Appearance` doc comment for why the backend never invents a value.
- */
-function appearanceAttrs(appearance?: Appearance): PaintAttrs {
-  if (!appearance) return {}
-  const attrs: PaintAttrs = {}
-  if (isNonEmptyString(appearance.fill)) attrs.fill = appearance.fill
-  if (isNonEmptyString(appearance.stroke)) attrs.stroke = appearance.stroke
-  if (isNonNegativeLength(appearance.strokeWidth)) attrs['stroke-width'] = appearance.strokeWidth
-  if (isNonEmptyString(appearance.fontFamily)) attrs['font-family'] = appearance.fontFamily
-  if (isNonNegativeLength(appearance.fontSize)) attrs['font-size'] = appearance.fontSize
-  // Emitted after `fill` so the pair reads together; `1` is the SVG initial
-  // value, so it is omitted to keep an opacity-free scene byte-identical.
-  if (
-    typeof appearance.fillOpacity === 'number' &&
-    Number.isFinite(appearance.fillOpacity) &&
-    appearance.fillOpacity !== 1
-  ) {
-    attrs['fill-opacity'] = appearance.fillOpacity
-  }
-  if (
-    typeof appearance.strokeOpacity === 'number' &&
-    Number.isFinite(appearance.strokeOpacity) &&
-    appearance.strokeOpacity !== 1
-  ) {
-    attrs['stroke-opacity'] = appearance.strokeOpacity
-  }
-  if (isNonEmptyString(appearance.strokeDasharray)) {
-    attrs['stroke-dasharray'] = appearance.strokeDasharray
-  }
-  return attrs
-}
+import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**
  * SVG `<text y>` is the BASELINE, not the top of the glyph box — `bbox.y`
@@ -170,35 +108,6 @@ const FADE_DEFS: ReadonlyArray<SvgDef> = [
   },
 ]
 
-const DROP_SHADOW_ID = 'wb-drop-shadow'
-
-/**
- * One shared soft shadow for everything that floats (the comment layer's
- * chrome). Declared per referencing element and hoisted by `collectDefs`,
- * exactly like the fade mask, so a shadow-free scene stays byte-identical.
- * The region is widened past the default -10%..110% because the blur's
- * reach (3·stdDeviation + dy ≈ 5.5px) exceeds 10% of a small element like
- * the 20px pin, and a clipped shadow reads as a rendering artifact.
- */
-const DROP_SHADOW_DEFS: ReadonlyArray<SvgDef> = [
-  {
-    id: DROP_SHADOW_ID,
-    node: el(
-      'filter',
-      { id: DROP_SHADOW_ID, x: '-30%', y: '-30%', width: '160%', height: '160%' },
-      [
-        el('feDropShadow', {
-          dx: 0,
-          dy: 1,
-          stdDeviation: 1.5,
-          'flood-color': '#000000',
-          'flood-opacity': 0.3,
-        }),
-      ],
-    ),
-  },
-]
-
 /**
  * The tinted box behind a run (inline code today). Bleeds `backdropPadXPx`
  * past the run horizontally so the glyphs are not flush against the edge,
@@ -263,261 +172,6 @@ function renderTextRun(run: TextRunNode, tables?: ResolveTables): SvgChild {
   const href =
     run.link.kind === 'link' ? sanitizeHref(run.link.href) : trustedHref(run.link.documentId)
   return el('a', { href }, [content])
-}
-
-/**
- * The box chrome of a spatial canvas node. A non-finite bbox field is a
- * layout bug this package must not crash on — it renders as nothing rather
- * than reaching `formatCoord`, which throws by contract.
- */
-/**
- * The resolution inputs a render pass carries: tables merged over this
- * package's built-in ones. One object rather than a positional argument each,
- * because every one of them threads through the same eight recursive call
- * sites and a second positional parameter is how the third gets forgotten.
- */
-interface ResolveTables {
-  readonly icons?: IconTable
-  readonly shapes?: ShapeTable
-  /**
-   * The user-space region every glow filter in this document declares —
-   * the scene's bounds, which already include each halo's reach. Lazy,
-   * because most scenes glow nowhere and the walk should cost them nothing.
-   */
-  readonly glowRegion?: () => BoundingBox
-}
-
-/**
- * The filter a glowing element references, and its definition: a Gaussian
- * blur of the element merged twice under the element itself (twice, so the
- * halo has body without a flood colour — it is the element's own paint).
- * One definition per (radius, region); the id derives from both, so a
- * repeated id across inline-injected SVGs is byte-identical by construction.
- */
-function glowOf(
-  appearance: Appearance | undefined,
-  tables: ResolveTables | undefined,
-): { readonly filter?: string; readonly defs: ReadonlyArray<SvgDef> } {
-  const radius = appearance?.glow?.radiusPx
-  if (!isNonNegativeLength(radius) || radius === 0 || tables?.glowRegion === undefined) {
-    return { defs: [] }
-  }
-  const region = tables.glowRegion()
-  const regionKey = [region.x, region.y, region.w, region.h].map(formatCoord).join(',')
-  const id = `wb-glow-${formatCoord(radius)}-${idToken(regionKey)}`
-  const def: SvgDef = {
-    id,
-    node: el(
-      'filter',
-      {
-        id,
-        filterUnits: 'userSpaceOnUse',
-        x: region.x,
-        y: region.y,
-        width: region.w,
-        height: region.h,
-      },
-      [
-        el('feGaussianBlur', { stdDeviation: radius * GLOW_STD_DEVIATION_RATIO, result: 'blur' }),
-        el('feMerge', undefined, [
-          el('feMergeNode', { in: 'blur' }),
-          el('feMergeNode', { in: 'blur' }),
-          el('feMergeNode', { in: 'SourceGraphic' }),
-        ]),
-      ],
-    ),
-  }
-  return { filter: `url(#${id})`, defs: [def] }
-}
-
-function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
-  if (!isFiniteBox(node.bbox)) return []
-  if (node.ink?.style === 'sketch') return renderSketchShape(node, node.ink, tables)
-  return renderCrispShape(node, tables)
-}
-
-/** Presence-only: attach a glow's filter reference and definition to an element. */
-function withGlow(element: SvgVNode, glow: ReturnType<typeof glowOf>): SvgChild {
-  if (glow.filter === undefined) return element
-  return withDefs({ ...element, attrs: { ...element.attrs, filter: glow.filter } }, glow.defs)
-}
-
-/**
- * A pencilled node: the flat fill (or hatch lines) as an underlay, then the
- * strokes the shared decomposition hands back, round-capped so the passes
- * read as one pencil line. Comment chrome never arrives here — the layout
- * inks document content only — so the drop-shadow branch stays crisp.
- */
-function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: ResolveTables): SvgChild {
-  const outline =
-    node.shape === undefined ? null : nodeOutline(node.shape, node.bbox, tables?.shapes)
-  const strokes = sketchShape(outline, node.bbox, ink.seed, { hatch: ink.fill === 'hatch' })
-  const paint = appearanceAttrs(node.appearance)
-  const strokeAttrs = {
-    fill: 'none',
-    stroke: paint.stroke,
-    'stroke-width': paint['stroke-width'],
-    'stroke-opacity': paint['stroke-opacity'],
-    'stroke-dasharray': paint['stroke-dasharray'],
-  }
-  const underlay: SvgChild =
-    strokes.hatch !== undefined
-      ? el(
-          'g',
-          { 'stroke-linecap': 'round' },
-          strokes.hatch.map((d) =>
-            el('path', {
-              d,
-              fill: 'none',
-              stroke: paint.stroke,
-              'stroke-width': HATCH_STROKE_WIDTH,
-              'stroke-opacity': HATCH_OPACITY,
-            }),
-          ),
-        )
-      : paint.fill === undefined || paint.fill === 'none'
-        ? []
-        : // The crisp silhouette with its stroke removed: a hand draws no
-          // 6px fillet, so the rect underlay drops its radius too.
-          renderCrispShape(
-            {
-              ...node,
-              radius: undefined,
-              appearance: {
-                fill: paint.fill,
-                ...(paint['fill-opacity'] === undefined
-                  ? {}
-                  : { fillOpacity: paint['fill-opacity'] }),
-              },
-            },
-            tables,
-          )
-  const outlineStrokes = el(
-    'g',
-    { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-    strokes.strokes.map((d) => el('path', { d, ...strokeAttrs })),
-  )
-  return [underlay, withGlow(outlineStrokes, glowOf(node.appearance, tables))]
-}
-
-const HATCH_STROKE_WIDTH = 0.9
-const HATCH_OPACITY = 0.75
-
-function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
-  // Non-rect silhouettes come from the shared decomposition (one producer
-  // for drawing and hit-testing — layout/nodes/node-outline.ts); an absent
-  // `shape` stays the historic rect byte-for-byte.
-  if (node.shape !== undefined) {
-    const outline = nodeOutline(node.shape, node.bbox, tables?.shapes)
-    // A null outline here can only mean the id resolves to nothing — the
-    // non-finite box is already handled above — so the node falls back to
-    // its rect. Drawing NOTHING was correct while ids came from a closed
-    // union and null meant a degenerate box; once a document can name a
-    // shape this build does not carry, it made the node disappear.
-    if (outline === null) return renderChromeRect(node, tables)
-    const glow = glowOf(node.appearance, tables)
-    switch (outline.kind) {
-      case 'ellipse':
-        return withGlow(
-          el('ellipse', {
-            cx: outline.cx,
-            cy: outline.cy,
-            rx: outline.rx,
-            ry: outline.ry,
-            ...appearanceAttrs(node.appearance),
-          }),
-          glow,
-        )
-      case 'polygon':
-        return withGlow(
-          el('polygon', {
-            points: pointsAttr(outline.points),
-            ...appearanceAttrs(node.appearance),
-          }),
-          glow,
-        )
-      case 'cylinder': {
-        const { x, y, w, h, ry } = outline
-        const rx = w / 2
-        const top = y + ry
-        const bottom = y + h - ry
-        const arc = (sweep: 0 | 1, toX: number, atY: number) =>
-          `A ${formatCoord(rx)} ${formatCoord(ry)} 0 0 ${sweep} ${formatCoord(toX)} ${formatCoord(atY)}`
-        const silhouette = [
-          `M ${formatCoord(x)} ${formatCoord(top)}`,
-          arc(1, x + w, top),
-          `L ${formatCoord(x + w)} ${formatCoord(bottom)}`,
-          arc(1, x, bottom),
-          'Z',
-        ].join(' ')
-        // The lid is the visible lower half of the top cap — stroke-only
-        // ink INSIDE the silhouette, so bounds/hit keep reading the bbox.
-        const lid = [`M ${formatCoord(x)} ${formatCoord(top)}`, arc(0, x + w, top)].join(' ')
-        const paint = appearanceAttrs(node.appearance)
-        const parts = [
-          el('path', { d: silhouette, ...paint }),
-          el('path', {
-            d: lid,
-            fill: 'none',
-            stroke: paint.stroke,
-            'stroke-width': paint['stroke-width'],
-            'stroke-opacity': paint['stroke-opacity'],
-          }),
-        ]
-        // Two siblings, byte-for-byte as before, unless a glow needs the pair
-        // filtered as one — a halo per part would double up along the lid.
-        return glow.filter === undefined ? parts : withGlow(el('g', undefined, parts), glow)
-      }
-    }
-  }
-  return renderChromeRect(node, tables)
-}
-
-/**
- * A pencilled edge: the drawn polyline (rounded corners and hops included,
- * through the same flattening the hit-test uses) in two bowed passes, and
- * each arrowhead as two wing strokes — no marker, since a crisp triangle on
- * a pencil line is the one thing that reads as two styles at once.
- */
-function renderSketchEdge(node: ResolvedEdgeNode, ink: SceneInk, tables?: ResolveTables): SvgChild {
-  const strokes = sketchEdge(node.path, ink.seed, {
-    arrows: edgeArrowPolygons(node),
-    rounded: node.rounded === true,
-    jumps: node.jumps ?? [],
-  })
-  const paint = appearanceAttrs(node.appearance)
-  return withGlow(
-    el(
-      'g',
-      { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-      strokes.strokes.map((d) =>
-        el('path', {
-          d,
-          fill: 'none',
-          stroke: paint.stroke,
-          'stroke-width': paint['stroke-width'],
-          'stroke-opacity': paint['stroke-opacity'],
-          'stroke-dasharray': paint['stroke-dasharray'],
-          role: PRESENTATION,
-        }),
-      ),
-    ),
-    glowOf(node.appearance, tables),
-  )
-}
-
-/** The historic rect, byte-for-byte — also what a node falls back to when its
- *  shape id resolves to nothing. */
-function renderChromeRect(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
-  const glow = glowOf(node.appearance, tables)
-  const rect = el('rect', {
-    ...rectAttrs(node.bbox),
-    rx: isPositiveLength(node.radius) ? node.radius : undefined,
-    ...appearanceAttrs(node.appearance),
-    filter: node.appearance?.dropShadow === true ? `url(#${DROP_SHADOW_ID})` : glow.filter,
-  })
-  if (node.appearance?.dropShadow === true) return withDefs(rect, DROP_SHADOW_DEFS)
-  return glow.filter === undefined ? rect : withDefs(rect, glow.defs)
 }
 
 function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {
@@ -656,22 +310,6 @@ function roundedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[] 
   }
   parts.push(...lineWithJumps(current, last, jumpsWithinSpan(jumps, corners.length, current, last)))
   return parts.join(' ')
-}
-
-function pointsAttr(points: readonly EdgePoint[]): string {
-  return points.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
-}
-
-/**
- * Content-derived id token: every character outside [A-Za-z0-9-] becomes
- * `_` + its hex code point, so any authored color string yields a valid,
- * collision-free XML id and the same color always derives the same id
- * (which is what lets `collectDefs` share one definition per color).
- */
-function idToken(value: string): string {
-  return [...value]
-    .map((ch) => (/[A-Za-z0-9-]/.test(ch) ? ch : `_${(ch.codePointAt(0) ?? 0).toString(16)}`))
-    .join('')
 }
 
 function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {

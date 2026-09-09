@@ -184,7 +184,7 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
 // to null). A constant spelled that way is module-level by convention, so it
 // cannot be about the scope that just left; a lowercase identifier can be,
 // which is why `setFolder(landedIn)` must not read as a reset.
-const EMPTY = '(null|\\[\\]|false|0|\'\'|""|[A-Z][A-Z0-9_]*)'
+const EMPTY = '(null|undefined|\\[\\]|false|0|\'\'|""|[A-Z][A-Z0-9_]*)'
 
 /**
  * What a name is called and how a reset to it would read.
@@ -377,6 +377,10 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',
+  // The session's look override (ADR-0030 decision 6) is a preview chosen
+  // FOR ONE BOARD: carried across a switch it would draw the arrived
+  // document in a look nobody picked for it.
+  drawAs: 'cleared on switch',
   currentScopeRef:
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
   versionRefreshSignal:

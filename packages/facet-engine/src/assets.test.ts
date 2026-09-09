@@ -65,6 +65,21 @@ describe('plugin assets', () => {
     ).toThrow(/asset name/)
   })
 
+  it('hands out the PARSED tokens, so a theme that omits defaults still has an empty one', () => {
+    // Every reader of a theme dereferences `defaults`; a plugin that leaves
+    // it out (a hand-written asset, one parsed from JSON) must not hand the
+    // renderer an object the schema would have filled in.
+    const { defaults: _omitted, ...bare } = SAMPLE_THEME_TOKENS
+    const sparse = definePlugin({
+      id: 'sparse',
+      displayName: 'Sparse',
+      facets: [],
+      assets: { themes: { bare } },
+    })
+    const registry = createFacetRegistry([sparse])
+    expect(registry.themeAsset('sparse.bare')?.defaults).toEqual({})
+  })
+
   it('rejects a theme asset that does not satisfy the token contract at definition time', () => {
     expect(() =>
       definePlugin({

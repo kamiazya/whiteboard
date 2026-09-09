@@ -1,5 +1,6 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
+  readDocumentKind,
   readFacets,
   readSpatialCanvas,
   writeDocumentKind,
@@ -626,6 +627,33 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
         facets: { [THEME_KEY]: { theme: 'visual.neon' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test("target: 'canvas' on a kind-less document writes the envelope and declares nothing", async () => {
+    // The same stance the document branch takes on a fresh document: the
+    // write replaces nothing, so it neither fails nor guesses a kind — and
+    // the message can never read "is a markdown document" about a document
+    // that declared none.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, () => {})
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+    })
+    expect(result.updated[0]?.facets).toEqual({ [THEME_KEY]: { theme: 'visual.neon' } })
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readDocumentKind(doc)).toBeUndefined()
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+      [THEME_KEY]: { theme: 'visual.neon' },
+    })
   })
 
   test('nodeId and a canvas target together name two things at once and are refused', async () => {

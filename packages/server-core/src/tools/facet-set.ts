@@ -228,10 +228,14 @@ async function setOne(
   }
 
   if (input.target === 'canvas') {
-    if (kind !== 'spatial') {
+    // A markdown document has no canvas envelope; a document with no kind
+    // is allowed through and NOT declared, for the reason the document
+    // branch below gives — this replaces nothing, so it has neither
+    // something to lose nor any evidence to offer about the format.
+    if (kind === 'markdown') {
       throw new DocumentKindMismatchError(
         documentId,
-        kind ?? 'markdown',
+        kind,
         "Canvas-target facets live on a spatial document's canvas envelope. Omit target to set facets on a markdown document.",
       )
     }

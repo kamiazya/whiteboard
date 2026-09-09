@@ -117,7 +117,9 @@ the table alone.
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
-  one implementation shared by Node/browser/Workers.
+  one implementation shared by Node/browser/Workers. `svg/shapes.ts` draws a
+  node's silhouette and an edge's line (crisp or pencilled, with the glow
+  either takes); `svg/paint.ts` holds the presence-only paint helpers.
 - `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
   Zod-schematized output of this package. It reports one entry per
   ADDRESSABLE node — the chrome shapes carrying a document `id` — because
@@ -997,7 +999,9 @@ the table alone.
     themes on one cache must not hand each other the other's wrapped lines.
     `naturalNodeContentSize` goes through the same resolution; a caller
     sizing a node under a theme passes the theme id as `style`, since a
-    single-node canvas carries no facet to read.
+    single-node canvas carries no facet to read. So does
+    `layoutSpatialEdges` — it shipped without it, and a drag drew every
+    edge crisp and straight over a pencilled, curved committed render.
     `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
     that PREVIEWS paint rather than painting — the editor's paper and its
     colour swatches — so a picker and the render read one table; it answers
@@ -1104,18 +1108,23 @@ the table alone.
   and never calls the wrapping code.
 - `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
   keeps `layoutSpatialEdges` equal to the edge suffix of
-  `layoutSpatialCanvas`. Its node generator reads the facet REGISTRY
+  `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
   (`test-utils/facet-arbitraries.ts` over facet-engine's
-  `facetPayloadSamples`) rather than a list of facet names, because what it
-  guards is a second entry point folding over FEWER facets than the
-  committed layout — which a named list cannot cover for a facet registered
-  later. It shipped that way: plain generated nodes, no silhouettes on
-  either side, the property agreeing vacuously while every edge into a
-  shaped node floated off it for a whole drag. Two guards keep it honest — one fails naming a
-  registered node facet whose schema yields no payloads, one fails when the
-  drawn facets stop changing the layout being compared. Adding a node facet
-  needs no edit here; adding one `deriveFacetForm` cannot express fails the
-  first guard, which is the decision point.
+  `facetPayloadSamples`) for the nodes' facets AND the canvas's, rather
+  than a list of facet names, because what it guards is a second entry
+  point folding over FEWER facets than the committed layout — which a named
+  list cannot cover for a facet registered later. It shipped that way
+  twice: plain generated nodes, no silhouettes on either side, the property
+  agreeing vacuously while every edge into a shaped node floated off it for
+  a whole drag; then nodes with facets and a canvas with none, agreeing
+  again while a themed board's edges dragged crisp and straight. The second
+  is why the scenario also draws `style`: a theme is drawn under
+  `'document'` and never under the library's clean default. Three guards
+  keep it honest — one fails naming a registered node or canvas facet whose
+  schema yields no payloads, two fail when the drawn node facets, or the
+  drawn canvas facets, stop changing the layout being compared. Adding a
+  facet needs no edit here; adding one `deriveFacetForm` cannot express
+  fails the first guard, which is the decision point.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

@@ -22,6 +22,7 @@ import type {
   ResolvedReference,
   Scene,
   SpatialContentCache,
+  SpatialLayoutOptions,
   SpatialRenderStyle,
   SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -113,11 +114,18 @@ export interface RenderedCanvas {
   readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
 }
 
-export function renderCanvasToSvgWith(
-  canvas: SpatialCanvas,
-  options: RenderCanvasCoreOptions,
-): RenderedCanvas {
-  const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
+/**
+ * What every layout this editor runs shares — the look, its resolver, and
+ * where a theme's family counts as available — in ONE place, so the edge
+ * overlay a drag re-routes per frame cannot draw a different look from
+ * the committed scene it floats over.
+ */
+export function editorLayoutBase(options: {
+  readonly measure: MeasureText
+  readonly theme?: ResolvedTheme
+  readonly style?: SpatialRenderStyle
+}): Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'style' | 'fontAvailable'> {
+  return {
     measure: options.measure,
     appearance: createEditorAppearance(options.theme ?? 'light'),
     style: options.style ?? 'document',
@@ -125,6 +133,15 @@ export function renderCanvasToSvgWith(
     // face for it; otherwise layout measures and declares the bundled one,
     // the same answer the daemon's export gives.
     fontAvailable: hasLoadedFace,
+  }
+}
+
+export function renderCanvasToSvgWith(
+  canvas: SpatialCanvas,
+  options: RenderCanvasCoreOptions,
+): RenderedCanvas {
+  const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
+    ...editorLayoutBase(options),
     references: options.references,
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,

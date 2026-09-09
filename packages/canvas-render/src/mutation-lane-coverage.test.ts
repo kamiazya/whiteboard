@@ -85,11 +85,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // reach and determinism claims are properties, exactly what a survivor
     // would expose as decorative.
     //
+    // 63 since `svg/paint.ts` and `svg/shapes.ts` left `svg/backend.ts`:
+    // the paint helpers and the shape/edge renderers it had grown past its
+    // line ceiling with. Not in the lane — their properties are the
+    // byte-identical SVG tests, which are examples.
     // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
     // `glow.test.ts`'s bounds assertion, which fails on any other reach.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 61,
+      production: 63,
     })
   })
 

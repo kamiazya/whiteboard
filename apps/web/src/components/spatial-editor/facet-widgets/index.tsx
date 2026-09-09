@@ -11,7 +11,7 @@
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import { DerivedFacetForm, type FacetEditor, type PluginUi } from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry, resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -34,6 +34,12 @@ export interface NodePropertiesContext {
 export interface CanvasSettingsContext {
   readonly canvas: SpatialCanvas
   readonly run: (command: EditorCommand) => void
+  /**
+   * The registry the panel resolved its rows from — what a derived row
+   * builds its form from too, so a host passing its own registry never
+   * gets a row selected by one definition and drawn by another.
+   */
+  readonly facetRegistry: FacetRegistry
 }
 
 export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
@@ -205,12 +211,12 @@ function canvasFacetRow(key: string, label: string): CanvasSettingsWidget {
  * asset and nothing on this side.
  */
 function derivedCanvasFacetRow(key: string, title: string): CanvasSettingsWidget {
-  return ({ canvas, run }) => (
+  return ({ canvas, run, facetRegistry }) => (
     <DerivedFacetForm
       facetKey={key}
       title={title}
       stored={canvas['x-whiteboard']?.facets?.[key]}
-      registry={bundledFacetRegistry}
+      registry={facetRegistry}
       onWrite={(facetKey, payload) => run({ kind: 'set-canvas-facet', key: facetKey, payload })}
     />
   )

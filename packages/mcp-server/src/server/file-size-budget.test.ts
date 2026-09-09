@@ -156,7 +156,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // shrank — body-patch.ts (134) and its two test files (165 + 106) are
   // deleted, so 14 files come to 295 insertions against 541 deletions.
   'packages/server-core/src/tools/canvas-edit.ts': 1098,
-  'apps/web/src/App.tsx': 973,
+  // Shrunk from 973: the effect that fetches a theme's family from the
+  // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
+  // daemon-keyed effect belongs — App composes, it does not fetch.
+  'apps/web/src/App.tsx': 962,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
@@ -174,7 +177,13 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // nothing red, which is precisely the comment's job to prevent a second
   // time.
   'packages/loro-adapter/src/workspace-tree.ts': 1116,
-  'packages/canvas-render/src/svg/backend.ts': 991,
+  // Shrunk from 991 while the theme layer added its glow filter and pencil
+  // passes: the shape and edge renderers (crisp and sketched, with the
+  // halo either takes) moved to `svg/shapes.ts`, and the presence-only
+  // paint helpers every element shares to `svg/paint.ts`. What is left is
+  // the text, list, table, code, icon and edge cases plus the document
+  // envelope.
+  'packages/canvas-render/src/svg/backend.ts': 831,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -289,7 +298,15 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // for a real defect the widened candidate ring exposed — a bubble landing
   // on a neighbour's pin — and it has to be a pre-pass, since pushing each
   // pin as it is drawn protects only the comments after it.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2137,
+  // +237 for the render theme layer (ADR-0030 decision 5): the theme is
+  // resolved PER CANVAS at every nesting level of the recursion this file
+  // owns (`withCanvasTheme`), so an embed reads its own facet before the
+  // host's, and the ink, the default shape and the default routing it
+  // implies are read where each node and edge is composed. Raised rather
+  // than split: the resolution reads and rewrites `ResolvedLayoutOptions`,
+  // and a module holding it would import the recursion's private options
+  // type back from here.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2374,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
@@ -310,7 +327,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // where the earlier splits put this file's pure core. This guard is what
   // asked the question — the growth read as the feature's cost until it
   // turned out two thirds of it was misfiled.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2723,
+  // +20 for the session's look (ADR-0030 decision 6): the `style` prop and
+  // the theme-fonts generation are two more inputs the editor threads to
+  // its scene and its drag layers, and the paper it paints is the palette's
+  // surface. Threading is this file's job; there is nothing here to move.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2743,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

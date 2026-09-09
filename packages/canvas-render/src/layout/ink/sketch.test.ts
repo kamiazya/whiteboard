@@ -97,9 +97,15 @@ describe('sketchShape', () => {
     const ink = sketchShape(nodeOutline('visual.cylinder', b), b, 5)
     expect(ink.strokes).toHaveLength(2)
     // The lid is the lower half of the top cap: a stroke dips below the cap
-    // line at the centre, which neither the outline's own caps nor the sides do.
-    const ry = nodeOutline('visual.cylinder', b)!.kind === 'cylinder' ? 10 : 0
-    const lidDepth = pointsOf(ink.strokes[0]!).filter((p) => p.x > 45 && p.x < 55 && p.y > ry)
+    // line at the centre, into the band between the cap line and 2·ry. The
+    // band is what excludes the bottom cap, which also crosses the centre —
+    // at the far end of the box — and would satisfy a one-sided test alone.
+    const outline = nodeOutline('visual.cylinder', b)
+    const ry = outline?.kind === 'cylinder' ? outline.ry : 0
+    const capLine = b.y + ry
+    const lidDepth = pointsOf(ink.strokes[0]!).filter(
+      (p) => p.x > 45 && p.x < 55 && p.y > capLine && p.y < capLine + 2 * ry,
+    )
     expect(lidDepth.length).toBeGreaterThan(0)
   })
 

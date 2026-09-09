@@ -3,6 +3,7 @@
 // canvas envelope through the same command every canvas facet takes, and
 // "Default" clears it rather than storing a value that means nothing.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CANVAS_SETTINGS_WIDGETS } from './index.js'
@@ -21,7 +22,9 @@ describe('the canvas theme row', () => {
     const run = vi.fn()
     const widget = CANVAS_SETTINGS_WIDGETS[THEME_KEY]
     expect(widget).toBeDefined()
-    const { getByRole } = render(<>{widget?.({ canvas: canvasIn(undefined), run })}</>)
+    const { getByRole } = render(
+      <>{widget?.({ canvas: canvasIn(undefined), run, facetRegistry: bundledFacetRegistry })}</>,
+    )
     expect(getByRole('radio', { name: 'Default' })).toBeTruthy()
     expect(getByRole('radio', { name: 'Sketch' })).toBeTruthy()
     fireEvent.click(getByRole('radio', { name: 'Neon' }))
@@ -35,7 +38,11 @@ describe('the canvas theme row', () => {
   it('marks the stored theme, and Default clears the facet instead of storing a value', () => {
     const run = vi.fn()
     const widget = CANVAS_SETTINGS_WIDGETS[THEME_KEY]
-    const { getByRole } = render(<>{widget?.({ canvas: canvasIn('visual.sketch'), run })}</>)
+    const { getByRole } = render(
+      <>
+        {widget?.({ canvas: canvasIn('visual.sketch'), run, facetRegistry: bundledFacetRegistry })}
+      </>,
+    )
     expect((getByRole('radio', { name: 'Sketch' }) as HTMLInputElement).checked).toBe(true)
     fireEvent.click(getByRole('radio', { name: 'Default' }))
     expect(run).toHaveBeenCalledWith({

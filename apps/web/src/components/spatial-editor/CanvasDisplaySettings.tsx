@@ -119,7 +119,7 @@ export function CanvasDisplaySettings({
         </div>
       )}
       {active?.widgets.map(({ key, widget }) => (
-        <Fragment key={key}>{widget({ canvas, run })}</Fragment>
+        <Fragment key={key}>{widget({ canvas, run, facetRegistry })}</Fragment>
       ))}
       {onStyleChange !== undefined && (
         // This tab's look, apart from the document's: the one row here that

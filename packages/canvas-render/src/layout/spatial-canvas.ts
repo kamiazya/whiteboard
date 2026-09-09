@@ -2309,19 +2309,26 @@ export function layoutSpatialEdges(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): SceneNode[] {
-  return composeEdgesAndLabels(canvas, {
-    ...withSpatialReferenceSeams(options),
-    ...resolveContributions(canvas, options),
-    passagesByNode: new Map(),
-    regionsByThread: new Map(),
-    messagesByThread: new Map(),
-    geometry: resolveGeometry(options.geometry),
-    parseBody: options.parseBody ?? parseMarkdownBody,
-    highlightCode: options.highlightCode ?? highlightCode,
-    activeEmbedPath: new Set(),
-    embedDepth: 0,
-    fitToBox: true,
-  }).content
+  // Through the same theme resolution the full layout applies to this
+  // canvas: the ink, the routing default and the paint an edge takes are
+  // the theme's, and a second entry point that skipped it drew a live drag
+  // crisp and straight over a pencilled, curved committed render.
+  return composeEdgesAndLabels(
+    canvas,
+    withCanvasTheme(canvas, {
+      ...withSpatialReferenceSeams(options),
+      ...resolveContributions(canvas, options),
+      passagesByNode: new Map(),
+      regionsByThread: new Map(),
+      messagesByThread: new Map(),
+      geometry: resolveGeometry(options.geometry),
+      parseBody: options.parseBody ?? parseMarkdownBody,
+      highlightCode: options.highlightCode ?? highlightCode,
+      activeEmbedPath: new Set(),
+      embedDepth: 0,
+      fitToBox: true,
+    }),
+  ).content
 }
 
 /**
