@@ -27,6 +27,13 @@ export interface SpatialNodeAppearance {
 }
 
 export interface SpatialAppearanceResolver {
+  /**
+   * Which surface this resolver paints for. Optional because a hand-built
+   * resolver in a test need not say; a layout that resolves a document
+   * theme reads it to pick the theme's matching palette, treating absence
+   * as light. Set by `createSpatialTheme` on every resolver it builds.
+   */
+  readonly mode?: 'light' | 'dark'
   resolveNode(node: SpatialNode): SpatialNodeAppearance
   resolveEdge(edge: CanvasEdge): Appearance | undefined
   /** Appearance for a `file`/`link`/`group` label run or a degraded body fallback run. */

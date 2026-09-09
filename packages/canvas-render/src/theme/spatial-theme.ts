@@ -82,8 +82,9 @@ function rawHex(color: CanvasColor | undefined): string | undefined {
   return color?.startsWith('#') ? color : undefined
 }
 
-function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
+function buildTheme(palette: SpatialPalette, mode: SpatialThemeMode): SpatialAppearanceResolver {
   return {
+    mode,
     resolveNode: (node: SpatialNode) => {
       // `palette.node` is keyed by `SpatialNode['type']`'s closed union;
       // the fallback only fires for a value cast past the type system
@@ -199,11 +200,11 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
 // fresh resolver object every call would churn `SpatialEditor`'s `useMemo`
 // deps and re-render its SVG on every frame.
 const THEMES: Readonly<Record<SpatialThemeMode, SpatialAppearanceResolver>> = Object.freeze({
-  light: Object.freeze(buildTheme(SPATIAL_LIGHT_PALETTE)),
-  dark: Object.freeze(buildTheme(SPATIAL_DARK_PALETTE)),
+  light: Object.freeze(buildTheme(SPATIAL_LIGHT_PALETTE, 'light')),
+  dark: Object.freeze(buildTheme(SPATIAL_DARK_PALETTE, 'dark')),
 })
 
 export function createSpatialTheme(options: SpatialThemeOptions): SpatialAppearanceResolver {
-  if (options.palette !== undefined) return buildTheme(options.palette)
+  if (options.palette !== undefined) return buildTheme(options.palette, options.mode)
   return THEMES[options.mode]
 }

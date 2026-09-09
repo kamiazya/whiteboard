@@ -74,9 +74,15 @@ describe('the mutation lane covers what it says it covers', () => {
     // filled rect fails `fills the box for a ticked item` and returning no
     // marker at all fails the preview guard in apps/web. What a mutation
     // score would add here is a number over two rects.
+    //
+    // 59 since `theme/theme-asset.ts`, outside the lane: it is a field-by-
+    // field copy of the token contract onto the palette plus a memo, and both
+    // are pinned by name — the round-trip test fails on any dropped field and
+    // the memo test on a fresh object per call. A mutation score would count
+    // 30 property copies.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 10,
-      production: 58,
+      production: 59,
     })
   })
 

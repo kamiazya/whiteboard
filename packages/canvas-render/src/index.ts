@@ -50,6 +50,7 @@ export type {
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
+  SpatialRenderStyle,
 } from './layout/spatial-canvas.js'
 export {
   COMMENT_BUBBLE_OFFSET_PX,
@@ -65,6 +66,7 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
   resolveShapeTable,
+  resolveThemeTable,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
@@ -141,5 +143,7 @@ export type {
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
 export { createSpatialTheme } from './theme/spatial-theme.js'
+export type { ThemedAppearanceOptions } from './theme/theme-asset.js'
+export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyNodes } from './tidy.js'

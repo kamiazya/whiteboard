@@ -6,7 +6,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, plugin-visual, zod, css-line-break, lowlight |
+| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) | model, codec, plugin-visual, facet-engine, zod, css-line-break, lowlight |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |

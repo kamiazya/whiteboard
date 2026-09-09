@@ -57,10 +57,16 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // is injection — the layout pass takes the resolvers the way it takes
     // `highlightCode`. Worth doing when a SECOND plugin wants to change how
     // a node is drawn; before that it is indirection with one implementation.
+    // facet-engine: the theme TOKEN CONTRACT (ADR-0030 decision 3) — the one
+    // shape a registered theme has, declared in the engine so ADR-0013
+    // decision 8 can build on it without moving it; this package maps it
+    // onto its palette. zod-only, so it holds on Node, the browser and a
+    // worker alike — checked before adopting.
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-plugin-visual',
+      '@kamiazya/whiteboard-facet-engine',
     ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,

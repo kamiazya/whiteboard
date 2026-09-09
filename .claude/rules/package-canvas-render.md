@@ -135,8 +135,9 @@ the table alone.
 - MathJax (or any math typesetting engine) invocation — composition roots
   own that; this package only defines the SVG-fragment node type and the
   seam for a composition root to inject an already-rendered fragment.
-- The theme/design-token layer (deferred to a later slice) — layout uses a
-  small set of fixed geometry constants, not a token system.
+- The theme TOKEN CONTRACT itself — that is facet-engine's
+  (`themeTokensSchema`, ADR-0030 decision 3); this package maps tokens onto
+  its palette (`theme/theme-asset.ts`) and never re-declares them.
 - A Canvas-API rendering backend, PNG/resvg rasterization, opentype.js /
   font loading — those are composition-root concerns that supply the
   `measure` callback, not something this package imports.
@@ -150,8 +151,10 @@ the table alone.
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
   `parseBody`; every consumer already bundled it to pass that same function
-  in), `css-line-break` (UAX #14 break opportunities) and `zod` (via
-  `catalog:`), for `sceneDigestSchema` only.
+  in), `@kamiazya/whiteboard-plugin-visual` (the default render
+  contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
+  contract, zod-only), `css-line-break` (UAX #14 break opportunities) and
+  `zod` (via `catalog:`), for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -963,6 +966,38 @@ the table alone.
     names the drift class; `tools/arch-lint`'s
     `reference-seams-check.test.ts` refuses a seam defined outside this
     directory.
+
+15. **A canvas's theme is resolved IN LAYOUT, per canvas** (ADR-0030
+    decisions 4-6; `withCanvasTheme` in `layout/spatial-canvas.ts`,
+    `theme/theme-asset.ts`). A `RenderContribution` may register `themes`
+    (token bundles by bare name, namespaced like `shapes`) and a `readTheme`
+    that answers the id the CANVAS names; `SpatialLayoutOptions.style`
+    decides whether that is honoured — `'clean'` (the DEFAULT: decision #10's
+    agent never pays unasked) ignores it, `'document'` draws it, and a theme
+    id draws that theme unsaved (the session override). Resolution happens at
+    the top of `layoutSpatialCanvasInternal`, so an embedded canvas reads its
+    OWN facet first and inherits the host's only when it names none — the
+    same side of the line `visual.edges`/`visual.shape` already stand on in
+    an embed, and deliberately NOT a layout option spread downward through
+    `...options`, which is the shape that lets an outer document's setting
+    win over an embedded canvas's own.
+    What a theme changes: the appearance resolver (the token palette for the
+    base resolver's `mode`, through `createSpatialTheme`'s once-unused
+    `palette` swap point — so `SpatialAppearanceResolver.mode` exists and
+    `createSpatialTheme` stamps it), the label/body font family (declared
+    only where `fontAvailable` says a face exists, else the bundled family
+    plus a `font-missing` report — the declared family must be the measured
+    one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
+    `visual.edges` is silent, `nodeShape` where a node's own facet is silent
+    (never a group, which is a frame), `groupFrame` on group chrome. An
+    unknown id draws clean and reports `unknown-theme`; nothing throws.
+    `createThemedAppearance` is memoized per (tokens, mode, family) so a
+    themed canvas keeps the frozen-singleton property the editor's `useMemo`
+    relies on. The content cache key carries the label family, because two
+    themes on one cache must not hand each other the other's wrapped lines.
+    `naturalNodeContentSize` goes through the same resolution; a caller
+    sizing a node under a theme passes the theme id as `style`, since a
+    single-node canvas carries no facet to read.
 
 ## Conventions
 
