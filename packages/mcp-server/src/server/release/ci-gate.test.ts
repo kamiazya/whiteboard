@@ -32,12 +32,19 @@ interface RunJob {
   conclusion: string | null
 }
 
-const { gateFailures, SKIPPABLE_JOBS, baseJobName } = (await import(
+const { gateFailures, SKIPPABLE_JOBS, baseJobName, stillSettling, readSettledJobs } = (await import(
   pathToFileURL(join(ROOT, 'tools/checks/src/ci-gate.mjs')).href
 )) as {
   gateFailures: (input: { jobs: unknown; needed: string[]; gateJobName: string }) => string[]
   SKIPPABLE_JOBS: Record<string, string>
   baseJobName: (name: string) => string
+  stillSettling: (input: { jobs: unknown; needed: string[]; gateJobName: string }) => boolean
+  readSettledJobs: (input: {
+    fetchJobs: () => Promise<RunJob[]>
+    sleep: (ms: number) => Promise<void>
+    needed: string[]
+    gateJobName: string
+  }) => Promise<{ jobs: RunJob[]; problems: string[] }>
 }
 
 function fixture(which: 'red' | 'green'): RunJob[] {
@@ -186,5 +193,73 @@ describe('the gate judges the run, and refuses everything but success', () => {
     expect(run([{ name: 'ci-gate', status: 'in_progress', conclusion: null }])).toHaveLength(1)
     expect(run(null)).toHaveLength(1)
     expect(run('[]')).toHaveLength(1)
+  })
+})
+
+// The Actions API is eventually consistent, and `needs` has already made
+// every job below the gate terminal before its step runs — so an answer of
+// `in_progress` there can only be the API lagging its own run, never work
+// still going on. Measured on a real run: `dry-run-npm` and `dry-run-docker`
+// were reported `in_progress` six seconds after they completed, and the gate
+// failed a run whose 21 jobs had all succeeded, printing `toJSON(needs)`
+// beside it saying `"result": "success"`.
+describe('the gate re-reads a run the API has not caught up with', () => {
+  const needed = ['verify']
+  const settled: RunJob[] = [{ name: 'verify', status: 'completed', conclusion: 'success' }]
+  const lagging: RunJob[] = [{ name: 'verify', status: 'in_progress', conclusion: null }]
+  const noSleep = async () => undefined
+
+  it('answers a lagging job as still settling, and a finished one as not', () => {
+    expect(stillSettling({ jobs: lagging, needed, gateJobName: GATE_ID })).toBe(true)
+    expect(stillSettling({ jobs: settled, needed, gateJobName: GATE_ID })).toBe(false)
+  })
+
+  it('counts a needed job the listing has not published yet as settling', () => {
+    expect(stillSettling({ jobs: [], needed, gateJobName: GATE_ID })).toBe(true)
+  })
+
+  it('passes once the second read shows the job finished', async () => {
+    const answers = [lagging, settled]
+    const { problems } = await readSettledJobs({
+      fetchJobs: async () => answers.shift() ?? settled,
+      sleep: noSleep,
+      needed,
+      gateJobName: GATE_ID,
+    })
+    expect(problems).toEqual([])
+  })
+
+  it('does not re-read over a real failure, however many attempts remain', async () => {
+    // The distinction that makes the retry safe: a `failure` conclusion is
+    // not something the API can resolve into a success, so waiting on it
+    // would only delay the red.
+    let reads = 0
+    const { problems } = await readSettledJobs({
+      fetchJobs: async () => {
+        reads += 1
+        return [{ name: 'verify', status: 'completed', conclusion: 'failure' }]
+      },
+      sleep: noSleep,
+      needed,
+      gateJobName: GATE_ID,
+    })
+    expect(problems).toEqual(['verify: failure'])
+    expect(reads).toBe(1)
+  })
+
+  it('gives up and reports rather than waiting for ever', async () => {
+    let reads = 0
+    const { problems } = await readSettledJobs({
+      fetchJobs: async () => {
+        reads += 1
+        return lagging
+      },
+      sleep: noSleep,
+      needed,
+      gateJobName: GATE_ID,
+    })
+    expect(problems).toEqual(['verify: still in_progress when the gate ran'])
+    expect(reads).toBeGreaterThan(1)
+    expect(reads).toBeLessThan(20)
   })
 })
