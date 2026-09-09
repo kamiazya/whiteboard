@@ -80,9 +80,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // are pinned by name — the round-trip test fails on any dropped field and
     // the memo test on a fresh object per call. A mutation score would count
     // 30 property copies.
+    //
+    // 60 and 11 since `layout/ink/sketch.ts`, which the lane DOES cover: its
+    // reach and determinism claims are properties, exactly what a survivor
+    // would expose as decorative.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 10,
-      production: 59,
+      mutated: 11,
+      production: 60,
     })
   })
 

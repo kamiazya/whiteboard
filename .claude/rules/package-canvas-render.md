@@ -998,6 +998,28 @@ the table alone.
     `naturalNodeContentSize` goes through the same resolution; a caller
     sizing a node under a theme passes the theme id as `style`, since a
     single-node canvas carries no facet to read.
+    **Ink** (decision #10's geometry half, `layout/ink/sketch.ts`): a theme
+    whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
+    every DOCUMENT shape and edge the layout composes — a kind plus
+    `seedFromId(id)`, never coordinates, so translate/scale carry it
+    untouched and `sceneDigest` sees nothing. Comment and proposal chrome
+    are built elsewhere and stay crisp on purpose: the annotation layer has
+    to keep reading as chrome. `sketchShape` (rect, ellipse, polygon, the
+    cylinder's caps+sides+lid) and `sketchEdge` (the SAME flattened polyline
+    the hit-test uses, arrowheads as wing strokes instead of markers) are
+    the one decomposition the SVG backend draws from; a coloured node is
+    hatched (`fill: 'hatch'`) rather than tinted. Two contracts, both
+    property-tested and in the mutation lane: every named coordinate lies
+    within the semantic bounds plus `SKETCH_INK_REACH_PX`, which
+    `sceneBounds` adds for an inked node (a quadratic never leaves the
+    triangle of its three points, so checking the named points checks the
+    curve); and the randomness is `styleRandomFromSeed(seed)` with no
+    positional input, so a moved box draws the same ink moved. Curves are
+    inked from chords whose control point sits on the TRUE arc — measured
+    before that, per-vertex jitter on a 24-sample ellipse read as tick
+    marks. Ink amplitude is in canvas units and is NOT scaled by
+    `scaleScene`, the same class as arrowheads: a miniature's pencil line is
+    relatively bolder, by design.
 
 ## Conventions
 

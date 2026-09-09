@@ -224,6 +224,27 @@ export interface ShapeSceneNode {
    */
   readonly shape?: ShapeId
   readonly appearance?: Appearance
+  /**
+   * How this chrome is INKED, when a theme says other than crisp (ADR-0030
+   * decision 7). A kind plus a seed, never coordinates: the SVG backend
+   * derives the strokes from `bbox`/`shape` through the shared decomposition
+   * (`layout/ink/sketch.ts`), so translate/scale need no knowledge of it and
+   * `sceneDigest`/hit-testing keep reading the box. Absent = the crisp
+   * chrome, byte-identical to before this field existed.
+   */
+  readonly ink?: SceneInk
+}
+
+/**
+ * A style's ink assignment on a scene node. `seed` is `seedFromId` of the
+ * node's or edge's id, so the same document draws the same strokes twice
+ * and a moved node keeps its wobble. `fill: 'hatch'` asks for hatch lines
+ * in place of the flat fill — what a coloured node gets under a pencil.
+ */
+export interface SceneInk {
+  readonly style: 'sketch'
+  readonly seed: number
+  readonly fill?: 'hatch'
 }
 
 /**
@@ -470,6 +491,8 @@ export interface ResolvedEdgeNode {
    * (see its `<path>` construction), which is what makes that safe.
    */
   readonly rounded?: true
+  /** Inked other than crisp — see `ShapeSceneNode.ink`. Absent = the crisp line. */
+  readonly ink?: SceneInk
   /**
    * This edge is comment-layer chrome (a leader from a pin to its bubble),
    * never a document edge — the same marker `ShapeSceneNode` carries and for

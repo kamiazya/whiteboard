@@ -12,6 +12,13 @@ export {
   routeEdge,
 } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
+export {
+  SKETCH_INK_REACH_PX,
+  type SketchEdgeOptions,
+  type SketchInk,
+  sketchEdge,
+  sketchShape,
+} from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export type {
   CodeToken,
@@ -40,7 +47,7 @@ export type {
 } from './layout/nodes/spatial-appearance.js'
 export { findPassage } from './layout/passage-highlight.js'
 export { scaleScene } from './layout/scale-scene.js'
-export { createStyleRandom, seedFromId } from './layout/seed.js'
+export { createStyleRandom, seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
   DecorationContext,
   FacetCardData,
@@ -109,6 +116,7 @@ export type {
   RawHtmlNode,
   ResolvedEdgeNode,
   Scene,
+  SceneInk,
   SceneNode,
   ShapeId,
   ShapeSceneNode,

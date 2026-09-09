@@ -55,6 +55,7 @@ import type {
   BoundingBox,
   ResolvedEdgeNode,
   Scene,
+  SceneInk,
   SceneNode,
   ShapeSceneNode,
   TextRunNode,
@@ -105,6 +106,7 @@ import {
   nodePassagesOf,
 } from './passage-highlight.js'
 import { scaleScene } from './scale-scene.js'
+import { seedFromId } from './seed.js'
 import { translateScene } from './translate-scene.js'
 
 /**
@@ -623,6 +625,9 @@ function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
   const shape = options.nodeOutlines?.[node.id]
+  // A coloured node is hatched rather than tinted under a pencil; an
+  // uncoloured one keeps its flat surface fill beneath the strokes.
+  const ink = sketchInkFor(node.id, options, node.color !== undefined)
   return {
     kind: 'shape',
     id: node.id,
@@ -630,7 +635,23 @@ function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSc
     ...(resolved.radius !== undefined ? { radius: resolved.radius } : {}),
     ...(shape !== undefined ? { shape } : {}),
     ...(resolved.appearance !== undefined ? { appearance: resolved.appearance } : {}),
+    ...(ink === undefined ? {} : { ink }),
   }
+}
+
+/**
+ * The ink a DOCUMENT node or edge carries under the active theme, seeded
+ * from its id (decision #10: id-keyed, never positional). Only document
+ * content is inked — comment and proposal chrome are built elsewhere and
+ * stay crisp, so the annotation layer keeps reading as chrome.
+ */
+function sketchInkFor(
+  id: string,
+  options: ResolvedLayoutOptions,
+  hatch: boolean,
+): SceneInk | undefined {
+  if (options.activeTheme?.tokens.ink !== 'sketch') return undefined
+  return { style: 'sketch', seed: seedFromId(id), ...(hatch ? { fill: 'hatch' as const } : {}) }
 }
 
 /**
@@ -1281,7 +1302,12 @@ function composeEdge(
     options.shapeTable,
   )
   const appearance = options.appearance.resolveEdge(edge)
-  return appearance === undefined ? routed : { ...routed, appearance }
+  const ink = sketchInkFor(edge.id, options, false)
+  return {
+    ...routed,
+    ...(appearance === undefined ? {} : { appearance }),
+    ...(ink === undefined ? {} : { ink }),
+  }
 }
 
 /**

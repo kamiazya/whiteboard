@@ -1,8 +1,9 @@
 import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
-import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
+import { ARROW_MARKER, edgeArrowEnds, edgeArrowPolygons } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
+import { sketchEdge, sketchShape } from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
@@ -10,7 +11,9 @@ import type {
   BoundingBox,
   CodeBlockNode,
   ListItemNode,
+  ResolvedEdgeNode,
   Scene,
+  SceneInk,
   SceneNode,
   ShapeSceneNode,
   TableCellSceneNode,
@@ -277,6 +280,72 @@ interface ResolveTables {
 
 function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
+  if (node.ink?.style === 'sketch') return renderSketchShape(node, node.ink, tables)
+  return renderCrispShape(node, tables)
+}
+
+/**
+ * A pencilled node: the flat fill (or hatch lines) as an underlay, then the
+ * strokes the shared decomposition hands back, round-capped so the passes
+ * read as one pencil line. Comment chrome never arrives here — the layout
+ * inks document content only — so the drop-shadow branch stays crisp.
+ */
+function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: ResolveTables): SvgChild {
+  const outline =
+    node.shape === undefined ? null : nodeOutline(node.shape, node.bbox, tables?.shapes)
+  const strokes = sketchShape(outline, node.bbox, ink.seed, { hatch: ink.fill === 'hatch' })
+  const paint = appearanceAttrs(node.appearance)
+  const strokeAttrs = {
+    fill: 'none',
+    stroke: paint.stroke,
+    'stroke-width': paint['stroke-width'],
+    'stroke-opacity': paint['stroke-opacity'],
+    'stroke-dasharray': paint['stroke-dasharray'],
+  }
+  const underlay: SvgChild =
+    strokes.hatch !== undefined
+      ? el(
+          'g',
+          { 'stroke-linecap': 'round' },
+          strokes.hatch.map((d) =>
+            el('path', {
+              d,
+              fill: 'none',
+              stroke: paint.stroke,
+              'stroke-width': HATCH_STROKE_WIDTH,
+              'stroke-opacity': HATCH_OPACITY,
+            }),
+          ),
+        )
+      : paint.fill === undefined || paint.fill === 'none'
+        ? []
+        : // The crisp silhouette with its stroke removed: a hand draws no
+          // 6px fillet, so the rect underlay drops its radius too.
+          renderCrispShape(
+            {
+              ...node,
+              radius: undefined,
+              appearance: {
+                fill: paint.fill,
+                ...(paint['fill-opacity'] === undefined
+                  ? {}
+                  : { fillOpacity: paint['fill-opacity'] }),
+              },
+            },
+            tables,
+          )
+  const outlineStrokes = el(
+    'g',
+    { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+    strokes.strokes.map((d) => el('path', { d, ...strokeAttrs })),
+  )
+  return [underlay, outlineStrokes]
+}
+
+const HATCH_STROKE_WIDTH = 0.9
+const HATCH_OPACITY = 0.75
+
+function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   // Non-rect silhouettes come from the shared decomposition (one producer
   // for drawing and hit-testing — layout/nodes/node-outline.ts); an absent
   // `shape` stays the historic rect byte-for-byte.
@@ -334,6 +403,36 @@ function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
     }
   }
   return renderChromeRect(node)
+}
+
+/**
+ * A pencilled edge: the drawn polyline (rounded corners and hops included,
+ * through the same flattening the hit-test uses) in two bowed passes, and
+ * each arrowhead as two wing strokes — no marker, since a crisp triangle on
+ * a pencil line is the one thing that reads as two styles at once.
+ */
+function renderSketchEdge(node: ResolvedEdgeNode, ink: SceneInk): SvgChild {
+  const strokes = sketchEdge(node.path, ink.seed, {
+    arrows: edgeArrowPolygons(node),
+    rounded: node.rounded === true,
+    jumps: node.jumps ?? [],
+  })
+  const paint = appearanceAttrs(node.appearance)
+  return el(
+    'g',
+    { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
+    strokes.strokes.map((d) =>
+      el('path', {
+        d,
+        fill: 'none',
+        stroke: paint.stroke,
+        'stroke-width': paint['stroke-width'],
+        'stroke-opacity': paint['stroke-opacity'],
+        'stroke-dasharray': paint['stroke-dasharray'],
+        role: PRESENTATION,
+      }),
+    ),
+  )
 }
 
 /** The historic rect, byte-for-byte — also what a node falls back to when its
@@ -683,6 +782,7 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
         node.children.map((child) => renderNode(child, tables)),
       )
     case 'edge': {
+      if (node.ink?.style === 'sketch') return renderSketchEdge(node, node.ink)
       const appearance = appearanceAttrs(node.appearance)
       // `fill="none"` is not decoration. SVG's initial fill is black and a
       // <polyline> fills the region its points enclose, so a bent edge would
