@@ -106,15 +106,10 @@ worked measurements live.** Load it before the work, not after:
   can read, which is a `--body`/`--body-file` argument; it fails open on stdin, an editor, or
   `--fill`.
 - **`mcp-tool-surface`** — a tool's name, description, schema or existence is read by a model
-  on every turn, and a change to it passes every test either way. ADR-0030's criteria are
-  checked by two pinned scoreboards (what the table costs to read and how much of it explains
-  itself; what an errand costs in calls) and an opt-in LLM-driven lane (`pnpm eval:tool-surface`,
-  a real model on a seeded fixture, graded by outcome). A rename, consolidation or retirement
-  carries the lane's before/after at `--trials=3`, and is decided by the columns, not by the
-  count — the count could not see one tool being 45% of the table. Its first run found two
-  product bugs the transcript read as model mistakes, which is why a failure is probed against
-  the store before it is believed. The `tool-surface` review dimension (opt-in) judges the diff
-  by the same criteria.
+  on every turn, and a change to it passes every test either way. ADR-0030's criteria, two
+  pinned scoreboards, and an opt-in LLM-driven lane (`pnpm eval:tool-surface`) graded by
+  outcome, with its boards rendered so a drawing is looked at and not only scored. The
+  `tool-surface` review dimension (opt-in) judges a diff by the same criteria.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 

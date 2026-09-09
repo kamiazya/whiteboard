@@ -26,7 +26,6 @@ export class InMemoryVersionHistory implements VersionHistory {
       createdAt: new Date(this.next * 1000).toISOString(),
       elementCount: 0,
       auto: options.auto,
-      hasThumbnail: false,
       branchName: options.branchName ?? 'main',
       ...(options.label === undefined ? {} : { label: options.label }),
       ...(options.operator === undefined ? {} : { operator: options.operator }),

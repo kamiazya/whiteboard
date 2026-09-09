@@ -87,7 +87,10 @@ function alwaysOnFiles(): string[] {
 }
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
-  'AGENTS.md': 16,
+  // 17 since the MCP section gained its three-line pointer at the
+  // mcp-tool-surface skill; main sat 23 characters under the boundary, so
+  // the bucket is bought by the pointer alone.
+  'AGENTS.md': 17,
   // 16 since `packages/history` joined the table — the shared mechanics both
   // keepers read a branch, a merge plan and a checkpoint out of. A package
   // that is not in the table is a package nobody can place, so the row is
@@ -106,7 +109,11 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // ci-gate.mjs. The file had 117 characters of headroom, so this bucket is
   // bought by about 515 characters of prose, not by drift — a coarse
   // instrument charges the whole step to whoever crosses it.
-  '.claude/rules/dev-flow.md': 27,
+  // 28 since the mcp-tool-surface skill joined the "four things you cannot
+  // see by reading a diff" list and the review workflow gained its opt-in
+  // tool-surface dimension; the entry is trimmed to the pointer, and the
+  // detail is the skill's.
+  '.claude/rules/dev-flow.md': 28,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -163,7 +170,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // shipped VACUOUS — plain nodes on both sides, agreeing about canvases that
 // carried no facets at all, while the bug it exists to catch was live. A
 // reader who does not know that will write the next generator the same way.
-const CANVAS_RENDER_BUDGET = 81
+// 82 since the paint-order rule (groups behind what they hold, whatever the
+// stored order says) — a bug a person saw in a rendered diagram and no test
+// had caught.
+const CANVAS_RENDER_BUDGET = 82
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

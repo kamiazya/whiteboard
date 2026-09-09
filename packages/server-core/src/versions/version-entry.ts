@@ -47,7 +47,7 @@ export type VersionEntry = z.infer<typeof versionEntrySchema>
 /**
  * A version as the MCP tools answer it: what an agent acts on, and nothing
  * the History PANEL needs that an agent does not. `path` repeats the
- * document it asked about, `elementCount` and `hasThumbnail` are panel
+ * document it asked about, `elementCount` is panel
  * decoration, and `branchName` is the legacy column ADR-0029 retired the
  * branch from (always `main` on the wire). Measured on the errand
  * scoreboard, four saved versions answered 1,948 bytes with them and 1,316

@@ -1,0 +1,335 @@
+/**
+ * What `wb_canvas_edit` accepts and answers: the op union and the input and
+ * output schemas, in one place a model reads and the tool executes.
+ */
+import {
+  annotationIdSchema,
+  canvasCommentSchema,
+  canvasEdgeSchema,
+  documentIdSchema,
+  edgePatchFieldsSchema,
+  extensionFacetsSchema,
+  nodeIdSchema,
+  nodePatchFieldsSchema,
+  nonnegativeIntegerSchema,
+  proposalSchema,
+  spatialNodeSchema,
+  workspaceIdSchema,
+  type XWhiteboard,
+} from '@kamiazya/whiteboard-model'
+import { z } from 'zod'
+import { canvasSnapshotSchema } from './canvas-snapshot.js'
+
+// Derived from the stored node schemas rather than restated beside them, so
+// a field added to a node type reaches this tool's input for free. Only the
+// id and the four geometry fields become optional; `type` stays required
+// because it is the discriminator, and the per-type content fields stay
+// required because there is no sensible default for a link with no url.
+const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
+const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
+const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
+
+/**
+ * The node extension as a WRITER declares it: one flat object instead of
+ * the stored two-variant union, narrowed to the stored shape on parse.
+ *
+ * Two reasons, one of them measured. The stored schema `.catch`es an
+ * unrecognised extension so a canvas stays readable, which on the write
+ * side would silently DROP a broken embed a caller just sent; here a
+ * `kind: "embed"` with no document is refused by name. And the stored
+ * union is emitted inline into the tool's input once per node type per op
+ * — eight times, 487 bytes each — where this shape is 290, on a table a
+ * model reads on every turn.
+ */
+const nodeExtensionWriteSchema = z
+  .object({
+    kind: z.literal('embed').optional(),
+    documentId: documentIdSchema.optional(),
+    versionRef: z.string().min(1).optional(),
+    facets: extensionFacetsSchema.optional(),
+  })
+  .strict()
+  .refine((value) => (value.kind === 'embed') === (value.documentId !== undefined), {
+    message: 'an embed names the document it embeds: kind "embed" and documentId go together',
+  })
+  .transform((value): XWhiteboard => {
+    if (value.kind === 'embed' && value.documentId !== undefined) {
+      return {
+        kind: 'embed',
+        documentId: value.documentId,
+        ...(value.versionRef === undefined ? {} : { versionRef: value.versionRef }),
+        ...(value.facets === undefined ? {} : { facets: value.facets }),
+      }
+    }
+    return value.facets === undefined ? {} : { facets: value.facets }
+  })
+const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
+
+const nodeDraftSchema = z.discriminatedUnion('type', [
+  textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+])
+
+const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
+
+/**
+ * One step of a batch. The verbs are the ones the retired single-purpose
+ * tools carried, so nothing an agent could do before is missing here — plus
+ * `node.remove` / `edge.remove`, which had no tool at all: the only way to
+ * delete anything used to be a whole-document replace.
+ */
+/**
+ * Where one id goes, a SELECTOR may go instead: every node inside a group,
+ * or every node on the canvas. Measured before it existed: "colour every box
+ * inside the Clients group" and "lock every item on the roadmap" each cost a
+ * read the errand did not need — the snapshot was there only to learn the
+ * ids the edit would then name one by one. Exactly one of the three.
+ */
+const NODE_TARGET = {
+  id: nodeIdSchema.optional(),
+  within: nodeIdSchema.optional().describe('Instead of id: every node inside this group.'),
+  all: z.literal(true).optional().describe('Instead of id: every node on the canvas.'),
+} as const
+const EDGE_TARGET = {
+  id: nodeIdSchema.optional(),
+  within: nodeIdSchema
+    .optional()
+    .describe('Instead of id: every edge with both ends inside this group.'),
+  all: z.literal(true).optional().describe('Instead of id: every edge on the canvas.'),
+} as const
+export type Target = { id?: string; within?: string; all?: true }
+const exactlyOneTarget = {
+  check: (value: Target) =>
+    [value.id, value.within, value.all].filter((field) => field !== undefined).length === 1,
+  message: 'name exactly one of id, within and all',
+}
+
+const canvasOpSchema = z.discriminatedUnion('op', [
+  z
+    .object({
+      op: z.literal('node.add'),
+      node: nodeDraftSchema,
+      within: nodeIdSchema
+        .optional()
+        .describe('A group to place the node inside; the group grows to fit.'),
+    })
+    .strict(),
+  z
+    .object({ op: z.literal('node.patch'), ...NODE_TARGET, patch: nodePatchFieldsSchema })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  /**
+   * A line-range splice of a text node's body, `[startLine, endLine]`
+   * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
+   * this replaces part of it, so a caller editing one line of a long note
+   * sends that line. Retired `wb_body_patch` into this tool: as an op it
+   * batches with everything else, and it falls under the propose-by-default
+   * rule that tool had no mode for.
+   */
+  z
+    .object({
+      op: z.literal('node.splice'),
+      id: nodeIdSchema,
+      startLine: nonnegativeIntegerSchema,
+      endLine: nonnegativeIntegerSchema,
+      replacement: z.string(),
+    })
+    .strict()
+    .refine((value) => value.startLine <= value.endLine, {
+      message: 'startLine must be <= endLine',
+    }),
+  z
+    .object({ op: z.literal('node.remove'), ...NODE_TARGET })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z.object({ op: z.literal('edge.add'), edge: edgeDraftSchema }).strict(),
+  z
+    .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
+    .strict(),
+  z
+    .object({ op: z.literal('edge.remove'), ...EDGE_TARGET })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({ op: z.literal('node.lock'), ...NODE_TARGET, locked: z.boolean() })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({ op: z.literal('edge.lock'), ...EDGE_TARGET, locked: z.boolean() })
+    .strict()
+    .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
+  z
+    .object({
+      op: z.literal('tidy'),
+      scope: z.array(nodeIdSchema).min(1).optional(),
+      within: nodeIdSchema.optional().describe('Instead of scope: every node inside this group.'),
+    })
+    .strict()
+    .refine((value) => value.scope === undefined || value.within === undefined, {
+      message: 'scope and within are alternatives; pass one',
+    }),
+  /**
+   * The annotation layer (ADR-0024). A draft may omit the id (minted) and
+   * the anchor point — a comment about a NODE names `targetNodeId` and the
+   * server anchors it at that node's top-right corner. `createdAt` defaults
+   * to now, stamped by the server so the record orders without trusting
+   * every caller's clock format.
+   */
+  z
+    .object({
+      op: z.literal('comment.add'),
+      comment: canvasCommentSchema.partial({ id: true, x: true, y: true }),
+    })
+    .strict(),
+  /**
+   * Resolution keeps the record in the document (the conversation is the
+   * point); `resolved: false` reopens. There is deliberately NO remove op:
+   * resolving is the only way to close a comment, for a person in the
+   * editor and for an agent alike (ADR-0025 decision 2) — a verb one side
+   * had and the other did not would let an agent erase feedback a person
+   * could only close.
+   */
+  z
+    .object({
+      op: z.literal('comment.resolve'),
+      id: nodeIdSchema,
+      resolved: z.boolean().optional(),
+    })
+    .strict(),
+  /**
+   * "This group contains exactly these." The ONE declarative op, and so the
+   * only one that deletes something it was not told about.
+   *
+   * It names MEMBERS by id and nothing else. The shape used to carry a full
+   * node declaration per member — the node union a second time, a third of
+   * this tool's bytes — and the lane showed what a model did with that:
+   * wrote x/y/width/height for every box, the ones already there included.
+   * Creating a member is `node.add` with `within`.
+   *
+   * Scope is STRICT containment in `within`'s stored box. That rule is what
+   * makes the boundary safe rather than a judgement call: a node straddling
+   * the edge — a human mid-drag — is not enclosed, so it is out of scope and
+   * survives. A listed node that is elsewhere is moved in and placed.
+   */
+  z
+    .object({
+      op: z.literal('region.set'),
+      within: nodeIdSchema,
+      nodes: z
+        .array(nodeIdSchema)
+        .describe(
+          'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in. Create a new member with node.add and within.',
+        ),
+      edges: z
+        .array(nodeIdSchema)
+        .optional()
+        .describe('Edges to keep among the members; omitted keeps every edge whose ends survive.'),
+    })
+    .strict(),
+])
+
+/**
+ * 200 is a ceiling on one request, not on a board: a batch past this size is
+ * almost always a model looping, and a rejected oversized batch is cheaper
+ * to recover from than a half-understood one.
+ */
+const MAX_OPS = 200
+
+export const canvasEditInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    documentId: documentIdSchema,
+    ops: z.array(canvasOpSchema).min(1).max(MAX_OPS),
+    /**
+     * Whether this batch CHANGES the document or PROPOSES a change to it
+     * (ADR-0029). A proposal is stored beside the content, drawn on the live
+     * document, and adopted or dismissed by a person.
+     *
+     * **The default is decided by what the batch CARRIES, not by who is
+     * calling.** Content — node and edge adds, patches and removes — is
+     * proposed, because nobody watches an agent type and there is no moment
+     * at which a person could object (decision 3). A batch carrying anything
+     * else applies: `comment.*` is the annotation layer, a lock is a claim on
+     * a document rather than a change to it, and `tidy`/`region.set` have no
+     * anchor to follow — the same line the layer already drew when it said
+     * which verbs a proposal can carry.
+     *
+     * A default that refused those instead would refuse a verb this tool
+     * supports, and one of its callers is the widget's comment box: a person
+     * typing there would get an error rather than a comment.
+     *
+     * A MIXED batch applies, because the batch is all-or-nothing and
+     * splitting it would be a third thing neither mode means.
+     *
+     * `apply` is therefore still what a surface a person is looking at
+     * should pass explicitly — the product's drawing skills do, since a
+     * person who asked for a drawing right now is the case decision 3
+     * exempts.
+     */
+    mode: z.enum(['apply', 'propose']).optional(),
+    /**
+     * Add to the proposal already open under this id instead of opening a
+     * new one — decision 8's "one request, not one call". Only meaningful
+     * with `mode: 'propose'`; a batch that touches an element the proposal
+     * already carries REPLACES that change rather than stacking a second
+     * opinion beside it.
+     */
+    proposalId: annotationIdSchema.optional(),
+    /**
+     * Move a watching browser's viewport onto what this batch touched.
+     * Defaults to true: an agent editing a board a human is looking at
+     * should not leave them hunting for the change. Set false for
+     * housekeeping edits that do not deserve to steal someone's view.
+     */
+    follow: z.boolean().optional(),
+  })
+  .strict()
+export type CanvasEditInput = z.infer<typeof canvasEditInputSchema>
+
+export const geometryEntrySchema = z
+  .object({
+    id: nodeIdSchema,
+    x: z.number().int(),
+    y: z.number().int(),
+    width: z.number().int(),
+    height: z.number().int(),
+  })
+  .strict()
+
+export const canvasEditOutputSchema = z
+  .object({
+    documentId: documentIdSchema,
+    applied: z.number().int().nonnegative(),
+    /**
+     * Every element the batch created, changed, moved, locked or deleted.
+     * Sorted, so the payload is reproducible across runs rather than
+     * carrying Set iteration order.
+     */
+    touched: z
+      .object({
+        nodes: z.array(nodeIdSchema),
+        edges: z.array(nodeIdSchema),
+        comments: z.array(nodeIdSchema),
+      })
+      .strict(),
+    /**
+     * Final geometry of every node this batch positioned WITHOUT being told
+     * the numbers — an auto-placed add, or a node `tidy` moved. A node whose
+     * coordinates the caller supplied is not listed: the caller already
+     * knows them.
+     */
+    geometry: z.array(geometryEntrySchema),
+    /** The board after the batch, so no second round trip is needed to read it. */
+    snapshot: canvasSnapshotSchema,
+    /**
+     * What was proposed, present only in `propose` mode. The whole proposal
+     * rather than a summary of it: the caller does not know the ids minted
+     * or the geometry placed, and this is the same schema the document
+     * stores, so there is no second shape to keep in step.
+     */
+    proposed: proposalSchema.optional(),
+  })
+  .strict()
+export type CanvasEditOutput = z.infer<typeof canvasEditOutputSchema>

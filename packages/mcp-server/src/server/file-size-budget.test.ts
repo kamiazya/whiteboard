@@ -173,7 +173,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the daemon's merge before the fix, a branch tip read back as "" with
   // nothing red, which is precisely the comment's job to prevent a second
   // time.
-  'packages/loro-adapter/src/workspace-tree.ts': 1116,
+  // 1144: `syncMapEntries`, so a fold or projection carries a nested
+  // container (a thread, a proposal) instead of flattening it to a value.
+  'packages/loro-adapter/src/workspace-tree.ts': 1144,
   'packages/canvas-render/src/svg/backend.ts': 991,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
@@ -289,7 +291,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // for a real defect the widened candidate ring exposed — a bubble landing
   // on a neighbour's pin — and it has to be a pre-pass, since pushing each
   // pin as it is drawn protects only the comments after it.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2137,
+  // 2154: `paintOrderOf`, groups behind what they hold whatever the stored
+  // order says.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2154,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
