@@ -1,5 +1,11 @@
 import type { z } from 'zod'
 import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
+import {
+  type IconAsset,
+  iconAssetSchema,
+  type ThemeTokens,
+  themeTokensSchema,
+} from './theme-tokens.js'
 
 /**
  * The facet engine's definition + registry machinery (ADR-0013 decisions 3,
@@ -52,6 +58,27 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
    * against the schema, so a spec cannot name a field that does not exist.
    */
   readonly editor?: FacetEditorSpec
+  /**
+   * Fields whose value is the ID of a registered asset (`<plugin>.<name>`),
+   * by asset kind. The write path refuses a payload naming an asset no
+   * plugin registered, so a document cannot point at a theme that does not
+   * exist — while the READ path never checks: a stored id another
+   * deployment registered is data, and the renderer degrades on it.
+   */
+  readonly assetRefs?: Readonly<Record<string, AssetKind>>
+}
+
+export type AssetKind = 'themes' | 'icons'
+
+/**
+ * What a plugin registers beside its facets (ADR-0013 decision 3's assets
+ * layer): things a document names by id and a renderer resolves in every
+ * composition root. Keyed by BARE name; the registry composes
+ * `<plugin>.<name>`, the same way silhouettes are namespaced.
+ */
+export interface FacetPluginAssets {
+  readonly themes?: Readonly<Record<string, ThemeTokens>>
+  readonly icons?: Readonly<Record<string, IconAsset>>
 }
 
 export interface FacetPlugin {
@@ -64,6 +91,7 @@ export interface FacetPlugin {
    */
   readonly displayName: string
   readonly facets: readonly FacetDefinition[]
+  readonly assets?: FacetPluginAssets
 }
 
 export function defineFacet<S extends z.ZodTypeAny>(
@@ -83,6 +111,9 @@ export function defineFacet<S extends z.ZodTypeAny>(
   }
   if (definition.editor !== undefined) {
     assertEditorSpecFits(definition.name, definition.schema, definition.editor)
+  }
+  if (definition.assetRefs !== undefined) {
+    assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
   }
   for (const tag of Object.keys(definition.compat ?? {})) {
     if (!VERSION_PATTERN.test(tag)) {
@@ -108,7 +139,54 @@ export function definePlugin(plugin: FacetPlugin): FacetPlugin {
     }
     seen.add(facet.name)
   }
+  for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
+    assertAssetName(plugin.id, name)
+    const result = themeTokensSchema.safeParse(tokens)
+    if (!result.success) {
+      throw new Error(
+        `plugin "${plugin.id}" theme asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+      )
+    }
+  }
+  for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
+    assertAssetName(plugin.id, name)
+    const result = iconAssetSchema.safeParse(icon)
+    if (!result.success) {
+      throw new Error(
+        `plugin "${plugin.id}" icon asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+      )
+    }
+  }
   return plugin
+}
+
+function assertAssetName(pluginId: string, name: string): void {
+  if (!SEGMENT_PATTERN.test(name)) {
+    throw new Error(`plugin "${pluginId}" asset name "${name}" must match ${SEGMENT_PATTERN}`)
+  }
+}
+
+/**
+ * Definition-time check for asset refs, the same shape as an editor spec's:
+ * a ref naming a field the schema does not declare is a programmer error.
+ * Reads the schema's object shape directly rather than the derived form,
+ * because a ref field is a plain string the form layer already handles and
+ * the check is about NAMES, not controls.
+ */
+function assertAssetRefsFit(
+  facetName: string,
+  schema: z.ZodTypeAny,
+  assetRefs: Readonly<Record<string, AssetKind>>,
+): void {
+  const shape = (schema as { shape?: Record<string, unknown> }).shape
+  const known = new Set(Object.keys(shape ?? {}))
+  for (const field of Object.keys(assetRefs)) {
+    if (!known.has(field)) {
+      throw new Error(
+        `facet "${facetName}" assetRefs names field "${field}", which its schema does not declare`,
+      )
+    }
+  }
 }
 
 export type FacetWriteResult =
@@ -131,6 +209,10 @@ export interface FacetRegistry {
   readonly targetsOf: (key: string) => readonly FacetTarget[] | undefined
   readonly validateFacetWrite: (key: string, payload: unknown) => FacetWriteResult
   readonly resolveFacetPayload: (key: string, payload: unknown) => FacetResolution
+  /** Registered asset ids of one kind, `<plugin>.<name>`, in registration order. */
+  readonly assetIds: (kind: AssetKind) => readonly string[]
+  readonly themeAsset: (id: string) => ThemeTokens | undefined
+  readonly iconAsset: (id: string) => IconAsset | undefined
 }
 
 /**
@@ -181,8 +263,46 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   const currentKey = (namespace: string, definition: FacetDefinition): string =>
     `${namespace}.${definition.name}/${definition.version}`
 
+  // Composed once: the registry is immutable data, and every write and
+  // every render asks the same question of the same tables.
+  const themes = new Map<string, ThemeTokens>()
+  const icons = new Map<string, IconAsset>()
+  for (const plugin of plugins) {
+    for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
+      themes.set(`${plugin.id}.${name}`, tokens)
+    }
+    for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
+      icons.set(`${plugin.id}.${name}`, icon)
+    }
+  }
+  const tableOf = (kind: AssetKind): ReadonlyMap<string, unknown> =>
+    kind === 'themes' ? themes : icons
+
+  /**
+   * After the schema has accepted the payload: every ref field that carries
+   * a value must name a registered asset. The message lists what IS
+   * registered, because "unknown theme" alone sends an author to the docs
+   * for a list this registry already holds.
+   */
+  const unregisteredRef = (
+    definition: FacetDefinition,
+    value: unknown,
+  ): { field: string; id: string; kind: AssetKind } | undefined => {
+    if (definition.assetRefs === undefined || typeof value !== 'object' || value === null) {
+      return undefined
+    }
+    for (const [field, kind] of Object.entries(definition.assetRefs)) {
+      const id = (value as Record<string, unknown>)[field]
+      if (typeof id === 'string' && !tableOf(kind).has(id)) return { field, id, kind }
+    }
+    return undefined
+  }
+
   return {
     plugins,
+    assetIds: (kind) => [...tableOf(kind).keys()],
+    themeAsset: (id) => themes.get(id),
+    iconAsset: (id) => icons.get(id),
     targetsOf(key) {
       const parsed = parseKey(key)
       if (parsed === null) return undefined
@@ -208,6 +328,14 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
         return {
           ok: false,
           message: `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+        }
+      }
+      const missing = unregisteredRef(definition, result.data)
+      if (missing !== undefined) {
+        const registered = [...tableOf(missing.kind).keys()]
+        return {
+          ok: false,
+          message: `"${key}" field ${missing.field} names ${missing.kind} asset "${missing.id}", which no plugin registered — registered: ${registered.length === 0 ? '(none)' : registered.join(', ')}`,
         }
       }
       return { ok: true, value: result.data }

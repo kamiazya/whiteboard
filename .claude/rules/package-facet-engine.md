@@ -77,6 +77,22 @@ paths:
   payloads it rejects rather than handing back ones no reader resolves.
   `canvas-render` is the first consumer, through a dev-only dependency.
 
+- The THEME TOKEN CONTRACT and plugin ASSETS (ADR-0030 decision 3,
+  `theme-tokens.ts` + the registry): `themeTokensSchema` is the one shape a
+  registered theme has — ink, an optional font FAMILY name, an optional
+  glow, BOTH mode palettes (six-digit hex only; resvg parses no oklch), and
+  `defaults` for what is drawn. A plugin registers `assets.themes` /
+  `assets.icons` by bare name and the registry composes `<plugin>.<name>`,
+  exactly as silhouettes are namespaced; `assetIds` / `themeAsset` /
+  `iconAsset` answer them. A facet declares `assetRefs: { field: kind }`
+  and `validateFacetWrite` then refuses a payload naming an asset no plugin
+  registered (the message lists what is registered) — while
+  `resolveFacetPayload` never checks, because a stored id another
+  deployment registered is data and the renderer degrades on it. The
+  contract lives HERE rather than in canvas-render so it is a prefix of
+  ADR-0013 decision 8: when views and slots land, neither the type nor any
+  asset moves.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's
@@ -116,6 +132,10 @@ paths:
 - Compat-chain behavior is property-tested with injective migrations so the
   exact output is asserted, and the property is mutation-checked (skipping
   the final chain step must go red).
+- Asset registration is property-tested (`assets.property.test.ts`): every
+  listed id resolves, `(plugin, name)` → id is injective, and
+  `validateFacetWrite` accepts an id iff it is listed. Mutation-checked:
+  dropping the ref check in `validateFacetWrite` fails two tests.
 
 ## Common mistakes (append as review finds them)
 
