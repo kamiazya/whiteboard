@@ -188,7 +188,10 @@ export function registerPairingLinkTool(
       description:
         'Mint a `#wb=` daemon-pairing URL that lets the whiteboard web app connect to this local daemon, optionally targeting a specific workspace/document. ' +
         PAIRING_LINK_CREDENTIAL_NOTE,
-      inputSchema: pairingLinkInputShape,
+      // The OBJECT, strict, not the shape: handed a shape, the SDK rebuilds
+      // a non-strict object around it and a misspelt optional parameter is
+      // dropped rather than refused (ADR-0030 C10).
+      inputSchema: z.object(pairingLinkInputShape).strict(),
       outputSchema: pairingLinkOutputSchema,
     },
     async (rawArgs) => {

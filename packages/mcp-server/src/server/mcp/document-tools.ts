@@ -55,7 +55,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.facetList.name,
     {
       description: tools.facetList.description,
-      inputSchema: tools.facetList.inputSchema.shape,
+      inputSchema: tools.facetList.inputSchema,
       outputSchema: tools.facetList.outputSchema,
     },
     async (args) => {
@@ -70,7 +70,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.facetSet.name,
     {
       description: tools.facetSet.description,
-      inputSchema: tools.facetSet.inputSchema.shape,
+      inputSchema: tools.facetSet.inputSchema,
       outputSchema: tools.facetSet.outputSchema,
     },
     async (args) => {
@@ -87,7 +87,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasRenderSvg.name,
     {
       description: tools.canvasRenderSvg.description,
-      inputSchema: tools.canvasRenderSvg.inputSchema.shape,
+      inputSchema: tools.canvasRenderSvg.inputSchema,
       outputSchema: tools.canvasRenderSvg.outputSchema,
     },
     async (args) => {
@@ -106,7 +106,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasView.name,
     {
       description: tools.canvasView.description,
-      inputSchema: tools.canvasView.inputSchema.shape,
+      inputSchema: tools.canvasView.inputSchema,
       outputSchema: tools.canvasView.outputSchema,
       _meta: { ui: { resourceUri: CANVAS_VIEW_RESOURCE_URI } },
     },
@@ -122,7 +122,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentSearch.name,
     {
       description: tools.documentSearch.description,
-      inputSchema: tools.documentSearch.inputSchema.shape,
+      inputSchema: tools.documentSearch.inputSchema,
       outputSchema: tools.documentSearch.outputSchema,
     },
     async (args) => {
@@ -137,7 +137,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentGet.name,
     {
       description: tools.documentGet.description,
-      inputSchema: tools.documentGet.inputSchema.shape,
+      inputSchema: tools.documentGet.inputSchema,
       outputSchema: tools.documentGet.outputSchema,
     },
     async (args) => {
@@ -152,7 +152,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasSnapshot.name,
     {
       description: tools.canvasSnapshot.description,
-      inputSchema: tools.canvasSnapshot.inputSchema.shape,
+      inputSchema: tools.canvasSnapshot.inputSchema,
       outputSchema: tools.canvasSnapshot.outputSchema,
     },
     async (args) => {
@@ -167,7 +167,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.viewportSet.name,
     {
       description: tools.viewportSet.description,
-      inputSchema: tools.viewportSet.inputSchema.shape,
+      inputSchema: tools.viewportSet.inputSchema,
       outputSchema: tools.viewportSet.outputSchema,
     },
     async (args) => {
@@ -185,7 +185,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasEdit.name,
     {
       description: tools.canvasEdit.description,
-      inputSchema: tools.canvasEdit.inputSchema.shape,
+      inputSchema: tools.canvasEdit.inputSchema,
       outputSchema: tools.canvasEdit.outputSchema,
     },
     async (args) => {
@@ -206,7 +206,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.threadEdit.name,
     {
       description: tools.threadEdit.description,
-      inputSchema: tools.threadEdit.inputSchema.shape,
+      inputSchema: tools.threadEdit.inputSchema,
       outputSchema: tools.threadEdit.outputSchema,
     },
     async (args) => {
@@ -227,7 +227,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionSave.name,
     {
       description: tools.versionSave.description,
-      inputSchema: tools.versionSave.inputSchema.shape,
+      inputSchema: tools.versionSave.inputSchema,
       outputSchema: tools.versionSave.outputSchema,
     },
     async (args) => {
@@ -247,7 +247,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionList.name,
     {
       description: tools.versionList.description,
-      inputSchema: tools.versionList.inputSchema.shape,
+      inputSchema: tools.versionList.inputSchema,
       outputSchema: tools.versionList.outputSchema,
     },
     async (args) => {
@@ -262,7 +262,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionRestore.name,
     {
       description: tools.versionRestore.description,
-      inputSchema: tools.versionRestore.inputSchema.shape,
+      inputSchema: tools.versionRestore.inputSchema,
       outputSchema: tools.versionRestore.outputSchema,
     },
     async (args) => {
@@ -323,7 +323,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentList.name,
     {
       description: tools.documentList.description,
-      inputSchema: tools.documentList.inputSchema.shape,
+      inputSchema: tools.documentList.inputSchema,
       outputSchema: tools.documentList.outputSchema,
     },
     async (args) => {
@@ -337,7 +337,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentResolve.name,
     {
       description: tools.documentResolve.description,
-      inputSchema: tools.documentResolve.inputSchema.shape,
+      inputSchema: tools.documentResolve.inputSchema,
       outputSchema: tools.documentResolve.outputSchema,
     },
     async (args) => {

@@ -182,6 +182,10 @@ Beside the four-place list and the smoke call that
   tasks. Quote the whole name for one.
 - **Bytes, not tokens, on rung 1.** A tokenizer would make the pin depend
   on which model reads it. Divide by ~4 when quoting tokens, and say so.
-- **`wb_facet_list` answers any input.** Every parameter is optional, so
-  a stray key is not even a validation error. Its rung-1 `strays` row is
-  `unreached` for that reason; do not "fix" the pin.
+- **Register the Zod OBJECT, never its `.shape`.** Handed a shape, the SDK
+  rebuilds a non-strict object around it and a misspelt optional parameter
+  is dropped with the call reporting success; `wb_facet_list`, every
+  parameter of which is optional, answered the unfiltered list to any
+  input at all. Every registration is the object now (C10), the rung-1
+  `strays` column is `refused` for all 18, and a test holds it by name.
+  The price was 29 visible bytes a tool for `additionalProperties: false`.

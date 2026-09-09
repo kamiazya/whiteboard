@@ -120,7 +120,7 @@ preference; the tag is what makes it a criterion.
 | C7 | Every tool carries `title` and explicit `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` where they apply | `tool-naming.test.ts`, `tool-profiles.test.ts` | pass |
 | C8 | Tool names are `wb_<entity>_<action>` (ADR-0009) and within SEP-986's format | `tool-naming.test.ts` | pass |
 | C9 | A schema-invalid call is answered as a tool error naming the field, never as a protocol error | rung 1 | pass |
-| C10 | An unknown top-level key is refused by name, never stripped | rung 1 | FAIL: 15 of 18 strip |
+| C10 | An unknown top-level key is refused by name, never stripped | rung 1 | was FAIL (15 of 18 stripped, and `wb_facet_list` answered any input); every registration now hands the SDK the Zod object, +29 visible bytes a tool |
 | C11 | An error message names what to do differently — the right parameter on the right tool, in the vocabulary of `vocabulary.md` | review; the smoke's `expectToolError` for the ones it exercises | was FAIL: `wb_document_list`'s not-found message told the caller to pass `createWorkspace`, a parameter of `wb_workspace_edit`, "along with the canvas"; the advice now follows the caller's intent (`document-crud.test.ts`) |
 | C12 | A tool whose response can be large has a limit, a filter, or a stated truncation — never silent cutting | review | `wb_canvas_snapshot` and `wb_document_search` yes; `wb_document_get` caps how many documents, not how large |
 | C13 | An errand costs the fewest calls the surface allows, and a consolidation that cuts calls says what it did to bytes | rung 2 | pinned |
@@ -317,8 +317,8 @@ its evidence:
 
 - ~~A comment thread does not survive a restart~~ — landed (§3): the
   record's fold and projection now carry nested containers.
-- C10: register the Zod object rather than its `.shape` for the 15 tools
-  that strip, the way `wb_body_edit` and `wb_workspace_edit` already do.
+- ~~C10: register the Zod object rather than its `.shape`~~ — landed for
+  all 18, 464 visible bytes for the whole table.
 - ~~C11: `WorkspaceNotFoundError`'s message~~ — landed.
 - A tags-only query: `wb_document_search` with a filter and no text, or
   tags on `wb_document_list`'s rows — the "count of process-tagged

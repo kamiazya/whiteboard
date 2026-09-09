@@ -105,21 +105,26 @@ describe('what the tool table costs to read', () => {
     }
 
     expect(rows).toEqual({
+      // Every tool refuses a stray key since every registration hands the
+      // SDK the Zod OBJECT rather than its `.shape` (ADR-0030 C10): handed
+      // a shape, the SDK rebuilt a non-strict object around it, and a
+      // misspelt optional parameter was dropped with the call reporting
+      // success — 15 of 18 tools, and wb_facet_list, every parameter of
+      // which is optional, answered the unfiltered list to any input at
+      // all. The price is 29 visible bytes a tool (`"additionalProperties":
+      // false`), 493 across the table.
+      //
       // The MCP Apps UI tool. Nearly all of its wire size is an OUTPUT
       // schema (the whole scene), which the model never reads.
       canvas_view: {
-        visibleBytes: 572,
-        wireBytes: 16572,
+        visibleBytes: 601,
+        wireBytes: 16601,
         descriptionWords: 39,
         parameters: 2,
         undescribed: 2,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
-      // One of two tools registered with the whole Zod object rather than
-      // its `.shape`, which is why its `.strict()` survives to the boundary
-      // and a stray key is refused. The rest hand the SDK a shape, and the
-      // SDK rebuilds a non-strict object around it.
       wb_body_edit: {
         visibleBytes: 1900,
         wireBytes: 18512,
@@ -133,68 +138,66 @@ describe('what the tool table costs to read', () => {
       // carries the full node and edge schemas once per arm, and not one
       // of its 207 properties says what it is for.
       wb_canvas_edit: {
-        visibleBytes: 15829,
-        wireBytes: 36448,
+        visibleBytes: 15858,
+        wireBytes: 36477,
         descriptionWords: 169,
         parameters: 207,
         undescribed: 207,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_canvas_snapshot: {
-        visibleBytes: 676,
-        wireBytes: 4016,
+        visibleBytes: 705,
+        wireBytes: 4045,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
-        strays: 'stripped',
+        strays: 'refused',
         names: ['wb_document_get'],
       },
       wb_document_get: {
-        visibleBytes: 950,
-        wireBytes: 2728,
+        visibleBytes: 979,
+        wireBytes: 2757,
         descriptionWords: 63,
         parameters: 4,
         undescribed: 3,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_document_list: {
-        visibleBytes: 444,
-        wireBytes: 1101,
+        visibleBytes: 473,
+        wireBytes: 1130,
         descriptionWords: 32,
         parameters: 1,
         undescribed: 1,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_document_resolve: {
-        visibleBytes: 413,
-        wireBytes: 951,
+        visibleBytes: 442,
+        wireBytes: 980,
         descriptionWords: 12,
         parameters: 2,
         undescribed: 2,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_document_search: {
-        visibleBytes: 1002,
-        wireBytes: 1832,
+        visibleBytes: 1031,
+        wireBytes: 1861,
         descriptionWords: 42,
         parameters: 5,
         undescribed: 2,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
-      // Every parameter optional, so a stray key is not even an error: the
-      // call answers the unfiltered list as if it had been asked for.
       wb_facet_list: {
-        visibleBytes: 393,
-        wireBytes: 1067,
+        visibleBytes: 422,
+        wireBytes: 1096,
         descriptionWords: 30,
         parameters: 1,
         undescribed: 1,
-        strays: 'unreached',
+        strays: 'refused',
         names: [],
       },
       // Re-pinned when the tool learned to tag (ADR-0030 §4): +1,122
@@ -204,81 +207,79 @@ describe('what the tool table costs to read', () => {
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 1896,
-        wireBytes: 2715,
+        visibleBytes: 1925,
+        wireBytes: 2744,
         descriptionWords: 80,
         parameters: 7,
         undescribed: 0,
-        strays: 'stripped',
+        strays: 'refused',
         names: ['wb_facet_list'],
       },
-      // Refuses for want of a daemon before it validates anything.
       wb_pairing_link_create: {
-        visibleBytes: 1228,
-        wireBytes: 1890,
+        visibleBytes: 1257,
+        wireBytes: 1919,
         descriptionWords: 70,
         parameters: 4,
         undescribed: 0,
-        strays: 'unreached',
+        strays: 'refused',
         names: [],
       },
       wb_scene_render: {
-        visibleBytes: 1603,
-        wireBytes: 1950,
+        visibleBytes: 1632,
+        wireBytes: 1979,
         descriptionWords: 51,
         parameters: 4,
         undescribed: 2,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_thread_edit: {
-        visibleBytes: 3015,
-        wireBytes: 3582,
+        visibleBytes: 3044,
+        wireBytes: 3611,
         descriptionWords: 122,
         parameters: 32,
         undescribed: 32,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       // The version tools, the pairing tool and now wb_facet_set are the
       // ones whose every parameter is described. They are the shape to copy.
       wb_version_list: {
-        visibleBytes: 575,
-        wireBytes: 1655,
+        visibleBytes: 604,
+        wireBytes: 1684,
         descriptionWords: 20,
         parameters: 2,
         undescribed: 0,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_version_restore: {
-        visibleBytes: 1475,
-        wireBytes: 2127,
+        visibleBytes: 1504,
+        wireBytes: 2156,
         descriptionWords: 41,
         parameters: 6,
         undescribed: 0,
-        strays: 'stripped',
+        strays: 'refused',
         names: [],
       },
       wb_version_save: {
-        visibleBytes: 953,
-        wireBytes: 2172,
+        visibleBytes: 982,
+        wireBytes: 2201,
         descriptionWords: 54,
         parameters: 3,
         undescribed: 0,
-        strays: 'stripped',
+        strays: 'refused',
         names: ['wb_version_restore'],
       },
       wb_viewport_set: {
-        visibleBytes: 871,
-        wireBytes: 1269,
+        visibleBytes: 900,
+        wireBytes: 1298,
         descriptionWords: 52,
         parameters: 8,
         undescribed: 8,
-        strays: 'stripped',
+        strays: 'refused',
         names: ['wb_canvas_edit'],
       },
-      // The other whole-object registration; see wb_body_edit.
       wb_workspace_edit: {
         visibleBytes: 2287,
         wireBytes: 3252,
@@ -313,13 +314,26 @@ describe('what the tool table costs to read', () => {
       }),
     }).toEqual({
       tools: 18,
-      // +1,122 for wb_facet_set's tags (see its row). Under the ~40,000 at
+      // +1,122 for wb_facet_set's tags (see its row) and +464 for every
+      // tool refusing a stray key (see canvas_view; sixteen tools, the two
+      // that already registered the object unchanged). Under the ~40,000 at
       // which ADR-0030 §5 says to reconsider loading the table upfront.
-      visibleBytes: 36082,
-      wireBytes: 103839,
+      visibleBytes: 36546,
+      wireBytes: 104303,
       parameters: 327,
       undescribed: 295,
     })
+  })
+
+  // C10, held as a statement rather than only as eighteen pinned rows: a
+  // tool that starts stripping again fails here by name.
+  it('every tool refuses an unknown top-level key by name', async () => {
+    const { client, tools } = await connect()
+    for (const tool of tools) {
+      const result = await client.callTool({ name: tool.name, arguments: { zz_stray: true } })
+      expect(result.isError, tool.name).toBe(true)
+      expect(firstText(result), tool.name).toContain('zz_stray')
+    }
   })
 
   // MCP 2025-11-25 (SEP-1303): an input the schema rejects is answered as a
