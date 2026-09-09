@@ -97,6 +97,7 @@ overrides:
 packageExtensionsChecksum: sha256-zefmQpf8vEPc7SN/0sawRR9byMnf0hIcDSosyOFP5TM=
 
 patchedDependencies:
+  loro-codemirror@0.3.3: 18628db540c602282ceadd23ff93c6e6a3ad35df4dde19509f277a20c1ef9f7d
   mdast-util-gfm-task-list-item@2.0.0: 46e4f9426ff571630f8e987deac6af7f16e9d14a26162919c60324588270db47
 
 importers:
@@ -243,7 +244,7 @@ importers:
         version: 2.1.1
       loro-codemirror:
         specifier: ^0.3.3
-        version: 0.3.3(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6)
+        version: 0.3.3(patch_hash=18628db540c602282ceadd23ff93c6e6a3ad35df4dde19509f277a20c1ef9f7d)(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6)
       loro-crdt:
         specifier: 'catalog:'
         version: 1.13.6
@@ -13515,7 +13516,7 @@ snapshots:
 
   longest-streak@3.1.0: {}
 
-  loro-codemirror@0.3.3(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6):
+  loro-codemirror@0.3.3(patch_hash=18628db540c602282ceadd23ff93c6e6a3ad35df4dde19509f277a20c1ef9f7d)(@codemirror/state@6.7.1)(@codemirror/view@6.43.7)(loro-crdt@1.13.6):
     dependencies:
       '@codemirror/state': 6.7.1
       '@codemirror/view': 6.43.7

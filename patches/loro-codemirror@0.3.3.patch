@@ -1,0 +1,30 @@
+diff --git a/dist/sync.js b/dist/sync.js
+index 8f36aa0b82011dbc2980b0bfdd140fc31ede82dc..2173a2e2b63fce3f9227db49d762227658c09cda 100644
+--- a/dist/sync.js
++++ b/dist/sync.js
+@@ -66,12 +66,24 @@ export class LoroSyncPluginValue {
+         };
+         this.sub = doc.subscribe(this.onRemoteUpdate);
+         Promise.resolve().then(() => {
+-            this.isInitDispatch = true;
+             const currentText = this.view.state.doc.toString();
+             const text = this.getTextFromDoc(this.doc);
+             if (currentText === text.toString()) {
+                 return;
+             }
++            // Armed HERE rather than at the top of this callback. `update()`
++            // clears the flag by consuming the NEXT update it sees, whatever
++            // that update is -- so arming it before the early return above
++            // leaves it standing with no dispatch to pair with, and the
++            // user's first keystroke is the update that gets swallowed. The
++            // editor is then one character ahead of the container, and the
++            // second keystroke calls insert(1, ...) on a length-0 LoroText:
++            // "Index out of bound. The given pos is 1, but the length is 0."
++            // That throws inside a ViewPlugin, so @codemirror/view disables
++            // the plugin for the life of the view and no further keystroke
++            // reaches the CRDT at all -- which reads as saving being broken
++            // rather than as a crash.
++            this.isInitDispatch = true;
+             view.dispatch({
+                 changes: [
+                     {
