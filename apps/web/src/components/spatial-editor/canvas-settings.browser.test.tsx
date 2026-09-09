@@ -94,6 +94,30 @@ it('the Display row opens the popover with both option rows', async () => {
   await openPanel(container)
   expect(menu()?.textContent).toContain('Edge routing')
   expect(menu()?.textContent).toContain('Line jumps')
+  expect(menu()?.textContent).toContain('Theme')
+})
+
+it('a theme pick writes visual.theme to the canvas envelope; Default clears it', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const themeRadio = (label: string) =>
+    menu()?.querySelector(`input[type="radio"][aria-label="${label}"]`) as HTMLInputElement
+
+  await openPanel(container)
+  await vi.waitFor(() => expect(themeRadio('Neon')).toBeTruthy())
+  fireEvent.click(themeRadio('Neon'))
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({
+      theme: 'visual.neon',
+    })
+  })
+  expect(menu()).toBeTruthy()
+  expect(themeRadio('Neon').checked).toBe(true)
+
+  fireEvent.click(themeRadio('Default'))
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined()
+  })
 })
 
 it('a pick applies canvas-wide and keeps the popover open; current values are marked', async () => {

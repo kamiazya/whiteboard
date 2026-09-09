@@ -9,9 +9,9 @@
  * later editor-spec tier derives a default form instead of failing here.
  */
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
-import type { FacetEditor, PluginUi } from '@kamiazya/whiteboard-facet-ui'
+import { DerivedFacetForm, type FacetEditor, type PluginUi } from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import { bundledFacetRegistry, resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -196,8 +196,30 @@ function canvasFacetRow(key: string, label: string): CanvasSettingsWidget {
     )
 }
 
+/**
+ * A canvas-target row DERIVED from the facet's own editor spec — the form
+ * `facet-ui` builds from the schema and the `editor` block the plugin
+ * declared, writing to the envelope. The vessel ADR-0030 named as the gap:
+ * a facet with a declared editor and no component of its own reaches the
+ * settings panel through here, so registering a theme is registering an
+ * asset and nothing on this side.
+ */
+function derivedCanvasFacetRow(key: string, title: string): CanvasSettingsWidget {
+  return ({ canvas, run }) => (
+    <DerivedFacetForm
+      facetKey={key}
+      title={title}
+      stored={canvas['x-whiteboard']?.facets?.[key]}
+      registry={bundledFacetRegistry}
+      onWrite={(facetKey, payload) => run({ kind: 'set-canvas-facet', key: facetKey, payload })}
+    />
+  )
+}
+
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {
   'visual.edges/v0': visualEdgesPanel,
+  // How the canvas is DRAWN (ADR-0030): a registered theme asset by id.
+  'visual.theme/v0': derivedCanvasFacetRow('visual.theme/v0', 'Theme'),
   // The document's own mark — what its tab, its file row and, where there is
   // room, its overview draw instead of a picture derived from its contents.
   'visual.symbol/v0': canvasFacetRow('visual.symbol/v0', 'Symbol'),

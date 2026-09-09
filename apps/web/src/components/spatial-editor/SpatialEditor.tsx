@@ -59,6 +59,7 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type {
   CommentThread,
@@ -1897,6 +1898,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           style={{
             position: 'relative',
             flex: '1 1 auto',
+            // The paper is the palette's surface for the UI mode (ADR-0030):
+            // a theme carries one per mode, and the bundled palette's is the
+            // page background, so an unthemed canvas looks exactly as before.
+            backgroundColor: resolveCanvasPalette(canvas, theme).surface,
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,

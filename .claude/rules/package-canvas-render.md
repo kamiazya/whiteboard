@@ -998,6 +998,10 @@ the table alone.
     `naturalNodeContentSize` goes through the same resolution; a caller
     sizing a node under a theme passes the theme id as `style`, since a
     single-node canvas carries no facet to read.
+    `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
+    that PREVIEWS paint rather than painting — the editor's paper and its
+    colour swatches — so a picker and the render read one table; it answers
+    the bundled palette for the mode wherever layout would draw clean.
     **Ink** (decision #10's geometry half, `layout/ink/sketch.ts`): a theme
     whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
     every DOCUMENT shape and edge the layout composes — a kind plus

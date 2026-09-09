@@ -164,3 +164,39 @@ describe('ensureViewerFontLoaded', () => {
     expect(vi.getTimerCount()).toBe(0)
   })
 })
+
+describe('hasLoadedFace', () => {
+  afterEach(() => {
+    uninstallFakeFontApis()
+    delete (document as unknown as { fonts?: unknown }).fonts
+  })
+
+  function installFaceSet(faces: readonly { family: string; status: string }[]) {
+    Object.defineProperty(document, 'fonts', {
+      configurable: true,
+      value: { [Symbol.iterator]: () => faces[Symbol.iterator]() },
+    })
+  }
+
+  it('the vendored family is always available: it is what layout measures with', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    const { VIEWER_FONT_FAMILY } = await import('./font.js')
+    expect(hasLoadedFace(VIEWER_FONT_FAMILY)).toBe(true)
+  })
+
+  it('a family is available only while this realm holds a LOADED face for it', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    installFaceSet([
+      { family: '"Patrick Hand"', status: 'loaded' },
+      { family: 'Caveat', status: 'loading' },
+    ])
+    expect(hasLoadedFace('Patrick Hand')).toBe(true)
+    expect(hasLoadedFace('Caveat')).toBe(false)
+    expect(hasLoadedFace('Nobody')).toBe(false)
+  })
+
+  it('answers false, never throws, in a realm with no face set', async () => {
+    const { hasLoadedFace } = await importFreshFontLoading()
+    expect(hasLoadedFace('Patrick Hand')).toBe(false)
+  })
+})

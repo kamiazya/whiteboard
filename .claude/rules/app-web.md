@@ -98,3 +98,38 @@ Three things a mechanical move does not see, and what catches each now:
 
 None of them sees an edge INSIDE `src/`, which is the gap `layer-order`
 closes.
+
+## The document's theme (ADR-0030)
+
+`lib/spatial/scene-render-core.ts` is the ONE composition of
+`layoutSpatialCanvas` this app has, and it defaults `style` to `'document'`
+there: a person editing a board sees the theme it names, and every surface
+that pictures a document — the editor, its drag layers, the row thumbnail,
+the preview pane, the export — pictures the same look. The layout worker
+runs the same composition, so the two threads cannot default apart and the
+worker protocol carries no style field at all; `'clean'` is a session
+override a caller passes, and nothing passes one today.
+
+Three consequences, each with its guard:
+
+- **The render key gains no axis.** The theme is a canvas facet, so a
+  document's content digest already changes when its theme does, and the
+  registered assets are part of the build id. A style axis would only be
+  needed if one surface drew a document in two looks, and none does.
+- **The paper is the palette's surface for the UI mode**, painted by
+  `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
+  The bundled palette's surface IS the page background in both modes, so an
+  unthemed canvas is byte-identical to before; neon gets its night.
+  `SpatialEditor.test.tsx` pins both.
+- **Colour swatches preview the palette the canvas is drawn in.**
+  `colorRow` takes a `SpatialPalette` rather than a mode, and
+  `CanvasContextMenu` resolves it once with `resolveCanvasPalette` — a
+  canvas-render export, so the point-owning surfaces still name no facet
+  domain (`facet-wiring-guard.test.ts`).
+
+The Theme row in the Display panel is `derivedCanvasFacetRow` in
+`facet-widgets/index.tsx`: `facet-ui`'s `DerivedFacetForm` over the plugin's
+own `editor` spec, writing through `set-canvas-facet`. Registering a theme is
+registering an asset; nothing on this side changes. `canvas-theme-row.test.tsx`
+(jsdom) and `canvas-settings.browser.test.tsx` cover the row and the pick.
+

@@ -261,3 +261,24 @@ describe('bottom dock composition', () => {
     expect(palette.querySelector('[data-testid="history-slot"]')).not.toBeNull()
   })
 })
+
+describe('paper (ADR-0030)', () => {
+  const neon = (): SpatialCanvas => ({
+    ...twoNodeCanvas(),
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  })
+
+  it("paints the theme's surface for the UI mode under the canvas, so neon gets its night", () => {
+    const { getByTestId } = render(
+      <SpatialEditor canvas={neon()} onChange={vi.fn()} measure={fakeMeasure} theme="dark" />,
+    )
+    expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(3, 7, 17)')
+  })
+
+  it('a canvas naming no theme keeps the bundled paper, which is the page background', () => {
+    const { getByTestId } = render(
+      <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,
+    )
+    expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(255, 255, 255)')
+  })
+})

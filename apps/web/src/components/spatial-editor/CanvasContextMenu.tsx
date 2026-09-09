@@ -1,3 +1,4 @@
+import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
@@ -258,7 +259,7 @@ export function CanvasContextMenu({
                 edge,
                 point: contextMenu.point,
                 setCommentCompose,
-                theme,
+                palette: resolveCanvasPalette(canvas, theme),
                 isEdgeLocked,
                 edgeLockEnabled,
                 applyResult,
@@ -290,7 +291,7 @@ export function CanvasContextMenu({
                   node,
                   canvas,
                   canvasRef,
-                  theme,
+                  palette: resolveCanvasPalette(canvas, theme),
                   gestureState,
                   isLocked,
                   lockEnabled,

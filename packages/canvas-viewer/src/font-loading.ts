@@ -52,6 +52,29 @@ function resolveFontFaceSet(): FontFaceSet | undefined {
   return (globalThis as { fonts?: FontFaceSet }).fonts
 }
 
+/**
+ * Whether a family a theme names can be MEASURED in this realm, which is
+ * the question layout's `fontAvailable` seam asks (ADR-0030 decision 9):
+ * the vendored family always, since it is what layout measures with by
+ * default; any other only while this realm holds a loaded face for it.
+ * A family only the operating system provides answers false — Canvas 2D
+ * would draw it, but an export of the same canvas could not, and a face
+ * the two sides disagree on puts every wrapped line somewhere else.
+ */
+export function hasLoadedFace(family: string): boolean {
+  if (family === VIEWER_FONT_FAMILY) return true
+  const faceSet = resolveFontFaceSet()
+  if (faceSet === undefined || typeof faceSet[Symbol.iterator] !== 'function') return false
+  for (const face of faceSet) {
+    // A face constructed as `"Patrick Hand"` reports its family with the
+    // quotes it was given; the theme names it bare.
+    if (face.family.replace(/^["']|["']$/g, '') === family && face.status === 'loaded') {
+      return true
+    }
+  }
+  return false
+}
+
 /** Whether this realm can register the vendored face at all. */
 export function canLoadViewerFont(): boolean {
   return typeof FontFace !== 'undefined' && resolveFontFaceSet() !== undefined

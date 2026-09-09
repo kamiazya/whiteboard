@@ -63,7 +63,13 @@ import type {
 } from '../scene-graph.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { createThemedAppearance } from '../theme/theme-asset.js'
+import {
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+  type SpatialPalette,
+} from '../theme/spatial-palette.js'
+import type { SpatialThemeMode } from '../theme/spatial-theme.js'
+import { createThemedAppearance, paletteFromTokens } from '../theme/theme-asset.js'
 import {
   COMMENT_TEXT_MAX_WIDTH_PX,
   layoutCommentBody,
@@ -1604,6 +1610,29 @@ export function resolveThemeTable(
     }
   }
   return table
+}
+
+/**
+ * The palette ONE canvas is drawn in under `style: 'document'` — the theme
+ * it names, resolved for the mode, else the bundled palette for that mode.
+ *
+ * For an editor chrome that previews paint rather than painting: a colour
+ * picker's swatches show the strokes a pick will produce, and a themed
+ * board's strokes are the theme's, not the bundled ones. Resolved here so
+ * the preview and the layout read the same table; a caller re-deriving it
+ * is a caller that can disagree with the render.
+ */
+export function resolveCanvasPalette(
+  canvas: SpatialCanvas,
+  mode: SpatialThemeMode,
+  contributions: readonly RenderContribution[] = [visualRenderContribution],
+): SpatialPalette {
+  const own = contributions
+    .map((contribution) => contribution.readTheme?.(canvas))
+    .find((id) => id !== undefined)
+  const tokens = own === undefined ? undefined : resolveThemeTable(contributions)[own]
+  if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+  return paletteFromTokens(tokens.palette[mode])
 }
 
 /**
