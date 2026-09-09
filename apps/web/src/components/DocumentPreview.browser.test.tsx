@@ -134,9 +134,15 @@ describe('DocumentPreview', () => {
     // The release landed off the surface. These are hovers, not a drag.
     pointer('pointermove', 1, 340, 340, { pointerType: 'mouse', buttons: 0 })
     pointer('pointermove', 1, 380, 380, { pointerType: 'mouse', buttons: 0 })
+    // Asserted through what the NEXT real drag arrives at rather than by
+    // waiting to see nothing happen: a press that ends here moves the view by
+    // its own +20/+20 and no more. With the hovers counted the surface is
+    // already at translate(180px, 180px) by now, so this value is out of
+    // reach — which is the whole claim, stated as something that comes true.
+    pointer('pointerdown', 1, 380, 380, { pointerType: 'mouse', buttons: 1 })
+    pointer('pointermove', 1, 400, 400, { pointerType: 'mouse', buttons: 1 })
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(transformOf(container)).toBe('scale(1) translate(60px, 40px)')
+    await expect.poll(() => transformOf(container)).toBe('scale(1) translate(80px, 60px)')
   })
 
   // The other way a press ends without an up: the platform takes the capture
@@ -153,9 +159,12 @@ describe('DocumentPreview', () => {
 
     pointer('lostpointercapture', 1, 260, 240)
     pointer('pointermove', 1, 340, 340)
+    // Same shape as above: the next real drag adds its own +20/+20 and
+    // nothing the revoked press left behind.
+    pointer('pointerdown', 1, 340, 340)
+    pointer('pointermove', 1, 360, 360)
 
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    expect(transformOf(container)).toBe('scale(1) translate(60px, 40px)')
+    await expect.poll(() => transformOf(container)).toBe('scale(1) translate(80px, 60px)')
   })
 
   // The screen this surface is most often read on has no wheel and no
