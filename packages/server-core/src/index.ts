@@ -53,13 +53,6 @@ export {
   bodyEditOutputSchema,
   createBodyEditTool,
 } from './tools/body-edit.js'
-export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
-export {
-  bodyPatchInputSchema,
-  bodyPatchOutputSchema,
-  bodyPatchRangeSchema,
-  createBodyPatchTool,
-} from './tools/body-patch.js'
 export { createCanvasEditTool } from './tools/canvas-edit.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
@@ -121,7 +114,6 @@ export {
 } from './tools/document-tags.js'
 export {
   NodeNotFoundError,
-  NotATextNodeError,
   PatchValidationError,
 } from './tools/errors.js'
 export type {

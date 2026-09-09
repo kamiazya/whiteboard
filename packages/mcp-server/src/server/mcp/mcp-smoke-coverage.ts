@@ -45,7 +45,6 @@
 export const ALL_REGISTERED_TOOLS = [
   'wb_viewport_set',
   'wb_body_edit',
-  'wb_body_patch',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_thread_edit',
@@ -83,7 +82,6 @@ export const COVERED_TOOLS = [
   'wb_workspace_edit',
   'canvas_view',
   'wb_body_edit',
-  'wb_body_patch',
   'wb_scene_render',
   'wb_document_get',
   'wb_document_list',
