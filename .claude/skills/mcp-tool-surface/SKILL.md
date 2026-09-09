@@ -99,15 +99,26 @@ with every tool call, tool-error text, token and cost figure.
   thread that does not survive a restart. Reproduce what the model saw
   with `connectWhiteboard` from `scripts/eval/lib/whiteboard-client.mjs`
   against a seeded directory before concluding anything about the model.
-- **`toolErrorTexts` is the C11 evidence.** It is what the model was told
-  when a call was refused. A refusal that names the wrong tool's parameter
-  (`wb_document_list` telling the caller to pass `createWorkspace`), or
-  one that says "passage no longer in the body" to a model editing
-  frontmatter, is a finding on the message, and the fix is cheap.
-- **`tools` says what the description failed to say.** Three trials of
-  "tag this note" reached `wb_facet_set` once, because its description
-  says "facets" and never "tags". When a task wanders, read the
-  description of the tool it should have reached, as the model did.
+- **`toolErrorTexts` is the C11 evidence, and sometimes the C5 evidence.**
+  It is what the model was told when a call was refused. A refusal that
+  names the wrong tool's parameter (`wb_document_list` telling the caller
+  to pass `createWorkspace`) is a finding on the message and the fix is
+  cheap; a refusal that says the tool cannot take what the task needs
+  (`facets.tags` must match `{namespace}.{name}/v{n}`) is a gap in the
+  surface, and the fix is a parameter.
+- **An errand that keeps counting past a refusal is a scoreboard that
+  lies.** The errand corpus's `call` throws on `isError` for this reason:
+  two of its four rows had measured a refused write and a crashed seam
+  as one cheap call each. A harness that drives real tools supplies every
+  seam the tools reach (`InMemoryVersionHistory`), or the tool answers an
+  error and the count reads as success.
+- **`tools` says what the surface failed to offer — read the refusal
+  texts before blaming the description.** Three trials of "tag this note"
+  wandered through four tools, and the first reading was "the description
+  never says tags". The refusal text said the tool could not take a tag at
+  all: an errand step with no tool behind it (C5), which no description
+  fixes. When a task wanders, read what each refusal told the model, then
+  the description of the tool it should have reached, in that order.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1

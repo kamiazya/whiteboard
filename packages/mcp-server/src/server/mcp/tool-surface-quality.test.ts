@@ -197,14 +197,20 @@ describe('what the tool table costs to read', () => {
         strays: 'unreached',
         names: [],
       },
+      // Re-pinned when the tool learned to tag (ADR-0030 §4): +1,122
+      // visible bytes buy `tags.add` / `tags.remove` — three parameters, all
+      // described, and the four that were not now are — and a description
+      // that says "tags", which three trials of "tag this note" had never
+      // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
+      // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 774,
-        wireBytes: 1401,
-        descriptionWords: 45,
-        parameters: 4,
-        undescribed: 4,
+        visibleBytes: 1896,
+        wireBytes: 2715,
+        descriptionWords: 80,
+        parameters: 7,
+        undescribed: 0,
         strays: 'stripped',
-        names: [],
+        names: ['wb_facet_list'],
       },
       // Refuses for want of a daemon before it validates anything.
       wb_pairing_link_create: {
@@ -234,8 +240,8 @@ describe('what the tool table costs to read', () => {
         strays: 'stripped',
         names: [],
       },
-      // The version tools and the pairing tool are the only ones whose every
-      // parameter is described. They are the shape to copy.
+      // The version tools, the pairing tool and now wb_facet_set are the
+      // ones whose every parameter is described. They are the shape to copy.
       wb_version_list: {
         visibleBytes: 575,
         wireBytes: 1655,
@@ -298,7 +304,8 @@ describe('what the tool table costs to read', () => {
       // PRICE, paid by the client on connect rather than by the model:
       // two-thirds of it is output schemas.
       wireBytes: total(wireBytes),
-      // DEBT. 324 declared, 25 described.
+      // DEBT. 327 declared, 32 described: wb_facet_set's seven were the
+      // first tool paid down (+3 declared, all described).
       parameters: total((t) => parameterCoverage(t.inputSchema).parameters),
       undescribed: total((t) => {
         const c = parameterCoverage(t.inputSchema)
@@ -306,10 +313,12 @@ describe('what the tool table costs to read', () => {
       }),
     }).toEqual({
       tools: 18,
-      visibleBytes: 34960,
-      wireBytes: 102525,
-      parameters: 324,
-      undescribed: 299,
+      // +1,122 for wb_facet_set's tags (see its row). Under the ~40,000 at
+      // which ADR-0030 §5 says to reconsider loading the table upfront.
+      visibleBytes: 36082,
+      wireBytes: 103839,
+      parameters: 327,
+      undescribed: 295,
     })
   })
 

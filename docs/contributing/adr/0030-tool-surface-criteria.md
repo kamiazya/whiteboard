@@ -218,17 +218,35 @@ rather than reading the transcript:
   and `proposals.durability.test.ts` cross the reopen no in-process test
   crossed, and fail without the fix. Re-run, the task passes 2 of 2 in
   two calls.
-- **The tag write passes, and never the same way twice.** Three trials
-  reached the state by three routes: `wb_facet_set` after two refusals;
-  `wb_body_edit` twice, `wb_facet_list`, then a whole-document rewrite
-  through `wb_workspace_edit`; `wb_body_edit` once ("Passage tag1 does
-  not apply: its passage is no longer in the body"), `wb_facet_list`,
-  then the rewrite. The right tool is `wb_facet_set`, and in two trials
-  of three the model never considered it: its description says "facets"
-  and never says "tags", and a model asked to tag a note reads the
-  frontmatter as body. C4 on one tool, and the cheapest description fix
-  the lane has pointed at; the lane now records each refusal's text
-  (`toolErrorTexts`) so the next such case names its own parameter.
+- **The tag write passed, and never the same way twice — because no
+  tool could do it.** Three trials reached the state by three routes:
+  `wb_facet_set`, refused twice, then a rewrite; `wb_body_edit` twice,
+  `wb_facet_list`, then a whole-document rewrite through
+  `wb_workspace_edit`; `wb_body_edit` once ("Passage tag1 does not apply:
+  its passage is no longer in the body"), `wb_facet_list`, then the
+  rewrite. The first reading of this was "the model never considered
+  `wb_facet_set`"; the refusal texts (`toolErrorTexts`, which the lane
+  now records) said otherwise: `facets.tags: extension facet key "tags"
+  must match {namespace}.{name}/v{n}`. Tags are OKF *core* frontmatter and
+  `wb_facet_set` accepted only extension facets, so "tag this note" had
+  no tool, and the model's rewrite of the whole document was the only
+  correct answer the surface offered. C5, not C4: an errand step with no
+  tool behind it.
+
+  The same probe caught the errand scoreboard lying. Its "tag 5
+  documents" errand sent `facets: { 'core/v1': ... }`, a key the tool
+  never accepted, and counted the refusal as one cheap call for a week;
+  "save a labelled version of 4 documents" measured a harness that
+  supplied no `versions` seam and answered a crash the same way. A
+  refused call is now a thrown one in the corpus, and both rows are
+  re-pinned on real writes.
+
+  Landed: `wb_facet_set` takes `tags: { add, remove }` (the errand's
+  shape, so one payload tags five notes that each keep their own), every
+  parameter described, and a description that says so. Rung 3 on the
+  task, three trials: 5.7 calls and 7 tool errors before, **2 calls and
+  0 errors after**, pass^k 1 both times. Rung 1: +1,122 visible bytes,
+  four fewer undescribed parameters.
 
 
 Read the table as the sources say to: the pass column is the gate and the
@@ -259,10 +277,9 @@ anything is retired.
   model, having done the reasonable thing, answered 0. `wb_document_list`
   carries no tags. Either the filter stands alone (a tags-only search) or
   the list carries tags; C5 and C12, and a follow-up in §6.
-- **`wb_facet_set` does not say "tags"** (C4): three trials of "tag this
-  note" reached the right tool once. The OKF core facets are `type` and
-  `tags`; a description that names them is the first thing to try, and
-  the lane's tag-write task is what says whether it worked.
+- ~~`wb_facet_set` does not say "tags"~~ — it could not tag at all (C5,
+  §3); landed as `tags: { add, remove }`, judged by the lane's tag-write
+  task.
 - **`wb_facet_list`** — a schema lookup with no required parameter, which
   answers an unfiltered list to any input (C10). Whether an agent ever
   needs it, or `wb_facet_set`'s refusal should carry the schema instead.
