@@ -980,6 +980,17 @@ async function main() {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }
   console.log('[e2e] canvas_view → scene + references + both ids for the widget')
+  // The look is the widget's to draw, so the tool only echoes it — and the
+  // SDK validates that echo against the outputSchema.
+  const viewedStyled = await callTool('canvas_view', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (viewedStyled.style !== 'document') {
+    throw new Error(`canvas_view did not echo style: ${JSON.stringify(viewedStyled.style)}`)
+  }
+  console.log("[e2e] canvas_view(style: 'document') → style echoed for the widget")
 
   // The widget's sticky-note append, in ITS EXACT argument shape (a text
   // node with no geometry, auto-placed server-side) — the runtime guard
