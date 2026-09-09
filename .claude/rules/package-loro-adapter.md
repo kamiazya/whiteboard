@@ -104,6 +104,19 @@ implementations live in the composition roots.
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT
   merge while avoiding Loro's nested-container overwrite issues.
+- **The threads and proposals planes are the exception: each entry IS a
+  nested container** (mergeable, so two peers replying at once converge),
+  and the workspace record has to carry it as one. `syncMapEntries` in
+  `workspace-tree.ts` is the one map-entry sync the fold, the projection,
+  `copyNodeData` and `reconcileDocContent` all go through, and it recurses
+  into a container where the source has one instead of `set`ting its
+  `toJSON()`. Before it, a thread went into the record as a value and came
+  back after a restart as one — the reader skipped it, the writer threw
+  `Expected value type Map but found Value(Map)` — and no in-process test
+  saw it, because the projection is per-process and only a reopen
+  re-projects. `comment-threads.durability.test.ts` and
+  `proposals.durability.test.ts` cross that reopen; a new plane whose
+  entries are containers gets a test of the same shape.
 - **`containers.ts` holds the `DocumentContainers` seam and the container keys
   more than one module reads.** A key lives in `loro-bridge.ts` until a second
   module needs it and moves here then — which is also what keeps `loro-bridge`

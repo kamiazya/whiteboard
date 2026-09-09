@@ -205,8 +205,19 @@ rather than reading the transcript:
   without a wait before closing, and with a later canvas edit; a
   markdown note's thread behaves the same. The model therefore searched
   a canvas that, to every read it had, carried no thread, and its
-  nineteen calls are the honest result. Filed in §6 as the first
-  follow-up, ahead of any retirement.
+  nineteen calls are the honest result.
+
+  **Fixed the same day**, and the cause was not Loro's: the workspace
+  record's fold (`writeWorkspaceDocumentContent`) and projection
+  (`projectWorkspaceDocument`) copied map entries through `toJSON()`, so
+  a thread — a nested container so two peers replying at once converge —
+  went into the record as a plain value and came back as one. Proposals
+  had the same shape and the same loss. `syncMapEntries` now carries a
+  nested container as a container through all four record paths (fold,
+  projection, duplicate, version restore); `comment-threads.durability.test.ts`
+  and `proposals.durability.test.ts` cross the reopen no in-process test
+  crossed, and fail without the fix. Re-run, the task passes 2 of 2 in
+  two calls.
 - **The tag write passes, and never the same way twice.** Three trials
   reached the state by three routes: `wb_facet_set` after two refusals;
   `wb_body_edit` twice, `wb_facet_list`, then a whole-document rewrite
@@ -287,11 +298,8 @@ dimension, which judges the diff by the same criteria.
 Filed as follow-ups, each its own increment with the scoreboards as
 its evidence:
 
-- **A comment thread does not survive a restart** (§3): the annotation
-  layer writes a thread as a value where its reader expects a container.
-  Nearest layer is a round-trip test in `loro-adapter` or `server-core`
-  (write a thread, export a snapshot, import it, read the threads), red
-  today; the `loro-crdt-usage` skill is the reference for the fix.
+- ~~A comment thread does not survive a restart~~ — landed (§3): the
+  record's fold and projection now carry nested containers.
 - C10: register the Zod object rather than its `.shape` for the 15 tools
   that strip, the way `wb_body_edit` and `wb_workspace_edit` already do.
 - C11: `WorkspaceNotFoundError`'s message.

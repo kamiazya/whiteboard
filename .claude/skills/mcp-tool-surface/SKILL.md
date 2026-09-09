@@ -161,9 +161,12 @@ Beside the four-place list and the smoke call that
   point it at a checkout to "save a copy".
 - **The seeding server and the model's server are different processes.**
   Anything that survives only in memory is invisible to the model, and
-  the first run found exactly that: comment threads. Until that is fixed
-  (ADR-0030 §6), the "roadmap item with an open comment" task fails for
-  a reason that is not the surface's, and the verdict line says so.
+  the first run found exactly that: comment threads and proposals were
+  flattened to values by the workspace record's fold and came back
+  unreadable after a restart (fixed; `comment-threads.durability.test.ts`
+  is the shape of the test that crosses a reopen). A task that fails
+  every trial on a read the fixture plainly supports is first checked
+  for this: seed, close, reopen with `connectWhiteboard`, read.
 - **`--only` is a substring over task names** — `--only=tag` matched two
   tasks. Quote the whole name for one.
 - **Bytes, not tokens, on rung 1.** A tokenizer would make the pin depend
