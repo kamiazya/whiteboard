@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The LLM-driven lane of the tool-surface eval (ADR-0030).
+// The LLM-driven lane of the tool-surface eval (ADR-0031).
 //
 // Seeds a fixture workspace through the real MCP server, then hands each
 // task in tasks.mjs to a real model through the claude CLI with ONLY this

@@ -524,7 +524,7 @@ async function main() {
   console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
 
   // id → placement is a row of wb_document_list now; the standalone
-  // wb_document_resolve is retired (ADR-0030 §4).
+  // wb_document_resolve is retired (ADR-0031 §4).
   const resolvedRow = namedList.documents.find((d) => d.documentId === named.documentId)
   if (resolvedRow === undefined || resolvedRow.path !== named.path) {
     throw new Error(

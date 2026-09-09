@@ -1,5 +1,5 @@
 // The errands a model is asked to run against the fixture, and how each is
-// graded. See ADR-0030 for what this lane measures and what it cannot.
+// graded. See ADR-0031 for what this lane measures and what it cannot.
 //
 // Grading is by OUTCOME, never by path: a read task is passed by the value
 // it answers, a write task by the state it leaves. Which tools it called and
