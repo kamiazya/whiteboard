@@ -4,7 +4,6 @@ import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -54,6 +53,7 @@ import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { loroTextSync } from '../lib/loro-codemirror-sync.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -251,7 +251,7 @@ function useBrowserDocument(
         ? undefined
         : // bodyTextOf, not a root getText: in workspace mode the doc is the
           // WORKSPACE document and this document's body sits on its tree node.
-          [LoroSyncPlugin(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
+          [loroTextSync(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
     [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null

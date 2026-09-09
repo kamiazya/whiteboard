@@ -1,13 +1,13 @@
 // @vitest-environment jsdom
 /**
- * What `patches/loro-codemirror@0.3.3.patch` is for.
+ * The spec `loro-codemirror-sync.ts` is written against.
  *
- * `LoroSyncPluginValue` arms an `isInitDispatch` flag so that its own seeding
- * dispatch is not echoed back into the container as a local edit. Upstream
- * arms it BEFORE the early return that skips the seeding when the view and
- * the container already agree — which is every empty new note — so the flag
- * is left standing with no dispatch to pair with, and `update()` consumes it
- * on the user's first keystroke instead.
+ * These cases are all defects the `loro-codemirror` package shipped, kept as
+ * the reason each rule in the module exists rather than as history. The one
+ * below cost the most: upstream armed an `isInitDispatch` flag BEFORE the
+ * early return that skips seeding when the view and the container already
+ * agree — every empty new note — so the flag stood with no dispatch to pair
+ * with and `update()` consumed it on the user's first keystroke.
  *
  * The consequence is not a lost character. The editor is then one character
  * ahead of the container, so the second keystroke asks a length-0 `LoroText`
@@ -28,9 +28,9 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { LoroSyncPlugin } from 'loro-codemirror'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, describe, expect, it } from 'vitest'
+import { loroTextSync } from './loro-codemirror-sync.js'
 
 const views: EditorView[] = []
 
@@ -42,7 +42,7 @@ function bind(doc: LoroDoc, initial = ''): EditorView {
   const view = new EditorView({
     state: EditorState.create({
       doc: initial,
-      extensions: [LoroSyncPlugin(doc, (d) => d.getText('body'))],
+      extensions: [loroTextSync(doc, (d) => d.getText('body'))],
     }),
     parent: document.body,
   })
@@ -127,7 +127,7 @@ describe('content that reaches the container from outside this editor', () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: '',
-        extensions: [LoroSyncPlugin(doc, workspaceBody)],
+        extensions: [loroTextSync(doc, workspaceBody)],
       }),
       parent: document.body,
     })
@@ -246,7 +246,7 @@ describe('undo over content that arrived from elsewhere', () => {
     const view = new EditorView({
       state: EditorState.create({
         doc: '',
-        extensions: [history(), LoroSyncPlugin(doc, workspaceBody)],
+        extensions: [history(), loroTextSync(doc, workspaceBody)],
       }),
       parent: document.body,
     })
