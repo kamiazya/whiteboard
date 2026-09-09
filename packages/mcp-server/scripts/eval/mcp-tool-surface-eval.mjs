@@ -36,6 +36,10 @@ const arg = (name, fallback) => {
 const flag = (name) => process.argv.includes(`--${name}`)
 
 const TRIALS = Number(arg('trials', '1'))
+if (!Number.isSafeInteger(TRIALS) || TRIALS < 1) {
+  console.error('[eval] --trials must be a positive integer')
+  process.exit(2)
+}
 const MODEL = arg('model', undefined)
 const ONLY = arg('only', undefined)
 const OUT = arg('out', undefined)

@@ -407,6 +407,24 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(row).toEqual({ workspaceId: 'sess-1' })
   })
 
+  it('lists two saves from the same millisecond newest-first by insertion order', async () => {
+    // A random id was the tie-breaker, so back-to-back saves that shared a
+    // createdAt came back in random order — the lane's fixture saves two
+    // labelled versions in a row and asks which is latest.
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000)
+    try {
+      for (const label of ['first', 'second', 'third']) {
+        const doc = new LoroDoc()
+        appendElement(doc, label)
+        await store.save('sess-1', 'canvas-z', doc, { auto: false, label })
+      }
+    } finally {
+      nowSpy.mockRestore()
+    }
+    const listed = await store.list('sess-1', 'canvas-z')
+    expect(listed.map((entry) => entry.label)).toEqual(['third', 'second', 'first'])
+  })
+
   describe('pruneSandwichedAutoVersions', () => {
     // Save a version while pinning Date.now() so chronological order is
     // deterministic regardless of how fast the test runs.

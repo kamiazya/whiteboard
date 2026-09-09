@@ -745,6 +745,22 @@ describe('tags (OKF core), the errand a caller is usually doing', () => {
     ).rejects.toThrow(FacetSetNeedsPayloadError)
   })
 
+  test('an empty tags object is refused by the schema, not saved as a no-op', () => {
+    const parsed = facetSetInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: {},
+    })
+    expect(parsed.success).toBe(false)
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { remove: ['x'] },
+      }).success,
+    ).toBe(true)
+  })
+
   test('tags belong to a document, so nodeId and tags together are refused', async () => {
     const store = await markdownWithTags([])
     await expect(

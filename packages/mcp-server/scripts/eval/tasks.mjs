@@ -137,13 +137,12 @@ export const TASKS = [
           detail: content.includes('Observability') ? 'proposed, not applied' : 'no such box',
         }
       }
-      const daemon = board.nodes.find((n) => n.text === 'Daemon')
-      const linked = board.edges.some(
-        (e) =>
-          (e.fromNode === daemon?.id && e.toNode === node.id) ||
-          (e.fromNode === node.id && e.toNode === daemon?.id),
-      )
-      return { ok: linked, detail: linked ? 'box added and linked' : 'box added, not linked' }
+      const daemon = byText(board, 'Daemon')
+      const connected = daemon !== undefined && linked(board, daemon, node)
+      return {
+        ok: connected,
+        detail: connected ? 'box added and linked' : 'box added, not linked',
+      }
     },
   },
   {
@@ -175,7 +174,9 @@ export const TASKS = [
         documentIds: [ids['notes/style-guide']],
       })
       const content = String(read.documents[0]?.content ?? '')
-      const green = /buttons are always green/i.test(content)
+      // The outcome, not the wording: "Buttons are green." is as much the
+      // asked-for change as "Buttons are always green."
+      const green = /buttons are\b[^.\n]*\bgreen/i.test(content)
       const teal = /teal/i.test(content)
       const amberKept = /amber/i.test(content)
       const ok = green && !teal && amberKept
@@ -228,14 +229,7 @@ export const TASKS = [
       const board = await snapshot(wb, ids, 'boards/architecture')
       const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Clients')
       if (group === undefined) return { ok: false, detail: 'the Clients group is gone' }
-      const inside = board.nodes.filter(
-        (n) =>
-          n.id !== group.id &&
-          n.x >= group.x &&
-          n.y >= group.y &&
-          n.x + n.width <= group.x + group.width &&
-          n.y + n.height <= group.y + group.height,
-      )
+      const inside = board.nodes.filter((n) => strictlyInside(n, group))
       const texts = inside.map((n) => (n.text ?? '').trim()).sort()
       const wanted = ['CLI', 'Mobile app', 'Web app']
       const exact = JSON.stringify(texts) === JSON.stringify(wanted)
@@ -268,14 +262,8 @@ export const TASKS = [
       const board = await snapshot(wb, ids, 'boards/roadmap')
       const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Pipeline')
       if (group === undefined) return { ok: false, detail: 'no Pipeline group' }
-      const inside = (n) =>
-        n.id !== group.id &&
-        n.x >= group.x &&
-        n.y >= group.y &&
-        n.x + n.width <= group.x + group.width &&
-        n.y + n.height <= group.y + group.height
-      const byText = (t) => board.nodes.find((n) => (n.text ?? '').trim() === t)
-      const chain = ['Ingest', 'Transform', 'Publish'].map(byText)
+      const inside = (n) => strictlyInside(n, group)
+      const chain = ['Ingest', 'Transform', 'Publish'].map((t) => byText(board, t))
       if (chain.some((n) => n === undefined)) return { ok: false, detail: 'a box is missing' }
       const outside = chain.filter((n) => !inside(n)).map((n) => n.text)
       if (outside.length > 0)
@@ -323,12 +311,7 @@ export const TASKS = [
       const board = await snapshot(wb, ids, 'boards/architecture')
       const group = board.nodes.find((n) => n.type === 'group' && n.label === 'Clients')
       if (group === undefined) return { ok: false, detail: 'the Clients group is gone' }
-      const inside = (n) =>
-        n.id !== group.id &&
-        n.x >= group.x &&
-        n.y >= group.y &&
-        n.x + n.width <= group.x + group.width &&
-        n.y + n.height <= group.y + group.height
+      const inside = (n) => strictlyInside(n, group)
       const members = board.nodes.filter(inside)
       const uncoloured = members.filter((n) => n.color !== '5').map((n) => n.id)
       if (members.length < 2) return { ok: false, detail: `group holds ${members.length}` }
@@ -453,14 +436,22 @@ export const TASKS = [
         ['rows', 'SQLite', 'Daemon'],
         ['render', 'Daemon', 'Browser'],
       ]
-      const messages = steps.map(([label]) =>
-        board.nodes.find(
-          (n) =>
-            n.type !== 'group' &&
-            text(n).toLowerCase().includes(label) &&
-            !['Browser', 'Daemon', 'SQLite'].includes(text(n)),
-        ),
+      // Each step claims ONE distinct node, the closest match first: a
+      // node reading "renders rows" contains both "rows" and "render", and
+      // a substring search that let two steps share it would grade the
+      // wrong geometry.
+      const pool = board.nodes.filter(
+        (n) => n.type !== 'group' && !['Browser', 'Daemon', 'SQLite'].includes(text(n)),
       )
+      const messages = steps.map(([label]) => {
+        const wanted = label.toLowerCase()
+        const candidates = pool
+          .filter((n) => text(n).toLowerCase().includes(wanted))
+          .sort((a, b) => text(a).length - text(b).length)
+        const chosen = candidates[0]
+        if (chosen !== undefined) pool.splice(pool.indexOf(chosen), 1)
+        return chosen
+      })
       const missing = steps.filter((_, i) => messages[i] === undefined).map((s) => s[0])
       if (missing.length > 0)
         return { ok: false, detail: `missing messages: ${missing.join(', ')}` }

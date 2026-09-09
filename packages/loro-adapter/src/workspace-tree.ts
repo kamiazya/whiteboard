@@ -731,7 +731,28 @@ function syncMapEntries(target: LoroMap, source: LoroMap): boolean {
   for (const key of source.keys()) {
     const wanted = source.get(key) as unknown
     const existing = target.get(key) as unknown
-    if (wanted instanceof LoroMap) {
+    // A plain value may carry a `kind` FIELD (a thread anchor does); only a
+    // container has the method.
+    const wantedKind =
+      typeof wanted === 'object' &&
+      wanted !== null &&
+      typeof (wanted as { kind?: unknown }).kind === 'function'
+        ? (wanted as { kind: () => string }).kind()
+        : null
+    if (wantedKind === 'Text' || wantedKind === 'MovableList' || wantedKind === 'List') {
+      // A container `LoroMap.set` cannot take: recreated whole, the way
+      // copyNodeData carries it, rather than handed to `set` as a value.
+      if (existing !== undefined) target.delete(key)
+      if (wantedKind === 'Text') {
+        target.setContainer(key, new LoroText()).insert(0, (wanted as LoroText).toString())
+      } else {
+        const list = target.setContainer(key, new LoroMovableList())
+        for (const entry of (wanted as LoroMovableList).toJSON() as unknown[]) {
+          list.push(entry as Parameters<typeof list.push>[0])
+        }
+      }
+      changed = true
+    } else if (wanted instanceof LoroMap) {
       if (existing !== undefined && !(existing instanceof LoroMap)) {
         target.delete(key)
         changed = true

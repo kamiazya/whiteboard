@@ -515,6 +515,17 @@ dimension, which judges the diff by the same criteria.
 Filed as follow-ups, each its own increment with the scoreboards as
 its evidence:
 
+- **Workspace records flattened before the container fix.** The fold now
+  carries a thread or proposal as a container, and a record that holds a
+  VALUE where a later save brings a container is replaced. What nothing
+  repairs is a record flattened by the old fold whose projection is then
+  saved back unchanged: the plain value is copied out and synced in as the
+  same plain value, so readers keep skipping it. Those threads were already
+  unreadable under the old code — nothing that worked stops working — and
+  the repair belongs to the readers, which know which keys hold containers;
+  an increment of its own, with a durability test that projects a flattened
+  record and writes a message into it.
+
 - ~~A comment thread does not survive a restart~~ — landed (§3): the
   record's fold and projection now carry nested containers.
 - ~~C10: register the Zod object rather than its `.shape`~~ — landed for

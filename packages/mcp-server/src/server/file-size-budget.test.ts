@@ -178,7 +178,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // time.
   // 1144: `syncMapEntries`, so a fold or projection carries a nested
   // container (a thread, a proposal) instead of flattening it to a value.
-  'packages/loro-adapter/src/workspace-tree.ts': 1144,
+  // 1165: the fold recreates a nested text or list container instead of
+  // handing it to `LoroMap.set`.
+  'packages/loro-adapter/src/workspace-tree.ts': 1165,
   // Shrunk from 991 while the theme layer added its glow filter and pencil
   // passes: the shape and edge renderers (crisp and sketched, with the
   // halo either takes) moved to `svg/shapes.ts`, and the presence-only

@@ -20,6 +20,7 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
 import { describe, expect, it } from 'vitest'
+import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import {
   crossReferences,
   descriptionWords,
@@ -35,11 +36,15 @@ import { registerPairingLinkTool } from './pairing-link.js'
 
 async function connect(): Promise<{ client: Client; tools: readonly ListedTool[] }> {
   const server = new McpServer({ name: 'whiteboard-surface', version: '0.0.0' })
+  // Only `tools/list` is read here, which touches no seam: the version
+  // history is the one seam a registration reaches at construction, and
+  // the rest are stated absent rather than faked with no behaviour.
   registerDocumentTools(server, {
     documentStore: new InMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
-  })
+    versions: new InMemoryVersionHistory(),
+  } as never)
   // Registered separately in index.ts, so registered separately here: the
   // scoreboard reads the whole table, not the document half of it.
   registerPairingLinkTool(server, undefined, undefined)

@@ -51,7 +51,7 @@ const call = async (
   context: ErrandContext,
   name: string,
   args: Record<string, unknown>,
-): Promise<void> => {
+): Promise<Awaited<ReturnType<ErrandContext['client']['callTool']>>> => {
   const result = await context.client.callTool({ name, arguments: args })
   if (result.isError) {
     const text = (result.content as { type?: string; text?: string }[] | undefined)?.find(
@@ -59,6 +59,7 @@ const call = async (
     )?.text
     throw new Error(`${name} refused: ${text ?? 'no message'}`)
   }
+  return result
 }
 
 export const MCP_ERRAND_CORPUS: readonly Errand[] = [
@@ -73,17 +74,14 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     name: 'author a canvas of 8 nodes and 6 edges',
     seedDocuments: 0,
     run: async (context) => {
-      const created = await context.client.callTool({
-        name: 'wb_workspace_edit',
-        arguments: {
-          workspaceId: context.workspaceId,
-          // Workspaces are never materialised implicitly, so a first
-          // document in a fresh workspace carries this flag rather than
-          // costing a separate call. Without it the create fails loudly,
-          // which is the design and not a quirk of the fixture.
-          createWorkspace: true,
-          ops: [{ op: 'document.create', path: 'drawing', kind: 'spatial' }],
-        },
+      const created = await call(context, 'wb_workspace_edit', {
+        workspaceId: context.workspaceId,
+        // Workspaces are never materialised implicitly, so a first
+        // document in a fresh workspace carries this flag rather than
+        // costing a separate call. Without it the create fails loudly,
+        // which is the design and not a quirk of the fixture.
+        createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'drawing', kind: 'spatial' }],
       })
       const documentId = documentIdOf(created)
       const ops = [

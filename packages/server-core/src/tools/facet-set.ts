@@ -53,6 +53,12 @@ const tagsChangeSchema = z
     remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),
   })
   .strict()
+  // `tags: {}` would pass every later guard and save an unchanged tag
+  // list as a new snapshot — the silent no-op the payload guard exists
+  // to refuse, arriving one level down.
+  .refine((change) => (change.add?.length ?? 0) + (change.remove?.length ?? 0) > 0, {
+    message: 'name at least one tag to add or remove',
+  })
 
 export const facetSetInputSchema = z
   .object({
