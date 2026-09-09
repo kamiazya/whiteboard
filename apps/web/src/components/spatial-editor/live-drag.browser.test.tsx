@@ -437,3 +437,33 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
   expect(pulled.length).toBeGreaterThan(0)
   for (const [x, y] of pulled) expect(x).toBeCloseTo(500 + Math.abs(y - 300), 5)
 })
+
+it('a themed board keeps its look while a node is carried: ghost and backdrop alike', async () => {
+  const neon: SpatialCanvas = {
+    ...start,
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  }
+  const { Host } = makeHost(neon)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+
+  fireEvent.pointerDown(root, {
+    pointerId: 5,
+    clientX: r.left + 160,
+    clientY: r.top + 130,
+    buttons: 1,
+  })
+  fireEvent.pointerUp(root, { pointerId: 5, clientX: r.left + 160, clientY: r.top + 130 })
+  await frame()
+  await dragWithoutRelease(root, [160, 130], [220, 160])
+
+  // The carried node travels in the ghost layer; the node staying behind is
+  // in the backdrop. A board with no comments used to hand the ghost a
+  // canvas with no envelope at all, so the theme vanished for the drag.
+  const ghost = container.querySelector('[data-testid="drag-preview"]')
+  expect(ghost?.innerHTML ?? '').toContain('Alpha')
+  expect(ghost?.innerHTML ?? '').toContain('wb-glow')
+  const backdrop = container.querySelector('[data-testid="canvas-content"]')
+  expect(backdrop?.innerHTML ?? '').toContain('wb-glow')
+})
