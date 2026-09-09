@@ -29,7 +29,8 @@ catalog:
   # the 6.x API republished to sit beside this. Two do: tools/arch-lint (its
   # scans), and packages/mcp-server, which pins 6 outright because tsup
   # bundles rollup-plugin-dts 6.1.1 and nothing here can redirect a vendored
-  # resolution.
+  # resolution. `typescript-pin.test.ts` fails when tsup vendors 6.5.0 or
+  # later, so that pin cannot outlive its reason.
   typescript: "^7.0.2"
   vite: "^8.2.0"
   vitest: "^5.0.0"
