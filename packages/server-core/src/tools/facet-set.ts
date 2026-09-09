@@ -1,7 +1,9 @@
 import {
+  readCoreFacets,
   readDocumentKind,
   readFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeFacets,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -34,16 +36,53 @@ import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError }
  */
 const MAX_DOCUMENTS = 50
 
+/**
+ * Tags are OKF core frontmatter, and "tag this note" is the thing a caller
+ * is usually doing when it reaches for this tool — so the shape is the
+ * errand's (add these, drop those, keep the rest), not the storage's (the
+ * whole list, replaced). The whole-list shape would make ONE payload over
+ * many documents clobber each document's own tags, which is exactly the
+ * batch this tool exists for.
+ */
+const tagsChangeSchema = z
+  .object({
+    add: z
+      .array(z.string().min(1))
+      .optional()
+      .describe('Tags to add; one already present is left where it is.'),
+    remove: z.array(z.string().min(1)).optional().describe('Tags to drop, by name.'),
+  })
+  .strict()
+  // `tags: {}` would pass every later guard and save an unchanged tag
+  // list as a new snapshot — the silent no-op the payload guard exists
+  // to refuse, arriving one level down.
+  .refine((change) => (change.add?.length ?? 0) + (change.remove?.length ?? 0) > 0, {
+    message: 'name at least one tag to add or remove',
+  })
+
 export const facetSetInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
-    documentIds: z.array(documentIdSchema).min(1).max(MAX_DOCUMENTS),
+    workspaceId: workspaceIdSchema.describe('The workspace the documents belong to.'),
+    documentIds: z
+      .array(documentIdSchema)
+      .min(1)
+      .max(MAX_DOCUMENTS)
+      .describe('The documents to write, all with the same payload.'),
     /**
      * Present: the write targets this NODE of a spatial document (facets
      * land in the node's x-whiteboard facets bucket). Absent: the write
      * targets the documents themselves (markdown only).
      */
-    nodeId: nodeIdSchema.optional(),
+    nodeId: nodeIdSchema
+      .optional()
+      .describe(
+        'Set the facets on this node of a spatial document instead of on the document itself. Takes exactly one documentId, and no tags.',
+      ),
+    tags: tagsChangeSchema
+      .optional()
+      .describe(
+        "Change the documents' OKF core tags: add and remove by name, every other tag stays. Markdown documents only.",
+      ),
     /**
      * Where a write without `nodeId` lands: the documents themselves
      * (markdown frontmatter; the default), or the CANVAS envelope of a
@@ -61,7 +100,11 @@ export const facetSetInputSchema = z
      * A null value DELETES that facet; anything else sets it. Deletion is
      * an input-only tombstone — stored buckets never hold null.
      */
-    facets: extensionFacetsSchema,
+    facets: extensionFacetsSchema
+      .optional()
+      .describe(
+        'Extension facets to set, keyed `{namespace}.{name}/v{n}` (wb_facet_list says which are registered). Merged by key: an omitted key keeps its value, null deletes it. Not for tags — those are `tags`.',
+      ),
   })
   .strict()
 export type FacetSetInput = z.infer<typeof facetSetInputSchema>
@@ -69,11 +112,54 @@ export type FacetSetInput = z.infer<typeof facetSetInputSchema>
 export const facetSetOutputSchema = z
   .object({
     updated: z
-      .array(z.object({ documentId: documentIdSchema, facets: extensionFacetsSchema }).strict())
+      .array(
+        z
+          .object({
+            documentId: documentIdSchema,
+            facets: extensionFacetsSchema.describe(
+              'The extension facets now on the document or node.',
+            ),
+            tags: z
+              .array(z.string())
+              .optional()
+              .describe("The document's tags after the write, when `tags` was given."),
+          })
+          .strict(),
+      )
       .describe('One entry per document, in the order asked for.'),
   })
   .strict()
 export type FacetSetOutput = z.infer<typeof facetSetOutputSchema>
+
+/** Neither `tags` nor `facets`: nothing to write, and a silent no-op would read as done. */
+export class FacetSetNeedsPayloadError extends Error {
+  constructor() {
+    super(
+      'Nothing to set: pass `tags` (add/remove OKF core tags) or `facets` (extension facets), or both.',
+    )
+    this.name = 'FacetSetNeedsPayloadError'
+  }
+}
+
+/** Tags are a document's frontmatter; a node has none. */
+export class TagsTargetDocumentError extends Error {
+  constructor() {
+    super(
+      'Tags are OKF frontmatter and belong to the document, not to a node. Omit nodeId to tag the document, or omit tags to set node facets.',
+    )
+    this.name = 'TagsTargetDocumentError'
+  }
+}
+
+/** A markdown document that has no frontmatter yet has nowhere to put a tag. */
+export class DocumentHasNoFrontmatterError extends Error {
+  constructor(documentId: string) {
+    super(
+      `Document ${documentId} has no OKF frontmatter to tag. Write its content first with wb_workspace_edit's document.set op (a markdown body starting with a --- frontmatter block), then tag it.`,
+    )
+    this.name = 'DocumentHasNoFrontmatterError'
+  }
+}
 
 /**
  * `nodeId` narrows to a node INSIDE one document, and two documents do not
@@ -114,10 +200,16 @@ export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
     description:
-      "Set facets on a document, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme), or — with nodeId — on one node of a spatial document. Merges by facet key: an omitted key keeps its stored value, a null value deletes the key. Registered facets are validated against their schema, their declared targets, and the assets they name.",
+      "Tag documents, or set facets on them. `tags` adds and removes OKF core tags by name on one or more markdown documents, leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme), or — with nodeId — on one node of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. One payload covers every document named, so tagging five notes is one call.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
+      if (input.tags === undefined && input.facets === undefined) {
+        throw new FacetSetNeedsPayloadError()
+      }
+      if (input.nodeId !== undefined && input.tags !== undefined) {
+        throw new TagsTargetDocumentError()
+      }
       if (input.nodeId !== undefined && input.documentIds.length !== 1) {
         throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
       }
@@ -141,7 +233,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       const requiredTarget = input.nodeId !== undefined ? 'node' : (input.target ?? 'document')
       const sets: Record<string, unknown> = {}
       const deletions: string[] = []
-      for (const [key, payload] of Object.entries(input.facets)) {
+      for (const [key, payload] of Object.entries(input.facets ?? {})) {
         if (payload === null) {
           deletions.push(key)
           continue
@@ -277,9 +369,25 @@ async function setOne(
 
   const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...sets }
   for (const key of deletions) delete mergedFacets[key]
-  writeFacets(doc, mergedFacets)
+  if (input.facets !== undefined) writeFacets(doc, mergedFacets)
+
+  let tags: string[] | undefined
+  if (input.tags !== undefined) {
+    const core = readCoreFacets(doc)
+    if (core === undefined) throw new DocumentHasNoFrontmatterError(documentId)
+    const remove = new Set(input.tags.remove ?? [])
+    const kept = (core.tags ?? []).filter((tag) => !remove.has(tag))
+    const added = (input.tags.add ?? []).filter(
+      (tag, i, all) => !kept.includes(tag) && all.indexOf(tag) === i,
+    )
+    tags = [...kept, ...added]
+    // The whole core bucket goes back, tags included: writeCoreFacets
+    // replaces rather than merges, and an omitted `tags` would drop them.
+    const { tags: _previous, ...rest } = core
+    writeCoreFacets(doc, tags.length === 0 ? rest : { ...rest, tags })
+  }
 
   await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
 
-  return { documentId, facets: mergedFacets }
+  return { documentId, facets: mergedFacets, ...(tags === undefined ? {} : { tags }) }
 }

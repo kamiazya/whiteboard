@@ -1290,3 +1290,15 @@ the table alone.
 - Adding a second producer for geometry that is both drawn and consumed
   elsewhere (hit-testing, bounds) instead of sharing one decomposition —
   the curved-edge highlight/hit mismatch was exactly this drift.
+
+## Paint order is not stored order
+
+`layoutSpatialCanvas` paints every group first, larger before smaller, then
+everything else in stored order (`paintOrderOf` in `layout/spatial-canvas.ts`).
+Stored order is a Loro map's id order, not the order a caller wrote, so a
+group whose id sorted after a member's painted over it once it had a colour:
+four of eleven boxes vanished from a diagram the MCP eval lane drew, and the
+lane's grader, reading the store, passed it. The one test that pins this
+lists the member before the group and asserts the group's chrome comes first
+in the scene. A z-order a document actually stores would be the honest
+dissolution; until JSON Canvas gives one, containers-behind is the rule.

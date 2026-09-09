@@ -208,7 +208,6 @@ const EXPECTED_TOOLS = [
   'wb_version_restore',
   'wb_version_save',
   'wb_workspace_edit',
-  'wb_document_resolve',
   'wb_document_list',
   'wb_pairing_link_create',
 ]
@@ -524,15 +523,15 @@ async function main() {
   }
   console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
 
-  // wb_document_resolve: id → placement, through the real outputSchema.
-  const resolved = await callTool('wb_document_resolve', {
-    workspaceId: WORKSPACE_ID,
-    documentId: named.documentId,
-  })
-  if (resolved.documentId !== named.documentId || resolved.path !== named.path) {
-    throw new Error(`wb_document_resolve returned unexpected shape: ${JSON.stringify(resolved)}`)
+  // id → placement is a row of wb_document_list now; the standalone
+  // wb_document_resolve is retired (ADR-0031 §4).
+  const resolvedRow = namedList.documents.find((d) => d.documentId === named.documentId)
+  if (resolvedRow === undefined || resolvedRow.path !== named.path) {
+    throw new Error(
+      `wb_document_list does not place ${named.documentId}: ${JSON.stringify(namedList)}`,
+    )
   }
-  console.log(`[e2e] wb_document_resolve → ${resolved.documentId} at ${resolved.path}`)
+  console.log(`[e2e] wb_document_list places ${resolvedRow.documentId} at ${resolvedRow.path}`)
 
   // document.delete: a throwaway document, deleted and gone from the list.
   const doomed = await createDocument({ path: 'doomed', kind: 'spatial' })
@@ -1338,8 +1337,8 @@ async function main() {
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
 
   // region.set is the one op that deletes by OMISSION, so the smoke drives
-  // the full reconcile through the real wire: declare two, then declare one,
-  // and the other must be gone. The group sits far from everything else so
+  // the full reconcile through the real wire: add two inside, name both,
+  // then name one, and the other must be gone. The group sits far from everything else so
   // nothing already on this canvas is enclosed by it.
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
@@ -1350,15 +1349,9 @@ async function main() {
         op: 'node.add',
         node: { id: 'region', type: 'group', x: 5000, y: 5000, width: 900, height: 600 },
       },
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [
-          { id: 'in-1', type: 'text', text: 'first' },
-          { id: 'in-2', type: 'text', text: 'second' },
-        ],
-        edges: [],
-      },
+      { op: 'node.add', node: { id: 'in-1', type: 'text', text: 'first' }, within: 'region' },
+      { op: 'node.add', node: { id: 'in-2', type: 'text', text: 'second' }, within: 'region' },
+      { op: 'region.set', within: 'region', nodes: ['in-1', 'in-2'] },
     ],
     follow: false,
   })
@@ -1366,14 +1359,7 @@ async function main() {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'apply',
-    ops: [
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [{ id: 'in-1', type: 'text', text: 'first' }],
-        edges: [],
-      },
-    ],
+    ops: [{ op: 'region.set', within: 'region', nodes: ['in-1'] }],
     follow: false,
   })
   const survivors = reconciled.snapshot.nodes.map((node) => node.id)
@@ -1388,6 +1374,19 @@ async function main() {
     throw new Error(`region.set reached outside its region: ${JSON.stringify(survivors)}`)
   }
   console.log('[e2e] wb_canvas_edit(region.set) → region reconciled, rest of the board untouched')
+  // A selector where an id goes: `within` names the group, not its members.
+  const lockedRegion = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [{ op: 'node.lock', within: 'region', locked: true }],
+    follow: false,
+  })
+  const lockedIds = lockedRegion.snapshot.nodes.filter((node) => node.locked).map((node) => node.id)
+  if (!lockedIds.includes('in-1') || lockedIds.includes('lockable')) {
+    throw new Error(`node.lock within reached the wrong nodes: ${JSON.stringify(lockedIds)}`)
+  }
+  console.log("[e2e] wb_canvas_edit(node.lock within) → only the region's member locked")
 
   // wb_viewport_set with nobody watching. This smoke runs headless, so
   // delivered:false IS the success path — the point is that asking a

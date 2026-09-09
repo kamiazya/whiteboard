@@ -10,6 +10,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { sql } from 'kysely'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
@@ -344,7 +345,10 @@ export class FileVersionStore implements VersionStore {
       .selectAll()
       .where('documentId', '=', documentId)
       .orderBy('createdAt', 'desc')
-      .orderBy('id', 'desc')
+      // Two saves in one millisecond share a createdAt, and the id is a
+      // random nanoid, so ordering by it put "as drafted" after "after the
+      // meeting" at random. The rowid is insertion order.
+      .orderBy(sql`rowid`, 'desc')
       .execute()
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }

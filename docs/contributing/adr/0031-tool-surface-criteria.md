@@ -1,0 +1,587 @@
+# ADR-0031: The tool surface is judged by an instrument, not by its count
+
+**Status:** Accepted
+
+## Context
+
+Two increments retired five tools in a week (`wb_body_patch` into
+`wb_canvas_edit`'s ops, then the standalone document CRUD into
+`wb_workspace_edit`), and each was measured on the errand scoreboard
+(`tool-call-count-quality.test.ts`): calls per errand, request bytes,
+response bytes. That instrument prices an errand **after the tool has been
+chosen**. Nothing measured the choosing — what the tool table costs a model
+to read on every turn, whether a model picks the right tool for a task it
+has not been shown the name of, whether its first call is valid — and so
+the next round of consolidation had only one number to steer by, and it was
+the tool count. A count is the wrong currency: folding three tools into one
+can leave the model reading exactly as much, and folding two overlapping
+reads into one can cut what it reads in half without changing the count.
+
+This ADR fixes the criteria first and the instrument beside them, so that
+the retirements still to come are decided by measurements rather than by
+the feeling that 18 is too many.
+
+### What the surface costs today (measured 2026-09-09)
+
+Read off a real `McpServer`'s `tools/list` over an in-memory transport
+(`tool-surface-quality.test.ts`), so these are what a client receives.
+
+| | |
+|---|---|
+| tools | 18 |
+| model-visible bytes (name + description + input schema) | 34,960 (~8.7k tokens at 4 bytes/token) |
+| wire bytes (the whole entry; output schemas are two thirds of it) | 102,525 |
+| the largest tool, `wb_canvas_edit` | 15,829 visible bytes — 45% of the table |
+| input parameters declared, at any depth | 324 |
+| of which described | 25 |
+| tools whose every parameter is described | 4 (`wb_version_*`, `wb_pairing_link_create`) |
+| tools that silently DROP an unknown top-level key | 15 of 18 |
+| tools that answer a schema-invalid call as a tool error, not a protocol error | 18 of 18 |
+
+Two of those rows are debt the count could never have shown. 299 of 324
+parameters are undescribed: ADR-0009 decision 6 said descriptions would
+"land in the same increment as the renames, written as `.describe()` on
+the Zod shapes", and they landed on four tools. And 15 tools hand the SDK a
+`.shape` rather than the Zod object, so the SDK rebuilds a non-strict
+validator around it and a typo'd optional parameter (`limt`) is stripped
+rather than refused — the call looks like it worked.
+
+### What the sources say
+
+Read for this ADR, 2025–2026, in the order that matters here:
+
+- **The cost that degrades an agent is tokens of tool definitions, not the
+  tool count.** Anthropic measured ~55K tokens for 58 tools across five
+  servers and 134K in one internal case, and names the trigger for
+  loading tools on demand instead of upfront as "10+ tools" or ">10K
+  tokens of definitions" (["Introducing advanced tool use"](https://www.anthropic.com/engineering/advanced-tool-use), 2025-11-24).
+  Cloudflare's Code Mode collapses an API to two tools for the same reason
+  (["Code Mode"](https://blog.cloudflare.com/code-mode-mcp/), 2026-02-20).
+  The one measured degradation curve is RAG-MCP's, over 1–11,100 tools
+  ([arXiv:2505.03275](https://arxiv.org/abs/2505.03275), 2025-05); the
+  "30–40 tools" ceiling that circulates is asserted without method
+  ([Speakeasy](https://www.speakeasy.com/mcp/tool-design), undated).
+- **Consolidate around the errand, not the endpoint.** Anthropic's worked
+  examples replace `list_users`/`list_events`/`create_event` with
+  `schedule_event` (["Writing effective tools for agents"](https://www.anthropic.com/engineering/writing-tools-for-agents), 2025-09-11);
+  Block took Linear from 30+ endpoint-shaped tools to two, and holds to
+  **one risk level per tool** — never a read-only path and a destructive
+  path behind one name (["Block's playbook"](https://engineering.block.xyz/blog/blocks-playbook-for-designing-mcp-servers), 2025-06-16).
+  The MCP blog's reading of the annotations agrees: an unannotated tool is
+  assumed destructive, non-idempotent and open-world, so omission is not
+  neutral (["Tool annotations as risk vocabulary"](https://blog.modelcontextprotocol.io/posts/2026-03-16-tool-annotations/), 2026-03-16).
+- **Selection among overlapping tools is decided by description wording,
+  and swings by more than 10x on wording alone** across 17 models
+  ([arXiv:2505.18135](https://arxiv.org/abs/2505.18135), EMNLP 2025).
+  Two tools that read the same thing are therefore not disambiguated by
+  better prose; they are merged, or one is retired.
+- **Descriptions are lintable, and fixing them is not uniformly good.**
+  Across 856 tools on 103 live servers, 97.1% carried a description smell
+  and 56% failed to state their purpose; augmenting descriptions raised
+  task success by a median 5.85 points and partial completion by 15% —
+  and increased steps by 67% and regressed 16.67% of cases
+  ([arXiv:2602.14878](https://arxiv.org/abs/2602.14878), 2026-02). A lint
+  is an early warning; only a task-level eval says a rewrite helped.
+- **Grade the outcome, not the path.** Checking that an agent followed a
+  specific tool sequence "results in overly brittle tests, as agents
+  regularly find valid approaches that eval designers didn't anticipate";
+  reliability is pass^k (every trial passes), not pass@k
+  (["Demystifying evals for AI agents"](https://www.anthropic.com/engineering/demystifying-evals-for-ai-agents), 2026-01).
+  Anthropic's own MCP eval recipe is ten read-only, independent questions
+  with single stable string answers, paraphrased so the question does not
+  carry the target's words, solved by a real model with only the server's
+  tools ([mcp-builder `evaluation.md`](https://raw.githubusercontent.com/anthropics/skills/main/skills/mcp-builder/reference/evaluation.md)).
+- **Spec-level rules worth pinning:** a tool name is 1–64 characters of
+  `[A-Za-z0-9_.-/]` (SEP-986); an input the schema rejects is a *tool*
+  error the model can repair from, never a JSON-RPC error that ends the
+  turn (SEP-1303) — both in the
+  [2025-11-25 changelog](https://modelcontextprotocol.io/specification/2025-11-25/changelog).
+
+Two things the sources do not settle, decided below: whether the lever at
+this size is consolidation or discovery, and how far one tool may carry
+mixed-risk ops before its annotation is a lie.
+
+## Decision
+
+### 1. The criteria
+
+Each is a statement a script or a reviewer can mark pass or fail, tagged
+with the rung (section 2) that checks it. A criterion nobody checks is a
+preference; the tag is what makes it a criterion.
+
+| # | criterion | checked by | today |
+|---|---|---|---|
+| C1 | The model-visible size of the table (name + description + input schema, summed) is pinned, and a change says why it moved | rung 1 | 34,960 B |
+| C2 | No single tool is more than a third of C1 | rung 1 | FAIL: `wb_canvas_edit` 45% |
+| C3 | Every input parameter, at every depth, carries a description | rung 1 | FAIL: 299 undescribed |
+| C4 | A description says WHEN to reach for the tool relative to its neighbours, not only what it does — the errand-level "use this over that" | review, and the `names` column of rung 1 as a hint | 3 of 18 name a neighbour |
+| C5 | A tool corresponds to an errand step someone would name, not to a storage operation; two tools that read or write the same thing differently are merged or one is retired | rung 3 decides; review proposes | open, §4 |
+| C6 | One risk level per tool: a tool is annotated for its worst op, and a tool that cannot be honestly given one `destructiveHint` is two tools | `tool-profiles.ts` + review | pass, with `wb_canvas_edit` and `wb_workspace_edit` DESTRUCTIVE for one op each |
+| C7 | Every tool carries `title` and explicit `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` where they apply | `tool-naming.test.ts`, `tool-profiles.test.ts` | pass |
+| C8 | Tool names are `wb_<entity>_<action>` (ADR-0009) and within SEP-986's format | `tool-naming.test.ts` | pass |
+| C9 | A schema-invalid call is answered as a tool error naming the field, never as a protocol error | rung 1 | pass |
+| C10 | An unknown top-level key is refused by name, never stripped | rung 1 | was FAIL (15 of 18 stripped, and `wb_facet_list` answered any input); every registration now hands the SDK the Zod object, +29 visible bytes a tool |
+| C11 | An error message names what to do differently — the right parameter on the right tool, in the vocabulary of `vocabulary.md` | review; the smoke's `expectToolError` for the ones it exercises | was FAIL: `wb_document_list`'s not-found message told the caller to pass `createWorkspace`, a parameter of `wb_workspace_edit`, "along with the canvas"; the advice now follows the caller's intent (`document-crud.test.ts`) |
+| C12 | A tool whose response can be large has a limit, a filter, or a stated truncation — never silent cutting | review | `wb_canvas_snapshot` and `wb_document_search` yes; `wb_document_get` caps how many documents, not how large |
+| C13 | An errand costs the fewest calls the surface allows, and a consolidation that cuts calls says what it did to bytes | rung 2 | pinned |
+| C14 | A real model, shown the tools and not their names, completes the fixture errands; a change to the surface does not lower that rate | rung 3 | §3 |
+
+C1 and C13 are PRICE rows — no target, pinned so a trade is visible. C2,
+C3, C10 are DEBT and target zero. The rest are pass/fail.
+
+### 2. The ladder
+
+| rung | instrument | runs | catches | cannot see |
+|---|---|---|---|---|
+| 0 | the existing guards: `tools/list` set parity with `ALL_REGISTERED_TOOLS`, the four-place list, naming shape, profiles, the smoke that calls every tool | every push | a tool registered wrong, missing, or misnamed | anything about how a model reads it |
+| 1 | **the tool-surface scoreboard**, `tool-surface-quality.test.ts` over the oracle `test-utils/tool-surface-metrics.ts`: per tool, visible and wire bytes, description words, parameters and how many are undescribed, what a stray key gets, which neighbours the description names; the totals; and C9 for every tool | every push | C1–C3, C9, C10 moving, loudly, in either direction | whether a description is GOOD, whether a model would choose the tool |
+| 2 | the errand scoreboard, `tool-call-count-quality.test.ts` | every push | C13: an errand that got dearer in calls or bytes | an errand nobody wrote; whether a model would find the cheap path |
+| 3 | **the LLM-driven lane**, `pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface`: seeds a fixture workspace through the real server, hands each task in `scripts/eval/tasks.mjs` to a real model through the `claude` CLI with only this server's tools, from an empty directory, on its own copy of the data; grades by outcome (a string answer, or the state read back); reports calls, tools used, tool errors, tokens, cost, wall time, and pass@k / pass^k over `--trials` | on demand, before and after a surface change; skips where there is no CLI | C5, C14: a rename or retirement that made a model pick wrong, call wrong, or take longer | a task nobody wrote; it is non-deterministic, so one trial is a reading and `--trials=3` is a measurement |
+
+Rung 3 is not in `pnpm test` and never will be: it spends API quota and
+needs a network. `--dry-run` seeds the fixture and runs every verifier
+against it without a model, and a write task's verifier must FAIL there —
+a verifier that passes on the untouched fixture would pass a model that
+did nothing, which is the mutation check the ladder needs before any
+result of the lane is believed.
+
+Why the `claude` CLI and not a framework (`mcp-eval`, `promptfoo`,
+DeepEval's MCP metrics): it is the client the repo's `smoke:claude`
+already drives, the lane is a few hundred lines, and grading is
+deterministic because the fixture is owned — a judge model would add
+variance to answer questions the store can answer exactly. Revisit when a
+task needs a judge or the corpus outgrows a hand-written file.
+
+### 3. What a rung-3 run says, and the baseline
+
+The lane runs from an empty working directory with `--tools ""`,
+`--strict-mcp-config` and `--disable-slash-commands`, so the model sees
+the Claude Code system prompt, the server's `instructions`, and the tool
+table — nothing that names a tool for it. The prompt names the workspace
+id and the task, nothing else.
+
+Baseline, 2026-09-09, one trial, the CLI's default model (`claude-sonnet-5`):
+
+| task | verdict | calls | tools it reached for | tool errors | cost |
+|---|---|---|---|---|---|
+| who grants repository access | pass | 2 | `wb_document_search`, `wb_document_get` | 0 | $0.107 |
+| count of process-tagged documents | **FAIL** — answered 0, wanted 2 | 1 | `wb_document_search` | 0 | $0.019 |
+| label on the browser-daemon connection | pass | 2 | `wb_document_search`, `wb_canvas_snapshot` | 0 | $0.027 |
+| button colour in the style guide | pass | 2 | `wb_document_search`, `wb_document_get` | 0 | $0.027 |
+| box count on the roadmap | pass | 2 | `wb_document_search`, `wb_canvas_snapshot` | 0 | $0.027 |
+| owner of the backup action item | pass | 2 | `wb_document_search`, `wb_document_get` | 0 | $0.027 |
+| latest version label of the meeting note | pass | 2 | `wb_document_search`, `wb_version_list` | 0 | $0.027 |
+| roadmap item with an open comment | **FAIL** — gave up | 19 | ten different tools, `canvas_view` three times, `wb_document_search` five | 1 | $0.202 |
+| what the onboarding note links to | pass | 2 | `wb_document_search`, `wb_document_get` | 0 | $0.027 |
+| add a box and connect it | pass — applied, not proposed | 3 | `wb_document_list`, `wb_canvas_snapshot`, `wb_canvas_edit` | 0 | $0.119 |
+| add a tag without losing the others | pass | 5 | `wb_document_search`, `wb_document_get`, `wb_facet_set`, `wb_body_edit`, `wb_workspace_edit` | 2 | $0.060 |
+| checkpoint every board | pass | 2 | `wb_document_list`, `wb_version_save` | 0 | $0.029 |
+
+pass@1 **10/12**, mean **3.7 calls** per task, 3 tool errors, **$0.70** for the
+run, ~10 minutes wall. Every two-call read cost ~69k input tokens: the
+table is ~8.7k of that and the rest is the CLI's own system prompt,
+which is why the lane reports cost beside calls rather than tokens alone.
+
+What the two failures are, established by probing the store directly
+rather than reading the transcript:
+
+- **The tag count is a gap in the surface**, not in the model. There is
+  no way to ask for documents by tag alone (§4), so one search with the
+  filter answered nothing and the model believed it. A second trial of
+  the same task PASSED, in four calls: the search answered nothing
+  again, and this time the model listed every document and read them
+  all. That is the pair pass@k and pass^k exist to separate — the task
+  is answerable and not reliably answered — and the four calls are the
+  price of the missing filter, which the errand scoreboard's row for
+  this errand will pin once the filter exists.
+- **The comment task sits on a durability bug the fixture exposed.** A
+  thread added through `wb_thread_edit` is returned by `canvas_view`
+  while the server that wrote it is alive, and is GONE once the data
+  directory is reopened by a fresh process: `threads: []`, and a second
+  `wb_thread_edit` on the same document then refuses with Loro's
+  `Expected value type Map but found Value(Map(...))` — the thread was
+  written as a plain value where the reader expects a child container,
+  so it does not survive a snapshot round trip. Reproduced with and
+  without a wait before closing, and with a later canvas edit; a
+  markdown note's thread behaves the same. The model therefore searched
+  a canvas that, to every read it had, carried no thread, and its
+  nineteen calls are the honest result.
+
+  **Fixed the same day**, and the cause was not Loro's: the workspace
+  record's fold (`writeWorkspaceDocumentContent`) and projection
+  (`projectWorkspaceDocument`) copied map entries through `toJSON()`, so
+  a thread — a nested container so two peers replying at once converge —
+  went into the record as a plain value and came back as one. Proposals
+  had the same shape and the same loss. `syncMapEntries` now carries a
+  nested container as a container through all four record paths (fold,
+  projection, duplicate, version restore); `comment-threads.durability.test.ts`
+  and `proposals.durability.test.ts` cross the reopen no in-process test
+  crossed, and fail without the fix. Re-run, the task passes 2 of 2 in
+  two calls.
+- **The tag write passed, and never the same way twice — because no
+  tool could do it.** Three trials reached the state by three routes:
+  `wb_facet_set`, refused twice, then a rewrite; `wb_body_edit` twice,
+  `wb_facet_list`, then a whole-document rewrite through
+  `wb_workspace_edit`; `wb_body_edit` once ("Passage tag1 does not apply:
+  its passage is no longer in the body"), `wb_facet_list`, then the
+  rewrite. The first reading of this was "the model never considered
+  `wb_facet_set`"; the refusal texts (`toolErrorTexts`, which the lane
+  now records) said otherwise: `facets.tags: extension facet key "tags"
+  must match {namespace}.{name}/v{n}`. Tags are OKF *core* frontmatter and
+  `wb_facet_set` accepted only extension facets, so "tag this note" had
+  no tool, and the model's rewrite of the whole document was the only
+  correct answer the surface offered. C5, not C4: an errand step with no
+  tool behind it.
+
+  The same probe caught the errand scoreboard lying. Its "tag 5
+  documents" errand sent `facets: { 'core/v1': ... }`, a key the tool
+  never accepted, and counted the refusal as one cheap call for a week;
+  "save a labelled version of 4 documents" measured a harness that
+  supplied no `versions` seam and answered a crash the same way. A
+  refused call is now a thrown one in the corpus, and both rows are
+  re-pinned on real writes.
+
+  Landed: `wb_facet_set` takes `tags: { add, remove }` (the errand's
+  shape, so one payload tags five notes that each keep their own), every
+  parameter described, and a description that says so. Rung 3 on the
+  task, three trials: 5.7 calls and 7 tool errors before, **2 calls and
+  0 errors after**, pass^k 1 both times. Rung 1: +1,122 visible bytes,
+  four fewer undescribed parameters.
+
+
+Read the table as the sources say to: the pass column is the gate and the
+calls column is the diagnostic. A task that passes in seven calls where
+the errand scoreboard's cheapest path is two is not a failure of the
+model; it is C4 or C5 unmet on the tools it wandered through, and it says
+which.
+
+### 3b. The second reading, after one round of tuning (2026-09-09)
+
+Same lane, same twelve tasks, one trial, after the increments §6 records
+as landed (threads survive a restart; `wb_facet_set` tags; the search
+filter stands alone; every tool refuses a stray key; `wb_document_resolve`
+retired; integer bounds gone):
+
+| | baseline | after |
+|---|---|---|
+| tasks passed | 10 / 12 | **12 / 12** |
+| mean calls per task | 3.7 | **2.0** |
+| tool errors | 3 | **0** |
+| cost of the run | $0.70 | $0.56 |
+| tools | 18 | 17 |
+| model-visible bytes | 34,960 | 33,251 (34,617 once the text anchor was described, below) |
+| undescribed parameters | 299 | 283 (265) |
+
+Every task that had wandered now takes the two calls its errand needs (a
+search to find the document, one read or write), and the table a model
+reads shrank while gaining two capabilities. Two more write tasks were
+added after this reading — a passage edit through `wb_body_edit` and a
+reply through `wb_thread_edit` — because those two tools had no task and
+the baseline's refusal texts showed a model reaching for `wb_body_edit`
+with the wrong anchor shape.
+
+**What the byte column was bought with, in order of size:**
+
+| cut | visible bytes | what it cost a model |
+|---|---|---|
+| safe-integer bounds off every `.int()` field (`integerSchema` in the model) | -1,912 | nothing: `{ "type": "integer" }` says what the bounds said |
+| the node extension a writer sends as one flat object, narrowed on parse | -1,320 | nothing, and a broken embed is now refused by name instead of silently dropped |
+| `wb_document_resolve` retired | -442 | nothing: a list row carries the id and the path |
+| `additionalProperties: false` on every tool (C10) | +464 | a stray key refused instead of dropped |
+| `tags` on `wb_facet_set`, all parameters described | +1,122 | a tool for "tag this note" |
+| the search filter standing alone, all parameters described | +379 | one call for "every document tagged X" |
+| the text anchor and the body change described (`wb_body_edit`, and `wb_thread_edit`'s anchor union) | +1,366 | the passage-edit task: 1 refusal in 2 trials before, 0 in 3 after — the first C3 payment made on evidence |
+
+**What did not work, so nobody tries it twice.** `$ref`/`$defs`
+deduplication is the obvious cut for `wb_canvas_edit` (the node union is
+inlined once per op arm, and the SDK accepts a raw JSON Schema), but the
+SDK round-trips a raw schema through `z.fromJSONSchema` and emits it
+INLINED again: measured, a two-arm schema with one `$ref` listed with the
+definition copied into both arms. Dedup has to happen at the source
+schema, which is what the flat extension did. `multipleOf: 1` as an
+integer form emits 40 bytes less than `.int()` but accepts a denormal
+(`1.4e-45`), which the model's own property test caught; `.meta()`
+overriding the bounds keeps `.int()`'s validation.
+
+**C3 against C1, decided.** Describing the 283 undescribed parameters at
+the ~50 bytes a `.describe()` costs would add ~14,000 bytes — 42% of the
+table — most of it on JSON Canvas 1.0 fields (`x`, `y`, `width`, `text`,
+`fromNode`) whose meaning is the spec's and which the lane shows models
+writing correctly with no description at all. So C3 is paid down where
+the lane shows a model guessing wrong (a refusal text naming the
+parameter), tool by tool, and JSON Canvas fields inherit their spec's
+meaning. The `undescribed` column stays honest; it is a debt with a
+price, not a debt to clear blindly.
+
+### 4. What the instrument is now pointed at
+
+These are questions for the lane, deliberately not decided here. Each
+names the criterion it is about and what a rung-3 run has to show before
+anything is retired.
+
+- **Four ways to read a canvas** — `wb_document_get` (JSON Canvas),
+  `wb_canvas_snapshot` (compact, no threads), `canvas_view` (scene plus
+  threads, a UI tool by ADR-0009 point 7), `wb_scene_render` (SVG). C5.
+  The "roadmap item with an open comment" task is the probe: only one of
+  the three data reads answers it.
+- ~~Four tools on the document noun~~ — `wb_document_resolve` is
+  retired: its one answer, an id's path, is a column of every
+  `wb_document_list` row, so no errand lost a way to be done and the table
+  lost 442 bytes. The lane's baseline had it reached once, by a model
+  wandering. `list`, `search` and `get` stay: a listing, a filter and a
+  read are three errands.
+- ~~A question the surface cannot answer in one call~~ — "how many
+  documents carry tag X", found by the lane's first run: `wb_document_search`
+  required a non-empty `query` and its `tags` filter only narrowed text
+  matches, and a tag is not searchable text, so `query: "process",
+  tags: ["process"]` answered nothing for two tagged documents. Landed:
+  the filter stands alone (`query` optional; neither words nor a filter is
+  refused and points at `wb_document_list`). Rung 3 on the task, three
+  trials: 3 calls each before (a search that answered nothing, then a
+  list and a read of every document), **1 call each after**, pass^k 1
+  both times. Rung 1: +379 visible bytes, two fewer undescribed.
+- ~~`wb_facet_set` does not say "tags"~~ — it could not tag at all (C5,
+  §3); landed as `tags: { add, remove }`, judged by the lane's tag-write
+  task.
+- **`wb_facet_list`** — a schema lookup with no required parameter, which
+  answers an unfiltered list to any input (C10). Whether an agent ever
+  needs it, or `wb_facet_set`'s refusal should carry the schema instead.
+- **`wb_canvas_edit` at 39%** (C2; was 45%). The ops union repeats the
+  full node and edge schemas per arm, and `$ref` is not available (§3b),
+  so what remains is the union itself: `region.set` carries the node
+  union a second time and `node.add` the first. Measured before deciding
+  anything about `region.set`'s shape (2026-09-09): the arm is 3,930 of
+  the ops union's 11,431 bytes (34%; `nodes` 3,126, `edges` 597), so it
+  is a third of the tool for one op. Rung 2 pins the op itself at one
+  call, 426 request bytes for a group plus three geometry-less boxes,
+  1,954 back. Rung 3 on the errand the op was built for ("make this
+  group contain exactly these three"), a fixture group 700 wide already
+  holding two boxes, nine trials over three runs: pass^k 1, 3 calls each
+  (search, snapshot, edit), and **the model reached `region.set` in two
+  of the six trials whose ops were recorded** — the other four got the
+  same outcome from `node.add`, once after widening the group with
+  `node.patch` and once after shifting a box over. Both `region.set`
+  calls declared full geometry for every box, none left a position to
+  placement; one was refused (`node "mobile" would not be inside
+  "clients"`, right edge 760 in a group of 700) and the retry shrank
+  everything to fit. Placement has the same edge: at 700 wide the
+  corpus's own three default-size boxes wrap to a second row that does
+  not fit, and the whole batch is refused with a text that says which
+  box and not how wide the group would have to be. So the op is reached
+  a third of the time on its own errand, costs a third of the tool to
+  offer, and its refusal has no repair advice — three findings, none of
+  which yet says which shape to change to.
+
+  Landed first, because it is the cheapest and changes no shape: the
+  group GROWS to hold what placement put in it (a locked one refuses and
+  says the size it would need), the refusal for a caller-chosen position
+  names the edge and the overrun and the three ways out, and `nodes`
+  carries one description saying geometry can be omitted (+168 bytes,
+  the tool's first described parameter). Three lane steps, three trials
+  each, same task: growth and the refusal text alone — reached 2 of 3,
+  the one refusal repaired the way the text said (widen with
+  `node.patch`, in the same batch) instead of by shrinking every box;
+  still full geometry on every node. The description added — reached 3
+  of 3 and the new box left to placement in all three, **and every trial
+  then spent a fourth call moving it**: placement had started from the
+  group's top-left as if it were empty and put the new box on the first
+  one. A follow-up call after a write is the lane grading the write's
+  RESULT, and that one was a product bug the op had carried since it
+  shipped. Placement made to pack around what the region keeps — reached
+  3 of 3, no follow-up call, one trial declaring no geometry at all, the
+  one refusal repaired by omitting x/y as advised. What this did not
+  move: the arm's 3,930 bytes, and the model's habit of writing
+  x/y/width/height for a box that already has them.
+
+  **Landed second: `region.set` names members by id, and a member is
+  created by `node.add` with `within`.** The node union left the arm
+  (rung 1: `wb_canvas_edit` 13,066 -> 9,675, the table 34,785 -> 31,394,
+  parameters 317 -> 254), and with it the place the habit lived. Rung 2:
+  the errand's request 425 -> 549 (three `node.add` wrappers instead of
+  one declaration list), response unchanged. Rung 3, the group task,
+  three trials: reached 3 of 3 — and every trial was refused once. The
+  model wrote `within` AND the next slot in the row (x 560, right edge
+  760 in a group of 700), which the description had promised the group
+  would grow for; the refusal contradicted the description. So growth
+  applies to a positioned node too, and only a position before the
+  group's top-left — the one thing growth keeps — is refused. After: 3
+  of 3 reached, 3 calls each, 0 refusals, $0.138 for three trials
+  against the baseline's $0.151. Two shapes stayed in the payloads a
+  reader should expect: the model still positions a new box by hand when
+  a row is visible to extend, and one trial closed with `tidy` on the
+  group.
+
+- **Server-decided geometry, measured and not acted on.** The hypothesis
+  that an op should be able to name an earlier op's OUTPUT — the group's
+  box depending on where three placed nodes landed — was given its own
+  task ("add three boxes in a row, chained, inside a group labelled
+  Pipeline"). Three trials, three passes, three calls, one edit each:
+  the model computed every coordinate itself, group included, in one
+  batch, and after `within` landed it did the same with `within` on each
+  box. No round trip to read a placement, no refusal. A reference syntax
+  would have saved output tokens on a task the surface already does in
+  one call, at the price of a mini-language the schema cannot validate
+  (C3, C11) — not a trade the lane can be made to show a gain on. Kept
+  as a task so a shape that WOULD need it is noticed when it appears.
+- **A set, measured as a selector.** Proposed: a batch-scoped named set
+  an op pushes into, then operated on in bulk. Two tasks were written for
+  the shape — "colour every box inside the Clients group" and "lock every
+  item on the roadmap" — and the baseline said what the cost actually
+  was: three calls each, the middle one a snapshot whose only purpose was
+  to learn the ids the edit would then name one by one. The accumulator
+  half could not move that (every id a model creates it also chooses, so
+  it never needs a set of its own outputs); the SELECTOR half could.
+  Landed as `within` and `all` where an op takes one id (+1,095 visible
+  bytes, eleven parameters, all described). After, three trials each: the
+  lock errand went 3 -> 2 calls in two of three (snapshot skipped, `all`
+  on nodes and edges in one batch), the colour errand stayed at 3 calls
+  but went from two ops to one — `within` needs the group's id, and the
+  snapshot is still where that comes from. Six of six trials reached for
+  the selector unprompted. What would take the colour errand to two calls
+  is a selector by LABEL, which is a lookup with no uniqueness behind it;
+  left as the next candidate rather than added on the same evidence.
+- **The use-case axis, measured with pictures.** "Can the surface draw
+  what a person actually asks for" is C5, and no task had asked for a
+  LAYOUT. Two now do: a three-layer architecture diagram (groups stacked
+  in order, members inside and lined up, nothing overlapping, eight
+  connections) and a sequence diagram (participants as columns, messages
+  between their two participants, each lower than the last). Both pass
+  six of six, one edit call each, every coordinate written by hand —
+  around 3k output tokens for the architecture drawing, and the numbers
+  right. The runner now keeps a rendering of every board a write task
+  names beside `--out`, because a verdict cannot carry what a drawing
+  looks like, and the first pictures found two product bugs the grader
+  (which reads the store) had passed: `wb_scene_render`'s SVG had no
+  viewBox, so a layer drawn at y=0 lost its label off the top; and a
+  coloured group whose id sorted after a member's painted OVER it — four
+  of eleven boxes gone from a diagram that scored as correct. Both fixed
+  in canvas-render's envelope and paint order.
+
+  On the same tasks, the push-then-arrange idea was given its cheapest
+  form — `below` and `rightOf` on `node.add`, a position the server
+  computes from a node an earlier op placed, so a grid needs no
+  arithmetic — and REVERTED: six trials of six wrote every coordinate by
+  hand with the relations in the table and described, zero reached for
+  either, for +261 bytes. A model drawing a whole diagram plans the
+  picture globally and writes it in one pass; a chain of relations is
+  the incremental style, and it did not want it. Recorded so the shape
+  is not re-proposed on the same evidence; a different shape (a whole
+  `layout` op that takes rows of members, say) would need its own
+  measurement, and the diagram tasks are where to take it.
+- **A stray key inside a node draft is accepted silently** (C10, one
+  level down). A trial wrote `"height80": true` beside `"height": 80`,
+  and the write succeeded: the per-type node schemas are non-strict so a
+  document may carry another tool's extension keys, and the draft
+  inherits that. The top-level strays test cannot see it. Worth a write-
+  side `.strict()` on the draft — this tool writes only what it knows —
+  judged by the refusal text a typo then gets.
+- **What a call answers with**, the errand scoreboard's `responseBytes`
+  column, is the other half of what a model reads and was untouched until
+  the version tools stopped answering the History panel's row (1,948 ->
+  1,316 for four saves). What remains by size: `wb_canvas_edit` answers
+  the resulting board (a truncated snapshot, ~2,500 of the "author a
+  canvas" errand's 3,172 bytes) so a drawing flow needs no read after each
+  edit — kept, because the read it saves is a whole call. `wb_scene_render`
+  answers SVG text, 1,800 bytes for a four-box board: cheap, but markup a
+  model cannot LOOK at. An image content block (PNG through the daemon's
+  resvg, ~500 tokens for 1000x380) would let a vision model judge a
+  layout it drew; that is a capability (C5) rather than a cut, and its
+  lane task would have to be graded on a layout property the store can
+  check.
+- **The description debt** (C3, C4). 299 parameters, and the four
+  tools that have none owed are the shape to copy. Landed in increments
+  that the rung-1 `undescribed` column counts down, and each increment
+  checked against rung 3 rather than assumed to help (the smells paper's
+  16.67% is why).
+
+### 5. The lever at this size
+
+Consolidation and description work, not discovery. At ~8.7k tokens the
+table is under the line at which Anthropic's guidance stops loading a
+table upfront, and every retirement in §4 moves C1 down rather than up.
+The rung-1 total is what makes the crossing loud: if C1 passes ~40,000
+bytes (~10k tokens) — because a tool grew, or a new one landed — the
+question changes from "which tool goes" to "does this server offer a
+search over its own tools", and that is a new ADR, not a bigger cut.
+
+### 6. What lands with this ADR, and what is filed
+
+Lands: the criteria above; the rung-1 scoreboard and its oracle,
+calibrated; the rung-3 lane, its fixture and twelve tasks, and the
+baseline in §3; the `mcp-tool-surface` skill, which is the procedure a
+change to the table follows, and the opt-in `tool-surface` review
+dimension, which judges the diff by the same criteria.
+
+Filed as follow-ups, each its own increment with the scoreboards as
+its evidence:
+
+- **Workspace records flattened before the container fix.** The fold now
+  carries a thread or proposal as a container, and a record that holds a
+  VALUE where a later save brings a container is replaced. What nothing
+  repairs is a record flattened by the old fold whose projection is then
+  saved back unchanged: the plain value is copied out and synced in as the
+  same plain value, so readers keep skipping it. Those threads were already
+  unreadable under the old code — nothing that worked stops working — and
+  the repair belongs to the readers, which know which keys hold containers;
+  an increment of its own, with a durability test that projects a flattened
+  record and writes a message into it.
+
+- ~~A comment thread does not survive a restart~~ — landed (§3): the
+  record's fold and projection now carry nested containers.
+- ~~C10: register the Zod object rather than its `.shape`~~ — landed for
+  all 18, 464 visible bytes for the whole table.
+- ~~C11: `WorkspaceNotFoundError`'s message~~ — landed.
+- ~~A tags-only query~~ — landed; the "count of process-tagged documents"
+  task is the regression test.
+- C3, in the order §4 gives.
+- The §4 retirements, each with a rung-3 before/after.
+
+## Consequences
+
+- A retirement is no longer argued from the count. Its PR carries the
+  rung-1 diff (C1, C3), the rung-2 diff (C13) and a rung-3 before/after
+  (C14), and a reviewer reads the three together — the price column
+  exists so a consolidation cannot buy fewer calls with a bigger table
+  silently.
+- Rung 1's numbers are pinned exactly, so every description added and
+  every schema reshaped fails the scoreboard until its row is re-pinned.
+  That is the same discipline as the routing and search scoreboards, and
+  the same cost: a line in the commit saying why.
+- Rung 3 costs money and minutes, and is non-deterministic. One trial is
+  a reading; a decision cites `--trials=3` and reports pass^k. A task
+  that fails every trial on a frontier model is first suspected of being
+  a broken task.
+- The fixture and the tasks are held-out from the descriptions: a
+  description may not quote a task, and a task may not name a tool.
+  Refreshing the tasks when the descriptions are rewritten is part of
+  the description increment.
+- `apps/web` and the daemon's HTTP routes are untouched; this ADR judges
+  the MCP tool table only.
+
+## Alternatives considered
+
+**A tool-count ceiling.** Rejected: no source that measured anything
+measured the count, and the count cannot see the two largest debts found
+here (one tool being 45% of the table; 299 undescribed parameters).
+
+**Tokens rather than bytes for C1.** Rejected for now: a tokenizer makes
+the number depend on which model reads it and adds a dependency to a
+test that must stay hermetic. Bytes are exact, monotone in tokens for
+this JSON, and the ~4:1 ratio is stated wherever a token figure is quoted.
+
+**A description lint (the six-component smell rubric) as a gate.**
+Rejected as a gate, kept as a hint: the one paper that measured it found
+description fixes regress a sixth of cases, so C3 counts presence and
+rung 3 judges quality.
+
+**Grading rung 3 by expected tool sequence.** Rejected, per the sources:
+a valid path the task author did not anticipate would fail. The sequence
+is recorded as a diagnostic beside the verdict.
+
+**An LLM judge for the write tasks.** Rejected: the store can be read
+back exactly, and a judge would add variance to a question with a
+deterministic answer.
+
+**Deferred tool loading / a tool-search tool now.** Deferred to a
+threshold (§5), because at this size it would add a discovery step to
+every errand to save a table that fits.

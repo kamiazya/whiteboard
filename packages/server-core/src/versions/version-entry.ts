@@ -43,3 +43,53 @@ export const versionEntrySchema = z.object({
   restoredFrom: z.string().optional(),
 })
 export type VersionEntry = z.infer<typeof versionEntrySchema>
+
+/**
+ * A version as the MCP tools answer it: what an agent acts on, and nothing
+ * the History PANEL needs that an agent does not. `path` repeats the
+ * document it asked about, `elementCount` is panel
+ * decoration, and `branchName` is the legacy column ADR-0029 retired the
+ * branch from (always `main` on the wire). Measured on the errand
+ * scoreboard, four saved versions answered 1,948 bytes with them and 1,316
+ * without; a model reads that answer in every turn that follows.
+ *
+ * The operator keeps who and how they are shown, not the peer and agent
+ * ids a person never types.
+ */
+export const versionEntryForAgentSchema = z
+  .object({
+    id: z.string().describe('The version to restore or name later.'),
+    createdAt: z.string(),
+    label: z.string().optional(),
+    auto: z.boolean().describe('True for an automatic checkpoint, false for one somebody saved.'),
+    operator: z
+      .object({
+        kind: z.enum(['ai', 'human', 'system']),
+        displayName: z.string().optional(),
+      })
+      .strict()
+      .optional(),
+    restoredFrom: z.string().optional(),
+  })
+  .strict()
+export type VersionEntryForAgent = z.infer<typeof versionEntryForAgentSchema>
+
+export function versionEntryForAgent(entry: VersionEntry): VersionEntryForAgent {
+  return {
+    id: entry.id,
+    createdAt: entry.createdAt,
+    ...(entry.label === undefined ? {} : { label: entry.label }),
+    auto: entry.auto,
+    ...(entry.operator === undefined
+      ? {}
+      : {
+          operator: {
+            kind: entry.operator.kind,
+            ...(entry.operator.displayName === undefined
+              ? {}
+              : { displayName: entry.operator.displayName }),
+          },
+        }),
+    ...(entry.restoredFrom === undefined ? {} : { restoredFrom: entry.restoredFrom }),
+  }
+}

@@ -158,6 +158,7 @@ pnpm smoke           # MCP smoke
 pnpm smoke:e2e       # version / route / no_client wiring smoke
 pnpm smoke:claude    # Claude subprocess smoke (uses API quota)
 pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
+pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses API quota; ADR-0031)
 pnpm intent:validate # TanStack Intent validate
 ```
 

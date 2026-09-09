@@ -106,6 +106,10 @@ When changing transport, routing, or tool registration, add or update a nearest-
 test for `/mcp` behaviour and verify against the running endpoint with a real client, not only
 mocked unit tests.
 
+Changing what a MODEL reads of a tool (name, description, schema, existence) is the
+`mcp-tool-surface` skill: ADR-0031's criteria, two pinned scoreboards, and the LLM-driven
+lane's before/after in the PR body. The tool count is not a criterion.
+
 Everything else — how each client registers the stdio proxy, the SessionStart hook that ensures
 the daemon, its per-worktree port and spawn lock, and the failure modes — is
 `docs/contributing/mcp-debugging.md` and `docs/contributing/development.md`, which carry it in

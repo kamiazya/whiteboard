@@ -11,6 +11,7 @@ import type { ServerDeps } from '../server-deps.js'
 import {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundError,
+  type WorkspaceNotFoundIntent,
   WorkspaceSegmentUnusableError,
 } from './document-crud.errors.js'
 import type {
@@ -34,13 +35,14 @@ import { createDocumentSetTool, OkfParseError } from './document-set.js'
  */
 async function rethrowWorkspaceNotFound<T>(
   workspaceId: string,
+  intent: WorkspaceNotFoundIntent,
   body: () => Promise<T>,
 ): Promise<T> {
   try {
     return await body()
   } catch (err) {
     if (err instanceof PortWorkspaceNotFoundError) {
-      throw new WorkspaceNotFoundError(workspaceId)
+      throw new WorkspaceNotFoundError(workspaceId, intent)
     }
     throw err
   }
@@ -155,7 +157,7 @@ export async function wbDocumentCreate(
   // and outranks tidiness here — naming must never gate creation — so a
   // caller sending a blank one gets a document, not an error.
   const name = input.name?.trim()
-  const entry = await rethrowWorkspaceNotFound(workspaceId, () =>
+  const entry = await rethrowWorkspaceNotFound(workspaceId, 'create', () =>
     deps.documentIndex.createDocument({
       workspaceId,
       path: input.path,
@@ -222,7 +224,7 @@ export async function wbDocumentList(
   // An unknown workspace is an error, not an empty list — otherwise a typo'd
   // workspaceId is indistinguishable from a genuinely empty workspace. The
   // index enforces that; this only restates it in the tool's vocabulary.
-  const entries = await rethrowWorkspaceNotFound(input.workspaceId, () =>
+  const entries = await rethrowWorkspaceNotFound(input.workspaceId, 'read', () =>
     deps.documentIndex.listDocuments({ workspaceId: input.workspaceId }),
   )
   return {

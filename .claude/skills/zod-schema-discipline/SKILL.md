@@ -38,5 +38,6 @@ Concrete rules:
 ## Verify (always)
 
 - Compile-time guard: `pnpm --filter @kamiazya/whiteboard-mcp typecheck` and `pnpm build`.
+- The model-facing side of a tool — its description, every parameter's `.describe()`, its annotations — is judged by ADR-0031's scoreboards, not by this skill: a new or reshaped tool re-pins its row in `tool-surface-quality.test.ts` and lands with every parameter described. Load `mcp-tool-surface` for the procedure.
 - Runtime guard for MCP tools: extend `pnpm smoke:e2e` (`scripts/smoke/mcp-e2e-smoke.mjs`) to call any new/changed tool at least once — the MCP SDK validates `structuredContent` against `outputSchema` at runtime, catching drift the type system can't see.
 - **Mutation-check** when fixing a drift: revert the production fix, confirm `pnpm build` OR `pnpm smoke:e2e` fails, then restore. Commit the test/smoke step that would have caught it.

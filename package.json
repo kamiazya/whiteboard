@@ -40,6 +40,7 @@
     "mcp:debug:http": "pnpm --filter @kamiazya/whiteboard-mcp mcp:debug:http",
     "smoke": "pnpm --filter @kamiazya/whiteboard-mcp smoke",
     "smoke:e2e": "pnpm --filter @kamiazya/whiteboard-mcp smoke:e2e",
+    "eval:tool-surface": "pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface",
     "smoke:packaged": "pnpm --filter @kamiazya/whiteboard-mcp smoke:packaged",
     "smoke:tarball": "pnpm --filter @kamiazya/whiteboard-mcp smoke:tarball",
     "smoke:codex-config": "pnpm --filter @kamiazya/whiteboard-mcp smoke:codex-config",

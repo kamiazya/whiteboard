@@ -176,7 +176,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the daemon's merge before the fix, a branch tip read back as "" with
   // nothing red, which is precisely the comment's job to prevent a second
   // time.
-  'packages/loro-adapter/src/workspace-tree.ts': 1116,
+  // 1144: `syncMapEntries`, so a fold or projection carries a nested
+  // container (a thread, a proposal) instead of flattening it to a value.
+  // 1165: the fold recreates a nested text or list container instead of
+  // handing it to `LoroMap.set`.
+  'packages/loro-adapter/src/workspace-tree.ts': 1165,
   // Shrunk from 991 while the theme layer added its glow filter and pencil
   // passes: the shape and edge renderers (crisp and sketched, with the
   // halo either takes) moved to `svg/shapes.ts`, and the presence-only
@@ -307,7 +311,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // and a module holding it would import the recursion's private options
   // type back from here. The palette a chrome previews resolves through the
   // same `pickThemeId`, so it sits here too.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2385,
+  // +17 more for `paintOrderOf`, groups behind what they hold whatever the
+  // stored order says.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2402,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card

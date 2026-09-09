@@ -1,8 +1,10 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
+  readCoreFacets,
   readDocumentKind,
   readFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -22,9 +24,12 @@ import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError } from './errors.js'
 import {
   createFacetSetTool,
+  DocumentHasNoFrontmatterError,
+  FacetSetNeedsPayloadError,
   facetSetInputSchema,
   NodeAndCanvasTargetError,
   NodeTargetNeedsOneDocumentError,
+  TagsTargetDocumentError,
 } from './facet-set.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -668,5 +673,134 @@ describe('wb_facet_set canvas target (ADR-0030)', () => {
         facets: {},
       }),
     ).rejects.toThrow(NodeAndCanvasTargetError)
+  })
+})
+
+describe('tags (OKF core), the errand a caller is usually doing', () => {
+  async function reload(store: FakeDocumentStore): Promise<LoroDoc> {
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    if (loaded === null) throw new Error('nothing stored')
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    return doc
+  }
+
+  async function markdownWithTags(tags: string[]): Promise<FakeDocumentStore> {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags })
+    })
+    return store
+  }
+
+  test('add appends what is missing and keeps the rest; remove drops by name', async () => {
+    const store = await markdownWithTags(['retro', 'draft'])
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['archived', 'retro'], remove: ['draft'] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['retro', 'archived'])
+    const stored = await reload(store)
+    expect(readCoreFacets(stored)?.tags).toEqual(['retro', 'archived'])
+    // The core `type` the write did not mention is still there.
+    expect(readCoreFacets(stored)?.type).toBe('note')
+  })
+
+  test('tags and facets can travel in one call, and facets alone still work', async () => {
+    const store = await markdownWithTags([])
+    const tool = createFacetSetTool(makeDeps(store))
+    const both = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['reviewed'] },
+      facets: { 'example.kanban/v1': { status: 'done' } },
+    })
+    expect(both.updated[0]).toEqual({
+      documentId: DOCUMENT_ID,
+      facets: { 'example.kanban/v1': { status: 'done' } },
+      tags: ['reviewed'],
+    })
+    const facetsOnly = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      facets: { 'example.kanban/v1': null },
+    })
+    expect(facetsOnly.updated[0]).toEqual({ documentId: DOCUMENT_ID, facets: {} })
+    expect(readCoreFacets(await reload(store))?.tags).toEqual(['reviewed'])
+  })
+
+  test('a call with neither tags nor facets is refused, not silently a no-op', async () => {
+    const store = await markdownWithTags([])
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+      }),
+    ).rejects.toThrow(FacetSetNeedsPayloadError)
+  })
+
+  test('an empty tags object is refused by the schema, not saved as a no-op', () => {
+    const parsed = facetSetInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: {},
+    })
+    expect(parsed.success).toBe(false)
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { remove: ['x'] },
+      }).success,
+    ).toBe(true)
+  })
+
+  test('tags belong to a document, so nodeId and tags together are refused', async () => {
+    const store = await markdownWithTags([])
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'n1',
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(TagsTargetDocumentError)
+  })
+
+  test('a spatial document has no frontmatter to tag', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'spatial'))
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test('a markdown document with no frontmatter yet is told where a tag would go', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(DocumentHasNoFrontmatterError)
+  })
+
+  test('the tool tells a model it tags, by name', () => {
+    const tool = createFacetSetTool(makeDeps(new FakeDocumentStore()))
+    expect(tool.description).toMatch(/\btags?\b/)
   })
 })

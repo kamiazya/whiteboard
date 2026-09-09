@@ -73,6 +73,7 @@ export {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
+  paintOrderOf,
   resolveCanvasPalette,
   resolveShapeTable,
   resolveThemeTable,

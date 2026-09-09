@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
+import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -58,11 +59,11 @@ export const xWhiteboardSchema = z.union([
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
 // JSON Canvas 1.0 geometry is specified in integer pixels.
-const positionFieldSchema = z.number().int()
+const positionFieldSchema = integerSchema
 // Sizes reject negatives. Zero stays valid: JSON Canvas 1.0 does not forbid a
 // degenerate box, and a node collapsed on one axis is a layout concern, not a
 // parse error.
-const sizeFieldSchema = z.number().int().nonnegative()
+const sizeFieldSchema = nonnegativeIntegerSchema
 
 const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
@@ -182,8 +183,8 @@ export const edgeRoutingSchema = z.object({
  */
 export const canvasCommentSchema = z.object({
   id: nodeIdSchema,
-  x: z.number().int(),
-  y: z.number().int(),
+  x: integerSchema,
+  y: integerSchema,
   text: z.string().min(1),
   author: okfActorSchema.optional(),
   createdAt: okfTimestampSchema.optional(),

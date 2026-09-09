@@ -14,7 +14,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import { composeCanvasScene, computeSceneDimensions } from '../render/compose-canvas-scene.js'
+import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
 import type { ServerDeps } from '../server-deps.js'
@@ -123,8 +123,12 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
           threads: readAnnotations(doc),
         })
       }
-      const { width, height } = computeSceneDimensions(scene)
-      return { svg: renderSceneToSvg(scene), width, height }
+      const envelope = sceneEnvelope(scene)
+      return {
+        svg: renderSceneToSvg(scene, { viewBox: envelope }),
+        width: envelope.w,
+        height: envelope.h,
+      }
     },
   }
 }
