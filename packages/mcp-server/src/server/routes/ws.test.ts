@@ -109,6 +109,15 @@ class FakeWebSocket {
 
 const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
+// `ws.ts` keys both its client registry and its latest-viewport cache by
+// `<workspaceId>/<path>`, as module state with no reset seam. So a test whose
+// premise is "nobody has connected to this canvas yet" has to mint a path no
+// earlier test used — including an earlier REPEAT of itself, since
+// `vitest --repeats` runs the same test again in the same process and the
+// module is loaded once.
+let canvasSeq = 0
+const freshCanvas = (name: string): string => `${name}-${++canvasSeq}`
+
 describe('handleWsUpgrade workspace existence', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-test-'))
@@ -171,17 +180,24 @@ describe('handleWsUpgrade workspace existence', () => {
     // cannot be given one afterwards.
     await prepareDataDir(tempDir)
     await upsertWorkspaceRow(await getDb(tempDir), CANONICAL, { segment: 'design' })
-    await saveDocument(CANONICAL, 'spec', new LoroDoc())
+    const path = freshCanvas('spec')
+    await saveDocument(CANONICAL, path, new LoroDoc())
 
     const ws = new FakeWebSocket()
     await handleWsUpgrade(
-      { url: '/ws/design/spec', headers: { host: 'localhost:3099' } } as never,
+      { url: `/ws/design/${path}`, headers: { host: 'localhost:3099' } } as never,
       ws as never,
     )
 
     expect(ws.closes).toEqual([])
-    expect(getClientCount(CANONICAL, 'spec')).toBe(1)
-    expect(getClientCount('design', 'spec')).toBe(0)
+    expect(getClientCount(CANONICAL, path)).toBe(1)
+    expect(getClientCount('design', path)).toBe(0)
+
+    // Deregisters the socket. Left open it stays in the registry, and on a
+    // repeat of this test in the same process the count climbs — 1, then 2.
+    // The fresh path above independently avoids that; both are here because
+    // a test that opens a socket should close it either way.
+    ws.emitClose()
   })
 })
 
@@ -347,16 +363,20 @@ describe('handleWsUpgrade viewport replay', () => {
   }
 
   it('replays the most recent viewport_request to a client that connects after the broadcast', async () => {
+    // A canvas nothing has broadcast to yet — the premise of "A receives the
+    // request once, and only because of this test's own send".
+    const canvas = freshCanvas('canvas-a')
+
     // Client A connects first, becomes ready.
     const a = new FakeWebSocket()
     await handleWsUpgrade(
-      { url: '/ws/session1/canvas-a', headers: { host: 'localhost:3099' } } as never,
+      { url: `/ws/session1/${canvas}`, headers: { host: 'localhost:3099' } } as never,
       a as never,
     )
     await a.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
 
     // viewport_set fires while only A is connected.
-    sendViewportRequest('session1', 'canvas-a', 'req-1', { mode: 'fit', padding: 24 })
+    sendViewportRequest('session1', canvas, 'req-1', { mode: 'fit', padding: 24 })
 
     expect(
       textFrames(a).filter((m) => (m as { type?: string }).type === 'viewport_request'),
@@ -374,7 +394,7 @@ describe('handleWsUpgrade viewport replay', () => {
     // race with Excalidraw's mount and the client-side init flow.
     const b = new FakeWebSocket()
     await handleWsUpgrade(
-      { url: '/ws/session1/canvas-a', headers: { host: 'localhost:3099' } } as never,
+      { url: `/ws/session1/${canvas}`, headers: { host: 'localhost:3099' } } as never,
       b as never,
     )
     expect(
@@ -403,15 +423,16 @@ describe('handleWsUpgrade viewport replay', () => {
   })
 
   it('caches only the latest viewport_request per canvas', async () => {
+    const canvas = freshCanvas('canvas-b')
     const a = new FakeWebSocket()
     await handleWsUpgrade(
-      { url: '/ws/session1/canvas-b', headers: { host: 'localhost:3099' } } as never,
+      { url: `/ws/session1/${canvas}`, headers: { host: 'localhost:3099' } } as never,
       a as never,
     )
     await a.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
 
-    sendViewportRequest('session1', 'canvas-b', 'req-1', { mode: 'fit' })
-    sendViewportRequest('session1', 'canvas-b', 'req-2', {
+    sendViewportRequest('session1', canvas, 'req-1', { mode: 'fit' })
+    sendViewportRequest('session1', canvas, 'req-2', {
       mode: 'move',
       scrollX: 100,
       scrollY: 200,
@@ -420,7 +441,7 @@ describe('handleWsUpgrade viewport replay', () => {
 
     const b = new FakeWebSocket()
     await handleWsUpgrade(
-      { url: '/ws/session1/canvas-b', headers: { host: 'localhost:3099' } } as never,
+      { url: `/ws/session1/${canvas}`, headers: { host: 'localhost:3099' } } as never,
       b as never,
     )
     await b.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
