@@ -352,6 +352,19 @@ anything is retired.
   union a second time (~5,000 bytes) and `node.add` the first. Below a
   third of the table would need one of them to change shape; neither
   has a case yet.
+- **What a call answers with**, the errand scoreboard's `responseBytes`
+  column, is the other half of what a model reads and was untouched until
+  the version tools stopped answering the History panel's row (1,948 ->
+  1,316 for four saves). What remains by size: `wb_canvas_edit` answers
+  the resulting board (a truncated snapshot, ~2,500 of the "author a
+  canvas" errand's 3,172 bytes) so a drawing flow needs no read after each
+  edit — kept, because the read it saves is a whole call. `wb_scene_render`
+  answers SVG text, 1,800 bytes for a four-box board: cheap, but markup a
+  model cannot LOOK at. An image content block (PNG through the daemon's
+  resvg, ~500 tokens for 1000x380) would let a vision model judge a
+  layout it drew; that is a capability (C5) rather than a cut, and its
+  lane task would have to be graded on a layout property the store can
+  check.
 - **The description debt** (C3, C4). 299 parameters, and the four
   tools that have none owed are the shape to copy. Landed in increments
   that the rung-1 `undescribed` column counts down, and each increment
