@@ -29,6 +29,7 @@ import {
 import {
   followReferencesAfterRename,
   type ServerDeps,
+  WorkspaceSegmentUnusableError,
   wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
@@ -363,6 +364,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
     } catch (err) {
       if (err instanceof DocumentPathTakenError) {
         return c.json({ title: `Canvas "${path}" already exists` }, 409)
+      }
+      // The refusal the comment above promises: a handle that names nothing
+      // and cannot be a segment is the caller's to change, not a failure.
+      if (err instanceof WorkspaceSegmentUnusableError) {
+        return c.json({ title: err.message } satisfies ApiErrorBody, 400)
       }
       getLogger('document').error({ err: err as Error }, 'wbDocumentCreate failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)

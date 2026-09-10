@@ -207,6 +207,35 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
 
+  // A scale the schema admits (any positive number) can size the target to
+  // nothing; the renderer refuses, and that refusal is the caller's to fix.
+  it('answers 400 invalid_request when the caller sized the render to nothing', async () => {
+    mockExportCanvasHeadless.mockRejectedValue(
+      new Error('Target size is zero (please do not set the width/height/zoom options to 0)'),
+    )
+    const app = makeApp()
+    const res = await app.request('/api/w/s1/document/canvas-a/export', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ scale: 5e-324 }),
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'invalid_request' })
+  })
+
+  it('refuses a scale that is not positive before rendering', async () => {
+    const app = makeApp()
+    for (const scale of [0, -1]) {
+      const res = await app.request('/api/w/s1/document/canvas-a/export', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ scale }),
+      })
+      expect(res.status, String(scale)).toBe(400)
+    }
+    expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
+  })
+
   it('returns 500 with headless_export_failed when headless rendering throws', async () => {
     mockExportCanvasHeadless.mockRejectedValue(new Error('boom'))
     const app = makeApp()

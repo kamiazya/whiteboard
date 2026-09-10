@@ -7,9 +7,11 @@ import { z } from 'zod'
 // ExportResponse/ExportErrorBody types derived below.
 
 export const exportRequestSchema = z.object({
-  padding: z.number().optional(),
-  scale: z.number().optional(),
-  minFontPx: z.number().optional(),
+  // Bounds a caller can get wrong: a negative padding or a scale of zero
+  // sizes the render to nothing, which the renderer refuses after the work.
+  padding: z.number().nonnegative().optional(),
+  scale: z.number().positive().optional(),
+  minFontPx: z.number().nonnegative().optional(),
   frameId: z.string().optional(),
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),

@@ -5,7 +5,7 @@ import type {
 import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import type { LoroDoc } from 'loro-crdt'
+import { decodeImportBlobMeta, type LoroDoc } from 'loro-crdt'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -66,6 +66,14 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
     'update',
     async (c, workspaceId, path) => {
       const bytes = new Uint8Array(await c.req.arrayBuffer())
+      // Bytes Loro cannot decode are the client's mistake, answered the way
+      // the workspace-document route answers its own: checked before the
+      // import, so a decode failure never escapes the handler as a 500.
+      try {
+        decodeImportBlobMeta(bytes, true)
+      } catch {
+        return c.json({ error: 'invalid_body', message: 'Malformed document update' }, 400)
+      }
       const deps = await depsOf()
       const doc = await applyDocumentUpdate(deps, { workspaceId, path, update: bytes })
 
