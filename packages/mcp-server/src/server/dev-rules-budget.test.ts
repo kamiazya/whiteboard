@@ -180,7 +180,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // Plus the paint-order rule (groups behind what they hold, whatever the
 // stored order says) — a bug a person saw in a rendered diagram and no test
 // had caught.
-const CANVAS_RENDER_BUDGET = 88
+// 90 since the theme polish wave: the two THEMED pixel goldens and why they
+// stay text-free, the markdown-embed path taking the same `style`, and the
+// content cache's theme axis beside the render key that deliberately has
+// none — each the record of a defect that shipped green.
+const CANVAS_RENDER_BUDGET = 90
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
