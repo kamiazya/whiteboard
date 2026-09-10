@@ -1571,9 +1571,24 @@ Four things the calibration decided that a reader would otherwise re-derive:
   `architecture/tidied` owes `apart 1` at ratio 1.4 where neither the
   reference nor the draft owes anything — Services stretched to hold a
   member at its right edge, so its widest internal gap (168px) exceeds its
-  members' clearance to the frame below (150px). Left as an owe rather than
-  fixed in the increment that measured it; the scoreboard pins the exception
-  so it cannot be lost.
+  members' clearance to the frame below (150px). The scoreboard pins the
+  exception so it cannot be lost.
+
+  **The obvious fix was measured and not taken.** The rule the column
+  implies is that a group's clearance to its neighbours must exceed its own
+  widest internal gap; on this board that is Storage moving down 144px, and
+  the result reads `apart` 1 to 0 and `worstRatio` 1.4 to 0.73 for ink 2019
+  to 2322 (+15%) and envelope 872x772 to 872x916 (+19% area), with every
+  other column unmoved. Systemic, since it would apply to every board with a
+  wide frame.
+
+  Read the owe as MILD, and the reason is structural rather than a judgement
+  call: C1 scores only groups with a DRAWN BORDER, and common region is a
+  stronger grouping cue than proximity — a reader's first pass may be by
+  spacing, but the frame is right there settling it. The strong form of this
+  column would score IMPLIED groups, which is exactly what taking edge
+  components out of the group set gave up. So `apart` on a framed group says
+  the spacing argues with the frame, not that the reader is misled.
 
 The column set follows the literature, and the module doc says which
 source each column follows (ADR-0031 §7 has the reading). Two things a
