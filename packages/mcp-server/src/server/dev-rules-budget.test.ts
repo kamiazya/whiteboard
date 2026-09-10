@@ -256,7 +256,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // -> 0 reading either half of it has to be judged against. A later session
 // asking "was that ever fixed, and what did it cost" reads it here rather
 // than reconstructing it from four commits.
-const CANVAS_RENDER_BUDGET = 120
+// 121 for where that fix's SETTLING CEILING came from: the pass
+// distribution over 40000 boards, the six that never reach a fixpoint at
+// all, and the fact that a guessed ceiling of 4 shipped and CI's stress
+// lane found the board needing 5. A ceiling with no measurement beside it
+// is the next session's guess as well.
+const CANVAS_RENDER_BUDGET = 121
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

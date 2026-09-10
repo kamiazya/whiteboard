@@ -745,6 +745,30 @@ describe('convergence', () => {
     expect(tidyNodes(once)).toEqual([])
   })
 
+  it('settles a locked frame overlapping a scoped one, which takes five passes', () => {
+    // Shrunk by CI's stress lane from the property above, and the reason the
+    // settling ceiling is a measurement rather than a guess: a ceiling of 4
+    // shipped and this board needs 5. Each pass moves a member that the next
+    // has to grow a frame around — g1 grows 224 -> 310 -> 358 while n2 and n4
+    // walk down it — and it is the densest shape the generator draws: two
+    // overlapping frames, one of them LOCKED, half the board out of scope.
+    const nodes = [
+      box('g0', 9, 13, 100, 123, 'group'),
+      box('g1', 0, 0, 100, 224, 'group'),
+      box('n0', 0, 0, 41, 30),
+      box('n1', 0, -9, 140, 30),
+      box('n2', 0, 0, 41, 30),
+      box('n3', 7, 120, 41, 30),
+      box('n4', 0, 0, 41, 30),
+    ]
+    const options = {
+      locked: (id: string) => id === 'g0',
+      scope: new Set(nodes.filter((_, i) => i % 2 === 0).map((n) => n.id)),
+    }
+    const once = applyMoves(nodes, [...tidyNodes(nodes, options)])
+    expect(tidyNodes(once, options)).toEqual([])
+  })
+
   it('re-reads the margin after the frame grows UP around a member', () => {
     // Growing up or left moves the frame's corner without moving a single
     // member, so it moves the MARGIN relative to them: here the frame grew

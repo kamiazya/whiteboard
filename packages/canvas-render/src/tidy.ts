@@ -579,24 +579,30 @@ function settleOnce(nodes: readonly TidyNode[], options: TidyOptions): TidyNode[
  *
  * Every rule below this line is local — a band, a hop, a margin, a frame
  * growing — and idempotence is a property of all of them together, which no
- * one of them can be responsible for. Four separate fixes each closed a
- * family and left a smaller one: measured over 20000 crowded generated
- * boards with locks, scopes and edges, 3139 in 5000 were not idempotent
- * before them and 9 in 20000 after. The last few are not a family, they are
- * the tail of a fixpoint nobody was computing.
+ * one of them can be responsible for. Two fixes each closed a family and
+ * left a smaller one; the rest is not a family at all, it is the tail of a
+ * fixpoint nobody was computing.
  *
  * So the entry point computes it. It settles, re-enters, and stops when the
- * state repeats — bounded, and stopping at a state already SEEN rather than
- * only at an equal one for the reason the level's own loop does: a cascade
- * can oscillate, and a repeated state is the one re-entry reproduces.
+ * state repeats — stopping at a state already SEEN rather than at one that
+ * stopped moving, for the reason the level's own loop does: the passes can
+ * CYCLE, and a repeated state is the one re-entry reproduces. Six boards in
+ * 40000 do exactly that, so this is not a theoretical case.
  *
  * The cost is one confirming pass on a board that was already settled,
- * which is what most are: measured 19ms -> 29ms -> 39ms on a 300-box,
- * 8-frame board across the three stages of this change. A tap can pay that;
- * a caller who could not is `layoutSpatialEdges`, and tidy is not on its
- * path.
+ * which is what most are: measured 19ms -> 45ms on a 300-box, 8-frame
+ * board. A tap can pay that; a caller who could not is `layoutSpatialEdges`,
+ * and tidy is not on its path.
+ *
+ * The CEILING is a measurement, not a guess. Over 40000 boards drawn the way
+ * the property draws them — one or two frames, a lock always, a partial
+ * scope half the time — reaching a repeated state took 2 passes on 34885 of
+ * them, 3 on 4759, and 7 at the worst. A ceiling of 4 shipped, and CI's
+ * stress lane found the board that needs 5 within the hour: a locked frame
+ * overlapping a scoped one, where each pass moved a member the next pass had
+ * to grow the frame around.
  */
-const TIDY_MAX_SETTLE_PASSES = 4
+const TIDY_MAX_SETTLE_PASSES = 12
 
 export function tidyNodes(
   nodes: readonly TidyNode[],

@@ -1560,6 +1560,15 @@ Three local fixes and one structural one, each measured:
   already promising. Cost: one more settling pass on a board tidy actually
   changed — 19ms -> 45ms on a 300-box, 8-frame board, 0.8s -> 1.9s over the
   20000-board sweep.
+  **Its ceiling is a measurement, and the first one was a guess that CI
+  caught.** Over 40000 boards drawn as the property draws them (one or two
+  frames, a lock always, a partial scope half the time), reaching a repeated
+  state took 2 passes on 34885, 3 on 4759, and 7 at the worst — and 6 of
+  those 40000 never reach a FIXPOINT at all, which is why the stop is at a
+  state already SEEN. A ceiling of 4 shipped and `stress-changed-tests`
+  found the board needing 5 within the hour: a locked frame overlapping a
+  scoped one, each pass moving a member the next had to grow a frame around.
+  It is pinned as an example, and the ceiling is 12.
 - **The frame pass INSIDE the level's loop was implemented, measured and
   DROPPED.** It is the obvious structural fix and it works: it settles far
   more boards in one pass (400 of 20000 still needed a second, against 1394).
