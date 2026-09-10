@@ -1453,3 +1453,21 @@ this is the drawing the model asks for; what would change it is the
 placement (a gateway in its own row), which is the drawer's, or the tier
 order, which is a population-wide change nothing here has measured. Not
 a router item; recorded so the trace is not taken again.
+
+**Every ink term reads axis-aligned segments only, and the straight
+style's routes are diagonals** — so a diagonal back through the edge's
+own box (a top-side stub, then the line down to a target below) cost the
+search nothing while the score read 63px of it (sixth reading). The tier
+swap that looked like the answer was measured first and rejected:
+endpoint-body-ink above crossings moved nothing on that board, because
+the term was blind either way, and on the sweep bought `own-endpoint` 12
+to 5 for crossings 494 to 686 — a row for the matrix above. What fixed
+the board is `diagonalInkThrough` in `overlap-and-intrusion`'s self term,
+over the edge's OWN endpoint bodies only: every legitimate straight route
+has zero of it, since the diagonal runs from one stub's end to the
+other's, so it is the defect itself and belongs at tier 0 as the straight
+form of the retrace, not at the price tier. A diagonal through a FOREIGN
+body stays the tunnel rule's business, and that rule still reads
+axis-aligned segments alone by design. The sweep cannot see any of this
+(orthogonal, no diagonals); the drawing corpus is the straight
+population, and it moved on one price.
