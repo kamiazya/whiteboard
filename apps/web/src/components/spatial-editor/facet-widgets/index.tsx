@@ -185,30 +185,6 @@ export const NODE_FACET_EDITORS: Readonly<Record<string, FacetEditor>> = Object.
 )
 
 /**
- * A canvas-target row built from the plugin's OWN editor for that facet —
- * the same component the node inspector renders, writing to the envelope
- * instead of to a node.
- *
- * Reusing it rather than declaring a second picker is what keeps the two
- * places a symbol can be chosen from offering the same set: a canvas picker
- * with its own list would drift from the node one on the first icon anybody
- * adds.
- */
-function canvasFacetRow(key: string, label: string): CanvasSettingsWidget {
-  const Editor = NODE_FACET_EDITORS[key]
-  return ({ canvas, run }) =>
-    Editor === undefined ? null : (
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">{label}</span>
-        <Editor
-          value={canvas['x-whiteboard']?.facets?.[key]}
-          write={(payload) => run({ kind: 'set-canvas-facet', key, payload })}
-        />
-      </div>
-    )
-}
-
-/**
  * A canvas-target row DERIVED from the facet's own editor spec — the form
  * `facet-ui` builds from the schema and the `editor` block the plugin
  * declared, writing to the envelope. The vessel ADR-0030 named as the gap:
@@ -234,5 +210,8 @@ export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidg
   'visual.theme/v0': derivedCanvasFacetRow('visual.theme/v0', 'Theme'),
   // The document's own mark — what its tab, its file row and, where there is
   // room, its overview draw instead of a picture derived from its contents.
-  'visual.symbol/v0': canvasFacetRow('visual.symbol/v0', 'Symbol'),
+  // Through the SAME derived row the other two take, now that the picker
+  // vocabulary can express it: this was the one row drawn by a plugin
+  // component, and the one that looked unlike its neighbours.
+  'visual.symbol/v0': derivedCanvasFacetRow('visual.symbol/v0', 'Symbol'),
 }

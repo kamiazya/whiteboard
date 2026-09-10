@@ -170,8 +170,8 @@ describe('an editor spec refines the derived form', () => {
           label: 'Shape',
           quick: true,
           options: [
-            { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
-            { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+            { value: 'ellipse', label: 'Ellipse', glyph: { kind: 'shape', name: 'circle' } },
+            { value: 'diamond', label: 'Diamond', glyph: { kind: 'shape', name: 'diamond' } },
           ],
         },
       },
@@ -185,8 +185,8 @@ describe('an editor spec refines the derived form', () => {
       control: {
         kind: 'segmented',
         options: [
-          { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
-          { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+          { value: 'ellipse', label: 'Ellipse', glyph: { kind: 'shape', name: 'circle' } },
+          { value: 'diamond', label: 'Diamond', glyph: { kind: 'shape', name: 'diamond' } },
         ],
       },
       required: true,
@@ -204,8 +204,8 @@ describe('an editor spec refines the derived form', () => {
         kind: {
           widget: 'segmented',
           options: [
-            { value: null, label: 'Rectangle', glyph: 'square' },
-            { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
+            { value: null, label: 'Rectangle', glyph: { kind: 'shape', name: 'square' } },
+            { value: 'ellipse', label: 'Ellipse', glyph: { kind: 'shape', name: 'circle' } },
           ],
         },
       },

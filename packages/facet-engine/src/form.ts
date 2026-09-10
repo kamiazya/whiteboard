@@ -13,13 +13,10 @@
 import { z } from 'zod'
 
 /**
- * The glyph vocabulary a spec may name — CLOSED, and owned by the core the
- * way contribution points are. A plugin picks from it; it cannot ship an
- * image or a component, which is what keeps a declared editor a
- * declaration rather than third-party UI code (the catalog-as-sandbox
- * principle of ADR-0013).
+ * The SHAPE glyphs a spec may name — closed, and owned by the core the way
+ * contribution points are.
  */
-export const FACET_GLYPHS = [
+export const FACET_GLYPH_SHAPES = [
   'square',
   'circle',
   'diamond',
@@ -28,7 +25,51 @@ export const FACET_GLYPHS = [
   'cylinder',
   'none',
 ] as const
-export type FacetGlyph = (typeof FACET_GLYPHS)[number]
+export type FacetGlyphShape = (typeof FACET_GLYPH_SHAPES)[number]
+
+/**
+ * What an option may be DRAWN as. Closed in FORM — three arms, and a
+ * plugin cannot add a fourth — while open in CONTENT, which is the
+ * distinction that matters: a plugin still cannot ship an image or a
+ * component (the catalog-as-sandbox principle of ADR-0013), but it is no
+ * longer limited to seven silhouettes the core happened to enumerate.
+ *
+ * The shape list alone was the bottleneck that broke the ladder. It could
+ * not name a database icon or a pin, so `visual.symbol` — twelve choices,
+ * six of them this plugin's own vendored geometry — had nowhere to go but
+ * a hand-written component, and a hand-written component has no styling
+ * contract. Four different-looking pickers in one panel followed from
+ * that, so the vocabulary is widened rather than the escape hatch used.
+ *
+ * `asset` names a registered icon (`assets.icons`, ADR-0013 decision 3),
+ * so the geometry travels as DATA through the registry both realms already
+ * share — the same road a theme takes. `char` is one character or emoji,
+ * which needs no registration because there is nothing to resolve.
+ */
+export type FacetGlyph =
+  | { readonly kind: 'shape'; readonly name: FacetGlyphShape }
+  | { readonly kind: 'char'; readonly value: string }
+  | { readonly kind: 'asset'; readonly id: string }
+
+/**
+ * One choice in a facet-level picker: the WHOLE payload it writes, and how
+ * to meet it.
+ *
+ * `payload: null` says the facet should not exist. It is the only way a
+ * picker says that, which is the point — the derived form used to offer a
+ * `Clear` button beside a segment that already meant the same thing, so
+ * "no theme" had two controls and a reader had to guess whether they
+ * differed.
+ */
+export interface FacetPickerOption {
+  readonly payload: unknown | null
+  readonly label: string
+  readonly glyph?: FacetGlyph
+}
+
+export interface FacetPickerSpec {
+  readonly options: readonly FacetPickerOption[]
+}
 
 export interface FacetSegmentedOption {
   /**
@@ -72,8 +113,15 @@ export interface FacetFieldSpec {
   readonly options?: readonly FacetSegmentedOption[]
 }
 
+/**
+ * How a plugin says this facet is met. Exactly one of the two: a `picker`
+ * is one control writing whole payloads, `fields` is a form over the
+ * schema's own fields. Declaring both would be two answers to one
+ * question, and `assertEditorSpecFits` refuses it.
+ */
 export interface FacetEditorSpec {
-  readonly fields: Readonly<Record<string, FacetFieldSpec>>
+  readonly picker?: FacetPickerSpec
+  readonly fields?: Readonly<Record<string, FacetFieldSpec>>
 }
 
 export interface FacetFormVariant {
@@ -83,6 +131,7 @@ export interface FacetFormVariant {
 }
 
 export type FacetForm =
+  | { readonly kind: 'picker'; readonly options: readonly FacetPickerOption[] }
   | { readonly kind: 'fields'; readonly fields: readonly FacetFormField[] }
   | {
       readonly kind: 'variants'
@@ -141,7 +190,7 @@ function fieldsOf(
     const { inner, required } = unwrap(member)
     const derived = controlOf(inner)
     if (derived === undefined) return undefined
-    const spec = editor?.fields[name]
+    const spec = editor?.fields?.[name]
     fields.push({
       name,
       label: spec?.label ?? humanize(name),
@@ -176,6 +225,14 @@ function humanize(name: string): string {
 }
 
 export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec): FacetForm {
+  // A declared picker WINS over anything the schema would derive. Both
+  // shapes this serves derive something on their own — a union derives
+  // `variants`, an object derives `fields` — and neither is what the
+  // plugin means: the derivation describes the STORAGE, and the picker
+  // describes the choice a person is actually making.
+  if (editor?.picker !== undefined) {
+    return { kind: 'picker', options: editor.picker.options }
+  }
   if (schema instanceof z.ZodObject) {
     const fields = fieldsOf(schema.shape as Record<string, z.ZodTypeAny>, undefined, editor)
     return fields === undefined ? UNSUPPORTED : { kind: 'fields', fields }
@@ -226,6 +283,14 @@ export function assertEditorSpecFits(
   schema: z.ZodTypeAny,
   editor: FacetEditorSpec,
 ): void {
+  if (editor.picker !== undefined && editor.fields !== undefined) {
+    throw new Error(`facet "${facetName}" declares both a picker and fields; it may declare one`)
+  }
+  if (editor.picker !== undefined) {
+    assertPickerFits(facetName, schema, editor.picker)
+    return
+  }
+  if (editor.fields === undefined) return
   const form = deriveFacetForm(schema)
   if (form.kind !== 'fields') {
     throw new Error(
@@ -237,6 +302,42 @@ export function assertEditorSpecFits(
     if (!known.has(name)) {
       throw new Error(
         `facet "${facetName}" editor names field "${name}", which its schema does not declare`,
+      )
+    }
+  }
+}
+
+/**
+ * Every option's payload is parsed by the facet's OWN schema, here, at
+ * definition time.
+ *
+ * This is what the declared picker buys over a hand-written component, and
+ * it is not a nicety: a component's payload is only ever checked at the
+ * write boundary, so a typo in one of twelve options ships, validates as a
+ * refused write, and reads to the person as a choice that silently does
+ * nothing. Declaring it means the plugin cannot start.
+ */
+function assertPickerFits(facetName: string, schema: z.ZodTypeAny, picker: FacetPickerSpec): void {
+  if (picker.options.length === 0) {
+    throw new Error(`facet "${facetName}" declares a picker with no options`)
+  }
+  const seen = new Set<string>()
+  for (const option of picker.options) {
+    // Payload equality by canonical JSON: two options writing the same
+    // thing are two controls a person cannot tell apart, and whichever is
+    // drawn second can never read as selected.
+    const fingerprint = JSON.stringify(option.payload ?? null)
+    if (seen.has(fingerprint)) {
+      throw new Error(
+        `facet "${facetName}" picker option "${option.label}" writes the same payload as an earlier one`,
+      )
+    }
+    seen.add(fingerprint)
+    if (option.payload === null) continue
+    const result = schema.safeParse(option.payload)
+    if (!result.success) {
+      throw new Error(
+        `facet "${facetName}" picker option "${option.label}" writes a payload its own schema refuses`,
       )
     }
   }

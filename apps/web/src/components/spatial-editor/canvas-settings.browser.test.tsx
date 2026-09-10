@@ -220,8 +220,8 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
 it('lets a person give the document its own mark, and take it back', async () => {
   // The entry point everything else this facet feeds depends on: the tab,
   // the file row and — where there is room — the overview all read what this
-  // writes. The picker is the plugin's OWN, so the canvas offers exactly the
-  // set a node does.
+  // writes. The options come from the plugin's own DECLARATION, so the
+  // canvas offers exactly the set a node does.
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   await openPanel(container)
@@ -244,5 +244,96 @@ it('lets a person give the document its own mark, and take it back', async () =>
   // like one that never chose.
   await vi.waitFor(() =>
     expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toBeUndefined(),
+  )
+})
+
+/**
+ * The three facet rows draw ONE control.
+ *
+ * They drew three. `visual.symbol` had a hand-written component (a
+ * radiogroup with its radios hidden behind an accent fill), `visual.theme`
+ * derived a segmented control with no glyphs — so its radios were VISIBLE
+ * beside a word, the only round radios in the panel — and `visual.shape`
+ * derived the same control WITH glyphs, which drew a bordered pill. One
+ * job, three looks, two of them side by side.
+ *
+ * The measurement is structural rather than a class-name check: what went
+ * wrong was three different ELEMENT shapes, and a class assertion would
+ * have passed over all three.
+ *
+ * What it catches, measured: drawing the picker as `aria-pressed` buttons
+ * — the spelling being unified away — fails this and two neighbours. What
+ * it does NOT catch, also measured: a plugin declaring a `component` again.
+ * That is not a hole in the test but a property of this surface — a canvas
+ * settings row goes through the derived form whatever the plugin declares,
+ * so a component cannot reach here at all. It can still reach the NODE
+ * inspector, and holding every surface to one control is a scan's job, not
+ * this file's.
+ */
+it('draws every facet row through the one selection control', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+  const panel = menu() as HTMLElement
+
+  // The SET, not the order — which row comes first is the contribution
+  // point's business and has its own test.
+  const groups = [...panel.querySelectorAll('[role="radiogroup"]')]
+  expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual(['Symbol', 'Theme'])
+
+  // Every option in every group is the same thing: a real radio (so arrow
+  // keys work, which the button rows never had), visually hidden, inside a
+  // label that carries the accessible name.
+  for (const group of groups) {
+    const options = [...group.querySelectorAll('label')]
+    expect(options.length).toBeGreaterThan(1)
+    for (const option of options) {
+      const input = option.querySelector('input[type="radio"]')
+      expect(input, `${option.getAttribute('title') ?? '?'} is not a radio`).not.toBeNull()
+      expect(input?.getAttribute('aria-label')).toBeTruthy()
+      // Hidden, not absent: a visible radio beside a word is the spelling
+      // that made Theme look unlike its neighbours.
+      expect(Math.round((input as HTMLElement).getBoundingClientRect().width)).toBeLessThan(2)
+    }
+  }
+})
+
+/**
+ * One way to say "none", not two.
+ *
+ * The derived form used to add a `Clear` button whenever anything was
+ * stored, beside a `Default` option that already meant the same thing — and
+ * the button's visible text was the bare word "Clear", naming nothing it
+ * would clear (the facet was in its `aria-label` only). A picker carries
+ * absence as an ordinary option, so the button has nothing left to do.
+ */
+it('offers no Clear beside a picker that already has a none option', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+
+  const neon = await vi.waitFor(() => {
+    const el = menu()?.querySelector('[aria-label="Neon"]')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+  fireEvent.click(neon)
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({
+      theme: 'visual.neon',
+    }),
+  )
+
+  // Something IS stored now — the state that used to grow a Clear button.
+  expect(
+    [...(menu()?.querySelectorAll('button') ?? [])].filter((b) =>
+      /clear/i.test(b.getAttribute('aria-label') ?? b.textContent ?? ''),
+    ),
+  ).toEqual([])
+
+  // And the none option is what takes it back.
+  fireEvent.click(menu()?.querySelector('[aria-label="Default"]') as HTMLElement)
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined(),
   )
 })

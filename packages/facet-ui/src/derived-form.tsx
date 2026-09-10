@@ -20,6 +20,7 @@ import {
 } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useState } from 'react'
 import { glyphIcon } from './glyph.js'
+import { FacetOption, FacetOptionGroup } from './option-group.js'
 
 /** The host supplies these; the literal is what a bare page falls back to. */
 const INK = 'var(--foreground, #171717)'
@@ -46,14 +47,6 @@ const CONTROL: CSSProperties = {
   padding: '0.25rem 0.5rem',
   fontSize: '0.75rem',
 }
-const SEGMENT: CSSProperties = {
-  ...CONTROL,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '0.25rem',
-  padding: '0.25rem 0.375rem',
-  cursor: 'pointer',
-}
 const BUTTON: CSSProperties = {
   border: `1px solid ${LINE}`,
   background: 'transparent',
@@ -77,6 +70,7 @@ function FieldInput({
   title,
   field,
   value,
+  registry,
   onChange,
   onClear,
 }: {
@@ -85,6 +79,8 @@ function FieldInput({
   readonly title: string
   readonly field: FacetFormField
   readonly value: unknown
+  /** Only the `asset` glyph arm needs it — it resolves registered geometry. */
+  readonly registry: FacetRegistry
   readonly onChange: (next: unknown) => void
   /**
    * A segmented option carrying `value: null` means the facet should not
@@ -115,53 +111,21 @@ function FieldInput({
   }
   if (field.control.kind === 'segmented') {
     return (
-      <span
-        id={id}
-        role="radiogroup"
-        aria-label={name}
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '0.125rem',
-        }}
-      >
-        {/* Real radios rather than buttons wearing the role: the keyboard
-            behaviour a segmented control needs comes free with the element. */}
-        {field.control.options.map((option) => {
-          const glyph = glyphIcon(option.glyph)
-          return (
-            // A declared glyph is DRAWN, the way the quick band draws it —
-            // a shape picker spelling "Parallelogram" is both wider and
-            // slower to read than the shape itself. The word stays as the
-            // accessible name, so nothing is lost for a screen reader, and
-            // an option with no glyph still shows its label.
-            <label
+      <span id={id}>
+        <FacetOptionGroup label={name}>
+          {field.control.options.map((option) => (
+            <FacetOption
               key={option.label}
-              title={glyph === undefined ? undefined : option.label}
-              style={SEGMENT}
-            >
-              <input
-                type="radio"
-                name={id}
-                aria-label={option.label}
-                checked={option.value === null ? value === undefined : value === option.value}
-                onChange={() => (option.value === null ? onClear() : onChange(option.value))}
-              />
-              {glyph === undefined ? (
-                option.label
-              ) : (
-                <span
-                  aria-hidden="true"
-                  style={{ display: 'inline-flex', width: '1rem', height: '1rem' }}
-                >
-                  {glyph}
-                </span>
-              )}
-            </label>
-          )
-        })}
+              name={id}
+              label={option.label}
+              selected={option.value === null ? value === undefined : value === option.value}
+              onSelect={() => (option.value === null ? onClear() : onChange(option.value))}
+              {...(glyphIcon(option.glyph, registry) === undefined
+                ? {}
+                : { glyph: glyphIcon(option.glyph, registry) })}
+            />
+          ))}
+        </FacetOptionGroup>
       </span>
     )
   }
@@ -276,6 +240,45 @@ export function DerivedFacetForm({
     )
   }
 
+  /**
+   * A PICKER is the whole form: one control, whole payloads, and the
+   * facet's absence as an ordinary option rather than a button beside it.
+   *
+   * That last part is why there is no Clear here. The derived form used to
+   * offer one whenever anything was stored, and the theme row ended up
+   * with two ways to say "no theme" — a `Default` segment and a `Clear`
+   * whose visible text named nothing it would clear. One control, one way.
+   */
+  if (form.kind === 'picker') {
+    const current = JSON.stringify(stored ?? null)
+    return (
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
+        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{title}</span>
+        <FacetOptionGroup label={title}>
+          {form.options.map((option) => {
+            const glyph = glyphIcon(option.glyph, registry)
+            return (
+              <FacetOption
+                key={option.label}
+                name={`facet-picker-${facetKey}`}
+                label={option.label}
+                selected={JSON.stringify(option.payload ?? null) === current}
+                // Straight through the write path, the same as every other
+                // control here: `null` clears, anything else is validated
+                // before it is stored. A picker payload was already parsed
+                // at definition time, so this is the second of two nets.
+                onSelect={() =>
+                  onWrite(facetKey, option.payload === null ? undefined : option.payload)
+                }
+                {...(glyph === undefined ? {} : { glyph })}
+              />
+            )
+          })}
+        </FacetOptionGroup>
+      </div>
+    )
+  }
+
   const activeVariant =
     form.kind === 'variants'
       ? (form.variants.find((variant) => variant.label === draft[form.discriminant]) ??
@@ -353,6 +356,7 @@ export function DerivedFacetForm({
             title={title}
             field={field}
             value={draft[field.name]}
+            registry={registry}
             onChange={(next) => change(field, next)}
             onClear={() => onWrite(facetKey, undefined)}
           />

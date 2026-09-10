@@ -30,7 +30,6 @@
     "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-facet-ui": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
-    "lucide-react": "^1.28.0",
     "react": "catalog:",
     "zod": "catalog:"
   },

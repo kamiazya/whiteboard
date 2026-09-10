@@ -187,13 +187,20 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // It owns the vendored icon geometry because `visual.symbol`'s schema is
   // what enumerates those names; the renderer draws from the same table, so
   // `canvas-render` depends on this package rather than the other way round.
+  // That geometry is also REGISTERED as an `assets.icons` bundle, which is
+  // how a declared picker draws it without anyone importing a component.
+  //
+  // `lucide-react` is deliberately gone. This package vendors the geometry
+  // (see `src/icons/README.md`) and its last importer was the hand-written
+  // symbol editor, retired when the picker vocabulary could express that
+  // facet. Nothing here renders a lucide COMPONENT any more.
   '@kamiazya/whiteboard-plugin-visual': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-facet-ui',
       '@kamiazya/whiteboard-model',
     ],
-    allowedThirdParty: ['lucide-react', 'react', 'zod'],
+    allowedThirdParty: ['react', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {

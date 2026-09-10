@@ -34,9 +34,9 @@ const shapeRegistry = createFacetRegistry([
               label: 'Shape',
               quick: true,
               options: [
-                { value: null, label: 'Rectangle', glyph: 'square' },
-                { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
-                { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+                { value: null, label: 'Rectangle', glyph: { kind: 'shape', name: 'square' } },
+                { value: 'ellipse', label: 'Ellipse', glyph: { kind: 'shape', name: 'circle' } },
+                { value: 'diamond', label: 'Diamond', glyph: { kind: 'shape', name: 'diamond' } },
               ],
             },
           },

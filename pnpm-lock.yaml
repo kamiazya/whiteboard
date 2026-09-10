@@ -843,9 +843,6 @@ importers:
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
-      lucide-react:
-        specifier: ^1.28.0
-        version: 1.28.0(react@19.2.5)
       react:
         specifier: 'catalog:'
         version: 19.2.5
