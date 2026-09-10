@@ -230,7 +230,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // above re-priced against the corrected instrument — kept in full, because
 // the first verdict was published and "rejected" alone would send the next
 // reader after a number that has changed.
-const CANVAS_RENDER_BUDGET = 109
+// 112 for the composition axis: its four columns and their sources, and the
+// four things its calibration DECIDED — a group is a frame and not a
+// component, `guides` alone is not a verdict, a tie counts as apart, and
+// tidy is not promised to buy proximity. Each was measured out of a wrong
+// first definition, which is the part a reader would otherwise redo.
+const CANVAS_RENDER_BUDGET = 112
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

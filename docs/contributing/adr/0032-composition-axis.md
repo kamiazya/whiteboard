@@ -117,6 +117,28 @@ the drawing easier to understand" on the strength of these numbers.
 - **Pinned exactly** over the same corpus, so an improvement is as loud as
   a regression and whoever moves a number says why.
 
+### What this axis deliberately does not cover, and where it will attach
+
+The same question — does this drawing do its job — has a second half that
+is not about where boxes sit: **whether the drawing uses the facet
+vocabulary it has**. Colour, icon and the rest of `visual`'s facets
+([ADR-0013](0013-facet-system.md)) are how a drawing says two things differ
+in KIND rather than in position, and a board that distinguishes nothing
+with them has left that channel unspent whatever its geometry scores.
+
+That is a later phase (user, 2026-09-10) and probably its own ADR, because
+it reads the facet registry rather than the scene's resolved appearance.
+The seam it will attach to is C4: `contrast` as defined here counts the
+treatments a scene ends up with against the structural roles the graph has,
+which is the geometry-side shadow of the facet question. A facet-aware
+column asks it directly — which facets are set at all, whether elements
+sharing a role share a treatment, and whether a distinction a reader can
+see corresponds to a distinction the document declares.
+
+It is named here so the columns above are defined without closing that seam
+off, and so a later reader knows the omission was scoped rather than
+missed.
+
 ## Consequences
 
 - The compositional questions the loop has been settling by argument get a

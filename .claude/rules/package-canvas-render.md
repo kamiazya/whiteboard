@@ -1503,6 +1503,51 @@ The grouped scoreboard's
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).
 
+## The composition score judges what the board hands its reader
+
+`quality/composition-score.ts` (`scoreComposition(canvas, scene)`) is
+[ADR-0032](../../docs/contributing/adr/0032-composition-axis.md)'s second
+axis, scored BESIDE the drawing score and never mixed into it: the drawing
+score judges DEFECTS and their price, and the questions left once its debt
+criterion saturated — should a hub sit between its targets, should every
+frame's first column sit on one line — are not defect questions. One column
+per principle of *The Non-Designer's Design Book*, each with a source:
+proximity from the Gestalt-in-diagrams work, alignment from Balinsky et
+al.'s alignment statistics and grid regularity (DocEng 2009), repetition
+from Ngo et al.'s regularity/homogeneity/rhythm (Information Sciences
+2003). `contrast` (`treatments`, `roles`) is REPORTED-ONLY and may not be
+cited for or against a change — salience manipulations have shown no effect
+in some empirical work, and a leg that weak does not carry weight.
+
+**What it may be read to mean is fixed and narrow**: the composition a
+drawing hands its reader, never that the drawing was understood. Every
+source validates against something else — perceived aesthetics, usability,
+perceptual grouping — and none of them on this product's drawings.
+
+Four things the calibration decided that a reader would otherwise re-derive:
+
+- **A group is a FRAME, not a connected component.** With components in the
+  set the hand-drawn SEQUENCE reference owed all three of its groups at a
+  worst ratio of 5.5 — a message box joined to a participant column at the
+  far side of the board, which is that diagram's grammar. A reference owing
+  is what the calibration forbids. The cost is that a frameless board is
+  silent on proximity, pinned as the blind spot.
+- **`guides` alone is not a verdict.** A scattered board shares almost no
+  anchors and so resolves to FEW lines, exactly as a composed board does.
+  The monotone pair is `offGuide` (elements sharing no line, lower better)
+  and `perGuide` (elements per shared line, higher better).
+- **An inside gap EQUAL to the outside gap counts as `apart`.** Equal
+  spacing gives a reader nothing to group by, so a tie contradicts the frame
+  rather than passing it.
+- **Tidy is NOT promised to buy proximity.** The drawing score's "tidy never
+  adds debt" has no analogue here, because the first reading refuted it:
+  `architecture/tidied` owes `apart 1` at ratio 1.4 where neither the
+  reference nor the draft owes anything — Services stretched to hold a
+  member at its right edge, so its widest internal gap (168px) exceeds its
+  members' clearance to the frame below (150px). Left as an owe rather than
+  fixed in the increment that measured it; the scoreboard pins the exception
+  so it cannot be lost.
+
 The column set follows the literature, and the module doc says which
 source each column follows (ADR-0031 §7 has the reading). Two things a
 session extending it has to know. **A column earns its place by an
