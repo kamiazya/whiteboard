@@ -7,9 +7,15 @@ import { z } from 'zod'
 // ExportResponse/ExportErrorBody types derived below.
 
 export const exportRequestSchema = z.object({
-  padding: z.number().optional(),
-  scale: z.number().optional(),
-  minFontPx: z.number().optional(),
+  // Bounds a caller can get wrong in either direction: a negative padding
+  // or a scale of zero sizes the render to nothing, which the renderer
+  // refuses after the work; a huge one asks for a target no process can
+  // allocate (scale is resvg's zoom factor, padding widens the bounds on
+  // every side). 8x is four times a retina export; 1024px of padding is
+  // a poster's margin.
+  padding: z.number().nonnegative().max(1024).optional(),
+  scale: z.number().positive().max(8).optional(),
+  minFontPx: z.number().nonnegative().optional(),
   frameId: z.string().optional(),
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),
