@@ -197,7 +197,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // table is what stops the same shapes being argued for again.
 // 94 for the gap column: what the score reads between two boxes, and why
 // tidy's margin is held at the same number.
-const CANVAS_RENDER_BUDGET = 94
+// 97 for tidy inside a frame — the three rules around it each came from a
+// measurement a reader would otherwise repeat — and for the traced search
+// that shows the same-row loop is the cost model's answer, not a miss.
+const CANVAS_RENDER_BUDGET = 97
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

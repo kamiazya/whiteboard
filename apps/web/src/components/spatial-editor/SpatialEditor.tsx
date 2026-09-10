@@ -118,7 +118,7 @@ import {
 } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
-import type { BoxMove } from './align.js'
+import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
@@ -1697,10 +1697,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const applyBoxMoves = (moves: readonly BoxMove[]): boolean => {
       if (moves.length === 0) return true
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: moves.map((move) => ({ kind: 'move-node' as const, ...move })),
-      }
+      const command: EditorCommand = { kind: 'batch', commands: moves.map(boxMoveCommand) }
       const running = applyCommand(canvasRef.current, command)
       if (running !== canvasRef.current) onChange(running, command)
       return true

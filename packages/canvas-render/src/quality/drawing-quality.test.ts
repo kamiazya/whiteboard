@@ -123,11 +123,15 @@ describe('drawing quality across the corpus', () => {
       'architecture/tidied': {
         nodes: 11,
         edges: 8,
-        // Tidy moves a frame with its members as one unit, so what is wrong
-        // INSIDE a frame survives it: the overlap, the near misses, the
-        // cramped members. It clears what is wrong BETWEEN units.
-        nodeOverlaps: 1,
-        overlapAreaPx: 3200,
+        // Tidy clears what is wrong between units and, since it tidies
+        // inside a frame, what is wrong among a frame's members too: the
+        // overlap and the cramped members go. What it leaves is the two
+        // near misses between members of DIFFERENT frames (`cli` moved in
+        // to its frame's 32px margin; `api` and `sqlite` sit at 40 in
+        // theirs), which no band sees — bands run among a frame's members
+        // and among the frames, never across them.
+        nodeOverlaps: 0,
+        overlapAreaPx: 0,
         straddles: 0,
         edgeThroughNode: 0,
         throughInkPx: 0,
@@ -135,23 +139,26 @@ describe('drawing quality across the corpus', () => {
         labelOverLabel: 0,
         labelCovered: 0,
         textOverflow: 0,
-        crampedMembers: 2,
-        nearMisses: 5,
+        crampedMembers: 0,
+        nearMisses: 2,
         tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
-        crossings: 0,
-        bends: 3,
-        edgeLengthPx: 2874,
-        unevenGaps: 1,
+        // One crossing where the frames' members, now separated, put
+        // `search` under `auth` in the Services frame; the router pays it
+        // rather than the reversal and two bends it drew before.
+        crossings: 1,
+        bends: 1,
+        edgeLengthPx: 2708,
+        unevenGaps: 2,
         envelopePx: { w: 840, h: 884 },
-        reversals: 1,
+        reversals: 0,
         flow: 'down',
         againstFlow: 0,
-        crossingsPerEdge: 0,
-        bendsPerEdge: 0.38,
-        overlapsPerPair: 0.04,
+        crossingsPerEdge: 0.13,
+        bendsPerEdge: 0.13,
+        overlapsPerPair: 0,
         density: 0.17,
       },
       'sequence/reference': {
@@ -347,13 +354,17 @@ describe('drawing quality across the corpus', () => {
     }
   })
 
-  it('tidy clears what is wrong between units and leaves what is wrong inside a frame', () => {
+  it('tidy clears what is wrong between units and inside a frame alike', () => {
     const drafted = scores.get('architecture/drafted') as DrawingScore
     const tidied = scores.get('architecture/tidied') as DrawingScore
     expect([drafted.straddles, tidied.straddles]).toEqual([1, 0])
     expect([drafted.labelCovered, tidied.labelCovered]).toEqual([1, 0])
-    expect(tidied.nodeOverlaps).toBe(drafted.nodeOverlaps)
-    expect(tidied.nearMisses).toBe(drafted.nearMisses)
+    // Inside the Services frame: `api` over `auth`, and two members within
+    // the padding of their frame. Both used to survive tidy.
+    expect([drafted.nodeOverlaps, tidied.nodeOverlaps]).toEqual([1, 0])
+    expect([drafted.crampedMembers, tidied.crampedMembers]).toEqual([2, 0])
+    // Members of different frames are aligned by nobody; that pair stays.
+    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([5, 2])
   })
 })
 

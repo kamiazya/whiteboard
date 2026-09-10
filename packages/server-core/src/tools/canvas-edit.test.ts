@@ -1422,8 +1422,11 @@ describe('wb_canvas_edit — node.add within a group', () => {
     expect(mobile.x).toBeGreaterThanOrEqual(group.x)
     expect(mobile.x + mobile.width).toBeLessThanOrEqual(group.x + group.width)
     expect(mobile.y + mobile.height).toBeLessThanOrEqual(group.y + group.height)
-    // It fit in the room the group had, so the group did not grow.
-    expect(group).toMatchObject({ width: 700, height: 300 })
+    // It fit in the room the group had, but flush with the bottom edge —
+    // the lane's board read that as a cramped member — so the group grows
+    // by the gutter it keeps for what it places.
+    expect(mobile.y).toBe(820)
+    expect(group).toMatchObject({ width: 700, height: 340 })
   })
 
   test('grows the group to hold the nodes it placed inside it', async () => {
@@ -1771,6 +1774,67 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
 
     expect(result.touched.nodes).not.toContain('far')
     expect(result.touched.nodes).not.toContain('g')
+  })
+
+  test('tidy within a group moves a member off the frame corner to its margin, and grows the frame for one at the far edge', async () => {
+    // `a` sits 20px from the frame's top-left: it moves in to the 32px
+    // margin (the corner stays put). `c` is flush with the bottom-right,
+    // where moving in would mean moving every member, so the frame grows
+    // and the result reports its size. `far` is outside and untouched.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...BOARD,
+      nodes: [
+        ...BOARD.nodes,
+        { id: 'c', type: 'text' as const, x: 416, y: 456, width: 80, height: 40, text: 'c' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'tidy', within: 'g' }],
+    })
+
+    expect(result.geometry.find((entry) => entry.id === 'a')).toMatchObject({ x: 32, y: 32 })
+    const frame = result.geometry.find((entry) => entry.id === 'g')
+    expect(frame).toMatchObject({ x: 0, y: 0, width: 528, height: 528 })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((n) => n.id === 'g')).toMatchObject({ width: 528, height: 528 })
+    expect(result.touched.nodes).not.toContain('far')
+  })
+
+  test('a member placed inside a group keeps the gutter to the frame edge; the group grows when it cannot', async () => {
+    // Two rows fit exactly: 40 + 80 + 40 + 80 = 240 of a 240-tall frame, so
+    // the second row would end flush with the bottom edge. Flush is what a
+    // reader sees as jammed, so the frame grows by the gutter instead.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 240 },
+        { id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 80, text: 'a' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'b', type: 'text', text: 'b', width: 200, height: 80 },
+        },
+      ],
+    })
+
+    expect(result.geometry.find((entry) => entry.id === 'b')).toMatchObject({ x: 40, y: 160 })
+    expect(result.geometry.find((entry) => entry.id === 'g')).toMatchObject({ height: 280 })
   })
 
   test('exactly one of id, within and all, at the schema', () => {

@@ -187,9 +187,11 @@ wb_scene_render({ workspaceId, documentId, style: "document" })
 ```
 
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
-parameters — it is a one-shot auto-arrange, not a configurable layout engine. It refuses a markdown
-document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it moved
-comes back under `geometry`.
+parameters — it is a one-shot auto-arrange, not a configurable layout engine. It tidies inside a
+group as well: members separate and line up within it, and the group grows (never shrinks) to hold
+them with a 32px margin — `within: "<group id>"` scopes it to one group's members. It refuses a
+markdown document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it
+moved comes back under `geometry`, a grown group with its new size.
 
 `wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format. It
 renders a markdown document too, as a page. `fragment` is the only way to render less than the

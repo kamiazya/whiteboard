@@ -233,7 +233,15 @@ function tidied(canvas: SpatialCanvas): SpatialCanvas {
     ...canvas,
     nodes: canvas.nodes.map((n) => {
       const move = moves.get(n.id)
-      return move === undefined ? n : { ...n, x: move.x, y: move.y }
+      return move === undefined
+        ? n
+        : {
+            ...n,
+            x: move.x,
+            y: move.y,
+            width: move.width ?? n.width,
+            height: move.height ?? n.height,
+          }
     }),
   }
 }

@@ -3,11 +3,23 @@
  * rough topology instead of re-laying the canvas out wholesale.
  *
  * Three passes over UNITS (an outermost group and everything its box
- * contains move as one; every other node is its own unit):
+ * contains move as one; every other node is its own unit), applied INSIDE
+ * each frame first and then at the level of the frames themselves:
  *
+ * 0. Inside a frame: its members are tidied as a canvas of their own (the
+ *    same three passes, recursively for nested frames), and the frame then
+ *    GROWS — never shrinks — to hold them with `TIDY_MARGIN_PX` on every
+ *    side, when it is unlocked and it or one of its members is in scope.
+ *    Its top-left stays put: a member hugging that corner is moved in to
+ *    the margin instead, so the frame keeps its alignment with its peers.
+ *    Without this a frame was opaque: a member overlapping its neighbour,
+ *    or jammed against the frame's edge, was something tidy could not
+ *    see, and `tidy` scoped to a frame's members moved nothing at all.
  * 1. Band alignment, per axis: units whose edge anchors sit within
- *    `TIDY_BAND_PX` of the band's FIRST member snap to that first
- *    anchor's grid-rounded value. Banding by the fixed first anchor —
+ *    `TIDY_BAND_PX` of the band's FIRST member snap to one target — the
+ *    anchor of the band's first IMMOBILE member when it has one (a
+ *    neighbour that cannot move is the row, wherever it sits), else the
+ *    first anchor's grid-rounded value. Banding by the fixed first anchor —
  *    never a running mean — is what stops transitive chaining (A near B,
  *    C near B's new spot) from dragging a whole diagonal into one line.
  * 2. Overlap resolution as a deterministic sequential PLACEMENT: units in
@@ -21,14 +33,19 @@
  *    the edge optimizer re-routes and re-sides edges on the
  *    committed render.
  *
- * Pure and total: returns ONLY the boxes that actually move; degenerate
- * input never throws. Locked nodes never move and stand as fixed
- * obstacles; out-of-scope units likewise.
+ * Pure and total: returns ONLY the boxes that actually move (a frame that
+ * grew carries its new size); degenerate input never throws. Locked nodes
+ * never move and stand as fixed obstacles, and a frame holding one is held
+ * by it (moving the frame would carry it away from a member that cannot
+ * follow); out-of-scope units likewise.
  */
 export interface TidyMove {
   readonly id: string
   readonly x: number
   readonly y: number
+  /** Present only on a frame that grew to hold its members. */
+  readonly width?: number
+  readonly height?: number
 }
 
 export interface TidyNode {
@@ -63,8 +80,15 @@ interface Rect {
   h: number
 }
 
+interface Point {
+  readonly x: number
+  readonly y: number
+}
+
 interface Unit {
   readonly rootId: string
+  /** Every node of the unit, the root included. */
+  readonly members: readonly TidyNode[]
   /** Member node ids that move with the unit (locked members excluded). */
   readonly movableIds: readonly string[]
   bbox: Rect
@@ -74,6 +98,7 @@ interface Unit {
 }
 
 const roundToGrid = (v: number) => Math.round(v / TIDY_GRID_PX) * TIDY_GRID_PX
+const ceilToGrid = (v: number) => Math.ceil(v / TIDY_GRID_PX) * TIDY_GRID_PX
 
 function fullyContains(outer: Rect, inner: Rect): boolean {
   return (
@@ -127,10 +152,17 @@ function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
   const units: Unit[] = []
   let movableCount = 0
   const pushUnit = (rootId: string, memberNodes: readonly TidyNode[], bbox: Rect) => {
-    const movable = inScope(rootId) && !locked(rootId) && movableCount < TIDY_MAX_UNITS
+    // A frame holding a locked member is held by it: moving the unit would
+    // carry the frame away from a member that cannot follow.
+    const movable =
+      inScope(rootId) &&
+      !locked(rootId) &&
+      !memberNodes.some((m) => locked(m.id)) &&
+      movableCount < TIDY_MAX_UNITS
     if (movable) movableCount++
     units.push({
       rootId,
+      members: memberNodes,
       movableIds: memberNodes.filter((m) => !locked(m.id)).map((m) => m.id),
       bbox: { ...bbox },
       movable,
@@ -165,26 +197,40 @@ function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
 function alignBands(units: Unit[], axis: 'x' | 'y'): void {
   const anchor = (u: Unit) => (axis === 'x' ? u.bbox.x : u.bbox.y)
   const sorted = [...units].sort((a, b) => anchor(a) - anchor(b))
-  let bandFirst: number | undefined
+  let band: Unit[] = []
+  let bandFirst = 0
+  const settle = () => {
+    // An immobile member is the band's truth: a movable one snaps onto it
+    // exactly, grid or no grid, since the grid cannot move that neighbour
+    // and a 4px miss reads as a row drawn carelessly. A band that can move
+    // as a whole takes the grid.
+    const fixed = band.find((u) => !u.movable)
+    const target = fixed === undefined ? roundToGrid(bandFirst) : anchor(fixed)
+    for (const unit of band) {
+      if (!unit.movable) continue
+      const delta = target - anchor(unit)
+      if (delta === 0) continue
+      if (axis === 'x') {
+        unit.bbox.x += delta
+        unit.dx += delta
+      } else {
+        unit.bbox.y += delta
+        unit.dy += delta
+      }
+    }
+    band = []
+  }
   for (const unit of sorted) {
     // STRICT inequality: consecutive band targets are >= one band apart
     // (multiples of the grid), so a snapped unit sitting exactly one band
     // from a neighbour must not re-join it on a later pass.
-    if (bandFirst === undefined || anchor(unit) - bandFirst >= TIDY_BAND_PX) {
+    if (band.length === 0 || anchor(unit) - bandFirst >= TIDY_BAND_PX) {
+      settle()
       bandFirst = anchor(unit)
     }
-    if (!unit.movable) continue
-    const target = roundToGrid(bandFirst)
-    const delta = target - anchor(unit)
-    if (delta === 0) continue
-    if (axis === 'x') {
-      unit.bbox.x += delta
-      unit.dx += delta
-    } else {
-      unit.bbox.y += delta
-      unit.dy += delta
-    }
+    band.push(unit)
   }
+  settle()
 }
 
 /**
@@ -244,14 +290,65 @@ function resolveOverlaps(units: Unit[]): void {
   }
 }
 
-export function tidyNodes(
+/**
+ * The smallest box holding `frame` and every rect with the margin around
+ * it: growth only, so a frame drawn roomier than it needs stays as drawn.
+ */
+function enclosing(frame: Rect, rects: readonly Rect[]): Rect {
+  const x = Math.min(frame.x, ...rects.map((r) => r.x - TIDY_MARGIN_PX))
+  const y = Math.min(frame.y, ...rects.map((r) => r.y - TIDY_MARGIN_PX))
+  const right = Math.max(frame.x + frame.w, ...rects.map((r) => r.x + r.w + TIDY_MARGIN_PX))
+  const bottom = Math.max(frame.y + frame.h, ...rects.map((r) => r.y + r.h + TIDY_MARGIN_PX))
+  return { x, y, w: right - x, h: bottom - y }
+}
+
+/**
+ * One level of the tidy: every node's settled rect, frames tidied inside
+ * (recursively) and grown before the level's own units align and separate.
+ */
+function tidyLevel(
   nodes: readonly TidyNode[],
-  options: TidyOptions = {},
-): readonly TidyMove[] {
-  const clean = usable(nodes)
-  if (clean.length < 2) return []
-  const byId = new Map(clean.map((n) => [n.id, n]))
-  const units = buildUnits(clean, options)
+  options: TidyOptions,
+  // Inside a frame: the least x and y a movable unit may keep, so a member
+  // hugging the frame's top or left edge is moved in to the margin rather
+  // than the frame grown around it — the frame's top-left is its anchor
+  // and its alignment with its peers, and stays put. Only an immobile
+  // member can push a frame up or left.
+  floor?: Point,
+): Map<string, Rect> {
+  const locked = options.locked ?? (() => false)
+  const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
+  const units = buildUnits(nodes, options)
+  const settled = new Map<string, Rect>(nodes.map((n) => [n.id, rectOf(n)]))
+  for (const unit of units) {
+    const inner = unit.members.filter((m) => m.id !== unit.rootId)
+    if (inner.length === 0) continue
+    const frame = settled.get(unit.rootId)
+    if (frame === undefined) continue
+    const innerSettled = tidyLevel(inner, options, {
+      x: ceilToGrid(frame.x + TIDY_MARGIN_PX),
+      y: ceilToGrid(frame.y + TIDY_MARGIN_PX),
+    })
+    for (const [id, rect] of innerSettled) settled.set(id, rect)
+    const grows = !locked(unit.rootId) && (inScope(unit.rootId) || inner.some((m) => inScope(m.id)))
+    if (!grows) continue
+    const grown = enclosing(frame, [...innerSettled.values()])
+    settled.set(unit.rootId, grown)
+    unit.bbox = { ...grown }
+  }
+  if (floor !== undefined) {
+    for (const unit of units) {
+      if (!unit.movable) continue
+      if (unit.bbox.x < floor.x) {
+        unit.dx += floor.x - unit.bbox.x
+        unit.bbox.x = floor.x
+      }
+      if (unit.bbox.y < floor.y) {
+        unit.dy += floor.y - unit.bbox.y
+        unit.bbox.y = floor.y
+      }
+    }
+  }
   // Run the passes to an internal FIXPOINT (bounded): an overlap hop can
   // land a unit near a band boundary and vice versa, so a single sweep is
   // not always stable. Iterating until nothing moves makes tidy's output
@@ -265,20 +362,38 @@ export function tidyNodes(
     resolveOverlaps(units)
     if (units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|') === before) break
   }
-  const moves: TidyMove[] = []
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue
     for (const id of unit.movableIds) {
-      const node = byId.get(id)
-      if (node === undefined) continue
-      const x = Math.round(node.x + unit.dx)
-      const y = Math.round(node.y + unit.dy)
-      // Defensive twin of the workspace write guard: tidy must
-      // never emit a position the doc layer would refuse.
-      if (!Number.isFinite(x) || !Number.isFinite(y)) continue
-      if (x === node.x && y === node.y) continue
-      moves.push({ id, x, y })
+      const rect = settled.get(id)
+      if (rect === undefined) continue
+      settled.set(id, { ...rect, x: rect.x + unit.dx, y: rect.y + unit.dy })
     }
+  }
+  return settled
+}
+
+export function tidyNodes(
+  nodes: readonly TidyNode[],
+  options: TidyOptions = {},
+): readonly TidyMove[] {
+  const clean = usable(nodes)
+  if (clean.length < 2) return []
+  const settled = tidyLevel(clean, options)
+  const moves: TidyMove[] = []
+  for (const node of clean) {
+    const rect = settled.get(node.id)
+    if (rect === undefined) continue
+    const x = Math.round(rect.x)
+    const y = Math.round(rect.y)
+    const width = Math.round(rect.w)
+    const height = Math.round(rect.h)
+    // Defensive twin of the workspace write guard: tidy must
+    // never emit a position the doc layer would refuse.
+    if (![x, y, width, height].every(Number.isFinite)) continue
+    const grew = width !== node.width || height !== node.height
+    if (x === node.x && y === node.y && !grew) continue
+    moves.push(grew ? { id: node.id, x, y, width, height } : { id: node.id, x, y })
   }
   return moves
 }

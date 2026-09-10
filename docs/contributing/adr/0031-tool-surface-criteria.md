@@ -679,6 +679,36 @@ price of a box a line taller than the daemon's font strictly needs. Read
 again with the floor: no debt three trials of three, no tool error, and
 the task's `debtFreePowK` back at 1.
 
+**The fifth reading: the whole lane again, and what tidy left inside a
+frame (2026-09-10).** With the round-4 instruction in place ("end with a
+tidy op scoped to the boxes you added"), the whole lane over three
+trials read `debtFreePowK 0.7`: seven of the ten drawing tasks debt-free
+in every trial, and the three board-editing tasks each owing one trial —
+`nearMisses 1` (a box added at y=300 beside row-mates at 300, which the
+scoped tidy snapped to the grid's 304), `crampedMembers 1` (a member
+placed flush with its frame's bottom edge), `crampedMembers 3` (a frame
+sized exactly to its three members, then a tidy scoped to them). All
+three are one finding, measured on the fixture: tidy never looked inside
+a frame — `within: <group>` and a scope naming a member both returned
+nothing, and an overlapping member stayed overlapping — so the
+instruction sent models to an op that could not do what it was asked.
+Tidy now tidies inside a frame and grows it to hold its members with the
+32px margin (`package-canvas-render.md` has the three rules around it and
+what each was measured on), a band that holds an immobile box aligns to
+that box rather than the grid, and the tool keeps its own gutter when it
+places a member so a placement is never flush. Read again, the three
+tasks came back debt-free three trials of three each, with no tidy op
+issued in the `add a box` trials this time — the near-miss fix is
+exercised by its unit example and the corpus, not by the lane. The
+drawing-corpus row `architecture/tidied` moved with it: overlap 1 to 0,
+cramped 2 to 0, near misses 5 to 2 (members of different frames, which
+no band sees), at the price of one crossing; the grouped tidy
+scoreboard's `stillOverlapping` went 283 to 0. The same reading traced
+the architecture task's `bends 6, reversals 3`: it is the router's cost
+model choosing zero crossings over a loop, given where the model put the
+gateway — a placement finding, recorded beside the rejected router
+matrix so the search is not traced again.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

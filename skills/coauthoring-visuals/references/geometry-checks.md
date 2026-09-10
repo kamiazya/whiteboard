@@ -29,7 +29,7 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 ## Local Surgery
 
 - overlap: widen the gap, shift one node down a row, or shorten the label — a `node.patch` op (or
-  just a `tidy` op, which separates overlaps for you)
+  just a `tidy` op, which separates overlaps for you, inside a group too, growing it to fit)
 - clipped label: widen the node (`width`/`height`) or shorten the text
 - dangling connection: nudge the node it targets, or `edge.patch` a `fromSide`/`toSide` the author
   named back to nothing so the router chooses the face

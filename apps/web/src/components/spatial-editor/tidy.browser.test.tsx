@@ -144,6 +144,34 @@ it('tidies the whole canvas from the empty-space menu', () => {
   expect(latest.commands[0]).toMatchObject({ kind: 'batch' })
 })
 
+it('grows a group around a member at its edge, in the same undo step as the moves', () => {
+  // 'm' is flush with its frame's bottom-right corner: tidy moves nothing
+  // else and the frame grows to give it the 32px margin, applied through
+  // the batch as a resize so one undo steps back through all of it.
+  const framed: SpatialCanvas = {
+    nodes: [
+      { id: 'g', type: 'group', x: 40, y: 40, width: 240, height: 160 },
+      { id: 'm', type: 'text', x: 176, y: 136, width: 104, height: 64, text: 'M' },
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(framed)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  openMenuOn(root, 600, 500)
+  latest.commands.length = 0
+  clickItem(container, 'Tidy canvas')
+
+  expect(byId(latest.canvas, 'm')).toMatchObject({ x: 176, y: 136 })
+  expect(byId(latest.canvas, 'g')).toMatchObject({ x: 40, y: 40, width: 272, height: 192 })
+  expect(latest.commands).toHaveLength(1)
+  expect(latest.commands[0]).toMatchObject({
+    kind: 'batch',
+    commands: [{ kind: 'resize-node', id: 'g', width: 272, height: 192 }],
+  })
+})
+
 it('emits nothing when the canvas is already tidy', () => {
   const { Host, latest } = makeHost(initial)
   const { container } = render(<Host />)
