@@ -886,6 +886,22 @@ The user's decision that made this the right place (2026-09-10): tidy
 already has side effects on a drawing somebody made, so the question is
 not whether it may move boxes but whether the move raises the score.
 
+**The fourteenth reading (2026-09-10).** The whole lane with row order in
+tidy: 24 of 24 pass, `debtFreePowK` 1.0 for the second round running, and
+the price columns fell lane-wide — over the thirty drawn boards,
+crossings 3 to 1, bends 22 to 13, reversals 9 to 4, ink down 6%. Read it
+with the caveat it deserves: the number of trials that issued a `tidy`
+also rose, 15 of 30 to 18 of 30, and the models are stochastic, so part of
+that spread is sampling rather than the pass. What is not sampling is the
+corpus, where the same board is measured deterministically either way.
+
+Three tool errors, against none last round, in two shapes. Two are the
+height refusal working as designed. The third is new and is the surface's:
+a model wrote `id` at the OP level of `node.add` rather than inside
+`node`, and the whole call was refused as an unrecognized key. That is the
+next item — a batch lost to a key one level out is the same class as the
+`within: null` refusal the ninth reading fixed.
+
 **The twelfth reading (2026-09-10), refuted.** The result of the call
 said it: `wb_canvas_edit` answered with a `notes` line naming a touched
 box whose connections along its own row all ran one way, the near and

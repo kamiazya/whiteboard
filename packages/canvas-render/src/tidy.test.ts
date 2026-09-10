@@ -273,6 +273,25 @@ describe('row order by edges', () => {
     expect(moves).toEqual([])
   })
 
+  it('a locked hub is not swapped, and its partner is not shuffled around it', () => {
+    // The mirror of the locked-partner case, and unpinned until the
+    // mutation lane implied it: without the guard the partner is moved to
+    // the locked hub's spot and then pushed off it again, for nothing.
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+      locked: (id) => id === 'hub',
+    })
+    expect(moves).toEqual([])
+  })
+
   it('a second tidy with the same edges moves nothing', () => {
     const nodes = [
       box('hub', 40, 0, 160, 60),
