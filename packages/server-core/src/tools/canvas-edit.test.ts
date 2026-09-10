@@ -1,3 +1,4 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
   createSpatialTheme,
@@ -1848,6 +1849,45 @@ describe('wb_canvas_edit — a node created without a height', () => {
     await expect(addAndMeasure(LONG_JA, 40)).rejects.toThrow(
       new RegExp(`needs ${needs}px of height at width 260`),
     )
+  })
+
+  test('the ratio measurer is a floor: a narrow font cannot pass a box the score reads as cut', async () => {
+    // The daemon measures with its real font and the lane's score with the
+    // ratio measurer every machine has, which reads wider; the one board
+    // the score charged after the refusal landed was one the daemon's font
+    // had let through. The tool takes the taller of the two, so what it
+    // accepts is what the score, and a narrower client font, would accept.
+    const hairline: MeasureText = (text, font) => ({
+      advanceWidth: text.length,
+      ascent: font.sizePx * 0.8,
+      descent: font.sizePx * 0.2,
+      lineGap: 0,
+    })
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+    const tool = createCanvasEditTool({ ...makeDeps(store), measure: async () => hairline })
+    const add = (height?: number) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'n',
+              type: 'text',
+              text: LONG_JA,
+              ...(height === undefined ? {} : { height }),
+            },
+          },
+        ],
+      })
+    const { needs } = await addAndMeasure(LONG_JA)
+    await expect(add(40)).rejects.toThrow(new RegExp(`needs ${needs}px`))
+    await add()
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]?.height).toBe(needs)
   })
 
   test('keeps a named height that holds the text', async () => {

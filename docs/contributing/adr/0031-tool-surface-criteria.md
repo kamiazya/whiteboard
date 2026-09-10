@@ -671,9 +671,11 @@ description says so. After that: two trials omitted the height and were
 fitted, one named 200×100 and was NOT refused — the daemon measures with
 its real font and the text fits there, while the score measures with the
 ratio measurer every machine has and reads one line more, `textOverflow
-1`. So the column's last reading on this task is an instrument gap rather
-than a drawing defect, and it is filed as one: the score and the tool
-should measure alike, or the score should say which measurer it read.
+1`. That was an instrument gap rather than a drawing defect, and it is
+closed on the tool's side: the fit takes the taller of the two readings,
+its own font's and the ratio measurer's, so what the tool accepts is what
+the score and a client drawing with a wider font would accept, at the
+price of a box a line taller than the daemon's font strictly needs.
 
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,

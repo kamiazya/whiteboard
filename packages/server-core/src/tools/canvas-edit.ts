@@ -68,8 +68,15 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
  * width, not a position.
  */
 function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  const natural = naturalNodeContentSize(node, { measure, appearance: MCP_SCENE_APPEARANCE })
-  return Math.max(fallback, natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+  // The taller of two readings: the composition root's own font, and the
+  // ratio measurer every machine has. The daemon's font is narrower than
+  // the ratio, so a box it fits can still read as cut to the drawing score
+  // and to a client drawing with a wider font; the floor is what makes
+  // "fits" mean the same thing to the tool and to what judges it.
+  const under = (m: MeasureText) =>
+    naturalNodeContentSize(node, { measure: m, appearance: MCP_SCENE_APPEARANCE }).h
+  const natural = Math.max(under(measure), under(constantRatioMeasureText))
+  return Math.max(fallback, natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
 }
 
 /**
