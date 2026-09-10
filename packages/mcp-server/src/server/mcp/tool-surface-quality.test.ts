@@ -250,9 +250,13 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
+      // Re-pinned when `style` stopped being ignored on a markdown document
+      // (ADR-0030 decision 5): +32 visible bytes say what it does there —
+      // it draws the canvases the body embeds — instead of saying it does
+      // nothing.
       wb_scene_render: {
-        visibleBytes: 2189,
-        wireBytes: 2536,
+        visibleBytes: 2221,
+        wireBytes: 2568,
         descriptionWords: 51,
         parameters: 5,
         undescribed: 2,
@@ -361,8 +365,10 @@ describe('what the tool table costs to read', () => {
       // +940 when the render theme layer landed on main (ADR-0030): `style`
       // on canvas_view and wb_scene_render, `target` on wb_facet_set; the
       // two new undescribed parameters are that layer's, not this sweep's.
-      visibleBytes: 33429,
-      wireBytes: 98099,
+      // +32 for `style` answering on a markdown document too (see
+      // wb_scene_render).
+      visibleBytes: 33461,
+      wireBytes: 98131,
       parameters: 268,
       undescribed: 201,
     })

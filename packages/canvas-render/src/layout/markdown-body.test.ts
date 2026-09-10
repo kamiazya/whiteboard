@@ -91,3 +91,46 @@ describe('layoutMdastBlocks (public) — canvas embeds', () => {
     }
   })
 })
+
+describe('layoutMdastBlocks (public) — an embedded canvas keeps its own theme', () => {
+  const themed: SpatialCanvas = {
+    ...canvas,
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+  }
+  const inkStyles = (nodes: readonly SceneNode[]): string[] => {
+    const out: string[] = []
+    const visit = (node: SceneNode) => {
+      const entry = node as {
+        ink?: { style?: string }
+        runs?: readonly SceneNode[]
+        children?: readonly SceneNode[]
+      }
+      if (entry.ink?.style !== undefined) out.push(entry.ink.style)
+      for (const run of entry.runs ?? []) visit(run)
+      for (const child of entry.children ?? []) visit(child)
+    }
+    for (const node of nodes) visit(node)
+    return out
+  }
+  const embedOf = (style?: 'clean' | 'document') => {
+    const scene = layoutMdastBlocks(body, {
+      measure: createFakeMeasure(),
+      maxWidth: 600,
+      fontFamily: 'sans-serif',
+      resolveEmbed: (id) => (id === A ? { title: 'Board', canvas: themed } : undefined),
+      ...(style === undefined ? {} : { style }),
+    })
+    const embed = scene.nodes[0]
+    if (embed?.kind !== 'embedResolved') throw new Error('expected an embedResolved block')
+    return embed
+  }
+
+  it("under style 'document' the miniature draws the theme the embedded canvas names", () => {
+    expect(inkStyles(embedOf('document').children)).toContain('sketch')
+  })
+
+  it('under the library default the miniature draws clean, as every headless caller expects', () => {
+    expect(inkStyles(embedOf().children)).not.toContain('sketch')
+    expect(inkStyles(embedOf('clean').children)).not.toContain('sketch')
+  })
+})

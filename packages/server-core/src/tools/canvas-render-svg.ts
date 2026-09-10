@@ -47,7 +47,7 @@ export const canvasRenderSvgInputSchema = z
     style: spatialRenderStyleSchema
       .default('clean')
       .describe(
-        "Which look a canvas is drawn in. 'clean' (the default) is the bundled look whatever the document says, so an agent reading the SVG never pays for a theme's jittered geometry or glow unasked. 'document' draws the theme the canvas names in its visual.theme/v0 facet. A theme id such as 'visual.sketch' draws that theme without the document naming it — a preview. Markdown documents ignore it.",
+        "Which look a canvas is drawn in. 'clean' (the default) is the bundled look whatever the document says, so an agent reading the SVG never pays for a theme's jittered geometry or glow unasked. 'document' draws the theme the canvas names in its visual.theme/v0 facet. A theme id such as 'visual.sketch' draws that theme without the document naming it — a preview. On a markdown document it draws the canvases the body embeds.",
       ),
   })
   .strict()
@@ -104,7 +104,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
         if (root === undefined) {
           throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
         }
-        scene = composeMarkdownScene(root, measure, { references })
+        scene = composeMarkdownScene(root, measure, { references, style: input.style })
       } else {
         const part =
           input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)

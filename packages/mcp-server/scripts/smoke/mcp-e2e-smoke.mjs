@@ -951,6 +951,35 @@ async function main() {
     '[e2e] wb_scene_render(markdown, embedReferences:true) → page with the embedded canvas',
   )
 
+  // The same page under `style: 'document'`. A markdown host names no theme,
+  // so what must be drawn is the EMBEDDED board's own (ADR-0030 decision 5) —
+  // the style argument reaching a nested layout is exactly what a type check
+  // cannot see, and the page renders happily without it.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+  })
+  const styledMarkdown = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    embedReferences: true,
+    style: 'document',
+  })
+  if (!styledMarkdown.svg.includes('filterUnits="userSpaceOnUse"')) {
+    throw new Error(
+      `wb_scene_render(markdown, style: document) drew the embedded board clean: ${styledMarkdown.svg.slice(0, 300)}`,
+    )
+  }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  console.log("[e2e] wb_scene_render(markdown, style: 'document') → the embedded board's own theme")
+
   // `fragment` names a part the document must hold; an unknown one is a
   // tool error naming it, not a silent whole-document render.
   await expectToolError(

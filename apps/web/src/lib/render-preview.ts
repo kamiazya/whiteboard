@@ -202,6 +202,10 @@ function layoutScene(
         measure,
         maxWidth,
         canvasAppearance: createEditorAppearance(theme ?? 'light'),
+        // A human surface draws the document (ADR-0030 decision 6), so a
+        // board embedded in a note is pencilled or glowing here exactly as
+        // it is on the canvas — the same default the spatial surfaces take.
+        style: 'document',
         fontFamily: SPATIAL_THEME_FONT_FAMILY,
         // A page, not an object. This pane runs to a readable measure, where the
         // node scale — cut so a heading cannot eat a third of a 280px box —

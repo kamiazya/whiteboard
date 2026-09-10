@@ -54,8 +54,14 @@ theme's jittered geometry or glow unless it asks. Pass `style`:
 - a theme id such as `"visual.sketch"` previews that theme without storing it.
 - `"clean"` (the default) ignores the document's theme.
 
+On a **markdown document** `style` reaches the boards its body embeds with `![[board]]`: a note
+rendered with `"document"` draws each embedded board in the theme that board names, and `"clean"`
+draws them all in the bundled look. A note has no theme of its own to choose.
+
 The daemon's PNG and SVG export routes take the same `style`, optional, with the same default.
-The web editor's own export draws what you see, theme included.
+The web editor's own export draws what you see, theme included. The web app's preview pane and
+the file rows' thumbnails always draw the document, so an embedded board looks there the way it
+looks on the canvas.
 
 ## Fonts
 

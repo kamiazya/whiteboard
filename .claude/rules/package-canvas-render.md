@@ -1002,6 +1002,12 @@ the table alone.
     single-node canvas carries no facet to read. So does
     `layoutSpatialEdges` — it shipped without it, and a drag drew every
     edge crisp and straight over a pencilled, curved committed render.
+    A canvas embedded in a MARKDOWN body resolves the same way, through
+    `layoutMdastBlocks`'s (`layout/markdown-body.ts`) own `style` — a
+    markdown host carries no theme, so `'document'` means the embed's own,
+    and the library default stays `'clean'` so every headless caller's bytes
+    are unchanged. It shipped without that, and the same board was pencilled
+    on the canvas and crisp inside a `![[board]]` in a note.
     `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
     that PREVIEWS paint rather than painting — the editor's paper and its
     colour swatches — so a picker and the render read one table; it answers
