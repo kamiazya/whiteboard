@@ -108,9 +108,11 @@ it('offers no Tidy for a single-node selection', () => {
   expect(menuItem(container, 'Tidy')).toBeUndefined()
 })
 
-it('never moves a locked node — it stands as a fixed obstacle', () => {
+it('never moves a locked node — it stands as a fixed obstacle, and the column', () => {
   // 'c' is locked and 12px off the column; select-all skips it, and tidy
-  // must leave it exactly where it was while still fixing 'b'.
+  // must leave it exactly where it was. It is also the one member of the
+  // column that cannot move, so the column is aligned to IT rather than to
+  // the grid: 'a' and 'b' come to x=52, not 'b' alone to 40.
   const withLocked: SpatialCanvas = {
     nodes: [
       ...initial.nodes,
@@ -126,7 +128,8 @@ it('never moves a locked node — it stands as a fixed obstacle', () => {
   openMenuOn(root, 100, 70)
   clickItem(container, 'Tidy')
 
-  expect(byId(latest.canvas, 'b').x).toBe(40)
+  expect(byId(latest.canvas, 'a').x).toBe(52)
+  expect(byId(latest.canvas, 'b').x).toBe(52)
   expect(byId(latest.canvas, 'c')).toMatchObject({ x: 52, y: 400 })
 })
 
@@ -142,6 +145,34 @@ it('tidies the whole canvas from the empty-space menu', () => {
   expect(byId(latest.canvas, 'b').x).toBe(40)
   expect(latest.commands).toHaveLength(1)
   expect(latest.commands[0]).toMatchObject({ kind: 'batch' })
+})
+
+it('grows a group around a member at its edge, in the same undo step as the moves', () => {
+  // 'm' is flush with its frame's bottom-right corner: tidy moves nothing
+  // else and the frame grows to give it the 32px margin, applied through
+  // the batch as a resize so one undo steps back through all of it.
+  const framed: SpatialCanvas = {
+    nodes: [
+      { id: 'g', type: 'group', x: 40, y: 40, width: 240, height: 160 },
+      { id: 'm', type: 'text', x: 176, y: 136, width: 104, height: 64, text: 'M' },
+    ],
+    edges: [],
+  }
+  const { Host, latest } = makeHost(framed)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  openMenuOn(root, 600, 500)
+  latest.commands.length = 0
+  clickItem(container, 'Tidy canvas')
+
+  expect(byId(latest.canvas, 'm')).toMatchObject({ x: 176, y: 136 })
+  expect(byId(latest.canvas, 'g')).toMatchObject({ x: 40, y: 40, width: 272, height: 192 })
+  expect(latest.commands).toHaveLength(1)
+  expect(latest.commands[0]).toMatchObject({
+    kind: 'batch',
+    commands: [{ kind: 'resize-node', id: 'g', width: 272, height: 192 }],
+  })
 })
 
 it('emits nothing when the canvas is already tidy', () => {

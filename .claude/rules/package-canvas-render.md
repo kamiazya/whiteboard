@@ -1218,6 +1218,18 @@ the table alone.
   module few tests import as a weak signal, and treat its survivor list as a
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.
+  **A survivor `judged by` ZERO tests is a runner artefact, not a
+  hypothesis.** On `tidy.ts` with `coverageAnalysis: 'off'` — every mutant
+  is meant to face all 42 tests — 19 of 65 survivors came back with
+  `testsCompleted 0`, and the six of those checked by hand (the root
+  tie-break, the hop direction, both hop arithmetics, the floor's y
+  block) each failed one to three tests when the same edit was applied.
+  Read that column before the row: `0` says nothing ran, and the edit is
+  still yours to apply. The four `tidy.ts` entries the ledger does hold
+  were each judged by all 42 and reasoned: `<=` on a margin or a floor
+  admits exactly the coordinate the hop or the shift then lands on, so
+  the mutant costs a no-op iteration and nothing else; skipping a zero
+  delta is a guard around an addition of zero.
   It also pays the other way: a survivor whose LOCATION looks obviously
   killable is often a sub-expression, not the statement. `edge-crossing-
   sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,
@@ -1335,11 +1347,34 @@ that duplication is the independence. A scene links a label to what it names
 through `TextRunNode.annotates`, set by the layout and read by nothing
 that paints; the flat scene has no other way back from a label's box.
 
-The first reading found what tidy leaves: a frame and what it holds move
-as ONE unit, so an overlap or a near miss INSIDE a frame survives a tidy
-that clears the straddle and the hidden label beside it. `tidy-quality`
-cannot see this — its grouped corpus never plants a defect among a
-frame's members — and the scoreboard pins it until tidy tidies inside.
+The first reading found what tidy left: a frame and what it holds moved
+as ONE unit, so an overlap or a near miss INSIDE a frame survived a tidy
+that cleared the straddle and the hidden label beside it, and a `tidy`
+scoped to a frame's members (`within`) moved nothing at all — measured on
+the lane's fixture before the fix, `[]` for both. **Tidy now tidies inside
+a frame** (`tidy.ts`): a frame's members are tidied as a canvas of their
+own, recursively, and the frame GROWS — never shrinks — to hold them with
+`TIDY_MARGIN_PX` on every side, when it is unlocked and it or a member is
+in scope; `TidyMove` carries the new size, which `canvas-edit.ts` and the
+editor's `applyBoxMoves` apply. Three rules around it, each from a
+reading. The frame's top-left stays put — a member hugging that corner is
+moved in to the margin instead — because growing up or left staggered the
+frame 24px against its peers (measured on `architecture/tidied`: Clients
+at x=-24 beside Services at 0, which no column charges and any reader
+sees). A frame holding a LOCKED member is held by it: the grouped
+`tidy-quality` corpus kept 10 overlapping pairs after everything else
+cleared, each a member separated from a locked neighbour inside and then
+carried back onto it when the unit moved and the locked one stayed. And a
+band that holds an immobile unit aligns to that unit's actual anchor
+rather than the grid: the lane's `add a box` task snapped a box added at
+y=300 to 304 beside out-of-scope row-mates at 300 (`nearMisses 1`), since
+a neighbour that cannot move IS the row, wherever it sits. What tidy still
+leaves is a near miss between members of DIFFERENT frames — bands run
+among a frame's members and among the frames, never across them — pinned
+as the two `architecture/tidied` owes. The grouped scoreboard's
+`stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
+replaced by `membersLeftBehind` (members may now settle inside a unit;
+what must not happen is one ending outside it).
 
 The column set follows the literature, and the module doc says which
 source each column follows (ADR-0031 §7 has the reading). Two things a
@@ -1398,3 +1433,19 @@ from `e5` reaching a top-to-top hook that a differently ordered search
 finds — and each change raised a debt column on the population. The
 drafted board also lost under the second (reversals 1 to 3). A third
 attempt starts from the sweep's debt, not from the reference's price.
+
+**The same-row loop is the cost model's answer, not a search miss** — read
+off a traced search (fifth reading) before a third attempt was made. The
+lane's architecture board puts a gateway in the same row as the two
+services it fans out to, one of them past the other: the straight
+`api→auth` plus a top hook for `api→search` crosses the three client
+edges arriving diagonally at the gateway's top (crossings 2), the under
+hook crosses `auth→sqlite` (crossings 2), and the route through the 40px
+gap crosses the straight edge (crossings 1) — so the only zero-crossing
+configuration is the bottom-bottom loop for `api→auth`, and the search
+finds it (`[0,0,0,0,0,3,6]` against the best single-edge alternative
+`[0,0,1,0,0,2,4]`). Crossings outrank reversals and bends by tier, so
+this is the drawing the model asks for; what would change it is the
+placement (a gateway in its own row), which is the drawer's, or the tier
+order, which is a population-wide change nothing here has measured. Not
+a router item; recorded so the trace is not taken again.

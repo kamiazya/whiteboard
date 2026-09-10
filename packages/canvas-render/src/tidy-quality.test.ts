@@ -167,7 +167,7 @@ describe('tidy quality scoreboard', () => {
   it('scores the same corpus with groups and a lock', () => {
     let stillOverlapping = 0
     let lockedMoved = 0
-    let unitTornApart = 0
+    let membersLeftBehind = 0
     let movedNodes = 0
     let displacement = 0
 
@@ -183,26 +183,30 @@ describe('tidy quality scoreboard', () => {
 
       if (delta.has(lockedId)) lockedMoved++
 
-      // A group and everything its box holds is ONE unit, so they move by the
-      // same vector or not at all. A unit torn apart is the defect the
-      // outermost-rooted single scoop exists to prevent, and it is invisible
-      // to a board with no groups on it.
-      const group = nodes[0] as TidyNode
-      const members = nodes.filter(
-        (n) =>
-          n.id !== lockedId &&
-          n.x >= group.x &&
-          n.y >= group.y &&
-          n.x + n.width <= group.x + group.width &&
-          n.y + n.height <= group.y + group.height,
-      )
-      const vectors = new Set(members.map((m) => delta.get(m.id) ?? '0,0'))
-      if (vectors.size > 1) unitTornApart++
-
       const after = nodes.map((n) => {
         const m = moves.find((mv) => mv.id === n.id)
-        return m === undefined ? n : { ...n, x: m.x, y: m.y }
+        return m === undefined
+          ? n
+          : { ...n, x: m.x, y: m.y, width: m.width ?? n.width, height: m.height ?? n.height }
       })
+      // A group and everything its box holds is ONE unit: members may settle
+      // among themselves inside it, but every unlocked member the box held
+      // is still inside it afterwards — the frame moved with them, or grew
+      // around them. A member left behind is the defect the outermost-rooted
+      // single scoop exists to prevent, and it is invisible to a board with
+      // no groups on it.
+      const group = nodes[0] as TidyNode
+      const inside = (n: TidyNode, g: TidyNode) =>
+        n.x >= g.x &&
+        n.y >= g.y &&
+        n.x + n.width <= g.x + g.width &&
+        n.y + n.height <= g.y + g.height
+      const groupAfter = after[0] as TidyNode
+      for (const n of nodes) {
+        if (n.id === lockedId || n.id === group.id || !inside(n, group)) continue
+        const moved = after.find((a) => a.id === n.id) as TidyNode
+        if (!inside(moved, groupAfter)) membersLeftBehind++
+      }
       // The group's own box is not a thing a reader sees a collision with —
       // it is drawn around its members — so overlap is scored on the members.
       const bodies = after.filter((n) => n.type !== 'group')
@@ -223,7 +227,7 @@ describe('tidy quality scoreboard', () => {
     expect({
       // DEBT
       lockedMoved,
-      unitTornApart,
+      membersLeftBehind,
       // PRICE — including the overlap that a locked obstacle can force tidy
       // to accept, which is why it is not debt here.
       stillOverlapping,
@@ -231,18 +235,25 @@ describe('tidy quality scoreboard', () => {
       displacement,
     }).toEqual({
       lockedMoved: 0,
-      unitTornApart: 0,
-      // Non-zero by design, which is why it is priced rather than owed:
-      // members of one group unit keep their relative positions, so a pair
-      // that overlapped inside the group still does, and a locked node is an
-      // obstacle tidy cannot move out of the way. The number is here so that
-      // a change making it WORSE has to say so.
+      membersLeftBehind: 0,
+      // Non-zero by design, which is why it is priced rather than owed: a
+      // locked node is an obstacle tidy cannot move out of the way. The
+      // number is here so that a change making it WORSE has to say so.
       // 241 -> 283 with the 32px margin: a wider promise is harder to keep
       // around an obstacle that cannot move, and the oracle judges by the
       // margin tidy promises, so the count rose with it.
-      stillOverlapping: 283,
-      movedNodes: 1933,
-      displacement: 72976,
+      // 283 -> 0 once tidy looked inside a frame: every pair left
+      // overlapping was a pair of members, which used to ride with their
+      // group untouched and now separate inside it, the frame growing to
+      // hold them. The last ten were a member separated from a LOCKED
+      // member inside, then carried back onto it when the unit moved and
+      // the locked one stayed — so a frame holding a locked member is now
+      // held by it. The two price columns rose — 1933 -> 1957 moves,
+      // 72976 -> 139357 px — because members now settle inside a frame
+      // rather than only with it, and a frame grows to hold them.
+      stillOverlapping: 0,
+      movedNodes: 1957,
+      displacement: 139357,
     })
   })
 })

@@ -285,18 +285,22 @@ export function createCanvasEditTool(deps: ServerDeps) {
           node.y + node.height <= group.y + group.height
       /**
        * Grows a group so that every rect is inside it, gutter included.
-       * Grow-only, only on an actual overflow past the right or bottom
-       * edge, and the top-left stays put, so re-applying the same op stays
-       * a no-op; what it can do is enclose a neighbour that sat just past
-       * the old edge, which the next region.set will then see in scope —
-       * geometry is geometry, and the result reports the size. A rect
-       * before the top-left is the caller's to move; callers refuse it.
+       * Grow-only, only when a rect reaches past the right or bottom edge
+       * less `keep` (a caller's own position is honoured to the edge; a
+       * position this batch chose keeps the gutter, since flush with the
+       * frame reads as jammed), and the top-left stays put, so re-applying
+       * the same op stays a no-op; what it can do is enclose a neighbour
+       * that sat just past the old edge, which the next region.set will
+       * then see in scope — geometry is geometry, and the result reports
+       * the size. A rect before the top-left is the caller's to move;
+       * callers refuse it.
        */
       const growToHold = (
         index: number,
         opName: string,
         group: SpatialNode,
         rects: readonly Rect[],
+        keep = 0,
       ): void => {
         const bounds = nodeAt(group.id) ?? group
         const needed = rects.reduce(
@@ -305,11 +309,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
             const bottom = rect.y + rect.height
             return {
               width:
-                right > bounds.x + bounds.width
+                right + keep > bounds.x + bounds.width
                   ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
                   : acc.width,
               height:
-                bottom > bounds.y + bounds.height
+                bottom + keep > bounds.y + bounds.height
                   ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
                   : acc.height,
             }
@@ -368,6 +372,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           opName,
           bounds,
           placements.map((at, i) => ({ ...at, ...(sizes[i] ?? { width: 0, height: 0 }) })),
+          PLACEMENT_GUTTER_PX,
         )
         return placements
       }
@@ -827,15 +832,14 @@ export function createCanvasEditTool(deps: ServerDeps) {
             nodes = nodes.map((node) => {
               const move = target.get(node.id)
               if (move === undefined) return node
-              geometry.set(node.id, {
-                id: node.id,
-                x: move.x,
-                y: move.y,
-                width: node.width,
-                height: node.height,
-              })
+              // A frame that grew to hold its members carries its new size.
+              const size = {
+                width: move.width ?? node.width,
+                height: move.height ?? node.height,
+              }
+              geometry.set(node.id, { id: node.id, x: move.x, y: move.y, ...size })
               touchedNodes.add(node.id)
-              return { ...node, x: move.x, y: move.y }
+              return { ...node, x: move.x, y: move.y, ...size }
             })
             return
           }
