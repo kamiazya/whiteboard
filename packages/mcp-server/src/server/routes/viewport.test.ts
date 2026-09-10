@@ -94,7 +94,7 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
     expect(body.error).toBe('timeout')
   })
 
-  it('forwards mode="fit", elementIds, padding, and animate to sendViewportRequest', async () => {
+  it('forwards mode="fit", elementIds, and animate to sendViewportRequest', async () => {
     mockGetClientCount.mockReturnValue(1)
     mockSendViewportRequest.mockImplementation((_sid, _path, requestId) => {
       queueMicrotask(() => {
@@ -109,7 +109,6 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
       body: JSON.stringify({
         mode: 'fit',
         elementIds: ['a', 'b'],
-        padding: 40,
         animate: true,
       }),
     })
@@ -120,9 +119,38 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
     expect(mockSendViewportRequest).toHaveBeenCalledWith('s1', 'canvas-a', expect.any(String), {
       mode: 'fit',
       elementIds: ['a', 'b'],
-      padding: 40,
       animate: true,
     })
+  })
+
+  // The browser parses the frame with `viewportRequestMessageSchema` and
+  // DROPS one it cannot read, so a body the schema does not admit used to
+  // produce no viewport change and a 504 — the caller's mistake reported as
+  // the browser's silence.
+  it('refuses a body the viewport message cannot carry with 400, before any WS frame', async () => {
+    mockGetClientCount.mockReturnValue(1)
+    const app = makeApp()
+    const bodies = [
+      { zoom: 'big' },
+      { mode: 'zoom' },
+      { elementIds: 'a' },
+      { scrollX: null },
+      // Not a viewport parameter: the browser has never read it, so
+      // accepting it would be a silent no-op.
+      { padding: 40 },
+    ]
+    for (const body of bodies) {
+      const res = await app.request('/api/w/s1/document/canvas-a/viewport', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      })
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      const error = (await res.json()) as { error: string; message: string }
+      expect(error.error).toBe('invalid_request')
+      expect(error.message).toContain(Object.keys(body)[0])
+    }
+    expect(mockSendViewportRequest).not.toHaveBeenCalled()
   })
 
   it('forwards mode="move", scrollX, scrollY, and zoom to sendViewportRequest', async () => {

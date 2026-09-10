@@ -376,7 +376,7 @@ describe('handleWsUpgrade viewport replay', () => {
     await a.emitMessage(Buffer.from(JSON.stringify({ type: 'client_ready' })), false)
 
     // viewport_set fires while only A is connected.
-    sendViewportRequest('session1', canvas, 'req-1', { mode: 'fit', padding: 24 })
+    sendViewportRequest('session1', canvas, 'req-1', { mode: 'fit', animate: false })
 
     expect(
       textFrames(a).filter((m) => (m as { type?: string }).type === 'viewport_request'),
@@ -385,7 +385,7 @@ describe('handleWsUpgrade viewport replay', () => {
         type: 'viewport_request',
         requestId: 'req-1',
         mode: 'fit',
-        padding: 24,
+        animate: false,
       }),
     ])
 
@@ -410,7 +410,7 @@ describe('handleWsUpgrade viewport replay', () => {
         type: 'viewport_request',
         requestId: 'req-1',
         mode: 'fit',
-        padding: 24,
+        animate: false,
       }),
     ])
     // A is not re-spammed by B's connect.

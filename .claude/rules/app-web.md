@@ -209,3 +209,16 @@ properties on one PR passed over the defect they exist to catch because
 each generator had a schema it had never met, and one walk in model — the
 package every generator can reach — is the permanent answer.
 
+### The settings migrations are total, and say so under a property
+
+`lib/user-settings-store.property.test.ts` draws whole v1 and v2 payloads
+from the legacy schemas (URL fields overridden to real http(s) URLs, since
+a random string is never one) and requires `migrateV2(migrateV1(v1))` and
+`migrateV2(v2)` to parse under the live `.strict()` schema while carrying
+each field across by name, then reads both through the real store from
+`localStorage` and round-trips a live payload through `save`/`load`. The
+class it closes is the one `vocabulary.md` records: the loader falls back
+to defaults on ANY parse failure, so a migration emitting one key the live
+schema does not admit discards a user's whole payload silently. The
+schemas and the two migrations are exported for it and for nothing else.
+
