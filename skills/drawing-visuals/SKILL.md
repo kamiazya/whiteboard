@@ -140,8 +140,11 @@ generous enough for the label.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
-worth naming yourself. `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd`
-(`none`/`arrow`) are the only routing hints; `wb_scene_render` computes the actual drawn path.
+worth naming yourself. `fromEnd`/`toEnd` (`none`/`arrow`) set the arrowheads. `fromSide`/`toSide`
+(`top`/`right`/`bottom`/`left`) exist but are best left out: the router picks the side that keeps
+the line clear of the other boxes, and a side you name is kept even when it runs the line through
+one — a `bottom`/`top` pair on an edge between two boxes on the SAME row loops under both and
+tunnels back through its own source. `wb_scene_render` computes the actual drawn path.
 
 **Ids you omit are minted for you** and reported under `touched`. Name them yourself for any node an
 edge has to reach.
