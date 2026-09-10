@@ -31,17 +31,24 @@ import {
   SEEDED_WORKSPACE_ID,
   seededServer,
 } from './test-utils/seeded-workspace.js'
-import { backlinksInputSchema } from './tools/backlinks.js'
+import { backlinksInputSchema, backlinksOutputSchema } from './tools/backlinks.js'
 import {
   wbDocumentCreateInputSchema,
+  wbDocumentCreateOutputSchema,
   wbDocumentDeleteInputSchema,
+  wbDocumentDeleteOutputSchema,
   wbDocumentListInputSchema,
+  wbDocumentListOutputSchema,
   wbDocumentResolveInputSchema,
+  wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
-import { documentSearchInputSchema } from './tools/document-search.js'
-import { documentTagsInputSchema } from './tools/document-tags.js'
-import { exportOkfInputSchema } from './tools/export-okf.js'
-import { linkifyMentionsInputSchema } from './tools/linkify-mentions.js'
+import { documentSearchInputSchema, documentSearchOutputSchema } from './tools/document-search.js'
+import { documentTagsInputSchema, documentTagsOutputSchema } from './tools/document-tags.js'
+import { exportOkfInputSchema, exportOkfOutputSchema } from './tools/export-okf.js'
+import {
+  linkifyMentionsInputSchema,
+  linkifyMentionsOutputSchema,
+} from './tools/linkify-mentions.js'
 
 /**
  * A path segment the URL parser leaves alone. `.` and `..` are resolved
@@ -131,6 +138,12 @@ interface Route {
   readonly pattern: string
   /** The schema the route parses with — one per row, and the row's own generator draws from it. */
   readonly schema: z.ZodTypeAny
+  /**
+   * The schema a typed client reads the answer with. A 2xx body that fails
+   * it is drift between what the route emits and what its readers expect —
+   * the route's handler is typed, but nothing parses on the way out.
+   */
+  readonly response: z.ZodTypeAny
   readonly request: fc.Arbitrary<{ path: string; body?: Body; seeded: boolean }>
 }
 
@@ -145,6 +158,7 @@ const ROUTES: readonly Route[] = [
     method: 'POST',
     pattern: '/api/v1/workspaces/:workspaceId/documents',
     schema: wbDocumentCreateInputSchema,
+    response: wbDocumentCreateOutputSchema,
     request: fc
       .tuple(workspaceArb, bodyArb(wbDocumentCreateInputSchema, ['workspaceId']))
       .map(([w, body]) => ({
@@ -158,6 +172,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/documents',
     schema: wbDocumentListInputSchema,
+    response: wbDocumentListOutputSchema,
     request: workspaceArb.map((w) => ({
       path: `${ws(w)}/documents`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -168,6 +183,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId',
     schema: wbDocumentResolveInputSchema,
+    response: wbDocumentResolveOutputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: doc(w, d),
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -178,6 +194,7 @@ const ROUTES: readonly Route[] = [
     method: 'DELETE',
     pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId',
     schema: wbDocumentDeleteInputSchema,
+    response: wbDocumentDeleteOutputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: doc(w, d),
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -188,6 +205,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/search',
     schema: documentSearchInputSchema,
+    response: documentSearchOutputSchema,
     request: fc.tuple(workspaceArb, searchQueryArb).map(([w, query]) => ({
       path: `${ws(w)}/search?${query}`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -198,6 +216,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/document-tags',
     schema: documentTagsInputSchema,
+    response: documentTagsOutputSchema,
     request: workspaceArb.map((w) => ({
       path: `${ws(w)}/document-tags`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -208,6 +227,7 @@ const ROUTES: readonly Route[] = [
     method: 'POST',
     pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions',
     schema: linkifyMentionsInputSchema,
+    response: linkifyMentionsOutputSchema,
     request: fc
       .tuple(
         workspaceArb,
@@ -225,6 +245,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks',
     schema: backlinksInputSchema,
+    response: backlinksOutputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: `${doc(w, d)}/backlinks`,
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -235,6 +256,7 @@ const ROUTES: readonly Route[] = [
     method: 'GET',
     pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/okf',
     schema: exportOkfInputSchema,
+    response: exportOkfOutputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: `${doc(w, d)}/okf`,
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -273,7 +295,11 @@ describe('every /api/v1 route answers or refuses with a reason, never a 5xx', ()
       const detail = `${route.method} ${request.path} ${init.body ?? ''} -> ${response.status} ${text.slice(0, 200)}`
       expect(response.status, detail).toBeLessThan(500)
       expect(() => JSON.parse(text), detail).not.toThrow()
-      if (response.status < 300) answered.set(route.name, (answered.get(route.name) ?? 0) + 1)
+      if (response.status < 300) {
+        answered.set(route.name, (answered.get(route.name) ?? 0) + 1)
+        const read = route.response.safeParse(JSON.parse(text))
+        expect(read.success, `${detail}\n${JSON.stringify(read.error?.issues)}`).toBe(true)
+      }
       // A body the schema produced, on the seeded workspace, is one the
       // route's own parse must accept: `invalid input` there is drift
       // between the route's composition of params and body, and the

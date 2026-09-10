@@ -20,22 +20,45 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import {
+  canvasExistsResponseSchema,
   createDocumentRequestSchema,
+  createDocumentResponseSchema,
   createWorkspaceRequestSchema,
+  deleteDocumentResponseSchema,
+  listDocumentsResponseSchema,
+  listTrashResponseSchema,
+  listVersionsResponseSchema,
+  listWorkspacesResponseSchema,
+  optimizeAllDocumentsResponseSchema,
+  pruneSandwichedVersionsResponseSchema,
   renameDocumentPathRequestSchema,
+  renameDocumentPathResponseSchema,
   renameWorkspaceRequestSchema,
+  restoreTrashResponseSchema,
   restoreVersionRequestSchema,
   saveVersionRequestSchema,
+  saveVersionResponseSchema,
   setNameRequestSchema,
   setPinnedRequestSchema,
+  updateDocumentResponseSchema,
+  versionDocumentResponseSchema,
+  workspaceNamesSchema,
+  workspaceSummarySchema,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { runtimeVerifyRequestSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
+import { listFontsResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
+import {
+  daemonPingResponseSchema,
+  runtimeStatusResponseSchema,
+  runtimeVerifyRequestSchema,
+  runtimeVerifyResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, beforeAll, describe, expect, vi } from 'vitest'
 import type { z } from 'zod'
-import { exportRequestSchema } from '../shared/api-contracts/export.js'
+import { clientCountResponseSchema } from '../shared/api-contracts/document-runtime.js'
+import { exportRequestSchema, exportResponseSchema } from '../shared/api-contracts/export.js'
 import { exportSvgRequestSchema } from '../shared/api-contracts/export-svg.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { fc, fcTest, withDefaults } from '../shared/test-utils/fast-check.js'
@@ -182,31 +205,66 @@ type Rule =
       readonly contentType?: string
       /** Fewer draws for a route whose every answer is a real render. */
       readonly runs?: number
+      /**
+       * The schema a typed client reads a 2xx with. A body that fails it is
+       * drift between what the route emits and what its readers expect —
+       * the handler is typed, but nothing parses on the way out. Absent
+       * where no client contract exists for the answer.
+       */
+      readonly response?: z.ZodTypeAny
     }
   | { readonly refusesOnly: string; readonly body?: z.ZodTypeAny }
   | { readonly skip: string }
 
 const RULES: Record<string, Rule> = {
-  'GET /api/workspaces': { answers: 'json' },
-  'POST /api/workspaces': { answers: 'json', body: createWorkspaceRequestSchema },
-  'PATCH /api/workspaces/:workspaceId': { answers: 'json', body: renameWorkspaceRequestSchema },
-  'GET /api/workspaces/:workspaceId/documents': { answers: 'json' },
+  'GET /api/workspaces': { answers: 'json', response: listWorkspacesResponseSchema },
+  'POST /api/workspaces': {
+    answers: 'json',
+    body: createWorkspaceRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  'PATCH /api/workspaces/:workspaceId': {
+    answers: 'json',
+    body: renameWorkspaceRequestSchema,
+    response: workspaceSummarySchema,
+  },
+  'GET /api/workspaces/:workspaceId/documents': {
+    answers: 'json',
+    response: listDocumentsResponseSchema,
+  },
   'POST /api/workspaces/:workspaceId/documents': {
     answers: 'json',
     body: createDocumentRequestSchema,
+    response: createDocumentResponseSchema,
   },
-  'GET /api/workspaces/:workspaceId/names': { answers: 'json' },
+  'GET /api/workspaces/:workspaceId/names': { answers: 'json', response: workspaceNamesSchema },
   'PUT /api/workspaces/:workspaceId/name': { answers: 'json', body: setNameRequestSchema },
-  'GET /api/workspaces/:workspaceId/trash': { answers: 'json' },
-  'POST /api/workspaces/:workspaceId/trash/:documentId/restore': { answers: 'json' },
-  'POST /api/workspaces/:workspaceId/versions/prune-sandwiched': { answers: 'json' },
-  'POST /api/workspaces/:workspaceId/documents/optimize-all': { answers: 'json' },
+  'GET /api/workspaces/:workspaceId/trash': { answers: 'json', response: listTrashResponseSchema },
+  'POST /api/workspaces/:workspaceId/trash/:documentId/restore': {
+    answers: 'json',
+    response: restoreTrashResponseSchema,
+  },
+  'POST /api/workspaces/:workspaceId/versions/prune-sandwiched': {
+    answers: 'json',
+    response: pruneSandwichedVersionsResponseSchema,
+  },
+  'POST /api/workspaces/:workspaceId/documents/optimize-all': {
+    answers: 'json',
+    response: optimizeAllDocumentsResponseSchema,
+  },
   'POST /api/workspaces/:workspaceId/files/purge-dangling': { answers: 'json' },
-  'GET /api/workspaces/:workspaceId/documents/*/versions': { answers: 'json' },
-  'GET /api/workspaces/:workspaceId/documents/*/versions/:id/document': { answers: 'json' },
+  'GET /api/workspaces/:workspaceId/documents/*/versions': {
+    answers: 'json',
+    response: listVersionsResponseSchema,
+  },
+  'GET /api/workspaces/:workspaceId/documents/*/versions/:id/document': {
+    answers: 'json',
+    response: versionDocumentResponseSchema,
+  },
   'POST /api/workspaces/:workspaceId/documents/*/versions': {
     answers: 'json',
     body: saveVersionRequestSchema,
+    response: saveVersionResponseSchema,
   },
   'POST /api/workspaces/:workspaceId/documents/*/versions/:id/restore': {
     answers: 'json',
@@ -223,27 +281,43 @@ const RULES: Record<string, Rule> = {
   'PUT /api/workspaces/:workspaceId/documents/*/path': {
     answers: 'json',
     body: renameDocumentPathRequestSchema,
+    response: renameDocumentPathResponseSchema,
   },
   'POST /api/workspaces/:workspaceId/documents/*/compact': { answers: 'json' },
-  'DELETE /api/workspaces/:workspaceId/documents/*': { answers: 'json' },
-  'GET /api/w/:workspaceId/document/*/exists': { answers: 'json' },
+  'DELETE /api/workspaces/:workspaceId/documents/*': {
+    answers: 'json',
+    response: deleteDocumentResponseSchema,
+  },
+  'GET /api/w/:workspaceId/document/*/exists': {
+    answers: 'json',
+    response: canvasExistsResponseSchema,
+  },
   'GET /api/w/:workspaceId/document/*/snapshot': { answers: 'bytes' },
-  'GET /api/w/:workspaceId/document/*/client-count': { answers: 'json' },
+  'GET /api/w/:workspaceId/document/*/client-count': {
+    answers: 'json',
+    response: clientCountResponseSchema,
+  },
   'POST /api/w/:workspaceId/document/*/viewport': {
     // No browser is connected, so every well-formed request is a 503.
     refusesOnly: 'needs a connected WebSocket client to apply the viewport',
     body: viewportRequestParamsSchema,
   },
-  'POST /api/w/:workspaceId/document/*/update': { answers: 'json', raw: true },
+  'POST /api/w/:workspaceId/document/*/update': {
+    answers: 'json',
+    raw: true,
+    response: updateDocumentResponseSchema,
+  },
   'POST /api/w/:workspaceId/document/*/export': {
     answers: 'json',
     body: exportRequestSchema,
     runs: 24,
+    response: exportResponseSchema,
   },
   'POST /api/w/:workspaceId/document/*/export-svg': {
     answers: 'json',
     body: exportSvgRequestSchema,
     runs: 24,
+    response: exportResponseSchema,
   },
   'PUT /api/w/:workspaceId/document/*/file/:fileId': {
     answers: 'none',
@@ -252,7 +326,11 @@ const RULES: Record<string, Rule> = {
   },
   'GET /api/w/:workspaceId/document/*/file/:fileId': { answers: 'bytes' },
   'GET /api/w/:workspaceId/workspace-document/snapshot': { answers: 'bytes' },
-  'POST /api/w/:workspaceId/workspace-document/update': { answers: 'json', raw: true },
+  'POST /api/w/:workspaceId/workspace-document/update': {
+    answers: 'json',
+    raw: true,
+    response: updateDocumentResponseSchema,
+  },
   'GET /api/sync/stream': { skip: 'holds the response open until the client goes away' },
   'POST /api/sync/subscribe': {
     refusesOnly: 'needs the stream id of an open /api/sync/stream, which this lane never opens',
@@ -262,14 +340,18 @@ const RULES: Record<string, Rule> = {
     refusesOnly: 'needs the stream id of an open /api/sync/stream, which this lane never opens',
     body: syncClientMessageRequestSchema,
   },
-  'GET /api/runtime/ping': { answers: 'json' },
-  'POST /api/runtime/verify': { answers: 'json', body: runtimeVerifyRequestSchema },
-  'GET /api/runtime/status': { answers: 'json' },
+  'GET /api/runtime/ping': { answers: 'json', response: daemonPingResponseSchema },
+  'POST /api/runtime/verify': {
+    answers: 'json',
+    body: runtimeVerifyRequestSchema,
+    response: runtimeVerifyResponseSchema,
+  },
+  'GET /api/runtime/status': { answers: 'json', response: runtimeStatusResponseSchema },
   'POST /api/runtime/touch': { answers: 'json' },
   'POST /api/runtime/shutdown': { answers: 'json' },
   'GET /api/runtime/storage': { answers: 'json' },
   'POST /api/runtime/logs/prune': { answers: 'json' },
-  'GET /api/fonts': { answers: 'json' },
+  'GET /api/fonts': { answers: 'json', response: listFontsResponseSchema },
   'GET /api/fonts/:id/file': { refusesOnly: 'a fresh data dir has no installed font' },
   'POST /api/fonts/:id/install': { skip: 'downloads the font from the network' },
   'POST /api/ws-ticket': {
@@ -340,9 +422,15 @@ function overrideFor(seed: Seeded) {
     }
     if (path.endsWith('markdown')) return OKF_OR_NOT
     if (path.endsWith('nonce')) return fc.constantFrom(...NONCES)
-    if (path.endsWith('outputPath')) {
-      return fc.constantFrom(join(tempDir, 'exports', 'a.png'), join(tempDir, 'exports', 'b.svg'))
-    }
+    // Absent: the route refuses any explicit output path outside the
+    // workspace's own exports directory before rendering, and a random
+    // frame id names no frame — either would leave the export rows
+    // refusing on nearly every draw and their ledger starving (measured:
+    // one stress run in five). The default output path is unique per
+    // export, so absent is also what lets the row answer more than once.
+    if (path.endsWith('outputPath') || path.endsWith('frameId')) return fc.constant(undefined)
+    // A restore to a random target path is refused before it restores.
+    if (path.endsWith('targetPath')) return fc.constant(undefined)
     return undefined
   }
 }
@@ -389,10 +477,40 @@ function bodyArb(method: string, rule: Rule, seed: Seeded): fc.Arbitrary<Body | 
   return fc.oneof(...arms)
 }
 
-/** Fill a registered pattern's parameters and wildcard from the seed at real weight. */
+/**
+ * Fill a registered pattern's parameters and wildcard from the seed at real
+ * weight. A quarter of draws are `happy`: every parameter names the seed, so
+ * a row whose answer needs three seeded parameters at once (a restore: the
+ * workspace, the one path with a version, that version's id) still answers
+ * inside its draws instead of starving its ledger — measured, the
+ * independent draws landed on all three about one time in fifteen.
+ */
 function pathArb(pattern: string, seed: Seeded): fc.Arbitrary<{ path: string; seeded: boolean }> {
+  return fc.oneof(
+    { weight: 1, arbitrary: fillPattern(pattern, seed, true) },
+    { weight: 3, arbitrary: fillPattern(pattern, seed, false) },
+  )
+}
+
+function fillPattern(
+  pattern: string,
+  seed: Seeded,
+  happy: boolean,
+): fc.Arbitrary<{ path: string; seeded: boolean }> {
   const segments = pattern.split('/')
   const parts = segments.map((segment): fc.Arbitrary<{ text: string; seeded: boolean }> => {
+    if (happy) {
+      const seededText = (): string | null => {
+        if (segment === ':workspaceId') return seed.workspace
+        if (segment === '*') return SPATIAL_PATH
+        if (segment === ':documentId') return seed.trashedId
+        if (segment === ':id') return seed.versionId
+        if (segment === ':fileId') return FILE_ID
+        return segment.startsWith(':') ? null : segment
+      }
+      const text = seededText()
+      if (text !== null) return fc.constant({ text, seeded: true })
+    }
     if (segment === ':workspaceId') {
       return workspaceArb(seed).map((w) => ({
         text: encodeURIComponent(w),
@@ -572,7 +690,17 @@ describe('every daemon route answers or refuses with a reason, never a 5xx', () 
               // A refusal the client cannot read.
               expect.fail(detail)
             }
-            if (res.status < 300) answered.set(key, (answered.get(key) ?? 0) + 1)
+            if (res.status < 300) {
+              answered.set(key, (answered.get(key) ?? 0) + 1)
+              if (
+                'response' in rule &&
+                rule.response !== undefined &&
+                contentType.includes('json')
+              ) {
+                const read = rule.response.safeParse(JSON.parse(text))
+                expect(read.success, `${detail}\n${JSON.stringify(read.error?.issues)}`).toBe(true)
+              }
+            }
           }),
           withDefaults({ numRuns: 'runs' in rule && rule.runs !== undefined ? rule.runs : 40 }),
         )

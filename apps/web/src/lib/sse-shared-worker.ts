@@ -16,7 +16,7 @@ import {
   toBase64,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { createDaemonFetch } from './daemon-auth-fetch.js'
-import { sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
+import { postWorkerEvent, sseWorkerRequestSchema } from './sse-shared-worker-protocol.js'
 
 /**
  * The worker's own replica of each subscribed document.
@@ -361,7 +361,7 @@ function ingest(baseUrl: string, doc: string, bytes: Uint8Array, from: MessagePo
       // them must never be handed the other's edits.
       if (state.baseUrl !== baseUrl) continue
       if (!state.subscriptions.has(doc)) continue
-      target.postMessage({ type: 'authority-update', doc, update: encoded })
+      postWorkerEvent(target, { type: 'authority-update', doc, update: encoded })
     }
   })
 }
@@ -421,7 +421,7 @@ function handle(port: MessagePort, raw: unknown): void {
       // fill it in is the same path a first-ever open already takes.
       const snapshot = replicaFor(state.baseUrl, msg.doc)?.export({ mode: 'snapshot' })
       if (snapshot === undefined) return
-      port.postMessage({ type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
+      postWorkerEvent(port, { type: 'snapshot', doc: msg.doc, snapshot: toBase64(snapshot) })
     })
     return
   }
@@ -446,10 +446,10 @@ function handle(port: MessagePort, raw: unknown): void {
       // daemon frame crossed each port twice.
       onUpdate: () => {},
       onMessage: (text) => {
-        port.postMessage({ type: 'message', doc: msg.doc, raw: text })
+        postWorkerEvent(port, { type: 'message', doc: msg.doc, raw: text })
       },
       onConnectionChange: (connected) => {
-        port.postMessage({ type: 'status', doc: msg.doc, connected })
+        postWorkerEvent(port, { type: 'status', doc: msg.doc, connected })
       },
     })
     state.subscriptions.set(msg.doc, off)
