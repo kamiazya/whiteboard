@@ -59,3 +59,16 @@ scan says.
   create canvas." — the mint boundary's `WorkspaceSegmentUnusableError`,
   which the handler's own comment promised as a 400, fell through its
   catch-all (now mapped).
+- **Every JSON this package writes and reads back is round-tripped from its
+  schema** (`server/persisted-json.property.test.ts`): the server-mode and
+  daemon records, the pairing grants file, the database location record,
+  the backup-in-progress marker, the blob envelope, the mirror manifest, and
+  the backup result the scheduled pass reads off the CLI's stdout. Each is
+  declared once and read through Zod, so the SHAPES cannot drift; what the
+  lane is for is a value the writer produces that a runtime check refuses,
+  because every reader here fails soft — an empty store, `null`, "no backup
+  running" — and the loss is silent. It found one the day it was written:
+  the marker's `expiresAt` was `Date.now() + ttlMs` under a schema that says
+  `.int()`, so a fractional lifetime wrote a marker GC read as no backup at
+  all, for the whole pass (now rounded up). The property's own bound has to
+  round the same way, or it fails on the fix.
