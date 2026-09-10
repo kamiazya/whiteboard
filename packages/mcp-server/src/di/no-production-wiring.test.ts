@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
 const productionSources = {
   ...import.meta.glob('../server/index.ts', { query: '?raw', eager: true, import: 'default' }),
   ...import.meta.glob('../server/app.ts', { query: '?raw', eager: true, import: 'default' }),
-  ...import.meta.glob('../server/entrypoint.ts', {
+  ...import.meta.glob('../server/daemon-entry.ts', {
     query: '?raw',
     eager: true,
     import: 'default',

@@ -25,11 +25,13 @@ catalog:
   # shared build/test tooling
   # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
   # NO JS compiler API (the root export is `lib/version.cjs`), so a package
-  # that parses ASTs or emits .d.ts takes `@typescript/typescript6` instead —
-  # the 6.x API republished to sit beside this. Two do: tools/arch-lint (its
-  # scans), and packages/mcp-server, which pins 6 outright because tsup
-  # bundles rollup-plugin-dts 6.1.1 and nothing here can redirect a vendored
-  # resolution.
+  # that parses ASTs takes `@typescript/typescript6` instead — the 6.x API
+  # republished to sit beside this. One does: tools/arch-lint, for its scans.
+  #
+  # Emitting .d.ts used to need it too, which is why mcp-server was pinned to
+  # 6: tsup vendors rollup-plugin-dts 6.1.1 into its own dist, so no override
+  # reached it. That pin is gone — mcp-server builds with tsdown, whose dts
+  # plugin has a `tsgo` generator that reads TypeScript 7 directly.
   typescript: "^7.0.2"
   vite: "^8.2.2"
   vitest: "^5.0.0"

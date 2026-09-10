@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url'
 const scriptDir = dirname(fileURLToPath(import.meta.url))
 const packageRoot = resolve(scriptDir, '../..')
 const loaderPath = resolve(packageRoot, 'node_modules/tsx/dist/loader.mjs')
-const entryPath = resolve(packageRoot, 'src/server/mcp/index.ts')
+const entryPath = resolve(packageRoot, 'src/server/mcp/stdio.ts')
 
 const child = spawn(
   process.execPath,

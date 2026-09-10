@@ -1,10 +1,10 @@
 // A distribution smoke imports the PACKAGED artifact by path. If that path is
-// not a tsup entry, no build produces it and the smoke cannot pass on any
+// not a bundler entry, no build produces it and the smoke cannot pass on any
 // machine — it fails its own precondition check before reaching the thing it
 // tests.
 //
 // Measured: `packaged-server-mode-backup-restore-smoke.mjs` imports
-// `dist/server/server-mode-backup-restore.js`, and tsup emitted only
+// `dist/server/server-mode-backup-restore.js`, and the bundler emitted only
 // `server/backup-restore`. The module's code WAS in dist, inside a hashed
 // chunk of cli/index.js, so nothing looked missing — `ls dist/server` after a
 // real build is what settled it. The smoke runs on the release path alone, so
@@ -22,9 +22,9 @@ import { describe, expect, it } from 'vitest'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
 
-/** tsup entry keys, e.g. `server/backup-restore`. */
-function tsupEntryKeys(): string[] {
-  const config = readFileSync(join(ROOT, 'packages/mcp-server/tsup.config.ts'), 'utf-8')
+/** bundler entry keys, e.g. `server/backup-restore`. */
+function bundlerEntryKeys(): string[] {
+  const config = readFileSync(join(ROOT, 'packages/mcp-server/tsdown.config.ts'), 'utf-8')
   const entryBlock = config.slice(config.indexOf('entry: {'), config.indexOf('outDir'))
   return [...entryBlock.matchAll(/'([^']+)':\s*'src\//g)].map((m) => m[1])
 }
@@ -46,14 +46,14 @@ function distPathsSmokesImport(): { file: string; entryKey: string }[] {
   return found
 }
 
-const entries = tsupEntryKeys()
+const entries = bundlerEntryKeys()
 const imported = distPathsSmokesImport()
 
-describe('every dist path a distribution smoke imports is a tsup entry', () => {
+describe('every dist path a distribution smoke imports is a bundler entry', () => {
   it('read a plausible entry list', () => {
     // A regex that stops matching reports "every smoke path is missing",
     // which sends the reader to the wrong file entirely.
-    expect(entries.length, 'no tsup entries parsed').toBeGreaterThan(5)
+    expect(entries.length, 'no bundler entries parsed').toBeGreaterThan(5)
     expect(entries).toContain('cli/index')
   })
 
@@ -64,7 +64,10 @@ describe('every dist path a distribution smoke imports is a tsup entry', () => {
   it('emits every path the smokes name', () => {
     const missing = imported
       .filter(({ entryKey }) => !entries.includes(entryKey))
-      .map(({ file, entryKey }) => `${file} imports dist/${entryKey}.js, which tsup does not emit`)
+      .map(
+        ({ file, entryKey }) =>
+          `${file} imports dist/${entryKey}.js, which the bundler does not emit`,
+      )
     expect(missing).toEqual([])
   })
 })

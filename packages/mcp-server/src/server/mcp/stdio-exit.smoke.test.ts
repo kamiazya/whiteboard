@@ -4,7 +4,7 @@ import { describe, it } from 'vitest'
 import { runStdioExitSmoke } from './stdio-exit.smoke-impl.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const entry = resolve(root, 'src/server/mcp/index.ts')
+const entry = resolve(root, 'src/server/mcp/stdio.ts')
 
 describe('stdio exit smoke', () => {
   it('exits promptly when stdin is closed (parent disconnect)', async () => {
