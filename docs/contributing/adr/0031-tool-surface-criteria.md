@@ -845,6 +845,22 @@ placement the drawer chose. So the next criterion is price on that board,
 and the next question is whether the surface can say where a fan-out box
 goes before the router has to pay for where it went.
 
+**The eleventh reading (2026-09-10), refuted.** The drawing skill's
+placement step was given one sentence: a box that fans out goes in the
+middle of its row or in a row of its own, never at the end, with the
+gateway as its example. Six trials of the layered task read it and none
+placed the gateway anywhere but the left end of its row, as every trial
+before had. Their price did move — bends 6 in two of six against seven
+of nine before, reversals 3 in the same two against six of nine — and a
+move nobody can attribute is not evidence: the sentence was not followed,
+so whatever moved the numbers was not the placement it asked for. The
+sentence is withdrawn. What it says about prose is worth keeping: a model
+drawing a layered diagram lists each layer's members left to right in the
+order it thinks of them, and a paragraph three steps down the skill does
+not reach that order. If the fan-out hub is to move, something the model
+cannot skip has to move it — the result of the call it just made, or
+tidy — and that is the next question, not another sentence.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

@@ -159,13 +159,6 @@ edge has to reach.
 then fill in the numbers. See [`style-reference.md`](./style-reference.md) for sizing and color
 guidance.
 
-**A box that fans out goes in the middle of its row, or in a row of its own — never at the end.** A
-gateway that receives three clients from above and sends to two services beside it, placed at the
-left end of the services row, leaves the edge to the far service no way past the near one: the
-router pays with a crossing or a loop under both, and no tidy moves a box between rows. Put the
-hub in the middle column of its row, or give it a row above the boxes it fans out to, and the
-edges have somewhere to go.
-
 ### Step 4: Tidy And Render
 
 Tidy is an op, so it usually belongs at the END of the same call that drew the diagram rather than
