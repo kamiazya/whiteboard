@@ -6,6 +6,7 @@ import {
   namespacedIdSchema,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
+  CanvasEdge,
   EdgeRoutingStyle,
   ExtensionFacets,
   LineJumps,
@@ -132,7 +133,13 @@ export const visualPlugin = definePlugin({
       name: 'edges',
       displayName: 'Edges',
       version: 'v0',
-      targets: ['canvas'],
+      // Both scopes, one facet: the question ("how is this drawn") is the
+      // same asked of a canvas and of one edge, and ADR-0013 decision 1's
+      // growth rule says that is one facet, not two. `visual.symbol` was
+      // widened the same way. The key stays `v0`: `targets` declares where a
+      // payload may attach and is not itself payload, so no stored value
+      // changes meaning and there is no migration to write.
+      targets: ['canvas', 'edge'],
       schema: visualEdgesFacetSchema,
     }),
     defineFacet({
@@ -299,6 +306,46 @@ export function resolveEffectiveCanvasEdgeStyle(
     style: explicit.style ?? defaults.style,
     lineJumps: explicit.lineJumps ?? defaults.lineJumps,
   }
+}
+
+/**
+ * How ONE edge is drawn: its own `visual.edges/v0` facet field by field over
+ * the canvas's answer, over the theme's default, over the built-in.
+ *
+ * Field by field rather than whole-value, and deliberately unlike the
+ * canvas-vs-nothing case: the two payloads are at DIFFERENT scopes, so an
+ * edge saying only `routing` is narrowing that one field, not declaring that
+ * the board's line jumps do not apply to it. Whole-value replacement is the
+ * rule WITHIN one scope, where a facet is one register.
+ */
+export function resolveEdgeStyle(
+  canvas: SpatialCanvas,
+  edge: CanvasEdge,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const own = resolveEdgeOwnStyle(edge, registry)
+  const canvasWide = resolveEffectiveCanvasEdgeStyle(canvas, registry)
+  return {
+    style: own.routing ?? canvasWide.style,
+    lineJumps: own.lineJumps ?? canvasWide.lineJumps,
+  }
+}
+
+/**
+ * What an edge says about ITSELF, with no canvas or theme filled in — the
+ * stored facet and nothing else. Separate from `resolveEdgeStyle` because an
+ * editor showing "inherited unless overridden" needs to know which fields
+ * the edge actually holds, and a resolved value cannot say.
+ */
+export function resolveEdgeOwnStyle(
+  edge: CanvasEdge,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualEdgesFacet {
+  const stored = edge['x-whiteboard']?.facets?.[VISUAL_EDGES_KEY]
+  if (stored === undefined) return {}
+  const resolution = registry.resolveFacetPayload(VISUAL_EDGES_KEY, stored)
+  if (resolution.kind !== 'resolved') return {}
+  return visualEdgesFacetSchema.parse(resolution.value)
 }
 
 /**

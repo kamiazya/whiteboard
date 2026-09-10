@@ -101,7 +101,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // a canvas that chose a setting and reverted serializes like one that
   // never touched it. `withEdgeStyle` now delegates to it rather than
   // repeating that rule, which is why the arm costs less than it reads.
-  'apps/web/src/lib/spatial/commands.ts': 995,
+  'apps/web/src/lib/spatial/commands.ts': 1029,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -139,7 +139,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
   // can fold a whole act into ONE commit. The bodies did not grow; these are
   // the two wrappers and the two lines saying what the split is for.
-  'packages/loro-adapter/src/loro-bridge.ts': 952,
+  'packages/loro-adapter/src/loro-bridge.ts': 953,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -322,8 +322,8 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // module holding it would import both back from this file. Asked by a
   // surface that cannot MEASURE a family it does not hold — the MCP Apps
   // widget, through `canvas_view`.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2432,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2448,
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2093,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -349,7 +349,7 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // scene, its drag layers and its overlays, and the paper it paints is the
   // palette's surface. Threading is this file's job; there is nothing here
   // to move.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2753,
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2780,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

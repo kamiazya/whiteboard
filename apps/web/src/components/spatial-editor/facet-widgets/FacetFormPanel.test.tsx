@@ -2,7 +2,7 @@
 // editable here, including the ones no quick band knows about — the gap an
 // agent's MCP write otherwise falls into.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
@@ -41,7 +41,21 @@ const plain = definePlugin({
     }),
   ],
 })
-const registry = createFacetRegistry([...bundledPlugins, plain])
+/** An edge-target facet with no widget, so the panel's edge case is derived too. */
+const flow = definePlugin({
+  id: 'flow',
+  displayName: 'Flow',
+  facets: [
+    defineFacet({
+      name: 'route',
+      displayName: 'Route',
+      version: 'v0',
+      targets: ['edge'],
+      schema: z.object({ hops: z.number() }),
+    }),
+  ],
+})
+const registry = createFacetRegistry([...bundledPlugins, plain, flow])
 
 const node = (facets?: Record<string, unknown>): SpatialNode => ({
   id: 'n1',
@@ -56,7 +70,13 @@ const node = (facets?: Record<string, unknown>): SpatialNode => ({
 
 describe('FacetFormPanel', () => {
   it('lists every node-target facet under its plugin heading, widget or not', () => {
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+      />,
+    )
     expect(screen.getByText('Planning')).not.toBeNull()
     expect(screen.getByText('Visual style')).not.toBeNull()
     // The facet with no quick band is the one this panel exists for.
@@ -67,7 +87,7 @@ describe('FacetFormPanel', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'planning.due/v0': { date: '2026-08-22' } })}
+        subject={{ kind: 'node', node: node({ 'planning.due/v0': { date: '2026-08-22' } }) }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -82,7 +102,13 @@ describe('FacetFormPanel', () => {
 
   it('refuses a payload the facet rejects, and says which field', () => {
     const onWrite = vi.fn()
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
     // `date` is required and empty: the registry's own write validation is
     // what answers, so the panel can never store what the tool would refuse.
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
@@ -94,7 +120,7 @@ describe('FacetFormPanel', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'planning.due/v0': { date: '2026-08-22' } })}
+        subject={{ kind: 'node', node: node({ 'planning.due/v0': { date: '2026-08-22' } }) }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -110,7 +136,10 @@ describe('control kinds the derived form emits', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } })}
+        subject={{
+          kind: 'node',
+          node: node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } }),
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -127,7 +156,13 @@ describe('control kinds the derived form emits', () => {
 
   it('a toggle writes a boolean and a number control writes a number', () => {
     const onWrite = vi.fn()
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
     fireEvent.change(screen.getByLabelText('Due Date'), {
       target: { value: '2026-08-22' },
     })
@@ -144,7 +179,13 @@ describe('control kinds the derived form emits', () => {
 
 describe("the panel honours a facet's declared editor", () => {
   it("uses the spec's label and its segmented options, not the derived defaults", () => {
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+      />,
+    )
     // visual.shape declares label 'Shape' and a segmented control; without
     // the spec the panel would show a select labelled 'kind'.
     const control = screen.getByLabelText('Shape')
@@ -158,7 +199,7 @@ describe('the absence segment clears the facet, like the band does', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'visual.shape/v0': { kind: 'hexagon' } })}
+        subject={{ kind: 'node', node: node({ 'visual.shape/v0': { kind: 'hexagon' } }) }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -178,11 +219,22 @@ describe('a draft never outlives what it was seeded from', () => {
     const onWrite = vi.fn()
     const stored = node({ 'planning.due/v0': { date: '2026-08-22' } })
     const { rerender } = render(
-      <FacetFormPanel node={stored} registry={registry} onWrite={onWrite} />,
+      <FacetFormPanel
+        subject={{ kind: 'node', node: stored }}
+        registry={registry}
+        onWrite={onWrite}
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Clear Due' }))
     // The host applies the clear and re-renders with the facet gone.
-    rerender(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={{}} />)
+    rerender(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+        editors={{}}
+      />,
+    )
     expect((screen.getByLabelText('Due Date') as HTMLInputElement).value).toBe('')
     onWrite.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
@@ -193,7 +245,10 @@ describe('a draft never outlives what it was seeded from', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } })}
+        subject={{
+          kind: 'node',
+          node: node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } }),
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -217,7 +272,10 @@ describe('the panel is bound to ONE node', () => {
     const onWrite = vi.fn()
     const { rerender } = render(
       <FacetFormPanel
-        node={{ ...node({ 'planning.due/v0': { date: '2026-01-01' } }), id: 'a' }}
+        subject={{
+          kind: 'node',
+          node: { ...node({ 'planning.due/v0': { date: '2026-01-01' } }), id: 'a' },
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -228,7 +286,10 @@ describe('the panel is bound to ONE node', () => {
     })
     rerender(
       <FacetFormPanel
-        node={{ ...node({ 'planning.due/v0': { date: '2026-12-31' } }), id: 'b' }}
+        subject={{
+          kind: 'node',
+          node: { ...node({ 'planning.due/v0': { date: '2026-12-31' } }), id: 'b' },
+        }}
         registry={registry}
         onWrite={onWrite}
       />,
@@ -246,7 +307,7 @@ describe('choices apply on pick; free entry still needs Save', () => {
     const writes: { key: string; payload: unknown }[] = []
     render(
       <FacetFormPanel
-        node={node()}
+        subject={{ kind: 'node', node: node() }}
         registry={registry}
         onWrite={(key, payload) => writes.push({ key, payload })}
       />,
@@ -261,7 +322,13 @@ describe('choices apply on pick; free entry still needs Save', () => {
 
   it('a text field is still staged until Save — there is no "done" mid-typing', () => {
     const writes: unknown[] = []
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => writes.push(1)} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => writes.push(1)}
+      />,
+    )
     fireEvent.change(screen.getByLabelText('Due Date'), { target: { value: '2026-09-01' } })
     expect(writes).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
@@ -271,7 +338,13 @@ describe('choices apply on pick; free entry still needs Save', () => {
 
 describe('a segmented option draws its declared glyph', () => {
   it('shows the shape, not the word — the same vocabulary the quick band uses', () => {
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+      />,
+    )
     // visual.shape declares a glyph per option. A picker that names shapes in
     // words while the band beside it draws them is two vocabularies.
     const ellipse = screen.getByLabelText('Ellipse')
@@ -283,7 +356,13 @@ describe('a segmented option draws its declared glyph', () => {
 })
 
 it('does not print a field label that repeats the facet name', () => {
-  render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+  render(
+    <FacetFormPanel
+      subject={{ kind: 'node', node: node() }}
+      registry={registry}
+      onWrite={() => {}}
+    />,
+  )
   // visual.shape declares label 'Shape' on its only field, under a heading
   // already reading 'Shape'.
   expect(screen.getAllByText('Shape')).toHaveLength(1)
@@ -294,7 +373,13 @@ it('does not print a field label that repeats the facet name', () => {
 describe('a registered editor replaces the derived form', () => {
   it('renders the badge picker for visual.symbol, and writes through the registry', () => {
     const onWrite = vi.fn()
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
     // The picker that used to live in the context menu now lives here, so
     // the facet has one face instead of two.
     fireEvent.click(screen.getByLabelText('Emoji ⭐'))
@@ -312,7 +397,14 @@ describe('a registered editor replaces the derived form', () => {
         </button>
       ),
     }
-    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} editors={editors} />)
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={onWrite}
+        editors={editors}
+      />,
+    )
     fireEvent.click(screen.getByRole('button', { name: 'bad' }))
     // `char` is a single grapheme. A hand-written editor gets no shorter
     // path to storage than a declared one.
@@ -345,14 +437,71 @@ describe('a registered editor is a COMPONENT, not a function the panel calls', (
     const first = { 'visual.symbol/v0': Counter('first') }
     const second = { 'visual.symbol/v0': Counter('second') }
     const { rerender } = render(
-      <FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={first} />,
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+        editors={first}
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'first 0' }))
     expect(screen.getByRole('button', { name: 'first 1' })).not.toBeNull()
 
     rerender(
-      <FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={second} />,
+      <FacetFormPanel
+        subject={{ kind: 'node', node: node() }}
+        registry={registry}
+        onWrite={() => {}}
+        editors={second}
+      />,
     )
     expect(screen.getByRole('button', { name: 'second 0' })).not.toBeNull()
+  })
+})
+
+describe('the panel retargeted at an edge', () => {
+  const edge = (facets?: Record<string, unknown>): CanvasEdge => ({
+    id: 'e1',
+    fromNode: 'a',
+    toNode: 'b',
+    ...(facets === undefined ? {} : { 'x-whiteboard': { facets } }),
+  })
+
+  it("lists the EDGE-target facets, not the node's", () => {
+    // Same vessel, different point: what a subject can carry is the
+    // registry's answer for its own target, never a list this panel keeps.
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'edge', edge: edge() }}
+        registry={registry}
+        onWrite={() => {}}
+      />,
+    )
+    // 'Edges' is the bundled visual.edges facet, now edge-target too; 'Due'
+    // is node-only, so a panel that ignored the point would show it here.
+    expect(screen.getByText('Edges')).toBeDefined()
+    expect(screen.getByText('Route')).toBeDefined()
+    expect(screen.queryByText('Due')).toBeNull()
+  })
+
+  it("shows the edge's own stored value and writes an edited payload back", () => {
+    const onWrite = vi.fn()
+    render(
+      <FacetFormPanel
+        subject={{ kind: 'edge', edge: edge({ 'flow.route/v0': { hops: 2 } }) }}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
+    const field = screen.getByLabelText('Route Hops') as HTMLInputElement
+    expect(field.value).toBe('2')
+    fireEvent.change(field, { target: { value: '5' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Route' }))
+    expect(onWrite).toHaveBeenCalledWith('flow.route/v0', { hops: 5 })
+  })
+
+  it('says so when nothing is selected, rather than showing an empty list', () => {
+    render(<FacetFormPanel subject={undefined} registry={registry} onWrite={() => {}} />)
+    expect(screen.getByText(/select a node or an edge/i)).toBeDefined()
   })
 })

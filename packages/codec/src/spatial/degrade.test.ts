@@ -106,3 +106,22 @@ it('drops the canvas-level x-whiteboard as well', () => {
 
   expect(degraded).not.toHaveProperty('x-whiteboard')
 })
+
+// Same one rule at the third site: strict JSON Canvas 1.0 has no room for an
+// edge's facets either, and an edge is rebuilt rather than passed through.
+it("drops an edge's x-whiteboard facets bucket", () => {
+  const degraded = strictDegrade({
+    nodes: [],
+    edges: [
+      {
+        id: 'e1',
+        fromNode: 'a',
+        toNode: 'b',
+        label: 'kept',
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+      },
+    ],
+  })
+
+  expect(degraded.edges[0]).toEqual({ id: 'e1', fromNode: 'a', toNode: 'b', label: 'kept' })
+})

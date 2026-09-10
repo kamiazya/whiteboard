@@ -19,7 +19,8 @@ paths:
   fallback where one exists). Both are adopted by canvas-render's layout
   defaults and the editor — user-reachable, no longer foundation-only.
 - The contribution RESOLUTION layer (`contributions.ts`): the closed
-  `ContributionPoint` set, and `resolveFacetContributions` answering "what
+  `ContributionPoint` set (`inspector.node`, `inspector.edge`,
+  `canvasSettings`), and `resolveFacetContributions` answering "what
   facet UI does this point carry" as namespace groups derived mechanically
   from facet `targets` — ordered by plugin ID (never `displayName`, which
   may be reworded/localized), headed by `displayName`. Ownership is

@@ -31,9 +31,12 @@ const canvasWith = (extension: SpatialCanvas['x-whiteboard']): SpatialCanvas => 
 })
 
 describe('visualPlugin', () => {
-  it('registers visual.edges/v0 as a canvas-target facet', () => {
+  it('registers visual.edges/v0 at both scopes: the board, and one edge', () => {
+    // One facet, not two: the same question asked of a board and of one
+    // edge (ADR-0013 decision 1's growth rule, the reading that widened
+    // visual.symbol). The key stays v0 — `targets` is not payload.
     expect(VISUAL_EDGES_KEY).toBe('visual.edges/v0')
-    expect(registry.targetsOf(VISUAL_EDGES_KEY)).toEqual(['canvas'])
+    expect(registry.targetsOf(VISUAL_EDGES_KEY)).toEqual(['canvas', 'edge'])
   })
 
   it('every bundled facet key satisfies the model key grammar', () => {

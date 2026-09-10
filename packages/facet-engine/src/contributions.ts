@@ -26,10 +26,11 @@ import type { FacetDefinition, FacetRegistry } from './registry.js'
  * from Delete. The menu keeps a doorway to the inspector, which is
  * navigation, not a contribution.
  */
-export type ContributionPoint = 'inspector.node' | 'canvasSettings'
+export type ContributionPoint = 'inspector.node' | 'inspector.edge' | 'canvasSettings'
 
 const POINT_TARGET = {
   'inspector.node': 'node',
+  'inspector.edge': 'edge',
   canvasSettings: 'canvas',
 } as const
 

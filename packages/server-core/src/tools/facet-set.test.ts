@@ -28,6 +28,7 @@ import {
   FacetSetNeedsPayloadError,
   facetSetInputSchema,
   NodeAndCanvasTargetError,
+  NodeAndEdgeTargetError,
   NodeTargetNeedsOneDocumentError,
   TagsTargetDocumentError,
 } from './facet-set.js'
@@ -338,6 +339,22 @@ describe('node-target writes (nodeId)', () => {
     return { documentStore, tool: createFacetSetTool(makeDeps(documentStore)) }
   }
 
+  const spatialWithEdge = async () => {
+    const documentStore = new FakeDocumentStore()
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(documentStore, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
+          { id: 'n2', type: 'text', text: 'b', x: 300, y: 200, width: 100, height: 50 },
+        ],
+        edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      })
+    })
+    return { documentStore, tool: createFacetSetTool(makeDeps(documentStore)) }
+  }
+
   test('sets a node-target facet into the node x-whiteboard facets bucket', async () => {
     const { documentStore, tool } = await spatialWith()
     const result = await tool.execute({
@@ -390,6 +407,91 @@ describe('node-target writes (nodeId)', () => {
         facets: { 'visual.edges/v0': { routing: 'curved' } },
       }),
     ).rejects.toThrow(/targets a node/)
+  })
+
+  test('sets an edge-target facet into the edge x-whiteboard facets bucket', async () => {
+    const { documentStore, tool } = await spatialWithEdge()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      edgeId: 'e1',
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+    expect(result.updated[0]?.facets).toEqual({ 'visual.edges/v0': { routing: 'orthogonal' } })
+
+    const loaded = await documentStore.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    expect(loaded).not.toBeNull()
+    const doc = new LoroDoc()
+    if (loaded !== null) doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    const canvas = readSpatialCanvas(doc)
+    expect(canvas?.edges[0]?.['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+    // The nodes beside it are untouched — the write names one edge.
+    expect(canvas?.nodes[0]?.['x-whiteboard']).toBeUndefined()
+  })
+
+  test('a null payload deletes the facet from the edge, leaving no empty extension', async () => {
+    const { documentStore, tool } = await spatialWithEdge()
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      edgeId: 'e1',
+      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      edgeId: 'e1',
+      facets: { 'visual.edges/v0': null },
+    })
+    expect(result.updated[0]?.facets).toEqual({})
+
+    const loaded = await documentStore.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    if (loaded !== null) doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    expect(readSpatialCanvas(doc)?.edges[0]).not.toHaveProperty('x-whiteboard')
+  })
+
+  test('rejects a registered facet whose targets exclude edge', async () => {
+    const { tool } = await spatialWithEdge()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        edgeId: 'e1',
+        facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+      }),
+    ).rejects.toThrow(/targets an edge/)
+  })
+
+  test('rejects an edgeId the canvas does not have', async () => {
+    const { tool } = await spatialWithEdge()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        edgeId: 'missing',
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      }),
+    ).rejects.toThrow(/missing/)
+  })
+
+  test('refuses nodeId and edgeId together: a write lands on one object', async () => {
+    const { tool } = await spatialWithEdge()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'n1',
+        edgeId: 'e1',
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      }),
+    ).rejects.toBeInstanceOf(NodeAndEdgeTargetError)
   })
 
   test('rejects nodeId on a markdown document', async () => {

@@ -1,3 +1,4 @@
+import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
 import {
   readCoreFacets,
   readDocumentKind,
@@ -8,6 +9,7 @@ import {
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  type CanvasEdge,
   documentIdSchema,
   type ExtensionFacets,
   extensionFacetsSchema,
@@ -20,7 +22,12 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
-import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError } from './errors.js'
+import {
+  DocumentKindMismatchError,
+  EdgeNotFoundError,
+  FacetWriteRejectedError,
+  NodeNotFoundError,
+} from './errors.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -78,18 +85,30 @@ export const facetSetInputSchema = z
       .describe(
         'Set the facets on this node of a spatial document instead of on the document itself. Takes exactly one documentId, and no tags.',
       ),
+    /**
+     * Present: the write targets this EDGE of a spatial document (facets
+     * land in the edge's own x-whiteboard facets bucket, ADR-0013 decision
+     * 5's edge slot). Mutually exclusive with `nodeId` and `target`, for the
+     * reason those two are exclusive with each other: a write lands on one
+     * object, and two ways of naming it are two chances to disagree.
+     */
+    edgeId: nodeIdSchema
+      .optional()
+      .describe(
+        'Set the facets on this edge of a spatial document instead of on the document itself. Takes exactly one documentId, and no tags.',
+      ),
     tags: tagsChangeSchema
       .optional()
       .describe(
         "Change the documents' OKF core tags: add and remove by name, every other tag stays. Markdown documents only.",
       ),
     /**
-     * Where a write without `nodeId` lands: the documents themselves
-     * (markdown frontmatter; the default), or the CANVAS envelope of a
-     * spatial document (`x-whiteboard.facets` — ADR-0013 decision 5's
-     * canvas slot, where `visual.theme/v0` and `visual.edges/v0` live).
-     * Two answers rather than three, because `nodeId` already says "a node"
-     * and saying it twice is how the two disagree.
+     * Where a write with neither `nodeId` nor `edgeId` lands: the documents
+     * themselves (markdown frontmatter; the default), or the CANVAS envelope
+     * of a spatial document (`x-whiteboard.facets` — ADR-0013 decision 5's
+     * canvas slot, where `visual.theme/v0` and a board-wide `visual.edges/v0`
+     * live). Two answers rather than four, because `nodeId` and `edgeId`
+     * already say which object, and saying it twice is how the two disagree.
      */
     target: z.enum(['document', 'canvas']).optional(),
     /**
@@ -187,6 +206,18 @@ export class NodeTargetNeedsOneDocumentError extends Error {
  * a write cannot land on both. Refused, like the batch case above and for
  * the same reason it is not a schema `.refine`.
  */
+export class NodeAndEdgeTargetError extends Error {
+  constructor() {
+    super('nodeId targets a node and edgeId targets an edge; pass one or the other.')
+    this.name = 'NodeAndEdgeTargetError'
+  }
+}
+
+/**
+ * `nodeId` names a node and `target: 'canvas'` names the canvas around it;
+ * a write cannot land on both. Refused, like the batch case above and for
+ * the same reason it is not a schema `.refine`.
+ */
 export class NodeAndCanvasTargetError extends Error {
   constructor() {
     super(
@@ -196,24 +227,33 @@ export class NodeAndCanvasTargetError extends Error {
   }
 }
 
+/** "an edge", "a node" — the refusal names the object, so it has to read like one. */
+function article(target: FacetTarget): string {
+  return target === 'edge' ? 'an' : 'a'
+}
+
 export function createFacetSetTool(deps: ServerDeps) {
   return {
     name: 'wb_facet_set' as const,
     description:
-      "Tag documents, or set facets on them. `tags` adds and removes OKF core tags by name on one or more markdown documents, leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme), or — with nodeId — on one node of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. One payload covers every document named, so tagging five notes is one call.",
+      "Tag documents, or set facets on them. `tags` adds and removes OKF core tags by name on one or more markdown documents, leaving the other tags alone. `facets` sets extension facets (keys like `visual.shape/v0`; wb_facet_list says which are registered) on the documents, on a spatial document's canvas (target: 'canvas' — where visual.theme/v0 chooses a theme and visual.edges/v0 routes every edge), or — with nodeId or edgeId — on one node or one edge of a spatial document, merging by key: an omitted key keeps its stored value, null deletes it. Registered facets are validated against their schema, their declared targets, and the assets they name. One payload covers every document named, so tagging five notes is one call.",
     inputSchema: facetSetInputSchema,
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
       if (input.tags === undefined && input.facets === undefined) {
         throw new FacetSetNeedsPayloadError()
       }
-      if (input.nodeId !== undefined && input.tags !== undefined) {
+      const element = input.nodeId ?? input.edgeId
+      if (input.nodeId !== undefined && input.edgeId !== undefined) {
+        throw new NodeAndEdgeTargetError()
+      }
+      if (element !== undefined && input.tags !== undefined) {
         throw new TagsTargetDocumentError()
       }
-      if (input.nodeId !== undefined && input.documentIds.length !== 1) {
+      if (element !== undefined && input.documentIds.length !== 1) {
         throw new NodeTargetNeedsOneDocumentError(input.documentIds.length)
       }
-      if (input.nodeId !== undefined && input.target === 'canvas') {
+      if (element !== undefined && input.target === 'canvas') {
         throw new NodeAndCanvasTargetError()
       }
 
@@ -230,7 +270,12 @@ export function createFacetSetTool(deps: ServerDeps) {
       // document and there is nothing to be gained by discovering it on the
       // third one after the first two were already written.
       const registry = deps.facetRegistry ?? bundledFacetRegistry
-      const requiredTarget = input.nodeId !== undefined ? 'node' : (input.target ?? 'document')
+      const requiredTarget: FacetTarget =
+        input.nodeId !== undefined
+          ? 'node'
+          : input.edgeId !== undefined
+            ? 'edge'
+            : (input.target ?? 'document')
       const sets: Record<string, unknown> = {}
       const deletions: string[] = []
       for (const [key, payload] of Object.entries(input.facets ?? {})) {
@@ -242,7 +287,7 @@ export function createFacetSetTool(deps: ServerDeps) {
         if (targets !== undefined && !targets.includes(requiredTarget)) {
           throw new FacetWriteRejectedError(
             key,
-            `its targets are [${targets.join(', ')}], and this write targets a ${requiredTarget}`,
+            `its targets are [${targets.join(', ')}], and this write targets ${article(requiredTarget)} ${requiredTarget}`,
           )
         }
         const result = registry.validateFacetWrite(key, payload)
@@ -314,6 +359,44 @@ async function setOne(
     writeSpatialCanvas(doc, {
       ...canvas,
       nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
+    })
+    await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
+    return { documentId, facets: merged }
+  }
+
+  if (input.edgeId !== undefined) {
+    const edgeId = input.edgeId
+    // Same order as the node branch, and for the same reason: a kind-less
+    // document has no canvas, so the edge cannot exist — say THAT rather
+    // than fabricating a kind for a mismatch message.
+    if (kind === undefined) {
+      throw new EdgeNotFoundError(documentId, edgeId)
+    }
+    if (kind !== 'spatial') {
+      throw new DocumentKindMismatchError(
+        documentId,
+        kind,
+        "Edge-target facets live on a spatial document's edge. Omit edgeId to set facets on a markdown document.",
+      )
+    }
+    const canvas = readSpatialCanvas(doc)
+    const edge = canvas.edges.find((candidate) => candidate.id === edgeId)
+    if (edge === undefined) {
+      throw new EdgeNotFoundError(documentId, edgeId)
+    }
+    const merged: ExtensionFacets = { ...edge['x-whiteboard']?.facets, ...sets }
+    for (const key of deletions) delete merged[key]
+    // The same canonical emptiness the node and canvas branches keep: an
+    // empty bucket takes the extension with it, so an edge that set a facet
+    // and cleared it serializes identically to one that never had it.
+    const { 'x-whiteboard': _extension, ...edgeRest } = edge
+    const nextEdge: CanvasEdge =
+      Object.keys(merged).length === 0
+        ? edgeRest
+        : { ...edgeRest, 'x-whiteboard': { facets: merged } }
+    writeSpatialCanvas(doc, {
+      ...canvas,
+      edges: canvas.edges.map((candidate) => (candidate.id === edgeId ? nextEdge : candidate)),
     })
     await saveDocumentSnapshot(deps, input.workspaceId, documentId, doc)
     return { documentId, facets: merged }

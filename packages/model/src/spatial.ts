@@ -24,6 +24,18 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * an existing node type (a diagram becomes a `file` node pointing at an
  * image) rather than through a variant only this project can read.
  */
+/**
+ * A facets-only `x-whiteboard`: the payload bucket and nothing else. What
+ * an EDGE carries (ADR-0013 decision 5's edge slot), and the node variant
+ * without an embed. `.strict()`, so a broken embed on a node fails this arm
+ * too rather than being silently stripped down to its facets.
+ */
+export const facetsOnlyExtensionSchema = z
+  .object({
+    facets: extensionFacetsSchema.optional().catch(undefined),
+  })
+  .strict()
+
 export const xWhiteboardSchema = z.union([
   z.object({
     kind: z.literal('embed'),
@@ -41,19 +53,14 @@ export const xWhiteboardSchema = z.union([
   }),
   /**
    * Node-target facets without an embed (ADR-0013 decision 5): payload only,
-   * so the node-level content-only rule holds. `.strict()`, so a broken
-   * embed (`kind` present, `documentId` missing/invalid) fails this variant
-   * too instead of being silently stripped down to its facets — the outer
-   * `.catch(undefined)` then drops the extension whole, exactly as before
-   * this variant existed. The facets bucket carries its own catch for the
-   * same reason the canvas-level one does: a bad key costs the bucket, not
-   * its siblings.
+   * so the node-level content-only rule holds. Strict, so a broken embed
+   * (`kind` present, `documentId` missing/invalid) fails this variant too
+   * instead of being silently stripped down to its facets — the outer
+   * `.catch(undefined)` then drops the extension whole. The facets bucket
+   * carries its own catch for the same reason the canvas-level one does: a
+   * bad key costs the bucket, not its siblings.
    */
-  z
-    .object({
-      facets: extensionFacetsSchema.optional().catch(undefined),
-    })
-    .strict(),
+  facetsOnlyExtensionSchema,
 ])
 
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
@@ -122,6 +129,13 @@ export const canvasEdgeSchema = z.object({
   toEnd: z.enum(['none', 'arrow']).optional(),
   color: canvasColorSchema.optional(),
   label: z.string().optional(),
+  /**
+   * Edge-target facets (ADR-0013 decision 5's edge slot): payload only —
+   * an edge has no content JSON Canvas cannot express, so unlike a node's
+   * key this one never carries an embed. Same escape hatch as the other two
+   * sites: an unreadable extension costs the extension, never the edge.
+   */
+  'x-whiteboard': facetsOnlyExtensionSchema.optional().catch(undefined),
 })
 
 export type CanvasEdge = z.infer<typeof canvasEdgeSchema>

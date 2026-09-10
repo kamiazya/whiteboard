@@ -463,3 +463,40 @@ describe('canvas comments on the canvas-level extension', () => {
     expect(parsed.success).toBe(true)
   })
 })
+
+describe("an edge's x-whiteboard", () => {
+  const edgeWith = (extension: unknown) =>
+    spatialCanvasSchema.parse({
+      nodes: [
+        { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', 'x-whiteboard': extension }],
+    }).edges[0]
+
+  it('carries a facets bucket, and nothing else', () => {
+    expect(edgeWith({ facets: { 'visual.edges/v0': { routing: 'curved' } } })).toEqual({
+      id: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+    })
+  })
+
+  // An edge has no content JSON Canvas cannot express, so unlike a node's key
+  // this one never carries an embed — a payload shaped like one is not an
+  // edge extension and costs the extension, never the edge.
+  it('refuses an embed, dropping the extension and keeping the edge', () => {
+    const edge = edgeWith({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V9' })
+    expect(edge).toEqual({ id: 'e1', fromNode: 'a', toNode: 'b' })
+  })
+
+  it('a malformed facet key costs the bucket, never the edge', () => {
+    expect(edgeWith({ facets: { 'not a key': {} } })).toEqual({
+      id: 'e1',
+      fromNode: 'a',
+      toNode: 'b',
+      'x-whiteboard': {},
+    })
+  })
+})

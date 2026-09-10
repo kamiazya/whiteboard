@@ -303,6 +303,8 @@ const COMMAND_COVERAGE = {
   'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',
   'set-node-color': 'not modelled: node inspector, single-field write',
   'set-node-facet': 'not modelled: facet panel, a plugin-owned payload with its own tests',
+  'set-edge-facet':
+    'not modelled: the edge twin of set-node-facet — a plugin-owned payload written to one edge, covered by commands.test.ts',
   'set-canvas-facet':
     'not modelled: the canvas-envelope twin of set-node-facet — a plugin-owned payload written to the envelope rather than to per-element state, covered by commands.test.ts',
   'set-node-file': 'not modelled: file picker dialog, single-field write',

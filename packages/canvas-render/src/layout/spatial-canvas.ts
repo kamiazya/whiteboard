@@ -44,7 +44,8 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
@@ -2328,25 +2329,40 @@ function composeEdgesAndLabels(
       ? { style: themeRouting }
       : {}),
   }
-  const anchors = assignEdgeAnchors(
-    canvas.nodes,
-    canvas.edges,
-    edgeStyle.style,
-    resolved.edgeSideOverrides,
-  )
+  // The SAME facet asked of one edge narrows the board's answer, field by
+  // field (ADR-0013's edge slot). Memoised per id because the side-choice
+  // search asks for an edge's style many times per layout, and each ask
+  // would otherwise re-resolve and re-parse a stored payload.
+  const ownStyles = new Map<string, VisualEdgesFacet>()
+  const ownStyleOf = (edge: CanvasEdge): VisualEdgesFacet => {
+    const hit = ownStyles.get(edge.id)
+    if (hit !== undefined) return hit
+    const own = resolveEdgeOwnStyle(edge)
+    ownStyles.set(edge.id, own)
+    return own
+  }
+  const styleOf = (edge: CanvasEdge): EdgeRoutingStyle =>
+    ownStyleOf(edge).routing ?? edgeStyle.style ?? 'straight'
+  const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, styleOf, resolved.edgeSideOverrides)
   const routedEdges = canvas.edges.map((edge) =>
-    composeEdge(canvas, edge, resolved, edgeStyle.style, anchors.get(edge.id)),
+    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id)),
   )
-  // Canvas-wide today; the same resolution is where a per-edge
-  // x-whiteboard override slots in later without touching the pipeline.
-  const lineJumps = edgeStyle.lineJumps ?? 'none'
-  const jumpsByEdge = lineJumps === 'arc' ? computeEdgeJumps(routedEdges) : undefined
+  // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
+  // hop" is asked of the edge that would draw the arc. Crossings are still
+  // computed over EVERY edge — who crosses whom is geometry, and an edge
+  // that wants no arcs of its own is still something its neighbours cross.
+  const hopsOf = (edge: CanvasEdge): boolean =>
+    (ownStyleOf(edge).lineJumps ?? edgeStyle.lineJumps ?? 'none') === 'arc'
+  const anyHops = canvas.edges.some(hopsOf)
+  const jumpsByEdge = anyHops ? computeEdgeJumps(routedEdges) : undefined
   const edgeContent =
     jumpsByEdge === undefined
       ? routedEdges
-      : routedEdges.map((edge) => {
+      : routedEdges.map((edge, index) => {
           const jumps = jumpsByEdge.get(edge.id)
-          return jumps === undefined ? edge : { ...edge, jumps }
+          const source = canvas.edges[index]
+          if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
+          return { ...edge, jumps }
         })
   const labelContent = canvas.edges
     .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))

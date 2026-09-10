@@ -2715,25 +2715,52 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         </div>
         {facetPanelOpen &&
           (() => {
+            // The panel is ABOUT whatever is selected. An edge selection wins
+            // over a node one because selecting an edge clears the node
+            // selection, so the two are never both live.
+            const edgeTarget =
+              selectedEdgeId === null
+                ? undefined
+                : canvas.edges.find((entry) => entry.id === selectedEdgeId)
             const target = canvas.nodes.find((entry) => entry.id === selectedId)
-            // Nothing selected: the inspector is ABOUT a node, so there is
-            // nothing for it to be about. It closes rather than standing
-            // there saying so — the same thing a press on blank canvas does
-            // to the context menu, which is the semantic this matches. The
-            // flag is cleared during render just above, so re-opening it
-            // later is an ordinary open rather than a stuck true.
-            if (target === undefined) return null
+            // Nothing selected: there is nothing for the inspector to be
+            // about. It closes rather than standing there saying so — the
+            // same thing a press on blank canvas does to the context menu,
+            // which is the semantic this matches. The flag is cleared during
+            // render just above, so re-opening it later is an ordinary open
+            // rather than a stuck true.
+            if (edgeTarget === undefined && target === undefined) return null
             return (
               <FacetFormPanel
-                node={target}
+                subject={
+                  edgeTarget !== undefined
+                    ? { kind: 'edge', edge: edgeTarget }
+                    : { kind: 'node', node: target as SpatialNode }
+                }
                 registry={bundledFacetRegistry}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
+                  if (edgeTarget !== undefined) {
+                    // One edge, because an edge selection is one edge —
+                    // there is no multi-edge selection to fan out over.
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-edge-facet' as const, id: edgeTarget.id, key, payload },
+                      ],
+                    })
+                    return
+                  }
                   // Applies to the whole selection, the semantics the menu
                   // bands had: reshaping five selected nodes must not become
                   // five visits to this panel.
                   const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-                  const ids = members.has(target.id) ? [...members] : [target.id]
+                  const ids =
+                    target !== undefined && members.has(target.id)
+                      ? [...members]
+                      : target === undefined
+                        ? []
+                        : [target.id]
                   applyResult({
                     state: { kind: 'idle' },
                     commands: ids.map((id) => ({

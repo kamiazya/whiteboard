@@ -1244,3 +1244,34 @@ describe('reconcileSpatialCanvas', () => {
     expect(Array.from(doc.oplogVersion().encode())).toEqual(Array.from(before))
   })
 })
+
+// The third `x-whiteboard` site (ADR-0013's edge slot). Edges are stored one
+// per key like nodes, so an edge's bucket has to survive the field mapping in
+// both directions — the node bucket did and the edge one did not, silently,
+// because nothing read it back.
+describe("an edge's facets bucket", () => {
+  test('round-trips through the Loro bridge, and a sibling edge keeps none', () => {
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+      ],
+      edges: [
+        {
+          id: 'e1',
+          fromNode: 'a',
+          toNode: 'b',
+          'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+        },
+        { id: 'e2', fromNode: 'b', toNode: 'a' },
+      ],
+    })
+
+    const read = readSpatialCanvas(doc)
+    expect(read.edges[0]?.['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
+    expect(read.edges[1]).not.toHaveProperty('x-whiteboard')
+  })
+})

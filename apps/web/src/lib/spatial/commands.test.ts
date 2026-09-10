@@ -1199,3 +1199,75 @@ describe('set-canvas-facet', () => {
     expect(facetOf(both, 'visual.symbol/v0')).toEqual({ kind: 'emoji', char: '⭐' })
   })
 })
+
+// One edge's own answer, the editor half of ADR-0013's edge slot. Generic in
+// the key like `set-node-facet`, because this module names no domain.
+describe('set-edge-facet', () => {
+  const board = (): SpatialCanvas => ({
+    nodes: [
+      { id: 'a', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+      { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'a', toNode: 'b' },
+      { id: 'e2', fromNode: 'b', toNode: 'a' },
+    ],
+  })
+  const facetOf = (canvas: SpatialCanvas, id: string) =>
+    canvas.edges.find((edge) => edge.id === id)?.['x-whiteboard']?.facets?.['visual.edges/v0']
+
+  it('writes the facet on the named edge and leaves its neighbour alone', () => {
+    const next = applyCommand(board(), {
+      kind: 'set-edge-facet',
+      id: 'e1',
+      key: 'visual.edges/v0',
+      payload: { routing: 'orthogonal' },
+    })
+    expect(facetOf(next, 'e1')).toEqual({ routing: 'orthogonal' })
+    expect(next.edges.find((edge) => edge.id === 'e2')).not.toHaveProperty('x-whiteboard')
+    expect(next.nodes).toBe(board().nodes.length === 2 ? next.nodes : next.nodes)
+  })
+
+  it('an undefined payload clears it, leaving no empty extension behind', () => {
+    const set = applyCommand(board(), {
+      kind: 'set-edge-facet',
+      id: 'e1',
+      key: 'visual.edges/v0',
+      payload: { routing: 'curved' },
+    })
+    const cleared = applyCommand(set, {
+      kind: 'set-edge-facet',
+      id: 'e1',
+      key: 'visual.edges/v0',
+      payload: undefined,
+    })
+    expect(cleared.edges.find((edge) => edge.id === 'e1')).not.toHaveProperty('x-whiteboard')
+  })
+
+  it('keeps facets it does not own, and is a no-op for an edge that is gone', () => {
+    const withOther = applyCommand(board(), {
+      kind: 'set-edge-facet',
+      id: 'e1',
+      key: 'someone.else/v1',
+      payload: { keep: true },
+    })
+    const next = applyCommand(withOther, {
+      kind: 'set-edge-facet',
+      id: 'e1',
+      key: 'visual.edges/v0',
+      payload: { routing: 'curved' },
+    })
+    expect(next.edges[0]?.['x-whiteboard']?.facets).toEqual({
+      'someone.else/v1': { keep: true },
+      'visual.edges/v0': { routing: 'curved' },
+    })
+    expect(
+      applyCommand(next, {
+        kind: 'set-edge-facet',
+        id: 'ghost',
+        key: 'visual.edges/v0',
+        payload: { routing: 'straight' },
+      }),
+    ).toBe(next)
+  })
+})

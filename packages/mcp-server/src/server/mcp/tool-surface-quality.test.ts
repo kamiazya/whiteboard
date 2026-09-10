@@ -126,7 +126,7 @@ describe('what the tool table costs to read', () => {
         // +181 for `themeFont` (a family and a URL), which the widget needs
         // and the model never reads: it is an OUTPUT field, so `visibleBytes`
         // — what the model is charged on every turn — does not move.
-        wireBytes: 15845,
+        wireBytes: 15781,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -140,7 +140,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 18794,
+        wireBytes: 19450,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -170,11 +170,11 @@ describe('what the tool table costs to read', () => {
       // skipped), and "colour every box inside the Clients group" from two
       // ops to one; six trials of six reached for the selector unprompted.
       wb_canvas_edit: {
-        visibleBytes: 10770,
-        wireBytes: 30798,
+        visibleBytes: 11098,
+        wireBytes: 31782,
         descriptionWords: 169,
-        parameters: 147,
-        undescribed: 133,
+        parameters: 151,
+        undescribed: 137,
         strays: 'refused',
         names: [],
       },
@@ -221,8 +221,8 @@ describe('what the tool table costs to read', () => {
         names: [],
       },
       wb_facet_list: {
-        visibleBytes: 422,
-        wireBytes: 1096,
+        visibleBytes: 429,
+        wireBytes: 1110,
         descriptionWords: 30,
         parameters: 1,
         undescribed: 1,
@@ -236,10 +236,10 @@ describe('what the tool table costs to read', () => {
       // once been able to act on. Rung 3 on that task: 5.7 calls and 7 tool
       // errors over three trials before, 2 calls and 0 after.
       wb_facet_set: {
-        visibleBytes: 2176,
-        wireBytes: 2995,
-        descriptionWords: 108,
-        parameters: 8,
+        visibleBytes: 2421,
+        wireBytes: 3240,
+        descriptionWords: 118,
+        parameters: 9,
         undescribed: 1,
         strays: 'refused',
         names: ['wb_facet_list'],
@@ -370,11 +370,17 @@ describe('what the tool table costs to read', () => {
       // two new undescribed parameters are that layer's, not this sweep's.
       // +32 for `style` answering on a markdown document too (see
       // wb_scene_render).
-      visibleBytes: 33461,
-      // +181, all of it canvas_view's themeFont (see its row).
-      wireBytes: 98312,
-      parameters: 268,
-      undescribed: 201,
+      // +580 when the edge facet slot landed (ADR-0013 decision 5's third
+      // site): `edgeId` on wb_facet_set with the sentence saying what it
+      // targets, plus the `x-whiteboard` bucket reaching `edge.patch` for
+      // free from the derived edge patch schema. The four new undescribed
+      // parameters are that bucket's own shape, which no tool describes.
+      visibleBytes: 34041,
+      // +1,835: the same bucket, spelled out in every edge-shaped payload
+      // the wire carries.
+      wireBytes: 100147,
+      parameters: 273,
+      undescribed: 205,
     })
   })
 

@@ -77,7 +77,7 @@ section forbids.
 ## The `x-whiteboard` extension contract
 
 Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**
-extension key, `x-whiteboard`, allowed at two sites:
+extension key, `x-whiteboard`, allowed at three sites:
 
 - **Document root** — canvas-target facets (`facets`, keyed
   `{namespace}.{name}/v{n}`: `visual.edges/v0` for edge routing and line
@@ -86,7 +86,12 @@ extension key, `x-whiteboard`, allowed at two sites:
   so a consumer that drops it still renders every edge, just with its own
   routing.
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
-  reference), the one piece of content JSON Canvas 1.0 cannot express.
+  reference), the one piece of content JSON Canvas 1.0 cannot express, and
+  node-target facets in the same `facets` bucket.
+- **An edge** — edge-target facets (`facets`) and nothing else: an edge has
+  no content JSON Canvas cannot express, so this site never carries an
+  embed. `visual.edges/v0` here overrides the board's routing for that one
+  edge, field by field.
 
 No other non-standard field is ever emitted, at any level. Foreign keys on an
 imported document (another tool's vendor fields) are stripped on parse and

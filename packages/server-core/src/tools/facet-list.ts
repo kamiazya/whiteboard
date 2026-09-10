@@ -12,10 +12,10 @@ import type { ServerDeps } from '../server-deps.js'
  * Read-only and deployment-scoped: the answer describes the registry, not
  * any document, so it takes no workspace or document id.
  */
-// The engine's own target set — not a wider guess. `workspace` and `edge`
-// are reserved in ADR-0013 but not implemented, and publishing them here
-// would advertise a write no registry can accept.
-const facetTargetSchema = z.enum(['document', 'canvas', 'node'])
+// The engine's own target set — not a wider guess. `workspace` is reserved
+// in ADR-0013 but not implemented, and publishing it here would advertise a
+// write no registry can accept.
+const facetTargetSchema = z.enum(['document', 'canvas', 'node', 'edge'])
 
 export const facetListInputSchema = z
   .object({

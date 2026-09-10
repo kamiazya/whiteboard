@@ -990,7 +990,7 @@ the table alone.
     only where `fontAvailable` says a face exists, else the bundled family
     plus a `font-missing` report — the declared family must be the measured
     one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
-    `visual.edges` is silent, `nodeShape` where a node's own facet is silent
+    no `visual.edges` speaks, `nodeShape` where a node's own facet is silent
     (never a group, which is a frame), `groupFrame` on group chrome.
     A body's FURNITURE is themed with its prose: the palette's optional
     `markdownChrome` becomes the `MarkdownTheme`'s `chromeColor` for every
