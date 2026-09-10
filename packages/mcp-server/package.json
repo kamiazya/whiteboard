@@ -84,7 +84,7 @@
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
     "daemon": "node dist/server/daemon-entry.js --daemon",
     "daemon:dev": "tsx watch src/server/index.ts --daemon",
-    "build:server": "tsup && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
+    "build:server": "tsdown && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
     "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
     "dev": "tsx watch src/server/index.ts",
     "test": "vitest run",
@@ -179,10 +179,10 @@
     "playwright": "^1.61.1",
     "react": "catalog:",
     "react-dom": "catalog:",
-    "tsup": "^8.5.0",
     "tsx": "^4.23.1",
-    "typescript": "^6.0.3",
+    "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "tsdown": "^0.23.0"
   }
 }

@@ -25,12 +25,13 @@ catalog:
   # shared build/test tooling
   # TypeScript 7 is the Go compiler: same type checking, ~4x faster. It ships
   # NO JS compiler API (the root export is `lib/version.cjs`), so a package
-  # that parses ASTs or emits .d.ts takes `@typescript/typescript6` instead —
-  # the 6.x API republished to sit beside this. Two do: tools/arch-lint (its
-  # scans), and packages/mcp-server, which pins 6 outright because tsup
-  # bundles rollup-plugin-dts 6.1.1 and nothing here can redirect a vendored
-  # resolution. `typescript-pin.test.ts` fails when tsup vendors 6.5.0 or
-  # later, so that pin cannot outlive its reason.
+  # that parses ASTs takes `@typescript/typescript6` instead — the 6.x API
+  # republished to sit beside this. One does: tools/arch-lint, for its scans.
+  #
+  # Emitting .d.ts used to need it too, which is why mcp-server was pinned to
+  # 6: tsup vendors rollup-plugin-dts 6.1.1 into its own dist, so no override
+  # reached it. That pin is gone — mcp-server builds with tsdown, whose dts
+  # plugin has a `tsgo` generator that reads TypeScript 7 directly.
   typescript: "^7.0.2"
   vite: "^8.2.0"
   vitest: "^5.0.0"
@@ -79,6 +80,17 @@ minimumReleaseAgeExclude:
   # older than the window and these entries stop doing anything.
   - vitest
   - "@vitest/*"
+  # TEMPORARY, and not a security patch: these let the tsup -> tsdown move be
+  # verified before the window elapses. tsdown 0.23.0 and rolldown-plugin-dts
+  # 0.28.5 were published 2026-09-03, so they age past it at 2026-09-10T17:46Z.
+  # REMOVE THESE THREE BEFORE MERGING — the entries exist only so the migration
+  # could be judged today, and the merged tree must install under the plain
+  # policy.
+  - tsdown
+  - rolldown-plugin-dts
+  # tsdown's own transitive dep, in the same window and only reachable
+  # through it.
+  - tinyexec
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

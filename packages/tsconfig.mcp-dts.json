@@ -1,0 +1,29 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": ["ES2022"],
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "strict": true,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "skipLibCheck": true,
+    "types": ["node"],
+    "typeRoots": ["./mcp-server/node_modules/@types", "../node_modules/@types"]
+  },
+  "include": [
+    "mcp-server/src/server/**/*.ts",
+    "mcp-server/src/shared/**/*.ts",
+    "mcp-server/src/cli/**/*.ts",
+    "*/src/**/*.ts"
+  ],
+  "exclude": [
+    "**/*.test.ts",
+    "**/*.test.tsx",
+    "**/*.bench.ts",
+    "**/test-utils/**",
+    "**/*.smoke-impl.ts",
+    "**/*.distribution-impl.ts",
+    "**/_test-*.ts"
+  ]
+}

@@ -1,18 +1,8 @@
-import { defineConfig } from 'tsup'
+import { defineConfig } from 'tsdown'
 
-// Decision B: the private @kamiazya/whiteboard-* workspace packages are bundled
-// INTO this package's dist via noExternal, so `npx @kamiazya/whiteboard-mcp`
-// does not 404 on unpublished workspace deps. Everything else stays external.
-//
-// splitting MUST stay on. Three modules compute paths from import.meta.url and
-// assume their canonical dist location:
-//   - shared/data-dir-secure.ts  (WHITEBOARD_ROOT = dist/.. → package root)
-//   - shared/package-version.ts  (require('../../package.json'))
-//   - server/export/headless-renderer.ts (bundled-font lookup under dist/assets/fonts/Roboto)
-// With splitting off, esbuild would inline them into deeper entries (e.g.
-// dist/server/mcp/index.js) where the relative offsets resolve wrong and break
-// widget/web-app/font resolution at runtime. Declaring them as entries + code
-// splitting keeps each at its canonical path so import.meta.url stays correct.
+// rolldown + the tsgo dts generator, which is what lets this package's
+// published .d.ts be emitted under TypeScript 7 at all — tsup vendors a
+// rollup-plugin-dts that needs the JS compiler API TS7 removed.
 export default defineConfig({
   entry: {
     'server/mcp/index': 'src/server/mcp/index.ts',
@@ -35,19 +25,22 @@ export default defineConfig({
     'cli/index': 'src/cli/index.ts',
   },
   outDir: 'dist',
-  tsconfig: 'tsconfig.server.json',
+  // Deliberately NOT tsconfig.server.json. rolldown-plugin-dts passes
+  // `--rootDir path.dirname(tsconfig)` to tsgo, so the tsconfig has to sit
+  // above every source the types are rolled up from — and `noExternal` below
+  // pulls nine sibling workspace packages into this dist. From mcp-server's own
+  // directory their files are outside rootDir and tsgo refuses to emit for them.
+  tsconfig: '../tsconfig.mcp-dts.json',
   format: 'esm',
   target: 'node22',
   platform: 'node',
-  splitting: true,
   sourcemap: true,
-  // A root tsconfig in the graph still declares the (now-deprecated) `baseUrl`;
-  // the TS build used for .d.ts emit errors on it under TS 6+. Silence it here
-  // rather than churn a shared root config.
-  dts: { compilerOptions: { ignoreDeprecations: '6.0' } },
+  dts: true,
   clean: true,
-  // yaml is CJS; bundling it into ESM triggers `require("process")` failures.
-  // Keep it external and list it in dependencies so npx finds it at runtime.
+  // package.json's exports, the bin, and the packaged smokes all name `.js`.
+  // tsdown defaults ESM to `.mjs`; this package is `"type": "module"`, so `.js`
+  // already means ESM and the default would rename every published path.
+  outExtensions: () => ({ js: '.js', dts: '.d.ts' }),
   external: ['yaml'],
   noExternal: [
     '@kamiazya/whiteboard-daemon-client',
