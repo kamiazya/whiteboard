@@ -342,19 +342,22 @@ describe('every workspace ships the path-scoped rule that teaches it', () => {
       'NO_RULE_OF_ITS_OWN names a workspace that is gone or now has its own rule — drop the entry',
     ).toEqual([])
 
-    // The rule has to name the WORKSPACE as well as the topic. `mentions`
-    // alone is satisfied by any passing use of the word, so an exemption
-    // could rest on prose that says nothing about the directory it exempts —
-    // the same shape as a check satisfied by an incidental import. Naming the
-    // path is also what lets a reader who opens `tools/checks` find where its
-    // guidance actually lives.
+    // The workspace and its subject have to appear in the SAME passage.
+    // `mentions` alone is satisfied by any passing use of the word, so an
+    // exemption could rest on prose that says nothing about the directory it
+    // exempts — the same shape as a check satisfied by an incidental import.
+    // Requiring both terms independently is only half a fix: a later edit can
+    // scatter them into unrelated paragraphs and still pass. These rules are
+    // written one paragraph per line, so a shared line IS a shared passage,
+    // and splitting the paragraph fails loudly rather than silently — which
+    // is the right way round for a reference somebody has to re-point.
     const unbacked = Object.entries(NO_RULE_OF_ITS_OWN).filter(([dir, entry]) => {
       const doc = readFileSync(join(REPO_ROOT, entry.documentedIn), 'utf-8')
-      return !doc.includes(dir) || !doc.includes(entry.mentions)
+      return !doc.split('\n').some((line) => line.includes(dir) && line.includes(entry.mentions))
     })
     expect(
       unbacked,
-      'an exemption says an always-on rule carries this workspace, and that rule no longer names the workspace or its subject — write the path-scoped rule, or fix the reason',
+      'an exemption says an always-on rule carries this workspace, and no single passage in that rule names both the workspace and its subject — write the path-scoped rule, or re-point the reason at the passage that does',
     ).toEqual([])
   })
 })
