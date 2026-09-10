@@ -180,7 +180,19 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // Plus the paint-order rule (groups behind what they hold, whatever the
 // stored order says) — a bug a person saw in a rendered diagram and no test
 // had caught.
-const CANVAS_RENDER_BUDGET = 88
+// 90 since the drawing score: the one instrument that judges the BOARD
+// rather than a mechanism, what it reads and where it is pinned, the
+// `annotates` link a scene needs to get from a label back to what it
+// names, and the first thing it found — tidy leaves every mistake inside a
+// frame where it was — which tidy's own scoreboard cannot see.
+// 91 once the column set was read against the literature: what a session
+// extending it has to know (a column earns its place by an empirical
+// ranking, not a catalogue; the vector stays a vector and the known blind
+// spot is pinned), and the router finding the new columns surfaced.
+// 92 for the sharing contract: the instruments read one polyline geometry,
+// the router never does, and the duplication left between them is the
+// independence — said where a session about to "deduplicate" it will read.
+const CANVAS_RENDER_BUDGET = 92
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

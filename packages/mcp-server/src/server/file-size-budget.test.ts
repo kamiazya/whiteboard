@@ -315,8 +315,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // type back from here. The palette a chrome previews resolves through the
   // same `pickThemeId`, so it sits here too.
   // +17 more for `paintOrderOf`, groups behind what they hold whatever the
-  // stored order says.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2402,
+  // stored order says. +4 for `annotates`, the link from a label's run back
+  // to the edge or container it names, set where each label is placed.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
