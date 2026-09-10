@@ -91,7 +91,10 @@ extension key, `x-whiteboard`, allowed at three sites:
 - **An edge** — edge-target facets (`facets`) and nothing else: an edge has
   no content JSON Canvas cannot express, so this site never carries an
   embed. `visual.edges/v0` here overrides the board's routing for that one
-  edge, field by field.
+  edge, field by field, and `visual.path/v0` carries the bends the line is
+  drawn through (`waypoints`, canvas coordinates, in order). A consumer that
+  drops the extension draws the same edge with its own routing — bends are
+  the clearest case of a rendering preference JSON Canvas does not model.
 
 No other non-standard field is ever emitted, at any level. Foreign keys on an
 imported document (another tool's vendor fields) are stripped on parse and

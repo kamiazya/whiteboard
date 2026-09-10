@@ -663,6 +663,34 @@ async function main() {
   )
   console.log('[e2e] wb_facet_set → a node-target facet is refused on an edge')
 
+  // A CONTRIBUTED router, end to end: `visual.path/v0` is the plugin's own
+  // facet, and the renderer draws it only through the router contribution
+  // point. Nothing in the type system connects the facet a tool writes to
+  // the polyline the daemon emits, so this is the step that would catch the
+  // contribution being dropped from the bundled plugin, or the bends being
+  // lost between the Loro edge bucket and the layout.
+  const BEND = { x: 4242, y: -1337 }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    edgeId: 'link',
+    facets: { 'visual.path/v0': { waypoints: [BEND] } },
+  })
+  const bent = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  if (typeof bent.svg !== 'string' || !bent.svg.includes(`${BEND.x},${BEND.y}`)) {
+    throw new Error('wb_scene_render drew no edge through the stored bend')
+  }
+  console.log('[e2e] wb_facet_set + wb_scene_render → the contributed router draws a stored bend')
+
+  // Cleared again, so every later step reads the canvas the rest of this
+  // smoke was written against.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    edgeId: 'link',
+    facets: { 'visual.path/v0': null },
+  })
+
   // Propose mode (ADR-0029). Through a real MCP client, so the SDK validates
   // the `proposed` payload against `proposalSchema` at runtime — the drift
   // the type system cannot see, and the reason this step is here rather than
