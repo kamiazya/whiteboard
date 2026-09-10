@@ -818,7 +818,15 @@ members positioned and `within` it: the group had landed at the cursor
 its top-left. A group this batch placed at the cursor is now placed
 around what goes in it, growing in every direction as members arrive,
 with the same wall and nesting rules as `region.set`, and `within`'s
-description says so. Rung 1: +107 bytes on `wb_canvas_edit`.
+description says so. Rung 1: +107 bytes on `wb_canvas_edit`. Rung 3 on
+the layered task, three trials: tool errors 1 to 0, calls 4 to 2.67 a
+trial, every board debt-free; the wrap task 3 of 3 at 3 calls. The first
+after-run refused two trials with the new wall message, and that was a
+second finding: a model adds all its groups first, the cursor puts them
+side by side, and one group's box around its members reached the next,
+still-empty one — and that empty box, covering a member of the first by
+accident, read as holding it. A cursor-placed group now holds nothing
+until it has been placed around something, whatever its box covers.
 
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
