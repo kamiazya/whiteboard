@@ -112,7 +112,10 @@ export async function withBackupMarker<T>(
       schemaVersion: 2,
       holder,
       startedAt,
-      expiresAt: Date.now() + ttlMs,
+      // Whole milliseconds, because the reader says `.int()` and fails OPEN:
+      // a fractional lifetime would otherwise write a marker that reads as
+      // no backup at all, for the whole pass.
+      expiresAt: Math.ceil(Date.now() + ttlMs),
     } satisfies z.infer<typeof markerSchema>
     await writeFile(markerPath(dataDir), `${JSON.stringify(marker, null, 2)}\n`, 'utf8').catch(
       () => {},
