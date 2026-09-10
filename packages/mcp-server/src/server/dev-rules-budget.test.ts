@@ -99,7 +99,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // under the boundary, so 294 of the 295 characters this row added are
   // charged to a step it did not take — a coarse instrument bills the whole
   // bucket to whoever crosses it.
-  '.claude/rules/architecture-map.md': 16,
+  // 17 for the cycle paragraph's rewrite: KNOWN_PACKAGE_CYCLES went empty
+  // when `packages/scene` took the renderer/plugin contract, and the
+  // paragraph now records what the entry WAS plus a correction — the
+  // extraction's commit gave a reason ("a router returns a scene node") the
+  // router contract then did not need. A reader who trusts a wrong reason
+  // extracts the wrong thing next time, so the correction is the rule's own
+  // business rather than only the commit's.
+  '.claude/rules/architecture-map.md': 17,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -191,7 +198,14 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 93 since a theme's palette reaches the markdown BODY's furniture: what
 // `markdownChrome` paints, that a comment body is deliberately not one of
 // them, and why a mono FAMILY is its own slice rather than a second token.
-const CANVAS_RENDER_BUDGET = 93
+// 95 since a contribution may supply the edge ALGORITHM: what crosses the
+// seam (a route, never a scene node) and why, that the side pass runs first
+// so sides are a router's input, the four ways it falls back, and the
+// measured reason selection is a reader rather than a widened payload — a
+// widened `routing` left the facet with no derived form, so the inspector's
+// routing control and the drag-parity property's payload samples both went
+// silently empty.
+const CANVAS_RENDER_BUDGET = 95
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

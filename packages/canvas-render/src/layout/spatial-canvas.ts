@@ -50,6 +50,7 @@ import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/ren
 import type {
   BoundingBox,
   DecorationContext,
+  EdgeRouter,
   NodeDecoration,
   RenderContribution,
   ResolvedEdgeNode,
@@ -83,6 +84,7 @@ import {
   nearestPointOnPolyline,
   placeCommentBubble,
 } from './comment-placement.js'
+import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
@@ -500,6 +502,8 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly contributions: readonly RenderContribution[]
   /** Their shapes, composed to namespaced ids. */
   readonly shapeTable: ShapeTable
+  /** Their edge routers, composed to namespaced ids. */
+  readonly routerTable: Readonly<Record<string, EdgeRouter>>
   /** Their theme assets, by namespaced id. */
   readonly themeTable: Readonly<Record<string, ThemeTokens>>
   /** The caller's resolver — what a canvas without a theme is painted with. */
@@ -1313,8 +1317,13 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
+  //
+  // A contribution may claim this edge; a decline or a name it did not
+  // register falls back to the built-in, never an error, so a document
+  // written against another deployment's plugins still draws.
   const routed = pullEdgeOntoOutlines(
-    routeEdge(canvas.nodes, edge, routingStyle, anchors),
+    contributedRoute(canvas, edge, options, anchors) ??
+      routeEdge(canvas.nodes, edge, routingStyle, anchors),
     canvas,
     edge,
     options.nodeOutlines,
@@ -1558,6 +1567,7 @@ function resolveContributions(
 ): {
   contributions: readonly RenderContribution[]
   shapeTable: ShapeTable
+  routerTable: Readonly<Record<string, EdgeRouter>>
   themeTable: Readonly<Record<string, ThemeTokens>>
   nodeOutlines: Readonly<Record<string, string>> | undefined
   explicitNodeOutlines: Readonly<Record<string, string>> | undefined
@@ -1567,6 +1577,7 @@ function resolveContributions(
   return {
     contributions,
     shapeTable: resolveShapeTable(contributions),
+    routerTable: resolveRouterTable(contributions),
     themeTable: resolveThemeTable(contributions),
     nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, contributions),
     explicitNodeOutlines: options.nodeOutlines,
@@ -2307,6 +2318,9 @@ function composeEdgesAndLabels(
     ownStyles.set(edge.id, own)
     return own
   }
+  // The side pass runs BEFORE any router does, over the whole edge set, so
+  // it works in the built-in vocabulary; a contributed router receives the
+  // sides it chose rather than being bound by them.
   const styleOf = (edge: CanvasEdge): EdgeRoutingStyle =>
     ownStyleOf(edge).routing ?? edgeStyle.style ?? 'straight'
   const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, styleOf, resolved.edgeSideOverrides)

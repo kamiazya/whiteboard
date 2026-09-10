@@ -96,9 +96,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // scene`. Nothing about the lane changed: the file was types only, so it
     // was never mutable and never in it — a module count moving without the
     // mutated set moving is what an extraction of pure types looks like.
+    //
+    // 63 since `layout/contributed-router.ts`, and outside the lane: every
+    // branch it has is a way of DECLINING — no contribution claims the edge,
+    // the name is one nobody registered, the router answers `null`, the path
+    // is under two points, an endpoint is missing — and each falls back to
+    // the built-in, which `contributed-router.test.ts` pins by name. A
+    // survivor there would say a fallback is unobserved, and the fallbacks
+    // are the whole module.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 62,
+      production: 63,
     })
   })
 

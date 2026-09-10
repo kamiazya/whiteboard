@@ -163,9 +163,20 @@ turning the import into a value import left the rest of arch-lint green.
 The dissolution this file predicted — a package below both holding the scene
 vocabulary, since it is a contract between the renderer and every plugin
 rather than the renderer's private type — landed as `packages/scene`. The
-second caller that made it worth doing was a plugin-contributed edge ROUTER,
-which returns a scene node and so cannot be a type-only edge at all. The
-guard did not retire with the cycle; it got stronger. `plugin-visual/src/
+second caller that made it worth doing was a plugin-contributed edge ROUTER.
+
+*Correction (same day): the extraction's commit said a router "returns a
+scene node and so cannot be a type-only edge at all". It does not. The
+router contract was then designed to return a ROUTE — points, and whether
+they curve — because terminating on a silhouette, the arrowheads, the paint
+and the ink are the renderer's and it applies them to every edge the same
+way; a router that built the node would be a second producer of that
+geometry. So the cycle was never forced to become a value edge. What made
+the extraction right is the condition this file actually stated — a second
+caller of the contract — and the debt itself: a loop no manifest could see,
+kept honest by a hand guard.*
+
+The guard did not retire with the cycle; it got stronger. `plugin-visual/src/
 renderer-independence.test.ts` now pins that there is no import of the
 renderer AT ALL, type-only or otherwise.
 

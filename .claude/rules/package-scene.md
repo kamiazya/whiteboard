@@ -13,8 +13,31 @@ paths:
   `Scene`). Plain TypeScript types, never Zod: a scene does not cross a
   process boundary, so per zod-schema-discipline it needs no runtime schema.
 - `contribution.ts`: the shape a plugin contributes to drawing — `NodeOutline`,
-  `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`, and
+  `ShapeContribution`/`ShapeTable`, `DecorationContext`/`NodeDecoration`,
+  the edge-router contract (`EdgeRouteRequest`/`EdgeRoute`/`EdgeRouter`), and
   `RenderContribution` itself.
+
+  A router returns a ROUTE — points, and whether they curve — never a scene
+  node. Terminating on a silhouette, the arrowheads, the paint and the ink
+  are the renderer's, and it applies them to every edge the same way; a
+  router that built the node would be a second producer of that geometry,
+  which is the drift canvas-render's one-producer rule exists to prevent.
+  It receives the sides the anchor pass chose (that pass runs first, across
+  the whole edge set, because fan-out needs to see every end sharing a
+  side), so sides are its input rather than its answer.
+
+A contribution SELECTS its router the way it selects a silhouette:
+`routers` by bare name plus `readRouting` answering one, with the renderer
+composing `${namespace}.${name}`. That is not ceremony — it is what stops a
+document naming another plugin's algorithm, and it means a plugin stores
+the choice in its OWN facet.
+
+Measured, and the reason it is a reader: widening `visual.edges/v0`'s
+`routing` to accept a namespaced id instead put the payload outside the
+vocabulary `deriveFacetForm` can read, so the facet silently produced no
+derived form — which is the routing control the inspector renders, and the
+payload samples the layout's own property test draws from. The engine's
+`facetPayloadSamples` caught it by answering with an empty list.
 
 ## Why the package exists
 
@@ -25,9 +48,16 @@ Before it, the contract lived inside `canvas-render`, and a plugin importing
 it closed a package cycle — held open only by every import back being
 type-only. That property is invisible to a manifest, so it cost a
 hand-written guard and an entry in arch-lint's `KNOWN_PACKAGE_CYCLES`, and
-it only held while the contract was types. A plugin-contributed edge ROUTER
-returns a scene node, which is a value, so the trick was about to stop
-working — that is the second caller `architecture-map.md` said to wait for.
+it only held while every import back was a type. A plugin-contributed edge
+ROUTER is the second caller `architecture-map.md` said to wait for.
+
+The extraction's own commit gave a WRONGER reason than that — it said a
+router returns a scene node, which is a value, so the type-only trick was
+about to stop working. The contract designed the next day returns a route
+instead, for the reason above, so the trick would have held. Kept here
+because the difference is the one worth teaching: what earned the package
+is a second caller of a contract plus a debt no manifest can see, never a
+prediction about what one caller's signature would force.
 
 ## What does NOT belong here
 

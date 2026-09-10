@@ -10,9 +10,15 @@
  */
 export type {
   DecorationContext,
+  EdgeRoute,
+  EdgeRouteAnchors,
+  EdgeRouteRequest,
+  EdgeRouter,
+  EdgeSide,
   NodeDecoration,
   NodeOutline,
   RenderContribution,
+  ScenePoint,
   ShapeContribution,
   ShapeTable,
 } from './contribution.js'

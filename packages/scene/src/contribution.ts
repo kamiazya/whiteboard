@@ -11,7 +11,7 @@
  * reaching for each other.
  */
 import type { ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Appearance, BoundingBox, SceneNode } from './scene-graph.js'
 
 /**
@@ -87,6 +87,68 @@ export interface DecorationContext {
  *  the union stays closed, contributions build from it. */
 export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
 
+/** A point in canvas coordinates — the same shape a scene path is made of. */
+export interface ScenePoint {
+  readonly x: number
+  readonly y: number
+}
+
+/** Which side of a node an edge leaves from or arrives at. */
+export type EdgeSide = 'top' | 'right' | 'bottom' | 'left'
+
+/**
+ * The endpoints a route must honour, as the anchor pass chose them.
+ *
+ * Chosen BEFORE routing and across the whole edge set — fan-out needs to see
+ * every end sharing a side, which no single route can — so this is a
+ * router's INPUT, never part of its answer. A router that returned sides
+ * would be returning what it was told.
+ */
+export interface EdgeRouteAnchors {
+  readonly fromSide: EdgeSide
+  readonly toSide: EdgeSide
+  /** Where on that side, when the fan-out moved the end off the midpoint. */
+  readonly from?: ScenePoint
+  readonly to?: ScenePoint
+}
+
+/** Everything a router is told about the one edge it is drawing. */
+export interface EdgeRouteRequest {
+  readonly edge: CanvasEdge
+  /** The endpoint nodes' boxes. A route needs their geometry, not their content. */
+  readonly from: BoundingBox
+  readonly to: BoundingBox
+  /**
+   * Every OTHER node's box. The two endpoints are deliberately absent: an
+   * edge has to reach them, so they are never obstacles.
+   */
+  readonly obstacles: readonly BoundingBox[]
+  readonly anchors: EdgeRouteAnchors | undefined
+}
+
+/**
+ * A route: the points, and whether they are drawn as a curve.
+ *
+ * Points rather than a scene node, on purpose. Terminating on a silhouette,
+ * the arrowheads, the paint and the ink are the renderer's, and it applies
+ * them to every edge the same way — a router that built the node would be a
+ * second producer of that geometry, which is the drift this package's own
+ * rules exist to prevent.
+ */
+export interface EdgeRoute {
+  readonly path: readonly ScenePoint[]
+  readonly rounded?: boolean
+}
+
+/**
+ * How one edge gets from end to end.
+ *
+ * `null` DECLINES — the renderer draws it with the built-in the canvas would
+ * otherwise have used. The same degradation an unknown shape id gets, and
+ * what lets a router answer for the cases it knows and no others.
+ */
+export type EdgeRouter = (request: EdgeRouteRequest) => EdgeRoute | null
+
 /**
  * Everything one plugin contributes to rendering.
  *
@@ -114,4 +176,30 @@ export interface RenderContribution {
   readonly themes?: Readonly<Record<string, ThemeTokens>>
   /** The theme id the CANVAS names (its own facet), or undefined for none. */
   readonly readTheme?: (canvas: SpatialCanvas) => string | undefined
+  /**
+   * Edge routers by BARE name, namespaced to `${namespace}.${name}` the way
+   * `shapes` are, and selected by `readRouting` the way a shape is selected
+   * by `readShape`.
+   */
+  readonly routers?: Readonly<Record<string, EdgeRouter>>
+  /**
+   * Which of THIS contribution's routers draws an edge — a bare name, or
+   * undefined to leave it to the built-ins.
+   *
+   * A reader rather than a facet key, and a bare name rather than a
+   * namespaced one, for the two reasons `readShape` is both: reading a facet
+   * is the plugin's job (through the engine's compat chain and schema), and
+   * the renderer composing the namespace is what stops a document naming
+   * another plugin's algorithm however it is written.
+   *
+   * A plugin declares its OWN facet to store the choice in. That is not a
+   * limitation but the pattern: `visual.shape/v0`'s `kind` enumerates the
+   * silhouettes `visual` ships, and a plugin adding one adds it to its own
+   * facet rather than widening somebody else's. The same holds here, and it
+   * is why `visual.edges/v0`'s `routing` stays the three built-in words —
+   * widening it to accept an id put the payload outside the vocabulary the
+   * engine derives an editor form from, which silently cost the routing
+   * control the inspector renders.
+   */
+  readonly readRouting?: (edge: CanvasEdge, canvas: SpatialCanvas) => string | undefined
 }

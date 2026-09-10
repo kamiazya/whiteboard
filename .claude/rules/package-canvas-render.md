@@ -1104,6 +1104,30 @@ the table alone.
     horizontal edge — because an unlit export would otherwise read as a
     working one.
 
+**An edge's ALGORITHM is contributable, not only the geometry it draws
+with.** A contribution registers `routers` by bare name and answers
+`readRouting` for the edges it claims; `composeEdge` asks each contribution
+in turn, composes `${namespace}.${name}`, and calls the router it finds. A
+decline (`null`), a name nobody registered, a path under two points, or a
+missing endpoint all fall back to the built-in — never an error, so a
+document written against another deployment's plugins still draws.
+
+What crosses the seam is a ROUTE (points, and whether they curve), never a
+scene node: `pullEdgeOntoOutlines`, the arrowheads, the appearance and the
+sketch ink stay here and apply to every edge the same way, so a router
+cannot become a second producer of that geometry. The side pass runs BEFORE
+any router — fan-out needs to see the whole edge set — so it works in the
+built-in vocabulary and a router receives its sides rather than choosing
+them.
+
+Selection is a READER rather than a widened payload, and that was measured
+rather than assumed: making `visual.edges/v0`'s `routing` accept a
+namespaced id put the payload outside `deriveFacetForm`'s vocabulary, so the
+facet produced no derived form — silently costing the routing control the
+inspector renders and the payload samples the drag-parity property draws
+from. A plugin stores its choice in its OWN facet, exactly as a plugin
+adding a silhouette adds it to its own rather than widening `visual.shape`.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
