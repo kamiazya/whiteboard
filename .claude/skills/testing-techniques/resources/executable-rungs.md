@@ -10,6 +10,8 @@ justified it (how many occurrences today, what the false-positive rate would be)
 |---|---|---|
 | `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`) and un-awaited `expectLoggedFailure`; a PR/issue number or `pre-fix` in a title |
 | `tools/biome-plugins/logger-argument-order.grit` | lint | `log.warning('msg', x)` in `mcp-server/src/server/**` (pino drops `x`) |
+| `tools/biome-plugins/route-refusal-shapes.grit` | lint | `c.notFound()` under `mcp-server/src/server/routes/**` — Hono's built-in 404 is `text/plain`, and every `/api/` refusal here is JSON |
+| `persisted-json-surface.test.ts` (`mcp-node`), `idb-stored-shapes-surface.test.ts` (`web-jsdom`) | scanned ledger | a stored shape added without a decision about what round-trips it |
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
 | `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
 | `tools/arch-lint/src/test-fixed-sleep-ledger.test.ts` | `arch-lint-node` | a file gaining a fixed-duration sleep (`setTimeout(r, N>0)` in a promise); per-file count pinned by equality, a ratchet |
@@ -29,8 +31,23 @@ justified it (how many occurrences today, what the false-positive rate would be)
 
 ## Adding a GritQL shape
 
-Biome runs the plugin over `**/*.test.ts(x)` and `**/*.browser.test.ts(x)` (`biome.json`
-`plugins[].includes`). What Biome's GritQL subset has been seen to support here: snippet
+Biome runs the plugin over the paths a `plugins[].includes` entry names (`biome.json`).
+
+**Anchor every include pattern with `**`, or the plugin runs over nothing.** A pattern
+written from the repo root (`packages/mcp-server/src/server/[**]/[*].ts`, wildcards bracketed
+here to keep this readable) matches no file, biome reports nothing, `pnpm lint` stays green,
+and the rule has never run. `logger-argument-order` shipped that way and was dead until
+measured — one real violating file under its own directory, only the pattern changed between
+runs: unanchored 0 diagnostics, `[**]/packages/mcp-server/src/server/[**]/[*].ts` 1,
+`[**]/mcp-server/src/server/[**]/[*].ts` 1, `[**]/src/server/[**]/[*].ts` 1. Its whole scope
+held no violation, so nothing was hiding behind it, but nothing would have been reported if
+one had been.
+
+The fixture pair below cannot catch that: it lints through a temporary config carrying the
+plugin and no `includes` at all, so it proves the RULES match and says nothing about the
+SCOPE. `biome-plugin.test.mjs` now checks both — every pattern is anchored, and a
+path-scoped plugin gets the bad fixture written at a real path inside its declared scope and
+linted through the repo's own config. What Biome's GritQL subset has been seen to support here: snippet
 patterns with `$vars`, `as $name`, `where`, `<:`, `contains`, `within`, `not`, `or { }`,
 `r"regex"` on a captured string, `$program` for the whole file, and
 `register_diagnostic(span, message, severity)`.
