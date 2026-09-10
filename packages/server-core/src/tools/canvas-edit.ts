@@ -248,7 +248,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
        * in put a row the caller had just drawn into a column inside a
        * default box, and every model then spent two calls undoing it.
        */
-      const placedByCursor = new Map<string, { width?: number; height?: number }>()
+      const placedByCursor = new Map<string, { width?: number; height?: number; placed?: true }>()
 
       // Resolved once, and only when some op creates a text node or changes
       // what decides whether one's text fits — the composition root's
@@ -386,6 +386,71 @@ export function createCanvasEditTool(deps: ServerDeps) {
         return placements
       }
 
+      /**
+       * Puts a group this batch placed at the cursor around what is put in
+       * it: the rects' bounds plus the gutter, joined with the group's
+       * current box when it already holds something, never smaller than a
+       * size it was given. A bystander in that box would become a member
+       * the next region.set deletes by omission, so it is a wall; a frame
+       * the box nests inside is not.
+       */
+      const placeAround = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        rects: readonly SpatialNode[],
+        given: { width?: number; height?: number; placed?: true },
+      ): SpatialNode => {
+        // The cursor's box holds nothing, whatever it happens to cover: only
+        // a box already placed around members is joined with the next.
+        const holding = given.placed === true
+        const around = rects.map((r) => ({
+          x: r.x - PLACEMENT_GUTTER_PX,
+          y: r.y - PLACEMENT_GUTTER_PX,
+          width: r.width + 2 * PLACEMENT_GUTTER_PX,
+          height: r.height + 2 * PLACEMENT_GUTTER_PX,
+        }))
+        const all = holding ? [...around, group] : around
+        const left = Math.min(...all.map((r) => r.x))
+        const top = Math.min(...all.map((r) => r.y))
+        const right = Math.max(...all.map((r) => r.x + r.width))
+        const bottom = Math.max(...all.map((r) => r.y + r.height))
+        const box = {
+          x: left,
+          y: top,
+          width: Math.max(given.width ?? 0, right - left),
+          height: Math.max(given.height ?? 0, bottom - top),
+        }
+        const members = new Set(rects.map((r) => r.id))
+        // Another group this batch put at the cursor, still holding
+        // nothing, is not a wall: it follows its own members when they
+        // come, and until then the cursor's spot is nobody's choice.
+        const unsettled = (node: SpatialNode) =>
+          placedByCursor.has(node.id) && placedByCursor.get(node.id)?.placed !== true
+        const wall = nodes.find(
+          (node) =>
+            node.id !== group.id &&
+            !members.has(node.id) &&
+            !enclosedBy(group)(node) &&
+            !unsettled(node) &&
+            overlaps(node, box) &&
+            !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
+        )
+        if (wall !== undefined) {
+          fail(
+            index,
+            opName,
+            `"${group.id}" placed around its members would reach "${wall.id}"; move "${wall.id}", or give "${group.id}" a position and size`,
+          )
+        }
+        const placed = { ...group, ...box }
+        nodes = nodes.map((node) => (node.id === group.id ? placed : node))
+        touchedNodes.add(group.id)
+        geometry.set(group.id, { id: group.id, ...box })
+        placedByCursor.set(group.id, { ...given, placed: true })
+        return placed
+      }
+
       /** The node ids one target selects, in canvas order; never empty. */
       const nodeTargets = (index: number, opName: string, target: Target): string[] => {
         if (target.id !== undefined) {
@@ -494,7 +559,8 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // y has no position, and guessing the other half would put it
             // somewhere the caller did not ask for either.
             const positioned = draft.x !== undefined && draft.y !== undefined
-            const group = op.within === undefined ? undefined : groupNamed(index, op.op, op.within)
+            const within = op.within ?? undefined
+            const group = within === undefined ? undefined : groupNamed(index, op.op, within)
             const at = positioned
               ? { x: draft.x as number, y: draft.y as number }
               : group === undefined
@@ -511,10 +577,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // are explicit, and the group grows so both hold — except before
             // its top-left, which growth keeps, so that one is refused.
             if (positioned && group !== undefined) {
-              if (parsed.data.x < group.x || parsed.data.y < group.y) {
-                fail(index, op.op, outsideDetail(id, parsed.data, group))
+              const unplaced = placedByCursor.get(group.id)
+              if (unplaced !== undefined) {
+                placeAround(index, op.op, group, [parsed.data], unplaced)
+              } else {
+                if (parsed.data.x < group.x || parsed.data.y < group.y) {
+                  fail(index, op.op, outsideDetail(id, parsed.data, group))
+                }
+                growToHold(index, op.op, group, [parsed.data])
               }
-              growToHold(index, op.op, group, [parsed.data])
             }
             nodes = [...nodes, parsed.data]
             touchedNodes.add(id)
@@ -676,7 +747,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
           case 'region.set': {
             let group = groupNamed(index, op.op, op.within)
-            const inScope = nodes.filter(enclosedBy(group))
+            // A group this batch put at the cursor and never placed around
+            // anything holds nothing, whatever the cursor's box covers.
+            const unsettled =
+              placedByCursor.get(group.id)?.placed !== true && placedByCursor.has(group.id)
+            const inScope = unsettled ? [] : nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
             const members = new Set(op.nodes)
             if (members.has(group.id)) {
@@ -716,37 +791,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // that box would become a member the next region.set deletes by
             // omission, so it is a wall; a frame the box nests inside is not.
             const unplaced = placedByCursor.get(group.id)
-            if (unplaced !== undefined && inScope.length === 0 && members.size > 0) {
+            if (unplaced !== undefined && unsettled && members.size > 0) {
               const rects = [...members].map((id) => nodeAt(id) as SpatialNode)
-              const left = Math.min(...rects.map((r) => r.x)) - PLACEMENT_GUTTER_PX
-              const top = Math.min(...rects.map((r) => r.y)) - PLACEMENT_GUTTER_PX
-              const right = Math.max(...rects.map((r) => r.x + r.width)) + PLACEMENT_GUTTER_PX
-              const bottom = Math.max(...rects.map((r) => r.y + r.height)) + PLACEMENT_GUTTER_PX
-              const box = {
-                x: left,
-                y: top,
-                width: Math.max(unplaced.width ?? 0, right - left),
-                height: Math.max(unplaced.height ?? 0, bottom - top),
-              }
-              const wall = nodes.find(
-                (node) =>
-                  node.id !== group.id &&
-                  !members.has(node.id) &&
-                  overlaps(node, box) &&
-                  !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
-              )
-              if (wall !== undefined) {
-                fail(
-                  index,
-                  op.op,
-                  `"${group.id}" placed around its members would reach "${wall.id}"; move "${wall.id}", or give "${group.id}" a position and size`,
-                )
-              }
-              group = { ...group, ...box }
-              nodes = nodes.map((node) => (node.id === group.id ? group : node))
-              touchedNodes.add(group.id)
-              geometry.set(group.id, { id: group.id, ...box })
-              placedByCursor.delete(group.id)
+              group = placeAround(index, op.op, group, rects, unplaced)
             }
 
             const dropped = inScope.filter((node) => !members.has(node.id))
