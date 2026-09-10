@@ -85,6 +85,10 @@ export function createThemedAppearance(
   // chrome, edges, labels — in the element's own paint; comment and
   // proposal chrome come from the base resolver untouched.
   const glow = tokens.glow === undefined ? {} : { glow: { radiusPx: tokens.glow.radiusPx } }
+  // The theme's line weight reaches node chrome and edges — never a label,
+  // which is filled text — and a group frame's own width, when the theme
+  // declares one, wins over it below.
+  const weight = tokens.strokeWidthPx === undefined ? {} : { strokeWidth: tokens.strokeWidthPx }
   const resolveNode = (node: SpatialNode): SpatialNodeAppearance => {
     const resolved = base.resolveNode(node)
     const framed =
@@ -96,7 +100,7 @@ export function createThemedAppearance(
             ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
           }
         : {}
-    return { ...resolved, appearance: { ...resolved.appearance, ...framed, ...glow } }
+    return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...glow } }
   }
   const themed: SpatialAppearanceResolver = Object.freeze({
     ...base,
@@ -104,7 +108,7 @@ export function createThemedAppearance(
     resolveNode,
     resolveEdge: (edge: CanvasEdge) => {
       const resolved = base.resolveEdge(edge)
-      return resolved === undefined ? undefined : { ...resolved, ...glow }
+      return resolved === undefined ? undefined : { ...resolved, ...weight, ...glow }
     },
     resolveLabel: () => ({ ...base.resolveLabel(), fontFamily, ...glow }),
   })

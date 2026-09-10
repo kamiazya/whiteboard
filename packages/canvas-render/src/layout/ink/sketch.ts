@@ -9,8 +9,9 @@
  *
  * - Every coordinate a stroke names lies within the primitive's own bounds
  *   plus `SKETCH_INK_REACH_PX`. The end points are displaced by at most
- *   `JITTER_PX` per axis and a quadratic's control point by at most
- *   `BOW_PX` off its chord, and a quadratic never leaves the triangle of
+ *   `JITTER_PX` per axis, a closing corner overshoots by `OVERSHOOT_PX`
+ *   along its side, and a quadratic's control point sits at most
+ *   `BOW_MAX_PX` off its chord; a quadratic never leaves the triangle of
  *   its three points — so checking the named points checks the curve.
  *   `sceneBounds` widens an inked node by exactly this constant.
  * - The randomness is `styleRandomFromSeed(seed)` and nothing else, consumed
@@ -20,8 +21,12 @@
  *
  * Two passes per outline, slightly different, is what reads as pencil
  * rather than a shaky single line — the same choice rough.js and tldraw
- * arrived at. A closed outline is one path per pass; the strokes stay
- * separate elements so a renderer can cap them round.
+ * arrived at. Each pass is ONE continuous sub-path: its vertices are
+ * displaced once and shared by the sides that meet there, so a corner is
+ * a join rather than a gap between two independently shaken ends, and a
+ * closed outline runs a little past its start the way a pen does. The bow
+ * of a side grows with its length (rough.js's rule) — an absolute amplitude
+ * left a 600px frame as straight as a ruler while a 60px chip wobbled.
  */
 import type { ArrowPolygon } from '../../edge-arrows.js'
 import type { BoundingBox, EdgeJumpPoint } from '../../scene-graph.js'
@@ -30,14 +35,17 @@ import type { NodeOutline } from '../nodes/node-outline.js'
 import { styleRandomFromSeed } from '../seed.js'
 
 /** How far (px) sketch ink may leave the semantic geometry it draws. */
-export const SKETCH_INK_REACH_PX = 4
+export const SKETCH_INK_REACH_PX = 8
 /** End-point displacement per axis, ±. */
 const JITTER_PX = 1.2
-/** Control-point offset off the chord, ±, at full segment length. */
-const BOW_PX = 2.4
-/** A segment shorter than this bows proportionally less, so a tiny side does not bulge. */
-const FULL_BOW_LENGTH_PX = 40
-const PASSES = 2
+/** Control-point offset off the chord, ±, per px of segment length. */
+const BOW_PER_PX = 0.012
+/** The bow's ceiling, so a wall-sized frame does not sag into its members. */
+const BOW_MAX_PX = 6
+/** How far a closed outline runs past its start along the last side. */
+const OVERSHOOT_PX = 3
+/** Outline and edge passes; the strokes a consumer sees first are these, in order. */
+export const SKETCH_PASSES = 2
 /** Points per half-ellipse arc. */
 const ARC_SAMPLES = 12
 /** Points around a whole ellipse. */
@@ -81,48 +89,79 @@ const isFiniteBox = (box: BoundingBox): boolean =>
 
 /** One jittered stroke from `a` to `b`: displaced ends, a bowed quadratic between. */
 function jittered(rng: Rng, a: Point, b: Point, jitter: number, bow: number): string {
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  const len = Math.hypot(dx, dy)
   const j = (): number => (rng() * 2 - 1) * jitter
   const ax = a.x + j()
   const ay = a.y + j()
   const bx = b.x + j()
   const by = b.y + j()
+  const [cx, cy] = bowed(rng, a, b, bow)
+  return `M ${num(ax)} ${num(ay)} Q ${num(cx)} ${num(cy)} ${num(bx)} ${num(by)}`
+}
+
+/** The control point of a bowed quadratic over the chord `a`→`b`: at most `bow` off it. */
+function bowed(rng: Rng, a: Point, b: Point, bow: number): readonly [number, number] {
+  const dx = b.x - a.x
+  const dy = b.y - a.y
+  const len = Math.hypot(dx, dy)
   const t = 0.35 + rng() * 0.3
-  const off = (rng() * 2 - 1) * bow * Math.min(1, len / FULL_BOW_LENGTH_PX)
+  const off = (rng() * 2 - 1) * bow
   const nx = len === 0 ? 0 : -dy / len
   const ny = len === 0 ? 0 : dx / len
-  const cx = a.x + dx * t + nx * off
-  const cy = a.y + dy * t + ny * off
-  return `M ${num(ax)} ${num(ay)} Q ${num(cx)} ${num(cy)} ${num(bx)} ${num(by)}`
+  return [a.x + dx * t + nx * off, a.y + dy * t + ny * off]
+}
+
+/** A side's bow amplitude: proportional to its length, capped. */
+const sideBow = (a: Point, b: Point): number =>
+  Math.min(BOW_MAX_PX, Math.hypot(b.x - a.x, b.y - a.y) * BOW_PER_PX)
+
+/** One displaced copy of each vertex, shared by the segments meeting there. */
+function shaken(rng: Rng, points: readonly Point[], amount: number): Point[] {
+  return points.map((p) => ({
+    x: p.x + (rng() * 2 - 1) * amount,
+    y: p.y + (rng() * 2 - 1) * amount,
+  }))
 }
 
 /**
- * One chord of a curve: ends displaced a little, and the control point at
- * the quadratic that passes through the arc's true midpoint (`2·mid −
- * (a+b)/2`), nudged. The control point sits outside the rim by the chord's
- * sagitta, which at 15° steps on the largest box this package lays out is
- * under 2px — inside the declared reach with the nudge.
+ * One chord of a curve, from its already-displaced ends, with the control
+ * point at the quadratic that passes through the arc's true midpoint
+ * (`2·mid − (a+b)/2`), nudged. The control point sits outside the rim by
+ * the chord's sagitta, which at 15° steps on the largest box this package
+ * lays out is under 2px — inside the declared reach with the nudge.
  */
-function curved(rng: Rng, a: Point, b: Point, mid: Point): string {
+function curvedTo(rng: Rng, a: Point, b: Point, mid: Point, to: Point): string {
   const j = (amount: number): number => (rng() * 2 - 1) * amount
-  const ax = a.x + j(CURVE_JITTER_PX)
-  const ay = a.y + j(CURVE_JITTER_PX)
-  const bx = b.x + j(CURVE_JITTER_PX)
-  const by = b.y + j(CURVE_JITTER_PX)
   const cx = 2 * mid.x - (a.x + b.x) / 2 + j(CURVE_BOW_PX)
   const cy = 2 * mid.y - (a.y + b.y) / 2 + j(CURVE_BOW_PX)
-  return `M ${num(ax)} ${num(ay)} Q ${num(cx)} ${num(cy)} ${num(bx)} ${num(by)}`
+  return `Q ${num(cx)} ${num(cy)} ${num(to.x)} ${num(to.y)}`
 }
 
-/** A straight-sided polyline (closed when `close`) as one path of jittered segments. */
+/**
+ * A straight-sided polyline (closed when `close`) as ONE continuous path:
+ * the vertices displaced once, a bowed quadratic per side between them,
+ * and — closed — a last side that runs `OVERSHOOT_PX` past the start.
+ */
 function strokePolyline(rng: Rng, points: readonly Point[], close: boolean): string {
-  const parts: string[] = []
   const n = points.length
-  const last = close ? n : n - 1
-  for (let i = 0; i < last; i += 1) {
-    parts.push(jittered(rng, points[i]!, points[(i + 1) % n]!, JITTER_PX, BOW_PX))
+  if (n === 0) return ''
+  const shook = shaken(rng, points, JITTER_PX)
+  const parts = [`M ${num(shook[0]!.x)} ${num(shook[0]!.y)}`]
+  const sides = close ? n : n - 1
+  for (let i = 0; i < sides; i += 1) {
+    const a = points[i]!
+    const b = points[(i + 1) % n]!
+    const [cx, cy] = bowed(rng, a, b, sideBow(a, b))
+    let to = shook[(i + 1) % n]!
+    if (close && i === sides - 1) {
+      const len = Math.hypot(b.x - a.x, b.y - a.y)
+      if (len > 0) {
+        to = {
+          x: to.x + ((b.x - a.x) / len) * OVERSHOOT_PX,
+          y: to.y + ((b.y - a.y) / len) * OVERSHOOT_PX,
+        }
+      }
+    }
+    parts.push(`Q ${num(cx)} ${num(cy)} ${num(to.x)} ${num(to.y)}`)
   }
   return parts.join(' ')
 }
@@ -135,11 +174,14 @@ interface Curve {
 }
 
 function strokeCurve(rng: Rng, curve: Curve): string {
-  const parts: string[] = []
   const n = curve.points.length
-  const last = curve.closed ? n : n - 1
-  for (let i = 0; i < last; i += 1) {
-    parts.push(curved(rng, curve.points[i]!, curve.points[(i + 1) % n]!, curve.mids[i]!))
+  if (n === 0) return ''
+  const shook = shaken(rng, curve.points, CURVE_JITTER_PX)
+  const parts = [`M ${num(shook[0]!.x)} ${num(shook[0]!.y)}`]
+  const chords = curve.closed ? n : n - 1
+  for (let i = 0; i < chords; i += 1) {
+    const next = (i + 1) % n
+    parts.push(curvedTo(rng, curve.points[i]!, curve.points[next]!, curve.mids[i]!, shook[next]!))
   }
   return parts.join(' ')
 }
@@ -315,7 +357,7 @@ export function sketchShape(
   // Every pass draws the whole silhouette as ONE path, so a rect is two
   // strokes and a cylinder — caps, sides and lid — is two as well; the
   // passes are what read as pencil, not the count of parts.
-  for (let pass = 0; pass < PASSES; pass += 1) {
+  for (let pass = 0; pass < SKETCH_PASSES; pass += 1) {
     strokes.push(
       silhouette.strokes
         .map((stroke) =>
@@ -368,7 +410,8 @@ export function sketchEdge(
   const rng = styleRandomFromSeed(seed)
   const drawn = resample(flattenDrawnEdgePath(path, options.jumps ?? [], options.rounded === true))
   const strokes: string[] = []
-  for (let pass = 0; pass < PASSES; pass += 1) strokes.push(strokePolyline(rng, drawn, false))
+  for (let pass = 0; pass < SKETCH_PASSES; pass += 1)
+    strokes.push(strokePolyline(rng, drawn, false))
   for (const arrow of options.arrows) {
     const [tip, left, right] = arrow.points
     if (tip === undefined || left === undefined || right === undefined) continue

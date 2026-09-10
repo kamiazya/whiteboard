@@ -1043,6 +1043,19 @@ the table alone.
     marks. Ink amplitude is in canvas units and is NOT scaled by
     `scaleScene`, the same class as arrowheads: a miniature's pencil line is
     relatively bolder, by design.
+    Three things make it read as a hand rather than a tremor, each pinned
+    by a test that a constant reverts: a side's bow is PROPORTIONAL to its
+    length (rough.js's rule, capped at `BOW_MAX_PX`) — an absolute 2.4px bow
+    left a 600px frame ruler-straight while a 60px chip wobbled; each pass
+    is ONE continuous sub-path whose vertices are displaced once and shared
+    by the sides meeting there, closing `OVERSHOOT_PX` past its start, where
+    four independently shaken sides left every corner an open gap; and the
+    backend paints the second pass at `SECOND_PASS_OPACITY`, since two
+    full-strength hairlines read as a ruled line drawn twice. The weight
+    itself is the theme's `strokeWidthPx` token (facet-engine), mapped onto
+    node chrome and edges by `theme-asset.ts` and never onto a label; sketch
+    declares 1.4. The themed pixel golden is the instrument that sees all of
+    this.
     **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the

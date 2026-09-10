@@ -91,6 +91,43 @@ describe('createThemedAppearance', () => {
   })
 })
 
+describe('stroke width tokens', () => {
+  it('a theme line weight reaches node chrome and edges, never labels; a group frame keeps its own', () => {
+    const themed = createThemedAppearance({
+      tokens: {
+        ...SAMPLE_THEME_TOKENS,
+        strokeWidthPx: 1.4,
+        defaults: { groupFrame: { strokeWidth: 2 } },
+      },
+      mode: 'light',
+      fontFamily: 'Roboto',
+    })
+    const text = themed.resolveNode({
+      id: 't',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      text: '',
+    })
+    expect(text.appearance?.strokeWidth).toBe(1.4)
+    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    expect(group.appearance?.strokeWidth).toBe(2)
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.strokeWidth).toBe(1.4)
+    expect(themed.resolveLabel().strokeWidth).toBeUndefined()
+    const bare = createThemedAppearance({
+      tokens: SAMPLE_THEME_TOKENS,
+      mode: 'light',
+      fontFamily: 'Roboto',
+    })
+    expect(
+      bare.resolveNode({ id: 't', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+        .appearance?.strokeWidth,
+    ).toBeUndefined()
+  })
+})
+
 describe('createSpatialTheme', () => {
   it('stamps its mode on the resolver so a layout can pick the matching theme palette', () => {
     expect(createSpatialTheme({ mode: 'light' }).mode).toBe('light')

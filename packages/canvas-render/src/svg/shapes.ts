@@ -7,7 +7,7 @@
  */
 import { edgeArrowPolygons } from '../edge-arrows.js'
 import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
-import { sketchEdge, sketchShape } from '../layout/ink/sketch.js'
+import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
 import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import type {
   Appearance,
@@ -162,13 +162,31 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
   const outlineStrokes = el(
     'g',
     { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-    strokes.strokes.map((d) => el('path', { d, ...strokeAttrs })),
+    strokes.strokes.map((d, pass) =>
+      el('path', { d, ...strokeAttrs, 'stroke-opacity': passOpacity(pass, strokeAttrs) }),
+    ),
   )
   return [underlay, withGlow(outlineStrokes, glowOf(node.appearance, tables))]
 }
 
 const HATCH_STROKE_WIDTH = 0.9
 const HATCH_OPACITY = 0.75
+/**
+ * The second pass of an outline is the pencil going over its own line: a
+ * lighter stroke on the same paper. At full strength two passes read as a
+ * doubled hairline rather than one hand-drawn line.
+ */
+const SECOND_PASS_OPACITY = 0.55
+
+/** The opacity a pass is painted at; a stroke past the passes (an arrowhead wing) keeps its own. */
+function passOpacity(
+  index: number,
+  attrs: { readonly 'stroke-opacity'?: number | undefined },
+): number | undefined {
+  const own = attrs['stroke-opacity']
+  if (index === 0 || index >= SKETCH_PASSES) return own
+  return own === undefined ? SECOND_PASS_OPACITY : own * SECOND_PASS_OPACITY
+}
 
 function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   // Non-rect silhouettes come from the shared decomposition (one producer
@@ -261,13 +279,13 @@ export function renderSketchEdge(
     el(
       'g',
       { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-      strokes.strokes.map((d) =>
+      strokes.strokes.map((d, pass) =>
         el('path', {
           d,
           fill: 'none',
           stroke: paint.stroke,
           'stroke-width': paint['stroke-width'],
-          'stroke-opacity': paint['stroke-opacity'],
+          'stroke-opacity': passOpacity(pass, paint),
           'stroke-dasharray': paint['stroke-dasharray'],
           role: PRESENTATION,
         }),

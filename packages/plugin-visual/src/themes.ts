@@ -89,6 +89,10 @@ const SKETCH_DARK: PaletteTokens = {
  */
 export const VISUAL_THEME_SKETCH: ThemeTokens = {
   ink: 'sketch',
+  // A pencil line, not a hairline: the two passes are painted at this
+  // weight and a lighter second one, and a 1px stroke doubled read as a
+  // ruled line drawn twice.
+  strokeWidthPx: 1.4,
   fontFamily: 'Yomogi',
   palette: { light: SKETCH_LIGHT, dark: SKETCH_DARK },
   defaults: {

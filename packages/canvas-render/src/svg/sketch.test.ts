@@ -40,6 +40,19 @@ describe('sketch ink in the SVG backend', () => {
     expect(svg).not.toMatch(/<rect [^>]*stroke=/)
   })
 
+  it('the second pass is lighter than the first, so the doubled line reads as a pencil going over', () => {
+    const svg = renderSceneToSvg({ nodes: [inkedRect] })
+    const paths = svg.match(/<path [^>]*>/g) ?? []
+    expect(paths).toHaveLength(2)
+    expect(paths[0]).not.toContain('stroke-opacity')
+    expect(paths[1]).toMatch(/stroke-opacity="0\.\d+"/)
+    const edgeSvg = renderSceneToSvg({ nodes: [inkedEdge] })
+    const edgePaths = edgeSvg.match(/<path [^>]*>/g) ?? []
+    expect(edgePaths[1]).toMatch(/stroke-opacity="0\.\d+"/)
+    // The arrowhead wings are single strokes and stay at full strength.
+    expect(edgePaths[2]).not.toContain('stroke-opacity')
+  })
+
   it('a hatched fill draws hatch lines in the stroke colour and no solid fill', () => {
     const svg = renderSceneToSvg({
       nodes: [{ ...inkedRect, ink: { style: 'sketch', seed: 42, fill: 'hatch' } }],
