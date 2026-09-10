@@ -586,6 +586,30 @@ const overlapsWithMargin = (a: ReturnType<typeof rectOf>, b: ReturnType<typeof r
   a.y < b.y + b.h + TIDY_MARGIN_PX &&
   b.y < a.y + a.h + TIDY_MARGIN_PX
 
+describe('convergence', () => {
+  it('settles a canvas whose passes cycle instead of reaching a fixpoint', () => {
+    // Found by the idempotence property (seed 1329482316) and pre-existing:
+    // the passes here have no fixpoint at all. A band snap moves n0 right,
+    // the overlap pass hops it back, and n2's own band follows a partner
+    // that moved — a period-3 cycle (n0 524<->528, n2 597<->608<->617). The
+    // loop used to stop at the iteration cap, so which of the three states
+    // it returned was decided by the cap's parity, and a second tidy walked
+    // the cycle further. It now stops at the first state it has already
+    // seen, which lies ON the cycle and therefore reproduces itself.
+    const nodes = [
+      box('n0', 524, 92, 41, 40),
+      box('n1', 572, 0, 41, 40),
+      box('n2', 572, 68, 60, 40),
+      box('n3', 572, 0, 101, 40),
+      box('n4', 460, 68, 101, 40),
+      box('n5', 0, 0, 41, 40),
+      box('n6', 0, 0, 41, 40),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+})
+
 describe('tidy properties', () => {
   const nodeArb = fc.record({
     x: fc.integer({ min: 0, max: 640 }),

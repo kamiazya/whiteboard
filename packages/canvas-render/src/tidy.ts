@@ -36,10 +36,12 @@
  * 2. Overlap resolution as a deterministic sequential PLACEMENT: units in
  *    document order claim their spot; a unit overlapping anything already
  *    placed (or any immobile unit) hops along one axis — chosen once from
- *    its first collision — until clear by `TIDY_MARGIN_PX`. Because every
- *    processed unit ends fully clear of everything before it, a second
- *    tidy has nothing to do: idempotence holds by construction (and is
- *    pinned by a property test).
+ *    its first collision — until clear by `TIDY_MARGIN_PX`. Every
+ *    processed unit ends fully clear of everything before it, but that
+ *    alone does not give idempotence: the passes can CYCLE, a snap and a
+ *    hop each undoing the other. The loop below therefore stops at the
+ *    first state it has already seen rather than only at a fixpoint, which
+ *    holds the property either way (both are pinned by tests).
  * 3. Edge legibility is deliberately NOT tidy's job — once nodes settle,
  *    the edge optimizer re-routes and re-sides edges on the
  *    committed render.
@@ -493,14 +495,28 @@ function tidyLevel(
   // not always stable. Iterating until nothing moves makes tidy's output
   // its own fixpoint — which is exactly what the idempotence property
   // requires: a second tidy starts at a fixpoint and moves nothing.
+  //
+  // Stopping at a state SEEN BEFORE, rather than only at one equal to the
+  // previous state, is what makes that hold when the passes CYCLE instead
+  // of settling — a band snap that the overlap pass undoes and the next
+  // band snap redoes elsewhere. A cycle has no fixpoint to reach, so the
+  // old test stopped at the iteration cap, mid-cycle, at whichever state
+  // the parity of the cap happened to land on; a second tidy resumed the
+  // cycle and moved the nodes again. Returning the first REPEATED state
+  // instead returns a state that lies on the cycle, so re-entering from it
+  // walks the same loop and stops on the same state — idempotent by the
+  // same argument, without either state being a fixpoint of the passes.
+  const signature = () => units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|')
+  const seen = new Set<string>([signature()])
   const TIDY_MAX_ITERATIONS = 8
   for (let i = 0; i < TIDY_MAX_ITERATIONS; i++) {
-    const before = units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|')
     alignBands(units, 'x')
     alignBands(units, 'y')
     if (options.edges !== undefined) orderRowsByEdges(units, options.edges)
     resolveOverlaps(units)
-    if (units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|') === before) break
+    const now = signature()
+    if (seen.has(now)) break
+    seen.add(now)
   }
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue
