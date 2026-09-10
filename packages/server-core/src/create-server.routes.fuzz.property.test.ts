@@ -127,6 +127,10 @@ const searchQueryArb = arbitraryForSchema(documentSearchInputSchema, { override 
 interface Route {
   readonly name: string
   readonly method: 'GET' | 'POST' | 'DELETE'
+  /** The pattern Hono registers, so the table is checked against what the app actually serves. */
+  readonly pattern: string
+  /** The schema the route parses with — one per row, and the row's own generator draws from it. */
+  readonly schema: z.ZodTypeAny
   readonly request: fc.Arbitrary<{ path: string; body?: Body; seeded: boolean }>
 }
 
@@ -139,6 +143,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'POST documents',
     method: 'POST',
+    pattern: '/api/v1/workspaces/:workspaceId/documents',
+    schema: wbDocumentCreateInputSchema,
     request: fc
       .tuple(workspaceArb, bodyArb(wbDocumentCreateInputSchema, ['workspaceId']))
       .map(([w, body]) => ({
@@ -150,6 +156,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET documents',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/documents',
+    schema: wbDocumentListInputSchema,
     request: workspaceArb.map((w) => ({
       path: `${ws(w)}/documents`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -158,6 +166,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET documents/:id',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId',
+    schema: wbDocumentResolveInputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: doc(w, d),
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -166,6 +176,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'DELETE documents/:id',
     method: 'DELETE',
+    pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId',
+    schema: wbDocumentDeleteInputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: doc(w, d),
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -174,6 +186,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET search',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/search',
+    schema: documentSearchInputSchema,
     request: fc.tuple(workspaceArb, searchQueryArb).map(([w, query]) => ({
       path: `${ws(w)}/search?${query}`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -182,6 +196,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET document-tags',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/document-tags',
+    schema: documentTagsInputSchema,
     request: workspaceArb.map((w) => ({
       path: `${ws(w)}/document-tags`,
       seeded: w === SEEDED_WORKSPACE_ID,
@@ -190,6 +206,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'POST documents/:id/linkify-mentions',
     method: 'POST',
+    pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions',
+    schema: linkifyMentionsInputSchema,
     request: fc
       .tuple(
         workspaceArb,
@@ -205,6 +223,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET documents/:id/backlinks',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks',
+    schema: backlinksInputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: `${doc(w, d)}/backlinks`,
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -213,6 +233,8 @@ const ROUTES: readonly Route[] = [
   {
     name: 'GET documents/:id/okf',
     method: 'GET',
+    pattern: '/api/v1/workspaces/:workspaceId/documents/:documentId/okf',
+    schema: exportOkfInputSchema,
     request: fc.tuple(workspaceArb, documentArb).map(([w, d]) => ({
       path: `${doc(w, d)}/okf`,
       seeded: w === SEEDED_WORKSPACE_ID && isSeededDocument(d),
@@ -220,25 +242,19 @@ const ROUTES: readonly Route[] = [
   },
 ]
 
-// The schemas the routes parse with, so a route added without a row here
-// is visible: every route the app registers must be named above.
-const ROUTE_SCHEMAS = [
-  wbDocumentCreateInputSchema,
-  wbDocumentListInputSchema,
-  wbDocumentResolveInputSchema,
-  wbDocumentDeleteInputSchema,
-  documentSearchInputSchema,
-  documentTagsInputSchema,
-  linkifyMentionsInputSchema,
-  backlinksInputSchema,
-  exportOkfInputSchema,
-]
-
 const answered = new Map<string, number>()
 
 describe('every /api/v1 route answers or refuses with a reason, never a 5xx', () => {
-  fcTest.prop([fc.constant(ROUTE_SCHEMAS.length)])('one schema per route row', (count) => {
-    expect(count).toBe(ROUTES.length)
+  // Read off the app itself, so a route added to `createServer` without a
+  // row here fails rather than staying unfuzzed. Middleware registers as
+  // `ALL` and is not a route.
+  fcTest.prop([fc.constant(null)])('every route the app registers has a row here', async () => {
+    const { app } = await seededServer()
+    const registered = app.routes
+      .filter((route) => route.method !== 'ALL')
+      .map((route) => `${route.method} ${route.path}`)
+    const rows = ROUTES.map((route) => `${route.method} ${route.pattern}`)
+    expect([...new Set(registered)].sort()).toEqual([...new Set(rows)].sort())
   })
 
   for (const route of ROUTES) {

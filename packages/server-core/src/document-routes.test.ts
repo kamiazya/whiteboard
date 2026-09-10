@@ -90,7 +90,10 @@ describe('canvas CRUD routes', () => {
         body: JSON.stringify({ path: 'note', kind: 'markdown', markdown, createWorkspace: true }),
       })
       expect(res.status, markdown).toBe(400)
-      expect(await res.json()).toMatchObject({ error: expect.stringContaining('OKF') })
+      // The stage is the reason; a message that dropped it would still say OKF.
+      expect(await res.json()).toMatchObject({
+        error: expect.stringContaining('OKF parse failed at frontmatter-schema:'),
+      })
     }
   })
 
