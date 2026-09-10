@@ -75,7 +75,7 @@ const sharedNodeFieldsSchema = z.object({
   // it learns what leaving the size out buys.
   width: sizeFieldSchema.describe('Box width; text wraps at it. Omit it for the default.'),
   height: sizeFieldSchema.describe(
-    'Box height. Omit it and a text box is made tall enough for its text; a named one is kept even when the text does not fit.',
+    'Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs.',
   ),
   color: canvasColorSchema.optional(),
   // `.catch` rather than a reject: an unrecognised extension payload — a

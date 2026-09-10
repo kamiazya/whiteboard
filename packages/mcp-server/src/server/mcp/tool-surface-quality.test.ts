@@ -123,7 +123,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 17836,
+        wireBytes: 17988,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -137,7 +137,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 21714,
+        wireBytes: 21900,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -172,15 +172,16 @@ describe('what the tool table costs to read', () => {
       // architecture board owed every one of its debts to a model writing
       // bottom/top on all eight edges, two of them between boxes on one
       // row (ADR-0031 §7): the sides now say what leaving them out buys.
-      // +952 for `width`/`height` described on the stored node schema and
+      // +1,045 for `width`/`height` described on the stored node schema and
       // the patch: ten parameters, because node.add emits them per node
       // type. Described because the lane's long-sentence task named a
-      // height too small for its text and the sentence was cut — a named
-      // height is kept (a recorded decision), so the schema is where a
-      // writer learns that omitting it buys a box tall enough.
+      // height too small for its text and the sentence was cut; the
+      // description alone moved nothing (3 of 3 still cut), so a height too
+      // short for its text is now refused with the number, and the
+      // description says so.
       wb_canvas_edit: {
-        visibleBytes: 12230,
-        wireBytes: 35178,
+        visibleBytes: 12323,
+        wireBytes: 35457,
         descriptionWords: 169,
         parameters: 147,
         undescribed: 119,
@@ -376,11 +377,11 @@ describe('what the tool table costs to read', () => {
       // +508 for the two edge sides described where the stored schema
       // declares them (see wb_canvas_edit); the wire moves on every tool
       // whose output carries an edge.
-      // +952 for the box sizes described where the stored schema declares
+      // +1,045 for the box sizes described where the stored schema declares
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
-      visibleBytes: 34889,
-      wireBytes: 107571,
+      visibleBytes: 34982,
+      wireBytes: 108188,
       parameters: 268,
       undescribed: 187,
     })

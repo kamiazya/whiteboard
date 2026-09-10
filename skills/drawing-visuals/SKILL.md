@@ -95,7 +95,7 @@ Once the intent is fixed, choose the node shape that fits:
 
 | Content | Node type |
 | --- | --- |
-| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width, and the box grows only when its height is omitted) |
+| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width; omit the height and the box is sized to its text) |
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
@@ -136,8 +136,9 @@ left-to-right flow. For everything else, let placement happen and finish with a 
 
 `color` is either a hex string like `#1971c2` or a JSON Canvas preset `"1"`-`"6"`; there is no
 semantic color name like `"primary"`. Text wraps at the box's width but the box never grows on its
-own: omit `height` and a text box is made tall enough for its text, while a height you name is kept
-even when the text does not fit — so name a height only when you know it holds the text.
+own: omit `height` and a text box is made tall enough for its text, while a height you name that is
+too short for the text is refused with the height it needs — so name a height only when you know it
+holds the text, or leave it out.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
@@ -195,8 +196,8 @@ renders a markdown document too, as a page. `fragment` is the only way to render
 whole document, and it addresses a group by label or a heading by text, never a region.
 Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
-- is text overflowing out of boxes? (a named height is kept even when the text does not fit; omit it
-  and the box is sized to its text)
+- is text overflowing out of boxes? (a write naming a height too short for its text is refused, so
+  this is a box resized by hand in the editor; omit the height and the box is sized to its text)
 - do edges connect to the intended nodes?
 - does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
