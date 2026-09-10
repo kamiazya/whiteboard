@@ -195,7 +195,9 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 93 for the matrix of the two router changes the drawing score rejected:
 // each cut the reference's reversals and raised the sweep's debt, and a
 // table is what stops the same shapes being argued for again.
-const CANVAS_RENDER_BUDGET = 93
+// 94 for the gap column: what the score reads between two boxes, and why
+// tidy's margin is held at the same number.
+const CANVAS_RENDER_BUDGET = 94
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

@@ -1314,9 +1314,11 @@ dissolution; until JSON Canvas gives one, containers-behind is the rule.
 a laid-out board as a person would: boxes over boxes, a box across a
 frame's edge, an edge's ink through a box it does not connect, a label
 over a box or under a frame, content cut to fit, a member jammed against
-its frame, a box a few pixels off its row — each a DEBT column that
-targets zero — beside crossings, bends, ink, uneven gaps, envelope and
-density as PRICE. The other instruments here each judge one mechanism on
+its frame, a box a few pixels off its row, two boxes with less than a
+readable gap between them (`READABLE_GAP_PX`, which tidy's margin is held
+at, since the score reading tidy's own output as jammed is what set it) —
+each a DEBT column that targets zero — beside crossings, bends, ink,
+uneven gaps, envelope and density as PRICE. The other instruments here each judge one mechanism on
 its own terms; this one judges what any of them, or a model through the
 tool surface, actually drew, and the MCP eval lane records it per board
 as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting

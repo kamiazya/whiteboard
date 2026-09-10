@@ -74,6 +74,7 @@ const DEBT_COLUMNS = [
   'textOverflow',
   'crampedMembers',
   'nearMisses',
+  'tightGaps',
   'edgeThroughFrame',
   'edgeOverlaps',
 ]
@@ -400,14 +401,24 @@ for (const task of tasks) {
   }
 }
 
+// A board owes no debt when every DEBT column reads zero; a board the score
+// could not read counts as owing, since nothing says it does not.
+const debtFree = (entry) =>
+  entry.score !== undefined && DEBT_COLUMNS.every((column) => entry.score[column] === 0)
 const byTask = new Map()
 for (const run of runs) {
-  const entry = byTask.get(run.task) ?? { passes: 0, trials: 0, calls: 0 }
+  const entry = byTask.get(run.task) ?? { passes: 0, trials: 0, calls: 0, boards: 0, debtFree: 0 }
   entry.trials += 1
   entry.calls += run.calls
   if (run.ok) entry.passes += 1
+  entry.boards += run.drawing.length
+  if (run.drawing.length > 0 && run.drawing.every(debtFree)) entry.debtFree += 1
   byTask.set(run.task, entry)
 }
+// The criterion ADR-0031 §7 named beside pass^k: of the tasks whose boards
+// were scored, the share whose boards owed no debt in EVERY trial. Null
+// when no board was scored (no --out, or no task names a board).
+const drawn = [...byTask.values()].filter((t) => t.boards > 0)
 const summary = {
   model: MODEL ?? 'cli default',
   trials: TRIALS,
@@ -416,6 +427,9 @@ const summary = {
   // pass@k: the task passed in at least one trial. pass^k: in every trial.
   passAtK: [...byTask.values()].filter((t) => t.passes > 0).length / byTask.size,
   passPowK: [...byTask.values()].filter((t) => t.passes === t.trials).length / byTask.size,
+  drawingTasks: drawn.length,
+  debtFreePowK:
+    drawn.length === 0 ? null : drawn.filter((t) => t.debtFree === t.trials).length / drawn.length,
   meanCalls: runs.reduce((n, r) => n + r.calls, 0) / runs.length,
   toolErrors: runs.reduce((n, r) => n + r.toolErrors, 0),
   totalCostUsd: runs.reduce((n, r) => n + (r.costUsd ?? 0), 0),

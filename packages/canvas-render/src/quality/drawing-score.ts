@@ -80,6 +80,13 @@ export interface DrawingScore {
    */
   readonly nearMisses: number
   /**
+   * Pairs of boxes side by side (or one above the other) with less than
+   * `READABLE_GAP_PX` between their facing edges, touching included: a row
+   * jammed shut, where nothing can be drawn between them and the eye reads
+   * two boxes as one. Overlap is the other column; this one starts at zero.
+   */
+  readonly tightGaps: number
+  /**
    * (edge, frame) pairs where the edge's ink runs inside a frame neither of
    * its ends belongs to — c-planarity's one rule, since a line through a
    * frame reads as a member of it.
@@ -138,6 +145,18 @@ export type Flow = 'down' | 'right' | 'up' | 'left' | 'none'
 export const NEAR_MISS_PX = 24
 /** The least a member should keep from its frame before it reads as cramped. */
 export const GROUP_PADDING_PX = 16
+/**
+ * The least two neighbours should keep between them: under it an edge
+ * between them has no room for its label or its arrowhead's runway, and a
+ * reader sees one shape. Twice the frame padding above — each box keeps
+ * its own clearance from the space between them, and a frame's border
+ * separates where two boxes' edges do not. Set from a reading rather than
+ * a catalogue: the board that made this a column kept 25px, which ELK's
+ * default node spacing (20) and tidy's former margin (24) would both have
+ * passed, and neither fits a label. Tidy's margin is held at this value
+ * so what tidy lays out is never charged.
+ */
+export const READABLE_GAP_PX = 32
 /** One grid step; two gaps within it read as equal. */
 export const EVEN_GAP_TOLERANCE_PX = 8
 
@@ -406,6 +425,24 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     if (dy > 0 && dy < NEAR_MISS_PX) nearMisses++
   })
 
+  // Boxes only: a member's distance from its frame is `crampedMembers`, and a
+  // box against a frame it is outside of is the frame's name being covered.
+  let tightGaps = 0
+  pairs(boxes, (a, b) => {
+    const ra = rectOf(a)
+    const rb = rectOf(b)
+    // The clear distance between facing edges on each axis; negative where
+    // the spans overlap on that axis. Beside each other means the spans
+    // overlap on the other axis, so a diagonal neighbour keeps no gap.
+    const gapX = Math.max(rb.x - (ra.x + ra.w), ra.x - (rb.x + rb.w))
+    const gapY = Math.max(rb.y - (ra.y + ra.h), ra.y - (rb.y + rb.h))
+    if (
+      (gapX >= 0 && gapX < READABLE_GAP_PX && gapY < 0) ||
+      (gapY >= 0 && gapY < READABLE_GAP_PX && gapX < 0)
+    )
+      tightGaps++
+  })
+
   const boxRects = boxes.map(rectOf)
   const unevenGaps =
     unevenGapsAlong(
@@ -442,6 +479,7 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     textOverflow,
     crampedMembers,
     nearMisses,
+    tightGaps,
     edgeThroughFrame,
     edgeOverlaps,
     sharedInkPx: Math.round(sharedInkPx),

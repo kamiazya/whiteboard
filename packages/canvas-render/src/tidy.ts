@@ -48,7 +48,7 @@ export interface TidyOptions {
 
 const TIDY_BAND_PX = 24
 const TIDY_GRID_PX = 8
-const TIDY_MARGIN_PX = 24
+const TIDY_MARGIN_PX = 32
 /**
  * Best-effort ceiling: movable units beyond this stay put (the rest of
  * the tidy still applies). Same class of bound as the edge optimizer's
