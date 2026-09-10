@@ -146,6 +146,12 @@ outside `deriveFacetForm`'s vocabulary — so the inspector shows the bends
 read-only. That is the form layer's honest signal rather than a gap: bends
 want a drag affordance, which is its own slice.
 
+The same `unsupported` answer is why the facet DECLARES `samples`. Anything
+generating payloads off the registry (canvas-render's live-drag parity
+property) would otherwise cover this facet by nothing while still reading as
+covering the edge facets. Two are declared: one bend, which is the shape a
+person places, and three, which is what makes the ORDER observable.
+
 The end-to-end guard is `pnpm smoke:e2e`. Nothing in the type system
 connects the facet `wb_facet_set` writes to the polyline the daemon emits,
 so that step is what would catch the contribution being dropped from the

@@ -465,8 +465,18 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
       fromNode: fc.constantFrom(...denseIds),
       toNode: fc.constantFrom(...denseIds),
       label: fc.option(fc.constant('flow'), { nil: undefined }),
+      // The EDGE's own facets, off the registry like the nodes' and the
+      // canvas's. An edge carries per-edge routing and the bends a
+      // contributed router draws, and both change the geometry this
+      // property compares — so a generator that drew none would agree about
+      // canvases where the two entry points have nothing to disagree over.
+      facets: facetsArb(bundledFacetRegistry, 'edge'),
     })
-    .map(({ label, ...edge }) => (label === undefined ? edge : { ...edge, label }))
+    .map(({ label, facets, ...edge }) => ({
+      ...edge,
+      ...(label === undefined ? {} : { label }),
+      ...(facets === undefined ? {} : { 'x-whiteboard': facets }),
+    }))
 
 /** The routing a scenario draws with, as the `visual.edges/v0` payload's two fields. */
 interface DrawnRouting {
@@ -556,15 +566,16 @@ describe('live-drag parity property (PBT)', () => {
     },
   )
 
-  it('every registered node and canvas facet contributes payloads the generator can draw', () => {
+  it('every registered node, canvas and edge facet contributes payloads the generator can draw', () => {
     // The mechanism's own failure mode: a facet whose schema `facetPayloadSamples`
     // cannot express widens the generator by nothing while the property still
     // reads as covering "the facets". Naming it here is what turns that into a
-    // decision — give the facet a derivable schema, or teach the sample deriver
-    // its shape.
+    // decision — give the facet a derivable schema, or declare the facet's
+    // own `samples` where its shape is outside that vocabulary for good.
     const empty = [
       ...facetCoverage(bundledFacetRegistry, 'node'),
       ...facetCoverage(bundledFacetRegistry, 'canvas'),
+      ...facetCoverage(bundledFacetRegistry, 'edge'),
     ]
       .filter((entry) => entry.samples.length === 0)
       .map((entry) => entry.key)
@@ -596,6 +607,31 @@ describe('live-drag parity property (PBT)', () => {
     const stripped = (canvas: SpatialCanvas): SpatialCanvas => ({
       ...canvas,
       nodes: canvas.nodes.map(({ 'x-whiteboard': _facets, ...node }) => node as SpatialNode),
+    })
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) => {
+      const canvas: SpatialCanvas = {
+        nodes: [...nodes],
+        edges: [...edges],
+        'x-whiteboard': withEdgesFacet(undefined, routing),
+      }
+      return (
+        JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
+        JSON.stringify(layoutSpatialCanvas(stripped(canvas), options).nodes)
+      )
+    })
+    expect(moved.length).toBeGreaterThanOrEqual(20)
+  })
+
+  it('the EDGE facets the generator draws actually change the layout it compares', () => {
+    // The third anti-vacuity guard, and the one this property shipped
+    // without: the edge target was opened while the generator still drew
+    // only node and canvas facets, so per-edge routing and the bends a
+    // contributed router draws were never in a compared canvas. The two
+    // entry points agreed for a reason unrelated to either.
+    const options = { measure, parseBody: fakeParseBody, appearance }
+    const stripped = (canvas: SpatialCanvas): SpatialCanvas => ({
+      ...canvas,
+      edges: canvas.edges.map(({ 'x-whiteboard': _facets, ...edge }) => edge as CanvasEdge),
     })
     const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) => {
       const canvas: SpatialCanvas = {

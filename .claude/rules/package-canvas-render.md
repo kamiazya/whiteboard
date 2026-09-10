@@ -1199,21 +1199,24 @@ adding a silhouette adds it to its own rather than widening `visual.shape`.
   keeps `layoutSpatialEdges` equal to the edge suffix of
   `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
   (`test-utils/facet-arbitraries.ts` over facet-engine's
-  `facetPayloadSamples`) for the nodes' facets AND the canvas's, rather
-  than a list of facet names, because what it guards is a second entry
-  point folding over FEWER facets than the committed layout — which a named
-  list cannot cover for a facet registered later. It shipped that way
-  twice: plain generated nodes, no silhouettes on either side, the property
-  agreeing vacuously while every edge into a shaped node floated off it for
-  a whole drag; then nodes with facets and a canvas with none, agreeing
-  again while a themed board's edges dragged crisp and straight. The second
-  is why the scenario also draws `style`: a theme is drawn under
-  `'document'` and never under the library's clean default. Three guards
-  keep it honest — one fails naming a registered node or canvas facet whose
-  schema yields no payloads, two fail when the drawn node facets, or the
-  drawn canvas facets, stop changing the layout being compared. Adding a
-  facet needs no edit here; adding one `deriveFacetForm` cannot express
-  fails the first guard, which is the decision point.
+  `facetPayloadSamples`) for all THREE targets — node, canvas and edge —
+  rather than a list of facet names, because what it guards is a second
+  entry point folding over FEWER facets than the committed layout, which a
+  named list cannot cover for a facet registered later. It shipped
+  vacuous three times, once per target: plain generated nodes, no
+  silhouettes on either side, while every edge into a shaped node floated
+  off it for a whole drag; then nodes with facets and a canvas with none,
+  while a themed board's edges dragged crisp and straight; then, when
+  ADR-0013's edge target opened, edges with none — per-edge routing and the
+  bends a contributed router draws never reached a compared canvas. The
+  second is why the scenario also draws `style`: a theme is drawn under
+  `'document'` and never under the library's clean default. Four guards
+  keep it honest — one fails naming a registered facet of any of the three
+  whose schema yields no payloads, three fail when the drawn node, canvas
+  or edge facets stop changing the layout being compared. Adding a facet
+  needs no edit here; adding one `deriveFacetForm` cannot express fails the
+  first guard until the facet DECLARES its own `samples`, which is the
+  decision point.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say

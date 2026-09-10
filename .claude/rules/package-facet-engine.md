@@ -70,13 +70,25 @@ paths:
   against a list of facet names, which is the difference between a property
   that covers the facet added next month and one that silently does not.
   Its vocabulary is `deriveFacetForm`'s, deliberately: a schema the form
-  layer answers `unsupported` for yields no payloads, which is the same
+  layer answers `unsupported` for derives no payloads, which is the same
   honest signal one level along, and a caller turns the empty list into a
   failure naming the facet. Every candidate is re-parsed through the
   facet's schema before it is returned, so a constraint the form layer
   cannot see (`visual.symbol`'s single-grapheme refinement) drops the
   payloads it rejects rather than handing back ones no reader resolves.
   `canvas-render` is the first consumer, through a dev-only dependency.
+
+  A facet in that `unsupported` case may DECLARE its payloads instead
+  (`FacetDefinition.samples`) — the escape the editor ladder already gives
+  a facet that needs a hand-written widget, so a generator asking the
+  registry still covers it. `visual.path/v0` is the first: a list of points
+  has no control in the derived vocabulary and never will, and the facet
+  was reaching the layout's own property test as nothing. The declaration
+  is bounded on both sides. `defineFacet` REFUSES it on a facet whose form
+  IS derivable, because a dead hand-written list beside a live derived one
+  is exactly the drift this layer exists to avoid; and the declared
+  payloads go through the same schema filter as derived ones, since a hand-
+  written list is what a schema change outgrows silently.
 
 - The THEME TOKEN CONTRACT and plugin ASSETS (ADR-0030 decision 3,
   `theme-tokens.ts` + the registry): `themeTokensSchema` is the one shape a

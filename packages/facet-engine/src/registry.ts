@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
+import { assertEditorSpecFits, deriveFacetForm, type FacetEditorSpec } from './form.js'
 import {
   type IconAsset,
   iconAssetSchema,
@@ -67,6 +67,20 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
    * deployment registered is data, and the renderer degrades on it.
    */
   readonly assetRefs?: Readonly<Record<string, AssetKind>>
+  /**
+   * Valid payloads, for the facet whose schema the form layer cannot
+   * express at all — a list of points, say. `facetPayloadSamples` answers
+   * with these instead of deriving, so a generator that asks the REGISTRY
+   * what a facet accepts still covers it.
+   *
+   * Only for that case: declaring them where a form CAN be derived throws
+   * at definition time, because a dead hand-written list beside a live
+   * derived one is the drift this whole layer exists to avoid. Each is
+   * parsed through the facet's own schema before it is handed out, so a
+   * declaration the schema has outgrown fails loudly rather than seeding a
+   * generator with a payload no reader resolves.
+   */
+  readonly samples?: readonly unknown[]
 }
 
 export type AssetKind = 'themes' | 'icons'
@@ -115,6 +129,17 @@ export function defineFacet<S extends z.ZodTypeAny>(
   }
   if (definition.assetRefs !== undefined) {
     assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
+  }
+  if (definition.samples !== undefined) {
+    if (definition.samples.length === 0) {
+      throw new Error(`facet "${definition.name}" declares an empty samples list`)
+    }
+    if (deriveFacetForm(definition.schema, definition.editor).kind !== 'unsupported') {
+      throw new Error(
+        `facet "${definition.name}" declares samples, but its form is derivable — ` +
+          'the declaration would never be read. Drop it, or say why the derived payloads are wrong.',
+      )
+    }
   }
   for (const tag of Object.keys(definition.compat ?? {})) {
     if (!VERSION_PATTERN.test(tag)) {

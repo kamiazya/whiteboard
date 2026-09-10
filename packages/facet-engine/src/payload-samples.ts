@@ -92,10 +92,17 @@ function combine(fields: readonly FacetFormField[]): readonly Record<string, unk
 
 /**
  * Payloads this build can write for `definition`, each already accepted by
- * its schema. Empty means the facet's schema is outside the form layer's
- * vocabulary — the honest signal that a generator over this facet needs a
- * hand-written sample, in the same way `deriveFacetForm` reports a facet
- * that needs a hand-written widget.
+ * its schema.
+ *
+ * A facet whose schema is outside the form layer's vocabulary derives
+ * nothing, and may DECLARE its payloads instead (`samples`) — the same
+ * escape `deriveFacetForm` gives a facet that needs a hand-written widget,
+ * so a generator asking the registry still covers it. Empty is then the
+ * honest signal that neither happened, which a caller's own completeness
+ * check turns into a failure naming the facet.
+ *
+ * Declared samples go through the same schema filter as derived ones: a
+ * hand-written list is exactly what a schema change outgrows silently.
  */
 export function facetPayloadSamples(definition: FacetDefinition): readonly unknown[] {
   const form = deriveFacetForm(definition.schema, definition.editor)
@@ -109,7 +116,7 @@ export function facetPayloadSamples(definition: FacetDefinition): readonly unkno
               ...payload,
             })),
           )
-        : []
+        : (definition.samples ?? [])
   const schema = definition.schema as z.ZodTypeAny
   return candidates.filter((candidate) => schema.safeParse(candidate).success)
 }

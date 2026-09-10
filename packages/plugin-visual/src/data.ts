@@ -207,6 +207,23 @@ export const visualPlugin = definePlugin({
       // board-wide list of points would mean nothing.
       targets: ['edge'],
       schema: visualPathFacetSchema,
+      // A list of points has no control in the derived vocabulary, so this
+      // facet derives no payloads — and a generator that asks the registry
+      // what a facet accepts would cover it by nothing while still reading
+      // as covering "the edge facets". Declared, it draws a real bend.
+      //
+      // One bend and three: one is the shape a person places, and three is
+      // what makes the ORDER observable, which a single point cannot.
+      samples: [
+        { waypoints: [{ x: 140, y: 260 }] },
+        {
+          waypoints: [
+            { x: 90, y: 300 },
+            { x: 210, y: 300 },
+            { x: 260, y: 120 },
+          ],
+        },
+      ],
     }),
     defineFacet({
       name: 'shape',

@@ -62,3 +62,49 @@ describe('facetPayloadSamples', () => {
     expect(facetPayloadSamples(nodeFacet('opaque', z.record(z.string(), z.unknown())))).toEqual([])
   })
 })
+
+describe('a facet that declares its own samples', () => {
+  const pathFacet = (samples?: readonly unknown[]) =>
+    defineFacet({
+      name: 'path',
+      displayName: 'Bends',
+      version: 'v0',
+      targets: ['edge'],
+      schema: z.object({ waypoints: z.array(z.object({ x: z.number(), y: z.number() })).min(1) }),
+      ...(samples === undefined ? {} : { samples }),
+    })
+
+  it('answers with them where the form layer can express nothing', () => {
+    // A list of points has no control in the derived vocabulary, so this
+    // facet's samples cannot be derived — and a generator over the registry
+    // would silently cover it by nothing.
+    expect(facetPayloadSamples(pathFacet())).toEqual([])
+    expect(facetPayloadSamples(pathFacet([{ waypoints: [{ x: 1, y: 2 }] }]))).toEqual([
+      { waypoints: [{ x: 1, y: 2 }] },
+    ])
+  })
+
+  it('drops a declared sample its own schema refuses, the way a derived one is dropped', () => {
+    // The declaration is written by hand and the schema moves without it, so
+    // it is checked exactly like a derived candidate — a stale sample must
+    // not reach a generator as a payload no reader resolves.
+    expect(
+      facetPayloadSamples(pathFacet([{ waypoints: [] }, { waypoints: [{ x: 1, y: 2 }] }])),
+    ).toEqual([{ waypoints: [{ x: 1, y: 2 }] }])
+  })
+
+  it('is refused at definition time on a facet the form layer CAN express', () => {
+    // Otherwise the declaration is dead: derived samples would answer and
+    // nothing would say the hand-written list is never read.
+    expect(() =>
+      defineFacet({
+        name: 'shape',
+        displayName: 'Shape',
+        version: 'v0',
+        targets: ['node'],
+        schema: z.object({ kind: z.enum(['ellipse', 'diamond']) }),
+        samples: [{ kind: 'ellipse' }],
+      }),
+    ).toThrow(/samples/)
+  })
+})
