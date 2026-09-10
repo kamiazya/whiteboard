@@ -9,7 +9,9 @@ import { z } from 'zod'
 // resolution-independent and scale is a raster-only concern.
 
 export const exportSvgRequestSchema = z.object({
-  padding: z.number().optional(),
+  // Same bounds as the PNG export's padding: it widens the bounds on every
+  // side, so a huge one is a document no reader can open.
+  padding: z.number().nonnegative().max(1024).optional(),
   frameId: z.string().optional(),
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),

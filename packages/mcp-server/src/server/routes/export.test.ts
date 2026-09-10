@@ -223,15 +223,25 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(await res.json()).toMatchObject({ error: 'invalid_request' })
   })
 
-  it('refuses a scale that is not positive before rendering', async () => {
+  it('refuses a scale or padding outside its bounds before rendering', async () => {
     const app = makeApp()
-    for (const scale of [0, -1]) {
+    // Too small sizes the render to nothing; too large asks for a target no
+    // process can allocate. Neither reaches the renderer.
+    for (const body of [
+      { scale: 0 },
+      { scale: -1 },
+      { scale: 1e308 },
+      { scale: 9 },
+      { padding: -1 },
+      { padding: 1e308 },
+    ]) {
       const res = await app.request('/api/w/s1/document/canvas-a/export', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ scale }),
+        body: JSON.stringify(body),
       })
-      expect(res.status, String(scale)).toBe(400)
+      expect(res.status, JSON.stringify(body)).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'invalid_request' })
     }
     expect(mockExportCanvasHeadless).not.toHaveBeenCalled()
   })
