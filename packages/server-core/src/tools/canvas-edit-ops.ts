@@ -4,7 +4,7 @@
  */
 import {
   annotationIdSchema,
-  canvasCommentSchema,
+  canvasCommentDraftSchema,
   canvasEdgeSchema,
   documentIdSchema,
   edgePatchFieldsSchema,
@@ -180,7 +180,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object({
       op: z.literal('comment.add'),
-      comment: canvasCommentSchema.partial({ id: true, x: true, y: true }),
+      comment: canvasCommentDraftSchema,
     })
     .strict(),
   /**
