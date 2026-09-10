@@ -64,6 +64,69 @@ describe('units', () => {
     expect(after.find((n) => n.id === 'inner')?.y).toBe(130 + dy)
     expect(after.find((n) => n.id === 'm')?.y).toBe(150 + dy)
   })
+
+  it('the outermost group is the root whatever the document order', () => {
+    // inner is listed before outer. Were every group its own root, inner
+    // would claim m first and outer would move alone; the outermost frame
+    // must still scoop both.
+    const nodes = [
+      box('inner', 20, 130, 120, 80, 'group'),
+      box('m', 160, 150, 60, 40),
+      box('outer', 0, 110, 300, 200, 'group'),
+      box('peer', 500, 96, 100, 60),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const dy = (after.find((n) => n.id === 'outer')?.y ?? 0) - 110
+    expect(dy).not.toBe(0)
+    expect(after.find((n) => n.id === 'inner')?.y).toBe(130 + dy)
+    expect(after.find((n) => n.id === 'm')?.y).toBe(150 + dy)
+  })
+
+  it('only a GROUP can be a frame: a group inside a large text box keeps its members', () => {
+    // The text box contains the group and its member outright. Were the
+    // text box read as a frame, the group would not be a unit root and its
+    // member would be free to move on its own; instead the group rides as
+    // one unit and the member's delta equals the group's.
+    const nodes = [
+      box('big', 0, 0, 400, 300),
+      box('g', 20, 20, 200, 120, 'group'),
+      box('m', 40, 40, 60, 40),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const g = after.find((n) => n.id === 'g')!
+    const m = after.find((n) => n.id === 'm')!
+    expect([g.x - 20, g.y - 20]).not.toEqual([0, 0])
+    expect([m.x - 40, m.y - 40]).toEqual([g.x - 20, g.y - 20])
+  })
+
+  it('two identical group boxes: the earlier one is the root and the later one rides with it', () => {
+    // Mutual containment ties; the document order breaks it. Both must
+    // move by one delta, never be separated as two overlapping units.
+    const nodes = [
+      box('first', 0, 0, 200, 120, 'group'),
+      box('second', 0, 0, 200, 120, 'group'),
+      box('m', 20, 20, 60, 40),
+      box('peer', 150, 0, 100, 60),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const first = after.find((n) => n.id === 'first')!
+    const second = after.find((n) => n.id === 'second')!
+    expect([second.x, second.y]).toEqual([first.x, first.y])
+    expect(moves.some((mv) => mv.id === 'peer' || mv.id === 'first')).toBe(true)
+    // The root is what scope and locks are read by: a scope naming only the
+    // later twin leaves the unit fixed, and the peer is what moves.
+    const scoped = tidyNodes(nodes, { scope: new Set(['second', 'peer']) })
+    expect(scoped.some((mv) => mv.id === 'first' || mv.id === 'second')).toBe(false)
+    expect(scoped.some((mv) => mv.id === 'peer')).toBe(true)
+    // Likewise a lock on the earlier twin holds the whole unit, so the later
+    // twin cannot be carried away from it; with the peer locked too, nothing
+    // is left to move and the overlap is accepted rather than the twins split.
+    const held = tidyNodes(nodes, { locked: (id) => id === 'first' || id === 'peer' })
+    expect(held).toEqual([])
+  })
 })
 
 describe('overlap resolution', () => {
@@ -97,6 +160,27 @@ describe('scope and totality', () => {
   it('an already tidy canvas produces no moves', () => {
     const nodes = [box('a', 0, 0), box('b', 200, 0)]
     expect(tidyNodes(nodes)).toEqual([])
+  })
+
+  it('two boxes exactly the margin apart are tidy; one pixel closer is not', () => {
+    // The promise is 32px BETWEEN boxes, so 32 is kept and 24 is separated
+    // — the boundary a strict-versus-inclusive comparison would move. Sizes
+    // and positions sit on the 8px grid so that grid snapping cannot be the
+    // move that is read.
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 32, 0)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 24, 0)])).not.toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 32)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 24)])).not.toEqual([])
+  })
+
+  it('a box with non-finite geometry is left out, and the rest still tidy', () => {
+    // NaN compares false with everything, so an unfiltered box would sit
+    // in every band and overlap nothing; it must neither move nor block.
+    const nodes = [box('a', 0, 0), box('b', 40, 0), box('ghost', Number.NaN, 0)]
+    const moves = tidyNodes(nodes)
+    expect(moves.some((m) => m.id === 'ghost')).toBe(false)
+    expect(moves.length).toBeGreaterThan(0)
+    expect(tidyNodes([box('a', 0, 0), box('b', 40, 0, Number.POSITIVE_INFINITY)])).toEqual([])
   })
 })
 

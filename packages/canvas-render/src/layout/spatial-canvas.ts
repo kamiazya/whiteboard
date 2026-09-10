@@ -82,7 +82,7 @@ import {
 } from './comment-placement.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
-import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
+import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
 import {
   assignEdgeAnchors,
   type EdgeAnchorOverride,
@@ -1389,11 +1389,9 @@ function composeEdgeLabel(
   edge: CanvasEdge,
   routed: ResolvedEdgeNode,
   options: ResolvedLayoutOptions,
+  obstacles: ReturnType<typeof labelObstacles>, // what the label must not lie over
 ): TextRunNode | undefined {
   if (edge.label === undefined || edge.label.trim().length === 0) return undefined
-  const center = edgeLabelAnchor(routed.path, routed.rounded === true)
-  if (!center) return undefined
-
   const labelAppearance = options.appearance.resolveLabel()
   const font = {
     family: labelAppearance.fontFamily ?? 'sans-serif',
@@ -1403,11 +1401,12 @@ function composeEdgeLabel(
     sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(edge.label, font)
-  const width = metrics.advanceWidth
-  const height = metrics.ascent + metrics.descent
+  const size = { w: metrics.advanceWidth, h: metrics.ascent + metrics.descent }
+  const center = edgeLabelPlacement(routed.path, size, obstacles, routed.rounded === true)
+  if (!center) return undefined
   return {
     kind: 'textRun',
-    bbox: { x: center.x - width / 2, y: center.y - height / 2, w: width, h: height },
+    bbox: { x: center.x - size.w / 2, y: center.y - size.h / 2, w: size.w, h: size.h },
     baseline: metrics.ascent,
     text: edge.label,
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
@@ -2322,8 +2321,9 @@ function composeEdgesAndLabels(
           const jumps = jumpsByEdge.get(edge.id)
           return jumps === undefined ? edge : { ...edge, jumps }
         })
+  const obstacles = labelObstacles(canvas.nodes)
   const labelContent = canvas.edges
-    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
+    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)
   return { content: [...edgeContent, ...labelContent], anchors }
 }
