@@ -782,8 +782,12 @@ where the round before wrote `within: null` or the group's own id on it.
 **The eighth reading (2026-09-10).** The whole lane with the `within`
 description: 24 of 24 pass, tool errors 5 to 0, `debtFreePowK` 0.8, two
 trials owing. One was a model's arithmetic: three frames whose centres
-sit 20px apart, drawn that way and kept by tidy (`nearMisses 2`), which
-no affordance answers yet. The other was the surface's, and every
+sit 20px apart, drawn that way and kept by tidy (`nearMisses 2`) — a
+whole tidy moved nothing on that board, since its bands read left and
+top edges while the score accepts centre and far edge too. Tidy now
+bands on those anchors as well, and the board reads no debt after one;
+what the surface cannot do is make a model run that tidy, and this one
+ran three scoped to a frame's members instead. The other was the surface's, and every
 wrap-a-chain trial paid for it: each sent one batch — three boxes in a
 row, two arrows, a group with no geometry, `region.set`, `tidy` — and then
 two more calls putting the boxes back where it had drawn them and sizing

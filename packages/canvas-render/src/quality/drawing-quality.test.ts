@@ -153,16 +153,19 @@ describe('drawing quality across the corpus', () => {
         // rather than the reversal and two bends it drew before.
         crossings: 1,
         bends: 1,
-        edgeLengthPx: 2708,
+        // 2708 -> 2663 and the envelope 840 -> 824 wide once tidy banded on
+        // centres: the narrower Storage frame, a few px off centre under
+        // the frames above, sits on their centre now.
+        edgeLengthPx: 2663,
         unevenGaps: 2,
-        envelopePx: { w: 840, h: 884 },
+        envelopePx: { w: 824, h: 884 },
         reversals: 0,
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0.13,
         bendsPerEdge: 0.13,
         overlapsPerPair: 0,
-        density: 0.17,
+        density: 0.18,
       },
       'sequence/reference': {
         nodes: 7,

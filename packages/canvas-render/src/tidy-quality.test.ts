@@ -131,7 +131,18 @@ describe('tidy quality scoreboard', () => {
       }
       for (const m of moves) {
         const before = byId.get(m.id) as TidyNode
-        if (m.x % TIDY_GRID_PX !== 0 || m.y % TIDY_GRID_PX !== 0) offGrid++
+        // Off the grid AND lined up with nothing: a unit centred under a
+        // wider neighbour, or flush with its far edge, keeps that anchor.
+        const n = { ...before, x: m.x, y: m.y }
+        const linedX = after.some(
+          (o) =>
+            o.id !== n.id &&
+            (o.x + o.width / 2 === n.x + n.width / 2 || o.x + o.width === n.x + n.width),
+        )
+        const linedY = after.some((o) => o.id !== n.id && o.y + o.height / 2 === n.y + n.height / 2)
+        if ((m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)) {
+          offGrid++
+        }
         if (m.x === before.x && m.y === before.y) noOpMoves++
         movedNodes++
         const d = Math.abs(m.x - before.x) + Math.abs(m.y - before.y)
@@ -158,9 +169,14 @@ describe('tidy quality scoreboard', () => {
       // tidy's own output as jammed (a 25px gap fits neither a label nor an
       // arrow's runway): every separation is a grid step wider, so the same
       // corpus is pushed 23% further and its worst case 55% further.
-      movedNodes: 1939,
-      displacement: 63515,
-      maxDisplacement: 725,
+      // 63515 -> 68923 and 1939 -> 1942 when banding grew from edges to the
+      // centre and far edge as well: a unit alone at its edge but a few px
+      // off a neighbour's centre now moves to it, and the worst case fell
+      // 725 -> 709 because a unit lined up that way is settled before the
+      // overlap pass, which then has less to push.
+      movedNodes: 1942,
+      displacement: 68923,
+      maxDisplacement: 709,
     })
   })
 
@@ -253,7 +269,8 @@ describe('tidy quality scoreboard', () => {
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
       movedNodes: 1957,
-      displacement: 139357,
+      // 139357 -> 145483 with banding on centres and far edges (above).
+      displacement: 145483,
     })
   })
 })

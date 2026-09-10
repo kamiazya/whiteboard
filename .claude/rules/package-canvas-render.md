@@ -1375,7 +1375,15 @@ y=300 to 304 beside out-of-scope row-mates at 300 (`nearMisses 1`), since
 a neighbour that cannot move IS the row, wherever it sits. What tidy still
 leaves is a near miss between members of DIFFERENT frames — bands run
 among a frame's members and among the frames, never across them — pinned
-as the two `architecture/tidied` owes. The grouped scoreboard's
+as the two `architecture/tidied` owes. **Bands read every anchor the
+score does** — the near edge, then the centre, then on x the far edge —
+since a lane board put a narrower frame 20px off centre under two wider
+ones and a tidy banding on left edges alone moved nothing (`nearMisses
+2`, before and after). A unit lined up by an earlier anchor is the truth
+for the later ones and never moves again; one centred that way keeps its
+centre off the grid if it must, which is the one exception the grid
+promise now states. Price: displacement +8.5% on the plain corpus, +4.4%
+grouped, every debt column unchanged. The grouped scoreboard's
 `stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).

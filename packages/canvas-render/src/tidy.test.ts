@@ -73,6 +73,47 @@ describe('band alignment', () => {
   })
 })
 
+describe('band alignment by centre and far edge', () => {
+  // The score reads a box as lined up on any anchor a drawer sets — left,
+  // centre, right; top, middle — so tidy lines up on the same ones. The
+  // lane drew a narrower frame centred under a wider one, 20px off, and a
+  // tidy banding on left edges alone could not see it.
+  it('a narrower box centred under a wider one, a few px off, snaps to its centre', () => {
+    const moves = tidyNodes([box('wide', 40, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
+    expect(moves).toEqual([{ id: 'narrow', x: 140, y: 200 }])
+  })
+
+  it("a box a few px off a wider box's right edge lines up on that edge", () => {
+    const moves = tidyNodes([box('wide', 0, 0, 600, 100), box('end', 410, 200, 200, 100)])
+    expect(moves).toEqual([{ id: 'end', x: 400, y: 200 }])
+  })
+
+  it("a taller box whose middle is near a neighbour's middle lines up on the middle", () => {
+    const moves = tidyNodes([box('a', 0, 0, 100, 60), box('tall', 200, -24, 100, 120)])
+    expect(moves).toEqual([{ id: 'tall', x: 200, y: -30 }])
+  })
+
+  it('a box lined up by its edge is the truth for a centre band, and does not move again', () => {
+    const moves = tidyNodes([
+      box('a', 0, 0, 100, 60),
+      box('b', 8, 96, 100, 60),
+      box('c', -96, 200, 300, 60),
+    ])
+    expect(moves).toEqual([
+      { id: 'b', x: 0, y: 96 },
+      { id: 'c', x: -100, y: 200 },
+    ])
+  })
+
+  it('a centred pair whose wide box is off the grid: the wide one takes the grid, the narrow one its centre', () => {
+    const moves = tidyNodes([box('wide', 42, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
+    expect(moves).toEqual([
+      { id: 'wide', x: 40, y: 0 },
+      { id: 'narrow', x: 140, y: 200 },
+    ])
+  })
+})
+
 describe('inside a frame', () => {
   const frame = (x: number, y: number, width: number, height: number) =>
     box('grp', x, y, width, height, 'group')
@@ -386,15 +427,27 @@ describe('tidy properties', () => {
   )
 
   fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
-    'every position it emits sits ON the grid',
+    "every position it emits sits ON the grid, or on a neighbour's centre or far edge",
     (rects) => {
       // Both movers land on the grid — banding snaps to it, and an overlap hop
-      // rounds AWAY from the collider onto it. Off-grid output would feed the
-      // next pass's banding and unsettle the fixpoint, so this is part of why
-      // idempotence holds rather than an independent nicety.
-      const offGrid = [...tidyNodes(plainNodes(rects))].filter(
-        (m) => m.x % TIDY_GRID_PX !== 0 || m.y % TIDY_GRID_PX !== 0,
-      )
+      // rounds AWAY from the collider onto it. The one exception is a unit
+      // lined up by its centre or far edge, which keeps that anchor exactly:
+      // the grid cannot move the neighbour it is centred under. Such a unit
+      // is never re-snapped, so off-grid output does not feed the next
+      // pass's banding, and the fixpoint idempotence needs still holds.
+      const nodes = plainNodes(rects)
+      const moves = [...tidyNodes(nodes)]
+      const after = applyMoves(nodes, moves)
+      const offGrid = moves.filter((m) => {
+        const n = after.find((c) => c.id === m.id) as TidyNode
+        const linedX = after.some(
+          (o) =>
+            o.id !== n.id &&
+            (o.x + o.width / 2 === n.x + n.width / 2 || o.x + o.width === n.x + n.width),
+        )
+        const linedY = after.some((o) => o.id !== n.id && o.y + o.height / 2 === n.y + n.height / 2)
+        return (m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)
+      })
       expect(offGrid).toEqual([])
     },
   )
