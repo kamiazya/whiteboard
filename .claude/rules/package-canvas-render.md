@@ -1225,11 +1225,16 @@ the table alone.
   tie-break, the hop direction, both hop arithmetics, the floor's y
   block) each failed one to three tests when the same edit was applied.
   Read that column before the row: `0` says nothing ran, and the edit is
-  still yours to apply. The four `tidy.ts` entries the ledger does hold
-  were each judged by all 42 and reasoned: `<=` on a margin or a floor
-  admits exactly the coordinate the hop or the shift then lands on, so
-  the mutant costs a no-op iteration and nothing else; skipping a zero
-  delta is a guard around an addition of zero.
+  still yours to apply. The `tidy.ts` entries the ledger does hold were
+  each judged by all 42 and reasoned: `<=` on a floor admits exactly the
+  coordinate the shift then lands on, so the mutant costs a no-op
+  iteration and nothing else; skipping a zero delta is a guard around an
+  addition of zero. The margin's `<=` was one of them until a centre or
+  far-edge snap began reading the margin to decide whether it may move:
+  the report said the entry "did not show up", the edit applied by hand
+  moved the grouped scoreboard, and the entry was dropped. An entry is a
+  claim about the tests that exist, and a new reader of the same
+  comparison can make it false.
   It also pays the other way: a survivor whose LOCATION looks obviously
   killable is often a sub-expression, not the statement. `edge-crossing-
   sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,
