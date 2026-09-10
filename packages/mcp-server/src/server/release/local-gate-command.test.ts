@@ -3,8 +3,8 @@
 // The gap this closes is not hypothetical: the five commands a session
 // habitually ran before pushing (`typecheck`, `lint`, `lint:noconsole`,
 // `audit`, `knip`) were a remembered list, not a derived one, and CI's
-// `check` job had grown three more (`intent:validate`, `secretlint`,
-// `test:scripts`). A remembered list reports green while the job it is
+// `check` job had grown three more (`intent:validate` — since retired with
+// its dependency — `secretlint`, `test:scripts`). A remembered list reports green while the job it is
 // standing in for would fail — which is worse than having no local command,
 // because it is trusted.
 //
