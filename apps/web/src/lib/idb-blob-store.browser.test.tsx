@@ -8,7 +8,7 @@
  * because every conformance case assumes a store that starts empty.
  */
 import { describeBlobStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
-import { describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import { clearNamedDb } from '../test-utils/browser-document.js'
 import { IdbBlobStore } from './idb-blob-store.js'
 
@@ -24,5 +24,23 @@ describe('IdbBlobStore', () => {
       store: new IdbBlobStore(DB_NAME),
       dispose: () => clearNamedDb(DB_NAME),
     }
+  })
+})
+
+describe('IdbBlobStore stored content type', () => {
+  it('reads back a blob stored with an empty content type, as a Blob types what it cannot parse', async () => {
+    await clearNamedDb(DB_NAME)
+    const store = new IdbBlobStore(DB_NAME)
+    const bytes = new Uint8Array([1, 2, 3])
+    // A type with a character outside printable ASCII is one a Blob will
+    // not carry, and what it answers instead is the empty string.
+    const untyped = new Blob([bytes], { type: 'image/\u2603' }).type
+    expect(untyped).toBe('')
+    const { ref } = await store.put({ bytes, contentType: untyped })
+    expect(await store.has({ ref })).toEqual({ exists: true })
+    const got = await store.get({ ref })
+    expect(Array.from(got?.bytes ?? [])).toEqual([1, 2, 3])
+    expect(got?.contentType).toBe('')
+    await clearNamedDb(DB_NAME)
   })
 })
