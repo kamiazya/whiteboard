@@ -259,35 +259,46 @@ describe('skills tool-surface guard', () => {
   // `.strict()` because the spec ENUMERATES its keys: an unlisted one is a
   // typo or a convention this repo has not agreed to, and either is worth a
   // deliberate edit here rather than silence.
-  it('every skill under skills/ has spec-conformant frontmatter', () => {
-    const schema = z
-      .object({
-        name: z.string().min(1),
-        description: z.string().min(1),
-        license: z.string().min(1).optional(),
-        compatibility: z.string().min(1).optional(),
-        'allowed-tools': z.string().min(1).optional(),
-        metadata: z.record(z.string(), z.string()).optional(),
-      })
-      .strict()
+  const skillFrontmatterSchema = z
+    .object({
+      name: z.string().min(1),
+      description: z.string().min(1),
+      license: z.string().min(1).optional(),
+      compatibility: z.string().min(1).optional(),
+      'allowed-tools': z.string().min(1).optional(),
+      metadata: z.record(z.string(), z.string()).optional(),
+    })
+    .strict()
 
-    const skillDirs = readdirSync(SKILLS_ROOT, { withFileTypes: true })
+  // The closing fence has to be a line of exactly three dashes. `\n---`
+  // alone also matches `----` and `---trailing junk`, which are not
+  // frontmatter terminators — and a file that ends that way parses as
+  // whatever happened to precede them, so the malformed part is simply not
+  // read rather than reported.
+  const FRONTMATTER = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/
+
+  function frontmatterProblems(root: string, minimum: number): string[] {
+    const dirs = readdirSync(root, { withFileTypes: true })
       .filter((entry) => entry.isDirectory())
       .map((entry) => entry.name)
     // Non-vacuity, the same reason the file's first assertion exists: a
     // schema that validates nothing passes.
-    expect(skillDirs.length).toBeGreaterThanOrEqual(3)
+    if (dirs.length < minimum) {
+      return [
+        `${displayPath(root)}: found ${dirs.length} skill directories, expected >= ${minimum}`,
+      ]
+    }
 
     const problems: string[] = []
-    for (const dir of skillDirs) {
-      const skillMdPath = resolve(SKILLS_ROOT, dir, 'SKILL.md')
+    for (const dir of dirs) {
+      const skillMdPath = resolve(root, dir, 'SKILL.md')
       if (!existsSync(skillMdPath)) {
-        problems.push(`${dir}: no SKILL.md`)
+        problems.push(`${displayPath(resolve(root, dir))}: no SKILL.md`)
         continue
       }
-      const frontmatter = readFileSync(skillMdPath, 'utf-8').match(/^---\n([\s\S]*?)\n---/)?.[1]
+      const frontmatter = readFileSync(skillMdPath, 'utf-8').match(FRONTMATTER)?.[1]
       if (frontmatter === undefined) {
-        problems.push(`${displayPath(skillMdPath)}: no --- frontmatter ---`)
+        problems.push(`${displayPath(skillMdPath)}: no --- frontmatter --- at the top of the file`)
         continue
       }
       let parsed: unknown
@@ -297,7 +308,7 @@ describe('skills tool-surface guard', () => {
         problems.push(`${displayPath(skillMdPath)}: frontmatter is not YAML (${String(err)})`)
         continue
       }
-      const result = schema.safeParse(parsed)
+      const result = skillFrontmatterSchema.safeParse(parsed)
       if (!result.success) {
         for (const issue of result.error.issues) {
           problems.push(`${displayPath(skillMdPath)}: ${issue.path.join('.')} ${issue.message}`)
@@ -306,13 +317,27 @@ describe('skills tool-surface guard', () => {
       }
       // A skill is addressed by its directory; a `name` saying otherwise
       // makes the two disagree wherever one of them is quoted.
-      if (result.data.name !== basename(dirname(skillMdPath))) {
+      if (result.data.name !== dir) {
         problems.push(
           `${displayPath(skillMdPath)}: name '${result.data.name}' is not its directory '${dir}'`,
         )
       }
     }
-    expect(problems).toEqual([])
+    return problems
+  }
+
+  it('every skill under skills/ has spec-conformant frontmatter', () => {
+    expect(frontmatterProblems(SKILLS_ROOT, 3)).toEqual([])
+  })
+
+  // The repo's OTHER skill root. These are the dev-workflow skills the
+  // agent loads, not the product's — a different audience, the same file
+  // format, and until now nothing read them as YAML at all. That gap was
+  // not theoretical: `testing-techniques` carried an unquoted description
+  // containing `Vitest 5's: traceView`, which YAML reads as a nested
+  // mapping, so its whole frontmatter failed to parse.
+  it('every skill under .claude/skills/ has spec-conformant frontmatter', () => {
+    expect(frontmatterProblems(resolve(repoRoot, '.claude/skills'), 10)).toEqual([])
   })
 
   // Sanity check that the walk itself has the shape the rest of this file
