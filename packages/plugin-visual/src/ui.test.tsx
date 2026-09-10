@@ -1,8 +1,15 @@
-// The plugin's own settings declaration and its one hand-written editor.
-// These assertions moved here with the code: they are about what `visual`
-// declares, not about the library it declares it with.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
-import { afterEach, describe, expect, it, vi } from 'vitest'
+// The plugin's own settings declaration. These assertions are about what
+// `visual` declares, not about the library it declares it with.
+//
+// It used to have one hand-written editor too, and this file tested it.
+// The picker vocabulary reaches that facet now, so the code it tested is
+// gone and the assertions became claims about the DECLARATION instead —
+// which is where they belonged: an option's payload is checked at
+// `defineFacet` time, and a declaration is a thing a node test can read
+// without rendering anything.
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, describe, expect, it } from 'vitest'
+import { visualPlugin } from './data.js'
 import { canDrawSymbol, SymbolMark, visualUi } from './ui.js'
 
 afterEach(cleanup)
@@ -16,23 +23,47 @@ describe('the visual plugin declares its own settings', () => {
     expect(visualUi.plugin).toBe('visual')
   })
 
-  it('ships a component only where the declared vocabulary cannot reach', () => {
-    const withComponent = visualUi.sections.filter((s) => s.component !== undefined)
-    // Shape and text are segmented choices — declarable. Only the badge
-    // picker (icons plus emoji) needs code.
-    expect(withComponent.map((s) => s.facet)).toEqual(['symbol'])
+  // `component` is the escape hatch, and NOTHING here takes it. Symbol was
+  // its last user: twelve choices across both arms of a union, which a
+  // field-level control could not express and a facet-level picker can.
+  //
+  // Pinned at zero rather than deleted, because the number going back up
+  // is the signal that matters. A next user is not forbidden — it is
+  // evidence the vocabulary is short again, the way it was short before.
+  it('takes the component escape hatch nowhere', () => {
+    expect(visualUi.sections.filter((s) => s.component !== undefined).map((s) => s.facet)).toEqual(
+      [],
+    )
   })
 })
 
-describe("visual's badge editor", () => {
-  it('renders the picker and writes the picked value', () => {
-    const write = vi.fn()
-    const Editor = visualUi.sections.find((s) => s.facet === 'symbol')?.component
-    expect(Editor).toBeDefined()
-    if (Editor === undefined) return
-    render(<Editor value={undefined} write={write} />)
-    fireEvent.click(screen.getByLabelText('Emoji ⭐'))
-    expect(write).toHaveBeenCalledWith({ kind: 'emoji', char: '⭐' })
+describe("visual's symbol picker", () => {
+  // What the hand-written editor's own test asserted — that picking ⭐
+  // writes `{kind:'emoji',char:'⭐'}` — is now a property of the
+  // DECLARATION, so it is read rather than rendered. The rendering half
+  // (a click on that option reaching the canvas) is pinned in
+  // apps/web's `canvas-settings.browser.test.tsx`, against the real vessel.
+  it('declares both arms of its union in one flat set of options', () => {
+    const symbol = visualPlugin.facets.find((f) => f.name === 'symbol')
+    const options = symbol?.editor?.picker?.options ?? []
+
+    expect(options.find((o) => o.label === 'Emoji ⭐')?.payload).toEqual({
+      kind: 'emoji',
+      char: '⭐',
+    })
+    expect(options.find((o) => o.label === 'Icon database')?.payload).toEqual({
+      kind: 'icon',
+      name: 'database',
+    })
+    // The absence option, which is what retired the Clear button beside it.
+    expect(options.find((o) => o.payload === null)?.label).toBe('No symbol')
+    // An icon option names REGISTERED geometry rather than shipping a
+    // drawing — the half that let this facet come back inside the
+    // vocabulary at all.
+    expect(options.find((o) => o.label === 'Icon database')?.glyph).toEqual({
+      kind: 'asset',
+      id: 'visual.database',
+    })
   })
 })
 
