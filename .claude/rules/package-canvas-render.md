@@ -1419,7 +1419,60 @@ the overlap pass moves the unit, both left `offGrid 1` (the PARTNER moves,
 not the unit); guarded anchors on iteration 0 only broke six centre-band
 examples, since the grid fallback undoes centre alignment; and seeding
 `lined` with every unit already on an anchor read `offGrid 81` and moved
-both scoreboards. **A unit's members are what is more than HALF inside a frame, not what
+both scoreboards. **A vote for the board's `flow` is proportional, because one vote per edge
+let a single arrow near 45 degrees decide it.** `mobile -> api` on the
+tidied architecture board runs (-320, 320); the classifier took `|dy| >=
+|dx|` and called it down. An 8px move made it (-328, 320) and it called it
+left — flipping a layered board's whole `flow` from `down` to `left` and
+`againstFlow`, which is defined against the winner, from 0 to 2. Nothing
+about the drawing had got harder to read; the frame of reference had
+moved, and a change measured across that boundary is mispriced by it (one
+was — see below). Each arrow now votes for BOTH axes in proportion to its
+own displacement, so an arrow on the diagonal splits its vote and decides
+nothing, and the 8px move changes each share by 0.01.
+
+The first fix tried was weighting a single vote by distance FROM the
+diagonal, and it was rejected by the corpus in one run: the architecture
+reference — a plainly top-down board — read `right` with `againstFlow` 5,
+because a layered diagram carries its layering in DIAGONAL edges (a client
+box down to the gateway) and the only axis-aligned edges are the two
+inside a row. Silencing the diagonals silences the structure. Worth
+knowing before reaching for the same shape again: the instrument wants
+edges near the diagonal to count for both readings, not for neither.
+
+What the correction also fixed was already written down and unacted on:
+`sequence/drafted` read `flow: right, againstFlow: 2` where its own
+reference read `up`, and the row's comment said why — "a tie, which goes
+to `right` by the fixed order". A draft was being charged two arrows
+against a flow the tie-break had invented. It now reads `up` with nothing
+against it, like the reference it is a draft of.
+
+**Making the frame's margin an ANCHOR rather than only a floor was
+measured, rejected, and RE-PRICED once the flow vote was corrected.** The
+two `nearMisses` left on `architecture/tidied` are a member moved in to its
+frame's 32px margin beside members already at 40 in theirs — one column to
+a reader, 8px apart to the score, and no band can see it, since bands run
+among a frame's members and among the frames, never across them. Snapping
+any member within `TIDY_BAND_PX` of the margin onto it clears them.
+
+Measured against the OLD vote it read: `nearMisses` 2 to 0 and ink 2047 to
+2019, but `flow` `down` to `left` with `againstFlow` 0 to 2, plus ink 1881
+to 1902 and `unevenGaps` 2 to 4 on the lane's board. Rejected on the flow
+row — a layered diagram that no longer reads top-down is not a trade worth
+two near misses.
+
+Re-measured against the CORRECTED vote, that row is not there at all:
+`flow` and `againstFlow` do not move, and what is left is `nearMisses` 2 to
+0 with ink 2047 to 2019 on one board against ink 1881 to 1902 and
+`unevenGaps` 2 to 4 on the other — debt down, price mixed, which is the
+ordering ADR-0031 §7 gives. The rejection was the instrument's, not the
+change's. What still stands against it is a DESIGN promise a test pins,
+that a frame padded to 40 is padded and tidy leaves it alone, and that is a
+decision rather than a measurement. Kept here in full because the first
+verdict was published, and a record that only says "rejected" would leave
+the next reader re-deriving a number that has since changed.
+
+**A unit's members are what is more than HALF inside a frame, not what
 its box fully contains.** A box drawn across a frame's edge belonged to
 no unit under containment: it became a singleton, and the overlap pass
 hopped it clear of the frame entirely — so tidy answered a straddle by

@@ -518,6 +518,36 @@ describe('scoreDrawing: flow', () => {
     expect(score(canvasOf(column)).flow).toBe('none')
   })
 
+  it('an edge within a few pixels of 45 degrees does not decide the flow', () => {
+    // Instrument validity. A plurality of one-vote-per-edge let an edge at
+    // 320 down by 320 left — a direction a reader would not call either —
+    // cast a full vote for whichever side of the diagonal it happened to
+    // fall on, and the winner then defines `againstFlow`. Measured on the
+    // corpus: `mobile -> api` at (-320, 320) voted down, and the same edge
+    // at (-328, 320) after an 8px move voted left, flipping a layered
+    // architecture board's flow from `down` to `left` and its `againstFlow`
+    // from 0 to 2. A vote is now weighted by how far the edge is FROM the
+    // diagonal, so an edge on it decides nothing.
+    const board = (dx: number) =>
+      canvasOf(
+        [
+          box('a', 800, 0),
+          box('b', 0, 0),
+          box('c', 800, 200),
+          box('d', 0, 200),
+          box('e', 400, 400),
+          box('f', 400, 800),
+          box('g', 800, 400),
+          box('h', 800 - dx, 400 + 320),
+        ],
+        [edge('ab', 'a', 'b'), edge('cd', 'c', 'd'), edge('ef', 'e', 'f'), edge('gh', 'g', 'h')],
+      )
+    // The only difference is 8px on one box, which moves `gh` from just
+    // inside the diagonal to just outside it.
+    expect(score(board(328)).flow).toBe(score(board(320)).flow)
+    expect(score(board(320)).flow).toBe('left')
+  })
+
   it('the arrowhead decides the direction, and an edge with none has no say', () => {
     const backwards = score(
       canvasOf(column, [
