@@ -161,6 +161,154 @@ describe('band alignment by centre and far edge', () => {
   })
 })
 
+describe('row order by edges', () => {
+  // Measured on the lane's layered board: a gateway at the left end of its
+  // row, fanning out to the two services beside it, reads crossings 1,
+  // bends 2, reversals 1; the same gateway between them reads 0, 0, 0 and
+  // a quarter less ink. Telling the model so, in the skill or in the call's
+  // answer, moved nothing in nine trials; tidy moves it.
+  const edges = (pairs: readonly (readonly [string, string])[]) =>
+    pairs.map(([fromNode, toNode]) => ({ fromNode, toNode }))
+
+  it('a box whose same-row connections all lie to one side swaps with the nearest of them', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves).toEqual([
+      { id: 'hub', x: 264, y: 0 },
+      { id: 'near', x: 40, y: 0 },
+    ])
+  })
+
+  it('a hub at the RIGHT end of its row swaps left, the mirror of the case above', () => {
+    // The mirror is its own branch, and the mutation lane found it pinned by
+    // nothing: deleting it left all 53 tests green.
+    const nodes = [
+      box('far', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('hub', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves).toEqual([
+      { id: 'near', x: 488, y: 0 },
+      { id: 'hub', x: 264, y: 0 },
+    ])
+  })
+
+  it('a group is neither hub nor partner: a row of frames keeps its order', () => {
+    const nodes = [
+      { id: 'g1', type: 'group' as const, x: 40, y: 0, width: 160, height: 60 },
+      { id: 'g2', type: 'group' as const, x: 264, y: 0, width: 160, height: 60 },
+      { id: 'g3', type: 'group' as const, x: 488, y: 0, width: 160, height: 60 },
+    ]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['g1', 'g2'],
+          ['g1', 'g3'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
+  it('a box with connections on both sides of it stays where it is', () => {
+    const nodes = [box('a', 40, 0, 160, 60), box('hub', 264, 0, 160, 60), box('b', 488, 0, 160, 60)]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['hub', 'a'],
+          ['hub', 'b'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
+  it('a single same-row connection is not a fan-out', () => {
+    const nodes = [box('a', 40, 0, 160, 60), box('b', 264, 0, 160, 60), box('c', 488, 0, 160, 60)]
+    expect(tidyNodes(nodes, { edges: edges([['a', 'c']]) })).toEqual([])
+  })
+
+  it('a connection to a box in another row does not count', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('below', 488, 200, 160, 60),
+    ]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['hub', 'near'],
+          ['hub', 'below'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
+  it('a locked partner is not swapped with, and the hub stays', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+      locked: (id) => id === 'near',
+    })
+    expect(moves).toEqual([])
+  })
+
+  it('a locked hub is not swapped, and its partner is not shuffled around it', () => {
+    // The mirror of the locked-partner case, and unpinned until the
+    // mutation lane implied it: without the guard the partner is moved to
+    // the locked hub's spot and then pushed off it again, for nothing.
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+      locked: (id) => id === 'hub',
+    })
+    expect(moves).toEqual([])
+  })
+
+  it('a second tidy with the same edges moves nothing', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const options = {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    }
+    const once = applyMoves(nodes, tidyNodes(nodes, options))
+    expect(tidyNodes(once, options)).toEqual([])
+  })
+})
+
 describe('inside a frame', () => {
   const frame = (x: number, y: number, width: number, height: number) =>
     box('grp', x, y, width, height, 'group')
@@ -438,6 +586,30 @@ const overlapsWithMargin = (a: ReturnType<typeof rectOf>, b: ReturnType<typeof r
   a.y < b.y + b.h + TIDY_MARGIN_PX &&
   b.y < a.y + a.h + TIDY_MARGIN_PX
 
+describe('convergence', () => {
+  it('settles a canvas whose passes cycle instead of reaching a fixpoint', () => {
+    // Found by the idempotence property (seed 1329482316) and pre-existing:
+    // the passes here have no fixpoint at all. A band snap moves n0 right,
+    // the overlap pass hops it back, and n2's own band follows a partner
+    // that moved — a period-3 cycle (n0 524<->528, n2 597<->608<->617). The
+    // loop used to stop at the iteration cap, so which of the three states
+    // it returned was decided by the cap's parity, and a second tidy walked
+    // the cycle further. It now stops at the first state it has already
+    // seen, which lies ON the cycle and therefore reproduces itself.
+    const nodes = [
+      box('n0', 524, 92, 41, 40),
+      box('n1', 572, 0, 41, 40),
+      box('n2', 572, 68, 60, 40),
+      box('n3', 572, 0, 101, 40),
+      box('n4', 460, 68, 101, 40),
+      box('n5', 0, 0, 41, 40),
+      box('n6', 0, 0, 41, 40),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+})
+
 describe('tidy properties', () => {
   const nodeArb = fc.record({
     x: fc.integer({ min: 0, max: 640 }),
@@ -450,6 +622,24 @@ describe('tidy properties', () => {
   })
   const plainNodes = (rects: readonly { x: number; y: number; w: number; h: number }[]) =>
     rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
+
+  fcTest.prop(
+    [
+      fc.array(nodeArb, { minLength: 2, maxLength: 8 }),
+      fc.array(fc.tuple(fc.nat({ max: 7 }), fc.nat({ max: 7 })), { maxLength: 8 }),
+    ],
+    withDefaults({ numRuns: 80 }),
+  )('with edges, tidy is still idempotent: a second pass moves nothing', (rects, pairs) => {
+    // Row order by edges swaps a hub with its nearest same-row target, and
+    // the swap ends the condition that caused it — but the overlap pass runs
+    // after, so the promise has to be checked over generated graphs too.
+    const nodes = plainNodes(rects)
+    const edges = pairs
+      .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
+      .map(([a, b]) => ({ fromNode: `n${a}`, toNode: `n${b}` }))
+    const once = applyMoves(nodes, tidyNodes(nodes, { edges }))
+    expect(tidyNodes(once, { edges })).toEqual([])
+  })
 
   fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
     'tidy is idempotent: a second pass moves nothing',

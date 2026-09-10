@@ -2,7 +2,7 @@
  * One-tap tidy: deterministic normalization that respects the author's
  * rough topology instead of re-laying the canvas out wholesale.
  *
- * Three passes over UNITS (an outermost group and everything its box
+ * Four passes over UNITS (an outermost group and everything its box
  * contains move as one; every other node is its own unit), applied INSIDE
  * each frame first and then at the level of the frames themselves:
  *
@@ -27,13 +27,21 @@
  *    unit in no band takes the grid at its edge; one centred under a wider
  *    neighbour keeps that centre, off the grid if it must, since a 4px miss
  *    on a centre reads as carelessly as one on a row.
+ * 1b. Row order by edges, when the caller passes them: a box whose
+ *    connections along its own row all lie to one side of it swaps places
+ *    with the nearest of them, so a hub that fans out sits between the
+ *    boxes it fans out to rather than at the end of the row, where the
+ *    router paid for the placement with a crossing or a loop. The swap
+ *    ends the condition that caused it, so it happens once.
  * 2. Overlap resolution as a deterministic sequential PLACEMENT: units in
  *    document order claim their spot; a unit overlapping anything already
  *    placed (or any immobile unit) hops along one axis — chosen once from
- *    its first collision — until clear by `TIDY_MARGIN_PX`. Because every
- *    processed unit ends fully clear of everything before it, a second
- *    tidy has nothing to do: idempotence holds by construction (and is
- *    pinned by a property test).
+ *    its first collision — until clear by `TIDY_MARGIN_PX`. Every
+ *    processed unit ends fully clear of everything before it, but that
+ *    alone does not give idempotence: the passes can CYCLE, a snap and a
+ *    hop each undoing the other. The loop below therefore stops at the
+ *    first state it has already seen rather than only at a fixpoint, which
+ *    holds the property either way (both are pinned by tests).
  * 3. Edge legibility is deliberately NOT tidy's job — once nodes settle,
  *    the edge optimizer re-routes and re-sides edges on the
  *    committed render.
@@ -66,6 +74,13 @@ export interface TidyOptions {
   /** Unit roots outside this set stay put (undefined = whole canvas). */
   readonly scope?: ReadonlySet<string>
   readonly locked?: (id: string) => boolean
+  /**
+   * The canvas's edges, by node id. With them a row is ORDERED as well as
+   * aligned: a box whose connections along its own row all lie to one side
+   * swaps with the nearest of them, so a hub that fans out sits between the
+   * boxes it fans out to. Without them rows keep the order they were drawn.
+   */
+  readonly edges?: readonly { readonly fromNode: string; readonly toNode: string }[]
 }
 
 const TIDY_BAND_PX = 24
@@ -304,6 +319,62 @@ function bandsBy(units: Unit[], anchor: (u: Unit) => number): Unit[][] {
 }
 
 /**
+ * Row order by edges. A box whose connections along its own row all lie to
+ * one side of it, two or more of them, is a hub drawn at the end of its
+ * row: the edge to the farther box has to pass the nearer one, and the
+ * router pays with a crossing or a loop under both. Measured on the lane's
+ * layered board, the same hub between its targets reads crossings 1 -> 0,
+ * bends 2 -> 0, reversals 1 -> 0 and a quarter less ink — and telling the
+ * model so, in the skill and in the call's answer, moved nothing in nine
+ * trials. So the hub swaps places with the nearest of them. After the swap
+ * one connection lies on each side, so the condition no longer holds and a
+ * second tidy moves nothing. Frames are left alone (a frame's order is its
+ * members' business), and so is a hub or partner that cannot move.
+ */
+function orderRowsByEdges(
+  units: Unit[],
+  edges: readonly { readonly fromNode: string; readonly toNode: string }[],
+): void {
+  const unitOf = new Map<string, Unit>()
+  for (const unit of units) {
+    if (unit.members.length === 1 && unit.members[0]?.type !== 'group') {
+      unitOf.set(unit.rootId, unit)
+    }
+  }
+  const sameRow = (a: Unit, b: Unit) => Math.abs(a.bbox.y - b.bbox.y) < TIDY_BAND_PX
+  for (const hub of units) {
+    if (!hub.movable || !unitOf.has(hub.rootId)) continue
+    const along: Unit[] = []
+    for (const edge of edges) {
+      const otherId =
+        edge.fromNode === hub.rootId
+          ? edge.toNode
+          : edge.toNode === hub.rootId
+            ? edge.fromNode
+            : undefined
+      if (otherId === undefined) continue
+      const other = unitOf.get(otherId)
+      if (other === undefined || other === hub || !sameRow(hub, other)) continue
+      along.push(other)
+    }
+    if (along.length < 2) continue
+    const right = along.every((u) => u.bbox.x >= hub.bbox.x + hub.bbox.w)
+    const left = along.every((u) => u.bbox.x + u.bbox.w <= hub.bbox.x)
+    if (!right && !left) continue
+    const nearest = along.reduce((best, u) =>
+      Math.abs(u.bbox.x - hub.bbox.x) < Math.abs(best.bbox.x - hub.bbox.x) ? u : best,
+    )
+    if (!nearest.movable) continue
+    const hubX = hub.bbox.x
+    const nearX = nearest.bbox.x
+    hub.dx += nearX - hubX
+    hub.bbox.x = nearX
+    nearest.dx += hubX - nearX
+    nearest.bbox.x = hubX
+  }
+}
+
+/**
  * Deterministic sequential placement: immobile units occupy first; each
  * movable unit then hops along ONE axis (chosen from its first collision:
  * smaller penetration wins, ties go horizontal; direction away from the
@@ -424,13 +495,28 @@ function tidyLevel(
   // not always stable. Iterating until nothing moves makes tidy's output
   // its own fixpoint — which is exactly what the idempotence property
   // requires: a second tidy starts at a fixpoint and moves nothing.
+  //
+  // Stopping at a state SEEN BEFORE, rather than only at one equal to the
+  // previous state, is what makes that hold when the passes CYCLE instead
+  // of settling — a band snap that the overlap pass undoes and the next
+  // band snap redoes elsewhere. A cycle has no fixpoint to reach, so the
+  // old test stopped at the iteration cap, mid-cycle, at whichever state
+  // the parity of the cap happened to land on; a second tidy resumed the
+  // cycle and moved the nodes again. Returning the first REPEATED state
+  // instead returns a state that lies on the cycle, so re-entering from it
+  // walks the same loop and stops on the same state — idempotent by the
+  // same argument, without either state being a fixpoint of the passes.
+  const signature = () => units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|')
+  const seen = new Set<string>([signature()])
   const TIDY_MAX_ITERATIONS = 8
   for (let i = 0; i < TIDY_MAX_ITERATIONS; i++) {
-    const before = units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|')
     alignBands(units, 'x')
     alignBands(units, 'y')
+    if (options.edges !== undefined) orderRowsByEdges(units, options.edges)
     resolveOverlaps(units)
-    if (units.map((u) => `${u.bbox.x} ${u.bbox.y}`).join('|') === before) break
+    const now = signature()
+    if (seen.has(now)) break
+    seen.add(now)
   }
   for (const unit of units) {
     if (!unit.movable || (unit.dx === 0 && unit.dy === 0)) continue

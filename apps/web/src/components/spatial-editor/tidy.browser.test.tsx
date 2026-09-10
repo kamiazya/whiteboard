@@ -133,6 +133,31 @@ it('never moves a locked node — it stands as a fixed obstacle, and the column'
   expect(byId(latest.canvas, 'c')).toMatchObject({ x: 52, y: 400 })
 })
 
+it('orders a row by its edges: a hub at the end swaps with the nearest box it fans out to', () => {
+  // The wiring, not the rule (that is tidy.test.ts): the editor hands tidy
+  // the canvas's edges, so a fan-out hub moves between its targets here too.
+  const board: SpatialCanvas = {
+    nodes: [
+      { id: 'hub', type: 'text', x: 40, y: 40, width: 160, height: 60, text: 'Hub' },
+      { id: 'near', type: 'text', x: 264, y: 40, width: 160, height: 60, text: 'Near' },
+      { id: 'far', type: 'text', x: 488, y: 40, width: 160, height: 60, text: 'Far' },
+    ],
+    edges: [
+      { id: 'e1', fromNode: 'hub', toNode: 'near' },
+      { id: 'e2', fromNode: 'hub', toNode: 'far' },
+    ],
+  }
+  const { Host, latest } = makeHost(board)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  openMenuOn(root, 700, 500)
+  clickItem(container, 'Tidy canvas')
+
+  expect(byId(latest.canvas, 'hub').x).toBe(264)
+  expect(byId(latest.canvas, 'near').x).toBe(40)
+})
+
 it('tidies the whole canvas from the empty-space menu', () => {
   const { Host, latest } = makeHost(initial)
   const { container } = render(<Host />)
