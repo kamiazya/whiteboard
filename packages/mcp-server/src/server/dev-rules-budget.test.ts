@@ -250,7 +250,13 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // frame-idempotence bug the same investigation surfaced, with the evidence
 // that it predates this session and the three partial fixes that did not
 // close it.
-const CANVAS_RENDER_BUDGET = 117
+// 120 when that bug was CLOSED: the standing-bug paragraph became the fix —
+// three measured changes, the structural one that was measured and dropped
+// for costing 50% more time to reach the same answer, and the 11853-of-20000
+// -> 0 reading either half of it has to be judged against. A later session
+// asking "was that ever fixed, and what did it cost" reads it here rather
+// than reconstructing it from four commits.
+const CANVAS_RENDER_BUDGET = 120
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

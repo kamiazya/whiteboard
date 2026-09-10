@@ -706,6 +706,129 @@ describe('convergence', () => {
     const once = applyMoves(nodes, [...tidyNodes(nodes)])
     expect(tidyNodes(once)).toEqual([])
   })
+
+  // A board with a FRAME settles too, and for a long time it did not: every
+  // idempotence property here generated PLAIN boxes, so nothing the frame
+  // passes do had ever been under one. Three shapes, each the smallest
+  // counterexample of its kind, kept as EXAMPLES beside the property that
+  // found them — a property reaches a shape only on some seeds, and five
+  // green runs of one read exactly like a closed class (measured: a fix
+  // that survived five fresh runs then failed the example it had itself
+  // produced earlier).
+  it('settles a member the frame carried off the grid when the whole unit moved', () => {
+    // The frame is off the grid, so tidy snaps it — and every member was
+    // placed on the BOARD's grid before that snap, so the move carried them
+    // 3px off it and the next tidy put them back. The commonest shape by
+    // far: 2446 of 3000 generated boards needed exactly two tidies.
+    const nodes = [
+      box('g', -21, -11, 261, 247, 'group'),
+      box('n0', 49, 146, 107, 30),
+      box('n1', 114, 20, 91, 60),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+
+  it('stops growing a frame whose member is re-placed against its old edge', () => {
+    // The frame grew 304 -> 305 -> 306 -> ... one pixel per tidy for ever,
+    // its members unchanged: growth was computed BEFORE the level's own
+    // passes moved the unit, so the relation it established was broken by
+    // the move and re-established from the new position next time.
+    const nodes = [
+      box('g', -12, 36, 304, 293, 'group'),
+      box('n0', 122, 155, 48, 63),
+      box('n1', -16, 4, 113, 58),
+      box('n2', 5, 115, 121, 51),
+      box('n3', 188, 68, 53, 45),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+
+  it('re-reads the margin after the frame grows UP around a member', () => {
+    // Growing up or left moves the frame's corner without moving a single
+    // member, so it moves the MARGIN relative to them: here the frame grew
+    // 16px up around a member the overlap pass had hopped past the margin,
+    // and the next tidy read that member as 16px inside the new margin and
+    // snapped it onto it. Held by `tidyNodes` settling to a fixpoint rather
+    // than by any rule about growth — running the frame pass inside the
+    // level's loop fixes this board too, and was measured and dropped for
+    // costing 50% more time to reach the same answer.
+    const nodes = [
+      box('g', -21, 11, 294, 234, 'group'),
+      box('n0', -25, 92, 95, 67),
+      box('n1', -22, 103, 105, 30),
+      box('n2', 112, 187, 116, 65),
+      box('n3', 130, -5, 124, 55),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+
+  it('keeps a band from pushing a member back out past the frame margin', () => {
+    // The floor runs once, before the level's passes, so a band could undo
+    // it — and that grew a frame for ever. Here a far-edge band snapped
+    // `n0`'s left edge to the grid and dragged its row-mate `n1` 3px left of
+    // the margin; the frame grew to hold the escapee and the level's own
+    // snap carried the whole unit back, 3px wider on every tidy with no
+    // member moving at all.
+    const nodes = [
+      box('g', -20, 26, 398, 247, 'group'),
+      box('n0', 94, 59, 75, 68),
+      box('n1', 5, 80, 150, 79),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
+
+  it('settles a frame whose growth pulls in the box beyond the one it grew for', () => {
+    // MEMBERSHIP is geometric — more than half inside — so a frame that grows
+    // to hold a straddler can swallow the box past it, and the answer was
+    // computed against a set that no longer holds. Here the frame grew 274 ->
+    // 295 to hold `n1`, which put `n0` mostly inside it, and the next tidy
+    // grew it again to 383. Drawn by the generator rather than by hand: the
+    // straddler has to be immobile, or the overlap pass hops it clear before
+    // the growth can reach it, which is what three hand-built attempts did.
+    const nodes = [
+      box('g', 11, 170, 274, 112, 'group'),
+      box('n0', 238, 227, 124, 73),
+      box('n1', 221, 230, 53, 72),
+    ]
+    const options = { locked: (id: string) => id === 'n1', scope: new Set(['n1']) }
+    const once = applyMoves(nodes, [...tidyNodes(nodes, options)])
+    expect(tidyNodes(once, options)).toEqual([])
+  })
+
+  it('settles a locked frame that cannot grow around the member it pushes out', () => {
+    // The same class in the other direction: the frame is locked, so it
+    // cannot grow, and the overlap pass separates its members past its
+    // bottom edge — after which the ejected one is no longer its member and
+    // the next tidy reads a different board.
+    const nodes = [
+      box('g', 0, 0, 240, 200, 'group'),
+      box('a', 32, 32, 160, 60),
+      box('b', 40, 100, 160, 60),
+      box('c', 48, 120, 160, 60),
+    ]
+    const options = { locked: (id: string) => id === 'g' }
+    const once = applyMoves(nodes, [...tidyNodes(nodes, options)])
+    expect(tidyNodes(once, options)).toEqual([])
+  })
+
+  it('stops a frame drifting left a grid step per tidy', () => {
+    // The same class, in the direction that is worse to look at: this frame
+    // grew AND walked, -2 -> -6 -> -10 -> -14, four pixels left per tidy,
+    // so a board left alone in an editor drifts off its own page.
+    const nodes = [
+      box('g', -14, -29, 204, 152, 'group'),
+      box('n0', 103, 76, 82, 56),
+      box('n1', 151, -3, 69, 44),
+      box('n2', 153, 85, 126, 77),
+      box('n3', 154, -26, 113, 54),
+    ]
+    const once = applyMoves(nodes, [...tidyNodes(nodes)])
+    expect(tidyNodes(once)).toEqual([])
+  })
 })
 
 describe('tidy properties', () => {
@@ -745,6 +868,63 @@ describe('tidy properties', () => {
       const nodes = plainNodes(rects)
       const once = applyMoves(nodes, [...tidyNodes(nodes)])
       expect(tidyNodes(once)).toEqual([])
+    },
+  )
+
+  const frameArb = fc.record({
+    x: fc.integer({ min: -60, max: 200 }),
+    y: fc.integer({ min: -60, max: 200 }),
+    w: fc.integer({ min: 100, max: 460 }),
+    h: fc.integer({ min: 100, max: 360 }),
+  })
+  const memberArb = fc.record({
+    x: fc.integer({ min: -60, max: 300 }),
+    y: fc.integer({ min: -60, max: 300 }),
+    w: fc.integer({ min: 41, max: 160 }),
+    h: fc.integer({ min: 30, max: 81 }),
+  })
+
+  fcTest.prop(
+    [
+      fc.array(frameArb, { minLength: 1, maxLength: 2 }),
+      fc.array(memberArb, { minLength: 2, maxLength: 7 }),
+      fc.nat({ max: 8 }),
+      fc.array(fc.tuple(fc.nat({ max: 8 }), fc.nat({ max: 8 })), { maxLength: 4 }),
+      fc.boolean(),
+    ],
+    withDefaults({ numRuns: 120 }),
+  )(
+    'tidy is idempotent on a board with a FRAME, which no other property draws',
+    (frames, rects, lockedIndex, pairs, scoped) => {
+      // Everything the frame passes can reach, in one property: a frame off
+      // the grid and off a whole multiple of the margin (on the grid its own
+      // grid and the board's coincide, and the commonest class here cannot
+      // arise), members drawn to straddle its edges (membership is by
+      // MAJORITY, so a straddler is what makes it grow), a second frame that
+      // may overlap or nest, a lock, a partial scope and edges.
+      //
+      // Deliberately harsher than the plain-box properties above, because
+      // every one of the three defects this covers needed two of those
+      // ingredients at once. Measured against the same generator outside
+      // vitest: 3139 of 5000 boards were not idempotent before this work and
+      // none is now.
+      const nodes = [
+        ...frames.map((f, i) => box(`g${i}`, f.x, f.y, f.w, f.h, 'group')),
+        ...rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h)),
+      ]
+      const lockedId = nodes[lockedIndex % nodes.length]?.id
+      const options = {
+        locked: (id: string) => id === lockedId,
+        ...(scoped ? { scope: new Set(nodes.filter((_, i) => i % 2 === 0).map((n) => n.id)) } : {}),
+        edges: pairs
+          .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
+          .map(([a, b]) => ({
+            fromNode: nodes[a]?.id as string,
+            toNode: nodes[b]?.id as string,
+          })),
+      }
+      const once = applyMoves(nodes, [...tidyNodes(nodes, options)])
+      expect(tidyNodes(once, options)).toEqual([])
     },
   )
 
