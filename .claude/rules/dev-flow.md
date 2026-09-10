@@ -113,7 +113,7 @@ worked measurements live.** Load it before the work, not after:
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 
-**Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment.
+**Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment, and `repo-coverage.test.ts` enforces that — including that the `paths:` frontmatter really covers the package, since a rule scoped at nothing loads for nobody.
 
 ## Ticketing (no GitHub Issues — all local-private)
 
