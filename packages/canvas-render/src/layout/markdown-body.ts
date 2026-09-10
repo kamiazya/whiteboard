@@ -4,7 +4,12 @@ import type { Scene } from '../scene-graph.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutMdastBlocks as layoutBlocks, type MdastLayoutOptions } from './nodes/mdast-blocks.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
-import { fitSceneIntoBox, layoutSpatialCanvas, type SpatialRenderStyle } from './spatial-canvas.js'
+import {
+  fitSceneIntoBox,
+  layoutSpatialCanvas,
+  type SpatialLayoutOptions,
+  type SpatialRenderStyle,
+} from './spatial-canvas.js'
 
 export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
   /**
@@ -21,6 +26,14 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
    * Defaults to `'clean'` like every other headless entry point.
    */
   readonly style?: SpatialRenderStyle
+  /**
+   * Whether a family an embedded canvas's THEME names can be measured in
+   * this realm, forwarded to that canvas's own layout. Defaults, like the
+   * layout's own, to the bundled family alone — so a host that holds a
+   * theme's face has to say so, or the board inside a note declares a
+   * family the note's realm never measured (ADR-0030 decision 9).
+   */
+  readonly fontAvailable?: SpatialLayoutOptions['fontAvailable']
 }
 
 /**
@@ -39,7 +52,7 @@ export interface MarkdownBodyLayoutOptions extends MdastLayoutOptions {
  */
 export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOptions): Scene {
   const options = withReferenceSeams(input)
-  const { canvasAppearance, style, ...rest } = options
+  const { canvasAppearance, style, fontAvailable, ...rest } = options
   return layoutBlocks(root, {
     layoutEmbeddedCanvas: (canvas, box) =>
       fitSceneIntoBox(
@@ -48,6 +61,7 @@ export function layoutMdastBlocks(root: MdastRoot, input: MarkdownBodyLayoutOpti
           appearance: canvasAppearance ?? createSpatialTheme({ mode: 'light' }),
           embedPath: box.embedPath,
           ...(style !== undefined ? { style } : {}),
+          ...(fontAvailable !== undefined ? { fontAvailable } : {}),
           ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
           ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
           ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),

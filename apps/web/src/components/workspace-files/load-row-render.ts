@@ -38,6 +38,7 @@ import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-wo
 import type { RenderBroker } from '../../lib/render-broker.js'
 import { cacheKeyFor, renderKeyOf } from '../../lib/render-key.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
+import { loadThemeFontFromSource, themeFacesKey } from '../../lib/theme-fonts.js'
 
 export interface DocumentRender {
   readonly svg: string
@@ -114,7 +115,17 @@ async function renderSpatialInPool(
     },
     'background',
   )
-  return reply.type === 'laid-out' ? { svg: reply.svg, bounds: reply.bounds } : null
+  if (reply.type !== 'laid-out') return null
+  // The fetch is on USE, and this is the moment of use: a list surface hands
+  // over stored bytes and never decodes the canvas, so the worker's reply is
+  // the first thing on this thread that knows which family the board's theme
+  // names. Not awaited — the picture the worker just drew is the answer, and
+  // the face lands in every realm at once (`attachThemeFaces`) and bumps the
+  // fonts generation, which is what asks the surfaces to draw again. A folder
+  // of fifty boards naming one theme fetches once: the loader refuses a face
+  // that is held or already in flight.
+  for (const family of reply.fontsMissing ?? []) void loadThemeFontFromSource(family)
+  return { svg: reply.svg, bounds: reply.bounds }
 }
 
 /**
@@ -170,6 +181,10 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
           ...(document.contentDigest === undefined ? {} : { state: document.contentDigest }),
         },
         deps.theme,
+        // Read at the moment the key is built, never held on the loader: a
+        // surface that asks again after a face landed must produce a
+        // different key, and the loader outlives the landing.
+        themeFacesKey(),
       )
       return await deps.broker.render(key, () => produce(document, cacheKeyFor(key)))
     } catch {

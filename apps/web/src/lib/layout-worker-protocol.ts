@@ -298,6 +298,19 @@ export type LayoutResponse =
        * survive structuredClone, and the drag overlay pins bystander edges
        * to exactly these without re-running the pass on the main thread. */
       readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
+      /**
+       * Families this layout WANTED and could not measure — a theme's
+       * family for which this realm holds no face, so the scene declares
+       * the bundled one instead.
+       *
+       * The worker is the first realm to know: a list surface hands over
+       * stored bytes and never decodes the canvas, so it cannot read the
+       * theme the board names. Absent means nothing was missing. The
+       * asking thread is the one that can fetch a face and register it in
+       * every realm at once (`lib/theme-fonts.ts`), which is why this
+       * travels back rather than being acted on here.
+       */
+      readonly fontsMissing?: readonly string[]
     }
   | {
       // A worker that throws, or that is asked to lay out a body nobody

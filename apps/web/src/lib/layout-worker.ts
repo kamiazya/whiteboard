@@ -320,6 +320,11 @@ self.onmessage = async (
     const references =
       request.references === undefined ? undefined : referenceSeamsFromWire(request.references)
     const expanded = new Set(request.expandedFileIds ?? [])
+    // What this realm could not measure. Reported back rather than acted on
+    // here: only the asking thread can fetch a face and register it in every
+    // realm at once, and a list surface's thread never decodes the canvas,
+    // so this is where the family a board's theme names first becomes known.
+    const fontsMissing = new Set<string>()
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
@@ -342,6 +347,9 @@ self.onmessage = async (
       showResolved: request.showResolved,
       threads: request.threads,
       proposals: request.proposals,
+      onDegrade: (event) => {
+        if (event.kind === 'font-missing') fontsMissing.add(event.family)
+      },
     })
     const response: LayoutResponse = {
       type: 'laid-out',
@@ -350,6 +358,7 @@ self.onmessage = async (
       bounds,
       scene,
       anchors,
+      ...(fontsMissing.size === 0 ? {} : { fontsMissing: [...fontsMissing] }),
     }
     self.postMessage(response)
     // The whole reply, `scene` and `anchors` included: they are not optional

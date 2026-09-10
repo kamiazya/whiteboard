@@ -192,6 +192,36 @@ face lands three ways at once, and each is a seam the next change must keep:
   the draft moves on commit. Comment and proposal chrome stay bundled, as
   the layout keeps them crisp.
 
+**The LIST surfaces ask through the worker, because they never decode the
+canvas.** A row hands stored bytes to the layout worker (`load-row-render.ts`),
+so the asking thread cannot read the theme the board names — the worker is the
+first realm that knows. It collects canvas-render's `font-missing`
+degradations and reports them as `laid-out.fontsMissing`; the loader then asks
+`loadThemeFontFromSource` for each, on the thread that owns the face set, and
+the three seams above carry it from there. The fetch stays on USE: a folder of
+boards naming no theme reports nothing and fetches nothing. `DocumentThumbnail`
+and `DocumentPreview` each read `useThemeFontsGeneration` for its CHANGE, which
+is what makes the row that paid for the fetch the row that is drawn again.
+
+**The render key gains a `fonts` axis, and the paragraph above about it gaining
+none is about STYLE.** That argument holds because the session override reaches
+the editor alone, so no keyed surface draws a document in two looks. Faces are
+the opposite: EVERY surface draws the bundled family before one lands and the
+theme's after, and a list surface only asks for the face once it has drawn the
+board once — so without the axis the memo, and the worker's own store behind
+it, answer that second ask with the first picture, on disk past the end of the
+tab. The axis is `themeFacesKey()`, the whole held set rather than this
+document's own family, because a key is built before the canvas is decoded. It
+is null for markdown and for every outline, for the reason the theme axis is:
+neither is measured in a family a theme names. The cost is one redraw of the
+rows on screen per family that lands, once, at background priority.
+
+The markdown PREVIEW pane's own prose is bundled-family too — no theme names a
+family for a note — but a board EMBEDDED in it does, so `render-preview.ts`
+passes `fontAvailable: hasLoadedFace` into `layoutMdastBlocks`, which forwards
+it to the embedded canvas's layout. Without it that miniature declared the
+bundled family while the same board on the canvas declared the theme's.
+
 The PNG export carries a held face the same way it carries the vendored
 one (`withViewerFontEmbedded(svg, themeFacesNamedBy(svg))`), and only the
 faces the SVG names, since each is megabytes. A daemon that cannot be

@@ -4,7 +4,7 @@ import { outlineKeyOf, renderKeyOf } from './render-key.js'
 
 const drawn = { svg: '<svg/>', bounds: { x: 0, y: 0, w: 1, h: 1 } }
 const keyFor = (documentId: string, state = '2026-09-03T00:00:00Z') =>
-  renderKeyOf({ documentId, kind: 'spatial' as const, state }, 'light')
+  renderKeyOf({ documentId, kind: 'spatial' as const, state }, 'light', '')
 
 /** A producer that does not settle until the test says so. */
 function deferred() {
@@ -52,7 +52,7 @@ describe('the in-tab render broker', () => {
   it('does not remember a completed render for a document with no version', async () => {
     const produce = vi.fn().mockResolvedValue(drawn)
     const broker = createInTabRenderBroker()
-    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light')
+    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light', '')
 
     expect(await broker.render(key, produce)).toEqual(drawn)
     expect(await broker.render(key, produce)).toEqual(drawn)
@@ -68,7 +68,7 @@ describe('the in-tab render broker', () => {
     const pending = deferred()
     const produce = vi.fn().mockReturnValue(pending.promise)
     const broker = createInTabRenderBroker()
-    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light')
+    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light', '')
 
     const first = broker.render(key, produce)
     const second = broker.render(key, produce)
@@ -146,7 +146,7 @@ describe('the in-tab render broker', () => {
     const subject = { documentId: 'd1', kind: 'spatial' as const, state: 'v1' }
     const rects = [{ x: 0, y: 0, w: 10, h: 10 }]
 
-    const svg = await broker.render(renderKeyOf(subject, 'light'), async () => drawn)
+    const svg = await broker.render(renderKeyOf(subject, 'light', ''), async () => drawn)
     const outline = await broker.render(outlineKeyOf(subject), async () => rects)
 
     expect(svg).toBe(drawn)

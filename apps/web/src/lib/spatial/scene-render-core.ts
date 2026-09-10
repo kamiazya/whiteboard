@@ -99,6 +99,13 @@ export interface RenderCanvasCoreOptions {
    * per proposal. Plain data, so it crosses to the layout worker unchanged.
    */
   readonly proposals?: readonly Proposal[]
+  /**
+   * What the layout could not do as asked (canvas-render's own seam,
+   * threaded verbatim). The worker listens for `font-missing` so the thread
+   * that owns the face set learns which family a board's theme names
+   * without decoding the canvas itself.
+   */
+  readonly onDegrade?: SpatialLayoutOptions['onDegrade']
 }
 
 export interface RenderedCanvas {
@@ -151,6 +158,7 @@ export function renderCanvasToSvgWith(
     showResolved: options.showResolved,
     threads: options.threads,
     proposals: options.proposals,
+    onDegrade: options.onDegrade,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

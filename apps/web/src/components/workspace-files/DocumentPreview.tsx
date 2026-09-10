@@ -14,6 +14,7 @@
 
 import { CopyPlus, ExternalLink, FileText, LayoutGrid, Trash2 } from 'lucide-react'
 import { useEffect, useState } from 'react'
+import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
@@ -58,6 +59,10 @@ export function DocumentPreview({
   className,
 }: DocumentPreviewProps) {
   const [state, setState] = useState<State>({ kind: 'idle' })
+  // Read for its CHANGE, not its value — the same reason the row beside this
+  // pane reads it: a themed board is drawn in the bundled family until this
+  // tab holds the theme's face, and both panes must become the one picture.
+  const fontsGeneration = useThemeFontsGeneration()
 
   useEffect(() => {
     if (document === null) {
@@ -65,7 +70,14 @@ export function DocumentPreview({
       return
     }
     let live = true
-    setState({ kind: 'loading', path: document.path })
+    // A redraw of the document already on screen keeps it there. The pane
+    // re-asks whenever a theme face lands, and blanking to "Drawing…" for
+    // that would make a face arriving look like a document reloading.
+    setState((current) =>
+      current.kind === 'drawn' && current.path === document.path
+        ? current
+        : { kind: 'loading', path: document.path },
+    )
     loadRender(document)
       .then((render) => {
         if (!live) return
@@ -83,7 +95,7 @@ export function DocumentPreview({
     return () => {
       live = false
     }
-  }, [document, loadRender])
+  }, [document, loadRender, fontsGeneration])
 
   if (document === null) {
     return (

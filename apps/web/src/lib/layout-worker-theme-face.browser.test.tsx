@@ -44,6 +44,10 @@ it('declares the bundled family until the theme face lands, and the theme family
   if (before.type !== 'laid-out') return
   expect(before.svg).toContain('font-family="Roboto"')
   expect(before.svg).not.toContain('Yomogi')
+  // And it SAYS which family it wanted: a list surface hands over stored
+  // bytes and never decodes the canvas, so this reply is how the asking
+  // thread learns there is a face to fetch at all.
+  expect(before.fontsMissing ?? []).toContain('Yomogi')
 
   // Any real font file will do for the worker's face set; the vendored one
   // is the bytes this app can always reach. Registered under the family the
@@ -59,4 +63,5 @@ it('declares the bundled family until the theme face lands, and the theme family
   expect(after.type).toBe('laid-out')
   if (after.type !== 'laid-out') return
   expect(after.svg).toContain('font-family="Yomogi"')
+  expect(after.fontsMissing ?? []).not.toContain('Yomogi')
 }, 20_000)
