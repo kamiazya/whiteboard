@@ -98,7 +98,10 @@ describe('drawing quality across the corpus', () => {
         crampedMembers: 2,
         // `web` 2px below its row-mates and 6px right of `blob`; `cli` 8px
         // right of the two frames it is not in.
-        nearMisses: 5,
+        // Three, all box-to-box (two rows 2px off, one column 6px off): the two
+        // it owed against FRAMES it is not in went when boxes stopped being
+        // asked to line up with frames.
+        nearMisses: 3,
         tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
@@ -196,7 +199,10 @@ describe('drawing quality across the corpus', () => {
         textOverflow: 0,
         crampedMembers: 0,
         // Daemon's head 6px below the others; SQLite's 10px right of `m2`.
-        nearMisses: 2,
+        // The drafted message box overlapping two lifeline heads also ends
+        // within 20px of the three heads' bottom edges; judged on three
+        // anchors, that is three more misses than the top edges alone saw.
+        nearMisses: 5,
         tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
@@ -364,7 +370,7 @@ describe('drawing quality across the corpus', () => {
     expect([drafted.nodeOverlaps, tidied.nodeOverlaps]).toEqual([1, 0])
     expect([drafted.crampedMembers, tidied.crampedMembers]).toEqual([2, 0])
     // Members of different frames are aligned by nobody; that pair stays.
-    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([5, 2])
+    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([3, 2])
   })
 })
 

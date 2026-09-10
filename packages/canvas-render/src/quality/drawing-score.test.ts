@@ -303,6 +303,19 @@ describe('scoreDrawing: fit and spacing', () => {
     expect(score(canvasOf([box('a', 0, 0), box('b', 100, 300)])).nearMisses).toBe(0)
   })
 
+  it('a wider box centred under a narrower one, or flush with its right edge, is aligned', () => {
+    // Alignment is any of the three anchors: a decision box 200 wide centred
+    // on a 160 column sits 20px off it on the left and is what a reader
+    // calls lined up (the lane's flowchart, `nearMisses 4` before this).
+    expect(score(canvasOf([box('a', 0, 0, 160), box('b', -20, 300, 200)])).nearMisses).toBe(0)
+    expect(score(canvasOf([box('a', 0, 0, 160), box('b', -40, 300, 200)])).nearMisses).toBe(0)
+    // Nothing lines up: left 10 off, centre 10 off, right 30 off.
+    expect(score(canvasOf([box('a', 0, 0, 160), box('b', 10, 300, 200)])).nearMisses).toBe(1)
+    expect(score(canvasOf([box('a', 0, 0, 200, 80), box('b', 400, 10, 200, 60)])).nearMisses).toBe(
+      0,
+    )
+  })
+
   it('two boxes almost aligned on the top are one near miss', () => {
     expect(score(canvasOf([box('a', 0, 0), box('b', 400, 6)])).nearMisses).toBe(1)
   })

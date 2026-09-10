@@ -75,8 +75,11 @@ export interface DrawingScore {
   /** Members closer than `GROUP_PADDING_PX` to their innermost frame. */
   readonly crampedMembers: number
   /**
-   * Pairs of boxes whose left edges, or top edges, differ by less than
-   * `NEAR_MISS_PX` but not by zero: aligned in intent, not in fact.
+   * Pairs of boxes that nearly line up on an axis and do not: the closest
+   * of their three anchors (left/centre/right, or top/middle/bottom)
+   * differs by less than `NEAR_MISS_PX` but not by zero. Aligned in
+   * intent, not in fact — while a wider box centred on a narrower one, or
+   * flush with its far edge, IS aligned, on the anchor the drawer chose.
    */
   readonly nearMisses: number
   /**
@@ -413,14 +416,23 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   }
 
   // Container and member line up by padding, not by intent, so a pair where
-  // one holds the other is not asked to align.
+  // one holds the other is not asked to align — nor is a box asked to line
+  // up with a frame it is not in: boxes align with boxes and frames with
+  // frames. Alignment is any of the three anchors on an axis: the lane drew
+  // a 200-wide decision box centred on a 160 column, 20px off on the left,
+  // and a reader calls that lined up; judged by the left edge alone, a box
+  // in one frame was also charged for sitting 6px off the CENTRE of the
+  // 800-wide frame beside it, which nobody reads as a miss.
+  const nearest = (a0: number, a1: number, b0: number, b1: number): number =>
+    Math.min(Math.abs(a0 - b0), Math.abs((a0 + a1) / 2 - (b0 + b1) / 2), Math.abs(a1 - b1))
   let nearMisses = 0
   pairs(nodes, (a, b) => {
+    if ((a.type === 'group') !== (b.type === 'group')) return
     const ra = rectOf(a)
     const rb = rectOf(b)
     if (contains(ra, rb) || contains(rb, ra)) return
-    const dx = Math.abs(ra.x - rb.x)
-    const dy = Math.abs(ra.y - rb.y)
+    const dx = nearest(ra.x, ra.x + ra.w, rb.x, rb.x + rb.w)
+    const dy = nearest(ra.y, ra.y + ra.h, rb.y, rb.y + rb.h)
     if (dx > 0 && dx < NEAR_MISS_PX) nearMisses++
     if (dy > 0 && dy < NEAR_MISS_PX) nearMisses++
   })
