@@ -861,6 +861,23 @@ not reach that order. If the fan-out hub is to move, something the model
 cannot skip has to move it — the result of the call it just made, or
 tidy — and that is the next question, not another sentence.
 
+**The twelfth reading (2026-09-10), refuted.** The result of the call
+said it: `wb_canvas_edit` answered with a `notes` line naming a touched
+box whose connections along its own row all ran one way, the near and
+far neighbour, and where its edges would have somewhere to go — present
+only when there was something to say, +202 bytes on the wire and none on
+what a model reads every turn. Three trials of the layered task drew the
+board, received the note, and made no further edit: each went on to set
+the viewport or render, and every gateway stayed at the end of its row
+(crossings 1, 0, 0; bends 2, 4, 6; reversals 1, 3, 3). A model that has
+drawn what it was asked treats the answer as confirmation, not as a
+finding, so a note there is read the way the skill was: not at all. The
+change is withdrawn; it is on branch `fanout-note` with its tests, in
+case the reading changes. What is left for this board's price is a
+MECHANISM rather than a message — tidy moving a fan-out hub between the
+boxes it fans out to — and that is a change to what tidy is allowed to
+do to an order a person drew, which is not this loop's to decide.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
