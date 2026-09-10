@@ -234,3 +234,25 @@ side was already there (`sseWorkerRequestSchema.safeParse` in the worker,
 `sseWorkerEventSchema.safeParse` in the stream source); this closes the
 emitting side, which is where the inventory found four raw literals.
 
+### Every IndexedDB stored shape round-trips under a property
+
+`lib/idb-stored-shapes.property.browser.test.tsx` writes through each
+production writer and reads through its reader, against the real
+IndexedDB: the blob store, the document-file store (its v2 record and the
+v1 record it rewrites on read), the document index's workspace and
+document rows, the document store's snapshot and delta log, and the
+version store's rows. Inputs are drawn from the writer's input space, or
+from the port's schema where the writer takes one; a `z.custom` /
+`z.instanceof` field is overridden by path, since the walk cannot know
+what a custom check wants. Every reader here fails soft — a record that
+does not parse is a miss, a missing image, a skipped row — which is why a
+property rather than an example: the loss is silent. It found one the day
+it was written: `IdbBlobStore.put` stores the content type it is handed,
+and a `Blob` answers `''` for a type it will not carry (one with a
+character outside printable ASCII), while the reader
+said `.min(1)` — so such a blob was stored, `has` said so, and `get`
+answered null, and the image never drew. The reader now accepts any
+string. Locally the browser project runs with
+`WHITEBOARD_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-<rev>/chrome-linux/headless_shell`
+when the installed Playwright revision is not the one the config pins.
+

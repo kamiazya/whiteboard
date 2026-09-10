@@ -70,7 +70,11 @@ const blobRecordSchema = z
   .object({
     v: z.literal(1),
     bytes: uint8ArraySchema,
-    contentType: z.string().min(1).optional(),
+    // Any string, the empty one included: `put` stores whatever type it was
+    // handed, and a `Blob` answers `''` for a type it will not carry. Reading
+    // this as `.min(1)` made every such record a MISS — the bytes were there
+    // and `has` said so, while `get` answered null and the image never drew.
+    contentType: z.string().optional(),
   })
   .strict()
 
