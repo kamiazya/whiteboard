@@ -213,7 +213,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // and the kind of thing a reader re-derives by breaking it again.
 // 103 for row order by edges: the measurement that made tidy the place for
 // it, and the two affordances measured and withdrawn before it.
-const CANVAS_RENDER_BUDGET = 103
+// 104 for the passes that CYCLE rather than settle: why the loop stops at a
+// state it has already seen, and the four fixes aimed at the snap instead
+// that measurement rejected — each one a session would otherwise re-try.
+const CANVAS_RENDER_BUDGET = 104
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
