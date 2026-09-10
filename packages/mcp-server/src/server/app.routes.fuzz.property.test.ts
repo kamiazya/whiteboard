@@ -425,7 +425,7 @@ function pathArb(pattern: string, seed: Seeded): fc.Arbitrary<{ path: string; se
       return fc
         .oneof(
           { weight: 3, arbitrary: fc.constant(seed.versionId) },
-          { weight: 1, arbitrary: fc.string({ minLength: 1, maxLength: 8 }) },
+          { weight: 1, arbitrary: segmentArb },
         )
         .map((id) => ({ text: encodeURIComponent(id), seeded: id === seed.versionId }))
     }
