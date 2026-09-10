@@ -136,8 +136,9 @@ describe('inside a frame', () => {
   it('a frame holding a locked member stays put, and its overlapper moves instead', () => {
     // Moving the frame would carry it away from the member that cannot
     // follow; the lock inside holds the whole unit, as a lock on the frame
-    // itself would.
-    const nodes = [frame(0, 0, 200, 160), box('a', 40, 40), box('peer', 100, -40)]
+    // itself would. The peer comes first in document order, so without the
+    // rule it is the frame that hops away from it.
+    const nodes = [box('peer', 100, -40), frame(0, 0, 200, 160), box('a', 40, 40)]
     const moves = tidyNodes(nodes, { locked: (id) => id === 'a' })
     expect(moves.some((mv) => mv.id === 'grp' || mv.id === 'a')).toBe(false)
     expect(moves.find((mv) => mv.id === 'peer')).toBeDefined()
