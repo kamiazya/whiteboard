@@ -25,7 +25,7 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
       { id: 'd', type: 'text', x: 80, y: 480, width: 160, height: 90, text: 'D' },
     ],
     edges: [{ id: 'e1', fromNode: 't', toNode: 'd' }],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   }
   const latest = { canvas: initial }
   function Host() {
@@ -83,7 +83,7 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
       { id: 'd', type: 'text', x: 620, y: 240, width: 160, height: 120, text: 'D' },
     ],
     edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   }
   function Host() {
     const [canvas, setCanvas] = useState(initial)
@@ -137,7 +137,7 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
       { id: 'f', fromNode: 'n', toNode: 't' },
       { id: 'c', fromNode: 'm', toNode: 't' },
     ],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   }
   function Host() {
     const [canvas, setCanvas] = useState(initial)

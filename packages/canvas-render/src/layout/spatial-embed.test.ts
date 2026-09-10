@@ -151,7 +151,9 @@ describe('file-node inline embeds', () => {
         { id: 'h', fromNode: 'a', toNode: 'b' },
         { id: 'v', fromNode: 'c', toNode: 'd' },
       ],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } },
+      'x-whiteboard': {
+        facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
+      },
     }
     const scene = layoutSpatialCanvas(
       { nodes: [fileNode()], edges: [] },

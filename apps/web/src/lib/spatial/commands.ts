@@ -117,9 +117,9 @@ export type EditorLeafCommand =
        * The canvas-envelope twin of set-node-facet, and facet-GENERIC for
        * the same reason: the key comes from the caller, so this module
        * never names a domain. `set-edge-routing` predates it and stays,
-       * because that facet has canonicalisation of its own (defaults are
-       * omitted, and the legacy `edgeRouting` key is absorbed) that a
-       * generic write cannot know about.
+       * because that facet has canonicalisation of its own (a value equal
+       * to the canvas's default is omitted) that a generic write cannot
+       * know about.
        */
       readonly kind: 'set-canvas-facet'
       readonly key: string
@@ -461,10 +461,8 @@ function withEdgeStyle(
   canvas: SpatialCanvas,
   patch: { routing?: EdgeRoutingStyle; lineJumps?: LineJumps },
 ): SpatialCanvas {
-  const { 'x-whiteboard': extension, ...rest } = canvas
-  // Seed the merge from the RESOLVED current value (facet first, legacy
-  // fallback), so the first write on a legacy canvas carries its setting
-  // into the facet — the write is where the migration persists.
+  // Seed the merge from the resolved current value, so writing one field
+  // never erases the other.
   const current = resolveCanvasEdgeStyle(canvas)
   const defaults = resolveCanvasEdgeDefaults(canvas)
   const merged = {
@@ -479,15 +477,10 @@ function withEdgeStyle(
       ? { lineJumps: merged.lineJumps }
       : {}),
   }
-  // The legacy edgeRouting key is absorbed above and dropped here — one
-  // facet, one version, no second place for the same answer to live. The
-  // envelope write itself is `withCanvasFacet`, so the canonical shape of a
-  // canvas that reverted is decided in exactly one place.
-  const { edgeRouting: _legacy, ...others } = extension ?? {}
-  const stripped: SpatialCanvas =
-    Object.keys(others).length === 0 ? rest : { ...rest, 'x-whiteboard': others }
+  // The envelope write itself is `withCanvasFacet`, so the canonical shape
+  // of a canvas that reverted is decided in exactly one place.
   return withCanvasFacet(
-    stripped,
+    canvas,
     VISUAL_EDGES_KEY,
     Object.keys(canonical).length === 0 ? undefined : canonical,
   )
@@ -693,7 +686,7 @@ function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): Spatial
  * input canvas reference unchanged). Same envelope-canonicality discipline
  * as `withEdgeStyle`/`setNodeFacet`: an empty `comments` result drops the
  * key, an empty extension disappears entirely, and sibling extension fields
- * (edgeRouting, facets) survive untouched.
+ * (facets) survive untouched.
  */
 function withComments(
   canvas: SpatialCanvas,

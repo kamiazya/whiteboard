@@ -101,7 +101,7 @@ it('drops the canvas-level x-whiteboard as well', () => {
   const degraded = strictDegrade({
     nodes: [],
     edges: [],
-    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
   })
 
   expect(degraded).not.toHaveProperty('x-whiteboard')

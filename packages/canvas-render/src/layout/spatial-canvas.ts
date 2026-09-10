@@ -2314,8 +2314,8 @@ function composeEdgesAndLabels(
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
-  // Facet-aware by DEFAULT (visual.edges/v0 first, legacy edgeRouting
-  // fallback): resolution lives here rather than at the call sites for the
+  // Facet-aware by DEFAULT (visual.edges/v0): resolution lives here rather
+  // than at the call sites for the
   // same reason the tokeniser default does — every surface that lays a
   // canvas out wants it, and the one that forgets draws different routes.
   // The theme's routing is a DEFAULT under the canvas's own facet (ADR-0030

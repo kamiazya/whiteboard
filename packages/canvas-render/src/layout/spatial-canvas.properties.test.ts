@@ -468,6 +468,31 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
     })
     .map(({ label, ...edge }) => (label === undefined ? edge : { ...edge, label }))
 
+/** The routing a scenario draws with, as the `visual.edges/v0` payload's two fields. */
+interface DrawnRouting {
+  readonly style: 'straight' | 'orthogonal' | 'curved' | undefined
+  readonly lineJumps: 'arc' | undefined
+}
+
+/**
+ * The envelope with the scenario's routing written into the canvas's
+ * `visual.edges/v0` facet, beside whatever facets the generator drew — the
+ * one stored shape routing has, since the pre-facet key was retired.
+ */
+function withEdgesFacet(
+  envelope: NonNullable<SpatialCanvas['x-whiteboard']> | undefined,
+  routing: DrawnRouting,
+): NonNullable<SpatialCanvas['x-whiteboard']> {
+  const payload = {
+    ...(routing.style === undefined ? {} : { routing: routing.style }),
+    ...(routing.lineJumps === undefined ? {} : { lineJumps: routing.lineJumps }),
+  }
+  return {
+    ...envelope,
+    facets: { ...envelope?.facets, 'visual.edges/v0': payload },
+  }
+}
+
 const dragScenarioArb = fc.record({
   nodes: fc.tuple(...denseIds.map(denseNodeArb)),
   // More edges than the six nodes can keep apart, so paths cross and the
@@ -502,13 +527,13 @@ const dragScenarioArb = fc.record({
 function scenarioCanvas(scenario: {
   readonly nodes: readonly SpatialNode[]
   readonly edges: readonly CanvasEdge[]
-  readonly routing: NonNullable<SpatialCanvas['x-whiteboard']>['edgeRouting']
+  readonly routing: DrawnRouting
   readonly envelope: ReturnType<typeof facetsArb> extends fc.Arbitrary<infer T> ? T : never
 }): SpatialCanvas {
   return {
     nodes: [...scenario.nodes],
     edges: [...scenario.edges],
-    'x-whiteboard': { edgeRouting: scenario.routing, ...scenario.envelope },
+    'x-whiteboard': withEdgesFacet(scenario.envelope, scenario.routing),
   }
 }
 
@@ -576,7 +601,7 @@ describe('live-drag parity property (PBT)', () => {
       const canvas: SpatialCanvas = {
         nodes: [...nodes],
         edges: [...edges],
-        'x-whiteboard': { edgeRouting: routing },
+        'x-whiteboard': withEdgesFacet(undefined, routing),
       }
       return (
         JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
@@ -593,7 +618,7 @@ describe('live-drag parity property (PBT)', () => {
         {
           nodes: [...nodes],
           edges: [...edges],
-          'x-whiteboard': { edgeRouting: { ...routing, lineJumps: 'arc' } },
+          'x-whiteboard': withEdgesFacet(undefined, { ...routing, lineJumps: 'arc' }),
         },
         options,
       ).some((node) => node.kind === 'edge' && (node.jumps?.length ?? 0) > 0),

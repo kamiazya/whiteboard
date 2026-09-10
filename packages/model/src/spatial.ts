@@ -140,8 +140,8 @@ function findDuplicateId(ids: string[]): string | undefined {
  * it must step around something.
  *
  * Declared on its own rather than inline, because the same choice is meant to
- * be overridable per edge later — that override has to reuse this type, not
- * restate it.
+ * be overridable per edge — that override reuses this type, never restates
+ * it. Stored as the `visual.edges/v0` facet, never as a field of its own.
  *
  * `straight` is the default and the only shape JSON Canvas itself implies:
  * direct segments, bending only to clear an obstacle.
@@ -152,13 +152,17 @@ export type EdgeRoutingStyle = z.infer<typeof edgeRoutingStyleSchema>
 
 /**
  * Line jumps draw a small arc where one edge crosses another, so crossing
- * lines stay readable. Canvas-wide today; the same enum is the slot a
- * later per-edge override reuses.
+ * lines stay readable. The same enum serves the canvas and a per-edge
+ * override alike.
  */
 export const lineJumpsSchema = z.enum(['none', 'arc'])
 
 export type LineJumps = z.infer<typeof lineJumpsSchema>
 
+/**
+ * The RESOLVED answer to "how are these edges drawn" — what a resolver hands
+ * the layout, never a stored shape (the stored shape is the facet).
+ */
 export const edgeRoutingSchema = z.object({
   style: edgeRoutingStyleSchema.optional(),
   lineJumps: lineJumpsSchema.optional(),
@@ -202,15 +206,20 @@ export type CanvasComment = z.infer<typeof canvasCommentSchema>
 
 /**
  * `x-whiteboard` at the CANVAS level — separate from the node-level key of the
- * same name, and holding preferences rather than content.
+ * same name, and holding preferences and annotations rather than content.
  *
  * This is not the general escape hatch the node-level key was narrowed away
  * from being. What lives here describes how to DRAW things JSON Canvas already
- * models; a consumer that drops it still renders every edge, just with its own
- * routing. Nothing that changes what the document MEANS belongs here.
+ * models (canvas-target facets such as `visual.edges/v0` and `visual.theme/v0`)
+ * and the conversation about them (comments); a consumer that drops it still
+ * renders every edge, just with its own routing. Nothing that changes what the
+ * document MEANS belongs here.
+ *
+ * The pre-facet `edgeRouting` preference is RETIRED without a compatibility
+ * read (0.0.x, no users): a document still carrying it loses that key on
+ * parse and draws with its theme's default, exactly as one that never set it.
  */
 export const canvasExtensionSchema = z.object({
-  edgeRouting: edgeRoutingSchema.optional(),
   /**
    * The comment annotation layer (ADR-0024). Lives under the canvas-level
    * extension because a strict JSON Canvas consumer that drops the key still
@@ -229,15 +238,14 @@ export const canvasExtensionSchema = z.object({
   /**
    * Canvas-target facets (ADR-0013 decision 5): the spatial counterpart of a
    * markdown document's `facets` bucket, carrying `{namespace}.{name}/v{n}`
-   * keyed payloads. The rendering preferences above are slated to fold INTO
-   * this bucket as canvas-target facets; until then both coexist and the
-   * facet takes precedence where both speak (the engine's resolver owns that
-   * rule).
+   * keyed payloads. Every rendering preference the envelope carries is one of
+   * these — the engine's resolvers own precedence between a facet, a theme's
+   * default and the built-in.
    *
    * `.catch(undefined)` on the BUCKET, not the whole extension: facets is a
    * record schema that rejects on any malformed key, and without its own
-   * catch one bad key would take the sibling preferences down with it. A bad
-   * bucket costs the bucket; edgeRouting and the canvas survive.
+   * catch one bad key would take the sibling comments down with it. A bad
+   * bucket costs the bucket; the comments and the canvas survive.
    */
   facets: extensionFacetsSchema.optional().catch(undefined),
 })

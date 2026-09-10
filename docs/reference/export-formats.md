@@ -79,9 +79,12 @@ section forbids.
 Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**
 extension key, `x-whiteboard`, allowed at two sites:
 
-- **Document root** — rendering preferences for things JSON Canvas already
-  models (currently `edgeRouting.style` and `edgeRouting.lineJumps`). A
-  consumer that drops it still renders every edge, just with its own routing.
+- **Document root** — canvas-target facets (`facets`, keyed
+  `{namespace}.{name}/v{n}`: `visual.edges/v0` for edge routing and line
+  jumps, `visual.theme/v0` for the theme) and the comment annotation layer
+  (`comments`). Rendering preferences for things JSON Canvas already models,
+  so a consumer that drops it still renders every edge, just with its own
+  routing.
 - **A node** — the canvas-embed extension (`kind: "embed"` plus a canvas
   reference), the one piece of content JSON Canvas 1.0 cannot express.
 

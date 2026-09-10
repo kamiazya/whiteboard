@@ -323,28 +323,23 @@ describe('canvas-level x-whiteboard', () => {
     'x-whiteboard': extension,
   })
 
-  it('accepts a routing style', () => {
-    const parsed = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { style: 'orthogonal' } }))
-    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
-  })
-
-  it('accepts line jumps beside the style, and alone', () => {
-    const both = spatialCanvasSchema.parse(
-      canvasWith({ edgeRouting: { style: 'orthogonal', lineJumps: 'arc' } }),
+  it('carries a canvas-target facets bucket: routing and line jumps live there', () => {
+    const parsed = spatialCanvasSchema.parse(
+      canvasWith({ facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } } }),
     )
-    expect(both['x-whiteboard']).toEqual({
-      edgeRouting: { style: 'orthogonal', lineJumps: 'arc' },
+    expect(parsed['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
     })
-    // Jumps without an explicit style: the style keeps its own default.
-    const alone = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { lineJumps: 'arc' } }))
-    expect(alone['x-whiteboard']).toEqual({ edgeRouting: { lineJumps: 'arc' } })
   })
 
   it('is absent-by-default, so a strict JSON Canvas document parses unchanged', () => {
     expect(spatialCanvasSchema.parse({ nodes: [], edges: [] })['x-whiteboard']).toBeUndefined()
   })
 
-  it('carries a canvas-target facets bucket beside the rendering preferences', () => {
+  // Retired without a compatibility read (0.0.x, no users): the key is
+  // stripped like any foreign field, the facet beside it survives, and
+  // nothing folds the old value into the facet.
+  it('drops the retired edgeRouting preference and keeps the facets beside it', () => {
     const parsed = spatialCanvasSchema.parse(
       canvasWith({
         edgeRouting: { style: 'orthogonal' },
@@ -352,26 +347,26 @@ describe('canvas-level x-whiteboard', () => {
       }),
     )
     expect(parsed['x-whiteboard']).toEqual({
-      edgeRouting: { style: 'orthogonal' },
       facets: { 'visual.edges/v0': { routing: 'curved' } },
     })
+    expect(parsed['x-whiteboard']).not.toHaveProperty('edgeRouting')
   })
 
-  it('a malformed facet key costs the facets bucket only, never the sibling preferences', () => {
+  it('a malformed facet key costs the facets bucket only, never the sibling comments', () => {
     const parsed = spatialCanvasSchema.parse(
       canvasWith({
-        edgeRouting: { style: 'orthogonal' },
+        comments: [{ id: 'c1', x: 1, y: 2, text: 'kept' }],
         facets: { 'not a key': {} },
       }),
     )
-    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+    expect(parsed['x-whiteboard']).toEqual({ comments: [{ id: 'c1', x: 1, y: 2, text: 'kept' }] })
     expect(parsed.nodes).toEqual([])
   })
 
   // Same escape-hatch rule the node-level key follows: a payload this version
-  // cannot read costs the setting, never the document.
-  it('silently drops an unreadable payload rather than failing the canvas', () => {
-    const parsed = spatialCanvasSchema.parse(canvasWith({ edgeRouting: { style: 'spiral' } }))
+  // cannot read costs the extension, never the document.
+  it('silently drops an unreadable extension rather than failing the canvas', () => {
+    const parsed = spatialCanvasSchema.parse(canvasWith('not an object'))
     expect(parsed['x-whiteboard']).toBeUndefined()
     expect(parsed.nodes).toEqual([])
   })
@@ -426,28 +421,33 @@ describe('canvasCommentSchema', () => {
 describe('canvas comments on the canvas-level extension', () => {
   const comment = { id: 'c1', x: 10, y: 20, text: 'shrink this' }
 
-  it('carries comments beside the rendering preferences', () => {
-    const parsed = spatialCanvasSchema.parse({
-      nodes: [],
-      edges: [],
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [comment] },
-    })
-    expect(parsed['x-whiteboard']).toEqual({
-      edgeRouting: { style: 'orthogonal' },
-      comments: [comment],
-    })
-  })
-
-  it('a malformed comment costs the comments bucket only, never the sibling preferences', () => {
+  it('carries comments beside the canvas facets', () => {
     const parsed = spatialCanvasSchema.parse({
       nodes: [],
       edges: [],
       'x-whiteboard': {
-        edgeRouting: { style: 'orthogonal' },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+        comments: [comment],
+      },
+    })
+    expect(parsed['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      comments: [comment],
+    })
+  })
+
+  it('a malformed comment costs the comments bucket only, never the sibling facets', () => {
+    const parsed = spatialCanvasSchema.parse({
+      nodes: [],
+      edges: [],
+      'x-whiteboard': {
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
         comments: [{ id: 'c1', x: 10, y: 20, text: '' }],
       },
     })
-    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+    expect(parsed['x-whiteboard']).toEqual({
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    })
   })
 
   // Deliberately UNLIKE an edge's endpoints: a comment may outlive the node it

@@ -20,10 +20,10 @@ import { z } from 'zod'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
- * `visual.edges/v0` — how this canvas's edges are drawn. The facet-shaped
- * successor of the legacy canvas-level `x-whiteboard.edgeRouting`
- * preference; both answer the same question, so this is one facet with two
- * fields, not two facets. `v0`: unstable, payload may still change shape.
+ * `visual.edges/v0` — how this canvas's edges are drawn: the routing and
+ * whether crossings jump. One facet with two fields, not two facets, since
+ * both answer the same question. `v0`: unstable, payload may still change
+ * shape.
  */
 export const visualEdgesFacetSchema = z.object({
   routing: edgeRoutingStyleSchema.optional(),
@@ -239,11 +239,10 @@ export type EdgeRouting = z.infer<typeof edgeRoutingSchema>
 
 /**
  * The one read path for "how do I route this canvas's edges": the
- * `visual.edges/v0` facet when it resolves, else the legacy
- * `x-whiteboard.edgeRouting` preference. Whole-value precedence, not
- * per-field merge — a facet is one register (replace semantics), so a facet
- * that says only `routing` means "and default line jumps", never "merge
- * with whatever the legacy key held".
+ * `visual.edges/v0` facet when it resolves, else nothing — the defaults are
+ * `resolveCanvasEdgeDefaults`'s. A facet is one register (replace
+ * semantics), so a facet that says only `routing` means "and default line
+ * jumps".
  */
 export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
@@ -263,7 +262,7 @@ export function resolveCanvasEdgeStyle(
       }
     }
   }
-  return extension?.edgeRouting ?? {}
+  return {}
 }
 
 /**

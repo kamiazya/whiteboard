@@ -663,11 +663,14 @@ describe('comment commands', () => {
   it('create-comment appends under x-whiteboard.comments, preserving other envelope fields', () => {
     const canvas: SpatialCanvas = {
       ...baseCanvas(),
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [OTHER] },
+      'x-whiteboard': {
+        facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+        comments: [OTHER],
+      },
     }
     const next = applyCommand(canvas, { kind: 'create-comment', comment: COMMENT })
     expect(next['x-whiteboard']?.comments?.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
-    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(next['x-whiteboard']?.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
     expect(next.nodes).toBe(canvas.nodes)
   })
 
@@ -681,7 +684,10 @@ describe('comment commands', () => {
   it('set-comment-resolved flips only the target comment; a missing id is a no-op', () => {
     const canvas: SpatialCanvas = {
       ...baseCanvas(),
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+      'x-whiteboard': {
+        facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+        comments: [COMMENT, OTHER],
+      },
     }
     const next = applyCommand(canvas, {
       kind: 'set-comment-resolved',
@@ -693,7 +699,7 @@ describe('comment commands', () => {
       resolved: true,
     })
     expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
-    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(next['x-whiteboard']?.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
 
     expect(
       applyCommand(canvas, { kind: 'set-comment-resolved', id: 'ghost', resolved: true }),
@@ -712,7 +718,10 @@ describe('comment commands', () => {
   it('move-comment rewrites only the target anchor; a missing id is a no-op', () => {
     const canvas: SpatialCanvas = {
       ...baseCanvas(),
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+      'x-whiteboard': {
+        facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+        comments: [COMMENT, OTHER],
+      },
     }
     const next = applyCommand(canvas, { kind: 'move-comment', id: 'c1', x: 300, y: -40 })
     expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c1')).toEqual({
@@ -721,7 +730,7 @@ describe('comment commands', () => {
       y: -40,
     })
     expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
-    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(next['x-whiteboard']?.facets).toEqual({ 'visual.theme/v0': { theme: 'visual.neon' } })
     expect(next.nodes).toBe(canvas.nodes)
 
     expect(applyCommand(canvas, { kind: 'move-comment', id: 'ghost', x: 1, y: 1 })).toBe(canvas)
@@ -729,9 +738,7 @@ describe('comment commands', () => {
 })
 
 // The routing style belongs to the canvas, so the command that sets it names
-// no node. Stored as the visual.edges/v0 facet (ADR-0013); writing it also
-// removes the legacy edgeRouting preference — the write is where the
-// migration persists.
+// no node. Stored as the visual.edges/v0 facet (ADR-0013), and nowhere else.
 describe('set-edge-routing', () => {
   const empty: SpatialCanvas = { nodes: [], edges: [] }
   const edgesFacet = (canvas: SpatialCanvas) => canvas['x-whiteboard']?.facets?.['visual.edges/v0']
@@ -739,7 +746,7 @@ describe('set-edge-routing', () => {
   it('records the style as the visual.edges facet', () => {
     const next = applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' })
     expect(edgesFacet(next)).toEqual({ routing: 'orthogonal' })
-    expect(next['x-whiteboard']).not.toHaveProperty('edgeRouting')
+    expect(Object.keys(next['x-whiteboard'] ?? {})).toEqual(['facets'])
   })
 
   it('leaves nodes and edges untouched', () => {
@@ -760,19 +767,6 @@ describe('set-edge-routing', () => {
     const reverted = applyCommand(set, { kind: 'set-edge-routing', style: 'straight' })
 
     expect(reverted).not.toHaveProperty('x-whiteboard')
-  })
-
-  // The write is where the legacy preference migrates: the resolved current
-  // value seeds the merge, the facet takes over, and the legacy key goes.
-  it('migrates a legacy edgeRouting canvas on first write, keeping the other field', () => {
-    const legacy: SpatialCanvas = {
-      ...empty,
-      'x-whiteboard': { edgeRouting: { style: 'curved', lineJumps: 'arc' } },
-    }
-    const next = applyCommand(legacy, { kind: 'set-edge-routing', style: 'orthogonal' })
-
-    expect(edgesFacet(next)).toEqual({ routing: 'orthogonal', lineJumps: 'arc' })
-    expect(next['x-whiteboard']).not.toHaveProperty('edgeRouting')
   })
 
   it('keeps facets it does not own', () => {
