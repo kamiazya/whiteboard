@@ -1,30 +1,60 @@
-import type { AnnotationAnchor, CommentMessage, CommentThread } from '../annotation.js'
-import { RESERVED_ROOT_KEYS } from '../facets.js'
-import { DOCUMENT_PATH_SEGMENT_PATTERN } from '../ids.js'
-import type {
-  MdastCellPhrasingContent,
-  MdastFlowContent,
-  MdastListItem,
-  MdastPhrasingContent,
-  MdastRoot,
-  MdastTableCell,
-  MdastTableRow,
+/**
+ * The shared generators over model's schemas, drawn FROM the schemas.
+ *
+ * Each arbitrary below is `arbitraryForSchema` over the schema it stands
+ * for, so a field added to the schema tomorrow — an edge's `label`, a
+ * group's `background`, the canvas-level `facets` bucket — is drawn by
+ * every property without anyone extending a hand-written mirror. This file
+ * used to BE that mirror, and it had drifted: the node generator knew no
+ * `subpath`, no `label`, no `versionRef`; the edge generator knew no side,
+ * end or label; the canvas generator drew comments and nothing else at the
+ * canvas level, so every round-trip property over a canvas was blind to
+ * `edgeRouting` and to the canvas's own facets.
+ *
+ * What stays hand-written is what a schema cannot say: the correlations
+ * (an edge's endpoints name nodes that exist, ids are unique across a
+ * collection), the value domains a filter would waste most draws on (a
+ * facet key's grammar, a yaml-safe facet value), and the one adversarial
+ * weighting (`workspaceSegmentArbitrary`) that exists to keep a mutated
+ * exclusion filter from passing vacuously.
+ */
+
+import type { z } from 'zod'
+import { annotationAnchorSchema, commentMessageSchema, commentThreadSchema } from '../annotation.js'
+import { documentKindSchema } from '../document-kind.js'
+import {
+  coreFacetsSchema,
+  EXTENSION_FACET_KEY_PATTERN,
+  extensionFacetsSchema,
+  facetsRawSchema,
+  RESERVED_ROOT_KEYS,
+} from '../facets.js'
+import { DOCUMENT_PATH_SEGMENT_PATTERN, documentIdSchema } from '../ids.js'
+import { markdownDocumentSchema } from '../markdown.js'
+import {
+  mdastFlowContentSchema,
+  mdastPhrasingContentSchema,
+  mdastRootSchema,
+  mdastTableRowSchema,
 } from '../mdast/index.js'
-import type { CanvasComment, CanvasEdge, SpatialCanvas } from '../spatial.js'
+import {
+  type CanvasEdge,
+  canvasCommentSchema,
+  canvasEdgeSchema,
+  canvasExtensionSchema,
+  type SpatialCanvas,
+  spatialNodeSchema,
+  xWhiteboardSchema,
+} from '../spatial.js'
+import { okfActorSchema } from '../trust.js'
 import { fc } from './fast-check.js'
+import { arbitraryForSchema, type SchemaArbitraryOptions, sameSchema } from './zod-arbitrary.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const ULID_FIRST_CHARS = '01234567'
 
-/** Generates canonical ULIDs: first char restricted to 0-7 (see ids.ts). */
-export const canonicalUlidArbitrary: fc.Arbitrary<string> = fc
-  .tuple(
-    fc.constantFrom(...ULID_FIRST_CHARS.split('')),
-    fc.array(fc.constantFrom(...CROCKFORD_CHARS.split('')), { minLength: 25, maxLength: 25 }),
-  )
-  .map(([first, rest]) => first + rest.join(''))
-
-const nodeIdArbitrary: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 24 })
+/** Canonical ULIDs, drawn from `documentIdSchema`'s own pattern. */
+export const canonicalUlidArbitrary: fc.Arbitrary<string> = arbitraryForSchema(documentIdSchema)
 
 // Mirrors workspaceSegmentSchema's own `.refine` (ids.ts): a canonical ULID
 // is exactly 26 Crockford base32 chars with a leading [0-7], matched
@@ -54,7 +84,9 @@ const ulidShapedCandidateArbitrary: fc.Arbitrary<string> = fc
  * with the schema's own ULID-shape disjointness refinement re-applied as a
  * generator-side filter. Its "valid-by-construction" claim is pinned by the
  * generator-validity property in `properties.test.ts`, not merely asserted
- * here in a comment.
+ * here in a comment. Kept hand-written on purpose: the schema-derived draw
+ * would reach a ULID-shaped candidate so rarely that a mutated exclusion
+ * filter passes vacuously.
  */
 export const workspaceSegmentArbitrary: fc.Arbitrary<string> = fc
   .oneof(
@@ -63,25 +95,9 @@ export const workspaceSegmentArbitrary: fc.Arbitrary<string> = fc
   )
   .filter((segment) => !ULID_SHAPE_PATTERN.test(segment))
 
-export const documentKindArbitrary = fc.constantFrom('markdown' as const, 'spatial' as const)
+export const documentKindArbitrary = arbitraryForSchema(documentKindSchema)
 
-export const coreFacetsArbitrary = fc.record(
-  {
-    type: fc.string({ minLength: 1, maxLength: 20 }),
-    title: fc.string({ maxLength: 40 }),
-    tags: fc.array(fc.string({ maxLength: 10 }), { maxLength: 5 }),
-    view: fc.string({ maxLength: 20 }),
-  },
-  { requiredKeys: ['type'] },
-)
-
-// Namespace = owning plugin id, name = the facet within it (ADR-0013).
-const facetSegmentArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
-const facetVersionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => `v${n}`)
-
-const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
-  .tuple(facetSegmentArbitrary, facetSegmentArbitrary, facetVersionArbitrary)
-  .map(([namespace, name, version]) => `${namespace}.${name}/${version}`)
+export const coreFacetsArbitrary = arbitraryForSchema(coreFacetsSchema)
 
 /**
  * `fc.jsonValue()` can place an own `__proto__` key inside a generated
@@ -112,11 +128,18 @@ function stripProtoKeys(value: unknown): unknown {
 
 const facetValueArbitrary = fc.jsonValue().map(stripProtoKeys)
 
-export const extensionFacetsArbitrary = fc.dictionary(
-  extensionFacetKeyArbitrary,
-  facetValueArbitrary,
-  { maxKeys: 4 },
-)
+/**
+ * The extension bucket's keys follow a grammar the schema states as a
+ * refinement over `z.record(z.string(), …)`; drawn from the pattern itself
+ * rather than left to the filter, which would reject every random key.
+ */
+export const extensionFacetsArbitrary = arbitraryForSchema(extensionFacetsSchema, {
+  override: (path) => {
+    if (path.endsWith('{key}')) return fc.stringMatching(EXTENSION_FACET_KEY_PATTERN)
+    if (path.endsWith('{}')) return facetValueArbitrary
+    return undefined
+  },
+})
 
 const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   .string({ minLength: 1, maxLength: 15 })
@@ -130,518 +153,162 @@ const facetsRawKeyArbitrary: fc.Arbitrary<string> = fc
   // key; `facets.test.ts` pins the skip as deliberate behaviour.
   .filter((key) => key !== '__proto__')
 
-export const facetsRawArbitrary = fc.dictionary(facetsRawKeyArbitrary, facetValueArbitrary, {
-  maxKeys: 4,
+export const facetsRawArbitrary = arbitraryForSchema(facetsRawSchema, {
+  override: (path) => {
+    if (path.endsWith('{key}')) return facetsRawKeyArbitrary
+    if (path.endsWith('{}')) return facetValueArbitrary
+    return undefined
+  },
 })
 
-const geometryArbitrary = fc.integer({ min: -10_000, max: 10_000 })
-const sizeArbitrary = fc.integer({ min: 0, max: 10_000 })
-const canvasColorArbitrary: fc.Arbitrary<string> = fc.oneof(
-  fc.constantFrom('1', '2', '3', '4', '5', '6'),
-  fc
-    .array(fc.constantFrom(...'0123456789abcdef'.split('')), { minLength: 6, maxLength: 6 })
-    .map((chars) => `#${chars.join('')}`),
+/**
+ * OKF actors: `human:` is the one prefix that carries meaning (trust tiers
+ * key off it), so it is drawn at real weight beside what the schema alone
+ * would accept.
+ */
+const okfActorArbitrary: fc.Arbitrary<string> = fc.oneof(
+  fc.constantFrom('human:reviewer', 'process:layout-agent'),
+  arbitraryForSchema(okfActorSchema),
 )
 
-const sharedNodeGeometryArbitrary = {
-  id: nodeIdArbitrary,
-  x: geometryArbitrary,
-  y: geometryArbitrary,
-  width: sizeArbitrary,
-  height: sizeArbitrary,
-  color: fc.option(canvasColorArbitrary, { nil: undefined }),
+/**
+ * The substitutions every schema-derived generator here shares, matched by
+ * schema IDENTITY so they apply wherever the schema is composed: a facets
+ * bucket draws its grammar, an actor draws the `human:` prefix at weight.
+ */
+const sharedOverrides: SchemaArbitraryOptions['override'] = (_path, schema) => {
+  if (sameSchema(schema, extensionFacetsSchema)) return extensionFacetsArbitrary
+  if (sameSchema(schema, okfActorSchema)) return okfActorArbitrary
+  return undefined
 }
 
-const spatialTextNodeArbitrary = fc.record({
-  ...sharedNodeGeometryArbitrary,
-  type: fc.constant('text' as const),
-  text: fc.string({ maxLength: 50 }),
+export const xWhiteboardArbitrary = arbitraryForSchema(xWhiteboardSchema, {
+  override: sharedOverrides,
 })
 
-const spatialFileNodeArbitrary = fc.record({
-  ...sharedNodeGeometryArbitrary,
-  type: fc.constant('file' as const),
-  file: fc.string({ minLength: 1, maxLength: 30 }),
+export const spatialNodeArbitrary = arbitraryForSchema(spatialNodeSchema, {
+  override: sharedOverrides,
 })
 
-const spatialLinkNodeArbitrary = fc.record({
-  ...sharedNodeGeometryArbitrary,
-  type: fc.constant('link' as const),
-  url: fc.webUrl(),
+export const canvasEdgeArbitrary = arbitraryForSchema(canvasEdgeSchema)
+
+export const markdownCanvasArbitrary = arbitraryForSchema(markdownDocumentSchema, {
+  // A body long enough for a property about text to reach something.
+  override: (path) => (path === '$.body' ? fc.string({ maxLength: 200 }) : undefined),
 })
-
-const spatialGroupNodeArbitrary = fc.record({
-  ...sharedNodeGeometryArbitrary,
-  type: fc.constant('group' as const),
-})
-
-// Both variants of the node-extension union: embed (facets optional) and
-// facets-only. Declared before the node arbitraries that attach it.
-export const xWhiteboardArbitrary = fc.oneof(
-  fc.record(
-    {
-      kind: fc.constant('embed' as const),
-      documentId: canonicalUlidArbitrary,
-      facets: extensionFacetsArbitrary,
-    },
-    { requiredKeys: ['kind', 'documentId'] },
-  ),
-  fc.record({ facets: extensionFacetsArbitrary }, { requiredKeys: [] }),
-)
-
-// Every node kind may carry the x-whiteboard extension (embed | facets-only
-// union), so the property suites that consume `spatialCanvasArbitrary`
-// (model's schema property, codec's round-trip and extension-contract
-// properties) exercise node facets rather than being blind to the union.
-const bareSpatialNodeArbitrary = fc.oneof(
-  spatialTextNodeArbitrary,
-  spatialFileNodeArbitrary,
-  spatialLinkNodeArbitrary,
-  spatialGroupNodeArbitrary,
-)
-
-export const spatialNodeArbitrary = fc
-  .tuple(bareSpatialNodeArbitrary, fc.option(xWhiteboardArbitrary, { nil: undefined }))
-  .map(([node, extension]) =>
-    extension === undefined ? node : { ...node, 'x-whiteboard': extension },
-  )
-
-export const canvasEdgeArbitrary = fc.record({
-  id: nodeIdArbitrary,
-  fromNode: nodeIdArbitrary,
-  toNode: nodeIdArbitrary,
-  color: fc.option(canvasColorArbitrary, { nil: undefined }),
-})
-
-export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })
 
 // ---------------------------------------------------------------------------
-// mdast content-model arbitraries. Valid-by-construction: each function only
-// ever generates a tree that is legal under the matching category schema in
-// ../mdast/index.ts (phrasing/cellPhrasing/flow/listItem/tableRow/tableCell/
-// root). `maxDepth` guards fast-check's own recursion (and the parser's)
-// from unbounded growth while still exercising genuinely nested structures.
+// mdast content-model arbitraries, drawn from the recursive schemas in
+// ../mdast/index.ts. `maxDepth` is how many times a category may nest inside
+// itself; at the ceiling the walk keeps the union arms and the empty arrays
+// that need no further expansion, so a tree is always finite.
 // ---------------------------------------------------------------------------
 
-const optionalNullableString = fc.option(fc.string({ maxLength: 10 }), { nil: null })
-const referenceTypeArbitrary = fc.constantFrom(
-  'shortcut' as const,
-  'collapsed' as const,
-  'full' as const,
-)
-
-// These leaf arbitraries are intentionally left untyped (no explicit
-// fc.Arbitrary<MdastPhrasingContent> annotation): they have no `children`
-// field, so their inferred literal shapes are structurally assignable to
-// BOTH MdastPhrasingContent and MdastCellPhrasingContent's matching
-// variants. Annotating them with the wider union type would make TS check
-// against the whole union (including children-bearing variants) and reject
-// reuse from `mdastCellPhrasingContentArbitrary`.
-const textLeafArbitrary = fc
-  .string({ maxLength: 20 })
-  .map((value) => ({ type: 'text' as const, value }))
-const inlineCodeLeafArbitrary = fc
-  .string({ maxLength: 20 })
-  .map((value) => ({ type: 'inlineCode' as const, value }))
-const breakLeafArbitrary: fc.Arbitrary<{ type: 'break' }> = fc.constant({ type: 'break' })
-const htmlLeafArbitrary = fc
-  .string({ maxLength: 20 })
-  .map((value) => ({ type: 'html' as const, value }))
-const imageLeafArbitrary = fc
-  .record({ url: fc.webUrl(), title: optionalNullableString, alt: optionalNullableString })
-  .map(({ url, title, alt }) => ({ type: 'image' as const, url, title, alt }))
-const imageReferenceLeafArbitrary = fc
-  .record({
-    identifier: fc.string({ minLength: 1, maxLength: 10 }),
-    label: optionalNullableString,
-    referenceType: referenceTypeArbitrary,
-    alt: optionalNullableString,
-  })
-  .map(({ identifier, label, referenceType, alt }) => ({
-    type: 'imageReference' as const,
-    identifier,
-    label,
-    referenceType,
-    alt,
-  }))
-const inlineMathLeafArbitrary = fc
-  .string({ maxLength: 20 })
-  .map((value) => ({ type: 'inlineMath' as const, value }))
 // `]`, `|` and `#` are the reference grammar's own delimiters, so a fragment
 // holding one is an encoding ambiguity rather than content.
-export const referenceFragmentArbitrary = fc.option(
-  fc
-    .string({ minLength: 1, maxLength: 10 })
-    .filter((s) => !/[\]|#]/.test(s) && s.trim().length > 0),
-  { nil: undefined },
-)
-const wikiLinkLeafArbitrary = fc
-  .record({
-    documentId: canonicalUlidArbitrary,
-    alias: fc.option(fc.string({ maxLength: 10 }), { nil: undefined }),
-    fragment: referenceFragmentArbitrary,
-  })
-  .map(({ documentId, alias, fragment }) => ({
-    type: 'wikiLink' as const,
-    documentId,
-    alias,
-    ...(fragment === undefined ? {} : { fragment }),
-  }))
-const embedLeafArbitrary = fc
-  .record({ documentId: canonicalUlidArbitrary, fragment: referenceFragmentArbitrary })
-  .map(({ documentId, fragment }) => ({
-    type: 'embed' as const,
-    documentId,
-    ...(fragment === undefined ? {} : { fragment }),
-  }))
+const referenceFragmentTextArbitrary = fc
+  .string({ minLength: 1, maxLength: 10 })
+  .filter((s) => !/[\]|#]/.test(s) && s.trim().length > 0)
+export const referenceFragmentArbitrary = fc.option(referenceFragmentTextArbitrary, {
+  nil: undefined,
+})
 
-/** Leaves shared by both PhrasingContent and TableCell's phrasing-minus-break. */
-const cellPhrasingLeafArbitraries = [
-  textLeafArbitrary,
-  inlineCodeLeafArbitrary,
-  htmlLeafArbitrary,
-  imageLeafArbitrary,
-  imageReferenceLeafArbitrary,
-  inlineMathLeafArbitrary,
-  wikiLinkLeafArbitrary,
-  embedLeafArbitrary,
-] as const
+const mdastOverrides: SchemaArbitraryOptions['override'] = (path) =>
+  path.endsWith('.fragment') ? referenceFragmentTextArbitrary : undefined
+
+function mdastArbitrary<T>(schema: z.ZodType<T>) {
+  const byDepth = new Map<number, fc.Arbitrary<T>>()
+  return (maxDepth = 3): fc.Arbitrary<T> => {
+    const known = byDepth.get(maxDepth)
+    if (known !== undefined) return known
+    const built = arbitraryForSchema(schema, { maxDepth, override: mdastOverrides })
+    byDepth.set(maxDepth, built)
+    return built
+  }
+}
 
 /** Bounded-depth PhrasingContent generator (includes `break`). */
-export function mdastPhrasingContentArbitrary(maxDepth = 3): fc.Arbitrary<MdastPhrasingContent> {
-  const leaves = fc.oneof(...cellPhrasingLeafArbitraries, breakLeafArbitrary)
-  if (maxDepth <= 0) return leaves
-
-  const childArbitrary = mdastPhrasingContentArbitrary(maxDepth - 1)
-  const childrenArbitrary = fc.array(childArbitrary, { maxLength: 3 })
-
-  return fc.oneof(
-    leaves,
-    childrenArbitrary.map((children) => ({ type: 'emphasis', children }) as const),
-    childrenArbitrary.map((children) => ({ type: 'strong', children }) as const),
-    fc
-      .record({ url: fc.webUrl(), title: optionalNullableString, children: childrenArbitrary })
-      .map(({ url, title, children }) => ({ type: 'link', url, title, children }) as const),
-    fc
-      .record({
-        identifier: fc.string({ minLength: 1, maxLength: 10 }),
-        label: optionalNullableString,
-        referenceType: referenceTypeArbitrary,
-        children: childrenArbitrary,
-      })
-      .map(
-        ({ identifier, label, referenceType, children }) =>
-          ({ type: 'linkReference', identifier, label, referenceType, children }) as const,
-      ),
-    childrenArbitrary.map((children) => ({ type: 'delete', children }) as const),
-  )
-}
-
-/**
- * PhrasingContent minus `break` — mdast's TableCell content model. Not
- * imported directly outside this file; used by `mdastTableCellArbitrary`
- * below and kept top-level (rather than nested) so its recursion stays
- * bounded and easy to follow independently of its caller.
- */
-function mdastCellPhrasingContentArbitrary(maxDepth = 3): fc.Arbitrary<MdastCellPhrasingContent> {
-  const leaves = fc.oneof(...cellPhrasingLeafArbitraries)
-  if (maxDepth <= 0) return leaves
-
-  const childArbitrary = mdastCellPhrasingContentArbitrary(maxDepth - 1)
-  const childrenArbitrary = fc.array(childArbitrary, { maxLength: 3 })
-
-  return fc.oneof(
-    leaves,
-    childrenArbitrary.map((children) => ({ type: 'emphasis', children }) as const),
-    childrenArbitrary.map((children) => ({ type: 'strong', children }) as const),
-    fc
-      .record({ url: fc.webUrl(), title: optionalNullableString, children: childrenArbitrary })
-      .map(({ url, title, children }) => ({ type: 'link', url, title, children }) as const),
-    fc
-      .record({
-        identifier: fc.string({ minLength: 1, maxLength: 10 }),
-        label: optionalNullableString,
-        referenceType: referenceTypeArbitrary,
-        children: childrenArbitrary,
-      })
-      .map(
-        ({ identifier, label, referenceType, children }) =>
-          ({ type: 'linkReference', identifier, label, referenceType, children }) as const,
-      ),
-    childrenArbitrary.map((children) => ({ type: 'delete', children }) as const),
-  )
-}
-
-const codeLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
-  .record({
-    value: fc.string({ maxLength: 20 }),
-    lang: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
-    meta: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
-  })
-  .map(({ value, lang, meta }) => ({ type: 'code', value, lang, meta }))
-const thematicBreakLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc.constant({
-  type: 'thematicBreak',
-})
-const definitionLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
-  .record({
-    identifier: fc.string({ minLength: 1, maxLength: 10 }),
-    label: optionalNullableString,
-    url: fc.webUrl(),
-    title: optionalNullableString,
-  })
-  .map(({ identifier, label, url, title }) => ({
-    type: 'definition',
-    identifier,
-    label,
-    url,
-    title,
-  }))
-const flowHtmlLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
-  .string({ maxLength: 20 })
-  .map((value) => ({ type: 'html', value }))
-const mathLeafArbitrary: fc.Arbitrary<MdastFlowContent> = fc
-  .record({
-    value: fc.string({ maxLength: 20 }),
-    meta: fc.option(fc.string({ maxLength: 10 }), { nil: null }),
-  })
-  .map(({ value, meta }) => ({ type: 'math', value, meta }))
+export const mdastPhrasingContentArbitrary = mdastArbitrary(mdastPhrasingContentSchema)
 
 /** Bounded-depth FlowContent generator. */
-export function mdastFlowContentArbitrary(maxDepth = 3): fc.Arbitrary<MdastFlowContent> {
-  const leaves = fc.oneof(
-    codeLeafArbitrary,
-    thematicBreakLeafArbitrary,
-    definitionLeafArbitrary,
-    flowHtmlLeafArbitrary,
-    mathLeafArbitrary,
-  )
-  if (maxDepth <= 0) return leaves
-
-  const phrasingChildren = fc.array(mdastPhrasingContentArbitrary(maxDepth - 1), { maxLength: 3 })
-  const flowChildren = fc.array(mdastFlowContentArbitrary(maxDepth - 1), { maxLength: 3 })
-  const listItemChildren = fc.array(mdastListItemArbitrary(maxDepth - 1), { maxLength: 3 })
-  const tableRowChildren = fc.array(mdastTableRowArbitrary(maxDepth - 1), { maxLength: 3 })
-
-  return fc.oneof(
-    leaves,
-    phrasingChildren.map((children) => ({ type: 'paragraph', children }) as const),
-    fc
-      .record({
-        depth: fc.constantFrom(
-          1 as const,
-          2 as const,
-          3 as const,
-          4 as const,
-          5 as const,
-          6 as const,
-        ),
-        children: phrasingChildren,
-      })
-      .map(({ depth, children }) => ({ type: 'heading', depth, children }) as const),
-    flowChildren.map((children) => ({ type: 'blockquote', children }) as const),
-    fc
-      .record({
-        ordered: fc.option(fc.boolean(), { nil: undefined }),
-        start: fc.option(fc.nat(9), { nil: undefined }),
-        spread: fc.option(fc.boolean(), { nil: undefined }),
-        children: listItemChildren,
-      })
-      .map(
-        ({ ordered, start, spread, children }) =>
-          ({ type: 'list', ordered, start, spread, children }) as const,
-      ),
-    fc
-      .record({
-        align: fc.option(
-          fc.array(fc.constantFrom('left' as const, 'right' as const, 'center' as const, null), {
-            maxLength: 3,
-          }),
-          { nil: undefined },
-        ),
-        children: tableRowChildren,
-      })
-      .map(({ align, children }) => ({ type: 'table', align, children }) as const),
-  )
-}
-
-/**
- * ListContent — a listItem's children are FlowContent. Not imported
- * directly outside this file; used by `mdastFlowContentArbitrary`'s `list`
- * variant.
- */
-function mdastListItemArbitrary(maxDepth = 3): fc.Arbitrary<MdastListItem> {
-  return fc
-    .record({
-      checked: fc.option(fc.boolean(), { nil: undefined }),
-      spread: fc.option(fc.boolean(), { nil: undefined }),
-      children: fc.array(mdastFlowContentArbitrary(maxDepth), { maxLength: 3 }),
-    })
-    .map(({ checked, spread, children }) => ({ type: 'listItem', checked, spread, children }))
-}
-
-/**
- * RowContent — a tableCell's children are phrasing minus `break`. Not
- * imported directly outside this file; used by `mdastTableRowArbitrary`.
- */
-function mdastTableCellArbitrary(maxDepth = 3): fc.Arbitrary<MdastTableCell> {
-  return fc
-    .array(mdastCellPhrasingContentArbitrary(maxDepth), { maxLength: 3 })
-    .map((children) => ({ type: 'tableCell', children }))
-}
+export const mdastFlowContentArbitrary = mdastArbitrary(mdastFlowContentSchema)
 
 /** TableContent — a tableRow's children are tableCells. */
-export function mdastTableRowArbitrary(maxDepth = 3): fc.Arbitrary<MdastTableRow> {
-  return fc
-    .array(mdastTableCellArbitrary(maxDepth), { maxLength: 3 })
-    .map((children) => ({ type: 'tableRow', children }))
-}
+export const mdastTableRowArbitrary = mdastArbitrary(mdastTableRowSchema)
 
 /**
  * Document root — an intentionally flow-only application subset of upstream
  * mdast Root (see ../mdast/index.ts).
  */
-export function mdastRootArbitrary(maxDepth = 3): fc.Arbitrary<MdastRoot> {
-  return fc
-    .array(mdastFlowContentArbitrary(maxDepth), { maxLength: 3 })
-    .map((children) => ({ type: 'root', children }))
-}
+export const mdastRootArbitrary = mdastArbitrary(mdastRootSchema)
+
+/**
+ * A canvas comment as the schema accepts it. `targetNodeId` is free-standing
+ * on purpose — a dangling target is VALID (a comment may outlive its
+ * subject), so the canvas arbitrary does not need to correlate it with node
+ * ids the way edges must be.
+ */
+export const canvasCommentArbitrary = arbitraryForSchema(canvasCommentSchema, {
+  override: sharedOverrides,
+})
+
+/**
+ * The annotation layer's generators (ADR-0026), drawn from the schemas. The
+ * anchor's three refinements — one reference at most, a node set naming
+ * each node once, a region with both sides — are honoured by the schema
+ * filter; `annotation.test.ts` pins that every arm and every reference is
+ * still reached.
+ */
+export const annotationAnchorArbitrary = arbitraryForSchema(annotationAnchorSchema)
+
+export const commentMessageArbitrary = arbitraryForSchema(commentMessageSchema, {
+  override: sharedOverrides,
+})
+
+export const commentThreadArbitrary = arbitraryForSchema(commentThreadSchema, {
+  override: (path, schema) => {
+    // Unique ids, because a thread whose two messages share an id is not a
+    // thread the storage can represent, and short ids collide often enough
+    // to pass hundreds of runs and then fail on someone else's seed.
+    if (path === '$.messages') {
+      return fc.uniqueArray(commentMessageArbitrary, {
+        minLength: 1,
+        maxLength: 4,
+        selector: (message) => message.id,
+      })
+    }
+    return sharedOverrides?.(path, schema)
+  },
+})
+
+/**
+ * The canvas-level extension: routing preferences, comments and the
+ * canvas's facets, each independently present. Comments get unique ids for
+ * the same reason a thread's messages do.
+ */
+const canvasExtensionArbitrary = arbitraryForSchema(canvasExtensionSchema, {
+  override: (path, schema) => {
+    if (path === '$.comments') {
+      return fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id })
+    }
+    return sharedOverrides?.(path, schema)
+  },
+})
 
 /**
  * A SpatialCanvas that is valid by construction.
  *
  * The two invariants `spatialCanvasSchema` enforces — unique node ids, and
  * edges whose endpoints exist — cannot be met by generating nodes and edges
- * independently, so they are built in rather than filtered afterwards. Node ids
- * in particular need the explicit uniqueness: `nodeIdArbitrary` has low entropy
- * at small sizes (it shrinks to `" "`), so collisions are rare enough to pass
+ * independently, so they are built in rather than filtered afterwards. Node
+ * ids in particular need the explicit uniqueness: the schema's id is any
+ * non-empty string, drawn short, so collisions are rare enough to pass
  * hundreds of runs and then fail on someone else's seed.
  *
- * It lives here because three packages were each building this shape by hand
- * and one of them had lost the node-id dedupe — a canvas the schema rejects,
- * asserted to round-trip.
+ * It lives here because three packages were each building this shape by
+ * hand and one of them had lost the node-id dedupe — a canvas the schema
+ * rejects, asserted to round-trip.
  */
-// Valid-by-construction: text is non-empty, the anchor is integer, and the
-// optional author/timestamp use the shapes their schemas actually accept.
-// `targetNodeId` is free-standing on purpose — a dangling target is VALID
-// (a comment may outlive its subject), so the canvas arbitrary does not need
-// to correlate it with node ids the way edges must be.
-export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc
-  .tuple(
-    fc.record(
-      {
-        id: nodeIdArbitrary,
-        x: geometryArbitrary,
-        y: geometryArbitrary,
-        text: fc.string({ minLength: 1, maxLength: 40 }),
-        author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
-        createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
-        resolved: fc.boolean(),
-      },
-      { requiredKeys: ['id', 'x', 'y', 'text'] },
-    ),
-    // A node, an edge, or neither — the anchor refuses both, so drawn as one
-    // choice the same way `annotationAnchorArbitrary` draws it.
-    fc.oneof(
-      fc.constant<{ targetNodeId?: string; targetEdgeId?: string }>({}),
-      nodeIdArbitrary.map((targetNodeId) => ({ targetNodeId })),
-      nodeIdArbitrary.map((targetEdgeId) => ({ targetEdgeId })),
-    ),
-  )
-  .map(([comment, target]) => ({ ...comment, ...target }))
-
-/**
- * The annotation layer's generators (ADR-0026). Valid-by-construction against
- * `annotationAnchorSchema` / `commentThreadSchema`, and deliberately covering
- * BOTH anchor arms: a property that only ever saw the spatial arm would say
- * nothing about the shape's whole reason for existing.
- */
-export const annotationAnchorArbitrary: fc.Arbitrary<AnnotationAnchor> = fc.oneof(
-  // A spatial anchor names a node, an edge, a node set, or nothing — never
-  // two of them, which the schema refuses, so the reference is drawn as one
-  // choice; a region (width + height) is drawn as one choice beside it.
-  fc
-    .tuple(
-      fc.oneof(
-        fc.constant<{ nodeId?: string; edgeId?: string; nodeIds?: string[] }>({}),
-        nodeIdArbitrary.map((nodeId) => ({ nodeId })),
-        nodeIdArbitrary.map((edgeId) => ({ edgeId })),
-        fc.uniqueArray(nodeIdArbitrary, { minLength: 2, maxLength: 4 }).map((nodeIds) => ({
-          nodeIds,
-        })),
-      ),
-      geometryArbitrary,
-      geometryArbitrary,
-      fc.oneof(
-        fc.constant<{ width?: number; height?: number }>({}),
-        fc
-          .tuple(fc.nat({ max: 2000 }), fc.nat({ max: 2000 }))
-          .map(([width, height]) => ({ width, height })),
-      ),
-    )
-    .map(([reference, x, y, extent]) => ({
-      kind: 'spatial' as const,
-      ...reference,
-      x,
-      y,
-      ...extent,
-    })),
-  fc
-    .record(
-      {
-        kind: fc.constant('text' as const),
-        nodeId: nodeIdArbitrary,
-        quote: fc.record(
-          {
-            prefix: fc.string({ maxLength: 8 }),
-            exact: fc.string({ minLength: 1, maxLength: 24 }),
-            suffix: fc.string({ maxLength: 8 }),
-          },
-          { requiredKeys: ['exact'] },
-        ),
-        start: fc.nat({ max: 4000 }),
-        length: fc.nat({ max: 200 }),
-      },
-      { requiredKeys: ['kind', 'quote', 'start', 'length'] },
-    )
-    // `end` is derived rather than generated so the range is never backwards —
-    // the schema rejects that, and a filter would just discard half the runs.
-    .map(({ length, ...anchor }) => ({ ...anchor, end: anchor.start + length })),
-  fc.constant({ kind: 'document' as const }),
-)
-
-export const commentMessageArbitrary: fc.Arbitrary<CommentMessage> = fc.record(
-  {
-    id: nodeIdArbitrary,
-    body: fc.string({ minLength: 1, maxLength: 40 }),
-    author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
-    createdAt: fc.constantFrom(
-      '2026-09-01T10:00:00+09:00',
-      '2026-09-01T11:30:00Z',
-      '2026-09-02T09:15:00Z',
-    ),
-  },
-  { requiredKeys: ['id', 'body'] },
-)
-
-export const commentThreadArbitrary: fc.Arbitrary<CommentThread> = fc.record(
-  {
-    id: nodeIdArbitrary,
-    anchor: annotationAnchorArbitrary,
-    status: fc.constantFrom('open' as const, 'resolved' as const),
-    createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
-    // Unique ids for the same reason the canvas arbitrary dedupes node ids:
-    // `nodeIdArbitrary` collides often enough at small sizes to pass hundreds
-    // of runs and then fail on someone else's seed, and a thread whose two
-    // messages share an id is not a thread the storage can represent.
-    messages: fc.uniqueArray(commentMessageArbitrary, {
-      minLength: 1,
-      maxLength: 4,
-      selector: (message) => message.id,
-    }),
-  },
-  { requiredKeys: ['id', 'anchor', 'status', 'messages'] },
-)
-
 export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
   .uniqueArray(spatialNodeArbitrary, { maxLength: 4, selector: (node) => node.id })
   .chain((nodes) => {
@@ -650,10 +317,8 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
     return fc
       .uniqueArray(
         fc
-          .tuple(fc.constantFrom(...ids), fc.constantFrom(...ids))
-          .chain(([fromNode, toNode]) =>
-            canvasEdgeArbitrary.map((edge) => ({ ...edge, fromNode, toNode })),
-          ),
+          .tuple(fc.constantFrom(...ids), fc.constantFrom(...ids), canvasEdgeArbitrary)
+          .map(([fromNode, toNode, edge]) => ({ ...edge, fromNode, toNode })),
         { maxLength: 3, selector: (edge) => edge.id },
       )
       .map((edges) => ({ nodes, edges }))
@@ -661,12 +326,8 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
   .chain(
     (canvas): fc.Arbitrary<SpatialCanvas> =>
       fc
-        .option(fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id }), {
-          nil: undefined,
-        })
-        .map((comments) =>
-          comments === undefined || comments.length === 0
-            ? canvas
-            : { ...canvas, 'x-whiteboard': { comments } },
+        .option(canvasExtensionArbitrary, { nil: undefined })
+        .map((extension) =>
+          extension === undefined ? canvas : { ...canvas, 'x-whiteboard': extension },
         ),
   )

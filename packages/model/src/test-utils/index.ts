@@ -6,3 +6,4 @@
  */
 export * from './arbitraries.js'
 export * from './fast-check.js'
+export * from './zod-arbitrary.js'

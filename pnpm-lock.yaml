@@ -535,6 +535,9 @@ importers:
       '@fast-check/vitest':
         specifier: ^0.4.1
         version: 0.4.1(vitest@5.0.0)
+      '@kamiazya/whiteboard-model':
+        specifier: workspace:*
+        version: link:../model
       fast-check:
         specifier: ^4.7.0
         version: 4.8.0

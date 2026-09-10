@@ -1,10 +1,11 @@
+import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
-import { facetCoverage, facetsArb } from '../test-utils/facet-arbitraries.js'
+import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
@@ -531,19 +532,23 @@ describe('live-drag parity property (PBT)', () => {
     },
   )
 
-  it('every registered node and canvas facet contributes payloads the generator can draw', () => {
-    // The mechanism's own failure mode: a facet whose schema `facetPayloadSamples`
-    // cannot express widens the generator by nothing while the property still
-    // reads as covering "the facets". Naming it here is what turns that into a
-    // decision — give the facet a derivable schema, or teach the sample deriver
-    // its shape.
-    const empty = [
-      ...facetCoverage(bundledFacetRegistry, 'node'),
-      ...facetCoverage(bundledFacetRegistry, 'canvas'),
-    ]
-      .filter((entry) => entry.samples.length === 0)
-      .map((entry) => entry.key)
-    expect(empty).toEqual([])
+  it('every registered node and canvas facet is drawn by the generator', () => {
+    // The mechanism's own failure mode: a facet the generator never produces
+    // widens the property by nothing while it still reads as covering "the
+    // facets". A construct the schema walk cannot express already throws at
+    // construction naming the path; this is the other half — every facet
+    // the bundled registry holds for either target actually arrives.
+    for (const target of ['node', 'canvas'] as const) {
+      const seen = new Set<string>()
+      for (const extension of fc.sample(facetsArb(bundledFacetRegistry, target), 300)) {
+        for (const key of Object.keys(extension?.facets ?? {})) seen.add(key)
+      }
+      expect([...seen].sort(), target).toEqual(
+        facetEntries(bundledFacetRegistry, target)
+          .map((entry) => entry.key)
+          .sort(),
+      )
+    }
   })
 
   it('the canvas facets the generator draws actually change the layout it compares', () => {

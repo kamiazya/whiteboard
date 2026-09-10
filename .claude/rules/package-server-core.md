@@ -52,6 +52,35 @@ paths:
 
 - Vitest project: `server-core-node` (registered in root `vitest.config.ts`).
 - Smoke: `createServer` returns an app whose `fetch` is callable.
+- **Every tool is fuzzed from its own input schema**
+  (`tools/tool-inputs.fuzz.property.test.ts`): `arbitraryForSchema` over
+  `tool.inputSchema` for each entry of `createServer(deps).tools`, run
+  against a seeded in-memory workspace (a spatial document with two text
+  nodes, a group, an edge and a comment; a markdown document with
+  frontmatter and a body; one saved version). Each call must ANSWER or
+  REFUSE — a domain error naming what was wrong — never crash (a
+  `TypeError` / `RangeError` / `ReferenceError`, a non-Error thrown, or a
+  message in a crash's vocabulary), and what it answers must parse under
+  its own `outputSchema`, which is what the MCP SDK checks at runtime. Ids
+  are drawn from the seeded workspace at real weight (matched by schema
+  def, since `.describe()` clones the object), and three tools get a
+  per-tool fix-up over a share of draws for what one field cannot know
+  about its siblings (a facet payload for the target the write names, a
+  passage edit's `assumed` equal to what the passage says, one canvas op
+  at a time, each fitted to what the canvas holds). A batch tool's op union
+  is ALSO driven one arm at a time, because a wide union passes on the arms
+  a random batch happens to reach — measured: 100 batches of
+  `wb_canvas_edit` answered with 7 of its 13 op kinds, and `node.patch`,
+  `node.splice`, `edge.remove`, `comment.resolve` and `region.set` never
+  reached the answering path. `OP_REACH` is the ledger over those arms in
+  the repo's sense (`coverage-ledger.md`): read off the schema in both
+  directions, `answers` checked against the run, and a `refused-only:`
+  entry says why the seeding cannot reach an arm and is checked to still be
+  true. The `afterAll` also fails when a whole tool never answered, so a
+  tool added to the record that the seeding cannot reach is visible rather
+  than green; `FUZZ_TALLY=1` prints each tool's tally, its refusal reasons
+  and the shapes it answered with. The refusing doubles this lane does not
+  replace (`unused*`) count as `environment`, never as a pass.
 
 ## Render style and canvas-target facets (ADR-0030)
 
