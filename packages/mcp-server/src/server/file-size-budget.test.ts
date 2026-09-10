@@ -139,7 +139,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
   // can fold a whole act into ONE commit. The bodies did not grow; these are
   // the two wrappers and the two lines saying what the split is for.
-  'packages/loro-adapter/src/loro-bridge.ts': 952,
+  // +8: `commentToFields` refuses a comment naming both a node and an edge,
+  // the same loud refusal it already gives a non-finite anchor and for the
+  // same reason — the thread it becomes is one every reader would drop.
+  'packages/loro-adapter/src/loro-bridge.ts': 960,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
