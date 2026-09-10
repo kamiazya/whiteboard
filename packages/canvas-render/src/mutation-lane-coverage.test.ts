@@ -101,9 +101,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // and the scoreboards' oracles share, outside the lane for the reason
     // the oracles are: what pins it is the scoreboards it feeds, whose
     // exact numbers move on any change to it.
+    // 66 and 12 since `layout/edges/diagonal-ink.ts`, the straight style's
+    // chord through an edge's own box, which the lane DOES cover: its
+    // sampled oracle and invariants are properties, and a survivor would be
+    // a chord read wrong.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 11,
-      production: 65,
+      mutated: 12,
+      production: 66,
     })
   })
 

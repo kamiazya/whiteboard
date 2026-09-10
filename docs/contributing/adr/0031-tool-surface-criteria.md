@@ -731,6 +731,24 @@ endpoint-body-ink tier sits below crossings, so a route through its own
 box outranked a crossing. Whether that order is right is a population
 question for the 2000-layout sweep, not a reading of one board.
 
+Traced, it was not the order. The search costed that route at ZERO
+self-ink: every ink term in the router reads axis-aligned segments only,
+and the straight style's routes are diagonals, so a diagonal back through
+the edge's own box was invisible to the search and visible to the score.
+Two changes were measured. Swapping the tiers (endpoint-body-ink above
+crossings) moved nothing on the board — the term was blind either way —
+and on the orthogonal sweep bought `own-endpoint` 12 to 5 for crossings
+494 to 686; rejected, and recorded beside the other router matrix. Reading
+the diagonal moved the board: the search then takes a bottom-to-right
+route with one crossing over the loop back through its source
+(`edgeThroughNode 1` to 0, bends 3 to 2, reversals 2 to 1, crossings 0
+to 1). It is charged at the intrusion tier, not the endpoint-body-ink
+one: every legitimate straight route has zero of it, since the diagonal
+runs from one stub's end to the other's, both outside their boxes — it is
+the straight style's form of the retrace the orthogonal style already
+charges there. The orthogonal sweep is untouched by construction (no
+diagonals), and the drawing corpus moved on one price only.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

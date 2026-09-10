@@ -465,6 +465,35 @@ describe('PENALTY_RULES', () => {
 })
 
 describe('overlap-and-intrusion', () => {
+  it("self term: a diagonal back through an endpoint body is an intrusion, the straight style's retrace", () => {
+    // A route that leaves its box's top by a stub and cuts back down
+    // through it on the diagonal was costed at zero everywhere while the
+    // drawing showed 63px of its own source. A chord of 50*sqrt2 through a
+    // 50-square, entering and leaving on its borders, charged at tier 0;
+    // the same chord through a FOREIGN body stays the axis-only tunnel
+    // rule's business, and an axis-aligned segment is not read here twice.
+    const path = [
+      { x: 0, y: 0 },
+      { x: 100, y: 100 },
+    ]
+    const square = { x: 25, y: 25, w: 50, h: 50 }
+    expect(selfPenalty(path, [], [], [square])).toEqual(
+      costAt('overlap-and-intrusion', Math.round(50 * Math.SQRT2 * COST_QUANTUM)),
+    )
+    expect(selfPenalty(path, [square], [], [])).toEqual(costAt('overlap-and-intrusion', 0))
+    expect(
+      selfPenalty(
+        [
+          { x: -10, y: 50 },
+          { x: 110, y: 50 },
+        ],
+        [],
+        [],
+        [square],
+      )[tierOf('overlap-and-intrusion')],
+    ).toBe(0)
+  })
+
   it('pair term: collinear horizontal segments with 10px x-overlap contribute 10*COST_QUANTUM to tier 0', () => {
     const triple = scoreSegmentPair(
       { x: 0, y: 0 },

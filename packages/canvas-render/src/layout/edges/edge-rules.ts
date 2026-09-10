@@ -13,6 +13,7 @@
  * is the PENALTY half — `pairScore` (spatial-edges.ts) and `selfPenalty`
  * compose over it to build the cost tuple `optimizeSideChoices` compares.
  */
+import { diagonalInkThrough } from './diagonal-ink.js'
 
 export type Side = 'top' | 'right' | 'bottom' | 'left'
 export type Point = { readonly x: number; readonly y: number }
@@ -533,8 +534,10 @@ const overlapAndIntrusion: PenaltyRule = {
   name: 'overlap-and-intrusion',
   tier: 0,
   pairTerm: (triple) => triple[0],
-  selfTerm: (path, foreignBodies) => {
-    let overlap = 0
+  selfTerm: (path, foreignBodies, _nodeBorders, endpointRects) => {
+    // The straight style's retrace: a diagonal back through the edge's
+    // own box, which no legitimate straight route has any of (diagonal-ink.ts).
+    let overlap = quantize(diagonalInkThrough(path, endpointRects))
     // Quantized once per POINT rather than per comparison: the retrace loop
     // below is quadratic in the segment count and re-derived the same six
     // values for every pair. `quantize` is pure, so the sums are unchanged.
@@ -707,14 +710,11 @@ const borderTracing: PenaltyRule = {
  * drift this package has a one-producer-per-geometry rule about.
  */
 export function interiorInkThrough(path: readonly Point[], rects: readonly Rect[]): number {
-  return inkAlongRects(
-    path,
-    rects.filter(
-      (r) =>
-        !rects.some((other) => other !== r && fullyContains(r, other) && !fullyContains(other, r)),
-    ),
-    (fixed, near, far) => near < fixed && fixed < far,
+  const bodies = rects.filter(
+    (r) =>
+      !rects.some((other) => other !== r && fullyContains(r, other) && !fullyContains(other, r)),
   )
+  return inkAlongRects(path, bodies, (fixed, near, far) => near < fixed && fixed < far)
 }
 
 export const endpointBodyInk: PenaltyRule = {

@@ -231,7 +231,12 @@ describe('drawing quality across the corpus', () => {
         ...DEBT_FREE,
         crossings: 0,
         bends: 0,
-        edgeLengthPx: 1010,
+        // 1010 -> 1055 when a diagonal back through an edge's own box became an
+        // intrusion: the first message's right-to-bottom pair had a clean drawn
+        // route but an unaligned TRIAL path that cut its own box, so the search
+        // now settles on top-to-left, 45px longer. Price, not debt: no column
+        // that targets zero moved.
+        edgeLengthPx: 1055,
         unevenGaps: 0,
         envelopePx: { w: 1008, h: 524 },
         // Tidy moves boxes, not the direction their arrows travel.

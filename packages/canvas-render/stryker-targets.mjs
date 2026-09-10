@@ -20,6 +20,9 @@
 export const MUTATED = [
   // The cost model and the searches the differential oracles cover.
   'src/layout/edges/edge-rules.ts',
+  // The diagonal clip the intrusion tier reads: a sampled oracle and two
+  // invariants, so a survivor here would be a chord read wrong.
+  'src/layout/edges/diagonal-ink.ts',
   'src/layout/edges/edge-crossing-sweep.ts',
   'src/layout/edges/grid-route.ts',
   // Serialization: escaping and character legality, byte-identical output.
