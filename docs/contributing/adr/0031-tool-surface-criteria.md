@@ -828,6 +828,23 @@ still-empty one — and that empty box, covering a member of the first by
 accident, read as holding it. A cursor-placed group now holds nothing
 until it has been placed around something, whatever its box covers.
 
+**The tenth reading (2026-09-10).** The whole lane with tidy banding on
+centres and a cursor-placed group following its members: 24 of 24 pass,
+`debtFreePowK` 1.0 — every one of the thirty drawn boards debt-free — no
+tool errors, 2.375 calls a trial, the fewest yet. Five readings moved the
+column from 0.7 to 1.0, and what moved it was never one thing: two tidy
+rules, two score rules, three router rules, and four things the surface
+said or did about groups. The debt criterion is saturated on this lane,
+which says as much about the lane as about the surface: ten drawing tasks
+of five to eleven boxes. What the boards still differ on is PRICE, and
+only one of them differs at all: the layered architecture board reads
+crossings 2, 1, 0 and reversals 2, 1, 3 across its three trials, with the
+same-row loop of the fifth reading behind the worst — the cost model's
+answer to a gateway placed beside the services it fans out to, a
+placement the drawer chose. So the next criterion is price on that board,
+and the next question is whether the surface can say where a fan-out box
+goes before the router has to pay for where it went.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
