@@ -902,6 +902,47 @@ a model wrote `id` at the OP level of `node.add` rather than inside
 next item — a batch lost to a key one level out is the same class as the
 `within: null` refusal the ninth reading fixed.
 
+**The fifteenth reading (2026-09-10): the refusal now names where the key
+belongs.** The fourteenth reading's third tool error — `id` at the op
+level of `node.add` — measured, through a real client, as:
+
+```
+Input validation error: Invalid arguments for tool wb_canvas_edit:
+ops.0: Unrecognized key: "id"
+```
+
+Two things are wrong with that as a thing a model reads. It names the key
+and not the fact needed to repair the call, and because one op failing
+validation refuses the CALL, every other op in the batch goes with it —
+so the cost of the mistake is a whole drawing, not a step. The mistake
+itself is a generalisation the surface invites: `node.patch`,
+`node.remove` and `node.lock` all take `id` beside `op`, and `node.add`
+alone takes it inside `node`.
+
+The same call now answers:
+
+```
+Input validation error: Invalid arguments for tool wb_canvas_edit:
+ops.0: Unrecognized key(s): "id" — the new node's own fields go inside
+`node`, not beside `op`.
+```
+
+Only a key the DRAFT actually has is redirected, on `node.add` and
+`edge.add` alike; a typo keeps the plain refusal, because sending it
+inside `node` would be a wrong answer stated as confidently as a right
+one. C1, C3 and C13 are unmoved by construction — a refusal message is
+not in the table, so this costs a model nothing to read and is paid only
+by the call that was already failing. Rungs 1 and 2 stayed green
+unchanged, which is the evidence for that.
+
+What this reading cannot claim is a rung-3 movement. The refusal fired in
+one call out of thirty in round 11, so three trials cannot see it: a
+before/after at that depth would report the same pass column either way
+and read as evidence of nothing. The measurement that stands is the
+message itself, taken through a real `Client` over the SDK's own
+validation (`canvas-edit-refusal.test.ts`), which is where the earlier
+C11 finding was fixed and pinned too.
+
 **The twelfth reading (2026-09-10), refuted.** The result of the call
 said it: `wb_canvas_edit` answered with a `notes` line naming a touched
 box whose connections along its own row all ran one way, the near and

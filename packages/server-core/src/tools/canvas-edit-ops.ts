@@ -75,6 +75,30 @@ const nodeDraftSchema = z.discriminatedUnion('type', [
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
 
 /**
+ * A key of the draft, written beside `op` instead of inside it, is told
+ * where it belongs. `node.patch`, `node.remove` and `node.lock` all take
+ * `id` at the op level and `node.add` takes it inside `node`, so a model
+ * generalises from the ops it just used and loses the WHOLE batch: one op
+ * failing validation refuses the call, and `Unrecognized key: "id"` names
+ * the key without naming the one thing needed to repair it. Measured in
+ * round 11 of the eval lane.
+ *
+ * Only a key the draft actually has is redirected. A typo has nowhere to
+ * point, and sending it inside `node` would be a wrong answer stated as
+ * confidently as a right one.
+ */
+const keysOf = (schema: { shape: Record<string, unknown> }) => Object.keys(schema.shape)
+const NODE_DRAFT_KEYS = new Set(nodeDraftSchema.options.flatMap(keysOf))
+const EDGE_DRAFT_KEYS = new Set(keysOf(edgeDraftSchema))
+const quoted = (keys: readonly string[]) => keys.map((key) => `"${key}"`).join(', ')
+const draftKeysBelongInside = (field: 'node' | 'edge', draftKeys: ReadonlySet<string>) => ({
+  error: (issue: { code: string; keys?: readonly string[] }) =>
+    issue.code === 'unrecognized_keys' && (issue.keys ?? []).some((key) => draftKeys.has(key))
+      ? `Unrecognized key(s): ${quoted(issue.keys ?? [])} — the new ${field}'s own fields go inside \`${field}\`, not beside \`op\`.`
+      : undefined,
+})
+
+/**
  * One step of a batch. The verbs are the ones the retired single-purpose
  * tools carried, so nothing an agent could do before is missing here — plus
  * `node.remove` / `edge.remove`, which had no tool at all: the only way to
@@ -108,16 +132,19 @@ const exactlyOneTarget = {
 
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
-    .object({
-      op: z.literal('node.add'),
-      node: nodeDraftSchema,
-      within: nodeIdSchema
-        .nullable()
-        .optional()
-        .describe(
-          'A group on the canvas, or added earlier in this batch, to place the node inside; it grows to fit, and one added in this batch with no position is placed around what goes in it. To wrap boxes that already exist in a new group, add the group and then region.set.',
-        ),
-    })
+    .object(
+      {
+        op: z.literal('node.add'),
+        node: nodeDraftSchema,
+        within: nodeIdSchema
+          .nullable()
+          .optional()
+          .describe(
+            'A group on the canvas, or added earlier in this batch, to place the node inside; it grows to fit, and one added in this batch with no position is placed around what goes in it. To wrap boxes that already exist in a new group, add the group and then region.set.',
+          ),
+      },
+      draftKeysBelongInside('node', NODE_DRAFT_KEYS),
+    )
     .strict(),
   z
     .object({ op: z.literal('node.patch'), ...NODE_TARGET, patch: nodePatchFieldsSchema })
@@ -147,7 +174,12 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .object({ op: z.literal('node.remove'), ...NODE_TARGET })
     .strict()
     .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
-  z.object({ op: z.literal('edge.add'), edge: edgeDraftSchema }).strict(),
+  z
+    .object(
+      { op: z.literal('edge.add'), edge: edgeDraftSchema },
+      draftKeysBelongInside('edge', EDGE_DRAFT_KEYS),
+    )
+    .strict(),
   z
     .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
     .strict(),
