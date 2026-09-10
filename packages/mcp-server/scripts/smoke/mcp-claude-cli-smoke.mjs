@@ -45,7 +45,7 @@ const mcpConfig = {
     whiteboard: {
       type: 'stdio',
       command: 'npx',
-      args: ['tsx', join(root, 'src/server/mcp/index.ts')],
+      args: ['tsx', join(root, 'src/server/mcp/stdio.ts')],
       env: { WHITEBOARD_DATA_DIR: tmpDataDir },
     },
   },

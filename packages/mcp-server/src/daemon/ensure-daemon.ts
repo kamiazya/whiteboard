@@ -107,7 +107,7 @@ function buildDaemonSpawnArgs(options: {
       env.WHITEBOARD_NO_WATCH === '1' ? ['--import', 'tsx/esm'] : ['--watch', '--import', 'tsx/esm']
     return {
       command: 'node',
-      args: [...nodeArgs, join(WHITEBOARD_ROOT, 'src/server/index.ts'), ...baseArgs],
+      args: [...nodeArgs, join(WHITEBOARD_ROOT, 'src/server/daemon-entry.ts'), ...baseArgs],
     }
   }
 

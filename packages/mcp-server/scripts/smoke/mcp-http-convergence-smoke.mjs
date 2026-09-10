@@ -110,7 +110,7 @@ function getFreePort() {
 const tmpDataDir = mkdtempSync(`${tmpdir()}/whiteboard-convergence-e2e-`)
 const port = await getFreePort()
 const mcpUrl = `http://127.0.0.1:${port}/mcp`
-const entry = resolve(root, 'src/server/index.ts')
+const entry = resolve(root, 'src/server/daemon-entry.ts')
 // No --daemon: this is a throwaway per-run server, not a registered
 // long-lived daemon — --daemon would also write a daemon-registry record
 // under the real home dir, which this smoke has no business touching.

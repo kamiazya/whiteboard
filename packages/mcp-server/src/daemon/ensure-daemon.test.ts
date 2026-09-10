@@ -141,7 +141,7 @@ describe('ensureDaemon', () => {
     expect(args).toContain('--watch')
     expect(args).toContain('--import')
     expect(args).toContain('tsx/esm')
-    expect(args).toContain('/repo/packages/mcp-server/src/server/index.ts')
+    expect(args).toContain('/repo/packages/mcp-server/src/server/daemon-entry.ts')
     expect(args).toContain('--daemon')
     expect(args).toContain('--port=45002')
   })
@@ -175,7 +175,7 @@ describe('ensureDaemon', () => {
     expect(args).not.toContain('--watch')
     expect(args).toContain('--import')
     expect(args).toContain('tsx/esm')
-    expect(args).toContain('/repo/packages/mcp-server/src/server/index.ts')
+    expect(args).toContain('/repo/packages/mcp-server/src/server/daemon-entry.ts')
     expect(args).toContain('--daemon')
   })
 
