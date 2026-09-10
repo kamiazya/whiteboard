@@ -1,5 +1,5 @@
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene, SceneNode } from '../scene-graph.js'
 import {
   buildArrowheadsScene,
   buildJumpHopScene,

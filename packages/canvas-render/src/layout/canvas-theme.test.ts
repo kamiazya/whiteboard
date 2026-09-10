@@ -5,14 +5,14 @@
 // route somebody chose explicitly (decision 4).
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { describe, expect, it } from 'vitest'
 import type {
   EmbedResolvedNode,
   ResolvedEdgeNode,
   Scene,
   ShapeSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import {

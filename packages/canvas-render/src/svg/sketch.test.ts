@@ -1,7 +1,7 @@
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { SKETCH_INK_REACH_PX } from '../layout/ink/sketch.js'
 import { sceneBounds } from '../scene-bounds.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 import { isWellFormedXmlFragment } from '../test-utils/xml-well-formed.js'
 import { renderSceneToSvg } from './backend.js'
 

@@ -26,7 +26,7 @@ import type {
   SceneNode,
   TableCellSceneNode,
   TableRowSceneNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
 
 type ScalableNode = SceneNode | ListItemNode | TableRowSceneNode | TableCellSceneNode
 

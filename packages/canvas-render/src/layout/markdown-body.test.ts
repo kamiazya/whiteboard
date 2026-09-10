@@ -5,9 +5,9 @@
 // surface that forgets draws a placeholder where the others draw the canvas.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { type LoadedReference, layoutMdastBlocks, referenceSeams } from '../index.js'
-import type { SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 
 const A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'

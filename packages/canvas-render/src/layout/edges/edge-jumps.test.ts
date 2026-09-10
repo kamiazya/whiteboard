@@ -4,8 +4,8 @@
 // Canvas-wide today; the per-edge override slot reuses the same resolution.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from '../nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'

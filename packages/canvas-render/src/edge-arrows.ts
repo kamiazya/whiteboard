@@ -1,4 +1,4 @@
-import type { ResolvedEdgeNode } from './scene-graph.js'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 
 /**
  * Arrowhead geometry shared by the SVG backend (which draws the triangles)

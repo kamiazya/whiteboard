@@ -11,8 +11,8 @@
  * alike, which is the tell: both go through the same translation.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CodeBlockNode, SceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { expect, it } from 'vitest'
-import type { CodeBlockNode, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'

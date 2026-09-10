@@ -6,9 +6,9 @@
 // pixels instead. Fixtures and the deliberate-regeneration flow live in
 // ../test-utils/pixel-golden-scenes.ts.
 
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { afterEach, describe, expect, it } from 'vitest'
 import { page } from 'vitest/browser'
-import type { Scene } from '../scene-graph.js'
 import {
   buildArrowheadsScene,
   buildIconSetScene,

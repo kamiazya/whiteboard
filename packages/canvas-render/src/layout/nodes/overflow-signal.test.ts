@@ -7,9 +7,9 @@
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../../scene-digest.js'
-import type { Scene, ShapeSceneNode } from '../../scene-graph.js'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
 import { SPATIAL_THEME_GEOMETRY } from '../../theme/spatial-geometry.js'
 import { layoutSpatialCanvas } from '../spatial-canvas.js'

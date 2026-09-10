@@ -36,7 +36,7 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import type { Scene } from '../scene-graph.js'
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { MARKDOWN_THEME_COMPACT, MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks, type MdastLayoutOptions } from './nodes/mdast-blocks.js'
 

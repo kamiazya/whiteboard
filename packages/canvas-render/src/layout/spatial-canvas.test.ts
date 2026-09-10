@@ -1,7 +1,12 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type {
+  HeadingBlockNode,
+  Scene,
+  ShapeSceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { describe, expect, it, vi } from 'vitest'
-import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { outlineContains } from './nodes/node-outline.js'
@@ -177,7 +182,8 @@ describe('layoutSpatialCanvas', () => {
     }
     const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
     const chrome = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+      (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
+        n.kind === 'shape' && n.id === 'a',
     )
     expect(chrome?.shape).toBe('visual.hexagon')
   })
@@ -299,7 +305,8 @@ describe('layoutSpatialCanvas', () => {
       baseOptions({ nodeOutlines: { a: 'visual.ellipse' } }),
     )
     const chrome = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+      (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
+        n.kind === 'shape' && n.id === 'a',
     )
     expect(chrome?.shape).toBe('visual.ellipse')
   })
@@ -318,7 +325,7 @@ describe('layoutSpatialCanvas', () => {
       baseOptions(),
     )
     const routed = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
     )
     expect(routed).toBeDefined()
     // Diagonal neighbours under orthogonal routing draw an L, never a
@@ -354,7 +361,8 @@ describe('layoutSpatialCanvas', () => {
     )
     const routed = (id: string) =>
       scene.nodes.find(
-        (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge' && n.id === id,
+        (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode =>
+          n.kind === 'edge' && n.id === id,
       )
     expect(routed('bent')?.path.length).toBeGreaterThan(2)
     expect(routed('plain')?.path.length).toBe(2)
@@ -375,7 +383,9 @@ describe('layoutSpatialCanvas', () => {
     const jumpsOf = (edges: CanvasEdge[]) => {
       const scene = layoutSpatialCanvas({ ...canvas([a, b, c, d], edges) }, baseOptions())
       return scene.nodes
-        .filter((n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge')
+        .filter(
+          (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
+        )
         .map((n) => [n.id, n.jumps?.length ?? 0] as const)
     }
     // Nothing asked for: no arc anywhere.
@@ -414,7 +424,7 @@ describe('layoutSpatialCanvas', () => {
       baseOptions(),
     )
     const routed = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
     )
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun' && n.text === 'L')
     expect(routed).toBeDefined()

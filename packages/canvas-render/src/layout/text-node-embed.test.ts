@@ -6,9 +6,9 @@
  * layout worker only made the omission visible on both threads at once.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { referenceSeams } from '../references/seams.js'
-import type { SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 

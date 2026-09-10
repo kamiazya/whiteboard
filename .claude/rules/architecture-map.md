@@ -6,7 +6,8 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) | model, codec, plugin-visual, facet-engine, zod, css-line-break, lowlight |
+| `packages/scene` | the scene VOCABULARY and the renderer/plugin contract — what a laid-out document is, and the shape a plugin contributes. Types only; it exists for its position, below both sides | model, facet-engine |
+| `packages/canvas-render` | layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) — the scene vocabulary it produces is `scene`'s | model, codec, scene, plugin-visual, facet-engine, zod, css-line-break, lowlight |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
@@ -15,7 +16,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/history` | a document's history as pure mechanics over the workspace record: the checkpoint scheduler, version retention, and frontier encoding. Both keepers run them; where the rows live stays in each root. Branch operations and merge planning lived here until ADR-0029 retired the branch | loro-crdt only |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, plugin-visual, search, hono, zod, loro-crdt |
 | `packages/facet-ui` | the facet system's React half, as a LIBRARY: primitives, the validated writer, the derived form. Knows no plugin | facet-engine, react, lucide-react |
-| `packages/plugin-visual` | the bundled `visual` plugin as an ordinary plugin package — data half (schemas, resolvers, the icon geometry `visual.symbol` enumerates) at `.`, what it draws ON a node at `/decorations`, React half at `/ui` | facet-engine, facet-ui, model, react, lucide-react, zod; canvas-render TYPE-ONLY (devDependency) |
+| `packages/plugin-visual` | the bundled `visual` plugin as an ordinary plugin package — data half (schemas, resolvers, the icon geometry `visual.symbol` enumerates) at `.`, what it draws ON a node at `/decorations`, React half at `/ui` | facet-engine, facet-ui, model, scene, react, lucide-react, zod |
 | `packages/daemon-client` | the daemon's browser-safe client half: the `/api` Zod contracts the web app parses, the fetch/WS/SSE document backends, `api-client`, and the shared backend contract test suites. Extracted from mcp-server's `src/shared` so browser-safety is structural (this table scans it), not positional; consumed directly by both composition roots | model, server-core, history, zod, @opentelemetry (browser SDK set) |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
@@ -147,21 +148,26 @@ on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one th
 backup lease was built for — was starting no background work at all, so
 scheduled backups reached only the local daemon.
 
-**A cross-package cycle is caught at the MANIFEST level, and its type-only
-property by a hand guard.** `plugin-visual` imports `canvas-render`'s
-scene-node vocabulary to build the decorations `canvas-render` then uses as
-its default — a source-level loop closed only by the import being TYPE-ONLY.
-`package-cycle-check.ts` now reads every workspace manifest's `dependencies`
-AND `devDependencies` (the door the direction check never inspects) and
-fails on any package loop not in `KNOWN_PACKAGE_CYCLES`, which carries this
-one edge with its reason. What stays hand-guarded is the type-only property
-itself — the manifest cannot see it, and measured, turning the import into
-a value import leaves the rest of arch-lint green:
-`plugin-visual/src/canvas-render-type-only.test.ts` is what fails, naming
-the offending line. The honest dissolution is a package below both holding
-the scene vocabulary, since it is a contract between the renderer and every
-plugin rather than the renderer's private type; worth extracting when a
-second plugin needs it, and recorded on `decorations.ts` until then.
+**A cross-package cycle is caught at the MANIFEST level, and there are none
+left.** `package-cycle-check.ts` reads every workspace manifest's
+`dependencies` AND `devDependencies` (the door the direction check never
+inspects) and fails on any package loop not in `KNOWN_PACKAGE_CYCLES` —
+which is now EMPTY.
+
+It carried one entry: `plugin-visual` imported `canvas-render`'s scene-node
+vocabulary to build what `canvas-render` then used as its default, a
+source-level loop closed only by every import back being TYPE-ONLY. That
+property is invisible to a manifest, so it needed a hand guard, and measured,
+turning the import into a value import left the rest of arch-lint green.
+
+The dissolution this file predicted — a package below both holding the scene
+vocabulary, since it is a contract between the renderer and every plugin
+rather than the renderer's private type — landed as `packages/scene`. The
+second caller that made it worth doing was a plugin-contributed edge ROUTER,
+which returns a scene node and so cannot be a type-only edge at all. The
+guard did not retire with the cycle; it got stronger. `plugin-visual/src/
+renderer-independence.test.ts` now pins that there is no import of the
+renderer AT ALL, type-only or otherwise.
 
 `lowlight` is a DEFAULT, not an opt-in. `layoutSpatialCanvas` supplies this
 package's own tokeniser the way it already supplies codec's markdown parser,

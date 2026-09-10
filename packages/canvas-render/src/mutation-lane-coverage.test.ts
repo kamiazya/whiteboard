@@ -91,9 +91,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // byte-identical SVG tests, which are examples.
     // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
     // `glow.test.ts`'s bounds assertion, which fails on any other reach.
+    //
+    // 62 since `scene-graph.ts` LEFT this package for `@kamiazya/whiteboard-
+    // scene`. Nothing about the lane changed: the file was types only, so it
+    // was never mutable and never in it — a module count moving without the
+    // mutated set moving is what an extraction of pure types looks like.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 63,
+      production: 62,
     })
   })
 

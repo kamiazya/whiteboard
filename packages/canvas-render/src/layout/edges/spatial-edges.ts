@@ -1,5 +1,5 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { ResolvedEdgeNode } from '../../scene-graph.js'
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
   centerOf,

@@ -28,8 +28,9 @@
  * of a side grows with its length (rough.js's rule) — an absolute amplitude
  * left a 600px frame as straight as a ruler while a 60px chip wobbled.
  */
+
+import type { BoundingBox, EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
 import type { ArrowPolygon } from '../../edge-arrows.js'
-import type { BoundingBox, EdgeJumpPoint } from '../../scene-graph.js'
 import { flattenDrawnEdgePath } from '../edges/edge-flatten.js'
 import type { NodeOutline } from '../nodes/node-outline.js'
 import { styleRandomFromSeed } from '../seed.js'

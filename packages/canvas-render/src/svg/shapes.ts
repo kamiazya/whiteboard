@@ -5,17 +5,18 @@
  * place the backend draws a shape from, so a silhouette kind added to
  * `node-outline.ts` is drawn here and nowhere else.
  */
-import { edgeArrowPolygons } from '../edge-arrows.js'
-import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
-import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
-import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
+
 import type {
   Appearance,
   BoundingBox,
   ResolvedEdgeNode,
   SceneInk,
   ShapeSceneNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { edgeArrowPolygons } from '../edge-arrows.js'
+import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
+import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
+import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import type { IconTable } from './backend.js'
 import { formatCoord } from './format.js'
 import {

@@ -47,21 +47,23 @@ import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mda
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
-import { z } from 'zod'
-import { highlightCode } from '../highlight/lowlight.js'
-import type { MeasureText } from '../measure.js'
-import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
-import { sceneBounds } from '../scene-bounds.js'
 import type {
-  Appearance,
   BoundingBox,
+  DecorationContext,
+  NodeDecoration,
+  RenderContribution,
   ResolvedEdgeNode,
   Scene,
   SceneInk,
   SceneNode,
   ShapeSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { z } from 'zod'
+import { highlightCode } from '../highlight/lowlight.js'
+import type { MeasureText } from '../measure.js'
+import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
+import { sceneBounds } from '../scene-bounds.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import {
@@ -1537,39 +1539,7 @@ function layoutSpatialCanvasInternalScene(
  * silhouette insets a decoration exactly as it insets text; `label` is the
  * resolved label appearance, so ink that should match the node's text can.
  */
-export interface DecorationContext {
-  readonly bounds: BoundingBox
-  readonly label: Appearance
-}
-
-/**
- * Everything one plugin contributes to rendering.
- *
- * `shapes` are keyed by BARE name and `readShape` answers a bare kind: this
- * package composes `${namespace}.${kind}` at both ends, so a payload never
- * carries a namespace and a document cannot name another plugin's geometry
- * however it is written.
- *
- * A reader rather than a facet KEY, because reading a facet is the plugin's
- * job: the bundled one resolves through the engine's compat chain and schema,
- * which a raw `stored.kind` read of a declared key never did.
- */
-export interface RenderContribution {
-  readonly namespace: string
-  readonly shapes?: Readonly<Record<string, ShapeContribution>>
-  readonly readShape?: (node: SpatialNode) => string | undefined
-  readonly readTextPlacement?: (node: SpatialNode) => 'start' | 'center' | undefined
-  readonly decorations?: readonly NodeDecoration[]
-  /**
-   * Theme assets by BARE name, namespaced to `${namespace}.${name}` the way
-   * `shapes` are. Unlike a shape, a theme id in a document MAY name another
-   * contribution's asset (ADR-0030 decision 2): reuse across plugins is what
-   * an asset is for, so the table is looked up by full id.
-   */
-  readonly themes?: Readonly<Record<string, ThemeTokens>>
-  /** The theme id the CANVAS names (its own facet), or undefined for none. */
-  readonly readTheme?: (canvas: SpatialCanvas) => string | undefined
-}
+export type { DecorationContext, NodeDecoration, RenderContribution }
 
 /**
  * Everything a contribution set decides ABOUT ONE CANVAS — the set, its shape
@@ -1754,10 +1724,6 @@ export function resolveShapeTable(contributions: readonly RenderContribution[]):
   }
   return table
 }
-
-/** A plugin's mark on a node. Returns scene nodes in this package's own
- *  vocabulary — the union stays closed, contributions build from it. */
-export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
 
 function composeDecorations(
   node: SpatialNode,

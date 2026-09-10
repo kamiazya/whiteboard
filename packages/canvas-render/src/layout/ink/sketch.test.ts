@@ -4,9 +4,9 @@
 // twice, and moving the geometry moves the ink with it — no positional
 // input reaches the randomness.
 import { test } from '@fast-check/vitest'
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
-import type { BoundingBox } from '../../scene-graph.js'
 import { BUILT_IN_SHAPES, nodeOutline } from '../nodes/node-outline.js'
 import { SKETCH_INK_REACH_PX, SKETCH_PASSES, sketchEdge, sketchShape } from './sketch.js'
 

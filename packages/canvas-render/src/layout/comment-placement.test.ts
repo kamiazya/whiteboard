@@ -3,8 +3,9 @@
 // a neighbouring node, or the bubble of the comment before it — which is
 // exactly the surface a reader was trying to see. The placer keeps that
 // offset as its FIRST choice and gives it up only when it collides.
+
+import type { BoundingBox } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { BoundingBox } from '../scene-graph.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import {
   COMMENT_BUBBLE_OFFSET_PX,

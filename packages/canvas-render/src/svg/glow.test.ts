@@ -4,10 +4,16 @@
 // relative to the element's bounding box drops an axis-aligned straight
 // edge entirely, because its box has zero area (measured on resvg 2.6.2;
 // it is the specification's behaviour, so a browser does the same).
+
+import type {
+  ResolvedEdgeNode,
+  Scene,
+  ShapeSceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { glowReachPx } from '../layout/ink/glow.js'
 import { sceneBounds } from '../scene-bounds.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { isWellFormedXmlFragment } from '../test-utils/xml-well-formed.js'
 import { renderSceneToSvg } from './backend.js'
 

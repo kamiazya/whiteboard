@@ -9,8 +9,8 @@
 // because the payload never holds a namespace.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { outlineContains } from './nodes/node-outline.js'

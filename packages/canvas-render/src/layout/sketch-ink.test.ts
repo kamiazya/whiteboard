@@ -4,9 +4,9 @@
 // semantic box.
 import { SAMPLE_THEME_TOKENS, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
-import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { seedFromId } from './seed.js'

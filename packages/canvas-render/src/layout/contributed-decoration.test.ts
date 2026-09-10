@@ -8,8 +8,8 @@
 // order. That is what makes this seam cheaper than the silhouette one.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
+import type { BoundingBox, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { BoundingBox, SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 

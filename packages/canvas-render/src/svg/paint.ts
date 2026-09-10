@@ -6,7 +6,7 @@
  * element and hoisted by `collectDefs`, so a scene without one stays
  * byte-identical.
  */
-import type { Appearance, BoundingBox } from '../scene-graph.js'
+import type { Appearance, BoundingBox } from '@kamiazya/whiteboard-scene'
 import type { PaintAttrs, SvgBoxAttrs } from './elements.js'
 import { formatCoord } from './format.js'
 import { el, type SvgDef } from './vnode.js'

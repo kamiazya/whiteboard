@@ -10,8 +10,8 @@
 // reader answers a bare kind and this package composes the id, so a document
 // cannot name another plugin's geometry however it is written.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import {
   layoutSpatialCanvas,
