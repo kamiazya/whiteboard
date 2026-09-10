@@ -72,3 +72,22 @@ scan says.
   `.int()`, so a fractional lifetime wrote a marker GC read as no backup at
   all, for the whole pass (now rounded up). The property's own bound has to
   round the same way, or it fails on the fix.
+- **A stored shape added tomorrow has to answer for itself**
+  (`server/persisted-json-surface.test.ts`). The lane above lists its
+  subjects as imports, so it could not notice a tenth writer/reader pair —
+  the route lanes read `app.routes` and scan the routes directory, and the
+  store lane did not. The ledger scans every place a Zod schema is handed
+  `JSON.parse` output, and each is `round-tripped: <the lane's describe>` or
+  `not modelled: <what covers it instead>`. Both directions fail, and the
+  round-tripped side names a TITLE rather than a module on purpose: "the lane
+  imports this file" is satisfied by an incidental import, which is how the
+  browser twin's first version could not fail at all.
+- **A route refuses in JSON, and `c.notFound()` does not**
+  (`tools/biome-plugins/route-refusal-shapes.grit`, scoped to
+  `server/routes/**`). Hono's built-in 404 answers `text/plain`, so a caller
+  parsing the body gets a SyntaxError instead of the reason — the shape the
+  files router shipped until the fuzz lane found it. The lint rule is the
+  rung that stops a new one being written; it caught one live instance, the
+  disabled `/api/debug` router. It is scoped to `routes/` because
+  `c.notFound()` is CORRECT three times in `app.ts`: RFC 9728 discovery
+  answers a bare 404 by design, and the two UI catch-alls serve a browser.

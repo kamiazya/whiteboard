@@ -219,7 +219,38 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 105 for membership by majority: the orphaned member no debt column could
 // see, and why neither scoreboard caught it — the shape of blind spot a
 // reader has to be told about, since the instrument reads clean.
-const CANVAS_RENDER_BUDGET = 105
+// 106 for the margin-as-anchor attempt measured and rejected: it clears the
+// two near misses a reader would want cleared, and flips the board's flow
+// to `left` doing it, which is exactly the trade a later session would
+// otherwise make again on the same reasoning.
+// 109 for the flow vote that made that verdict wrong: why one vote per edge
+// let an arrow near 45 degrees decide a board's whole reading, the first
+// fix the corpus rejected in one run (weighting AWAY from the diagonal
+// silences the diagonals a layered board is made of), and the rejection
+// above re-priced against the corrected instrument — kept in full, because
+// the first verdict was published and "rejected" alone would send the next
+// reader after a number that has changed.
+// 112 for the composition axis: its four columns and their sources, and the
+// four things its calibration DECIDED — a group is a frame and not a
+// component, `guides` alone is not a verdict, a tie counts as apart, and
+// tidy is not promised to buy proximity. Each was measured out of a wrong
+// first definition, which is the part a reader would otherwise redo.
+// 113 for the guide-line attempt the composition score rejected on its
+// first use as a decision instrument: the mechanism works on a constructed
+// case and buys nothing on a corpus whose `offGuide` is already 0 — which
+// is a statement about the CORPUS, and the next reader needs to know that
+// before either retrying it or inventing the fixture that justifies it.
+// 114 for the proximity owe measured and NOT chased: what the rule the
+// column implies would cost (+15% ink, +19% envelope, systemic), and why
+// the owe is mild — C1 scores only groups with a drawn border, and common
+// region is a stronger cue than proximity. Both are things a later session
+// would otherwise re-derive, one of them by shipping the change first.
+// 117 for what the eval lane found that the corpus could not — the margin
+// anchor pulling a member off another board's column — and for the standing
+// frame-idempotence bug the same investigation surfaced, with the evidence
+// that it predates this session and the three partial fixes that did not
+// close it.
+const CANVAS_RENDER_BUDGET = 117
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

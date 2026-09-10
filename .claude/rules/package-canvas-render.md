@@ -1419,7 +1419,63 @@ the overlap pass moves the unit, both left `offGrid 1` (the PARTNER moves,
 not the unit); guarded anchors on iteration 0 only broke six centre-band
 examples, since the grid fallback undoes centre alignment; and seeding
 `lined` with every unit already on an anchor read `offGrid 81` and moved
-both scoreboards. **A unit's members are what is more than HALF inside a frame, not what
+both scoreboards. **A vote for the board's `flow` is proportional, because one vote per edge
+let a single arrow near 45 degrees decide it.** `mobile -> api` on the
+tidied architecture board runs (-320, 320); the classifier took `|dy| >=
+|dx|` and called it down. An 8px move made it (-328, 320) and it called it
+left — flipping a layered board's whole `flow` from `down` to `left` and
+`againstFlow`, which is defined against the winner, from 0 to 2. Nothing
+about the drawing had got harder to read; the frame of reference had
+moved, and a change measured across that boundary is mispriced by it (one
+was — see below). Each arrow now votes for BOTH axes in proportion to its
+own displacement, so an arrow on the diagonal splits its vote and decides
+nothing, and the 8px move changes each share by 0.01.
+
+The first fix tried was weighting a single vote by distance FROM the
+diagonal, and it was rejected by the corpus in one run: the architecture
+reference — a plainly top-down board — read `right` with `againstFlow` 5,
+because a layered diagram carries its layering in DIAGONAL edges (a client
+box down to the gateway) and the only axis-aligned edges are the two
+inside a row. Silencing the diagonals silences the structure. Worth
+knowing before reaching for the same shape again: the instrument wants
+edges near the diagonal to count for both readings, not for neither.
+
+What the correction also fixed was already written down and unacted on:
+`sequence/drafted` read `flow: right, againstFlow: 2` where its own
+reference read `up`, and the row's comment said why — "a tie, which goes
+to `right` by the fixed order". A draft was being charged two arrows
+against a flow the tie-break had invented. It now reads `up` with nothing
+against it, like the reference it is a draft of.
+
+**The frame's margin is an ANCHOR, not only a floor** — a movable unit
+within `TIDY_BAND_PX` of `frame.{x,y} + TIDY_MARGIN_PX` snaps onto it. It is
+the one thing no band can do: bands run among a frame's members and among
+the frames, never across them, so `cli` moved in to its frame's 32 beside
+`api` and `sqlite` already at 40 in theirs was one column to a reader and
+8px apart to the score. `architecture/tidied` reads `nearMisses` 2 to 0 with
+ink 2047 to 2019; `lane/architecture-tidied` pays ink 1881 to 1902 and
+`unevenGaps` 2 to 4; grouped displacement 127141 to 127187, 46px over the
+whole corpus. Debt down, price mixed — the ordering §7 gives.
+
+**Its history is the case for taking a verdict from a corrected instrument
+rather than from the run that produced it.** Measured first against the OLD
+flow vote it also read `flow` `down` to `left` with `againstFlow` 0 to 2 —
+a layered diagram that no longer reads top-down — and it was rejected on
+that row alone. That row was the instrument's: one vote per edge let an
+arrow near 45 degrees decide the board's reading (see the flow paragraph
+above), and against the corrected vote `flow` and `againstFlow` do not move
+at all. What was left was a design question rather than a measurement —
+tidy had promised, in a pinned example, that a frame padded to 40 was
+padded and it would leave it alone — and the user took it: land it, rewrite
+the promise (2026-09-10). The example now pins the opposite, and names what
+superseded it.
+
+A member further in than a band is still left alone, which is what keeps
+this a snap rather than a normalisation; `leaves a member a whole band past
+the margin where it is` pins that boundary, and reverting the anchor to a
+plain floor turns four cases red.
+
+**A unit's members are what is more than HALF inside a frame, not what
 its box fully contains.** A box drawn across a frame's edge belonged to
 no unit under containment: it became a singleton, and the overlap pass
 hopped it clear of the frame entirely — so tidy answered a straddle by
@@ -1446,6 +1502,127 @@ The grouped scoreboard's
 `stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).
+
+**The margin anchor yields to a row the margin rule cannot move, and the
+EVAL LANE is what found that it had to.** Round 12, three trials of three,
+deterministic: a model wrapped a new chain in a group on a board whose own
+row starts at x=0, `region.set` put the frame at -40, and the first member
+was snapped from 0 to the margin at -8 — 8px off a row it had been lined up
+with. `debtFreePowK` 1.0 to 0.8, and the corpus never saw it because no
+corpus board has a frame straddling another board's column. So the margin
+anchor now yields when a member's anchor already agrees with something at
+that level that the margin rule CANNOT reach: anything locked, out of
+scope, or held by no frame at all.
+
+The narrowing is the rule, and both directions are pinned. Yielding to any
+outside anchor also protects two members of two DIFFERENT frames that are
+each about to snap to their own margin — they hold each other where they
+are, and the corpus loses exactly the alignment the anchor was added to buy
+(`nearMisses` 0 back to 2). Yielding to none is the lane's finding. It only
+ever YIELDS, never attracts, which is what keeps it clear of the drift the
+guide-line attempt below brought.
+
+**A standing bug the same investigation surfaced, and did NOT fix: tidy is
+not idempotent on a board with a frame.** Widening the idempotence
+generator to draw one finds a counterexample in seconds — and finds it on
+`9a26587e~1` too, before the margin anchor existed, so it dates from when
+tidy began tidying inside frames rather than from anything this session
+did. Both idempotence properties generate PLAIN boxes, so nothing the frame
+passes do has ever been under a property. Three partial fixes were measured
+and reverted (the margin relative to the frame's own edge; the frame's
+corner put on the grid before its members are placed; the margin anchor
+yielding to a neighbour it would jam) — each closes one family and none
+closes the class, because inside a frame the grid and the margin are two
+rules that disagree by the frame's own offset and each call resolves that
+disagreement from a different starting point. The likely fix is a grid
+relative to the frame's origin, which is its own increment.
+
+**Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
+— by the composition score, on its first use as a decision instrument.**
+The idea is sound and the mechanism worked: cluster every input anchor at
+`TIDY_BAND_PX`, keep the clusters two or more nodes hold, and let a unit
+that would take the bare grid take a line the board already nearly has
+instead. A constructed case passes that nothing else can fix — a second
+column in one frame and a second column in another, 8px apart, which bands
+cannot see because they run among a frame's members and among the frames,
+never across them.
+
+It buys nothing on the corpus. `offGuide` is already 0 on nine of eleven
+boards and `perGuide` 2.6-3.0, so alignment is not where these drawings are
+weak; the measured movement was `worstRatio` 1.4 to 1.33 and 0.29 to 0.24
+and one board's `perGuide` 2.67 to 2.83, with `apart` and `offGuide`
+unmoved. Against that it broke two things: a member snapped to its frame's
+margin was pulled back off it by a guide 8px away, and the idempotence
+property failed on two seeds — the guide set is read from the input, tidy
+changes the input, and a second tidy re-clusters into a different set. Made
+convergent, it would need the guide set to be a fixpoint of tidy, which is
+a substantially larger change than the one being justified.
+
+Recorded rather than retried, and NOT as "the idea is wrong": what the
+reading says is that the corpus has no board with the shape this fixes.
+The honest next step is a corpus case that has it — which is worth doing
+only when a real drawing produces one, since inventing the fixture that
+justifies the change is how a fixture becomes the convention by accident.
+
+## The composition score judges what the board hands its reader
+
+`quality/composition-score.ts` (`scoreComposition(canvas, scene)`) is
+[ADR-0032](../../docs/contributing/adr/0032-composition-axis.md)'s second
+axis, scored BESIDE the drawing score and never mixed into it: the drawing
+score judges DEFECTS and their price, and the questions left once its debt
+criterion saturated — should a hub sit between its targets, should every
+frame's first column sit on one line — are not defect questions. One column
+per principle of *The Non-Designer's Design Book*, each with a source:
+proximity from the Gestalt-in-diagrams work, alignment from Balinsky et
+al.'s alignment statistics and grid regularity (DocEng 2009), repetition
+from Ngo et al.'s regularity/homogeneity/rhythm (Information Sciences
+2003). `contrast` (`treatments`, `roles`) is REPORTED-ONLY and may not be
+cited for or against a change — salience manipulations have shown no effect
+in some empirical work, and a leg that weak does not carry weight.
+
+**What it may be read to mean is fixed and narrow**: the composition a
+drawing hands its reader, never that the drawing was understood. Every
+source validates against something else — perceived aesthetics, usability,
+perceptual grouping — and none of them on this product's drawings.
+
+Four things the calibration decided that a reader would otherwise re-derive:
+
+- **A group is a FRAME, not a connected component.** With components in the
+  set the hand-drawn SEQUENCE reference owed all three of its groups at a
+  worst ratio of 5.5 — a message box joined to a participant column at the
+  far side of the board, which is that diagram's grammar. A reference owing
+  is what the calibration forbids. The cost is that a frameless board is
+  silent on proximity, pinned as the blind spot.
+- **`guides` alone is not a verdict.** A scattered board shares almost no
+  anchors and so resolves to FEW lines, exactly as a composed board does.
+  The monotone pair is `offGuide` (elements sharing no line, lower better)
+  and `perGuide` (elements per shared line, higher better).
+- **An inside gap EQUAL to the outside gap counts as `apart`.** Equal
+  spacing gives a reader nothing to group by, so a tie contradicts the frame
+  rather than passing it.
+- **Tidy is NOT promised to buy proximity.** The drawing score's "tidy never
+  adds debt" has no analogue here, because the first reading refuted it:
+  `architecture/tidied` owes `apart 1` at ratio 1.4 where neither the
+  reference nor the draft owes anything — Services stretched to hold a
+  member at its right edge, so its widest internal gap (168px) exceeds its
+  members' clearance to the frame below (150px). The scoreboard pins the
+  exception so it cannot be lost.
+
+  **The obvious fix was measured and not taken.** The rule the column
+  implies is that a group's clearance to its neighbours must exceed its own
+  widest internal gap; on this board that is Storage moving down 144px, and
+  the result reads `apart` 1 to 0 and `worstRatio` 1.4 to 0.73 for ink 2019
+  to 2322 (+15%) and envelope 872x772 to 872x916 (+19% area), with every
+  other column unmoved. Systemic, since it would apply to every board with a
+  wide frame.
+
+  Read the owe as MILD, and the reason is structural rather than a judgement
+  call: C1 scores only groups with a DRAWN BORDER, and common region is a
+  stronger grouping cue than proximity — a reader's first pass may be by
+  spacing, but the frame is right there settling it. The strong form of this
+  column would score IMPLIED groups, which is exactly what taking edge
+  components out of the group set gave up. So `apart` on a framed group says
+  the spacing argues with the frame, not that the reader is misled.
 
 The column set follows the literature, and the module doc says which
 source each column follows (ADR-0031 §7 has the reading). Two things a

@@ -34,8 +34,13 @@ import { TASKS } from './tasks.mjs'
 // one are source-only; `tsx` resolves them the way the server launcher
 // resolves the server.
 register()
-const { constantRatioMeasureText, createSpatialTheme, layoutSpatialCanvas, scoreDrawing } =
-  await import('@kamiazya/whiteboard-canvas-render')
+const {
+  constantRatioMeasureText,
+  createSpatialTheme,
+  layoutSpatialCanvas,
+  scoreComposition,
+  scoreDrawing,
+} = await import('@kamiazya/whiteboard-canvas-render')
 const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
 const arg = (name, fallback) => {
@@ -83,11 +88,27 @@ const DEBT_COLUMNS = [
  * The non-zero debt columns by name, or the word for none — the line a
  * reader scans; a board the score could not read says so instead.
  */
-function debtLine({ score, error }) {
+function debtLine({ score, composition, error }) {
   if (score === undefined) return `not scored — ${error}`
   const debt = DEBT_COLUMNS.filter((c) => score[c] > 0).map((c) => `${c} ${score[c]}`)
   const price = `crossings ${score.crossings}, bends ${score.bends}, reversals ${score.reversals}, flow ${score.flow}${score.againstFlow > 0 ? ` (${score.againstFlow} against)` : ''}`
-  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; ${price}`
+  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; ${price}${compositionLine(composition)}`
+}
+
+/**
+ * ADR-0032's axis, read BESIDE the drawing columns and never mixed into
+ * them: what composition the board hands its reader. `apart` and `offGuide`
+ * are the owed ones and print only when non-zero; `perGuide` and the gap
+ * count print always, because they are what a reading compares across runs.
+ * `contrast` is reported-only by the ADR and deliberately absent from this
+ * line — a number nobody may cite does not belong where a decision is read.
+ */
+function compositionLine(composition) {
+  if (composition === undefined) return ''
+  const owed = ['apart', 'offGuide']
+    .filter((c) => composition[c] > 0)
+    .map((c) => `${c} ${composition[c]}`)
+  return `; composition ${owed.length === 0 ? 'clear' : owed.join(' ')}, perGuide ${composition.perGuide}, gaps ${composition.gaps}`
 }
 
 /**
@@ -132,7 +153,11 @@ async function captureBoards(wb, task, trial) {
         measure: constantRatioMeasureText,
         appearance: DRAWING_APPEARANCE,
       })
-      drawing.push({ board: path, score: scoreDrawing(canvas, scene) })
+      drawing.push({
+        board: path,
+        score: scoreDrawing(canvas, scene),
+        composition: scoreComposition(canvas, scene),
+      })
     } catch (error) {
       drawing.push({ board: path, error: error instanceof Error ? error.message : String(error) })
     }

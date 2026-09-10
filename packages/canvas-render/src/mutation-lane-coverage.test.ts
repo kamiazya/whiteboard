@@ -105,9 +105,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // chord through an edge's own box, which the lane DOES cover: its
     // sampled oracle and invariants are properties, and a survivor would be
     // a chord read wrong.
+    // 67 since `quality/composition-score.ts`, outside the lane for the
+    // reason `drawing-score.ts` is: an instrument whose calibration plants
+    // one defect and reads one column, which a mutation run reports as
+    // unsurprising survivors. Hand-checked instead — three predicates
+    // mutated (the apart threshold, the shared-line minimum, the gap's
+    // axis), and the first survived, which is how the tie case came to be
+    // pinned.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 12,
-      production: 66,
+      production: 67,
     })
   })
 

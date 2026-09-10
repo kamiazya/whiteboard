@@ -902,6 +902,48 @@ a model wrote `id` at the OP level of `node.add` rather than inside
 next item — a batch lost to a key one level out is the same class as the
 `within: null` refusal the ninth reading fixed.
 
+**The sixteenth reading (2026-09-10): the lane caught a regression the
+corpus could not, and `debtFreePowK` fell for the first time.** The whole
+lane, three trials, with both axes reported per board for the first time
+(ADR-0032's composition columns beside the drawing ones):
+
+| | round 11 | round 12 |
+|---|---|---|
+| pass^k | 1 | 1 |
+| `debtFreePowK` | 1.0 | **0.8** |
+| tool errors | 3 | 1 |
+| mean calls | — | 2.40 |
+
+The one tool error is the height refusal working as designed. The fall in
+`debtFreePowK` is two boards owing `nearMisses 1`, and one of them is the
+finding: **"wrap a new chain in a group" owed it in all three trials, with
+identical geometry**, which makes it the code rather than the model. The
+model added three boxes on a board whose own row starts at x=0, wrapped
+them in a group, and tidied; `region.set` put the frame at -40, so the
+frame's margin fell at -8, and the margin anchor that landed earlier the
+same day snapped the first member from 0 to -8 — 8px off the row it had
+been lined up with.
+
+Three things worth keeping from it.
+
+**The corpus could not have found this.** No corpus board has a frame whose
+margin lands beside another board's column, and the change had been measured
+on the corpus twice — once rejected, once accepted — without ever meeting
+the case. A population a model actually produces is not a bigger version of
+a curated one.
+
+**The composition columns read `clear` on the offending board.** `offGuide`
+counts elements sharing no line with anything, and the moved member still
+shared lines; the drawing score's `nearMisses` is what saw it. Two axes,
+and the older one caught it — which is the argument for keeping them
+separate rather than folding them into one number.
+
+**The fix is a yield, not a new attraction.** The margin anchor now stands
+down when a member is already lined up with something the margin rule
+cannot move. Pinned both ways: yielding to nothing is the lane's finding,
+and yielding to everything costs the corpus the alignment the anchor was
+added for.
+
 **The fifteenth reading (2026-09-10): the refusal now names where the key
 belongs.** The fourteenth reading's third tool error — `id` at the op
 level of `node.add` — measured, through a real client, as:

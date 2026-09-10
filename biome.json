@@ -122,7 +122,11 @@
     },
     {
       "path": "./tools/biome-plugins/logger-argument-order.grit",
-      "includes": ["packages/mcp-server/src/server/**/*.ts", "!**/*.test.ts"]
+      "includes": ["**/packages/mcp-server/src/server/**/*.ts", "!**/*.test.ts"]
+    },
+    {
+      "path": "./tools/biome-plugins/route-refusal-shapes.grit",
+      "includes": ["**/packages/mcp-server/src/server/routes/**/*.ts", "!**/*.test.ts"]
     }
   ]
 }

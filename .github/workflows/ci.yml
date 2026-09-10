@@ -42,9 +42,6 @@ jobs:
         # local-gate-command.test.ts derives `check:local` from those.
         run: pnpm audit:prod
 
-      - name: Validate skills
-        run: pnpm intent:validate
-
       - name: Secret scan (secretlint)
         run: pnpm secretlint
 

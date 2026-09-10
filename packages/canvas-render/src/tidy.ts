@@ -120,6 +120,43 @@ interface Unit {
 const roundToGrid = (v: number) => Math.round(v / TIDY_GRID_PX) * TIDY_GRID_PX
 const ceilToGrid = (v: number) => Math.ceil(v / TIDY_GRID_PX) * TIDY_GRID_PX
 
+/**
+ * The anchors of what this level holds that a frame does not, and that the
+ * MARGIN RULE CANNOT MOVE — anything locked or out of scope, and anything
+ * that is not a frame's member, since the margin only ever moves those. A
+ * member already lined up with one of them is already in a row, and the
+ * margin anchor yields to it.
+ *
+ * The narrowing is the whole rule, and both halves were measured. Yielding
+ * to any outside anchor also protects two members of two DIFFERENT frames
+ * that are each about to snap to their own margin: they hold each other
+ * where they are, and the corpus loses exactly the alignment the margin
+ * anchor was added to buy (`nearMisses` 0 back to 2). Yielding to none of
+ * them is what the eval lane caught — a model wrapped a chain in a group on
+ * a board whose own row starts at x=0, and the first member was snapped 8px
+ * off that row, three trials of three.
+ *
+ * Only ever a reason to YIELD, never to move anything, which is what keeps
+ * this clear of the drift a guide that ATTRACTS brought when it was tried.
+ */
+function anchorsToYieldTo(
+  nodes: readonly TidyNode[],
+  members: ReadonlySet<string>,
+  snappable: (id: string) => boolean,
+) {
+  const x: number[] = []
+  const y: number[] = []
+  for (const n of nodes) {
+    if (members.has(n.id) || snappable(n.id)) continue
+    x.push(n.x, n.x + n.width / 2, n.x + n.width)
+    y.push(n.y, n.y + n.height / 2, n.y + n.height)
+  }
+  return { x, y }
+}
+
+const onSomeAnchor = (value: number, anchors: readonly number[]): boolean =>
+  anchors.some((anchor) => Math.abs(anchor - value) <= 0.5)
+
 function fullyContains(outer: Rect, inner: Rect): boolean {
   return (
     inner.x >= outer.x &&
@@ -476,26 +513,52 @@ function enclosing(frame: Rect, rects: readonly Rect[]): Rect {
 function tidyLevel(
   nodes: readonly TidyNode[],
   options: TidyOptions,
-  // Inside a frame: the least x and y a movable unit may keep, so a member
-  // hugging the frame's top or left edge is moved in to the margin rather
-  // than the frame grown around it — the frame's top-left is its anchor
-  // and its alignment with its peers, and stays put. Only an immobile
-  // member can push a frame up or left.
+  // The anchors of what this level's frame does not hold and the margin
+  // rule cannot move, for the margin snap to yield to. Empty at the top
+  // level, which has no frame around it.
+  outside: { readonly x: readonly number[]; readonly y: readonly number[] },
+  // Inside a frame: the margin its members start at, as an ANCHOR rather
+  // than only a floor. A member hugging the frame's top or left edge is
+  // moved in to it rather than the frame grown around it — the frame's
+  // top-left is its anchor and its alignment with its peers, and stays put;
+  // only an immobile member can push a frame up or left. A member already
+  // clear of it but within `TIDY_BAND_PX` is pulled ONTO it, which is what
+  // makes frames that line up hold members that line up: bands run among a
+  // frame's members and among the frames, never across them, so nothing
+  // else can see that a member at 32 in one frame and one at 40 in another
+  // are a column to a reader. Superseding an earlier decision that a frame
+  // padded to more than the margin was padded and tidy left it alone (user,
+  // 2026-09-10): it costs 8px of movement on a board already fine, and buys
+  // the alignment no band reaches.
   floor?: Point,
 ): Map<string, Rect> {
   const locked = options.locked ?? (() => false)
   const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
   const units = buildUnits(nodes, options)
+  // Who the margin rule can reach at all: a frame's members, and nobody
+  // else. A box at this level that no frame holds keeps its row.
+  const framed = new Set(
+    units.flatMap((u) => (u.members.length > 1 ? u.members.map((m) => m.id) : [])),
+  )
   const settled = new Map<string, Rect>(nodes.map((n) => [n.id, rectOf(n)]))
   for (const unit of units) {
     const inner = unit.members.filter((m) => m.id !== unit.rootId)
     if (inner.length === 0) continue
     const frame = settled.get(unit.rootId)
     if (frame === undefined) continue
-    const innerSettled = tidyLevel(inner, options, {
-      x: ceilToGrid(frame.x + TIDY_MARGIN_PX),
-      y: ceilToGrid(frame.y + TIDY_MARGIN_PX),
-    })
+    const innerSettled = tidyLevel(
+      inner,
+      options,
+      anchorsToYieldTo(
+        nodes,
+        new Set(inner.map((m) => m.id)),
+        (id) => inScope(id) && !locked(id) && framed.has(id),
+      ),
+      {
+        x: ceilToGrid(frame.x + TIDY_MARGIN_PX),
+        y: ceilToGrid(frame.y + TIDY_MARGIN_PX),
+      },
+    )
     for (const [id, rect] of innerSettled) settled.set(id, rect)
     const grows = !locked(unit.rootId) && (inScope(unit.rootId) || inner.some((m) => inScope(m.id)))
     if (!grows) continue
@@ -506,13 +569,23 @@ function tidyLevel(
   if (floor !== undefined) {
     for (const unit of units) {
       if (!unit.movable) continue
-      if (unit.bbox.x < floor.x) {
-        unit.dx += floor.x - unit.bbox.x
-        unit.bbox.x = floor.x
-      }
-      if (unit.bbox.y < floor.y) {
-        unit.dy += floor.y - unit.bbox.y
-        unit.bbox.y = floor.y
+      for (const axis of ['x', 'y'] as const) {
+        const target = axis === 'x' ? floor.x : floor.y
+        const at = axis === 'x' ? unit.bbox.x : unit.bbox.y
+        if (at - target >= TIDY_BAND_PX) continue
+        // Already lined up with something the frame does not hold: a
+        // neighbour the margin rule cannot move IS the row, wherever it
+        // sits, and that holds across a frame's edge as much as inside it.
+        // Only the ANCHOR yields — a member outside the margin is still
+        // moved in, which is the floor's own job and not an alignment.
+        if (at >= target && onSomeAnchor(at, axis === 'x' ? outside.x : outside.y)) continue
+        if (axis === 'x') {
+          unit.dx += target - unit.bbox.x
+          unit.bbox.x = target
+        } else {
+          unit.dy += target - unit.bbox.y
+          unit.bbox.y = target
+        }
       }
     }
   }
@@ -561,7 +634,7 @@ export function tidyNodes(
 ): readonly TidyMove[] {
   const clean = usable(nodes)
   if (clean.length < 2) return []
-  const settled = tidyLevel(clean, options)
+  const settled = tidyLevel(clean, options, { x: [], y: [] })
   const moves: TidyMove[] = []
   for (const node of clean) {
     const rect = settled.get(node.id)

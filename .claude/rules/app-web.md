@@ -263,3 +263,15 @@ Locally the browser project runs with
 `WHITEBOARD_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-<rev>/chrome-linux/headless_shell`
 when the installed Playwright revision is not the one the config pins.
 
+`lib/idb-stored-shapes-surface.test.ts` is what keeps that lane honest as the
+app grows: it scans `lib/` for a module that names an object store AND hands
+a record to a schema, and every one is `round-tripped: <the lane's describe>`
+or `not modelled: <what covers it instead>`. Both halves of the probe are
+needed — the store constants alone catch writers that validate nothing, a
+schema parse alone catches every network client in `lib/`. The round-tripped
+side names a describe TITLE rather than a module because an import-shaped
+check could not fail here at all: the lane imports both not-modelled modules
+as fixtures, so "the lane imports it" was true of exactly the entries it was
+supposed to refuse. Its twin is
+`packages/mcp-server/src/server/persisted-json-surface.test.ts`.
+
