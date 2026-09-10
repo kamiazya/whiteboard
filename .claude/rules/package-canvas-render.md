@@ -1447,30 +1447,33 @@ to `right` by the fixed order". A draft was being charged two arrows
 against a flow the tie-break had invented. It now reads `up` with nothing
 against it, like the reference it is a draft of.
 
-**Making the frame's margin an ANCHOR rather than only a floor was
-measured, rejected, and RE-PRICED once the flow vote was corrected.** The
-two `nearMisses` left on `architecture/tidied` are a member moved in to its
-frame's 32px margin beside members already at 40 in theirs — one column to
-a reader, 8px apart to the score, and no band can see it, since bands run
-among a frame's members and among the frames, never across them. Snapping
-any member within `TIDY_BAND_PX` of the margin onto it clears them.
+**The frame's margin is an ANCHOR, not only a floor** — a movable unit
+within `TIDY_BAND_PX` of `frame.{x,y} + TIDY_MARGIN_PX` snaps onto it. It is
+the one thing no band can do: bands run among a frame's members and among
+the frames, never across them, so `cli` moved in to its frame's 32 beside
+`api` and `sqlite` already at 40 in theirs was one column to a reader and
+8px apart to the score. `architecture/tidied` reads `nearMisses` 2 to 0 with
+ink 2047 to 2019; `lane/architecture-tidied` pays ink 1881 to 1902 and
+`unevenGaps` 2 to 4; grouped displacement 127141 to 127187, 46px over the
+whole corpus. Debt down, price mixed — the ordering §7 gives.
 
-Measured against the OLD vote it read: `nearMisses` 2 to 0 and ink 2047 to
-2019, but `flow` `down` to `left` with `againstFlow` 0 to 2, plus ink 1881
-to 1902 and `unevenGaps` 2 to 4 on the lane's board. Rejected on the flow
-row — a layered diagram that no longer reads top-down is not a trade worth
-two near misses.
+**Its history is the case for taking a verdict from a corrected instrument
+rather than from the run that produced it.** Measured first against the OLD
+flow vote it also read `flow` `down` to `left` with `againstFlow` 0 to 2 —
+a layered diagram that no longer reads top-down — and it was rejected on
+that row alone. That row was the instrument's: one vote per edge let an
+arrow near 45 degrees decide the board's reading (see the flow paragraph
+above), and against the corrected vote `flow` and `againstFlow` do not move
+at all. What was left was a design question rather than a measurement —
+tidy had promised, in a pinned example, that a frame padded to 40 was
+padded and it would leave it alone — and the user took it: land it, rewrite
+the promise (2026-09-10). The example now pins the opposite, and names what
+superseded it.
 
-Re-measured against the CORRECTED vote, that row is not there at all:
-`flow` and `againstFlow` do not move, and what is left is `nearMisses` 2 to
-0 with ink 2047 to 2019 on one board against ink 1881 to 1902 and
-`unevenGaps` 2 to 4 on the other — debt down, price mixed, which is the
-ordering ADR-0031 §7 gives. The rejection was the instrument's, not the
-change's. What still stands against it is a DESIGN promise a test pins,
-that a frame padded to 40 is padded and tidy leaves it alone, and that is a
-decision rather than a measurement. Kept here in full because the first
-verdict was published, and a record that only says "rejected" would leave
-the next reader re-deriving a number that has since changed.
+A member further in than a band is still left alone, which is what keeps
+this a snap rather than a normalisation; `leaves a member a whole band past
+the margin where it is` pins that boundary, and reverting the anchor to a
+plain floor turns four cases red.
 
 **A unit's members are what is more than HALF inside a frame, not what
 its box fully contains.** A box drawn across a frame's edge belonged to

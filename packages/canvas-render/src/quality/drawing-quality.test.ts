@@ -143,13 +143,18 @@ describe('drawing quality across the corpus', () => {
         labelCovered: 0,
         textOverflow: 0,
         crampedMembers: 0,
-        nearMisses: 2,
+        nearMisses: 0,
         tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
-        // Debt-free AND price-free, once a box more than half inside a
-        // frame counts as its member. `search` was drawn across the
+        // Debt-free — `nearMisses` included, since the frame's margin
+        // became an anchor and every frame's first column now sits at its
+        // own: `cli` at 32 in one frame beside `api` and `sqlite` at 40 in
+        // theirs was one column to a reader and 8px apart to the score, and
+        // no band could see it (bands run among a frame's members and among
+        // the frames, never across them). Also price-free, once a box more
+        // than half inside a frame counts as its member. `search` was drawn across the
         // Services frame's right edge, so containment said it belonged to
         // nothing: it became its own unit and the overlap pass hopped it
         // out from under the frame entirely, which cost a crossing and a
@@ -159,8 +164,9 @@ describe('drawing quality across the corpus', () => {
         bends: 0,
         // 2663 -> 2047, a fifth of the ink, and a shorter envelope for a
         // wider one: 824x884 -> 872x772, 8% less area. Earlier readings on
-        // this row: 2708 before tidy banded on centres, 2663 after.
-        edgeLengthPx: 2047,
+        // this row: 2708 before tidy banded on centres, 2663 after; 2019
+        // once the frame's margin became an anchor.
+        edgeLengthPx: 2019,
         // One more gap that is not like its neighbours, paid for the above:
         // the frame that grew is wider than the two it sits between.
         unevenGaps: 3,
@@ -320,8 +326,12 @@ describe('drawing quality across the corpus', () => {
         // third. The sides the model pinned stay pinned.
         crossings: 0,
         bends: 0,
-        edgeLengthPx: 1881,
-        unevenGaps: 2,
+        // 1881 -> 1902 and two more uneven gaps when the frame's margin
+        // became an anchor: the price this board pays for the two near
+        // misses that change clears on the architecture one. Debt down,
+        // price mixed, which is the ordering §7 gives (user, 2026-09-10).
+        edgeLengthPx: 1902,
+        unevenGaps: 4,
         envelopePx: { w: 820, h: 804 },
         reversals: 0,
         flow: 'down',
@@ -417,8 +427,10 @@ describe('drawing quality across the corpus', () => {
     // the padding of their frame. Both used to survive tidy.
     expect([drafted.nodeOverlaps, tidied.nodeOverlaps]).toEqual([1, 0])
     expect([drafted.crampedMembers, tidied.crampedMembers]).toEqual([2, 0])
-    // Members of different frames are aligned by nobody; that pair stays.
-    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([3, 2])
+    // Members of different frames were aligned by nobody until the frame's
+    // margin became an anchor a member within a band snaps onto; the pair
+    // that used to stay is the last two of these.
+    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([3, 0])
   })
 })
 

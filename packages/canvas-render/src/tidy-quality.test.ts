@@ -278,7 +278,10 @@ describe('tidy quality scoreboard', () => {
       // inside a frame counts as its member: it is tidied AMONG the
       // members it belongs with, a few pixels, instead of being hopped
       // clear of the whole frame as a unit of its own.
-      displacement: 127141,
+      // 127141 -> 127187 with the frame's margin as an anchor: 46px over
+      // the whole grouped corpus, which is what pulling a member within a
+      // band onto its frame's margin costs.
+      displacement: 127187,
     })
   })
 })
