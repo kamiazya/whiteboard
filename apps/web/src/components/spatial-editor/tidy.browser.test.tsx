@@ -108,9 +108,11 @@ it('offers no Tidy for a single-node selection', () => {
   expect(menuItem(container, 'Tidy')).toBeUndefined()
 })
 
-it('never moves a locked node — it stands as a fixed obstacle', () => {
+it('never moves a locked node — it stands as a fixed obstacle, and the column', () => {
   // 'c' is locked and 12px off the column; select-all skips it, and tidy
-  // must leave it exactly where it was while still fixing 'b'.
+  // must leave it exactly where it was. It is also the one member of the
+  // column that cannot move, so the column is aligned to IT rather than to
+  // the grid: 'a' and 'b' come to x=52, not 'b' alone to 40.
   const withLocked: SpatialCanvas = {
     nodes: [
       ...initial.nodes,
@@ -126,7 +128,8 @@ it('never moves a locked node — it stands as a fixed obstacle', () => {
   openMenuOn(root, 100, 70)
   clickItem(container, 'Tidy')
 
-  expect(byId(latest.canvas, 'b').x).toBe(40)
+  expect(byId(latest.canvas, 'a').x).toBe(52)
+  expect(byId(latest.canvas, 'b').x).toBe(52)
   expect(byId(latest.canvas, 'c')).toMatchObject({ x: 52, y: 400 })
 })
 
