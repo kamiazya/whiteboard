@@ -82,6 +82,8 @@ export {
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { CompositionScore } from './quality/composition-score.js'
+export { scoreComposition } from './quality/composition-score.js'
 export type { DrawingScore } from './quality/drawing-score.js'
 export {
   EVEN_GAP_TOLERANCE_PX,
