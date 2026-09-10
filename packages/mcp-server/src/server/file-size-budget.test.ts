@@ -313,7 +313,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // same `pickThemeId`, so it sits here too.
   // +17 more for `paintOrderOf`, groups behind what they hold whatever the
   // stored order says.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2402,
+  // +4 for the theme axis on the text-node body cache key: without it a
+  // clean render and a themed one of the same node share an entry.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card

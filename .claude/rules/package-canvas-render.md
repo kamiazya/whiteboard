@@ -996,7 +996,16 @@ the table alone.
     `createThemedAppearance` is memoized per (tokens, mode, family) so a
     themed canvas keeps the frozen-singleton property the editor's `useMemo`
     relies on. The content cache key carries the label family, because two
-    themes on one cache must not hand each other the other's wrapped lines.
+    themes on one cache must not hand each other the other's wrapped lines —
+    AND the resolved theme id, because the family alone does not identify a
+    theme: `visual.neon` names no `fontFamily`, so a clean render and a neon
+    one of the same text node measured to the same key while their `textFill`
+    and syntax colours differ, and the first drawn answered the second. The id
+    is the honest axis since the palette follows from it; a canvas that
+    resolves to no theme keys as it always did under every style, so an
+    un-themed cache does not churn. `apps/web`'s worker keeps the same axis on
+    the CACHE it picks (`lib/layout-content-caches.ts`), one per (mode, style,
+    reference wire).
     `naturalNodeContentSize` goes through the same resolution; a caller
     sizing a node under a theme passes the theme id as `style`, since a
     single-node canvas carries no facet to read. So does

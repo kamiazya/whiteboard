@@ -834,6 +834,10 @@ function composeTextNode(
           // A theme's family fits differently; two themes on one cache must
           // not hand each other the other's wrapped lines.
           options.appearance.resolveLabel().fontFamily ?? null,
+          // The theme itself, which the family alone does not identify: one
+          // naming no font of its own measures where a clean render does and
+          // paints in its own ink, so the two looks would share an entry.
+          options.activeTheme?.id ?? null,
         ])
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks

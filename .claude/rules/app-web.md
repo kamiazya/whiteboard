@@ -126,11 +126,21 @@ the drag layers alike. Absent means `'document'` on both threads.
 
 Three consequences, each with its guard:
 
-- **The render key gains no axis.** The theme is a canvas facet, so a
-  document's content digest already changes when its theme does, and the
-  registered assets are part of the build id. The session override reaches
-  the editor alone — never the list surfaces — so no keyed surface draws a
-  document in two looks, which is what would need an axis.
+- **The render key gains no axis, and the two LAYOUT caches do.** The theme
+  is a canvas facet, so a document's content digest already changes when its
+  theme does, and the registered assets are part of the build id. The session
+  override reaches the editor alone — never the list surfaces — so no keyed
+  surface draws a document in two looks, which is what would need an axis on
+  `render-key.ts`. The caches the override DOES reach are the other answer to
+  the same question: the layout worker's body-memo store
+  (`lib/layout-content-caches.ts`) is keyed on the UI mode AND the request's
+  `style` — absent normalised to `'document'`, the default both threads take
+  — and canvas-render's own text-node body key carries the resolved theme id.
+  Without them a `'clean'` request and a `'document'` one of the same node
+  shared an entry, and whichever was laid out first answered the other, so
+  toggling **Draw as** could serve a body painted in the other look's ink. An
+  un-themed canvas keys identically under every style, so nothing else's
+  cache churns.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an
