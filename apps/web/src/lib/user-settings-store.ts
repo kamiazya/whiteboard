@@ -252,7 +252,7 @@ const appearanceSettingsSchema = z
   })
   .strict()
 
-const userSettingsSchema = z
+export const userSettingsSchema = z
   .object({
     version: z.literal(3),
     storage: storageSettingsSchema,
@@ -315,7 +315,7 @@ const legacyMigrationSettingsSchema = z
   })
   .strict()
 
-const legacyV1SettingsSchema = z
+export const legacyV1SettingsSchema = z
   .object({
     version: z.literal(1),
     storage: z
@@ -352,7 +352,7 @@ const legacyV1SettingsSchema = z
  * allowed to contain — a required field added to the live shape must not
  * start failing this parse and discarding migrating users' payloads.
  */
-const legacyV2SettingsSchema = z
+export const legacyV2SettingsSchema = z
   .object({
     version: z.literal(2),
     storage: z
@@ -389,7 +389,7 @@ const legacyV2SettingsSchema = z
 
 export type UserSettings = z.infer<typeof userSettingsSchema>
 
-function migrateV1(
+export function migrateV1(
   legacy: z.infer<typeof legacyV1SettingsSchema>,
 ): z.infer<typeof legacyV2SettingsSchema> {
   const { preferredProvider, lastBrowserCanvasId, localDaemonBaseUrl, ...carried } = legacy.storage
@@ -438,7 +438,7 @@ function normalizeLegacyPromotion(
   }
 }
 
-function migrateV2(legacy: z.infer<typeof legacyV2SettingsSchema>): UserSettings {
+export function migrateV2(legacy: z.infer<typeof legacyV2SettingsSchema>): UserSettings {
   const { promotion } = legacy.migration
   return {
     version: 3,

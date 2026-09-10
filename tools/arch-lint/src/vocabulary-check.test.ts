@@ -156,6 +156,7 @@ const BANNED = [
       // at its point in the log.
       'apps/web/src/lib/user-settings-store.ts',
       'apps/web/src/lib/user-settings-store.test.ts',
+      'apps/web/src/lib/user-settings-store.property.test.ts',
       '.claude/rules/vocabulary.md',
     ],
   },
