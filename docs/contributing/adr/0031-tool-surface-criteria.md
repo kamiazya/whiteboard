@@ -643,7 +643,11 @@ drawing per trial; the two boards are in the corpus as `lane/insert`
 (debt-free). What this round did not need was a placement affordance on
 `node.add` — a `between` that shifts the row — because a sentence was
 enough for the model to do the arithmetic itself; the affordance stays
-filed for the day a reading says the sentence is not.
+filed for the day a reading says the sentence is not. The whole lane,
+one trial each after this round: 14 of 14 passed, every one of the 8
+boards its tasks drew debt-free (`debtFreePowK 1`), 2.4 calls a task, 0
+tool errors, $0.87 — the instructions sentence changed nothing else the
+lane can see.
 
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
