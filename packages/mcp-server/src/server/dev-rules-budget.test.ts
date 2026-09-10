@@ -189,7 +189,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // extending it has to know (a column earns its place by an empirical
 // ranking, not a catalogue; the vector stays a vector and the known blind
 // spot is pinned), and the router finding the new columns surfaced.
-const CANVAS_RENDER_BUDGET = 91
+// 92 for the sharing contract: the instruments read one polyline geometry,
+// the router never does, and the duplication left between them is the
+// independence — said where a session about to "deduplicate" it will read.
+const CANVAS_RENDER_BUDGET = 92
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
