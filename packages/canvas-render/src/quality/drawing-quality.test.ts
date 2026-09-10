@@ -165,8 +165,12 @@ describe('drawing quality across the corpus', () => {
         // 2663 -> 2047, a fifth of the ink, and a shorter envelope for a
         // wider one: 824x884 -> 872x772, 8% less area. Earlier readings on
         // this row: 2708 before tidy banded on centres, 2663 after; 2019
-        // once the frame's margin became an anchor.
-        edgeLengthPx: 2019,
+        // once the frame's margin became an anchor; 2068 with the
+        // idempotence fixes, whose frame-relative grid moves two members a
+        // few pixels and lengthens the edges between the frames by 2.4%.
+        // Every debt column on this board is unchanged, and the composition
+        // axis reads the same change as `worstRatio` 1.4 -> 1.16.
+        edgeLengthPx: 2068,
         // One more gap that is not like its neighbours, paid for the above:
         // the frame that grew is wider than the two it sits between.
         unevenGaps: 3,
@@ -330,7 +334,10 @@ describe('drawing quality across the corpus', () => {
         // became an anchor: the price this board pays for the two near
         // misses that change clears on the architecture one. Debt down,
         // price mixed, which is the ordering §7 gives (user, 2026-09-10).
-        edgeLengthPx: 1902,
+        // 1902 -> 1893 with the idempotence fixes — the same change that
+        // costs the architecture board 2.4% pays 0.5% back here, which is
+        // what a corpus is for.
+        edgeLengthPx: 1893,
         unevenGaps: 4,
         envelopePx: { w: 820, h: 804 },
         reversals: 0,

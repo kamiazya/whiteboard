@@ -112,9 +112,14 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutated (the apart threshold, the shared-line minimum, the gap's
     // axis), and the first survived, which is how the tie case came to be
     // pinned.
+    // 68 and 13 since `tidy-units.ts`, split out of `tidy.ts` when that file
+    // passed the 800-line budget and covered for the same reason `tidy.ts`
+    // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had
+    // migrated — so leaving it out would have quietly reduced the lane's
+    // reach while the report read the same.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 12,
-      production: 67,
+      mutated: 13,
+      production: 68,
     })
   })
 
