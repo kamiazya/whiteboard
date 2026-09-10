@@ -1110,7 +1110,8 @@ the table alone.
   keeps `layoutSpatialEdges` equal to the edge suffix of
   `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
   (`test-utils/facet-arbitraries.ts`, a thin shaping of facet-engine's
-  `facetsArbitrary`, which walks each facet's own Zod schema) for the
+  `facetsArbitrary`, which draws each facet from its own Zod schema through
+  model's `arbitraryForSchema`) for the
   nodes' facets AND the canvas's, rather than a list of facet names,
   because what it guards is a second entry point folding over FEWER facets
   than the committed layout — which a named list cannot cover for a facet

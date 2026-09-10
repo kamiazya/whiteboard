@@ -1,12 +1,13 @@
 // The registry-level generator: every facet the registry holds for a target
 // is produced, nothing produced is refused by `validateFacetWrite`, and an
 // asset reference draws a REGISTERED id rather than a random string.
+
+import { acceptedOrThrow, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import * as fc from 'fast-check'
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { createFacetRegistry, defineFacet, definePlugin } from '../registry.js'
 import { facetEntries, facetsArbitrary } from './facet-arbitraries.js'
-import { acceptedOrThrow, arbitraryForSchema } from './zod-arbitrary.js'
 
 const shape = defineFacet({
   name: 'shape',

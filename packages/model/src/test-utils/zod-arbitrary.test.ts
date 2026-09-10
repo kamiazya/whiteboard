@@ -11,6 +11,18 @@ import { arbitraryForSchema } from './zod-arbitrary.js'
 
 const numRuns = 200
 
+type Tree = { readonly value: number; readonly children: Tree[] }
+const treeSchema: z.ZodType<Tree> = z.lazy(() =>
+  z.object({ value: z.number(), children: z.array(treeSchema) }),
+)
+type Inline = { readonly type: 'text'; value: string } | { readonly type: 'em'; children: Inline[] }
+const inlineSchema: z.ZodType<Inline> = z.lazy(() =>
+  z.discriminatedUnion('type', [
+    z.object({ type: z.literal('em'), children: z.array(inlineSchema).min(1) }),
+    z.object({ type: z.literal('text'), value: z.string() }),
+  ]),
+)
+
 const CASES: ReadonlyArray<readonly [string, z.ZodTypeAny]> = [
   ['object of primitives', z.object({ a: z.string(), b: z.number(), c: z.boolean() })],
   [
@@ -19,6 +31,7 @@ const CASES: ReadonlyArray<readonly [string, z.ZodTypeAny]> = [
   ],
   ['defaulted field', z.object({ a: z.enum(['x', 'y']).default('x') })],
   ['strict object', z.strictObject({ a: z.literal('only') })],
+  ['loose object', z.object({ a: z.string() }).loose()],
   ['enum', z.enum(['ellipse', 'diamond', 'hexagon'])],
   ['object enum', z.enum({ A: 'a', B: 'b' })],
   ['literal set', z.literal(['a', 1, true])],
@@ -30,6 +43,10 @@ const CASES: ReadonlyArray<readonly [string, z.ZodTypeAny]> = [
   ['string length', z.object({ one: z.string().length(1), some: z.string().min(2).max(3) })],
   ['regex string', z.string().regex(/^#[0-9a-f]{6}$/)],
   ['uuid string', z.string().uuid()],
+  ['url as a method', z.string().url()],
+  ['url as a schema', z.url()],
+  ['starts-with string', z.string().startsWith('#')],
+  ['two formats on one string', z.string().startsWith('a').endsWith('z')],
   ['union of objects', z.union([z.object({ k: z.literal('a') }), z.object({ k: z.literal('b') })])],
   [
     'discriminated union',
@@ -50,10 +67,11 @@ const CASES: ReadonlyArray<readonly [string, z.ZodTypeAny]> = [
   ['record of strings', z.record(z.string(), z.number())],
   ['record over enum keys', z.record(z.enum(['a', 'b']), z.boolean())],
   ['readonly object', z.object({ a: z.string() }).readonly()],
-  ['pipe keeps the input side', z.string().transform((s) => s.length)],
   ['catch and prefault', z.object({ a: z.string().catch('x'), b: z.number().prefault(1) })],
   ['unknown value', z.object({ any: z.unknown() })],
   ['refined object', z.object({ a: z.number(), b: z.number() }).refine((v) => v.a <= v.b)],
+  ['recursive object', treeSchema],
+  ['recursive union with a non-empty array', inlineSchema],
 ]
 
 describe('arbitraryForSchema', () => {
@@ -72,12 +90,41 @@ describe('arbitraryForSchema', () => {
       symbol: z.union([z.object({ icon: z.string() }), z.object({ emoji: z.string() })]),
       routing: z.enum(['straight', 'curved']).optional(),
     })
-    const drawn = fc.sample(arbitraryForSchema(schema), 300) as Array<z.infer<typeof schema>>
+    const drawn = fc.sample(arbitraryForSchema(schema), 300)
     expect(new Set(drawn.map((v) => v.kind))).toEqual(new Set(['ellipse', 'diamond', 'hexagon']))
     expect(new Set(drawn.map((v) => ('icon' in v.symbol ? 'icon' : 'emoji')))).toEqual(
       new Set(['icon', 'emoji']),
     )
     expect(new Set(drawn.map((v) => v.routing === undefined))).toEqual(new Set([true, false]))
+  })
+
+  it('draws an optional key as absent, never as a key holding undefined', () => {
+    // `{ a: undefined }` equals `{}` to `toEqual` and to nothing that
+    // serialises; a property over storage would pass a shape the store
+    // never sees. A default is left to the parse for the same reason: the
+    // key absent on the input side is how the default branch gets drawn.
+    const schema = z.object({
+      a: z.string().optional(),
+      b: z.string().optional().catch(undefined),
+      c: z.number().default(7),
+    })
+    const drawn = fc.sample(arbitraryForSchema(schema), 200)
+    for (const value of drawn) {
+      for (const key of ['a', 'b'] as const) {
+        if (key in value) expect(value[key]).not.toBeUndefined()
+      }
+      expect(value.c).toBeTypeOf('number')
+    }
+    expect(drawn.some((value) => value.c === 7)).toBe(true)
+    expect(drawn.some((value) => value.c !== 7)).toBe(true)
+  })
+
+  it('hands back the output side: a default filled, a transform applied', () => {
+    const schema = z.object({ n: z.string().transform((s) => s.length), d: z.number().default(1) })
+    for (const value of fc.sample(arbitraryForSchema(schema), 50)) {
+      expect(value.n).toBeTypeOf('number')
+      expect(value.d).toBeTypeOf('number')
+    }
   })
 
   it('honours a refinement the walk cannot see, by filtering rather than by luck', () => {
@@ -99,19 +146,73 @@ describe('arbitraryForSchema', () => {
         return undefined
       },
     })
-    for (const value of fc.sample(arbitrary, 50) as Array<z.infer<typeof schema>>) {
+    for (const value of fc.sample(arbitrary, 50)) {
       if (value.theme !== undefined) expect(value.theme).toBe('visual.sketch')
       expect(value.nested.ref).toBe('icon:1')
     }
   })
 
+  it('lets an override match a shared schema by identity wherever it appears', () => {
+    const idSchema = z.string()
+    const schema = z.object({
+      from: idSchema,
+      to: idSchema.optional(),
+      items: z.array(z.object({ ref: idSchema })),
+    })
+    const arbitrary = arbitraryForSchema(schema, {
+      override: (_path, candidate) => (candidate === idSchema ? fc.constant('ID') : undefined),
+    })
+    for (const value of fc.sample(arbitrary, 50)) {
+      expect(value.from).toBe('ID')
+      if (value.to !== undefined) expect(value.to).toBe('ID')
+      for (const item of value.items) expect(item.ref).toBe('ID')
+    }
+  })
+
+  it('bounds a recursive schema by maxDepth and reaches the ceiling', () => {
+    const depthOf = (tree: Tree): number =>
+      tree.children.length === 0 ? 0 : 1 + Math.max(...tree.children.map(depthOf))
+    for (const maxDepth of [0, 1, 2]) {
+      const depths = fc.sample(arbitraryForSchema(treeSchema, { maxDepth }), 300).map(depthOf)
+      expect(Math.max(...depths)).toBe(maxDepth)
+    }
+    // A union at the ceiling keeps only the arms that need no expansion.
+    const inlines = fc.sample(arbitraryForSchema(inlineSchema, { maxDepth: 0 }), 100)
+    expect(inlines.every((inline) => inline.type === 'text')).toBe(true)
+    expect(
+      fc
+        .sample(arbitraryForSchema(inlineSchema, { maxDepth: 1 }), 200)
+        .some((v) => v.type === 'em'),
+    ).toBe(true)
+  })
+
   it('throws instead of retrying forever when nothing drawn is accepted', () => {
     // A refinement nothing satisfies would make fast-check's filter loop
     // synchronously with no timeout to catch it; the decision is taken at
-    // construction, with the schema's own first complaint.
+    // construction, with the schema's own first complaint — at the field
+    // that carries the refinement, since that is where it is filtered.
     expect(() =>
       arbitraryForSchema(z.object({ a: z.string().refine(() => false, 'never') })),
-    ).toThrow(/nothing drawn for the schema at \$ is accepted \(first rejection: never\)/)
+    ).toThrow(/nothing drawn for the schema at \$\.a is accepted \(first rejection: never\)/)
+  })
+
+  it('keeps a refined union arm and a refined array element reachable at their own rate', () => {
+    // Filtered only at the root, the arm with no refinement would dominate
+    // and one rejected element would reject the whole collection.
+    const schema = z.object({
+      anchor: z.discriminatedUnion('kind', [
+        z
+          .object({ kind: z.literal('spatial'), a: z.number(), b: z.number() })
+          .refine((v) => v.a < v.b),
+        z.object({ kind: z.literal('document') }),
+      ]),
+      items: z.array(z.object({ n: z.number() }).refine((v) => v.n > 0)),
+    })
+    const drawn = fc.sample(arbitraryForSchema(schema), 400)
+    const spatial = drawn.filter((v) => v.anchor.kind === 'spatial').length
+    expect(spatial).toBeGreaterThan(120)
+    expect(spatial).toBeLessThan(280)
+    expect(drawn.some((v) => v.items.length >= 2)).toBe(true)
   })
 
   it('throws naming the path for a construct it has no generator for', () => {
@@ -121,10 +222,17 @@ describe('arbitraryForSchema', () => {
     expect(() => arbitraryForSchema(z.object({ items: z.array(z.set(z.string())) }))).toThrow(
       /"set" at \$\.items\[\]/,
     )
-    expect(() => arbitraryForSchema(z.string().url())).toThrow(/string format "url" at \$/)
     // A format whose regex fast-check cannot build a generator from (lookaheads).
     expect(() => arbitraryForSchema(z.object({ to: z.string().email() }))).toThrow(
       /string format "email" at \$\.to/,
+    )
+  })
+
+  it('throws naming the path for a recursion nothing can end', () => {
+    type Chain = { next: Chain }
+    const chain: z.ZodType<Chain> = z.lazy(() => z.object({ next: chain }))
+    expect(() => arbitraryForSchema(chain, { maxDepth: 2 })).toThrow(
+      /recursion at \$\.next\.next\.next cannot end within maxDepth 2/,
     )
   })
 })

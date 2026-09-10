@@ -18,10 +18,10 @@
  * construct the walk cannot express throws naming the path — the caller's
  * property fails at construction rather than passing over the facet.
  */
+import { acceptedOrThrow, arbitraryForSchema } from '@kamiazya/whiteboard-model/test-utils'
 import * as fc from 'fast-check'
 import type { z } from 'zod'
 import type { AssetKind, FacetRegistry, FacetTarget } from '../registry.js'
-import { acceptedOrThrow, arbitraryForSchema } from './zod-arbitrary.js'
 
 export interface FacetEntry {
   readonly key: string

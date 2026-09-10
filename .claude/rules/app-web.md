@@ -194,7 +194,8 @@ App test that mounts a daemon target.
 `facetsArbitrary(registry, 'canvas')` from facet-engine's `/testing`
 subpath is what a property about envelopes uses
 (`gesture-view.property.test.ts`): each facet the registry holds for the
-target, drawn by walking its own Zod schema, an `assetRefs` field drawing
+target, drawn from its own Zod schema by model's `arbitraryForSchema`
+(`@kamiazya/whiteboard-model/test-utils`), an `assetRefs` field drawing
 the registered asset ids, and every payload filtered by
 `validateFacetWrite` itself so a `.refine` the walk cannot see is still
 honoured. It follows a facet a plugin registers tomorrow without an edit.
@@ -205,6 +206,6 @@ check that the plugin this app ships has no facet the walk throws on at
 construction and none it quietly skips. It used to be a walker of its own
 here, beside a second one in canvas-render that drew from form samples; two
 properties on one PR passed over the defect they exist to catch because
-each generator had a schema it had never met, and one generator in the
-engine is the permanent answer.
+each generator had a schema it had never met, and one walk in model — the
+package every generator can reach — is the permanent answer.
 

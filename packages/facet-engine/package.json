@@ -27,6 +27,7 @@
   },
   "devDependencies": {
     "@fast-check/vitest": "^0.4.1",
+    "@kamiazya/whiteboard-model": "workspace:*",
     "fast-check": "^4.7.0",
     "typescript": "catalog:",
     "vitest": "catalog:"
