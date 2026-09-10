@@ -14,7 +14,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
-import { deriveFacetForm } from './form.js'
+import { deriveFacetForm, facetPayloadKey } from './form.js'
 import { defineFacet } from './registry.js'
 
 const symbolSchema = z.union([
@@ -83,6 +83,47 @@ describe('a declared picker', () => {
         },
       }),
     ).toThrow(/picker option "Database"/)
+  })
+
+  // Key ORDER is a writer's accident, never a difference in value. Both
+  // places that compared payloads used `JSON.stringify` directly and each
+  // had a hole: this one would admit a duplicate, and the vessel's "which
+  // option is current" would match nothing at all for a stored value whose
+  // keys arrived in another order — a picker drawn with no selection, from
+  // a facet `wb_facet_set` or an imported document wrote perfectly validly.
+  it('keys a payload by value, not by the order its keys were written', () => {
+    expect(facetPayloadKey({ kind: 'icon', name: 'database' })).toBe(
+      facetPayloadKey({ name: 'database', kind: 'icon' }),
+    )
+    // Nested, and through an array, since a payload is not always flat.
+    expect(facetPayloadKey({ a: { x: 1, y: [{ p: 1, q: 2 }] } })).toBe(
+      facetPayloadKey({ a: { y: [{ q: 2, p: 1 }], x: 1 } }),
+    )
+    // Still distinguishes what really differs, including absence.
+    expect(facetPayloadKey({ kind: 'icon', name: 'database' })).not.toBe(
+      facetPayloadKey({ kind: 'icon', name: 'file' }),
+    )
+    expect(facetPayloadKey(undefined)).toBe(facetPayloadKey(null))
+  })
+
+  it('refuses two options that write the same payload in a different key order', () => {
+    expect(() =>
+      defineFacet({
+        name: 'symbol',
+        displayName: 'Symbol',
+        version: 'v0',
+        targets: ['node'],
+        schema: symbolSchema,
+        editor: {
+          picker: {
+            options: [
+              { payload: { kind: 'icon', name: 'database' }, label: 'Database' },
+              { payload: { name: 'database', kind: 'icon' }, label: 'Database again' },
+            ],
+          },
+        },
+      }),
+    ).toThrow(/same payload/)
   })
 
   it('refuses two options that write the same payload', () => {

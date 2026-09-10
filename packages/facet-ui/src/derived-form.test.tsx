@@ -96,3 +96,82 @@ describe('DerivedFacetForm', () => {
     expect(screen.getByRole('alert')).not.toBeNull()
   })
 })
+
+/**
+ * A stored payload's key order is its WRITER'S. `wb_facet_set` and a
+ * document authored elsewhere have no reason to match the declaration's,
+ * and the picker compared the two by stringifying each — so such a value
+ * matched no option and the control drew with NOTHING selected, over a
+ * facet that was set, valid, and being drawn on the canvas.
+ */
+describe('a picker over a payload somebody else wrote', () => {
+  const SYMBOL_KEY = 'demo.symbol/v0'
+  const symbolRegistry = createFacetRegistry([
+    definePlugin({
+      id: 'demo',
+      displayName: 'Demo',
+      facets: [
+        defineFacet({
+          name: 'symbol',
+          displayName: 'Symbol',
+          version: 'v0',
+          targets: ['node'],
+          schema: z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
+          editor: {
+            picker: {
+              options: [
+                { payload: null, label: 'No symbol' },
+                { payload: { kind: 'icon', name: 'database' }, label: 'Database' },
+              ],
+            },
+          },
+        }),
+      ],
+    }),
+  ])
+
+  it('marks the option a reversed-key payload names', () => {
+    render(
+      <DerivedFacetForm
+        facetKey={SYMBOL_KEY}
+        title="Symbol"
+        // The SAME value the declaration writes, keys the other way round.
+        stored={{ name: 'database', kind: 'icon' }}
+        registry={symbolRegistry}
+        onWrite={vi.fn()}
+      />,
+    )
+
+    expect((screen.getByRole('radio', { name: 'Database' }) as HTMLInputElement).checked).toBe(true)
+    expect((screen.getByRole('radio', { name: 'No symbol' }) as HTMLInputElement).checked).toBe(
+      false,
+    )
+  })
+})
+
+/**
+ * A `<label>` inside a `<label>` is invalid, and the browser resolves a
+ * click on the inner one against the OUTER label's control — so the option
+ * a person pressed is not the one that takes the press. A segmented field
+ * therefore takes a plain wrapper; every other control here is a single
+ * labelable element, which is what `htmlFor` is for.
+ */
+describe('label nesting', () => {
+  it('never nests an option label inside a field label', () => {
+    const { container } = render(
+      <DerivedFacetForm
+        facetKey={SHAPE_KEY}
+        title="Shape"
+        stored={undefined}
+        registry={shapeRegistry}
+        onWrite={vi.fn()}
+      />,
+    )
+
+    const nested = [...container.querySelectorAll('label label')]
+    expect(nested.map((el) => el.getAttribute('title') ?? el.textContent)).toEqual([])
+    // And the options are still labels — the fix is where they sit, not
+    // what they are.
+    expect(container.querySelectorAll('label').length).toBeGreaterThan(1)
+  })
+})

@@ -17,6 +17,7 @@ import {
   type FacetForm,
   type FacetFormField,
   type FacetRegistry,
+  facetPayloadKey,
 } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useState } from 'react'
 import { glyphIcon } from './glyph.js'
@@ -110,6 +111,12 @@ function FieldInput({
     )
   }
   if (field.control.kind === 'segmented') {
+    // NOT wrapped in anything labelable, and the caller does not wrap this
+    // arm in a `<label>` either (see the field list below). A `<label>`
+    // inside a `<label>` is invalid, and the browser resolves a click on
+    // the inner one against the OUTER label's control — so the option a
+    // person pressed is not the one that takes the press. The group's own
+    // `aria-label` is what names it.
     return (
       <span id={id}>
         <FacetOptionGroup label={name}>
@@ -250,7 +257,11 @@ export function DerivedFacetForm({
    * whose visible text named nothing it would clear. One control, one way.
    */
   if (form.kind === 'picker') {
-    const current = JSON.stringify(stored ?? null)
+    // Keyed rather than stringified directly: a stored payload's key order
+    // is its WRITER's, and `wb_facet_set` or a document authored elsewhere
+    // has no reason to match this declaration's. Compared raw, such a value
+    // matches no option and the picker draws with nothing selected.
+    const current = facetPayloadKey(stored)
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
         <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{title}</span>
@@ -262,7 +273,7 @@ export function DerivedFacetForm({
                 key={option.label}
                 name={`facet-picker-${facetKey}`}
                 label={option.label}
-                selected={JSON.stringify(option.payload ?? null) === current}
+                selected={facetPayloadKey(option.payload) === current}
                 // Straight through the write path, the same as every other
                 // control here: `null` clears, anything else is validated
                 // before it is stored. A picker payload was already parsed
@@ -336,32 +347,41 @@ export function DerivedFacetForm({
           </select>
         </label>
       )}
-      {fields.map((field) => (
-        <label
-          key={field.name}
-          htmlFor={`facet-field-${facetKey}-${field.name}`}
-          // Wraps for the same reason the menu's option rows do: a segmented
-          // control with six options does not fit a phone beside its label,
-          // and the options past the edge are the ones nobody can tap.
-          style={ROW}
-        >
-          {/* A single-field facet usually labels its field the way the facet
-              itself is named ("Shape" under "Shape"). Printing it twice adds
-              a line and says nothing; the accessible name still carries it. */}
-          <span style={{ color: MUTED, fontWeight: field.required ? 500 : 400 }}>
-            {field.label === title ? '' : field.label}
-          </span>
-          <FieldInput
-            facetKey={facetKey}
-            title={title}
-            field={field}
-            value={draft[field.name]}
-            registry={registry}
-            onChange={(next) => change(field, next)}
-            onClear={() => onWrite(facetKey, undefined)}
-          />
-        </label>
-      ))}
+      {fields.map((field) => {
+        // A SEGMENTED field is its own radio group and carries its own
+        // accessible name, so it takes a plain wrapper: nesting its option
+        // labels inside a field `<label>` is invalid HTML, and a click on an
+        // inner label resolves against the outer one's control. Every other
+        // control here is a single labelable element, which is what a
+        // `<label htmlFor>` is for.
+        const Row = field.control.kind === 'segmented' ? 'div' : 'label'
+        return (
+          <Row
+            key={field.name}
+            {...(Row === 'label' ? { htmlFor: `facet-field-${facetKey}-${field.name}` } : {})}
+            // Wraps for the same reason the menu's option rows do: a segmented
+            // control with six options does not fit a phone beside its label,
+            // and the options past the edge are the ones nobody can tap.
+            style={ROW}
+          >
+            {/* A single-field facet usually labels its field the way the facet
+                itself is named ("Shape" under "Shape"). Printing it twice adds
+                a line and says nothing; the accessible name still carries it. */}
+            <span style={{ color: MUTED, fontWeight: field.required ? 500 : 400 }}>
+              {field.label === title ? '' : field.label}
+            </span>
+            <FieldInput
+              facetKey={facetKey}
+              title={title}
+              field={field}
+              value={draft[field.name]}
+              registry={registry}
+              onChange={(next) => change(field, next)}
+              onClear={() => onWrite(facetKey, undefined)}
+            />
+          </Row>
+        )
+      })}
       {error !== undefined && (
         <span role="alert" style={{ fontSize: '0.7rem', color: DANGER }}>
           {error}

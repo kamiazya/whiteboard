@@ -44,11 +44,21 @@ const SCAN_DIRS = [
  * primitive lives in ONE file, which is exempt for the reason a definition
  * always is.
  */
+/**
+ * `="x"`, `={'x'}`, `={"x"}` and `={`x`}` all set the same attribute, and a
+ * scan that knows only the first is one an author gets past by accident.
+ * Matching the VALUE with optional brace-and-quote around it covers every
+ * form without parsing TSX — the samples below drive each one, so a pattern
+ * that stops covering a form fails rather than going quiet.
+ */
+const attr = (name: string, value: string): RegExp =>
+  new RegExp(`${name}=\\{?\\s*["'\`]${value}["'\`]`)
+
 const MARKERS: readonly { readonly pattern: RegExp; readonly what: string }[] = [
-  { pattern: /role=["']radiogroup["']/, what: 'role="radiogroup"' },
-  { pattern: /role=["']radio["']/, what: 'role="radio"' },
-  { pattern: /role=["']menuitemradio["']/, what: 'role="menuitemradio"' },
-  { pattern: /type=["']radio["']/, what: '<input type="radio">' },
+  { pattern: attr('role', 'radiogroup'), what: 'role="radiogroup"' },
+  { pattern: attr('role', 'radio'), what: 'role="radio"' },
+  { pattern: attr('role', 'menuitemradio'), what: 'role="menuitemradio"' },
+  { pattern: attr('type', 'radio'), what: '<input type="radio">' },
   { pattern: /aria-checked=\{/, what: 'aria-checked={…}' },
 ]
 
@@ -160,6 +170,11 @@ describe('one selection control', () => {
       '<button role="menuitemradio" />',
       '<input type="radio" name="x" />',
       '<div aria-checked={selected} />',
+      // The expression forms, which a plain `role="radio"` scan misses.
+      "<button role={'radio'} />",
+      '<button role={"menuitemradio"} />',
+      '<input type={`radio`} />',
+      "<span role={ 'radiogroup' }>",
     ]
     for (const sample of samples) {
       expect(

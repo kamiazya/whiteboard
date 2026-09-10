@@ -331,6 +331,14 @@ function DocumentPageBody({
         // document's frontmatter takes: a canvas has no frontmatter and a
         // note has no canvas, so the two never appear together and the
         // segment reads the same length either way.
+        //
+        // No `preview === null` guard, and that is checked rather than
+        // assumed: this panel writes the LIVE document, so drawing it over
+        // a past state would be a write against a canvas nobody is looking
+        // at — but the state cannot arise. `WorkspaceTopBar` replaces the
+        // whole row while previewing, so no opener renders, and `preview`
+        // is set only by `VersionPanel`, which needs the slot to be holding
+        // `history`. Pinned in versions.browser.test.tsx.
         ...(documentKind === 'spatial' ? { display: {} } : {}),
         comments: { count: commentsRail.openThreadCount },
         // Always offered, and pressable at nought (user decision,

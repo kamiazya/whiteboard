@@ -71,6 +71,36 @@ export interface FacetPickerSpec {
   readonly options: readonly FacetPickerOption[]
 }
 
+/**
+ * A payload's identity, independent of the order its keys were written in.
+ *
+ * `JSON.stringify` preserves insertion order, so `{kind, name}` and
+ * `{name, kind}` — the same facet value by every rule this engine has —
+ * serialize differently. Two places compared payloads that way and each had
+ * a defect: the duplicate check below would admit two options writing the
+ * same thing, and the UI's "which option is current" comparison would find
+ * NO match for a stored value whose keys arrived in another order, drawing
+ * a picker with nothing selected.
+ *
+ * The second is the one that reaches a person, and it is reachable: a facet
+ * written by `wb_facet_set` or imported from a document authored elsewhere
+ * has whatever order its writer used. Exported so a vessel keys on the same
+ * function this engine validates with, rather than on a second definition
+ * of "the same payload".
+ */
+export function facetPayloadKey(payload: unknown): string {
+  const canonical = (value: unknown): unknown => {
+    if (Array.isArray(value)) return value.map(canonical)
+    if (typeof value !== 'object' || value === null) return value
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>)
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+        .map(([key, member]) => [key, canonical(member)]),
+    )
+  }
+  return JSON.stringify(canonical(payload ?? null))
+}
+
 export interface FacetSegmentedOption {
   /**
    * The value this segment writes. `null` CLEARS the facet — some defaults
@@ -323,10 +353,10 @@ function assertPickerFits(facetName: string, schema: z.ZodTypeAny, picker: Facet
   }
   const seen = new Set<string>()
   for (const option of picker.options) {
-    // Payload equality by canonical JSON: two options writing the same
-    // thing are two controls a person cannot tell apart, and whichever is
-    // drawn second can never read as selected.
-    const fingerprint = JSON.stringify(option.payload ?? null)
+    // Two options writing the same thing are two controls a person cannot
+    // tell apart, and whichever is drawn second can never read as selected.
+    // Keyed by `facetPayloadKey` so key ORDER cannot hide a duplicate.
+    const fingerprint = facetPayloadKey(option.payload)
     if (seen.has(fingerprint)) {
       throw new Error(
         `facet "${facetName}" picker option "${option.label}" writes the same payload as an earlier one`,
