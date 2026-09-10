@@ -168,25 +168,55 @@ function hasNoBlockEdgeNewline(node: AnyNode): boolean {
 }
 
 /**
- * A code span or inline math holding a line ending inside a heading that
- * can only be ATX (depth 3 and up; depths 1 and 2 fall back to setext,
- * which spans lines). Text there is encoded as `&#xA;`, but a code span
- * cannot carry a character reference, so `mdast-util-to-markdown` writes
- * the line ending raw and the heading splits in two on re-parse.
- * `markdown-heading-newline-round-trip.test.ts` pins that exact
- * behaviour, so this exclusion goes when upstream changes it.
+ * A line ending inside a code span or inline math. CommonMark reads a code
+ * span's line ending as a space, and `mdast-util-to-markdown` writes it as
+ * one whenever the character after it could open a block construct at a
+ * line start — `\n~` is written `` ` ~` `` and comes back as ` ~` — while a
+ * blank line inside a span ends the paragraph and leaves a stray backtick.
+ * Where the span sits in a heading that can only be ATX (depth 3 and up)
+ * the raw line ending splits the heading instead;
+ * `markdown-writer-limits-round-trip.test.ts` pins that instance.
  */
-function hasNoNewlineSpanInAtxHeading(node: AnyNode): boolean {
-  if (node.type === 'heading' && (node.depth ?? 0) >= 3) {
-    const holdsNewlineSpan = (child: AnyNode): boolean =>
-      ((child.type === 'inlineCode' || child.type === 'inlineMath') &&
-        typeof child.value === 'string' &&
-        child.value.includes('\n')) ||
-      (Array.isArray(child.children) && child.children.some((c) => holdsNewlineSpan(c as AnyNode)))
-    if (holdsNewlineSpan(node)) return false
+function hasNoNewlineInSpan(node: AnyNode): boolean {
+  if (
+    (node.type === 'inlineCode' || node.type === 'inlineMath') &&
+    typeof node.value === 'string' &&
+    node.value.includes('\n')
+  ) {
+    return false
   }
   return Array.isArray(node.children)
-    ? node.children.every((child) => hasNoNewlineSpanInAtxHeading(child as AnyNode))
+    ? node.children.every((child) => hasNoNewlineInSpan(child as AnyNode))
+    : true
+}
+
+/**
+ * A blank line inside a text value is a paragraph break, not text: markdown
+ * has no way to write two consecutive line endings that stay inside one
+ * paragraph, so `a\n\nb` comes back as two paragraphs and a trailing
+ * `\n\n` as nothing.
+ */
+function hasNoBlankLineInText(node: AnyNode): boolean {
+  if (isText(node) && /\n[ \t]*\n/.test(node.value)) return false
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoBlankLineInText(child as AnyNode))
+    : true
+}
+
+/**
+ * A link, image or definition destination that starts with `<`.
+ * `mdast-util-to-markdown` writes it raw — `![x](<)`, `[x](<a)` — where the
+ * parser reads `<` as the start of a pointy-bracket destination, so an
+ * unclosed one turns the whole construct into text and `<a>` comes back
+ * as `a`. CommonMark allows `\<` in a destination, so this is the
+ * writer's gap rather than the format's; `<` anywhere else in a
+ * destination survives. `markdown-writer-limits-round-trip.test.ts` pins
+ * it, so this exclusion goes when upstream escapes it.
+ */
+function hasNoLeadingAngleInDestination(node: AnyNode & { url?: unknown }): boolean {
+  if (typeof node.url === 'string' && node.url.startsWith('<')) return false
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoLeadingAngleInDestination(child as AnyNode))
     : true
 }
 
@@ -197,7 +227,9 @@ function nonListFlowArbitrary(maxDepth: number) {
     .filter(hasNoExcludedDescendant)
     .filter(hasNoBackslashText)
     .filter(hasNoBlockEdgeNewline)
-    .filter(hasNoNewlineSpanInAtxHeading)
+    .filter(hasNoNewlineInSpan)
+    .filter(hasNoBlankLineInText)
+    .filter(hasNoLeadingAngleInDestination)
 }
 
 const rootArbitrary = fc

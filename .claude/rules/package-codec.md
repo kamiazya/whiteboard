@@ -115,10 +115,12 @@ rather than in a string, so joining its runs yields `tightenthis`.
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/
   strikethrough flanking-rule interactions, reference-style links/definitions, and non-HTML-shaped
   `html` node values, a line ending at a block's first or last text — the block boundary itself,
-  which the writer emits raw where it encodes a boundary space as `&#x20;` — and a code span or
-  inline math holding a line ending inside an ATX-only heading (depth 3 and up), which the writer
-  cannot encode and so splits the heading on re-parse, pinned by
-  `markdown-heading-newline-round-trip.test.ts`; each exclusion is commented at its filter). The
+  which the writer emits raw where it encodes a boundary space as `&#x20;` — a blank line inside a
+  text value (a paragraph break), a line ending inside a code span or inline math (CommonMark reads
+  it as a space and the writer writes one whenever the next character could open a block; in an
+  ATX-only heading it splits the heading), and a destination starting with `<` (the writer leaves
+  it raw where the parser reads a pointy-bracket destination) — the last two pinned by
+  `markdown-writer-limits-round-trip.test.ts`; each exclusion is commented at its filter). The
   text those properties draw is dense on purpose — words with spaces, markdown punctuation, line
   endings, characters outside ASCII (model's `markdownTextArbitrary`) — and the property held at
   1500 runs once the two newline exclusions were in; before the densification no text value
