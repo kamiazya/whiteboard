@@ -1,9 +1,10 @@
 # ADR-0032: A composition axis — what a drawing hands its reader, judged by four principles with their sources
 
-**Status:** Accepted — the criteria, the column definitions and the validity
-claim; the score itself and its pinned scoreboard are the next increment.
-Sits beside [ADR-0031](0031-tool-surface-criteria.md) §7's drawing score
-rather than extending it.
+**Status:** Accepted — the criteria, the column definitions, the validity
+claim, and the score and pinned scoreboard that land with them. Sits beside
+[ADR-0031](0031-tool-surface-criteria.md) §7's drawing score rather than
+extending it. Three column definitions below were changed BY the calibration
+that followed; what is written here is what the measurements left standing.
 
 ## Context
 
