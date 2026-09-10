@@ -1054,8 +1054,14 @@ the table alone.
     full-strength hairlines read as a ruled line drawn twice. The weight
     itself is the theme's `strokeWidthPx` token (facet-engine), mapped onto
     node chrome and edges by `theme-asset.ts` and never onto a label; sketch
-    declares 1.4. The themed pixel golden is the instrument that sees all of
-    this.
+    declares 1.4. An edge keeps EVERY vertex the flattener produced and
+    gains an anchor only along a straight run longer than `EDGE_STEP_PX`
+    (`anchored`); the resampler it replaced kept one point per step, which
+    erased a hop (nine samples over ten pixels) and any bend inside the
+    step, so a sketched edge crossed other edges flat and cut its own
+    corners. A vertex's shake shrinks with its spacing, so the hop's dense
+    samples are not shaken into a burr. The themed pixel golden is the
+    instrument that sees all of this.
     **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the

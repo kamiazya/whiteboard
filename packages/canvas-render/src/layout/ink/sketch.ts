@@ -58,8 +58,14 @@ const ELLIPSE_SAMPLES = 24
  */
 const CURVE_JITTER_PX = 0.7
 const CURVE_BOW_PX = 0.8
-/** Along an edge, ink is re-anchored this often; between anchors it bows. */
+/** Along a straight run of an edge, ink is re-anchored this often; between anchors it bows. */
 const EDGE_STEP_PX = 24
+/**
+ * A vertex closer than this to a neighbour is shaken proportionally less:
+ * a hop is nine samples over ten pixels, and full displacement on each
+ * would turn the arc into a burr.
+ */
+const FULL_SHAKE_SPACING_PX = 12
 const HATCH_GAP_PX = 6
 const HATCH_ANGLE = (-41 * Math.PI) / 180
 /** Hatch lines are lighter than the outline and barely displaced. */
@@ -114,12 +120,28 @@ function bowed(rng: Rng, a: Point, b: Point, bow: number): readonly [number, num
 const sideBow = (a: Point, b: Point): number =>
   Math.min(BOW_MAX_PX, Math.hypot(b.x - a.x, b.y - a.y) * BOW_PER_PX)
 
-/** One displaced copy of each vertex, shared by the segments meeting there. */
-function shaken(rng: Rng, points: readonly Point[], amount: number): Point[] {
-  return points.map((p) => ({
-    x: p.x + (rng() * 2 - 1) * amount,
-    y: p.y + (rng() * 2 - 1) * amount,
-  }))
+/**
+ * One displaced copy of each vertex, shared by the segments meeting there.
+ * The displacement shrinks with the vertex's spacing from its neighbours
+ * (`FULL_SHAKE_SPACING_PX`), so a densely sampled curve keeps its shape.
+ */
+function shaken(rng: Rng, points: readonly Point[], amount: number, closed: boolean): Point[] {
+  const n = points.length
+  const gap = (i: number, j: number): number => {
+    const a = points[i]!
+    const b = points[j]!
+    return Math.hypot(b.x - a.x, b.y - a.y)
+  }
+  return points.map((p, i) => {
+    const before =
+      i > 0 ? gap(i - 1, i) : closed && n > 1 ? gap(n - 1, i) : Number.POSITIVE_INFINITY
+    const after = i < n - 1 ? gap(i, i + 1) : closed && n > 1 ? gap(i, 0) : Number.POSITIVE_INFINITY
+    const scale = Math.min(1, Math.min(before, after) / FULL_SHAKE_SPACING_PX)
+    return {
+      x: p.x + (rng() * 2 - 1) * amount * scale,
+      y: p.y + (rng() * 2 - 1) * amount * scale,
+    }
+  })
 }
 
 /**
@@ -144,7 +166,7 @@ function curvedTo(rng: Rng, a: Point, b: Point, mid: Point, to: Point): string {
 function strokePolyline(rng: Rng, points: readonly Point[], close: boolean): string {
   const n = points.length
   if (n === 0) return ''
-  const shook = shaken(rng, points, JITTER_PX)
+  const shook = shaken(rng, points, JITTER_PX, close)
   const parts = [`M ${num(shook[0]!.x)} ${num(shook[0]!.y)}`]
   const sides = close ? n : n - 1
   for (let i = 0; i < sides; i += 1) {
@@ -176,7 +198,7 @@ interface Curve {
 function strokeCurve(rng: Rng, curve: Curve): string {
   const n = curve.points.length
   if (n === 0) return ''
-  const shook = shaken(rng, curve.points, CURVE_JITTER_PX)
+  const shook = shaken(rng, curve.points, CURVE_JITTER_PX, curve.closed)
   const parts = [`M ${num(shook[0]!.x)} ${num(shook[0]!.y)}`]
   const chords = curve.closed ? n : n - 1
   for (let i = 0; i < chords; i += 1) {
@@ -372,18 +394,29 @@ export function sketchShape(
   return { strokes, hatch: hatchLines(rng, silhouette.region, box) }
 }
 
-/** Keep a point every `EDGE_STEP_PX` along the polyline, plus its last point. */
-function resample(points: readonly Point[]): Point[] {
-  const kept: Point[] = []
-  let last: Point | undefined
-  for (const [index, p] of points.entries()) {
-    const isLast = index === points.length - 1
-    if (last === undefined || isLast || Math.hypot(p.x - last.x, p.y - last.y) >= EDGE_STEP_PX) {
-      kept.push(p)
-      last = p
+/**
+ * Every vertex the flattener produced — a rounded corner's chords, a hop's
+ * samples — plus an anchor every `EDGE_STEP_PX` along any longer straight
+ * run. Keeping only one point per step used to erase both: a hop is nine
+ * points over ten pixels and a short stub is one bend inside the step, so
+ * a sketched edge crossed other edges flat and cut its own corners.
+ */
+function anchored(points: readonly Point[]): Point[] {
+  const out: Point[] = []
+  for (let i = 0; i < points.length; i += 1) {
+    const p = points[i]!
+    if (i > 0) {
+      const prev = points[i - 1]!
+      const len = Math.hypot(p.x - prev.x, p.y - prev.y)
+      const pieces = Math.floor(len / EDGE_STEP_PX)
+      for (let k = 1; k < pieces; k += 1) {
+        const t = k / pieces
+        out.push({ x: prev.x + (p.x - prev.x) * t, y: prev.y + (p.y - prev.y) * t })
+      }
     }
+    out.push(p)
   }
-  return kept
+  return out
 }
 
 export interface SketchEdgeOptions {
@@ -395,9 +428,9 @@ export interface SketchEdgeOptions {
 
 /**
  * The ink of one routed edge: the SAME drawn polyline the hit-test flattens
- * (`flattenDrawnEdgePath` — rounded corners and jump hops included), re-
- * anchored every `EDGE_STEP_PX` and drawn in two bowed passes, then each
- * arrowhead as two wing strokes from the tip.
+ * (`flattenDrawnEdgePath` — rounded corners and jump hops included), with
+ * an anchor every `EDGE_STEP_PX` along its straight runs, drawn in two
+ * bowed passes, then each arrowhead as two wing strokes from the tip.
  */
 export function sketchEdge(
   path: readonly Point[],
@@ -408,7 +441,7 @@ export function sketchEdge(
     return { strokes: [] }
   }
   const rng = styleRandomFromSeed(seed)
-  const drawn = resample(flattenDrawnEdgePath(path, options.jumps ?? [], options.rounded === true))
+  const drawn = anchored(flattenDrawnEdgePath(path, options.jumps ?? [], options.rounded === true))
   const strokes: string[] = []
   for (let pass = 0; pass < SKETCH_PASSES; pass += 1)
     strokes.push(strokePolyline(rng, drawn, false))

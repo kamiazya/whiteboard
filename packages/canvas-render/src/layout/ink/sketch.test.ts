@@ -160,6 +160,30 @@ describe('sketchEdge', () => {
     expect(arrowed.strokes.length).toBe(bare.strokes.length + 2)
   })
 
+  it('a jump hop survives into the ink — the pencil goes over the crossing, not through it', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 200, y: 0 },
+    ]
+    const ink = sketchEdge(pts, 5, { arrows: [], jumps: [{ segment: 0, x: 100, y: 0 }] })
+    // The hop bulges to the left of travel — upward, for a rightward run —
+    // by the jump radius, and a stroke that resampled every 24px kept none
+    // of its points, so the line crossed flat.
+    const highest = Math.min(...ink.strokes.flatMap(pointsOf).map((p) => p.y))
+    expect(highest).toBeLessThan(-3)
+  })
+
+  it('a bend closer than the anchor step to its neighbour is still turned, not cut diagonally', () => {
+    const pts = [
+      { x: 0, y: 0 },
+      { x: 20, y: 0 },
+      { x: 20, y: 100 },
+    ]
+    const ink = sketchEdge(pts, 6, { arrows: [] })
+    const nearCorner = ink.strokes.flatMap(pointsOf).some((p) => Math.hypot(p.x - 20, p.y - 0) < 3)
+    expect(nearCorner).toBe(true)
+  })
+
   it('a rounded path is inked along the rounded corners it is drawn with', () => {
     const pts = [
       { x: 0, y: 0 },
