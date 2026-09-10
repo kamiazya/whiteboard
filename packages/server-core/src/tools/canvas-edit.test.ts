@@ -1496,6 +1496,56 @@ describe('wb_canvas_edit — region.set', () => {
     ])
   })
 
+  test('another group this batch placed at the cursor, still empty, is not a wall — it will follow its own members', async () => {
+    // The lane added three groups with no geometry first, then the
+    // members: the cursor put the groups side by side, and the first
+    // group's box around its members reached the second, empty one.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'clients', type: 'group', label: 'Clients' } },
+        { op: 'node.add', node: { id: 'services', type: 'group', label: 'Services' } },
+        {
+          op: 'node.add',
+          within: 'clients',
+          node: { id: 'cli', type: 'text', x: 100, y: 100, width: 160, height: 60, text: 'CLI' },
+        },
+        {
+          op: 'node.add',
+          within: 'clients',
+          node: {
+            id: 'mobile',
+            type: 'text',
+            x: 540,
+            y: 100,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
+        },
+        {
+          op: 'node.add',
+          within: 'services',
+          node: { id: 'auth', type: 'text', x: 100, y: 320, width: 160, height: 60, text: 'Auth' },
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('clients')).toEqual([60, 60, 680, 140])
+    expect(at('services')).toEqual([60, 280, 240, 140])
+  })
+
   test('a member added within a cursor-placed group refuses to swallow a bystander, naming it', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {

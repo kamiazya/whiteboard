@@ -248,7 +248,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
        * in put a row the caller had just drawn into a column inside a
        * default box, and every model then spent two calls undoing it.
        */
-      const placedByCursor = new Map<string, { width?: number; height?: number }>()
+      const placedByCursor = new Map<string, { width?: number; height?: number; placed?: true }>()
 
       // Resolved once, and only when some op creates a text node or changes
       // what decides whether one's text fits — the composition root's
@@ -399,9 +399,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
         opName: string,
         group: SpatialNode,
         rects: readonly SpatialNode[],
-        given: { width?: number; height?: number },
+        given: { width?: number; height?: number; placed?: true },
       ): SpatialNode => {
-        const holding = nodes.some(enclosedBy(group))
+        // The cursor's box holds nothing, whatever it happens to cover: only
+        // a box already placed around members is joined with the next.
+        const holding = given.placed === true
         const around = rects.map((r) => ({
           x: r.x - PLACEMENT_GUTTER_PX,
           y: r.y - PLACEMENT_GUTTER_PX,
@@ -420,11 +422,17 @@ export function createCanvasEditTool(deps: ServerDeps) {
           height: Math.max(given.height ?? 0, bottom - top),
         }
         const members = new Set(rects.map((r) => r.id))
+        // Another group this batch put at the cursor, still holding
+        // nothing, is not a wall: it follows its own members when they
+        // come, and until then the cursor's spot is nobody's choice.
+        const unsettled = (node: SpatialNode) =>
+          placedByCursor.has(node.id) && placedByCursor.get(node.id)?.placed !== true
         const wall = nodes.find(
           (node) =>
             node.id !== group.id &&
             !members.has(node.id) &&
             !enclosedBy(group)(node) &&
+            !unsettled(node) &&
             overlaps(node, box) &&
             !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
         )
@@ -439,6 +447,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
         nodes = nodes.map((node) => (node.id === group.id ? placed : node))
         touchedNodes.add(group.id)
         geometry.set(group.id, { id: group.id, ...box })
+        placedByCursor.set(group.id, { ...given, placed: true })
         return placed
       }
 
@@ -738,7 +747,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
           case 'region.set': {
             let group = groupNamed(index, op.op, op.within)
-            const inScope = nodes.filter(enclosedBy(group))
+            // A group this batch put at the cursor and never placed around
+            // anything holds nothing, whatever the cursor's box covers.
+            const unsettled =
+              placedByCursor.get(group.id)?.placed !== true && placedByCursor.has(group.id)
+            const inScope = unsettled ? [] : nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
             const members = new Set(op.nodes)
             if (members.has(group.id)) {
@@ -778,10 +791,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // that box would become a member the next region.set deletes by
             // omission, so it is a wall; a frame the box nests inside is not.
             const unplaced = placedByCursor.get(group.id)
-            if (unplaced !== undefined && inScope.length === 0 && members.size > 0) {
+            if (unplaced !== undefined && unsettled && members.size > 0) {
               const rects = [...members].map((id) => nodeAt(id) as SpatialNode)
               group = placeAround(index, op.op, group, rects, unplaced)
-              placedByCursor.delete(group.id)
             }
 
             const dropped = inScope.filter((node) => !members.has(node.id))
