@@ -429,6 +429,8 @@ function overrideFor(seed: Seeded) {
     // one stress run in five). The default output path is unique per
     // export, so absent is also what lets the row answer more than once.
     if (path.endsWith('outputPath') || path.endsWith('frameId')) return fc.constant(undefined)
+    // A restore to a random target path is refused before it restores.
+    if (path.endsWith('targetPath')) return fc.constant(undefined)
     return undefined
   }
 }
@@ -475,10 +477,40 @@ function bodyArb(method: string, rule: Rule, seed: Seeded): fc.Arbitrary<Body | 
   return fc.oneof(...arms)
 }
 
-/** Fill a registered pattern's parameters and wildcard from the seed at real weight. */
+/**
+ * Fill a registered pattern's parameters and wildcard from the seed at real
+ * weight. A quarter of draws are `happy`: every parameter names the seed, so
+ * a row whose answer needs three seeded parameters at once (a restore: the
+ * workspace, the one path with a version, that version's id) still answers
+ * inside its draws instead of starving its ledger — measured, the
+ * independent draws landed on all three about one time in fifteen.
+ */
 function pathArb(pattern: string, seed: Seeded): fc.Arbitrary<{ path: string; seeded: boolean }> {
+  return fc.oneof(
+    { weight: 1, arbitrary: fillPattern(pattern, seed, true) },
+    { weight: 3, arbitrary: fillPattern(pattern, seed, false) },
+  )
+}
+
+function fillPattern(
+  pattern: string,
+  seed: Seeded,
+  happy: boolean,
+): fc.Arbitrary<{ path: string; seeded: boolean }> {
   const segments = pattern.split('/')
   const parts = segments.map((segment): fc.Arbitrary<{ text: string; seeded: boolean }> => {
+    if (happy) {
+      const seededText = (): string | null => {
+        if (segment === ':workspaceId') return seed.workspace
+        if (segment === '*') return SPATIAL_PATH
+        if (segment === ':documentId') return seed.trashedId
+        if (segment === ':id') return seed.versionId
+        if (segment === ':fileId') return FILE_ID
+        return segment.startsWith(':') ? null : segment
+      }
+      const text = seededText()
+      if (text !== null) return fc.constant({ text, seeded: true })
+    }
     if (segment === ':workspaceId') {
       return workspaceArb(seed).map((w) => ({
         text: encodeURIComponent(w),
