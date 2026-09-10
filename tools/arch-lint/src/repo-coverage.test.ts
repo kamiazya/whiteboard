@@ -316,13 +316,19 @@ describe('every workspace ships the path-scoped rule that teaches it', () => {
     ).toEqual([])
   })
 
-  it('scopes each rule at the package it teaches, so it actually loads there', () => {
+  it('scopes each rule at the whole package it teaches, so it actually loads there', () => {
+    // `<dir>/**` exactly, not a glob that merely starts with `<dir>/`: a rule
+    // scoped at `packages/history/src/**` does not load for that package's
+    // manifest, its config, or anything beside `src/`, and the reader who
+    // opened one of those is the reader this rule exists for. Every rule in
+    // the repo already uses this one form, so the check costs nothing today
+    // and the failure message names it.
     const unscoped = workspaceDirs()
       .filter((dir) => existsSync(ruleFileFor(dir)))
-      .filter((dir) => !declaredPaths(ruleFileFor(dir)).some((glob) => glob.startsWith(`${dir}/`)))
+      .filter((dir) => !declaredPaths(ruleFileFor(dir)).includes(`${dir}/**`))
     expect(
       unscoped,
-      'a rule file exists but its `paths:` frontmatter does not cover the package it is named for, so it loads for nobody — add "<dir>/**"',
+      'a rule file exists but its `paths:` frontmatter does not cover the whole package it is named for, so it loads for nobody who opens the rest of it — add exactly "<dir>/**"',
     ).toEqual([])
   })
 
@@ -336,13 +342,19 @@ describe('every workspace ships the path-scoped rule that teaches it', () => {
       'NO_RULE_OF_ITS_OWN names a workspace that is gone or now has its own rule — drop the entry',
     ).toEqual([])
 
-    const unbacked = Object.entries(NO_RULE_OF_ITS_OWN).filter(
-      ([, entry]) =>
-        !readFileSync(join(REPO_ROOT, entry.documentedIn), 'utf-8').includes(entry.mentions),
-    )
+    // The rule has to name the WORKSPACE as well as the topic. `mentions`
+    // alone is satisfied by any passing use of the word, so an exemption
+    // could rest on prose that says nothing about the directory it exempts —
+    // the same shape as a check satisfied by an incidental import. Naming the
+    // path is also what lets a reader who opens `tools/checks` find where its
+    // guidance actually lives.
+    const unbacked = Object.entries(NO_RULE_OF_ITS_OWN).filter(([dir, entry]) => {
+      const doc = readFileSync(join(REPO_ROOT, entry.documentedIn), 'utf-8')
+      return !doc.includes(dir) || !doc.includes(entry.mentions)
+    })
     expect(
       unbacked,
-      'an exemption says an always-on rule carries this workspace, and that rule no longer mentions it — write the path-scoped rule, or fix the reason',
+      'an exemption says an always-on rule carries this workspace, and that rule no longer names the workspace or its subject — write the path-scoped rule, or fix the reason',
     ).toEqual([])
   })
 })
