@@ -1419,7 +1419,30 @@ the overlap pass moves the unit, both left `offGrid 1` (the PARTNER moves,
 not the unit); guarded anchors on iteration 0 only broke six centre-band
 examples, since the grid fallback undoes centre alignment; and seeding
 `lined` with every unit already on an anchor read `offGrid 81` and moved
-both scoreboards. The grouped scoreboard's
+both scoreboards. **A unit's members are what is more than HALF inside a frame, not what
+its box fully contains.** A box drawn across a frame's edge belonged to
+no unit under containment: it became a singleton, and the overlap pass
+hopped it clear of the frame entirely — so tidy answered a straddle by
+ORPHANING a member outside the group its author drew it in, and JSON
+Canvas membership is containment, so the drawing had quietly lost a
+member. Nothing caught it: every debt column of the drawing score reads
+zero on the result, `straddles` included, precisely because the box no
+longer touches the frame at all; and `tidy-quality`'s `membersLeftBehind`
+counts only a box that was fully inside BEFORE, so a straddler leaving
+was never a member leaving. Measured on `architecture/tidied`, where
+`search` (640..840 across a frame ending at 800) settled below Services,
+between it and Storage: claimed instead, it stays in its row and the
+frame grows to 872 to hold it — crossings 1 to 0, bends 1 to 0, ink 2663
+to 2047 (a fifth), envelope 824x884 to 872x772 (8% less area), and
+`unevenGaps` 2 to 3, which is what the wider frame costs. Displacement
+over the grouped corpus fell 143650 to 127141: a claimed box is tidied
+among its fellows, a few pixels, instead of being hopped clear of a whole
+frame. Majority rather than contact, so a frame does not swallow a
+neighbour it overlaps by a corner (pinned both ways, and both thresholds
+mutation-checked); frames overlapping each other are resolved by document
+order, first claim winning, which is the rule the scoop already had.
+
+The grouped scoreboard's
 `stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).

@@ -272,9 +272,13 @@ describe('tidy quality scoreboard', () => {
       // 72976 -> 139357 px — because members now settle inside a frame
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
-      movedNodes: 1958,
+      movedNodes: 1957,
       // 139357 -> 143650 with banding on centres and far edges (above).
-      displacement: 143650,
+      // 143650 -> 127141, and one fewer move, once a box more than half
+      // inside a frame counts as its member: it is tidied AMONG the
+      // members it belongs with, a few pixels, instead of being hopped
+      // clear of the whole frame as a unit of its own.
+      displacement: 127141,
     })
   })
 })

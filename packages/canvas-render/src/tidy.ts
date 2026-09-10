@@ -2,9 +2,9 @@
  * One-tap tidy: deterministic normalization that respects the author's
  * rough topology instead of re-laying the canvas out wholesale.
  *
- * Four passes over UNITS (an outermost group and everything its box
- * contains move as one; every other node is its own unit), applied INSIDE
- * each frame first and then at the level of the frames themselves:
+ * Four passes over UNITS (an outermost group and everything more than half
+ * inside its box move as one; every other node is its own unit), applied
+ * INSIDE each frame first and then at the level of the frames themselves:
  *
  * 0. Inside a frame: its members are tidied as a canvas of their own (the
  *    same three passes, recursively for nested frames), and the frame then
@@ -129,6 +129,32 @@ function fullyContains(outer: Rect, inner: Rect): boolean {
   )
 }
 
+/**
+ * Membership by MAJORITY, not by containment: a box more than half inside a
+ * frame's own box is one of its members.
+ *
+ * A drawer who puts a box across a frame's edge means it to be in the frame
+ * — but `fullyContains` said no, so it became its own unit and the overlap
+ * pass hopped it clear of the frame entirely, leaving a member orphaned
+ * OUTSIDE the group it was drawn in. Nothing caught that: JSON Canvas
+ * membership is containment, so the drawing had quietly lost a member, and
+ * every debt column of the drawing score reads zero on the result (the
+ * straddle is gone precisely because the box no longer touches the frame).
+ * Claimed instead, it is tidied among its fellow members and the frame
+ * grows to hold it — passes that already existed.
+ *
+ * Majority rather than contact, so a frame does not swallow a neighbour it
+ * overlaps by a corner. Frames that overlap each other are resolved by
+ * document order, first claim winning, the same rule the scoop already had.
+ */
+function mostlyInside(outer: Rect, inner: Rect): boolean {
+  const area = inner.w * inner.h
+  if (area <= 0) return fullyContains(outer, inner)
+  const w = Math.min(outer.x + outer.w, inner.x + inner.w) - Math.max(outer.x, inner.x)
+  const h = Math.min(outer.y + outer.h, inner.y + inner.h) - Math.max(outer.y, inner.y)
+  return w > 0 && h > 0 && w * h * 2 > area
+}
+
 function overlapsWithMargin(a: Rect, b: Rect): boolean {
   return (
     a.x < b.x + b.w + TIDY_MARGIN_PX &&
@@ -195,7 +221,7 @@ function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
     if (node.type === 'group' && isRoot(node, groups.indexOf(node))) {
       void index
       const members = nodes.filter(
-        (m) => !claimed.has(m.id) && (m.id === node.id || fullyContains(rectOf(node), rectOf(m))),
+        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),
       )
       for (const m of members) claimed.add(m.id)
       pushUnit(node.id, members, rectOf(node))

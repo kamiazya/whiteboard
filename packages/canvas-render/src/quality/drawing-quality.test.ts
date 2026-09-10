@@ -148,24 +148,30 @@ describe('drawing quality across the corpus', () => {
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
-        // One crossing where the frames' members, now separated, put
-        // `search` under `auth` in the Services frame; the router pays it
-        // rather than the reversal and two bends it drew before.
-        crossings: 1,
-        bends: 1,
-        // 2708 -> 2663 and the envelope 840 -> 824 wide once tidy banded on
-        // centres: the narrower Storage frame, a few px off centre under
-        // the frames above, sits on their centre now.
-        edgeLengthPx: 2663,
-        unevenGaps: 2,
-        envelopePx: { w: 824, h: 884 },
+        // Debt-free AND price-free, once a box more than half inside a
+        // frame counts as its member. `search` was drawn across the
+        // Services frame's right edge, so containment said it belonged to
+        // nothing: it became its own unit and the overlap pass hopped it
+        // out from under the frame entirely, which cost a crossing and a
+        // bend and left it orphaned between two frames. Claimed, it stays
+        // in its row at (640, 384) and the frame grows to 872 to hold it.
+        crossings: 0,
+        bends: 0,
+        // 2663 -> 2047, a fifth of the ink, and a shorter envelope for a
+        // wider one: 824x884 -> 872x772, 8% less area. Earlier readings on
+        // this row: 2708 before tidy banded on centres, 2663 after.
+        edgeLengthPx: 2047,
+        // One more gap that is not like its neighbours, paid for the above:
+        // the frame that grew is wider than the two it sits between.
+        unevenGaps: 3,
+        envelopePx: { w: 872, h: 772 },
         reversals: 0,
         flow: 'down',
         againstFlow: 0,
-        crossingsPerEdge: 0.13,
-        bendsPerEdge: 0.13,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
         overlapsPerPair: 0,
-        density: 0.18,
+        density: 0.19,
       },
       'sequence/reference': {
         nodes: 7,
