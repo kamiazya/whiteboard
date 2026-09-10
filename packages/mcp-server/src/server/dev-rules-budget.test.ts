@@ -192,7 +192,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 92 for the sharing contract: the instruments read one polyline geometry,
 // the router never does, and the duplication left between them is the
 // independence — said where a session about to "deduplicate" it will read.
-const CANVAS_RENDER_BUDGET = 92
+// 93 for the matrix of the two router changes the drawing score rejected:
+// each cut the reference's reversals and raised the sweep's debt, and a
+// table is what stops the same shapes being argued for again.
+const CANVAS_RENDER_BUDGET = 93
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
