@@ -223,7 +223,14 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // two near misses a reader would want cleared, and flips the board's flow
 // to `left` doing it, which is exactly the trade a later session would
 // otherwise make again on the same reasoning.
-const CANVAS_RENDER_BUDGET = 106
+// 109 for the flow vote that made that verdict wrong: why one vote per edge
+// let an arrow near 45 degrees decide a board's whole reading, the first
+// fix the corpus rejected in one run (weighting AWAY from the diagonal
+// silences the diagonals a layered board is made of), and the rejection
+// above re-priced against the corrected instrument — kept in full, because
+// the first verdict was published and "rejected" alone would send the next
+// reader after a number that has changed.
+const CANVAS_RENDER_BUDGET = 109
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

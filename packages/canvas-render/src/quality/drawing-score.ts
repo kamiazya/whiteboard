@@ -206,11 +206,27 @@ function headings(canvas: SpatialCanvas, byId: ReadonlyMap<string, SpatialNode>)
   return out
 }
 
+/**
+ * A vote is weighted by how far the edge is FROM the diagonal: 1 for an
+ * axis-aligned arrow, 0 for one at 45 degrees.
+ *
+ * One vote per edge let an arrow a reader would call neither down nor left
+ * decide which it was, on the side of the diagonal it happened to fall.
+ * Measured on the corpus: `mobile -> api` at (-320, 320) voted down, the
+ * same arrow at (-328, 320) after an 8px move voted left, and a layered
+ * architecture board's whole flow went with it — `down` to `left`, and
+ * `againstFlow`, which is defined against the winner, 0 to 2. The board
+ * had not become harder to read; the frame of reference had moved.
+ */
 function flowOf(displacements: readonly Point[]): { flow: Flow; against: number } {
   const votes: Record<Exclude<Flow, 'none'>, number> = { down: 0, right: 0, up: 0, left: 0 }
   for (const d of displacements) {
-    if (Math.abs(d.y) >= Math.abs(d.x)) votes[d.y > 0 ? 'down' : 'up']++
-    else votes[d.x > 0 ? 'right' : 'left']++
+    const sx = Math.abs(d.x)
+    const sy = Math.abs(d.y)
+    const total = sx + sy
+    if (total === 0) continue
+    votes[d.y > 0 ? 'down' : 'up'] += sy / total
+    votes[d.x > 0 ? 'right' : 'left'] += sx / total
   }
   const order = ['down', 'right', 'up', 'left'] as const
   const flow = order.reduce<Flow>((best, f) => {

@@ -221,13 +221,16 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 937,
         unevenGaps: 1,
         envelopePx: { w: 1010, h: 520 },
-        // Two arrows head right and two up: a tie, which goes to `right` by
-        // the fixed order, and the two upward arrows then read as against
-        // it. The draft's first two messages sit far enough left of their
-        // heads for that to be what the picture says.
+        // `right` with two arrows against it until the vote stopped being
+        // one-per-edge: two arrows headed right and two up, a tie broken by
+        // the fixed order, and the two upward arrows then read as against a
+        // flow the tie-break had invented. Each arrow now votes for both
+        // axes in proportion to its own displacement, so the draft reads
+        // `up` like the reference it is a draft OF, and nothing is against
+        // it. The draft's debt is where it always was, in its overlaps.
         reversals: 0,
-        flow: 'right',
-        againstFlow: 2,
+        flow: 'up',
+        againstFlow: 0,
         crossingsPerEdge: 0,
         bendsPerEdge: 0,
         overlapsPerPair: 0.05,
@@ -248,10 +251,12 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 1055,
         unevenGaps: 0,
         envelopePx: { w: 1008, h: 524 },
-        // Tidy moves boxes, not the direction their arrows travel.
+        // Tidy moves boxes, not the direction their arrows travel: the
+        // draft's reading is this one, and the draft's `right` was a
+        // tie-break artefact (see its row).
         reversals: 0,
-        flow: 'right',
-        againstFlow: 2,
+        flow: 'up',
+        againstFlow: 0,
         crossingsPerEdge: 0,
         bendsPerEdge: 0,
         overlapsPerPair: 0,
