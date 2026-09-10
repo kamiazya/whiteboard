@@ -490,6 +490,77 @@ export const TASKS = [
     },
   },
   {
+    // Content that does not fit a box: there is no auto-wrap, so a sentence
+    // in a default-sized box is cut, and the only remedies are a wider box
+    // or shorter text. Graded on the box existing with the sentence intact
+    // and connected; whether it was sized to fit is the drawing column's
+    // `textOverflow`.
+    name: 'add a box with a long sentence',
+    boards: ['boards/architecture'],
+    prompt:
+      'On the architecture board, add a box below the daemon that says "Nightly backup: VACUUM INTO a dated file, then prune to the last fourteen" and connect the daemon to it. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/architecture')
+      const node = board.nodes.find((n) => text(n).toLowerCase().includes('nightly backup'))
+      if (node === undefined) return { ok: false, detail: 'no such box' }
+      if (!text(node).toLowerCase().includes('last fourteen')) {
+        return { ok: false, detail: 'the sentence was shortened' }
+      }
+      const daemon = byText(board, 'Daemon')
+      if (node.y < daemon.y + daemon.height) return { ok: false, detail: 'not below the daemon' }
+      if (!linked(board, daemon, node)) return { ok: false, detail: 'not linked to the daemon' }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: 'box added below, sentence intact, linked' }
+    },
+  },
+  {
+    // A decision with a loop back: the shape every process drawing has and
+    // the one that costs crossings and against-flow arrows when the boxes
+    // are laid out without room for the return path. Graded on the steps,
+    // the branch labels and nothing overlapping.
+    name: 'draw a flowchart with a retry loop',
+    boards: ['boards/deploy-flow'],
+    prompt:
+      'Create a board at boards/deploy-flow and draw the deploy process as a flowchart, top to bottom: Build, then Test, then a decision "Tests pass?", then Deploy, then Done. From the decision, an arrow labelled "yes" goes to Deploy and an arrow labelled "no" goes back up to Build. Nothing should overlap. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/deploy-flow')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/deploy-flow' }
+      const names = ['Build', 'Test', 'Tests pass?', 'Deploy', 'Done']
+      const steps = Object.fromEntries(names.map((n) => [n, byText(board, n)]))
+      const missing = names.filter((n) => steps[n] === undefined)
+      if (missing.length > 0) return { ok: false, detail: `missing steps: ${missing.join(', ')}` }
+      for (let i = 1; i < names.length; i++) {
+        if (steps[names[i - 1]].y >= steps[names[i]].y) {
+          return { ok: false, detail: `${names[i]} is not below ${names[i - 1]}` }
+        }
+      }
+      const wanted = [
+        ['Build', 'Test', undefined],
+        ['Test', 'Tests pass?', undefined],
+        ['Tests pass?', 'Deploy', 'yes'],
+        ['Tests pass?', 'Build', 'no'],
+        ['Deploy', 'Done', undefined],
+      ]
+      for (const [from, to, label] of wanted) {
+        const edge = board.edges.find(
+          (e) => e.fromNode === steps[from].id && e.toNode === steps[to].id,
+        )
+        if (edge === undefined) return { ok: false, detail: `not connected: ${from}->${to}` }
+        if (label !== undefined && (edge.label ?? '').trim().toLowerCase() !== label) {
+          return { ok: false, detail: `${from}->${to} is not labelled "${label}"` }
+        }
+      }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: 'five steps, a labelled branch, a loop back' }
+    },
+  },
+  {
     // A sequence diagram on a spatial canvas: participants as columns,
     // messages as boxes between their two participants, each lower than
     // the one before. Graded on those three orderings and on nothing

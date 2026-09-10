@@ -95,7 +95,7 @@ Once the intent is fixed, choose the node shape that fits:
 
 | Content | Node type |
 | --- | --- |
-| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting, no auto-wrap) |
+| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width, and the box grows only when its height is omitted) |
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
@@ -135,8 +135,9 @@ coordinates only when the layout itself carries meaning — a comparison matrix,
 left-to-right flow. For everything else, let placement happen and finish with a `tidy` op.
 
 `color` is either a hex string like `#1971c2` or a JSON Canvas preset `"1"`-`"6"`; there is no
-semantic color name like `"primary"`. There is no auto-wrap, so if you do set a width, pick one
-generous enough for the label.
+semantic color name like `"primary"`. Text wraps at the box's width but the box never grows on its
+own: omit `height` and a text box is made tall enough for its text, while a height you name is kept
+even when the text does not fit — so name a height only when you know it holds the text.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
@@ -194,7 +195,8 @@ renders a markdown document too, as a page. `fragment` is the only way to render
 whole document, and it addresses a group by label or a heading by text, never a region.
 Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
-- is text overflowing out of boxes? (there is no auto-wrap, so this is a real risk)
+- is text overflowing out of boxes? (a named height is kept even when the text does not fit; omit it
+  and the box is sized to its text)
 - do edges connect to the intended nodes?
 - does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
@@ -269,7 +271,7 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - [ ] did you choose the diagram family from [`visual-vocabulary.md`](./visual-vocabulary.md)?
 - [ ] did you draw the whole diagram in ONE `wb_canvas_edit` call rather than one call per node?
 - [ ] if you set coordinates at all, did you plan a rigid grid — or let placement happen and finish with a `tidy` op?
-- [ ] if you set widths, did you size boxes generously, since there is no auto-wrap?
+- [ ] if you named heights, do they hold their text? (omit the height and it is sized to fit)
 - [ ] did you use semantic, consistent colors even though the tool has no named color keys?
 - [ ] can the main path / supporting info / problem / proposal be distinguished visually?
 - [ ] are edge labels duplicating what node text already says?

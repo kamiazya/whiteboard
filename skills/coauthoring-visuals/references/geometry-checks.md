@@ -7,7 +7,8 @@ overlap or overflow warning on this tool surface — the check is entirely visua
 ## What To Check After Rendering
 
 - overlap: nodes, labels, and edges do not collide
-- clipped label: text is not cut off inside a node (there is no auto-wrap, so this is common)
+- clipped label: text is not cut off inside a node (a named height is kept even when the text does
+  not fit, so this is common when heights were named by hand)
 - dangling connection: an edge does not visually touch its node, or appears to connect to the wrong side
 - edge-through-node: an edge passes through an unrelated node
 - stacked parallel edges: multiple edges visually collapse into one path

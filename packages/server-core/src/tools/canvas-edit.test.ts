@@ -589,6 +589,35 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     for (const line of found) expect(line, line).toMatch(/Omit/)
   })
 
+  test('every box size a writer can name says what leaving it out buys', () => {
+    // A model adding a long sentence named 220x100 and the sentence was
+    // cut: a named height is kept (the decision below), so the schema is
+    // where a writer learns that omitting it buys a box tall enough.
+    const found: string[] = []
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item)
+        return
+      }
+      const props = (node as { properties?: Record<string, unknown> }).properties
+      // A node draft or patch, told from a bare region box by carrying a colour.
+      if (props !== undefined && props.color !== undefined) {
+        for (const field of ['width', 'height']) {
+          const entry = props[field] as { description?: string } | undefined
+          if (entry !== undefined) found.push(`${field}: ${entry.description ?? ''}`)
+        }
+      }
+      for (const value of Object.values(node)) walk(value)
+    }
+    walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
+    // node.add's four node types and node.patch each carry both, and each
+    // says what the size does to the TEXT: the add's that omitting the
+    // height fits it, the patch's that a named height is kept regardless.
+    expect(found.length).toBeGreaterThanOrEqual(10)
+    for (const line of found) expect(line, line).toMatch(/text/)
+  })
+
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,

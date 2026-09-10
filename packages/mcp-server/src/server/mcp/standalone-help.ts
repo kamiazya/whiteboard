@@ -46,7 +46,10 @@ export const WHITEBOARD_INSTRUCTIONS = [
   'On a canvas, boxes need room between them: under about 32px two boxes read as',
   'one shape and an edge between them has nowhere to put its label. To put a box',
   'between two others, move the neighbours over in the same batch rather than',
-  'shrinking the box or squeezing it into the gap.',
+  'shrinking the box or squeezing it into the gap. A box meant to sit in a row',
+  'or column with others shares their exact x or y; when adding beside existing',
+  'boxes, end the batch with a tidy op scoped to the boxes you added, which',
+  'lines up one that is a few pixels off and keeps the gaps.',
 ].join('\n')
 
 export function buildDrawDiagramPrompt(goal: string, diagramType?: string): string {

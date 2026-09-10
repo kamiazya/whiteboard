@@ -69,8 +69,14 @@ const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
   x: positionFieldSchema,
   y: positionFieldSchema,
-  width: sizeFieldSchema,
-  height: sizeFieldSchema,
+  // Described on the stored shape for the reason the edge sides are: every
+  // writer's schema derives from it, and a writer that names a size too
+  // small for its text gets the size it named, so the description is where
+  // it learns what leaving the size out buys.
+  width: sizeFieldSchema.describe('Box width; text wraps at it. Omit it for the default.'),
+  height: sizeFieldSchema.describe(
+    'Box height. Omit it and a text box is made tall enough for its text; a named one is kept even when the text does not fit.',
+  ),
   color: canvasColorSchema.optional(),
   // `.catch` rather than a reject: an unrecognised extension payload — a
   // variant this project has dropped, or one a future version writes — must
