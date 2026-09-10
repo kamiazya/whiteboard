@@ -88,3 +88,32 @@ describe('bundled theme assets', () => {
     expect(VISUAL_THEMES.neon.glow?.radiusPx).toBeGreaterThan(0)
   })
 })
+
+describe('neon', () => {
+  const chroma = (hex: string): number => {
+    const c = [1, 3, 5].map((at) => Number.parseInt(hex.slice(at, at + 2), 16))
+    return Math.max(...c) - Math.min(...c)
+  }
+
+  it('lights an unpainted board: the default strokes carry hue, since a grey halo reads as a smudge', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const palette = VISUAL_THEMES.neon.palette[mode]
+      for (const [kind, style] of Object.entries(palette.node)) {
+        if (kind === 'group') continue
+        expect(chroma(style.stroke), `${mode} ${kind}`).toBeGreaterThanOrEqual(80)
+      }
+      expect(chroma(palette.edgeStroke), `${mode} edge`).toBeGreaterThanOrEqual(80)
+    }
+  })
+
+  it('tells the node kinds apart by stroke in both halves, as the bundled palette does by fill', () => {
+    for (const mode of ['light', 'dark'] as const) {
+      const { text, file, link } = VISUAL_THEMES.neon.palette[mode].node
+      expect(new Set([text.stroke, file.stroke, link.stroke]).size).toBe(3)
+    }
+  })
+
+  it('declares a line weight the halo can bloom from', () => {
+    expect(VISUAL_THEMES.neon.strokeWidthPx).toBeGreaterThanOrEqual(1.5)
+  })
+})

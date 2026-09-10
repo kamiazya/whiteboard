@@ -81,8 +81,10 @@ export function createThemedAppearance(
 
   const base = createSpatialTheme({ mode, palette: paletteFromTokens(tokens.palette[mode]) })
   const frame = tokens.defaults.groupFrame
-  // The halo rides every document appearance the theme resolves — node
-  // chrome, edges, labels — in the element's own paint; comment and
+  // The halo rides node chrome and edges in the element's own paint. Not a
+  // label: a 12px glyph blurred at three deviations thickens into a smudge,
+  // and the label already sits on its halo pill. Not a group frame: the
+  // largest and least informative thing on the board to bloom. Comment and
   // proposal chrome come from the base resolver untouched.
   const glow = tokens.glow === undefined ? {} : { glow: { radiusPx: tokens.glow.radiusPx } }
   // The theme's line weight reaches node chrome and edges — never a label,
@@ -100,7 +102,8 @@ export function createThemedAppearance(
             ...(frame.strokeWidth === undefined ? {} : { strokeWidth: frame.strokeWidth }),
           }
         : {}
-    return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...glow } }
+    const halo = node.type === 'group' ? {} : glow
+    return { ...resolved, appearance: { ...resolved.appearance, ...weight, ...framed, ...halo } }
   }
   const themed: SpatialAppearanceResolver = Object.freeze({
     ...base,
@@ -110,7 +113,7 @@ export function createThemedAppearance(
       const resolved = base.resolveEdge(edge)
       return resolved === undefined ? undefined : { ...resolved, ...weight, ...glow }
     },
-    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily, ...glow }),
+    resolveLabel: () => ({ ...base.resolveLabel(), fontFamily }),
   })
   perTokens.set(key, themed)
   return themed

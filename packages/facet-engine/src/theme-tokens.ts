@@ -115,7 +115,7 @@ export const themeTokensSchema = z.object({
    * family and says so.
    */
   fontFamily: z.string().min(1).optional(),
-  /** A soft halo on strokes, symbols and text, in the element's own colour. */
+  /** A soft halo on node chrome, edges and symbols, in the element's own colour. */
   glow: z.object({ radiusPx: z.number().positive() }).optional(),
   /** Both modes, always: the canvas surface follows the UI, never the theme. */
   palette: z.object({

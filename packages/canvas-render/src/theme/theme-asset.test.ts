@@ -137,7 +137,7 @@ describe('createSpatialTheme', () => {
 })
 
 describe('glow tokens', () => {
-  it('a theme with glow puts a halo on nodes, edges and labels', () => {
+  it('a theme with glow puts a halo on node chrome and edges, never on a label or a group frame', () => {
     const themed = createThemedAppearance({
       tokens: { ...SAMPLE_THEME_TOKENS, glow: { radiusPx: 6 }, defaults: {} },
       mode: 'dark',
@@ -153,18 +153,27 @@ describe('glow tokens', () => {
       text: '',
     })
     expect(node.appearance?.glow).toEqual({ radiusPx: 6 })
-    const edge = themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })
-    expect(edge?.glow).toEqual({ radiusPx: 6 })
-    const label = themed.resolveLabel()
-    expect(label.glow).toEqual({ radiusPx: 6 })
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toEqual({
+      radiusPx: 6,
+    })
+    // A 12px glyph blurred at three deviations thickens into a smudge, and
+    // the label already sits on its halo pill; a container's frame is the
+    // largest and least informative thing on the board to bloom.
+    expect(themed.resolveLabel().glow).toBeUndefined()
+    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    expect(group.appearance?.glow).toBeUndefined()
   })
 
-  it('a theme without glow assigns none', () => {
+  it('a theme without glow leaves every appearance halo-free', () => {
     const themed = createThemedAppearance({
-      tokens: { ...SAMPLE_THEME_TOKENS, defaults: {} },
+      tokens: SAMPLE_THEME_TOKENS,
       mode: 'dark',
       fontFamily: 'Roboto',
     })
-    expect(themed.resolveLabel().glow).toBeUndefined()
+    expect(
+      themed.resolveNode({ id: 'n', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+        .appearance?.glow,
+    ).toBeUndefined()
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toBeUndefined()
   })
 })

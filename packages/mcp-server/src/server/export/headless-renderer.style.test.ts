@@ -29,7 +29,7 @@ describe('export style', () => {
       theme: 'dark',
     })
     expect(dark.svg).toContain('filterUnits="userSpaceOnUse"')
-    expect(dark.svg).toContain('#a5b4c7')
+    expect(dark.svg).toContain('#7dd3fc')
   })
 
   it('a sketch export declares the bundled family, not the handwriting one it cannot measure', async () => {

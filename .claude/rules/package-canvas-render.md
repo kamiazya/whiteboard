@@ -1077,7 +1077,15 @@ the table alone.
     and the specification's behaviour, so a browser does the same.
     `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
     for a glowing node and what sizes the region, one constant with two
-    readers. `filter` is a paint attribute on every painted element (a path,
+    readers. The theme mapping puts the halo on node chrome and edges ONLY
+    (`theme-asset.ts`): a label blurred at three deviations thickened into a
+    smudge over the halo pill it already sits on, and a group frame was the
+    largest and least informative bloom on the board. What a halo has to
+    bloom from is the theme's `strokeWidthPx` — a 1px stroke blurred peaks
+    at a quarter of its opacity — and neon's default strokes carry HUE per
+    kind, since the halo repeats the stroke colour and a grey one read as a
+    smudge; an unpainted board was the one thing on the theme that did not
+    glow (`themes.test.ts` pins the chroma and the per-kind difference). `filter` is a paint attribute on every painted element (a path,
     a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
     it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
     claim only a rasterizer can check — resvg paints the halo beside a
