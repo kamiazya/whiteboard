@@ -18,20 +18,13 @@
  * not replace are ENVIRONMENT, counted so a tool that only ever hit one is
  * visible as unexercised rather than passing.
  *
- * Ids are drawn from the seeded workspace at real weight — a spatial
- * document with two nodes, a group, an edge and a comment, a markdown document, and
- * one id that exists nowhere — so a tool reaches its happy path as well as
- * its not-found path, and a node-scoped op names a node that is there.
+ * Ids are drawn from the seeded workspace (`test-utils/seeded-workspace.ts`,
+ * shared with the route lane) at real weight, plus one id that exists
+ * nowhere — so a tool reaches its happy path as well as its not-found path,
+ * and a node-scoped op names a node that is there.
  */
 
 import { facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
-import {
-  writeCoreFacets,
-  writeDocumentKind,
-  writeFacets,
-  writeMarkdownBody,
-  writeSpatialCanvas,
-} from '@kamiazya/whiteboard-loro-adapter'
 import {
   annotationIdSchema,
   documentIdSchema,
@@ -42,68 +35,24 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { arbitraryForSchema, sameSchema } from '@kamiazya/whiteboard-model/test-utils'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
-import type { LoroDoc } from 'loro-crdt'
 import { afterAll, describe, expect } from 'vitest'
 import type { z } from 'zod'
-import { createServer } from '../create-server.js'
-import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
-import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
-import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import {
+  MISSING_DOCUMENT_ID,
+  SEEDED_MARKDOWN_ID,
+  SEEDED_SPATIAL_ID,
+  SEEDED_WORKSPACE_ID,
+  seededServer,
+} from '../test-utils/seeded-workspace.js'
 
-const WORKSPACE_ID = 'ws-1'
-const SPATIAL_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
-const MARKDOWN_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
-const MISSING_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+const WORKSPACE_ID = SEEDED_WORKSPACE_ID
+const SPATIAL_ID = SEEDED_SPATIAL_ID
+const MARKDOWN_ID = SEEDED_MARKDOWN_ID
+const MISSING_ID = MISSING_DOCUMENT_ID
 
 async function seededTools() {
-  const store = new FakeDocumentStore()
-  let board: LoroDoc | undefined
-  await seedDoc(store, SPATIAL_ID, (doc) => {
-    board = doc
-    writeDocumentKind(doc, 'spatial')
-    writeSpatialCanvas(doc, {
-      nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'one\ntwo\nthree' },
-        { id: 'n2', type: 'text', x: 400, y: 0, width: 200, height: 80, text: 'two' },
-        { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
-      ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
-      'x-whiteboard': { comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }] },
-    })
-  })
-  await seedDoc(store, MARKDOWN_ID, (doc) => {
-    writeDocumentKind(doc, 'markdown')
-    writeCoreFacets(doc, { type: 'note', tags: ['seed'] })
-    writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📝' } })
-    writeMarkdownBody(doc, `# Plan\n\nA paragraph with [[${SPATIAL_ID}]] in it.\n`)
-  })
-  store.documentIndex.seed({
-    workspaceId: WORKSPACE_ID,
-    documentId: SPATIAL_ID,
-    path: 'board',
-    kind: 'spatial',
-  })
-  store.documentIndex.seed({
-    workspaceId: WORKSPACE_ID,
-    documentId: MARKDOWN_ID,
-    path: 'notes/plan',
-    kind: 'markdown',
-  })
-  const versions = new FakeVersionHistory()
-  if (board === undefined) throw new Error('seedDoc did not configure the board')
-  // One saved version, so restore and list have something to name ('v1').
-  await versions.save(WORKSPACE_ID, 'board', board, { auto: false, label: 'seed' })
-  const deps = makeTestDeps({
-    documentStore: store,
-    documentIndex: store.documentIndex,
-    documentTeardown: inMemoryDocumentTeardown(),
-    versions,
-    liveDocuments: new FakeLiveDocuments(),
-  })
-  return createServer(deps).tools
+  return (await seededServer()).tools
 }
 
 /**
