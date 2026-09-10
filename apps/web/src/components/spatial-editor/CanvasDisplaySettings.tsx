@@ -30,6 +30,7 @@
  */
 import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
+import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
@@ -54,9 +55,6 @@ export interface CanvasDisplaySettingsProps {
   readonly style?: SpatialRenderStyle
   readonly onStyleChange?: (style: SpatialRenderStyle | undefined) => void
 }
-
-const OPTION_CLASS =
-  'flex h-7 min-w-7 items-center justify-center rounded px-2 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none text-muted-foreground aria-pressed:font-medium aria-pressed:bg-accent aria-pressed:text-foreground'
 
 /** A theme id's bare name, read for a person: `visual.sketch` → `sketch`. */
 function themeLabel(id: string): string {
@@ -135,7 +133,7 @@ export function CanvasDisplaySettings({
         // surface naming it.
         <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2">
           <span className="text-xs text-muted-foreground">Draw as</span>
-          <span className="flex flex-wrap items-center justify-end gap-0.5">
+          <FacetOptionGroup label="Draw as">
             {[
               { value: undefined, label: 'As saved' },
               { value: 'clean' as const, label: 'Clean' },
@@ -143,17 +141,15 @@ export function CanvasDisplaySettings({
                 .assetIds('themes')
                 .map((id) => ({ value: id, label: `Preview ${themeLabel(id)}` })),
             ].map(({ value, label }) => (
-              <button
+              <FacetOption
                 key={label}
-                type="button"
-                aria-pressed={style === value}
-                onClick={() => onStyleChange(value)}
-                className={OPTION_CLASS}
-              >
-                {label}
-              </button>
+                name="canvas-draw-as"
+                label={label}
+                selected={style === value}
+                onSelect={() => onStyleChange(value)}
+              />
             ))}
-          </span>
+          </FacetOptionGroup>
         </div>
       )}
     </>

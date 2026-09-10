@@ -60,9 +60,9 @@ async function openSettings(container: HTMLElement) {
 }
 
 const optionButton = (container: HTMLElement, label: string) =>
-  [...container.querySelectorAll('[data-testid="display-settings"] button')].find(
-    (button) => button.textContent?.trim() === label,
-  ) as HTMLButtonElement | undefined
+  container.querySelector(`[data-testid="display-settings"] input[aria-label="${label}"]`) as
+    | HTMLInputElement
+    | undefined
 
 it('offers the routing style from the display panel, not the creation menu', async () => {
   const { Host } = makeHost()

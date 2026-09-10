@@ -49,11 +49,12 @@ function makeHost() {
 }
 
 const menu = () => document.querySelector('[data-testid="display-panel"]')
+/**
+ * An option, by its accessible name — a real radio now, not a button, so
+ * `checked` is what says it is current rather than `aria-pressed`.
+ */
 const option = (label: string) =>
-  [...(menu()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === label) as
-    | HTMLButtonElement
-    | undefined
-
+  menu()?.querySelector(`input[aria-label="${label}"]`) as HTMLInputElement | undefined
 /** The panel stands in the slot from mount; nothing has to open it. */
 async function openPanel(_container: HTMLElement) {
   await vi.waitFor(() => expect(menu()).toBeTruthy())
@@ -105,13 +106,13 @@ it('under a theme the routing row marks the theme default, and Straight over it 
   await openPanel(container)
   await vi.waitFor(() => expect(themeRadio('Neon')).toBeTruthy())
   fireEvent.click(themeRadio('Neon'))
-  await vi.waitFor(() => expect(option('Orthogonal')?.getAttribute('aria-pressed')).toBe('true'))
+  await vi.waitFor(() => expect(option('Orthogonal')?.checked).toBe(true))
   expect(edgesFacetOf(latest.canvas)).toBeUndefined()
 
   fireEvent.click(option('Straight') as HTMLElement)
   await vi.waitFor(() => expect(edgesFacetOf(latest.canvas)?.routing).toBe('straight'))
-  expect(option('Straight')?.getAttribute('aria-pressed')).toBe('true')
-  expect(option('Orthogonal')?.getAttribute('aria-pressed')).toBe('false')
+  expect(option('Straight')?.checked).toBe(true)
+  expect(option('Orthogonal')?.checked).toBe(false)
 })
 
 it('a pick applies canvas-wide and leaves the panel up; current values are marked', async () => {
@@ -126,7 +127,7 @@ it('a pick applies canvas-wide and leaves the panel up; current values are marke
     expect(edgesFacetOf(latest.canvas)?.routing).toBe('curved')
   })
   expect(menu()).toBeTruthy()
-  expect(option('Curved')?.getAttribute('aria-pressed')).toBe('true')
+  expect(option('Curved')?.checked).toBe(true)
 
   fireEvent.click(option('On') as HTMLElement)
   await vi.waitFor(() => {
@@ -248,14 +249,15 @@ it('lets a person give the document its own mark, and take it back', async () =>
 })
 
 /**
- * The three facet rows draw ONE control.
+ * Every row in the panel draws ONE control.
  *
- * They drew three. `visual.symbol` had a hand-written component (a
+ * They drew four. `visual.symbol` had a hand-written component (a
  * radiogroup with its radios hidden behind an accent fill), `visual.theme`
  * derived a segmented control with no glyphs — so its radios were VISIBLE
- * beside a word, the only round radios in the panel — and `visual.shape`
- * derived the same control WITH glyphs, which drew a bordered pill. One
- * job, three looks, two of them side by side.
+ * beside a word, the only round radios in the panel — `visual.shape`
+ * derived the same control WITH glyphs, which drew a bordered pill, and
+ * Edge routing / Line jumps / Draw as were `aria-pressed` buttons written
+ * by hand in two apps/web files. One job, four looks, all in one panel.
  *
  * The measurement is structural rather than a class-name check: what went
  * wrong was three different ELEMENT shapes, and a class assertion would
@@ -270,16 +272,24 @@ it('lets a person give the document its own mark, and take it back', async () =>
  * inspector, and holding every surface to one control is a scan's job, not
  * this file's.
  */
-it('draws every facet row through the one selection control', async () => {
+it('draws every row through the one selection control', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   await openPanel(container)
   const panel = menu() as HTMLElement
 
-  // The SET, not the order — which row comes first is the contribution
-  // point's business and has its own test.
+  // Every row, facet-contributed or hand-written by this vessel. The SET,
+  // not the order — which row comes first is the contribution point's
+  // business and has its own test. (`Draw as` needs a host that holds the
+  // session override; this fixture passes none, so it is absent here and
+  // covered by the page-level test.)
   const groups = [...panel.querySelectorAll('[role="radiogroup"]')]
-  expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual(['Symbol', 'Theme'])
+  expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual([
+    'Edge routing',
+    'Line jumps',
+    'Symbol',
+    'Theme',
+  ])
 
   // Every option in every group is the same thing: a real radio (so arrow
   // keys work, which the button rows never had), visually hidden, inside a
@@ -336,4 +346,29 @@ it('offers no Clear beside a picker that already has a none option', async () =>
   await vi.waitFor(() =>
     expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined(),
   )
+})
+
+/**
+ * EVERY row in the panel, not only the facet ones.
+ *
+ * Edge routing, Line jumps and Draw as were hand-written `aria-pressed`
+ * button rows in two apps/web files — the third and fourth spellings in
+ * this one panel. A button wearing `aria-pressed` is a TOGGLE: a screen
+ * reader hears "pressed", not "1 of 3 selected", and there is no arrow-key
+ * movement between the options because the element never promised any.
+ *
+ * So the panel holds no `aria-pressed` selection control at all now. The
+ * attribute keeps its real job elsewhere (a tool, a rail opener) — what it
+ * must not do is stand in for a choice among alternatives.
+ */
+it('leaves no aria-pressed selection control anywhere in the panel', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+  const panel = menu() as HTMLElement
+
+  const pressed = [...panel.querySelectorAll('[aria-pressed]')].map(
+    (el) => el.getAttribute('aria-label') ?? el.textContent?.trim(),
+  )
+  expect(pressed).toEqual([])
 })

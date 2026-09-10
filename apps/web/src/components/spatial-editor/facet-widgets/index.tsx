@@ -9,15 +9,19 @@
  * later editor-spec tier derives a default form instead of failing here.
  */
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
-import { DerivedFacetForm, type FacetEditor, type PluginUi } from '@kamiazya/whiteboard-facet-ui'
+import {
+  DerivedFacetForm,
+  type FacetEditor,
+  FacetOption,
+  FacetOptionGroup,
+  type PluginUi,
+} from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveEffectiveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { TOGGLE_STATE_CLASS } from '../../../components/ui/dock-button.js'
 import type { EditorCommand } from '../../../lib/spatial/commands.js'
-import { cn } from '../../../lib/utils.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
@@ -63,8 +67,10 @@ const EDGE_ROUTING_CHOICES: readonly { style: EdgeRoutingStyle; label: string }[
   { style: 'curved', label: 'Curved' },
 ]
 
-const OPTION_CLASS =
-  'flex h-7 min-w-7 items-center justify-center rounded px-2 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
+const LINE_JUMP_CHOICES = [
+  { lineJumps: 'none', label: 'Off' },
+  { lineJumps: 'arc', label: 'On' },
+] as const
 
 const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) => {
   // The EFFECTIVE style — the facet, else the theme's default, else the
@@ -74,57 +80,40 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) 
   const current = resolveEffectiveCanvasEdgeStyle(canvas, facetRegistry)
   const currentRouting = current.style
   const currentJumps = current.lineJumps
+  // Both rows are pick-one-of-N, so both go through `facet-ui`'s option
+  // group like every other selection in the app. They were hand-written
+  // `aria-pressed` buttons — which a screen reader announces as "pressed"
+  // rather than "1 of 3", and which offer no arrow-key movement between
+  // the alternatives, because a button never promised any.
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">Edge routing</span>
-        {/* Wraps for the reason the context menu's option rows do: a row
-            that cannot fit the panel puts its last options past the edge,
-            where they are not merely ugly but untappable. Measured at
-            390px before the panel moved into the inspector slot — Curved
-            and On were both outside the screen. */}
-        <span className="flex flex-wrap items-center justify-end gap-0.5">
+        <FacetOptionGroup label="Edge routing">
           {EDGE_ROUTING_CHOICES.map(({ style, label }) => (
-            <button
+            <FacetOption
               key={style}
-              type="button"
-              aria-pressed={currentRouting === style}
-              onClick={() => run({ kind: 'set-edge-routing', style })}
-              className={cn(
-                OPTION_CLASS,
-                'text-muted-foreground aria-pressed:font-medium',
-                TOGGLE_STATE_CLASS,
-              )}
-            >
-              {label}
-            </button>
+              name="canvas-edge-routing"
+              label={label}
+              selected={currentRouting === style}
+              onSelect={() => run({ kind: 'set-edge-routing', style })}
+            />
           ))}
-        </span>
+        </FacetOptionGroup>
       </div>
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">Line jumps</span>
-        <span className="flex flex-wrap items-center justify-end gap-0.5">
-          {(
-            [
-              { lineJumps: 'none', label: 'Off' },
-              { lineJumps: 'arc', label: 'On' },
-            ] as const
-          ).map(({ lineJumps, label }) => (
-            <button
+        <FacetOptionGroup label="Line jumps">
+          {LINE_JUMP_CHOICES.map(({ lineJumps, label }) => (
+            <FacetOption
               key={lineJumps}
-              type="button"
-              aria-pressed={currentJumps === lineJumps}
-              onClick={() => run({ kind: 'set-line-jumps', lineJumps })}
-              className={cn(
-                OPTION_CLASS,
-                'text-muted-foreground aria-pressed:font-medium',
-                TOGGLE_STATE_CLASS,
-              )}
-            >
-              {label}
-            </button>
+              name="canvas-line-jumps"
+              label={label}
+              selected={currentJumps === lineJumps}
+              onSelect={() => run({ kind: 'set-line-jumps', lineJumps })}
+            />
           ))}
-        </span>
+        </FacetOptionGroup>
       </div>
     </div>
   )

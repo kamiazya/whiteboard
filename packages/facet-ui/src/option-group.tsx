@@ -22,6 +22,14 @@
  * `aria-pressed` button rows never had it. Styling is inline values and the
  * host's own custom properties — a class name inside a workspace package is
  * never generated (this package's rule, and it fails silently).
+ *
+ * One LOOK, two ARIA shells. Inside a MENU a radio input is the wrong
+ * element and would break the menu's own keyboard model, so a menu vessel
+ * gets `role="menuitemradio"` on a button instead — which is the correct
+ * role there, not a second idiom. What must not differ between the two is
+ * what a selected option looks like, and that is exactly what this module
+ * holds. `shell` is the caller saying which container it is in; it is not
+ * a style choice, and there is no third value.
  */
 import type { CSSProperties, ReactNode } from 'react'
 import { useId } from 'react'
@@ -96,7 +104,7 @@ const GLYPH: CSSProperties = {
 }
 
 export interface FacetOptionProps {
-  /** Groups the radios; every option in one group shares it. */
+  /** Groups the radios; every option in one group shares it. Unused in a menu. */
   readonly name: string
   /** The accessible name. Carried even where only a glyph is drawn. */
   readonly label: string
@@ -108,10 +116,47 @@ export interface FacetOptionProps {
    * name, so nothing is lost for a screen reader.
    */
   readonly glyph?: ReactNode
+  /**
+   * Which container this option stands in — a panel (real radios) or a
+   * menu (`menuitemradio`, so the menu's roving focus keeps working).
+   * Defaults to `group`. Inline rather than a named export: it is the
+   * caller saying where it is, not a type anyone builds against.
+   */
+  readonly shell?: 'group' | 'menu'
 }
 
-export function FacetOption({ name, label, selected, onSelect, glyph }: FacetOptionProps) {
+export function FacetOption({
+  name,
+  label,
+  selected,
+  onSelect,
+  glyph,
+  shell = 'group',
+}: FacetOptionProps) {
   const id = useId()
+  const body =
+    glyph === undefined ? (
+      label
+    ) : (
+      <span aria-hidden="true" style={GLYPH}>
+        {glyph}
+      </span>
+    )
+  if (shell === 'menu') {
+    return (
+      <button
+        type="button"
+        role="menuitemradio"
+        aria-checked={selected}
+        aria-label={label}
+        title={glyph === undefined ? undefined : label}
+        onClick={onSelect}
+        style={selected ? OPTION_SELECTED : OPTION}
+      >
+        {body}
+      </button>
+    )
+  }
   return (
     <label
       htmlFor={id}
@@ -137,13 +182,7 @@ export function FacetOption({ name, label, selected, onSelect, glyph }: FacetOpt
         onChange={onSelect}
         style={INPUT}
       />
-      {glyph === undefined ? (
-        label
-      ) : (
-        <span aria-hidden="true" style={GLYPH}>
-          {glyph}
-        </span>
-      )}
+      {body}
     </label>
   )
 }
@@ -152,9 +191,18 @@ export interface FacetOptionGroupProps {
   /** What the whole group is called, for a reader with no label in view. */
   readonly label: string
   readonly children: ReactNode
+  /**
+   * A menu supplies its OWN grouping (a `fieldset`, or the menu itself), so
+   * `menu` draws the row without a second role around it — nesting a
+   * radiogroup inside a menu would announce a group the menu does not have.
+   */
+  readonly shell?: 'group' | 'menu'
 }
 
-export function FacetOptionGroup({ label, children }: FacetOptionGroupProps) {
+export function FacetOptionGroup({ label, children, shell = 'group' }: FacetOptionGroupProps) {
+  if (shell === 'menu') {
+    return <span style={GROUP}>{children}</span>
+  }
   return (
     <span role="radiogroup" aria-label={label} style={GROUP}>
       {children}

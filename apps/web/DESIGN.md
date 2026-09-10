@@ -1036,6 +1036,55 @@ annotation entry. The verbs return the moment that bar goes (a desktop, or
 a caret outside the editor), so the swap costs nothing and the duplicate
 row is spent on the one affordance that had no button anywhere.
 
+## Pick one of N is one control
+
+A control that chooses AMONG ALTERNATIVES — edge routing, a theme, a
+symbol, a colour, which look to draw as — is
+`facet-ui`'s `FacetOptionGroup` / `FacetOption`, and nothing else.
+`selection-surface.test.ts` (in `tools/arch-lint`, so it reaches the
+packages too) holds it.
+
+It is not the same rule as the one below. A TOGGLE turns one thing on;
+this is N alternatives where exactly one is current, and the two want
+different elements. `aria-pressed` on a button announces "pressed" rather
+than "1 of 3", and a button promises no arrow-key movement between the
+options — so the primitive wraps a real radio, visually hidden, and gets
+that behaviour from the element.
+
+Six spellings of this were in the tree, four of them inside the display
+panel alone: an `aria-pressed` button row, a `menuitemradio` row, a
+radiogroup with hidden radios, a radiogroup with VISIBLE radios beside a
+word, a bordered glyph pill, and a `<select>`. Measured in that panel — 9
+`aria-pressed` buttons, 3 visible radios, 12 hidden radios, and
+`role="radiogroup"` on two of five rows. Nobody chose any of it; each was
+somebody drawing the control again in a file that could not see the last
+one.
+
+Three things follow:
+
+- **One look, two ARIA shells.** Inside a MENU a radio input is the wrong
+  element and would break the menu's own keyboard model, so `shell="menu"`
+  puts `role="menuitemradio"` on a button instead. That is the correct role
+  there, not a second idiom — what must not differ is what a selected
+  option looks like.
+- **A plugin composes it; it does not replace it.** This is
+  `createFacetWriter`'s bargain applied to drawing (ADR-0013 decision 10, as
+  amended): a plugin chooses what its options ARE and their order, not what
+  a selected one looks like. Before it, a package could not use this app's
+  utility classes at all — Tailwind's content detection stops at the app,
+  silently — so every package-side control was drawn by hand.
+- **"None" is an option, never a second control.** The theme row offered a
+  `Default` segment AND a `Clear` button whose visible text named nothing it
+  would clear. A picker carries absence as an ordinary option.
+
+What this rule does NOT claim is that every choice in the app looks
+identical. A CARD GRID — an icon over a label, in full-width cells, as
+Settings draws theme and tab-icon — is a different control from a property
+row's inline chip, and squeezing one into the other would be worse UI, not
+more consistent. Those are exemptions in the guard, each saying what shape
+it is and why the chip is the wrong instrument, and an exemption naming a
+file that no longer holds a control fails.
+
 ## A toggle looks toggled, and says so once
 
 A control that switches something on — a rail, a popover, a tool, a filter —
@@ -1061,9 +1110,10 @@ anyone maintaining a name list.
 
 **A control may keep its own look.** The segmented control in the markdown
 toolbar raises its selected segment instead of filling it
-(`aria-pressed:bg-background aria-pressed:shadow-sm`), and the edge-routing
-options add `aria-pressed:font-medium`. What the rule fixes is where the
-state is written, not what it looks like.
+(`aria-pressed:bg-background aria-pressed:shadow-sm`). What the rule fixes
+is where the state is written, not what it looks like. (The edge-routing
+options used to be listed here too. They were never a toggle — they are
+three alternatives — and they now go through the section above.)
 
 Exemptions are listed in the guard with a reason each: a tree row's
 disclosure triangle expresses itself by ROTATING, and the canvas context
