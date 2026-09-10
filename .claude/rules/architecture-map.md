@@ -60,9 +60,13 @@ know, because the reader who trips them is elsewhere:
 - **The cycle check (`cycle-check.ts`) is static and value-aware, so a
   CROSS-PACKAGE cycle is invisible to it.** The one that exists is guarded by
   hand, below.
-- **A package that adds an `@/...` path alias must declare it** in
+- **A package that adds a path alias must declare it** in
   `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES`, or that package's edges
-  silently leave the cycle graph.
+  silently leave the cycle graph — 115 of `apps/web`'s 554 while its `@/` was
+  live, and the check then reports clean over a picture it cannot see. That
+  is executable now: a bare specifier naming no declared dependency is either
+  a declared alias prefix or a recorded non-path one (a virtual module), and
+  a fabricated record fails too.
 - **An ADAPTER may not import a MECHANIC** — `adapter-mechanic-check.ts`
   enforcing [ADR-0018](../../docs/contributing/adr/0018-operation-vs-mechanic.md)'s
   one invariant. An adapter is an HTTP route under `server/routes/**` or an MCP

@@ -1,11 +1,12 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
 import { exemptedBoundaryViolationKinds, KNOWN_IMPORT_CYCLES } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
-import { scanSourceForBoundaryViolations } from './scanner.js'
+import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -90,9 +91,8 @@ function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): stri
  * `cycle-check.test.ts` pins a cycle that exists ONLY through an alias so
  * the capability cannot be dropped silently.
  */
-const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web'].map(
-  (packageDir) => join(REPO_ROOT, packageDir, 'src'),
-)
+const CYCLE_SCAN_PACKAGES = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web']
+const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, packageDir, 'src'))
 
 /**
  * No scanned package declares a path alias any more — apps/web's `@/` was
@@ -101,6 +101,11 @@ const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/
  * The map stays because the alias-following capability is pinned by
  * cycle-check.test.ts with its own fixture: a package that adds an alias
  * must declare it here or its edges silently leave the cycle graph.
+ *
+ * That last sentence used to be prose alone, which is the weakest place for
+ * a rule whose whole symptom is a scan reporting a clean result over a graph
+ * it could not see. `path aliases the cycle scan has to be told about`, below,
+ * is the executable half.
  */
 const CYCLE_SCAN_ALIASES = {} as const
 
@@ -194,6 +199,151 @@ describe('circular value-import check (real source coverage)', () => {
   it('every KNOWN_IMPORT_CYCLES entry is still an actually-detected cycle', () => {
     const stale = [...knownKeys].filter((key) => !foundKeys.has(key))
     expect(stale, JSON.stringify(stale)).toHaveLength(0)
+  })
+})
+
+/**
+ * Bare specifiers the scan below finds that are NOT package names, each with
+ * why it cannot be a path alias into a scanned tree.
+ *
+ * The distinction is the whole point: `CYCLE_SCAN_ALIASES` exists because a
+ * prefix standing for an intra-package DIRECTORY carries import edges, and a
+ * resolver blind to it builds the cycle graph out of a subset of the real
+ * one. A virtual module carries no such edge, and neither does a prefix
+ * pointing outside every scanned tree.
+ */
+const NON_PATH_BARE_SPECIFIERS: Record<string, string> = {
+  'virtual:pwa-register':
+    "vite-plugin-pwa generates this module's source at build time. It is not a directory, so " +
+    'there is no import edge for the cycle graph to be missing',
+  'virtual:widget-fonts':
+    'the widget build generates it from build-fonts-module.ts, same as above — generated source, ' +
+    'not a directory',
+  '@docs-assets/':
+    'vitest.docs-snapshots.config.ts maps it to `docs/assets/`, which is outside every scanned ' +
+    'tree. An edge that leaves the scan cannot close a cycle inside it, and the files it names ' +
+    'are `.canvas` fixtures rather than modules',
+}
+
+/** `@scope/name` or `name` — everything after that is a subpath. */
+function packageNameOf(specifier: string): string {
+  const segments = specifier.split('/')
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : (segments[0] as string)
+}
+
+/**
+ * Every bare (non-relative, non-`node:`) specifier in the cycle scan's own
+ * file set, paired with the package that imports it.
+ *
+ * The same file set on purpose: what this classifies is exactly what
+ * `buildValueImportGraph` had to resolve, so a specifier it could not follow
+ * is one the graph is missing.
+ */
+function bareSpecifiersInScannedTrees(): { packageDir: string; specifier: string; file: string }[] {
+  return CYCLE_SCAN_PACKAGES.flatMap((packageDir) =>
+    listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.ts', '.tsx']).flatMap((file) => {
+      const sourceFile = ts.createSourceFile(
+        file,
+        readFileSync(file, 'utf-8'),
+        ts.ScriptTarget.Latest,
+        true,
+      )
+      return collectModuleSpecifiers(sourceFile)
+        .map(({ specifier }) => specifier)
+        .filter(
+          (specifier) =>
+            !specifier.startsWith('.') &&
+            !specifier.startsWith('node:') &&
+            specifier.trim() === specifier,
+        )
+        .map((specifier) => ({ packageDir, specifier, file: relative(REPO_ROOT, file) }))
+    }),
+  )
+}
+
+function declaredDependencies(packageDir: string): ReadonlySet<string> {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'))
+  return new Set([
+    manifest.name,
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.devDependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ])
+}
+
+/**
+ * A specifier that names no declared dependency resolves through SOME alias
+ * mechanism — tsconfig `paths`, a vite/vitest `resolve.alias`, a plugin's
+ * virtual module. Which one does not matter here; that it is not plain node
+ * resolution does, because that is precisely what `resolveSpecifier` in
+ * cycle-check.ts cannot follow on its own.
+ */
+function aliasedSpecifiers(): { packageDir: string; specifier: string; file: string }[] {
+  const declaredPerPackage = new Map(
+    CYCLE_SCAN_PACKAGES.map((packageDir) => [packageDir, declaredDependencies(packageDir)]),
+  )
+  return bareSpecifiersInScannedTrees().filter(
+    ({ packageDir, specifier }) =>
+      !(declaredPerPackage.get(packageDir) as ReadonlySet<string>).has(packageNameOf(specifier)),
+  )
+}
+
+/**
+ * The one thing `CYCLE_SCAN_ALIASES` could not say about itself: that it is
+ * COMPLETE.
+ *
+ * `cycle-check.test.ts` pins that a declared alias is followed, and pins a
+ * cycle that exists only through one. Neither can notice a package that adds
+ * an alias and does not declare it here — and the symptom of that is the
+ * cycle check reporting a clean result from a graph missing those edges,
+ * which reads exactly like a clean codebase. Measured once already: `apps/web`
+ * wrote 115 of its 554 intra-package value edges as `@/...`.
+ *
+ * So the probe is the IMPORT rather than the mechanism. A tsconfig `paths`
+ * entry, a vite `resolve.alias`, a plugin's virtual module and whatever
+ * arrives next all surface the same way — a bare specifier naming no declared
+ * dependency — and one probe covers a list of mechanisms nobody has to keep.
+ */
+describe('path aliases the cycle scan has to be told about', () => {
+  const aliased = aliasedSpecifiers()
+
+  it('reads the scanned trees and finds ordinary package imports', () => {
+    // A walk that collected nothing would report every entry below as stale
+    // AND every alias as absent — two green assertions over an empty set.
+    // 2000+ when written, almost all of them plain dependencies.
+    expect(
+      bareSpecifiersInScannedTrees().length,
+      'the module-specifier walk found almost nothing; check it against how imports are written now',
+    ).toBeGreaterThan(500)
+  })
+
+  it('classifies every bare specifier that node resolution cannot reach', () => {
+    const aliasPrefixes = Object.keys(CYCLE_SCAN_ALIASES as Readonly<Record<string, string>>)
+    const unclassified = aliased.filter(
+      ({ specifier }) =>
+        !aliasPrefixes.some((prefix) => specifier.startsWith(prefix)) &&
+        !Object.keys(NON_PATH_BARE_SPECIFIERS).some((prefix) => specifier.startsWith(prefix)),
+    )
+    expect(
+      unclassified,
+      'this specifier names no declared dependency, so it resolves through an alias. If the alias ' +
+        'stands for a directory inside a scanned package, declare it in CYCLE_SCAN_ALIASES — ' +
+        'otherwise the cycle check builds its graph without those edges and reports a clean result ' +
+        'it cannot see. If it does not (a virtual module, or a directory outside every scanned ' +
+        'tree), record it in NON_PATH_BARE_SPECIFIERS with that reason.\n' +
+        JSON.stringify(unclassified, null, 2),
+    ).toEqual([])
+  })
+
+  it('every NON_PATH_BARE_SPECIFIERS entry is still a specifier the source writes', () => {
+    const stale = Object.keys(NON_PATH_BARE_SPECIFIERS).filter(
+      (prefix) => !aliased.some(({ specifier }) => specifier.startsWith(prefix)),
+    )
+    expect(
+      stale,
+      'NON_PATH_BARE_SPECIFIERS names a specifier nothing imports any more — drop the entry, so it ' +
+        'cannot go on exempting a mechanism the repo no longer has',
+    ).toEqual([])
   })
 })
 
