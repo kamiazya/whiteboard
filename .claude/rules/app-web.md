@@ -252,7 +252,14 @@ and a `Blob` answers `''` for a type it will not carry (one with a
 character outside printable ASCII), while the reader
 said `.min(1)` — so such a blob was stored, `has` said so, and `get`
 answered null, and the image never drew. The reader now accepts any
-string. Locally the browser project runs with
+string. Run counts stay inside the browser layer's budget (single digits to
+~20), which is exactly why the arrangement that finds the defect — an empty
+content type — is a weighted arm AND a pinned `example`, with a tally that
+fails the file if it stops being drawn: at one draw in six it was missed by
+one mutation run in three. `test-utils/fast-check.ts`'s `withDefaults` is
+generic for that, since `fc.Parameters<never>` types `examples` as `never[]`.
+An example is the CASE, not the RNG state, so it is not a pinned seed.
+Locally the browser project runs with
 `WHITEBOARD_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-<rev>/chrome-linux/headless_shell`
 when the installed Playwright revision is not the one the config pins.
 

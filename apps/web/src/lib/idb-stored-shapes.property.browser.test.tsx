@@ -53,17 +53,40 @@ claimIsolatedWhiteboardDb('idbstoredshapes')
 beforeAll(clearWhiteboardDb)
 afterAll(clearWhiteboardDb)
 
+// Run counts stay inside the browser layer's budget (single digits to ~20,
+// `test-layer-selection`): every case here is a real browser plus a real
+// IndexedDB transaction, and the projects share one runner with two other
+// browser projects. The bug this lane found needed four cases to reach.
 const bytesArb = fc.uint8Array({ maxLength: 2048 })
 const asList = (bytes: ArrayLike<number>): number[] => Array.from(bytes)
 
 /**
- * What an upload can carry as its type: the ordinary ones, the EMPTY one a
- * `Blob` answers for a type it cannot parse, and arbitrary text.
+ * What an upload can carry as its type: the ordinary ones, arbitrary text,
+ * and the EMPTY one a `Blob` answers for a type it will not carry.
+ *
+ * The empty arm is weighted rather than left to arise from the others,
+ * because it is the arrangement that found the defect and the run counts
+ * here are small: at one draw in six it was missed by one mutation run in
+ * three. Each property that can reach it also pins it as an `example`, so
+ * the case runs every time whatever the draws do, and `emptyTypeDraws`
+ * below fails the file if it stops being reached at all.
  */
 const mimeTypeArb = fc.oneof(
-  { weight: 2, arbitrary: fc.constantFrom('image/png', 'image/svg+xml', 'text/plain', '') },
+  { weight: 3, arbitrary: fc.constantFrom('image/png', 'image/svg+xml', 'text/plain') },
+  { weight: 2, arbitrary: fc.constant('') },
   { weight: 1, arbitrary: fc.string({ maxLength: 24 }) },
 )
+
+/** A tally, because a property that never draws the empty type asserts nothing about it. */
+let emptyTypeDraws = 0
+const recordMimeType = (mimeType: string): string => {
+  if (mimeType === '') emptyTypeDraws += 1
+  return mimeType
+}
+
+afterAll(() => {
+  expect(emptyTypeDraws).toBeGreaterThanOrEqual(3)
+})
 
 /** Raw access to one object store, for seeding a legacy record and reading what a rewrite left. */
 async function raw<T>(
@@ -84,8 +107,12 @@ async function raw<T>(
 describe('IdbBlobStore', () => {
   fcTest.prop(
     [bytesArb, fc.option(mimeTypeArb, { nil: undefined })],
-    withDefaults({ numRuns: 60 }),
+    withDefaults<[Uint8Array<ArrayBuffer>, string | undefined]>({
+      numRuns: 20,
+      examples: [[new Uint8Array([1, 2, 3]), '']],
+    }),
   )('gives back the bytes and content type that were put', async (bytes, contentType) => {
+    if (contentType !== undefined) recordMimeType(contentType)
     const store = new IdbBlobStore()
     const { ref } = await store.put({ bytes, contentType })
     expect(await store.has({ ref })).toEqual({ exists: true })
@@ -97,9 +124,16 @@ describe('IdbBlobStore', () => {
 })
 
 describe('DocumentFileStore', () => {
-  fcTest.prop([bytesArb, mimeTypeArb, fc.nat()], withDefaults({ numRuns: 40 }))(
+  fcTest.prop(
+    [bytesArb, mimeTypeArb, fc.nat()],
+    withDefaults<[Uint8Array<ArrayBuffer>, string, number]>({
+      numRuns: 15,
+      examples: [[new Uint8Array([1, 2, 3]), '', 0]],
+    }),
+  )(
     'gives back the image that was put, typed as the browser types it',
     async (bytes, mimeType, created) => {
+      recordMimeType(mimeType)
       const store = new DocumentFileStore()
       const fileId = `file-${generateDocumentId()}`
       await store.put(fileId, { mimeType, blob: new Blob([bytes], { type: mimeType }), created })
@@ -112,9 +146,16 @@ describe('DocumentFileStore', () => {
     },
   )
 
-  fcTest.prop([bytesArb, mimeTypeArb, fc.nat()], withDefaults({ numRuns: 20 }))(
+  fcTest.prop(
+    [bytesArb, mimeTypeArb, fc.nat()],
+    withDefaults<[Uint8Array<ArrayBuffer>, string, number]>({
+      numRuns: 8,
+      examples: [[new Uint8Array([1, 2, 3]), '', 0]],
+    }),
+  )(
     'reads a v1 record and rewrites it as v2 with its bytes in the blob store',
     async (bytes, mimeType, created) => {
+      recordMimeType(mimeType)
       const fileId = `legacy-${generateDocumentId()}`
       const blob = new Blob([bytes], { type: mimeType })
       await raw(DOCUMENT_FILES_STORE, 'readwrite', (files) =>
@@ -160,7 +201,7 @@ describe('IdbDocumentIndex', () => {
       workspaceArb,
       fc.uniqueArray(documentArb, { selector: (d) => d.path, minLength: 1, maxLength: 4 }),
     ],
-    withDefaults({ numRuns: 40 }),
+    withDefaults({ numRuns: 15 }),
   )('lists the workspace and its documents as they were created', async (workspace, docs) => {
     const index = new IdbDocumentIndex()
     const workspaceId = generateDocumentId()
@@ -189,7 +230,7 @@ describe('IdbDocumentStore', () => {
       fc.array(bytesArb, { minLength: 1, maxLength: 4 }),
       frontierArb,
     ],
-    withDefaults({ numRuns: 40 }),
+    withDefaults({ numRuns: 15 }),
   )(
     'gives back the snapshot and the delta log as they were saved',
     async (snapshot, maxChunkBytes, frontier, updates, newFrontier) => {
@@ -257,7 +298,7 @@ describe('BrowserVersionStore', () => {
     { requiredKeys: [] },
   )
 
-  fcTest.prop([saveInputArb], withDefaults({ numRuns: 25 }))(
+  fcTest.prop([saveInputArb], withDefaults({ numRuns: 10 }))(
     'lists a saved version as the entry save answered with',
     async (input) => {
       const saved = await versions.save(workspaceId, PATH, input)
