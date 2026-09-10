@@ -126,17 +126,18 @@ export const KNOWN_EQUIVALENT = {
   // 1008-test suite. Two neighbours of these are NOT here and were pinned
   // instead — writing every hoistable name unconditionally erases a container's
   // own attribute, and the every-child comparison throws on an attr-less child.
-  // `<=` on a floor admits exactly the coordinate the shift then lands on, so
-  // the mutant costs one no-op iteration and nothing else; skipping a zero
-  // delta guards an addition of zero. The margin's `<=` used to be here for
-  // the same reason, until a centre or far-edge snap started reading the
-  // margin to decide whether it may move: a pair exactly the margin apart
-  // then answers differently, and the grouped tidy scoreboard kills it. Each
-  // hand-verified; the reasoning is `package-canvas-render.md`.
+  // Skipping a zero delta guards an addition of zero. Two entries for the
+  // frame floor's `<` used to sit here, on the reasoning that `<=` admits
+  // exactly the coordinate the shift lands on and costs one no-op iteration:
+  // they are gone because the floor is gone — the margin is an ANCHOR now,
+  // and its comparison is a band, whose boundary a test pins. The margin's
+  // own `<=` left for a like reason earlier, when a centre or far-edge snap
+  // started reading the margin to decide whether it may move: a pair exactly
+  // the margin apart then answers differently, and the grouped tidy
+  // scoreboard kills it. Each hand-verified; the reasoning is
+  // `package-canvas-render.md`.
   'src/tidy.ts': {
     'ConditionalExpression: delta === 0 -> false': 1,
-    'EqualityOperator: unit.bbox.x < floor.x -> unit.bbox.x <= floor.x': 1,
-    'EqualityOperator: unit.bbox.y < floor.y -> unit.bbox.y <= floor.y': 1,
   },
   // `p` is a signed segment delta that the axis-aligned skip above the loop
   // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit

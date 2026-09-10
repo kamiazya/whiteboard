@@ -329,6 +329,35 @@ describe('inside a frame', () => {
     expect(g.height).toBe(160)
   })
 
+  it("snaps a member a few pixels past the frame's margin ONTO it, so frames that line up hold members that line up", () => {
+    // The two near misses this clears on the corpus: `cli` moved in to its
+    // frame's 32px margin beside `api` and `sqlite` already at 40 in theirs
+    // — one column to a reader, 8px apart to the score, and invisible to
+    // every band, since bands run among a frame's members and among the
+    // frames, never across them.
+    const nodes = [
+      frame(0, 0, 400, 200),
+      box('a', 8, 60, 200, 80),
+      box('grp-b', 0, 240, 400, 200, 'group'),
+      box('b', 40, 300, 200, 80),
+    ]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const first = after.find((n) => n.id === 'grp') as (typeof after)[number]
+    const second = after.find((n) => n.id === 'grp-b') as (typeof after)[number]
+    expect(after.find((n) => n.id === 'a')?.x).toBe(first.x + 32)
+    expect(after.find((n) => n.id === 'b')?.x).toBe(second.x + 32)
+  })
+
+  it('leaves a member a whole band past the margin where it is', () => {
+    // The boundary of the snap above. A member deliberately indented is
+    // indented; only one within a band of the margin is read as meaning to
+    // sit at it.
+    const atTheBand = [frame(0, 0, 400, 300), box('a', 32 + 24, 160, 200, 80)]
+    expect(tidyNodes(atTheBand)).toEqual([])
+    const justInside = [frame(0, 0, 400, 300), box('a', 32 + 16, 160, 200, 80)]
+    expect(tidyNodes(justInside)).toEqual([{ id: 'a', x: 32, y: 160 }])
+  })
+
   it('claims a box mostly inside the frame, instead of ejecting the one that straddles its edge', () => {
     // Membership is CONTAINMENT, so a box drawn across the frame's right
     // edge belonged to no unit: it became a singleton, and the overlap pass
@@ -376,10 +405,21 @@ describe('inside a frame', () => {
     expect(tidyNodes(nodes, { scope: new Set(['b']) })).toEqual([
       { id: 'grp', x: 0, y: 0, width: 400, height: 228 },
     ])
-    // Padded already: nothing to do, on any scope.
+    // Roomy already, and the members still move: a member within a band of
+    // the frame's margin is pulled ONTO it. This example used to assert
+    // nothing to do — a frame padded to 40 was padded, and tidy left it
+    // alone — and that decision was superseded (user, 2026-09-10) by the
+    // one thing no band can do: frames that line up hold members that line
+    // up, since bands run among a frame's members and among the frames,
+    // never across them. The frame itself is unmoved, and nothing is
+    // charged to a member further in than a band.
     const roomy = [frame(0, 0, 400, 240), box('a', 40, 40), box('b', 40, 136)]
-    expect(tidyNodes(roomy)).toEqual([])
-    expect(tidyNodes(roomy, { scope: new Set(['grp']) })).toEqual([])
+    expect(tidyNodes(roomy)).toEqual([
+      { id: 'a', x: 32, y: 32 },
+      { id: 'b', x: 32, y: 136 },
+    ])
+    const deep = [frame(0, 0, 400, 300), box('a', 80, 80), box('b', 80, 192)]
+    expect(tidyNodes(deep)).toEqual([])
   })
 
   it('a frame in scope grows for members that are not', () => {
@@ -474,7 +514,11 @@ describe('units', () => {
     const g = after.find((n) => n.id === 'g')!
     const m = after.find((n) => n.id === 'm')!
     expect([g.x, g.y]).not.toEqual([0, 0])
-    expect([m.x - 40, m.y - 40]).toEqual([g.x, g.y])
+    // Inside its own frame the member is tidied to the margin, so its delta
+    // is the unit's plus that snap; what says the group is the frame is
+    // that the member is still INSIDE it, at the margin the frame gives
+    // every member. Read as two units, they would have hopped apart.
+    expect([m.x - g.x, m.y - g.y]).toEqual([32, 32])
   })
 
   it('two identical group boxes: the earlier one is the root and the later one rides with it', () => {

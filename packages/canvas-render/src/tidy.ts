@@ -476,11 +476,19 @@ function enclosing(frame: Rect, rects: readonly Rect[]): Rect {
 function tidyLevel(
   nodes: readonly TidyNode[],
   options: TidyOptions,
-  // Inside a frame: the least x and y a movable unit may keep, so a member
-  // hugging the frame's top or left edge is moved in to the margin rather
-  // than the frame grown around it — the frame's top-left is its anchor
-  // and its alignment with its peers, and stays put. Only an immobile
-  // member can push a frame up or left.
+  // Inside a frame: the margin its members start at, as an ANCHOR rather
+  // than only a floor. A member hugging the frame's top or left edge is
+  // moved in to it rather than the frame grown around it — the frame's
+  // top-left is its anchor and its alignment with its peers, and stays put;
+  // only an immobile member can push a frame up or left. A member already
+  // clear of it but within `TIDY_BAND_PX` is pulled ONTO it, which is what
+  // makes frames that line up hold members that line up: bands run among a
+  // frame's members and among the frames, never across them, so nothing
+  // else can see that a member at 32 in one frame and one at 40 in another
+  // are a column to a reader. Superseding an earlier decision that a frame
+  // padded to more than the margin was padded and tidy left it alone (user,
+  // 2026-09-10): it costs 8px of movement on a board already fine, and buys
+  // the alignment no band reaches.
   floor?: Point,
 ): Map<string, Rect> {
   const locked = options.locked ?? (() => false)
@@ -506,13 +514,17 @@ function tidyLevel(
   if (floor !== undefined) {
     for (const unit of units) {
       if (!unit.movable) continue
-      if (unit.bbox.x < floor.x) {
-        unit.dx += floor.x - unit.bbox.x
-        unit.bbox.x = floor.x
-      }
-      if (unit.bbox.y < floor.y) {
-        unit.dy += floor.y - unit.bbox.y
-        unit.bbox.y = floor.y
+      for (const axis of ['x', 'y'] as const) {
+        const target = axis === 'x' ? floor.x : floor.y
+        const at = axis === 'x' ? unit.bbox.x : unit.bbox.y
+        if (at - target >= TIDY_BAND_PX) continue
+        if (axis === 'x') {
+          unit.dx += target - unit.bbox.x
+          unit.bbox.x = target
+        } else {
+          unit.dy += target - unit.bbox.y
+          unit.bbox.y = target
+        }
       }
     }
   }
