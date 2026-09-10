@@ -1642,6 +1642,103 @@ describe('wb_canvas_edit — region.set', () => {
  * lane: a model then declares full geometry for every box instead, which is
  * the arithmetic the optional geometry exists to spare it.
  */
+describe('wb_canvas_edit — notes on the answer', () => {
+  // The layered board the lane draws: a gateway at the left end of its row
+  // with the two services it fans out to beside it, so the edge to the far
+  // one has to pass the near one. Measured on that board, the same gateway
+  // mid-row reads crossings 1 -> 0, bends 2 -> 0, reversals 1 -> 0 and 24%
+  // less ink — and a sentence in the skill saying so was read by six
+  // trials and followed by none. The answer to the call is what a model
+  // cannot skip, so the answer says it.
+  const row = (ids: readonly string[], y: number) =>
+    ids.map((id, i) => ({
+      op: 'node.add' as const,
+      node: { id, type: 'text' as const, x: 40 + i * 220, y, width: 160, height: 60, text: id },
+    }))
+  const edges = [
+    ['cli', 'apigw'],
+    ['web', 'apigw'],
+    ['apigw', 'auth'],
+    ['apigw', 'search'],
+    ['auth', 'sqlite'],
+  ].map(([a, b]) => ({
+    op: 'edge.add' as const,
+    edge: { fromNode: a as string, toNode: b as string },
+  }))
+
+  test('a box whose same-row connections all lie to one side of it is named, with where to put it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        ...row(['cli', 'web'], 100),
+        ...row(['apigw', 'auth', 'search'], 400),
+        ...row(['sqlite'], 700),
+        ...edges,
+      ],
+    })
+
+    expect(result.notes).toEqual([
+      '"apigw" fans out along its row past "auth" to "search"; in the middle of its row, or in a row of its own, its edges have somewhere to go',
+    ])
+  })
+
+  test('the same board with the box in the middle of its row answers no note', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        ...row(['cli', 'web'], 100),
+        ...row(['auth', 'apigw', 'search'], 400),
+        ...row(['sqlite'], 700),
+        ...edges,
+      ],
+    })
+
+    expect(result.notes).toBeUndefined()
+  })
+
+  test('a box the batch did not touch is not named', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'apigw', type: 'text', x: 40, y: 400, width: 160, height: 60, text: 'apigw' },
+        { id: 'auth', type: 'text', x: 260, y: 400, width: 160, height: 60, text: 'auth' },
+        { id: 'search', type: 'text', x: 480, y: 400, width: 160, height: 60, text: 'search' },
+      ],
+      edges: [
+        { id: 'e1', fromNode: 'apigw', toNode: 'auth' },
+        { id: 'e2', fromNode: 'apigw', toNode: 'search' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'note', type: 'text', x: 40, y: 800, width: 160, height: 60, text: 'aside' },
+        },
+      ],
+    })
+
+    expect(result.notes).toBeUndefined()
+  })
+})
+
 describe('wb_canvas_edit — node.add within a group', () => {
   const GROUP = {
     id: 'g',

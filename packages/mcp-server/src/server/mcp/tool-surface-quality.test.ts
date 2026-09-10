@@ -190,9 +190,13 @@ describe('what the tool table costs to read', () => {
       // +107 for `within` accepting null (models write it to say "no group",
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
+      // +202 on the wire only, for `notes` on the answer: a box this batch
+      // touched whose same-row edges all run one way is named with where to
+      // put it, since the skill saying the same was read by six trials and
+      // followed by none, and the answer is what a model cannot skip.
       wb_canvas_edit: {
         visibleBytes: 12658,
-        wireBytes: 35792,
+        wireBytes: 35994,
         descriptionWords: 169,
         parameters: 147,
         undescribed: 119,
@@ -393,7 +397,7 @@ describe('what the tool table costs to read', () => {
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
       visibleBytes: 35317,
-      wireBytes: 108523,
+      wireBytes: 108725,
       parameters: 268,
       undescribed: 187,
     })

@@ -28,6 +28,7 @@ import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import { fanOutNotes } from './canvas-edit-notes.js'
 import {
   type CanvasEditInput,
   type CanvasEditOutput,
@@ -1058,12 +1059,14 @@ export function createCanvasEditTool(deps: ServerDeps) {
         }
       }
 
+      const notes = fanOutNotes(parsed.data, touchedNodes)
       return {
         documentId: input.documentId,
         applied: input.ops.length,
         touched,
         geometry: [...geometry.values()].sort((a, b) => a.id.localeCompare(b.id)),
         snapshot: projectCanvasSnapshot(input.documentId, parsed.data, nodeLocks, edgeLocks),
+        ...(notes.length > 0 ? { notes } : {}),
       }
     },
   }

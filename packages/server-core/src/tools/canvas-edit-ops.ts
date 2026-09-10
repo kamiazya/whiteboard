@@ -335,6 +335,16 @@ export const canvasEditOutputSchema = z
      * stores, so there is no second shape to keep in step.
      */
     proposed: proposalSchema.optional(),
+    /**
+     * What the board now says about a box this batch touched that a
+     * drawer would move: present only when there is something to say.
+     */
+    notes: z
+      .array(z.string())
+      .optional()
+      .describe(
+        'A box this batch touched that sits where its edges have nowhere to go, and where to put it instead. Absent when the board reads clean.',
+      ),
   })
   .strict()
 export type CanvasEditOutput = z.infer<typeof canvasEditOutputSchema>
