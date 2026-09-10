@@ -749,6 +749,15 @@ the straight style's form of the retrace the orthogonal style already
 charges there. The orthogonal sweep is untouched by construction (no
 diagonals), and the drawing corpus moved on one price only.
 
+**The `within` description (2026-09-10).** `within` on `node.add` now
+says a group must be on the canvas or added earlier in the batch, and
+that wrapping boxes that already exist is add-the-group-then-`region.set`;
+the refusal for a `within` that is not a group says the same. Rung 1:
++124 bytes on `wb_canvas_edit`. Rung 3 on the wrap-a-chain task, three
+trials: tool errors 3 to 0, calls 4.67 to 4.33 a trial, every board
+debt-free — each trial added the group and `region.set` in one batch
+where the round before wrote `within: null` or the group's own id on it.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

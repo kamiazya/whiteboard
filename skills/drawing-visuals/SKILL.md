@@ -234,6 +234,7 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
+| put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", ... } }`, then `region.set` naming them — `within` on a node.add only places that node inside a group that already exists (or was added earlier in the batch) |
 | structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
