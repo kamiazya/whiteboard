@@ -828,6 +828,56 @@ still-empty one — and that empty box, covering a member of the first by
 accident, read as holding it. A cursor-placed group now holds nothing
 until it has been placed around something, whatever its box covers.
 
+**The tenth reading (2026-09-10).** The whole lane with tidy banding on
+centres and a cursor-placed group following its members: 24 of 24 pass,
+`debtFreePowK` 1.0 — every one of the thirty drawn boards debt-free — no
+tool errors, 2.375 calls a trial, the fewest yet. Five readings moved the
+column from 0.7 to 1.0, and what moved it was never one thing: two tidy
+rules, two score rules, three router rules, and four things the surface
+said or did about groups. The debt criterion is saturated on this lane,
+which says as much about the lane as about the surface: ten drawing tasks
+of five to eleven boxes. What the boards still differ on is PRICE, and
+only one of them differs at all: the layered architecture board reads
+crossings 2, 1, 0 and reversals 2, 1, 3 across its three trials, with the
+same-row loop of the fifth reading behind the worst — the cost model's
+answer to a gateway placed beside the services it fans out to, a
+placement the drawer chose. So the next criterion is price on that board,
+and the next question is whether the surface can say where a fan-out box
+goes before the router has to pay for where it went.
+
+**The eleventh reading (2026-09-10), refuted.** The drawing skill's
+placement step was given one sentence: a box that fans out goes in the
+middle of its row or in a row of its own, never at the end, with the
+gateway as its example. Six trials of the layered task read it and none
+placed the gateway anywhere but the left end of its row, as every trial
+before had. Their price did move — bends 6 in two of six against seven
+of nine before, reversals 3 in the same two against six of nine — and a
+move nobody can attribute is not evidence: the sentence was not followed,
+so whatever moved the numbers was not the placement it asked for. The
+sentence is withdrawn. What it says about prose is worth keeping: a model
+drawing a layered diagram lists each layer's members left to right in the
+order it thinks of them, and a paragraph three steps down the skill does
+not reach that order. If the fan-out hub is to move, something the model
+cannot skip has to move it — the result of the call it just made, or
+tidy — and that is the next question, not another sentence.
+
+**The twelfth reading (2026-09-10), refuted.** The result of the call
+said it: `wb_canvas_edit` answered with a `notes` line naming a touched
+box whose connections along its own row all ran one way, the near and
+far neighbour, and where its edges would have somewhere to go — present
+only when there was something to say, +202 bytes on the wire and none on
+what a model reads every turn. Three trials of the layered task drew the
+board, received the note, and made no further edit: each went on to set
+the viewport or render, and every gateway stayed at the end of its row
+(crossings 1, 0, 0; bends 2, 4, 6; reversals 1, 3, 3). A model that has
+drawn what it was asked treats the answer as confirmation, not as a
+finding, so a note there is read the way the skill was: not at all. The
+change is withdrawn; it is on branch `fanout-note` with its tests, in
+case the reading changes. What is left for this board's price is a
+MECHANISM rather than a message — tidy moving a fan-out hub between the
+boxes it fans out to — and that is a change to what tidy is allowed to
+do to an order a person drew, which is not this loop's to decide.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
