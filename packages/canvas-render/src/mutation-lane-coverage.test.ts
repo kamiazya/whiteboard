@@ -91,9 +91,19 @@ describe('the mutation lane covers what it says it covers', () => {
     // byte-identical SVG tests, which are examples.
     // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
     // `glow.test.ts`'s bounds assertion, which fails on any other reach.
+    //
+    // 64 since `quality/drawing-score.ts`, outside the lane: an instrument,
+    // calibrated by examples that plant one defect each and read exactly one
+    // — the shape a mutation run would report as unsurprising survivors —
+    // and checked by hand once, four metrics mutated and six of its cases
+    // failing.
+    // 65 since `quality/polyline-geometry.ts`, the geometry the drawing score
+    // and the scoreboards' oracles share, outside the lane for the reason
+    // the oracles are: what pins it is the scoreboards it feeds, whose
+    // exact numbers move on any change to it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 63,
+      production: 65,
     })
   })
 

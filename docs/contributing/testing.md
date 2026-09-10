@@ -313,6 +313,12 @@ and never imports the registration code, so the surface cannot grade itself.
 Run the third before and after any change to a tool's name, description, schema
 or existence, and put both readings in the PR.
 
+The third also scores every board a write task names with canvas-render's
+drawing score (`packages/canvas-render/src/quality/drawing-score.ts`, pinned
+over hand-drawn references and drafts in `drawing-quality.test.ts`), so a
+drawing the verifier accepts and a reader would not is a non-zero debt column
+on the run's line rather than something only the rendered SVG could show.
+
 ---
 
 ## Hosted Web App (Cloudflare Pages) Release Gates

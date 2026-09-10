@@ -1302,3 +1302,55 @@ lane's grader, reading the store, passed it. The one test that pins this
 lists the member before the group and asserts the group's chrome comes first
 in the scene. A z-order a document actually stores would be the honest
 dissolution; until JSON Canvas gives one, containers-behind is the rule.
+
+## The drawing score judges the board, not a mechanism
+
+`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, exported) reads
+a laid-out board as a person would: boxes over boxes, a box across a
+frame's edge, an edge's ink through a box it does not connect, a label
+over a box or under a frame, content cut to fit, a member jammed against
+its frame, a box a few pixels off its row — each a DEBT column that
+targets zero — beside crossings, bends, ink, uneven gaps, envelope and
+density as PRICE. The other instruments here each judge one mechanism on
+its own terms; this one judges what any of them, or a model through the
+tool surface, actually drew, and the MCP eval lane records it per board
+as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting
+one defect and reading one; pinned in `drawing-quality.test.ts` over
+`test-utils/drawing-corpus.ts`, where each diagram the lane asks for is
+drawn as a reference, as a first attempt, and after tidy. Its polyline
+geometry is `quality/polyline-geometry.ts`, shared with the routing
+scoreboard's oracle and `reversal-count.ts` so a crossing means one thing
+across every instrument — and, by a contract
+`polyline-geometry.independence.test.ts` holds, imported by nothing under
+`layout/`: an oracle sharing a primitive with the router would agree with
+its mistakes by construction, so the router keeps its own geometry and
+that duplication is the independence. A scene links a label to what it names
+through `TextRunNode.annotates`, set by the layout and read by nothing
+that paints; the flat scene has no other way back from a label's box.
+
+The first reading found what tidy leaves: a frame and what it holds move
+as ONE unit, so an overlap or a near miss INSIDE a frame survives a tidy
+that clears the straddle and the hidden label beside it. `tidy-quality`
+cannot see this — its grouped corpus never plants a defect among a
+frame's members — and the scoreboard pins it until tidy tidies inside.
+
+The column set follows the literature, and the module doc says which
+source each column follows (ADR-0031 §7 has the reading). Two things a
+session extending it has to know. **A column earns its place by an
+empirical ranking, not by being in a metric catalogue**: crossing angle,
+angular resolution and node resolution are all standard and all absent,
+the first two because an orthogonal route makes them read 1.0 by
+construction, the third because 450k drawings found it uninformative.
+**The columns stay a vector, and the scoreboard pins the known blind
+spot**: a board scattered so far apart that a reader would reject it
+scores debt-free, with `density` its only witness — pinned as such in
+`drawing-quality.test.ts` rather than papered over, because the same
+readings can be produced by drawings nobody would accept. Beyond
+calibration, three tests make the instrument believable: each reference
+owes no more than its draft on any debt column, tidy never adds debt, and
+each planted defect moves only the column that names it.
+
+The second reading was a router finding: the hand-drawn architecture
+reference owes three `reversals`, because the router draws a same-row
+edge inside a frame as a loop under both boxes with no side pinned. The
+column exists so that a change to the side choice is judged by it.

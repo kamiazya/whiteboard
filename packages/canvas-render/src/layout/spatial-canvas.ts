@@ -778,7 +778,10 @@ function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[]
     0,
     ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
   )
-  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes
+  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes.map(
+    (entry) =>
+      entry.kind === 'textRun' ? { ...entry, annotates: { kind: 'node', id: node.id } } : entry,
+  )
 }
 
 /**
@@ -1408,6 +1411,7 @@ function composeEdgeLabel(
     baseline: metrics.ascent,
     text: edge.label,
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
+    annotates: { kind: 'edge', id: edge.id },
   }
 }
 
