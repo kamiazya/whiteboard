@@ -14,10 +14,12 @@ picks the one matching your settings.
 
 ## From the editor
 
-1. Open the document's **⋯** menu and choose **Display…**.
-2. Under **Theme**, pick **Sketch** or **Neon**. The canvas redraws at once; the popover stays
+1. Press **Display** in the document's toolbar — the sliders icon, beside the comments and
+   history buttons. The settings open next to the canvas, or as a sheet over it on a phone.
+2. Under **Theme**, pick **Sketch** or **Neon**. The canvas redraws at once; the panel stays
    open so you can compare.
 3. **Default** removes the theme again.
+4. Press **Display** again, or the **×** on the sheet, to close it.
 
 The same panel has a **Draw as** row for this tab only: **As saved** draws what the document
 says, **Clean** draws the bundled look, and **Preview sketch** / **Preview neon** try a theme

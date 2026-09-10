@@ -1,12 +1,22 @@
 /**
- * Canvas-wide display settings as a PANEL. The document's ⋯ menu hangs it in
- * a popover off its own trigger, from the leading `Display…` row; this
- * module owns what is in the panel and nothing about how it is opened.
+ * Canvas-wide display settings as a PANEL — the `display` member of the
+ * page's one inspector slot (`lib/inspector.ts`). This module owns what is
+ * in the panel and nothing about where it stands: `InspectorPanel` is the
+ * vessel, a column beside the editor where there is width and a bottom
+ * sheet under 768px.
  *
- * It used to carry its own gear in the header row — the row's only VIEW
+ * Standalone from SpatialEditor so the PAGE places it; it speaks the same
+ * (canvas, onChange) command contract the editor does.
+ *
+ * Two vessels came before and each failed the same way, from the opposite
+ * end of the row. First its own gear in the header — the row's only VIEW
  * control, one icon for one plugin's edge routing, against width the title
- * wanted. Standalone from SpatialEditor so the PAGE places it; it speaks the
- * same (canvas, onChange) command contract the editor does.
+ * wanted. Then a popover hung off the ⋯ kebab, which on a phone could not
+ * be dismissed at all: Radix takes an outside click or Escape, and at 424px
+ * of panel against a 390px screen there is neither a keyboard nor much
+ * outside. The slot answers both — the header spends no extra width,
+ * because a spatial document has no `properties` member to draw, and the
+ * sheet brings its own close.
  *
  * This surface OWNS the `canvasSettings` contribution point and knows no
  * facet domain (facet-wiring-guard.test.ts): panels come from the registry,
@@ -15,11 +25,8 @@
  * plugin's displayName (ordering stays namespace-id lexicographic — a
  * display name may be reworded or localized and must not move the order).
  *
- * Picks apply immediately and keep the popover open — these are property
- * pickers, and closing per pick would force a reopen for every adjustment,
- * which is also why the ⋯ row opens a popover rather than a submenu. Radix
- * owns dismissal (outside click, Escape) and returns focus to the kebab the
- * popover is anchored on, so a keyboard user never falls to <body>.
+ * Picks apply immediately and the panel stays open — these are property
+ * pickers, and closing per pick would force a reopen for every adjustment.
  */
 import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'

@@ -78,7 +78,12 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) 
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">Edge routing</span>
-        <span className="flex items-center gap-0.5">
+        {/* Wraps for the reason the context menu's option rows do: a row
+            that cannot fit the panel puts its last options past the edge,
+            where they are not merely ugly but untappable. Measured at
+            390px before the panel moved into the inspector slot — Curved
+            and On were both outside the screen. */}
+        <span className="flex flex-wrap items-center justify-end gap-0.5">
           {EDGE_ROUTING_CHOICES.map(({ style, label }) => (
             <button
               key={style}
@@ -98,7 +103,7 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) 
       </div>
       <div className="flex items-center justify-between gap-3">
         <span className="text-xs text-muted-foreground">Line jumps</span>
-        <span className="flex items-center gap-0.5">
+        <span className="flex flex-wrap items-center justify-end gap-0.5">
           {(
             [
               { lineJumps: 'none', label: 'Off' },

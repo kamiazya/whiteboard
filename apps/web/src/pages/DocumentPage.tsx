@@ -327,6 +327,11 @@ function DocumentPageBody({
         // Facets are OKF frontmatter, so only a markdown document has any
         // (ADR-0009 decision 3); the keeper answers none for a spatial one.
         ...(model.properties.facets === undefined ? {} : { properties: {} }),
+        // The spatial document's own attributes, in the place the markdown
+        // document's frontmatter takes: a canvas has no frontmatter and a
+        // note has no canvas, so the two never appear together and the
+        // segment reads the same length either way.
+        ...(documentKind === 'spatial' ? { display: {} } : {}),
         comments: { count: commentsRail.openThreadCount },
         // Always offered, and pressable at nought (user decision,
         // 2026-09-07): a document with no proposals is a fact worth being
@@ -360,23 +365,6 @@ function DocumentPageBody({
       )}
       <DocumentMenu
         onExport={(format) => void handleExport(format)}
-        // Canvas-level display settings, gated on kind the same way the
-        // facet disclosure is: a markdown document has no canvas to
-        // configure. They live in the menu's leading band rather than as a
-        // gear of their own — the row's only VIEW control, against width
-        // the title wanted.
-        {...(documentKind === 'spatial'
-          ? {
-              display: (
-                <CanvasDisplaySettings
-                  canvas={sync.canvas}
-                  onChange={sync.onChange}
-                  style={drawAs}
-                  onStyleChange={setDrawAs}
-                />
-              ),
-            }
-          : {})}
         {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}
@@ -485,6 +473,24 @@ function DocumentPageBody({
                 ? {}
                 : { onChange: model.properties.onFacetsChange })}
             />
+          </InspectorPanel>
+        ) : inspector === 'display' && documentKind === 'spatial' ? (
+          /* Canvas-wide display settings, in the slot the other panels
+             share. They were a popover off the ⋯ kebab until this, which
+             on a phone had no way out at all: Radix dismisses a popover on
+             an outside click or Escape, and at 424px of panel against a
+             390px screen there was neither a keyboard nor much outside.
+             Here the sheet brings its own close, and opening any other
+             panel takes the slot back. */
+          <InspectorPanel kind="display" onClose={() => setInspector(null)}>
+            <div className="p-3">
+              <CanvasDisplaySettings
+                canvas={sync.canvas}
+                onChange={sync.onChange}
+                style={drawAs}
+                onStyleChange={setDrawAs}
+              />
+            </div>
           </InspectorPanel>
         ) : undefined
       }

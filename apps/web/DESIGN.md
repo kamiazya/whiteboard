@@ -145,9 +145,9 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   | role | asks | where it lives |
   |---|---|---|
   | **identity** | where am I? | the mark (workspace), the document's title, the way back |
-  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties, comments, connections, history |
+  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties/display, comments, proposals, connections, history |
   | **act** | what do I do to this document? | ONE `⋯`, in ADR-0006's band order |
-  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display…` inside the `⋯` (subject: this canvas) |
+  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display` in the inspect slot (subject: this canvas) |
 
   Two things follow, and both were violations before this rule existed:
 
@@ -156,14 +156,25 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
     said they were alternatives. Captured on a phone before the retune: the
     display popover, the comments rail and the history sheet all up at
     once, over an editor with room for one. `lib/inspector.ts` declares the
-    union and `InspectorPanel` is the single vessel — a fifth panel joins
+    union and `InspectorPanel` is the single vessel — a new panel joins
     them rather than opening beside them.
+
+    The display panel took the longest to arrive, and it is the one that
+    was in that screenshot. It stayed outside as a popover off the `⋯`
+    until a phone measurement said what that costs: 424px of panel against
+    a 390px screen, dismissible only by an outside click or Escape, and a
+    phone has neither a keyboard nor much outside. A surface with no way
+    out is the strongest argument for the slot there is.
   - **A view control's ROW follows its subject, not its convenience.**
     Fullscreen asks how much screen the app gets, which does not change
     when a document opens, so it is the shell's. Display settings ask how
-    THIS canvas is drawn, so they are the document's — and being one
-    plugin's worth of edge routing, they earn a menu row rather than an
-    icon in a row the title wants.
+    THIS canvas is drawn, so they are the document's — and since what they
+    answer is "what is this document like", they are its `properties` under
+    another name, which is the place they take: the leading member of the
+    inspect segment, drawn for a spatial document exactly where a markdown
+    one draws Properties. The two are never offered together, so the row
+    spends no extra width — which was the whole reason they were exiled to
+    a menu row in the first place.
 
   What this rule refuses is the control with no answer: an affordance added
   to whichever row its implementing file already rendered. That is how the
@@ -585,14 +596,16 @@ share (ADR-0026 decision 5; `useCommentsRail` holds its state,
 `CommentsRailAside` is its vessel — a column where there is width, a bottom
 sheet over the editor under 768px, since a 288px column beside a 412px phone
 screen left the editor a strip a finger could not write in). The rail is one
-of five panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
-vessel `InspectorPanel`): a markdown document's properties, its comments, the
-changes somebody wants made to it, the documents linking to it (a daemon
-keeper only), its history. Opening any one
+of the panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
+vessel `InspectorPanel`): a document's own attributes (a markdown one's
+properties, a spatial one's display settings), its comments, the changes
+somebody wants made to it, the documents linking to it (a daemon keeper
+only), its history. Opening any one
 closes the others and every opener reads released, because two panels beside
 one editor — measured on a phone as the display popover, the comments sheet
 and the history sheet all open at once — is what the header retune set out to
-end; the properties editor and the connections list used to overlay UNDER the
+end (the display popover was the last of the three to join the slot, and
+joined because on a phone it could not be closed at all); the properties editor and the connections list used to overlay UNDER the
 header instead, a third shape for the same job. The rail carries
 the conversation's own verbs beside its reply box — Resolve/Reopen and Edit
 of the opening message — because a NOTE's thread has no card, and the rail

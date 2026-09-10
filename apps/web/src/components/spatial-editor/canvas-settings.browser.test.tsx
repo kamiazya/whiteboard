@@ -1,17 +1,23 @@
-// The canvas display-settings panel in the vessel that actually opens it:
-// the document's ⋯, whose leading `Display…` row hangs the popover off the
-// kebab. A pick applies the canvas-wide command immediately and keeps the
-// popover open for the next tweak, consecutive picks chain under a deferred
-// parent, and dismissal returns focus to the kebab.
+// The canvas display-settings panel in the vessel that actually holds it:
+// `InspectorPanel`, the page's one inspector slot (`lib/inspector.ts`). A
+// pick applies the canvas-wide command immediately and leaves the panel
+// standing for the next tweak, and consecutive picks chain under a
+// deferred parent.
+//
+// It was a popover off the ⋯ kebab before, which brought a dismissal dance
+// this file used to pin: the popover had to open on the MENU'S close, and
+// hand focus back to the kebab by hand. None of it survives the move —
+// the slot's own close is `InspectorPanel`'s, and the phone case that
+// motivated the move (no Escape, no outside left to press) is pinned at
+// the page level in BrowserDocumentPage.display-panel.browser.test.tsx.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledPlugins, type VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { userEvent } from 'vitest/browser'
 import { z } from 'zod'
-import { DocumentMenu } from '../workspace-top-bar/DocumentMenu.js'
+import { InspectorPanel } from '../document-editor/InspectorPanel.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { CANVAS_SETTINGS_WIDGETS } from './facet-widgets/index.js'
 
@@ -34,63 +40,29 @@ function makeHost() {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
     return (
-      <DocumentMenu
-        display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
-      />
+      <InspectorPanel kind="display" onClose={() => {}}>
+        <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+      </InspectorPanel>
     )
   }
   return { Host, latest }
 }
 
-const kebab = (c: HTMLElement) => c.querySelector('[aria-label="More actions"]') as HTMLElement
-const menu = () => document.querySelector('[data-testid="canvas-settings-menu"]')
+const menu = () => document.querySelector('[data-testid="display-panel"]')
 const option = (label: string) =>
   [...(menu()?.querySelectorAll('button') ?? [])].find((b) => b.textContent?.trim() === label) as
     | HTMLButtonElement
     | undefined
 
-/**
- * Open the panel the way a person does: REAL clicks on the kebab and its
- * leading row, through the browser's own event and focus sequence.
- *
- * Synthetic `fireEvent.pointerDown`/`pointerUp` drive Radix's menu fine and
- * are what this file used to do — but they skip the focus movement, which
- * is where the defect lived: the closing menu returned focus to the trigger
- * and the popover, having just opened, read that as an outside interaction
- * and dismissed itself. Measured in a real browser: popover present at
- * 50ms and 150ms, gone by 400ms, while every synthetic-event test stayed
- * green.
- */
-async function openPanel(container: HTMLElement) {
-  await userEvent.click(kebab(container))
-  const row = await vi.waitFor(() => {
-    const found = [...document.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent?.trim() === 'Display…',
-    )
-    expect(found).toBeDefined()
-    return found as HTMLElement
-  })
-  await userEvent.click(row)
-  // Wait for where focus COMES TO REST, not merely for the panel to appear.
-  // A `waitFor(panel exists)` is satisfied by the transient open and reads
-  // exactly like a pass; the two builds differ in the end state — focus in
-  // the panel, or back on the kebab with the panel gone with it.
-  await vi.waitFor(() => {
-    expect(document.querySelector('[role="menu"]'), 'the menu is still closing').toBeNull()
-    const panel = menu()
-    expect(panel, 'the panel closed again as the menu finished closing').toBeTruthy()
-    expect(
-      panel?.contains(document.activeElement),
-      'focus went somewhere other than the panel',
-    ).toBe(true)
-  })
+/** The panel stands in the slot from mount; nothing has to open it. */
+async function openPanel(_container: HTMLElement) {
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
 }
 
-it('the Display row opens the popover with both option rows', async () => {
+it('stands in the inspector slot with both option rows', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
 
-  expect(menu()).toBeNull()
   await openPanel(container)
   expect(menu()?.textContent).toContain('Edge routing')
   expect(menu()?.textContent).toContain('Line jumps')
@@ -142,7 +114,7 @@ it('under a theme the routing row marks the theme default, and Straight over it 
   expect(option('Orthogonal')?.getAttribute('aria-pressed')).toBe('false')
 })
 
-it('a pick applies canvas-wide and keeps the popover open; current values are marked', async () => {
+it('a pick applies canvas-wide and leaves the panel up; current values are marked', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
@@ -168,19 +140,17 @@ it('consecutive picks both survive a deferred parent', async () => {
     const [canvas, setCanvas] = useState(initial)
     latest.canvas = canvas
     return (
-      <DocumentMenu
-        display={
-          <CanvasDisplaySettings
-            canvas={canvas}
-            onChange={(next) => {
-              setTimeout(() => {
-                latest.canvas = next
-                setCanvas(next)
-              }, 30)
-            }}
-          />
-        }
-      />
+      <InspectorPanel kind="display" onClose={() => {}}>
+        <CanvasDisplaySettings
+          canvas={canvas}
+          onChange={(next) => {
+            setTimeout(() => {
+              latest.canvas = next
+              setCanvas(next)
+            }, 30)
+          }}
+        />
+      </InspectorPanel>
     )
   }
   const { container } = render(<DeferredHost />)
@@ -195,21 +165,6 @@ it('consecutive picks both survive a deferred parent', async () => {
       lineJumps: 'arc',
     })
   })
-})
-
-it('Escape closes and hands focus back to the kebab', async () => {
-  const { Host } = makeHost()
-  const { container } = render(<Host />)
-
-  const trigger = kebab(container)
-  await openPanel(container)
-
-  fireEvent.keyDown(menu() as HTMLElement, { key: 'Escape' })
-  await vi.waitFor(() => expect(menu()).toBeNull())
-  // The row that opened this unmounted with the menu, so the popover is
-  // anchored on the kebab and hands focus back there — a keyboard user keeps
-  // their place instead of falling to <body>.
-  await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
 })
 
 it('a second contributing namespace introduces displayName tabs; one namespace stays bare', async () => {
@@ -230,19 +185,17 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
   function Host() {
     const [canvas, setCanvas] = useState(initial)
     return (
-      <DocumentMenu
-        display={
-          <CanvasDisplaySettings
-            canvas={canvas}
-            onChange={(next) => setCanvas(next)}
-            facetRegistry={registry}
-            widgets={{
-              ...CANVAS_SETTINGS_WIDGETS,
-              'planning.board/v0': () => <div>Board options</div>,
-            }}
-          />
-        }
-      />
+      <InspectorPanel kind="display" onClose={() => {}}>
+        <CanvasDisplaySettings
+          canvas={canvas}
+          onChange={(next) => setCanvas(next)}
+          facetRegistry={registry}
+          widgets={{
+            ...CANVAS_SETTINGS_WIDGETS,
+            'planning.board/v0': () => <div>Board options</div>,
+          }}
+        />
+      </InspectorPanel>
     )
   }
   const { container } = render(<Host />)

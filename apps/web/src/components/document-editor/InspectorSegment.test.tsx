@@ -31,7 +31,20 @@ describe('InspectorSegment', () => {
       <InspectorSegment
         open={null}
         onToggle={noop}
-        tabs={{ history: {}, comments: {}, proposals: {}, connections: {}, properties: {} }}
+        // EVERY declared member, which is more than any one document
+        // offers — `properties` and `display` are the same place for the
+        // two document kinds and never appear together. The subject here
+        // is the ORDER, so the fixture states the whole surface and the
+        // length check stays a both-sides one: a member added to
+        // `INSPECTOR_ORDER` with no place here fails.
+        tabs={{
+          history: {},
+          comments: {},
+          proposals: {},
+          connections: {},
+          properties: {},
+          display: {},
+        }}
       />,
     )
 
@@ -41,7 +54,14 @@ describe('InspectorSegment', () => {
         ?.replace(/[,(].*$/, '')
         .trim(),
     )
-    expect(names).toEqual(['Properties', 'Comments', 'Proposals', 'Connections', 'History'])
+    expect(names).toEqual([
+      'Properties',
+      'Display',
+      'Comments',
+      'Proposals',
+      'Connections',
+      'History',
+    ])
     expect(names).toHaveLength(INSPECTOR_ORDER.length)
   })
 

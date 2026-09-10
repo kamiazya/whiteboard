@@ -92,43 +92,26 @@ describe('DocumentMenu — export entries', () => {
 })
 
 /**
- * Display settings used to be a gear of their own in the row, beside the
- * properties toggle. It is the only VIEW control the document row carried,
- * and one icon for one plugin's edge routing is a poor trade against the
- * width the title wants — so it moves into the menu, in the leading band
- * ADR-0006 reserves for properties.
+ * Display settings have had three homes: a gear of their own in the row, a
+ * `Display…` row in this menu opening a popover off the kebab, and now a
+ * panel in the page's one inspector slot (`lib/inspector.ts`).
+ *
+ * The middle one is why this block still exists rather than simply going
+ * with the code: the popover could not be dismissed on a phone at all, so
+ * a future reader proposing to bring it back here should find the reason
+ * it left. This menu carries NO display surface of any shape.
  */
-describe('DocumentMenu — display settings', () => {
-  it('has no Display row when the document has no canvas to configure', async () => {
+describe('DocumentMenu — no display surface', () => {
+  it('offers no display row, whatever the page passes', async () => {
     renderMenu({ onExport: vi.fn() })
     await openMenu()
 
     expect(screen.queryByText('Display…')).toBeNull()
-  })
-
-  it('puts Display… in the leading band, ahead of the verbs', async () => {
-    renderMenu({ onExport: vi.fn(), display: <div>edge routing</div> })
-    await openMenu()
-
-    const labels = screen.getAllByRole('menuitem').map((item) => item.textContent?.trim())
-    expect(labels[0]).toBe('Display…')
-  })
-
-  // The panel is a POPOVER, not a submenu: its widgets are segmented
-  // controls a person adjusts several times in a row, and a menu closes on
-  // the first select. It hangs off the kebab because the row that opened it
-  // unmounted with the menu.
-  it('opens the panel from that row', async () => {
-    renderMenu({ onExport: vi.fn(), display: <div>edge routing</div> })
-    await openMenu()
-
-    expect(screen.queryByText('edge routing')).toBeNull()
-    fireEvent.pointerUp(screen.getByRole('menuitem', { name: 'Display…' }))
-    await waitFor(() => expect(screen.getByText('edge routing')).toBeTruthy())
+    expect(screen.queryByText(/display/i)).toBeNull()
   })
 
   it('renders no display control of its own in the row', () => {
-    renderMenu({ onExport: vi.fn(), display: <div>edge routing</div> })
+    renderMenu({ onExport: vi.fn() })
 
     expect(screen.queryByRole('button', { name: 'Display settings' })).toBeNull()
   })
