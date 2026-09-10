@@ -1438,6 +1438,120 @@ describe('wb_canvas_edit — region.set', () => {
     ).rejects.toThrow(/"between"/)
   })
 
+  test('a positioned member added within a group this batch placed at the cursor moves the group around it', async () => {
+    // The node.add twin of the region.set case: the lane's layered board
+    // added a group with no geometry and then its members, positioned and
+    // within it; the group had landed at the cursor and the member was
+    // refused as "before the group's top-left". Each member added this way
+    // grows the group in every direction, gutter included.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Clients' } },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'web', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'Web' },
+        },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'cli', type: 'text', x: 40, y: 60, width: 160, height: 60, text: 'CLI' },
+        },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: {
+            id: 'mobile',
+            type: 'text',
+            x: 440,
+            y: 140,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('web')).toEqual([240, 140, 160, 60])
+    expect(at('cli')).toEqual([40, 60, 160, 60])
+    expect(at('mobile')).toEqual([440, 140, 160, 60])
+    expect(at('g')).toEqual([
+      40 - PLACEMENT_GUTTER_PX,
+      60 - PLACEMENT_GUTTER_PX,
+      560 + 2 * PLACEMENT_GUTTER_PX,
+      140 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+  })
+
+  test('a member added within a cursor-placed group refuses to swallow a bystander, naming it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'between', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'not mine' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pair' } },
+          {
+            op: 'node.add',
+            within: 'g',
+            node: { id: 'a', type: 'text', x: 40, y: 140, width: 160, height: 60, text: 'A' },
+          },
+          {
+            op: 'node.add',
+            within: 'g',
+            node: { id: 'c', type: 'text', x: 440, y: 140, width: 160, height: 60, text: 'C' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/"between"/)
+  })
+
+  test('within: null on node.add reads as no group', async () => {
+    // Models write null to say "not in a group"; refusing it costs the
+    // whole call, and the second call is the same batch without the null.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute(
+      canvasEditInputSchema.parse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
+          },
+          { op: 'node.add', within: null, node: { id: 'g', type: 'group', label: 'Later' } },
+        ],
+      }),
+    )
+    expect(result.applied).toBe(2)
+  })
+
   test('a group placed around members that sit in a frame nests inside it', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
