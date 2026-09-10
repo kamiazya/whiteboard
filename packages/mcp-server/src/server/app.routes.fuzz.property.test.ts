@@ -422,9 +422,13 @@ function overrideFor(seed: Seeded) {
     }
     if (path.endsWith('markdown')) return OKF_OR_NOT
     if (path.endsWith('nonce')) return fc.constantFrom(...NONCES)
-    if (path.endsWith('outputPath')) {
-      return fc.constantFrom(join(tempDir, 'exports', 'a.png'), join(tempDir, 'exports', 'b.svg'))
-    }
+    // Absent: the route refuses any explicit output path outside the
+    // workspace's own exports directory before rendering, and a random
+    // frame id names no frame — either would leave the export rows
+    // refusing on nearly every draw and their ledger starving (measured:
+    // one stress run in five). The default output path is unique per
+    // export, so absent is also what lets the row answer more than once.
+    if (path.endsWith('outputPath') || path.endsWith('frameId')) return fc.constant(undefined)
     return undefined
   }
 }
