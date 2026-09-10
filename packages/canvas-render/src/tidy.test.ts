@@ -304,6 +304,28 @@ describe('scope and totality', () => {
     expect(moves.some((m) => m.id === 'ghost')).toBe(false)
     expect(moves.length).toBeGreaterThan(0)
     expect(tidyNodes([box('a', 0, 0), box('b', 40, 0, Number.POSITIVE_INFINITY)])).toEqual([])
+    // Each of the four fields on its own: a ghost with one bad field and
+    // three good ones would otherwise sit in a band and block a hop.
+    for (const ghost of [
+      box('ghost', 0, Number.NaN),
+      box('ghost', 0, 0, Number.NaN),
+      box('ghost', 0, 0, 100, Number.NaN),
+    ]) {
+      const alone = tidyNodes([box('a', 0, 0), box('b', 40, 0), ghost])
+      expect(alone.some((m) => m.id === 'ghost')).toBe(false)
+      expect(alone).toEqual(tidyNodes([box('a', 0, 0), box('b', 40, 0)]))
+    }
+  })
+
+  it('past the unit ceiling the rest stay put, and stand as obstacles', () => {
+    // Best-effort bound (TIDY_MAX_UNITS = 300): the 301st movable unit is
+    // left where it is, so with every box on one spot exactly one reports
+    // no move — the last in document order — and the others clear it.
+    const nodes = Array.from({ length: 301 }, (_, i) => box(`n${i}`, 0, 0))
+    const moves = tidyNodes(nodes)
+    expect(moves.length).toBe(300)
+    expect(moves.some((m) => m.id === 'n300')).toBe(false)
+    expect(moves.every((m) => m.x >= 100 + 32 || m.y >= 60 + 32)).toBe(true)
   })
 })
 
