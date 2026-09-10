@@ -113,7 +113,9 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       node: nodeDraftSchema,
       within: nodeIdSchema
         .optional()
-        .describe('A group to place the node inside; the group grows to fit.'),
+        .describe(
+          'A group on the canvas, or added earlier in this batch, to place the node inside; it grows to fit. To wrap boxes that already exist in a new group, add the group and then region.set.',
+        ),
     })
     .strict(),
   z
