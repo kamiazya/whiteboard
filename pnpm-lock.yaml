@@ -119,8 +119,8 @@ importers:
         specifier: 13.0.5
         version: 13.0.5
       '@tanstack/intent':
-        specifier: ^0.0.40
-        version: 0.0.40
+        specifier: ^0.3.8
+        version: 0.3.8
       '@vitest/browser-playwright':
         specifier: 'catalog:'
         version: 5.0.0(msw@2.15.0(@types/node@24.13.1)(typescript@7.0.2))(playwright@1.61.1)(vite@8.2.2(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0))(vitest@5.0.0)
@@ -4083,8 +4083,8 @@ packages:
     peerDependencies:
       vite: ^5.2.0 || ^6 || ^7 || ^8
 
-  '@tanstack/intent@0.0.40':
-    resolution: {integrity: sha512-ZuUTzr4QrjNuWdv+DfTv0///uONz5+Sw3mR+2xOXHpob6vWsUXnSk3Ht7X9Rpu6zZdQYZlZnJCwN50CAZ21GCw==}
+  '@tanstack/intent@0.3.8':
+    resolution: {integrity: sha512-5KXhk+dPqzVHcETuf0Q6l1jasjFS2BJvG4Vw1dakuHEaQ85kZ3oSsOMROsad5w/DsEsQ9q1F00cQzIrk9jPzsQ==}
     hasBin: true
 
   '@testing-library/dom@10.4.1':
@@ -8222,11 +8222,6 @@ packages:
     resolution: {integrity: sha512-YgvUTfwqyc7UXVMrB+SImsVYSmTS8X/tSrtdNZMImM+n7+QTriRXyXim0mBrTXNeqzVF0KWGgHPeiyViFFrNDw==}
     engines: {node: '>=18'}
 
-  yaml@2.8.3:
-    resolution: {integrity: sha512-AvbaCLOO2Otw/lW5bmh9d/WEdcDFdQp2Z2ZUH3pX9U2ihyUY0nvLv7J6TrWowklRGPYbB/IuIMfYgxaCPg5Bpg==}
-    engines: {node: '>= 14.6'}
-    hasBin: true
-
   yaml@2.9.0:
     resolution: {integrity: sha512-2AvhNX3mb8zd6Zy7INTtSpl1F15HW6Wnqj0srWlkKLcpYl/gMIMJiyuGq2KeI2YFxUPjdlB+3Lc10seMLtL4cA==}
     engines: {node: '>= 14.6'}
@@ -11432,12 +11427,13 @@ snapshots:
       tailwindcss: 4.2.4
       vite: 8.2.2(@types/node@24.13.1)(esbuild@0.28.1)(jiti@2.7.0)(terser@5.48.0)(tsx@4.23.1)(yaml@2.9.0)
 
-  '@tanstack/intent@0.0.40':
+  '@tanstack/intent@0.3.8':
     dependencies:
       cac: 6.7.14
       jsonc-parser: 3.3.1
-      semver: 7.7.4
-      yaml: 2.8.3
+      semver: 7.8.5
+      std-env: 4.2.0
+      yaml: 2.9.0
 
   '@testing-library/dom@10.4.1':
     dependencies:
@@ -16308,8 +16304,6 @@ snapshots:
 
   yallist@5.0.0:
     optional: true
-
-  yaml@2.8.3: {}
 
   yaml@2.9.0: {}
 
