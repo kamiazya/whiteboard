@@ -282,6 +282,13 @@ describe('every workspace ships the path-scoped rule that teaches it', () => {
     )
   }
 
+  /**
+   * Where a workspace's rule lives, by convention: the top-level directory
+   * picks the prefix and the workspace's own name follows it, so
+   * `packages/search` is `package-search.md`. The convention is what makes
+   * this checkable at all — a rule filed under a name nobody can derive is
+   * one this guard reads as absent, which is the right answer.
+   */
   function ruleFileFor(dir: string): string {
     const [root, name] = dir.split('/')
     return join(REPO_ROOT, '.claude', 'rules', `${RULE_PREFIX[root as string]}-${name}.md`)
