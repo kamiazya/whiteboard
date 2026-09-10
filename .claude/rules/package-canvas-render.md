@@ -1101,6 +1101,13 @@ the table alone.
   coordinate-sign geometry: jump hops, rounded-edge corners, arrowheads,
   rect corner radius) — fixtures and the deliberate `--update`-then-eyeball
   regeneration flow live in `src/test-utils/pixel-golden-scenes.ts`.
+  Two of its fixtures are THEMED — one canvas drawn under `visual.sketch`
+  and under `visual.neon`, each on its own paper — because every other
+  golden here is crisp, so a change to sketch's jitter or neon's blur moved
+  no committed pixel and the look layer was judged by nothing. They stay
+  text-free like the rest, and for a stricter reason: a baseline is compared
+  at zero mismatched pixels on machines whose installed fonts differ, so a
+  rendered glyph is the one thing in a scene that cannot be reproduced.
 - `layout/text-wrapping-quality.test.ts` is the text-wrapping SCOREBOARD, the
   same instrument-first shape as the routing one below: 11 corpus cases x 3
   narrow widths, every number pinned EXACTLY. Debt (overflowing runs, worst
