@@ -22,7 +22,24 @@ import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '../scene
  * mistake. PRICE metrics have no target: an edge that goes around a box
  * costs bends, and a board that keeps its labels clear costs envelope. They
  * are here so a change that buys less of one harm with more of another has
- * to say so.
+ * to say so. The columns stay a vector: the metric landscapes that measured
+ * them (Mooney, Purchase, Wybrow & Kobourov, PacificVis 2024; Ahmed et al.,
+ * TVCG 2022) found pairs that fight each other, and a weighted sum hides
+ * which one lost.
+ *
+ * Where a column follows the graph-drawing literature it says so beside
+ * its definition. The ranking that decides which are debt: crossings first
+ * by a wide margin (Purchase, GD 1997), then continuity — a path that
+ * doubles back, not merely one that bends (Ware et al., Information
+ * Visualization 2002); a frame an edge runs through without connecting to
+ * it is the c-planarity rule (Feng, Cohen & Eades, COCOON 1995); an edge's
+ * ink through a box it does not connect is Dunne et al.'s "edge tunnel"
+ * (IBM J. Res. & Dev. 2015); flow is judged by where the boxes sit rather
+ * than by each arrow's angle, which is what correlated with readers
+ * (Burattin et al., 2016, r=0.72 against 0.26 for angles). Crossing angle
+ * and angular resolution are deliberately absent: on orthogonal routes
+ * every crossing is a right angle and every fan is parallel, so both would
+ * read 1.0 by construction, as Mooney et al. note of HOLA.
  */
 export interface DrawingScore {
   /** Denominators: what the board holds, containers included. */
@@ -55,6 +72,16 @@ export interface DrawingScore {
    * `NEAR_MISS_PX` but not by zero: aligned in intent, not in fact.
    */
   readonly nearMisses: number
+  /**
+   * (edge, frame) pairs where the edge's ink runs inside a frame neither of
+   * its ends belongs to — c-planarity's one rule, since a line through a
+   * frame reads as a member of it.
+   */
+  readonly edgeThroughFrame: number
+  /** Pairs of edges sharing a stretch of one line, where neither can be told from the other. */
+  readonly edgeOverlaps: number
+  /** That shared stretch, in px, over every such pair. */
+  readonly sharedInkPx: number
 
   // ── PRICE ──────────────────────────────────────────────────────────────
   /** Places two edges visibly cross. */
@@ -65,15 +92,41 @@ export interface DrawingScore {
   readonly edgeLengthPx: number
   /** Adjacent gaps in one row or column that differ by more than a grid step. */
   readonly unevenGaps: number
+  /**
+   * Times an edge's path turns back on an axis it was already travelling —
+   * the loop under a box and back over it. A bend is a corner; this is a
+   * corner that undoes an earlier one, which is what continuity means.
+   */
+  readonly reversals: number
+  /**
+   * The direction most arrows travel, read from where their boxes sit:
+   * the axis a head is displaced from its tail along, by majority.
+   */
+  readonly flow: Flow
+  /** Arrows whose head sits before its tail along `flow`; a lateral arrow is neither. */
+  readonly againstFlow: number
+  /**
+   * The counts above per edge and per pair of boxes, two decimals, so two
+   * boards of different sizes compare. Crossings per edge is what OGDF and
+   * ELK report; a theoretical maximum (Purchase's normalisation) has no
+   * meaning for a routed path, which can cross as often as it turns.
+   */
+  readonly crossingsPerEdge: number
+  readonly bendsPerEdge: number
+  readonly overlapsPerPair: number
   /** The drawing's extent. */
   readonly envelopePx: { readonly w: number; readonly h: number }
   /** Box area over envelope area, two decimals; how much of the picture is content. */
   readonly density: number
 }
 
+export type Flow = 'down' | 'right' | 'up' | 'left' | 'none'
+
 /**
  * The band tidy snaps within: two edges closer than this were meant to
  * line up, so a difference under it reads as a mistake rather than a choice.
+ * Also the displacement under which two boxes count as side by side for
+ * `flow`, so an arrow along a row a few pixels off is beside the flow.
  */
 export const NEAR_MISS_PX = 24
 /** The least a member should keep from its frame before it reads as cramped. */
@@ -189,6 +242,105 @@ function crossingsOf(paths: readonly (readonly Point[])[]): number {
   return count
 }
 
+/**
+ * Length along which `p` and `q` run on one line, over every pair of their
+ * segments. A segment lying on another's line but beyond its ends, or
+ * meeting it at a point, shares nothing.
+ */
+function sharedInk(p: readonly Point[], q: readonly Point[]): number {
+  const cross = (a: Point, b: Point, c: Point) =>
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+  let total = 0
+  for (let i = 1; i < p.length; i++) {
+    const a = p[i - 1] as Point
+    const b = p[i] as Point
+    const len = segmentLength(a, b)
+    if (len === 0) continue
+    for (let j = 1; j < q.length; j++) {
+      const c = q[j - 1] as Point
+      const d = q[j] as Point
+      if (cross(a, b, c) !== 0 || cross(a, b, d) !== 0) continue
+      const along = (r: Point) =>
+        ((r.x - a.x) * (b.x - a.x) + (r.y - a.y) * (b.y - a.y)) / (len * len)
+      const lo = Math.max(0, Math.min(along(c), along(d)))
+      const hi = Math.min(1, Math.max(along(c), along(d)))
+      if (hi > lo) total += (hi - lo) * len
+    }
+  }
+  return total
+}
+
+/** A step whose sign on an axis is opposite to the last non-zero sign on that axis. */
+function reversalsOf(path: readonly Point[]): number {
+  let count = 0
+  let lastX = 0
+  let lastY = 0
+  for (let i = 1; i < path.length; i++) {
+    const a = path[i - 1] as Point
+    const b = path[i] as Point
+    const sx = Math.sign(b.x - a.x)
+    const sy = Math.sign(b.y - a.y)
+    if (sx !== 0) {
+      if (sx === -lastX) count++
+      lastX = sx
+    }
+    if (sy !== 0) {
+      if (sy === -lastY) count++
+      lastY = sy
+    }
+  }
+  return count
+}
+
+const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
+
+/**
+ * Where each arrow's head sits relative to its tail, by box centre. An
+ * edge with an arrowhead at neither end, or at both, has no direction; a
+ * head displaced less than `NEAR_MISS_PX` on both axes sits on its tail.
+ */
+function headings(canvas: SpatialCanvas, byId: ReadonlyMap<string, SpatialNode>): Point[] {
+  const out: Point[] = []
+  for (const edge of canvas.edges) {
+    const from = byId.get(edge.fromNode)
+    const to = byId.get(edge.toNode)
+    if (from === undefined || to === undefined) continue
+    const headArrow = edge.toEnd !== 'none'
+    const tailArrow = edge.fromEnd === 'arrow'
+    if (headArrow === tailArrow) continue
+    const tail = centre(rectOf(headArrow ? from : to))
+    const head = centre(rectOf(headArrow ? to : from))
+    const d = { x: head.x - tail.x, y: head.y - tail.y }
+    if (Math.abs(d.x) < NEAR_MISS_PX && Math.abs(d.y) < NEAR_MISS_PX) continue
+    out.push(d)
+  }
+  return out
+}
+
+function flowOf(displacements: readonly Point[]): { flow: Flow; against: number } {
+  const votes: Record<Exclude<Flow, 'none'>, number> = { down: 0, right: 0, up: 0, left: 0 }
+  for (const d of displacements) {
+    if (Math.abs(d.y) >= Math.abs(d.x)) votes[d.y > 0 ? 'down' : 'up']++
+    else votes[d.x > 0 ? 'right' : 'left']++
+  }
+  const order = ['down', 'right', 'up', 'left'] as const
+  const flow = order.reduce<Flow>((best, f) => {
+    if (votes[f] === 0) return best
+    return best === 'none' || votes[f] > votes[best as Exclude<Flow, 'none'>] ? f : best
+  }, 'none')
+  if (flow === 'none') return { flow, against: 0 }
+  const axis = flow === 'down' || flow === 'up' ? 'y' : 'x'
+  const sign = flow === 'down' || flow === 'right' ? 1 : -1
+  const against = displacements.filter(
+    (d) => Math.abs(d[axis]) >= NEAR_MISS_PX && Math.sign(d[axis]) === -sign,
+  ).length
+  return { flow, against }
+}
+
+const round2 = (n: number) => Math.round(n * 100) / 100
+const rate = (count: number, denominator: number) =>
+  denominator === 0 ? 0 : round2(count / denominator)
+
 /** Pairs across `items`, each once. */
 function pairs<T>(items: readonly T[], visit: (a: T, b: T) => void): void {
   for (let i = 0; i < items.length; i++) {
@@ -294,6 +446,35 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   }
   const paths = edges.map((e) => e.path)
 
+  // An edge connecting a frame's member crosses its boundary once, which is
+  // what a member's edge does; one connecting nothing in the frame has no
+  // business inside it. Membership is judged by touch, so a straddling
+  // endpoint is charged as a straddle and not again here.
+  let edgeThroughFrame = 0
+  for (const { edge, path } of edges) {
+    const from = byId.get(edge.fromNode)
+    const to = byId.get(edge.toNode)
+    for (const g of groups) {
+      const frame = rectOf(g)
+      const touches = (n: SpatialNode | undefined) =>
+        n !== undefined && (n.id === g.id || overlapArea(rectOf(n), frame) > 0)
+      if (touches(from) || touches(to)) continue
+      if (interiorInk(path, frame) > 0) edgeThroughFrame++
+    }
+  }
+
+  let edgeOverlaps = 0
+  let sharedInkPx = 0
+  pairs(paths, (p, q) => {
+    const shared = sharedInk(p, q)
+    if (shared > 0) {
+      edgeOverlaps++
+      sharedInkPx += shared
+    }
+  })
+
+  const { flow, against: againstFlow } = flowOf(headings(canvas, byId))
+
   const runs = scene.nodes.filter(isRun)
   const edgeLabels = runs.filter((r) => r.annotates?.kind === 'edge')
   let labelOverNode = 0
@@ -374,6 +555,9 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
       (r) => r.h,
     )
 
+  const crossings = crossingsOf(paths)
+  const bends = paths.reduce((sum, p) => sum + bendsOf(p), 0)
+
   const envelope = scene.nodes.length === 0 ? { x: 0, y: 0, w: 0, h: 0 } : sceneBounds(scene)
   const envelopeArea = envelope.w * envelope.h
   const boxArea = boxRects.reduce((sum, r) => sum + area(r), 0)
@@ -392,10 +576,19 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     textOverflow,
     crampedMembers,
     nearMisses,
-    crossings: crossingsOf(paths),
-    bends: paths.reduce((sum, p) => sum + bendsOf(p), 0),
+    edgeThroughFrame,
+    edgeOverlaps,
+    sharedInkPx: Math.round(sharedInkPx),
+    crossings,
+    bends,
     edgeLengthPx: Math.round(paths.reduce((sum, p) => sum + lengthOf(p), 0)),
     unevenGaps,
+    reversals: paths.reduce((sum, p) => sum + reversalsOf(p), 0),
+    flow,
+    againstFlow,
+    crossingsPerEdge: rate(crossings, paths.length),
+    bendsPerEdge: rate(bends, paths.length),
+    overlapsPerPair: rate(nodeOverlaps, (boxes.length * (boxes.length - 1)) / 2),
     envelopePx: { w: Math.round(envelope.w), h: Math.round(envelope.h) },
     density: envelopeArea === 0 ? 0 : Math.round((boxArea / envelopeArea) * 100) / 100,
   }

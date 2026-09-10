@@ -588,6 +588,61 @@ rung for "the model's drawings read well" — pass^k over a debt of zero —
 is the honest next criterion, and it waits for a baseline reading over
 several trials before anyone pins it.
 
+**The columns, and where each comes from (2026-09-10).** Before the score
+became the baseline for the next surface change, its set was checked
+against the graph-drawing and diagram-layout literature rather than
+extended by taste. What that reading settled:
+
+- The ranking that decides what is DEBT. Crossings matter more than any
+  other aesthetic by a wide margin (Purchase, GD 1997, replicated for UML
+  by Purchase et al. 2001 and Sun & Wong 2005), and after them what Ware
+  et al. (Information Visualization, 2002) call continuity: a path that
+  turns back on itself reads worse than one that merely bends. An edge's
+  ink through a box it does not connect is a named metric, Dunne et al.'s
+  "edge tunnel" (IBM J. Res. & Dev. 2015). A line through a frame that
+  none of its ends belongs to is the one rule of c-planarity (Feng, Cohen
+  & Eades, COCOON 1995). Flow is read from where boxes sit, not from each
+  arrow's angle: position-based flow correlated with readers at r=0.72
+  where angle-based scored 0.26 (Burattin et al., 2016), which is also
+  the Sugiyama convention of upstream above downstream.
+- Three debt columns added from that list: `edgeThroughFrame`,
+  `edgeOverlaps` with `sharedInkPx` (two edges along one line, which no
+  reader can tell apart — the orthogonal drawing's own defect, where
+  straight-line drawings have angular resolution). Three price columns:
+  `reversals` (continuity), `flow` with `againstFlow` (position-based
+  flow, lateral arrows under the near-miss band counted as beside it, a
+  tie broken in a fixed order), and per-size rates `crossingsPerEdge`,
+  `bendsPerEdge`, `overlapsPerPair` so boards of different sizes compare
+  — per edge as OGDF and ELK report, because Purchase's normalisation by
+  a theoretical maximum has no meaning for a routed path.
+- What was deliberately not added. Crossing angle and angular resolution:
+  on orthogonal routes every crossing is a right angle and every fan is
+  parallel, so both read 1.0 by construction (Mooney et al., PacificVis
+  2024, say the same of HOLA). Node resolution: uninformative over 450k
+  drawings in the same study. A single weighted score: the metric
+  landscapes (Mooney 2024; Ahmed et al., TVCG 2022) found pairs that
+  fight, and a 2025 preprint morphed drawings into a dinosaur while
+  holding every standard metric steady — so the columns stay a vector,
+  and the scoreboard pins a board scattered so far apart that no debt
+  column can see it, as the known blind spot rather than a claim of
+  completeness. An LLM judge for layout: the one study that measured it
+  found judges insensitive to exactly these artefacts.
+- What makes the instrument believable beyond calibration, now tested:
+  each reference owes no more than its draft on any debt column and less
+  in all; tidy never adds debt; and each planted defect moves the column
+  that names it and no other debt column, over eleven planted cases. The
+  mutation checks that established the calibration covered every new
+  column: two mutations survived a first pass because two cases were too
+  gentle (no edge with arrowheads at both ends; a lateral arrow on an
+  exact row), and the cases were sharpened until they died.
+- The first reading of the new columns is a router finding. The
+  hand-drawn architecture REFERENCE owes three reversals: the router
+  draws both same-row edges inside the Services frame as loops — down
+  from the box's bottom, along, and back up — with no side pinned by
+  anyone, the same picture the lane's `fromSide: 'bottom'` board showed.
+  Pinned at 3 with the reason, so a change to the router's side choice
+  for a same-row neighbour is judged by that number.
+
 ## Consequences
 
 - A retirement is no longer argued from the count. Its PR carries the

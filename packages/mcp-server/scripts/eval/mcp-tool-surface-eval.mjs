@@ -74,6 +74,8 @@ const DEBT_COLUMNS = [
   'textOverflow',
   'crampedMembers',
   'nearMisses',
+  'edgeThroughFrame',
+  'edgeOverlaps',
 ]
 
 /**
@@ -83,7 +85,8 @@ const DEBT_COLUMNS = [
 function debtLine({ score, error }) {
   if (score === undefined) return `not scored — ${error}`
   const debt = DEBT_COLUMNS.filter((c) => score[c] > 0).map((c) => `${c} ${score[c]}`)
-  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; crossings ${score.crossings}, bends ${score.bends}`
+  const price = `crossings ${score.crossings}, bends ${score.bends}, reversals ${score.reversals}, flow ${score.flow}${score.againstFlow > 0 ? ` (${score.againstFlow} against)` : ''}`
+  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; ${price}`
 }
 
 /**

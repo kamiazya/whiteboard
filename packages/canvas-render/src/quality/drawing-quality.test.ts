@@ -46,7 +46,11 @@ const DEBT_FREE = {
   textOverflow: 0,
   crampedMembers: 0,
   nearMisses: 0,
+  edgeThroughFrame: 0,
+  edgeOverlaps: 0,
+  sharedInkPx: 0,
 }
+const DEBT_COLUMNS = Object.keys(DEBT_FREE) as (keyof typeof DEBT_FREE)[]
 
 describe('drawing quality across the corpus', () => {
   it('reports every board', () => {
@@ -60,6 +64,18 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 3208,
         unevenGaps: 0,
         envelopePx: { w: 800, h: 860 },
+        // Even the reference: the router draws the two same-row edges inside
+        // the Services frame as loops — down from the box's bottom, along,
+        // back up — one reversal on api->auth and two on api->search, which
+        // also climbs over Auth. Nothing else on the board turns back. A
+        // finding about the router's side choice for a neighbour on the same
+        // row, which this column exists to expose; a fix is judged here.
+        reversals: 3,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.75,
+        overlapsPerPair: 0,
         density: 0.19,
       },
       'architecture/drafted': {
@@ -82,6 +98,9 @@ describe('drawing quality across the corpus', () => {
         // `web` 2px below its row-mates and 6px right of `blob`; `cli` 8px
         // right of the two frames it is not in.
         nearMisses: 5,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
         crossings: 0,
         bends: 2,
         edgeLengthPx: 2680,
@@ -89,6 +108,14 @@ describe('drawing quality across the corpus', () => {
         // overlap where a gap should be.
         unevenGaps: 2,
         envelopePx: { w: 840, h: 750 },
+        // Only api->auth loops; api->search is drawn straight, because Auth
+        // moved onto API gateway and the line starts inside it.
+        reversals: 1,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.25,
+        overlapsPerPair: 0.04,
         density: 0.2,
       },
       'architecture/tidied': {
@@ -108,11 +135,20 @@ describe('drawing quality across the corpus', () => {
         textOverflow: 0,
         crampedMembers: 2,
         nearMisses: 5,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
         crossings: 0,
         bends: 3,
         edgeLengthPx: 2855,
         unevenGaps: 1,
         envelopePx: { w: 840, h: 868 },
+        reversals: 1,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.38,
+        overlapsPerPair: 0.04,
         density: 0.18,
       },
       'sequence/reference': {
@@ -124,6 +160,14 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 1270,
         unevenGaps: 0,
         envelopePx: { w: 1000, h: 580 },
+        // Messages are boxes whose arrows point up to the participant heads,
+        // three of the four along the column, so the board flows up.
+        reversals: 0,
+        flow: 'up',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.25,
+        overlapsPerPair: 0,
         density: 0.17,
       },
       'sequence/drafted': {
@@ -143,11 +187,24 @@ describe('drawing quality across the corpus', () => {
         crampedMembers: 0,
         // Daemon's head 6px below the others; SQLite's 10px right of `m2`.
         nearMisses: 2,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
         crossings: 0,
         bends: 0,
         edgeLengthPx: 937,
         unevenGaps: 1,
         envelopePx: { w: 1010, h: 520 },
+        // Two arrows head right and two up: a tie, which goes to `right` by
+        // the fixed order, and the two upward arrows then read as against
+        // it. The draft's first two messages sit far enough left of their
+        // heads for that to be what the picture says.
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 2,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0.05,
         density: 0.18,
       },
       'sequence/tidied': {
@@ -160,6 +217,13 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 1006,
         unevenGaps: 0,
         envelopePx: { w: 1008, h: 524 },
+        // Tidy moves boxes, not the direction their arrows travel.
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 2,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
         density: 0.18,
       },
       'fixture/architecture': {
@@ -171,6 +235,12 @@ describe('drawing quality across the corpus', () => {
         edgeLengthPx: 620,
         unevenGaps: 0,
         envelopePx: { w: 1000, h: 900 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
         density: 0.11,
       },
       'lane/architecture': {
@@ -191,6 +261,14 @@ describe('drawing quality across the corpus', () => {
         // The layers sit 300 and 280 apart.
         unevenGaps: 2,
         envelopePx: { w: 820, h: 800 },
+        // The two loops under API gateway: each dips and comes back up, and
+        // one also doubles back along the row.
+        reversals: 4,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0.13,
+        bendsPerEdge: 0.75,
+        overlapsPerPair: 0,
         density: 0.27,
       },
     })
@@ -227,5 +305,62 @@ describe('drawing quality across the corpus', () => {
     expect([drafted.labelCovered, tidied.labelCovered]).toEqual([1, 0])
     expect(tidied.nodeOverlaps).toBe(drafted.nodeOverlaps)
     expect(tidied.nearMisses).toBe(drafted.nearMisses)
+  })
+})
+
+// What makes the instrument believable beyond its calibration: the pairs
+// a person would order with confidence, ordered the same way by every debt
+// column. A metric set can be satisfied by a drawing nobody would accept
+// ("Same Quality Metrics, Different Graph Drawings", 2025 — the same
+// readings for a grid and a dinosaur), so the last case pins the blind
+// spot this set is known to have rather than pretending it has none.
+describe('drawing quality: the instrument orders what a reader would', () => {
+  const debtOf = (name: string) => {
+    const s = scores.get(name) as DrawingScore
+    return DEBT_COLUMNS.map((c) => [c, s[c]] as const)
+  }
+
+  it.each([
+    'architecture',
+    'sequence',
+  ])('the %s reference owes no more than its draft on any column, and less in all', (diagram) => {
+    const reference = debtOf(`${diagram}/reference`)
+    const drafted = debtOf(`${diagram}/drafted`)
+    for (const [i, [column, value]] of reference.entries()) {
+      expect(value, column).toBeLessThanOrEqual(drafted[i]?.[1] as number)
+    }
+    const total = (rows: readonly (readonly [string, number])[]) =>
+      rows.reduce((sum, [, v]) => sum + v, 0)
+    expect(total(reference)).toBeLessThan(total(drafted))
+  })
+
+  it.each(['architecture', 'sequence'])('tidy never adds debt to the %s draft', (diagram) => {
+    const drafted = debtOf(`${diagram}/drafted`)
+    const tidied = debtOf(`${diagram}/tidied`)
+    for (const [i, [column, value]] of tidied.entries()) {
+      expect(value, column).toBeLessThanOrEqual(drafted[i]?.[1] as number)
+    }
+  })
+
+  it('a board of boxes scattered far apart reads debt-free: density is its only witness', () => {
+    // No column names "too far apart" — every debt is a thing touching a
+    // thing it should not. A reader would still call this board unusable,
+    // and the number that says so is the price column `density`, which has
+    // no target. Pinned so the gap is a known one.
+    const scattered = {
+      nodes: [0, 1, 2, 3].map((i) => ({
+        id: `b${i}`,
+        type: 'text' as const,
+        x: i * 3000,
+        y: (i % 2) * 2500,
+        width: 200,
+        height: 80,
+        text: `box ${i}`,
+      })),
+      edges: [],
+    }
+    const s = scoreDrawing(scattered, layoutSpatialCanvas(scattered, { measure, appearance }))
+    expect(s).toMatchObject(DEBT_FREE)
+    expect(s.density).toBeLessThan(0.01)
   })
 })

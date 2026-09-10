@@ -1328,3 +1328,24 @@ as ONE unit, so an overlap or a near miss INSIDE a frame survives a tidy
 that clears the straddle and the hidden label beside it. `tidy-quality`
 cannot see this — its grouped corpus never plants a defect among a
 frame's members — and the scoreboard pins it until tidy tidies inside.
+
+The column set follows the literature, and the module doc says which
+source each column follows (ADR-0031 §7 has the reading). Two things a
+session extending it has to know. **A column earns its place by an
+empirical ranking, not by being in a metric catalogue**: crossing angle,
+angular resolution and node resolution are all standard and all absent,
+the first two because an orthogonal route makes them read 1.0 by
+construction, the third because 450k drawings found it uninformative.
+**The columns stay a vector, and the scoreboard pins the known blind
+spot**: a board scattered so far apart that a reader would reject it
+scores debt-free, with `density` its only witness — pinned as such in
+`drawing-quality.test.ts` rather than papered over, because the same
+readings can be produced by drawings nobody would accept. Beyond
+calibration, three tests make the instrument believable: each reference
+owes no more than its draft on any debt column, tidy never adds debt, and
+each planted defect moves only the column that names it.
+
+The second reading was a router finding: the hand-drawn architecture
+reference owes three `reversals`, because the router draws a same-row
+edge inside a frame as a loop under both boxes with no side pinned. The
+column exists so that a change to the side choice is judged by it.

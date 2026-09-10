@@ -185,7 +185,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // `annotates` link a scene needs to get from a label back to what it
 // names, and the first thing it found — tidy leaves every mistake inside a
 // frame where it was — which tidy's own scoreboard cannot see.
-const CANVAS_RENDER_BUDGET = 90
+// 91 once the column set was read against the literature: what a session
+// extending it has to know (a column earns its place by an empirical
+// ranking, not a catalogue; the vector stays a vector and the known blind
+// spot is pinned), and the router finding the new columns surfaced.
+const CANVAS_RENDER_BUDGET = 91
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
