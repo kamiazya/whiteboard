@@ -183,9 +183,13 @@ describe('what the tool table costs to read', () => {
       // that already exist takes (add it, then region.set): the lane's
       // wrap-a-chain trials wrote `within: null` or the group's own id on
       // the group and found region.set on a second call.
+      // +104 for region.set saying a group added in the batch with no
+      // position is placed around its members: with the sentence above
+      // the trials wrote one batch, then two more calls undoing where the
+      // cursor had put the group and the column it had pulled the row into.
       wb_canvas_edit: {
-        visibleBytes: 12447,
-        wireBytes: 35581,
+        visibleBytes: 12551,
+        wireBytes: 35685,
         descriptionWords: 169,
         parameters: 147,
         undescribed: 119,
@@ -385,8 +389,8 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35106,
-      wireBytes: 108312,
+      visibleBytes: 35210,
+      wireBytes: 108416,
       parameters: 268,
       undescribed: 187,
     })

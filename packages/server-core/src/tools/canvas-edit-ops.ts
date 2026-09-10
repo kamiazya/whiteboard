@@ -213,7 +213,9 @@ const canvasOpSchema = z.discriminatedUnion('op', [
    * Scope is STRICT containment in `within`'s stored box. That rule is what
    * makes the boundary safe rather than a judgement call: a node straddling
    * the edge — a human mid-drag — is not enclosed, so it is out of scope and
-   * survives. A listed node that is elsewhere is moved in and placed.
+   * survives. A listed node that is elsewhere is moved in and placed — except
+   * into a group this batch added without a position, which goes around
+   * its members instead.
    */
   z
     .object({
@@ -222,7 +224,7 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       nodes: z
         .array(nodeIdSchema)
         .describe(
-          'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in. Create a new member with node.add and within.',
+          'Every node the group contains, by id: one inside it that is not listed is removed, one listed that is elsewhere is moved in — unless the group was added in this batch with no position, which is placed around them where they sit. Create a new member with node.add and within.',
         ),
       edges: z
         .array(nodeIdSchema)

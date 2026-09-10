@@ -240,6 +240,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
+      /**
+       * Groups this batch put at the cursor, with the sizes they were given
+       * (a default is not a choice). A caller that adds a group with no
+       * position and then declares its members has said where the group
+       * goes: around them. Placing it at the cursor and pulling the members
+       * in put a row the caller had just drawn into a column inside a
+       * default box, and every model then spent two calls undoing it.
+       */
+      const placedByCursor = new Map<string, { width?: number; height?: number }>()
 
       // Resolved once, and only when some op creates a text node or changes
       // what decides whether one's text fits — the composition root's
@@ -510,6 +519,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
             nodes = [...nodes, parsed.data]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
+            if (!positioned && group === undefined && draft.type === 'group') {
+              placedByCursor.set(id, { width: draft.width, height: draft.height })
+            }
             return
           }
 
@@ -663,7 +675,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             return
 
           case 'region.set': {
-            const group = groupNamed(index, op.op, op.within)
+            let group = groupNamed(index, op.op, op.within)
             const inScope = nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
             const members = new Set(op.nodes)
@@ -696,6 +708,45 @@ export function createCanvasEditTool(deps: ServerDeps) {
                   `node "${id}" is locked; unlock it before moving it into "${group.id}"`,
                 )
               }
+            }
+
+            // A group this batch placed at the cursor, still holding nothing,
+            // goes around its members where they sit: their bounds plus the
+            // gutter, never smaller than a size it was given. A bystander in
+            // that box would become a member the next region.set deletes by
+            // omission, so it is a wall; a frame the box nests inside is not.
+            const unplaced = placedByCursor.get(group.id)
+            if (unplaced !== undefined && inScope.length === 0 && members.size > 0) {
+              const rects = [...members].map((id) => nodeAt(id) as SpatialNode)
+              const left = Math.min(...rects.map((r) => r.x)) - PLACEMENT_GUTTER_PX
+              const top = Math.min(...rects.map((r) => r.y)) - PLACEMENT_GUTTER_PX
+              const right = Math.max(...rects.map((r) => r.x + r.width)) + PLACEMENT_GUTTER_PX
+              const bottom = Math.max(...rects.map((r) => r.y + r.height)) + PLACEMENT_GUTTER_PX
+              const box = {
+                x: left,
+                y: top,
+                width: Math.max(unplaced.width ?? 0, right - left),
+                height: Math.max(unplaced.height ?? 0, bottom - top),
+              }
+              const wall = nodes.find(
+                (node) =>
+                  node.id !== group.id &&
+                  !members.has(node.id) &&
+                  overlaps(node, box) &&
+                  !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
+              )
+              if (wall !== undefined) {
+                fail(
+                  index,
+                  op.op,
+                  `"${group.id}" placed around its members would reach "${wall.id}"; move "${wall.id}", or give "${group.id}" a position and size`,
+                )
+              }
+              group = { ...group, ...box }
+              nodes = nodes.map((node) => (node.id === group.id ? group : node))
+              touchedNodes.add(group.id)
+              geometry.set(group.id, { id: group.id, ...box })
+              placedByCursor.delete(group.id)
             }
 
             const dropped = inScope.filter((node) => !members.has(node.id))
