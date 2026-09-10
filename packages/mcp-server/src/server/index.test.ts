@@ -287,6 +287,14 @@ describe('server/index main() config-file wiring', () => {
   afterEach(() => {
     vi.clearAllMocks()
     delete process.env.WHITEBOARD_TOKEN
+    // Applying a config-file token writes WHITEBOARD_DAEMON_TOKEN as well
+    // (config-file.ts), and the apply is skipped when EITHER is already set.
+    // Leaving this one behind therefore makes the next run of this test a
+    // silent no-op: the token never lands and the assertion reads `undefined`
+    // as if the file had not been read at all. Only `--repeats` runs the body
+    // twice in one process, which is why it survived until this file was
+    // touched and the stress job picked it up.
+    delete process.env.WHITEBOARD_DAEMON_TOKEN
     delete process.env.WHITEBOARD_DATA_DIR
     if (originalCwd) process.chdir(originalCwd)
     if (dir) rmSync(dir, { recursive: true, force: true })
