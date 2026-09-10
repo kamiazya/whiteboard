@@ -8,6 +8,8 @@ import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
 import type { Scene, SceneNode } from '../scene-graph.js'
+import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
+import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
 import { type DrawingScore, scoreDrawing } from './drawing-score.js'
 
@@ -792,5 +794,28 @@ describe('scoreDrawing: one planted defect moves one debt column', () => {
   ])('%s moves only its own column', (_name, base, planted, columns) => {
     expect(base).toMatchObject(DEBT_FREE)
     expect(moved(base, planted).sort()).toEqual([...columns].sort())
+  })
+})
+
+describe('scoreDrawing: instrument validity', () => {
+  fcTest.prop(
+    [fc.integer({ min: -2000, max: 2000 }), fc.integer({ min: -2000, max: 2000 })],
+    withDefaults({ numRuns: 20 }),
+  )('every column is invariant under translation', (dx, dy) => {
+    // Nothing a drawing score says should depend on WHERE on the plane the
+    // drawing sits: a board read at the origin and the same board read a
+    // thousand pixels away are one drawing. Stated as a property because
+    // the failure it guards against is silent — a column that keys on a
+    // sign, a quadrant or a viewport assumption reads plausibly on every
+    // example anyone would write. The `flow` column is the reason to have
+    // it: one vote per edge was wrong for a whole session without any
+    // example test asking the question that exposed it.
+    for (const c of DRAWING_CORPUS) {
+      const moved: SpatialCanvas = {
+        ...c.canvas,
+        nodes: c.canvas.nodes.map((n) => ({ ...n, x: n.x + dx, y: n.y + dy })),
+      }
+      expect(score(moved), `${c.name} @ ${dx},${dy}`).toEqual(score(c.canvas))
+    }
   })
 })
