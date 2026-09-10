@@ -15,13 +15,18 @@
  *    Without this a frame was opaque: a member overlapping its neighbour,
  *    or jammed against the frame's edge, was something tidy could not
  *    see, and `tidy` scoped to a frame's members moved nothing at all.
- * 1. Band alignment, per axis: units whose edge anchors sit within
- *    `TIDY_BAND_PX` of the band's FIRST member snap to one target — the
- *    anchor of the band's first IMMOBILE member when it has one (a
- *    neighbour that cannot move is the row, wherever it sits), else the
- *    first anchor's grid-rounded value. Banding by the fixed first anchor —
+ * 1. Band alignment, per axis and per anchor a drawer sets — the near
+ *    edge, then the centre, then on x the far edge: units whose anchors sit
+ *    within `TIDY_BAND_PX` of the band's FIRST member snap to one target —
+ *    the anchor of the band's first IMMOBILE member when it has one (a
+ *    neighbour that cannot move is the row, wherever it sits), or of one an
+ *    earlier anchor already lined up, else the first member's own anchor
+ *    with its edge put on the grid. Banding by the fixed first anchor —
  *    never a running mean — is what stops transitive chaining (A near B,
- *    C near B's new spot) from dragging a whole diagonal into one line.
+ *    C near B's new spot) from dragging a whole diagonal into one line. A
+ *    unit in no band takes the grid at its edge; one centred under a wider
+ *    neighbour keeps that centre, off the grid if it must, since a 4px miss
+ *    on a centre reads as carelessly as one on a row.
  * 2. Overlap resolution as a deterministic sequential PLACEMENT: units in
  *    document order claim their spot; a unit overlapping anything already
  *    placed (or any immobile unit) hops along one axis — chosen once from
@@ -193,44 +198,109 @@ function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
   return units
 }
 
-/** One banded alignment pass along one axis (fixed-first-anchor rule). */
+/**
+ * Banded alignment along one axis, by each anchor a drawer sets: the near
+ * edge, then the centre, then on x the far edge — a width is named, a
+ * height is usually fitted to the text. A unit lined up by an earlier
+ * anchor is that band's truth for the later ones and does not move again;
+ * a unit alone at its edge may still be centred under a wider neighbour,
+ * which a reader calls lined up and an edge band could never see. Units
+ * in no band at all take the grid at their edge.
+ */
 function alignBands(units: Unit[], axis: 'x' | 'y'): void {
-  const anchor = (u: Unit) => (axis === 'x' ? u.bbox.x : u.bbox.y)
+  const edge = (u: Unit) => (axis === 'x' ? u.bbox.x : u.bbox.y)
+  const extent = (u: Unit) => (axis === 'x' ? u.bbox.w : u.bbox.h)
+  const shift = (unit: Unit, delta: number) => {
+    if (delta === 0) return
+    if (axis === 'x') {
+      unit.bbox.x += delta
+      unit.dx += delta
+    } else {
+      unit.bbox.y += delta
+      unit.dy += delta
+    }
+  }
+  // A centre or far-edge snap is cosmetic and separation is not, so one
+  // that would put a unit inside a neighbour's margin yields. Without this
+  // the fixpoint loop drifts: the snap jams the unit, the overlap pass hops
+  // it away, and the next iteration snaps it back — an edge band can never
+  // do that, since a hop carries a unit out of its own band's reach, but a
+  // band measured against a third unit can.
+  const clearAfter = (unit: Unit, delta: number): boolean => {
+    const moved =
+      axis === 'x'
+        ? { ...unit.bbox, x: unit.bbox.x + delta }
+        : { ...unit.bbox, y: unit.bbox.y + delta }
+    return units.every((other) => other === unit || !overlapsWithMargin(moved, other.bbox))
+  }
+  const lined = new Set<Unit>()
+  for (const fraction of axis === 'x' ? [0, 0.5, 1] : [0, 0.5]) {
+    const anchor = (u: Unit) => edge(u) + extent(u) * fraction
+    const guarded = fraction !== 0
+    for (const band of bandsBy(units, anchor)) {
+      if (band.length < 2) continue
+      // An immobile member is the band's truth, and so is one an earlier
+      // anchor lined up: a movable one snaps onto it exactly, grid or no
+      // grid, since the grid cannot move that neighbour and a 4px miss
+      // reads as a row drawn carelessly. A band free to move as a whole
+      // puts its first member's edge on the grid and follows it.
+      const fixed = band.find((u) => !u.movable || lined.has(u))
+      const first = band[0] as Unit
+      // A partner inside a neighbour's margin is about to be hopped away by
+      // the overlap pass, and a unit lined up to it this iteration would be
+      // left off the grid, lined up with nothing. So a centre or far-edge
+      // band follows only a partner that is standing still.
+      const partner = fixed ?? first
+      if (guarded && !clearAfter(partner, 0)) continue
+      if (fixed === undefined) {
+        const toGrid = roundToGrid(edge(first)) - edge(first)
+        if (!guarded || clearAfter(first, toGrid)) shift(first, toGrid)
+      }
+      const target = anchor(partner)
+      for (const unit of band) {
+        if (!unit.movable || lined.has(unit)) continue
+        // A centre between a box of each parity is a half pixel; the edge
+        // takes the whole pixel nearest, since the output is rounded and a
+        // snap the rounding undoes is not a snap.
+        const delta = Math.round(edge(unit) + target - anchor(unit)) - edge(unit)
+        if (guarded && delta !== 0 && !clearAfter(unit, delta)) continue
+        shift(unit, delta)
+      }
+      // Lined up means sharing the anchor with SOMETHING, to the half pixel
+      // parity allows: a band whose every other snap yielded leaves its
+      // first member alone, and alone it takes the grid below like any other.
+      const atTarget = band.filter((u) => Math.abs(anchor(u) - target) <= 0.5)
+      if (atTarget.length >= 2) for (const unit of atTarget) lined.add(unit)
+    }
+  }
+  for (const unit of units) {
+    if (!unit.movable || lined.has(unit)) continue
+    shift(unit, roundToGrid(edge(unit)) - edge(unit))
+  }
+}
+
+/**
+ * Bands by the fixed first anchor — never a running mean — which is what
+ * stops transitive chaining (A near B, C near B's new spot) from dragging a
+ * whole diagonal into one line. STRICT inequality: consecutive band targets
+ * are >= one band apart (multiples of the grid), so a snapped unit sitting
+ * exactly one band from a neighbour must not re-join it on a later pass.
+ */
+function bandsBy(units: Unit[], anchor: (u: Unit) => number): Unit[][] {
   const sorted = [...units].sort((a, b) => anchor(a) - anchor(b))
+  const bands: Unit[][] = []
   let band: Unit[] = []
   let bandFirst = 0
-  const settle = () => {
-    // An immobile member is the band's truth: a movable one snaps onto it
-    // exactly, grid or no grid, since the grid cannot move that neighbour
-    // and a 4px miss reads as a row drawn carelessly. A band that can move
-    // as a whole takes the grid.
-    const fixed = band.find((u) => !u.movable)
-    const target = fixed === undefined ? roundToGrid(bandFirst) : anchor(fixed)
-    for (const unit of band) {
-      if (!unit.movable) continue
-      const delta = target - anchor(unit)
-      if (delta === 0) continue
-      if (axis === 'x') {
-        unit.bbox.x += delta
-        unit.dx += delta
-      } else {
-        unit.bbox.y += delta
-        unit.dy += delta
-      }
-    }
-    band = []
-  }
   for (const unit of sorted) {
-    // STRICT inequality: consecutive band targets are >= one band apart
-    // (multiples of the grid), so a snapped unit sitting exactly one band
-    // from a neighbour must not re-join it on a later pass.
     if (band.length === 0 || anchor(unit) - bandFirst >= TIDY_BAND_PX) {
-      settle()
+      if (band.length > 0) bands.push(band)
+      band = []
       bandFirst = anchor(unit)
     }
     band.push(unit)
   }
-  settle()
+  if (band.length > 0) bands.push(band)
+  return bands
 }
 
 /**

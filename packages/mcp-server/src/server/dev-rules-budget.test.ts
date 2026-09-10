@@ -208,7 +208,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 101 for the named side pair the search overrules, the lone-edge gate it
 // dropped and what that moved on the sweep, and the coincident-anchor
 // decision that changed with it — each a measurement a reader would repeat.
-const CANVAS_RENDER_BUDGET = 101
+// 102 for tidy banding on centres and far edges, and the drift the fixpoint
+// loop fell into when such a snap could jam a unit — found by fast-check,
+// and the kind of thing a reader re-derives by breaking it again.
+const CANVAS_RENDER_BUDGET = 102
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

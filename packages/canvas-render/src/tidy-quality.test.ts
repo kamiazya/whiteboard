@@ -131,7 +131,23 @@ describe('tidy quality scoreboard', () => {
       }
       for (const m of moves) {
         const before = byId.get(m.id) as TidyNode
-        if (m.x % TIDY_GRID_PX !== 0 || m.y % TIDY_GRID_PX !== 0) offGrid++
+        // Off the grid AND lined up with nothing: a unit centred under a
+        // wider neighbour, or flush with its far edge, keeps that anchor.
+        const n = { ...before, x: m.x, y: m.y }
+        // To the half pixel: two boxes of different parity cannot share a
+        // centre on whole pixels, and the output is whole pixels.
+        const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
+        const linedX = after.some(
+          (o) =>
+            o.id !== n.id &&
+            (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
+        )
+        const linedY = after.some(
+          (o) => o.id !== n.id && near(o.y + o.height / 2, n.y + n.height / 2),
+        )
+        if ((m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)) {
+          offGrid++
+        }
         if (m.x === before.x && m.y === before.y) noOpMoves++
         movedNodes++
         const d = Math.abs(m.x - before.x) + Math.abs(m.y - before.y)
@@ -158,8 +174,12 @@ describe('tidy quality scoreboard', () => {
       // tidy's own output as jammed (a 25px gap fits neither a label nor an
       // arrow's runway): every separation is a grid step wider, so the same
       // corpus is pushed 23% further and its worst case 55% further.
-      movedNodes: 1939,
-      displacement: 63515,
+      // 63515 -> 69515 and 1939 -> 1941 when banding grew from edges to the
+      // centre and far edge as well: a unit alone at its edge but a few px
+      // off a neighbour's centre now moves to it, unless that would jam it
+      // into a third unit, in which case the snap yields to separation.
+      movedNodes: 1941,
+      displacement: 69515,
       maxDisplacement: 725,
     })
   })
@@ -252,8 +272,9 @@ describe('tidy quality scoreboard', () => {
       // 72976 -> 139357 px — because members now settle inside a frame
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
-      movedNodes: 1957,
-      displacement: 139357,
+      movedNodes: 1958,
+      // 139357 -> 143650 with banding on centres and far edges (above).
+      displacement: 143650,
     })
   })
 })
