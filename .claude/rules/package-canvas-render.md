@@ -1317,9 +1317,14 @@ tool surface, actually drew, and the MCP eval lane records it per board
 as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting
 one defect and reading one; pinned in `drawing-quality.test.ts` over
 `test-utils/drawing-corpus.ts`, where each diagram the lane asks for is
-drawn as a reference, as a first attempt, and after tidy. It shares no
-code with the routing oracle, on purpose: that file is the routing
-scoreboard's independent witness. A scene links a label to what it names
+drawn as a reference, as a first attempt, and after tidy. Its polyline
+geometry is `quality/polyline-geometry.ts`, shared with the routing
+scoreboard's oracle and `reversal-count.ts` so a crossing means one thing
+across every instrument — and, by a contract
+`polyline-geometry.independence.test.ts` holds, imported by nothing under
+`layout/`: an oracle sharing a primitive with the router would agree with
+its mistakes by construction, so the router keeps its own geometry and
+that duplication is the independence. A scene links a label to what it names
 through `TextRunNode.annotates`, set by the layout and read by nothing
 that paints; the flat scene has no other way back from a label's box.
 

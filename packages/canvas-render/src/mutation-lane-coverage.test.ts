@@ -97,9 +97,13 @@ describe('the mutation lane covers what it says it covers', () => {
     // — the shape a mutation run would report as unsurprising survivors —
     // and checked by hand once, four metrics mutated and six of its cases
     // failing.
+    // 65 since `quality/polyline-geometry.ts`, the geometry the drawing score
+    // and the scoreboards' oracles share, outside the lane for the reason
+    // the oracles are: what pins it is the scoreboards it feeds, whose
+    // exact numbers move on any change to it.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 11,
-      production: 64,
+      production: 65,
     })
   })
 
