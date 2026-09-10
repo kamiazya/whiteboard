@@ -8,7 +8,8 @@ paths:
 ## What belongs here
 
 - Zod schemas: canvas meta, core/extension/raw facets, spatial canvas (JSON Canvas 1.0 + `x-whiteboard` extension), markdown body, workspace-tree node data, and the versioned mdast subset (exported via the `./mdast` subpath).
-- Shared fast-check arbitraries in `src/test-utils/` (valid-by-construction; never duplicated per test file).
+- Shared fast-check arbitraries in `src/test-utils/` (valid-by-construction; never duplicated per test file), and the
+  generator they are drawn with: `arbitraryForSchema`, the zod-v4-to-fast-check walk (see "Generators" below).
 
 ## What does NOT belong here
 
@@ -77,6 +78,63 @@ paths:
 
 - A key joins `RESERVED_ROOT_KEYS` the moment something INTERPRETS it, and not before. Until then
   `facetsRaw` is the right home: preserved verbatim, never half-understood.
+
+## Generators
+
+- **`test-utils/zod-arbitrary.ts` derives a fast-check arbitrary from a zod
+  v4 schema**, and `test-utils/arbitraries.ts` is `arbitraryForSchema` over
+  each model schema plus what a schema cannot say: the correlations (an
+  edge's endpoints name nodes that exist, ids unique across a collection),
+  the value domains a filter would waste every draw on (a facet key's
+  grammar, a yaml-safe facet value), and one adversarial weighting
+  (`workspaceSegmentArbitrary`). It lives here rather than in facet-engine,
+  where it started, because model is the lowest package and already the
+  home of the shared generators — codec, loro-adapter, canvas-viewer,
+  server-core and facet-engine all reach it through a dependency they have.
+  The file used to be a hand-written mirror, and it had drifted: no
+  `subpath`, `label`, `versionRef`, no edge side, end or label, and nothing
+  at the canvas level but comments — so every round-trip property over a
+  canvas was blind to `edgeRouting` and the canvas's own facets.
+- The walk's disciplines, each pinned in `zod-arbitrary.test.ts`: every
+  draw is filtered through the schema, at the schema that DECLARES a
+  refinement rather than only at the root (filtering at the root alone let
+  a three-arm anchor union draw its refinement-free arm 645 times in 1000);
+  an optional key is drawn absent half the time and never as a key holding
+  `undefined`; what comes out is the schema's OUTPUT (defaults filled,
+  transforms applied); a `z.lazy` nests up to `maxDepth` and then only the
+  arms and empty arrays that need no expansion; a construct with no
+  generator throws naming the path; a filter nothing passes throws at
+  construction, from a seeded preflight, so the decision is the same on
+  every run. An unbounded string runs up to twelve characters past its
+  minimum, printable ASCII six draws in nine and whole graphemes two, so a
+  serializer meets two of its own delimiters in one value — measured
+  before: half of every string was one of four fixed clusters and none was
+  longer than four characters.
+- **Density is measured, not assumed.** What the canvas generator reaches
+  per 1000 draws (2026-09-10): zero to six nodes at an even spread, zero
+  to five edges, every node type at a quarter each, an optional node field
+  present about half the time it can be, an edge's sides/ends/colour/label
+  each at half, a self-loop on one edge in seven (endpoints are drawn as a
+  distinct pair seven times in eight — two independent draws over four ids
+  made two edges in five a loop), `x-whiteboard` on 84% of canvases with
+  `edgeRouting` on 40% and canvas facets on 41%, comments on 32%; the
+  anchor union at a third per arm with every reference reached. mdast text
+  values (`markdownTextArbitrary`, on every `value`/`alt`/`title`/`label`
+  /`identifier`/`lang`/`meta`) carry a space in 40%, markdown punctuation in
+  45%, a line ending in 6% and a character outside ASCII in 15%. Eight
+  mutation checks — dropping an edge label, a canvas facet, a routing
+  field, a group background in codec's serializer; the same four fields
+  plus the envelope in loro-adapter's bridge — each turned the round-trip
+  property red. Re-measure with a scratch `fc.sample` tally when a
+  generator or a schema changes shape; a property that draws a field it
+  never lands is the vacuity this file exists to close.
+- Its first catch, the day the model generators were derived: a canvas
+  comment naming both `targetNodeId` and `targetEdgeId` was accepted by
+  `canvasCommentSchema`, written, and dropped by every reader — the thread
+  it becomes carries both onto one spatial anchor, which
+  `annotationAnchorSchema` refuses. The schema now refines (and
+  `canvasCommentDraftSchema` beside it, since zod refuses `.partial()` over
+  a refined object), and loro-adapter refuses the write loudly.
 
 ## Tests
 

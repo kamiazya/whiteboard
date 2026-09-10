@@ -5,7 +5,7 @@ import {
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
-import { withDocumentWriteLock } from '../store/workspace-lock.js'
+import { withDocumentWriteLock, withDocumentWriteLocks } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
 import { registerToolWithAnnotations, structuredJsonResult } from './tool-support.js'
 
@@ -55,7 +55,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.facetList.name,
     {
       description: tools.facetList.description,
-      inputSchema: tools.facetList.inputSchema.shape,
+      inputSchema: tools.facetList.inputSchema,
       outputSchema: tools.facetList.outputSchema,
     },
     async (args) => {
@@ -70,12 +70,12 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.facetSet.name,
     {
       description: tools.facetSet.description,
-      inputSchema: tools.facetSet.inputSchema.shape,
+      inputSchema: tools.facetSet.inputSchema,
       outputSchema: tools.facetSet.outputSchema,
     },
     async (args) => {
       const parsed = tools.facetSet.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
+      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
         tools.facetSet.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -87,7 +87,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasRenderSvg.name,
     {
       description: tools.canvasRenderSvg.description,
-      inputSchema: tools.canvasRenderSvg.inputSchema.shape,
+      inputSchema: tools.canvasRenderSvg.inputSchema,
       outputSchema: tools.canvasRenderSvg.outputSchema,
     },
     async (args) => {
@@ -106,7 +106,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasView.name,
     {
       description: tools.canvasView.description,
-      inputSchema: tools.canvasView.inputSchema.shape,
+      inputSchema: tools.canvasView.inputSchema,
       outputSchema: tools.canvasView.outputSchema,
       _meta: { ui: { resourceUri: CANVAS_VIEW_RESOURCE_URI } },
     },
@@ -122,7 +122,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentSearch.name,
     {
       description: tools.documentSearch.description,
-      inputSchema: tools.documentSearch.inputSchema.shape,
+      inputSchema: tools.documentSearch.inputSchema,
       outputSchema: tools.documentSearch.outputSchema,
     },
     async (args) => {
@@ -137,7 +137,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.documentGet.name,
     {
       description: tools.documentGet.description,
-      inputSchema: tools.documentGet.inputSchema.shape,
+      inputSchema: tools.documentGet.inputSchema,
       outputSchema: tools.documentGet.outputSchema,
     },
     async (args) => {
@@ -152,7 +152,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasSnapshot.name,
     {
       description: tools.canvasSnapshot.description,
-      inputSchema: tools.canvasSnapshot.inputSchema.shape,
+      inputSchema: tools.canvasSnapshot.inputSchema,
       outputSchema: tools.canvasSnapshot.outputSchema,
     },
     async (args) => {
@@ -167,7 +167,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.viewportSet.name,
     {
       description: tools.viewportSet.description,
-      inputSchema: tools.viewportSet.inputSchema.shape,
+      inputSchema: tools.viewportSet.inputSchema,
       outputSchema: tools.viewportSet.outputSchema,
     },
     async (args) => {
@@ -185,7 +185,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.canvasEdit.name,
     {
       description: tools.canvasEdit.description,
-      inputSchema: tools.canvasEdit.inputSchema.shape,
+      inputSchema: tools.canvasEdit.inputSchema,
       outputSchema: tools.canvasEdit.outputSchema,
     },
     async (args) => {
@@ -206,7 +206,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.threadEdit.name,
     {
       description: tools.threadEdit.description,
-      inputSchema: tools.threadEdit.inputSchema.shape,
+      inputSchema: tools.threadEdit.inputSchema,
       outputSchema: tools.threadEdit.outputSchema,
     },
     async (args) => {
@@ -227,12 +227,15 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionSave.name,
     {
       description: tools.versionSave.description,
-      inputSchema: tools.versionSave.inputSchema.shape,
+      inputSchema: tools.versionSave.inputSchema,
       outputSchema: tools.versionSave.outputSchema,
     },
     async (args) => {
       const parsed = tools.versionSave.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
+      // Every document in the batch, held for the batch's whole duration:
+      // a caller asked for these as one checkpoint, so another writer must
+      // not land between two of them.
+      const result = await withDocumentWriteLocks(parsed.documentIds, () =>
         tools.versionSave.execute(parsed),
       )
       return structuredJsonResult(result)
@@ -244,7 +247,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionList.name,
     {
       description: tools.versionList.description,
-      inputSchema: tools.versionList.inputSchema.shape,
+      inputSchema: tools.versionList.inputSchema,
       outputSchema: tools.versionList.outputSchema,
     },
     async (args) => {
@@ -259,7 +262,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     tools.versionRestore.name,
     {
       description: tools.versionRestore.description,
-      inputSchema: tools.versionRestore.inputSchema.shape,
+      inputSchema: tools.versionRestore.inputSchema,
       outputSchema: tools.versionRestore.outputSchema,
     },
     async (args) => {
@@ -288,43 +291,15 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
   )
 
-  registerToolWithAnnotations(
-    server,
-    tools.bodyPatch.name,
-    {
-      description: tools.bodyPatch.description,
-      inputSchema: tools.bodyPatch.inputSchema,
-      outputSchema: tools.bodyPatch.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.bodyPatch.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.bodyPatch.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.documentSet.name,
-    {
-      description: tools.documentSet.description,
-      inputSchema: tools.documentSet.inputSchema.shape,
-      outputSchema: tools.documentSet.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.documentSet.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.documentSet.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  // One call for several documents. Separate from wb_document_create rather
-  // than replacing it: a single create is the common case and should not
-  // have to be wrapped in an ops array to happen.
+  // The ONE front door onto document create / set / delete. The standalone
+  // `wb_document_create`, `wb_document_set` and `wb_document_delete` tools
+  // were retired into its ops: two ways to do one thing is a tool table an
+  // agent reads twice, and the batch is the shape that stops a five-document
+  // errand costing five round trips. A single create pays for it in bytes,
+  // not in calls — measured at +32 request / +106 response on one create.
+  //
+  // The OPERATIONS survive: `wbDocumentCreate` and friends still back these
+  // ops and the `/api/v1` routes. Only the second front door is gone.
   registerToolWithAnnotations(
     server,
     tools.workspaceEdit.name,
@@ -339,67 +314,20 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
   )
 
-  // Document CRUD. These have no Hono route counterpart registered here, but
-  // they still come from `createServer`'s tool record rather than from the
-  // bare operations, so the handle resolution that record carries applies.
-  registerToolWithAnnotations(
-    server,
-    tools.documentCreate.name,
-    {
-      description: tools.documentCreate.description,
-      inputSchema: tools.documentCreate.inputSchema,
-      outputSchema: tools.documentCreate.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentCreate.execute(
-        tools.documentCreate.inputSchema.parse(args),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
+  // The read half of document CRUD. These have no Hono route counterpart
+  // registered here, but they still come from `createServer`'s tool record
+  // rather than from the bare operations, so the handle resolution that
+  // record carries applies.
   registerToolWithAnnotations(
     server,
     tools.documentList.name,
     {
       description: tools.documentList.description,
-      inputSchema: tools.documentList.inputSchema.shape,
+      inputSchema: tools.documentList.inputSchema,
       outputSchema: tools.documentList.outputSchema,
     },
     async (args) => {
       const result = await tools.documentList.execute(tools.documentList.inputSchema.parse(args))
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.documentResolve.name,
-    {
-      description: tools.documentResolve.description,
-      inputSchema: tools.documentResolve.inputSchema.shape,
-      outputSchema: tools.documentResolve.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentResolve.execute(
-        tools.documentResolve.inputSchema.parse(args),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.documentDelete.name,
-    {
-      description: tools.documentDelete.description,
-      inputSchema: tools.documentDelete.inputSchema.shape,
-      outputSchema: tools.documentDelete.outputSchema,
-    },
-    async (args) => {
-      const result = await tools.documentDelete.execute(
-        tools.documentDelete.inputSchema.parse(args),
-      )
       return structuredJsonResult(result)
     },
   )

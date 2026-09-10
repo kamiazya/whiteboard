@@ -24,11 +24,10 @@ import { ICON_VERB_CLASS } from '../../components/ui/icon-verb.js'
 import { commentExcerpt } from '../../lib/comment-excerpt.js'
 import { cn } from '../../lib/utils.js'
 import type { SourcePaneApi } from '../markdown-editor/SourcePane.js'
-import { CommentBody } from './CommentBody.js'
 import { CommentComposer } from './CommentComposer.js'
 import { MessageBy, ThreadActivity } from './message-meta.js'
 import { ReplyComposer } from './ReplyComposer.js'
-import { ThreadReplies } from './ThreadReplies.js'
+import { ThreadMessage } from './ThreadMessage.js'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -151,22 +150,6 @@ function excerptOf(thread: CommentThread): string {
 }
 
 /**
- * Whether the expanded conversation should draw its opening message, given
- * that the row above it is already showing a summary of the same message.
- *
- * The panel used to draw it unconditionally and that was reverted, for a
- * reason that still holds: on a one-line plain comment the two are the same
- * sentence twice. What changed is that the row is now a LOSSY summary — the
- * syntax stripped, the blocks joined, clamped to two lines — so for a body
- * that has any of that in it the rendering is not a repeat, it is the
- * message. Comparing the two is what tells them apart, rather than a taste
- * call about which comments deserve it.
- */
-function excerptLosesSomething(body: string): boolean {
-  return commentExcerpt(body) !== body.trim()
-}
-
-/**
  * What a thread is about, for the anchors that have no in-place projection
  * to say it for them: the document, a node set, a region. A pin, a passage
  * highlight or an edge comment is found by its place; these are found here.
@@ -198,10 +181,14 @@ export function CommentsPanel({
   // expanded threads is a wall of text with no shape; reading one and
   // replying to it is the act this surface serves.
   const [openThreadId, setOpenThreadId] = useState<string | null>(null)
-  // The opening message under edit, with its draft: at most one, and it
-  // belongs to the row, so opening another conversation abandons it.
+  // The MESSAGE under edit, with its draft: at most one in the panel, and
+  // it belongs to its row, so opening another conversation abandons it. It
+  // named only a thread until every message became editable, which is the
+  // same shape the rest of this surface had — one message per conversation
+  // was reachable because one message per conversation was addressable.
   const [editing, setEditing] = useState<{
     readonly threadId: string
+    readonly messageId: string
     readonly body: string
   } | null>(null)
 
@@ -253,7 +240,6 @@ export function CommentsPanel({
    */
   const rowRefs = useRef(new Map<string, HTMLButtonElement>())
   const composeRef = useRef<SourcePaneApi | null>(null)
-  const editRef = useRef<SourcePaneApi | null>(null)
 
   // The ROW's toggle rather than its reply box: it is the conversation's
   // heading, and Tab continues from it into the verbs, the replies and the
@@ -269,14 +255,6 @@ export function CommentsPanel({
     if (composeAnchor === null) return
     composeRef.current?.focus()
   }, [composeAnchor])
-
-  // Keyed on the thread rather than on `editing`, which changes on every
-  // keystroke — the focus belongs to opening the editor, not to typing in it.
-  const editingThreadId = editing?.threadId ?? null
-  useEffect(() => {
-    if (editingThreadId === null) return
-    editRef.current?.focus()
-  }, [editingThreadId])
 
   /**
    * The compose box's commit, named because two things now reach it: the
@@ -294,11 +272,11 @@ export function CommentsPanel({
   function commitEdit(thread: CommentThread): void {
     if (editing === null || onEditMessage === undefined) return
     const body = editing.body.trim()
-    const opening = thread.messages[0]
-    // An emptied subject is a cancel, not a blank message: the schema
-    // refuses an empty body.
-    if (body !== '' && opening !== undefined && body !== opening.body) {
-      onEditMessage(thread.id, opening.id, body)
+    const message = thread.messages.find((entry) => entry.id === editing.messageId)
+    // An emptied message is a cancel, not a blank one: the schema refuses an
+    // empty body.
+    if (body !== '' && message !== undefined && body !== message.body) {
+      onEditMessage(thread.id, message.id, body)
     }
     setEditing(null)
   }
@@ -484,15 +462,16 @@ export function CommentsPanel({
               About the {anchorLabel(composeAnchor)}
             </p>
           )}
-          <CommentComposer
-            apiRef={composeRef}
-            label="Comment"
-            value={composeDraft}
-            onChange={setComposeDraft}
-            onSubmit={submitCompose}
-            compact
-          />
-          <div className="flex justify-end">
+          <div className="flex items-end gap-1">
+            <CommentComposer
+              apiRef={composeRef}
+              label="Comment"
+              value={composeDraft}
+              onChange={setComposeDraft}
+              onSubmit={submitCompose}
+              compact
+              className="min-w-0 flex-1"
+            />
             {/* Guarded on submit rather than disabled, so pressing Enter in
                 the field takes the same rule — but with no label to read, a
                 press that does nothing has to say why BEFORE it is pressed. */}
@@ -501,7 +480,7 @@ export function CommentsPanel({
               aria-label="Send comment"
               title="Send comment"
               aria-disabled={composeDraft.trim() === ''}
-              className={cn(ICON_VERB_CLASS, 'aria-disabled:opacity-40')}
+              className={cn(ICON_VERB_CLASS, '-my-2 aria-disabled:opacity-40')}
             >
               <SendHorizontal aria-hidden="true" className="size-4" />
             </button>
@@ -575,12 +554,35 @@ export function CommentsPanel({
                     aria-expanded={expanded}
                     aria-controls={`thread-${thread.id}`}
                     onClick={() => toggle(thread)}
+                    // No `TOGGLE_STATE_CLASS` here, deliberately. That fill
+                    // is how a control whose effect is ELSEWHERE says it is
+                    // on — the header button that opens this rail has no
+                    // other way to say so. A disclosure says it by
+                    // disclosing: the conversation appears right under this
+                    // row, indented and ruled. Filling the row as well made
+                    // a solid slab of the one line on screen that is pure
+                    // chrome, sitting above the prose that is the point.
                     className={cn(
                       'min-w-0 flex-1 rounded px-2 py-1.5 text-left text-xs hover:bg-accent',
-                      TOGGLE_STATE_CLASS,
+                      // Open, the row is one meta line; centring it in the
+                      // dot's own 44px keeps the collapse target a target.
+                      expanded && 'flex min-h-11 flex-col justify-center',
                     )}
                   >
-                    <span className="comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200">
+                    {/* A summary is what a CLOSED conversation shows. Open,
+                        the messages are right below it, so drawing this too
+                        put the same sentence on screen twice — and at two
+                        sizes, 12px row chrome against 14px prose. `sr-only`
+                        rather than unrendered: it is still the name of the
+                        control that collapses this conversation, and a row
+                        named "whole document 3 messages 0s ago" is not one
+                        anybody could act on. */}
+                    <span
+                      className={cn(
+                        'comment-row-subject line-clamp-2 text-neutral-800 dark:text-neutral-200',
+                        expanded && 'sr-only',
+                      )}
+                    >
                       {excerptOf(thread)}
                     </span>
                     <span className="comment-row-meta mt-0.5 flex items-center gap-2 text-[11px] text-neutral-500">
@@ -589,7 +591,16 @@ export function CommentsPanel({
                           {anchorLabel(thread.anchor)}
                         </span>
                       )}
-                      <MessageBy message={thread.messages[0]} />
+                      {/* Exactly one of these draws, by construction:
+                          `ThreadActivity` is silent on a lone remark, whose
+                          only stamp IS the opening message's. A conversation
+                          shows what a closed row can answer — how much is in
+                          here and whether it moved lately — and leaves the
+                          opening stamp to the first entry of the column one
+                          tap away. Both at once wrapped the row at 390px. */}
+                      {thread.messages.length <= 1 ? (
+                        <MessageBy message={thread.messages[0]} />
+                      ) : null}
                       <ThreadActivity thread={thread} />
                       {resolveAnchor?.(thread) === 'orphaned' ? (
                         <span data-testid={`thread-orphaned-${thread.id}`}>
@@ -604,74 +615,109 @@ export function CommentsPanel({
                 </div>
 
                 {expanded ? (
-                  <div id={`thread-${thread.id}`} className="mt-1 flex flex-col gap-2 pl-2">
-                    {/* Only Edit here now. Resolve moved ONTO the status dot
-                        on the row above — the state and the verb became one
-                        object, and it is reachable without opening the
-                        conversation first. */}
-                    {onEditMessage === undefined || editing?.threadId === thread.id ? null : (
-                      <div className="flex items-center">
-                        <button
-                          type="button"
-                          aria-label="Edit comment"
-                          title="Edit comment"
-                          onClick={() =>
-                            setEditing({
-                              threadId: thread.id,
-                              body: thread.messages[0]?.body ?? '',
-                            })
-                          }
-                          className={ICON_VERB_CLASS}
-                        >
-                          <Pencil aria-hidden="true" className="size-4" />
-                        </button>
-                      </div>
-                    )}
-                    {onEditMessage !== undefined && editing?.threadId === thread.id ? (
-                      <form
-                        data-testid="comment-edit"
-                        className="flex flex-col gap-1"
-                        onSubmit={(event) => {
-                          event.preventDefault()
-                          commitEdit(thread)
-                        }}
-                      >
-                        <CommentComposer
-                          apiRef={editRef}
-                          label="Edit comment text"
-                          value={editing.body}
-                          onChange={(body) => setEditing({ threadId: thread.id, body })}
-                          onSubmit={() => commitEdit(thread)}
+                  // ONE column for the whole conversation, standing on the
+                  // row's own text edge: `44px` of status dot puts the row's
+                  // 2px gap at 44 and its text at 54, so the rule fills that
+                  // gap channel and the column's content lands on 54 — under
+                  // the summary it belongs to. Before this the summary
+                  // started at 54px and the replies at 17px, outdented from
+                  // the message they answer with nothing tying either to the
+                  // dot.
+                  //
+                  // `border-l-2`, the weight the compose box's quote already
+                  // uses for the same job. Measured at `border-l` first: the
+                  // token resolves to `oklch(1 0 0 / 0.1)` in the dark theme,
+                  // which on this ground is invisible — a connector nobody
+                  // can see is not one.
+                  <div
+                    id={`thread-${thread.id}`}
+                    className="mt-1 ml-[44px] flex flex-col gap-3 border-l-2 pl-2"
+                  >
+                    {/* Every message, drawn the same way. The first one
+                        used to be built here by hand and the rest by
+                        a replies-only component, which is why only the
+                        first could be edited: the verb was in the half that
+                        only ever held one message. What is special about the opening
+                        message belongs to the THREAD — a row summarises it,
+                        and on a canvas its text is the flat comment's — not
+                        to how a message is drawn. */}
+                    <ol className="flex flex-col gap-3">
+                      {thread.messages.map((message) => (
+                        <ThreadMessage
+                          key={message.id}
+                          message={message}
                           compact
+                          action={
+                            onEditMessage === undefined ||
+                            editing?.messageId === message.id ? null : (
+                              <button
+                                type="button"
+                                data-testid={`edit-${message.id}`}
+                                aria-label="Edit message"
+                                title="Edit message"
+                                onClick={() =>
+                                  setEditing({
+                                    threadId: thread.id,
+                                    messageId: message.id,
+                                    body: message.body,
+                                  })
+                                }
+                                // Sunk into the stamp line rather than given
+                                // a row: `-my-3.5` spends the 44px tap
+                                // target across the 16px line it sits on, so
+                                // the verb is beside what it edits instead
+                                // of a lone pencil pushing the conversation
+                                // down by 44px.
+                                className={cn(ICON_VERB_CLASS, '-my-3.5')}
+                              >
+                                <Pencil aria-hidden="true" className="size-4" />
+                              </button>
+                            )
+                          }
+                          editor={
+                            editing?.messageId === message.id ? (
+                              <form
+                                data-testid="comment-edit"
+                                className="flex items-end gap-1"
+                                onSubmit={(event) => {
+                                  event.preventDefault()
+                                  commitEdit(thread)
+                                }}
+                              >
+                                <CommentComposer
+                                  autoFocus
+                                  label="Edit message text"
+                                  value={editing.body}
+                                  onChange={(body) =>
+                                    setEditing({
+                                      threadId: thread.id,
+                                      messageId: message.id,
+                                      body,
+                                    })
+                                  }
+                                  onSubmit={() => commitEdit(thread)}
+                                  compact
+                                  className="min-w-0 flex-1"
+                                />
+                                {/* No Cancel button: Escape already leaves
+                                    the edit, and an X here would be the
+                                    third meaning of that glyph in one
+                                    panel. */}
+                                <button
+                                  type="submit"
+                                  aria-label="Save"
+                                  title="Save"
+                                  aria-disabled={editing.body.trim() === ''}
+                                  className={cn(ICON_VERB_CLASS, '-my-2 aria-disabled:opacity-40')}
+                                >
+                                  <Check aria-hidden="true" className="size-4" />
+                                </button>
+                              </form>
+                            ) : null
+                          }
                         />
-                        {/* No Cancel button: Escape already leaves the edit,
-                            and an X here would be the third meaning of that
-                            glyph in one panel. */}
-                        <div className="flex justify-end">
-                          <button
-                            type="submit"
-                            aria-label="Save"
-                            title="Save"
-                            aria-disabled={editing.body.trim() === ''}
-                            className={cn(ICON_VERB_CLASS, 'aria-disabled:opacity-40')}
-                          >
-                            <Check aria-hidden="true" className="size-4" />
-                          </button>
-                        </div>
-                      </form>
-                    ) : null}
-                    {/* The opening message as WRITTEN, when the row's
-                        summary of it dropped something — see
-                        `excerptLosesSomething`. */}
-                    {excerptLosesSomething(thread.messages[0]?.body ?? '') ? (
-                      <CommentBody
-                        body={thread.messages[0]?.body ?? ''}
-                        compact
-                        className="text-neutral-800 dark:text-neutral-200"
-                      />
-                    ) : null}
-
-                    <ThreadReplies thread={thread} compact />
+                      ))}
+                    </ol>
 
                     {onReply === undefined ? null : (
                       // Keyed by thread, which is what makes the draft belong

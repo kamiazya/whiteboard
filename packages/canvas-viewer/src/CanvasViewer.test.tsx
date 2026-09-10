@@ -1,4 +1,8 @@
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import {
+  type MeasureText,
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
@@ -155,5 +159,46 @@ describe('CanvasViewer draws the conversations it is handed', () => {
     // The outline around the box both nodes occupy, dashed.
     expect(svg).toContain('<rect x="0" y="0" width="300" height="140"')
     expect(svg).toContain('stroke-dasharray="6 4"')
+  })
+})
+
+describe('CanvasViewer style (ADR-0030 decision 6)', () => {
+  const neon: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+      { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
+    ],
+    edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  }
+
+  it('draws the bundled look by default: a widget never pays for a theme unasked', () => {
+    const { getByTestId } = render(<CanvasViewer canvas={neon} measure={fakeMeasure} />)
+    expect(getByTestId('canvas-viewer').innerHTML).not.toContain('wb-glow')
+  })
+
+  it("style: 'document' draws the theme the canvas names", () => {
+    const { getByTestId } = render(
+      <CanvasViewer canvas={neon} measure={fakeMeasure} style="document" />,
+    )
+    expect(getByTestId('canvas-viewer').innerHTML).toContain('wb-glow')
+  })
+})
+
+describe('CanvasViewer draws in the theme its host says it is in', () => {
+  it('keeps the light palette by default and takes the dark one when the host asks', () => {
+    const { getByTestId } = render(
+      <CanvasViewer canvas={canvas} measure={fakeMeasure} testId="viewer-light" />,
+    )
+    const lightRect = getByTestId('viewer-light').querySelector('rect')
+    expect(lightRect?.getAttribute('stroke')).toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
+    cleanup()
+
+    const dark = render(
+      <CanvasViewer canvas={canvas} measure={fakeMeasure} theme="dark" testId="viewer-dark" />,
+    )
+    const darkRect = dark.getByTestId('viewer-dark').querySelector('rect')
+    expect(darkRect?.getAttribute('stroke')).toBe(SPATIAL_DARK_PALETTE.node.text.stroke)
+    expect(darkRect?.getAttribute('stroke')).not.toBe(SPATIAL_LIGHT_PALETTE.node.text.stroke)
   })
 })

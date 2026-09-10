@@ -45,7 +45,6 @@ function mkVersionsResponse(count = 24): Response {
       elementCount: 12,
       label,
       auto: true,
-      hasThumbnail: false,
       branchName,
       operator: { kind: 'system' as const, peerId: 'peer-system', displayName: 'auto-save' },
     })
@@ -67,7 +66,6 @@ function mkVersionsResponse(count = 24): Response {
     elementCount: 58,
     label: `Version ${index + 1}`,
     auto: true,
-    hasThumbnail: false,
     branchName: 'main',
     operator: {
       kind: 'system' as const,
@@ -189,12 +187,12 @@ describe('VersionTimeline browser mode', () => {
     expect(captured.session?.title).toMatch(/Version 1/)
   })
 
-  it('rings the lane HEAD is not on, names it, and keeps it out of the tab order', async () => {
-    // The parts a real engine decides rather than jsdom: whether an SVG
-    // circle actually paints as a ring, and whether the non-restorable row is
-    // genuinely unreachable by keyboard. The row is a plain container by
-    // design — not a disabled button — so "not focusable" is the whole of its
-    // keyboard contract, and jsdom's focus model is too forgiving to state it.
+  it('draws no lane column, even when the rows still carry a variation name', async () => {
+    // The fixture still serves rows on two lanes, because a document whose
+    // version rows still CARRY `branchName` is exactly the case that must
+    // draw one column of history. Lanes were the branch surface's view of
+    // this list; ADR-0029 retires that surface and leaves History as what it
+    // answers on its own — what this used to be, and can I go back.
     scenario = 'two-lanes'
     const { container } = render(
       <div
@@ -214,34 +212,15 @@ describe('VersionTimeline browser mode', () => {
       expect(container.textContent).toContain('Version 3')
     })
 
-    const dots = [...container.querySelectorAll('svg[viewBox="0 0 24 36"] circle')]
-    expect(dots.length).toBe(3)
-    const rings = dots.filter((c) => c.getAttribute('fill') === 'none')
-    expect(rings.length).toBe(1)
-    // The ring keeps its own lane's colour on the stroke, so it still reads as
-    // that lane rather than as a generic "other".
-    expect(rings[0]?.getAttribute('stroke')).toBe(FEATURE_COLOR)
-
-    const laneNames = [...container.querySelectorAll('[data-testid="version-lane-name"]')]
-    expect(laneNames.length).toBe(1)
-    expect(laneNames[0]?.textContent).toBe('feature')
-
-    // Two lanes, three rows, two restorable — so the feature row contributes
-    // no button at all.
+    // No lane rail, no lane name, and no "variation →" split label.
+    expect(container.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(0)
+    expect(container.querySelectorAll('[data-testid="version-lane-name"]').length).toBe(0)
+    expect(container.textContent ?? '').not.toContain('variation')
+    // Every row is one of the list's own, and every one can be looked at:
+    // the lane that made a row un-restorable is gone with the lanes.
     const rowButtons = [...container.querySelectorAll('button')].filter((b) =>
       /^Version \d/.test(b.textContent ?? ''),
     )
-    expect(rowButtons.length).toBe(2)
-
-    const featureRow = laneNames[0]?.closest('[data-testid="version-row"]')
-    expect(featureRow).not.toBeNull()
-    expect(featureRow?.querySelector('button')).toBeNull()
-
-    // And the browser refuses it focus, which is what "out of the tab order"
-    // actually means at runtime.
-    const shell = featureRow?.querySelector('div.rounded-xl') as HTMLElement | null
-    expect(shell).not.toBeNull()
-    shell?.focus()
-    expect(document.activeElement).not.toBe(shell)
+    expect(rowButtons.length).toBe(3)
   })
 })

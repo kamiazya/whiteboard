@@ -40,6 +40,12 @@ export type PaintAttrs = {
   'fill-opacity'?: number
   'stroke-opacity'?: number
   'stroke-dasharray'?: string
+  /**
+   * A `url(#…)` reference to a hoisted `<filter>`. On PaintAttrs rather than
+   * `rect` alone since glow: an edge, a text run and a symbol's `<use>` all
+   * carry a halo. NOT inherited, so hoist.ts deliberately never lifts it.
+   */
+  filter?: string
 }
 
 export type TextEmphasisAttrs = {
@@ -69,7 +75,7 @@ export type SvgElements = {
     role?: SvgRole
     'data-wb-key'?: string
   }
-  rect: SvgBoxAttrs & PaintAttrs & { rx?: number; filter?: string; role?: SvgRole }
+  rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
   // 'middle' is the only anchor emitted: body runs are left-anchored by
@@ -130,7 +136,17 @@ export type SvgElements = {
   // region (-10%..110%) clips a blur on a small element like the 20px
   // comment pin, and a percentage scales to every referencing element where
   // a userSpace number could not.
-  filter: { id: string; x?: string; y?: string; width?: string; height?: string }
+  // A glow's region is instead user-space NUMBERS over the whole scene:
+  // an axis-aligned straight edge has a zero-area box, and a percentage of
+  // zero is nothing to paint in.
+  filter: {
+    id: string
+    filterUnits?: 'userSpaceOnUse'
+    x?: string | number
+    y?: string | number
+    width?: string | number
+    height?: string | number
+  }
   feDropShadow: {
     dx: number
     dy: number
@@ -138,6 +154,9 @@ export type SvgElements = {
     'flood-color': string
     'flood-opacity': number
   }
+  feGaussianBlur: { stdDeviation: number; result?: string }
+  feMerge: Record<string, never>
+  feMergeNode: { in: string }
 }
 
 export type SvgTagName = keyof SvgElements

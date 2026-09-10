@@ -12,7 +12,7 @@
 //   4.  Seed via valid JWT:
 //         - workspace + canvas, with one node written through /update
 //         - file blob  (PUT /api/w/:ws/document/:path/file/:fileId)
-//         - manual version + thumbnail
+//         - manual version
 //         - workspace display name (PUT /api/workspaces/:ws/name)
 //   5.  Capture snapshot bytes from server A for byte-equality check.
 //   6.  Stop container A.
@@ -20,7 +20,7 @@
 //   8.  Verify server-mode.json is absent from restored dir.
 //   9.  Start container B with the restored data volume.
 //  10.  Verify all seeded data via HTTP API (canvas list, snapshot bytes,
-//       file bytes, version list + thumbnail bytes, workspace name).
+//       file bytes, version list, workspace name).
 //  11.  Verify 401 (no auth) and 403 (wrong scope) contracts still hold.
 //  12.  Scan docker logs for JWT / credential / path leaks.
 //  13.  Cleanup containers, JWKS server, temp dirs.
@@ -111,7 +111,7 @@ const BACKUP_RESTORE_ENTRY = resolve(
 )
 
 // Minimal valid PNG (1×1 white pixel) — satisfies the PNG signature check
-// (bytes 0-3 = 89 50 4E 47) that the thumbnail and file-upload routes enforce.
+// (bytes 0-3 = 89 50 4E 47) that the file-upload route enforces.
 const MINIMAL_PNG = Buffer.from([
   0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00, 0x00, 0x00, 0x0d, 0x49, 0x48, 0x44, 0x52,
   0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x02, 0x00, 0x00, 0x00, 0x90, 0x77, 0x53,
@@ -508,15 +508,6 @@ try {
         bodyLength: JSON.stringify(versionBody).length,
       })
 
-    // Save version thumbnail (versions:write).
-    const thumbRes = await authedFetch(
-      serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
-      jwt,
-      { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: MINIMAL_PNG },
-    )
-    if (!thumbRes.ok) fail(`scenario 3: thumbnail upload failed with ${thumbRes.status}`)
-
     // The workspace's own display name — a workspaces-table row rather than
     // anything inside a document, which is a category of state the backup has
     // to carry and no other step here touches.
@@ -712,19 +703,6 @@ try {
       fail('scenario 7: restored version label mismatch', {
         labelLength: foundVersion.label?.length ?? 0,
       })
-    }
-
-    // Version thumbnail (versions:read).
-    const thumbRes = await authedFetch(
-      serverBaseUrl,
-      `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents/${encodeURIComponent(CANVAS_PATH)}/versions/${seededVersionId}/thumbnail`,
-      jwt,
-    )
-    if (!thumbRes.ok)
-      fail(`scenario 7: thumbnail GET on restored server failed with ${thumbRes.status}`)
-    const restoredThumb = new Uint8Array(await thumbRes.arrayBuffer())
-    if (restoredThumb.byteLength !== MINIMAL_PNG.byteLength) {
-      fail('scenario 7: restored thumbnail byte length mismatch')
     }
 
     // Workspace display name.

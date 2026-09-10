@@ -15,7 +15,11 @@ import {
   setDocumentPinned,
 } from './daemon-api-client.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
-import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
+import {
+  type LoadedMarkdown,
+  type WorkspaceFilesSource,
+  WorkspaceMissingError,
+} from './files-source.js'
 
 /**
  * `WorkspaceFilesSource` over the daemon's HTTP API — the same five client
@@ -106,9 +110,13 @@ export function createDaemonFilesSource(
       await setDocumentPinned(daemonFetch, daemonBaseUrl, workspaceId, entry.path, pinned)
     },
 
-    async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<string> {
-      return (await getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId))
-        .markdown
+    async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<LoadedMarkdown> {
+      // `body`, not `markdown`: the route answers with both, and `markdown`
+      // is the OKF projection — frontmatter block included — which the
+      // thumbnail and preview renderers would draw as prose.
+      const okf = await getDocumentOkfV1(daemonFetch, daemonBaseUrl, workspaceId, entry.documentId)
+      const facets = okf.frontmatter.facets
+      return { body: okf.body, ...(facets === undefined ? {} : { facets }) }
     },
 
     loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {

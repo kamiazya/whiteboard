@@ -3,6 +3,7 @@ import { Check, Download, Loader2 } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useDaemonApi } from '../contexts/DaemonApiContext.js'
 import { installFont, listFonts } from '../lib/daemon-api-client.js'
+import { loadThemeFonts } from '../lib/theme-fonts.js'
 import { Button } from './ui/button.js'
 
 // Relative, because `createDaemonFetch` prefixes the daemon origin — the same
@@ -77,6 +78,9 @@ export function FontsCard() {
       })
       try {
         await installFont(fetchApi, RELATIVE, font.id)
+        // A family a theme names becomes measurable on screen the moment it
+        // is on the daemon's disk — the editor should not wait for a reload.
+        void loadThemeFonts({ fetchFn: fetchApi, daemonBaseUrl: RELATIVE })
         if (!mounted.current) return
         setState((prev) =>
           prev.kind === 'loaded'

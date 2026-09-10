@@ -1,8 +1,11 @@
+import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
+import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
@@ -444,8 +447,17 @@ const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
       y: fc.constantFrom(0, 80, 160, 240, 320),
       width: fc.constantFrom(60, 120, 240),
       height: fc.constantFrom(60, 120, 240),
+      // Read off the registry, never listed here: what a node CARRIES is the
+      // half of this parity the live overlay keeps forgetting, and a facet
+      // registered next month has to arrive in this generator on its own.
+      'x-whiteboard': facetsArb(bundledFacetRegistry, 'node'),
     })
-    .map((n) => (n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }) as SpatialNode)
+    .map(({ 'x-whiteboard': extension, ...n }) => {
+      const base = n.type === 'text' ? { ...n, text: 'n' } : { ...n, label: 'G' }
+      return (
+        extension === undefined ? base : { ...base, 'x-whiteboard': extension }
+      ) as SpatialNode
+    })
 
 const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
   fc
@@ -474,28 +486,110 @@ const dragScenarioArb = fc.record({
     ),
     lineJumps: fc.constantFrom(undefined, 'arc' as const),
   }),
+  // The CANVAS's own facets, off the registry like the nodes': the theme
+  // is resolved per canvas inside the layout, and the edge-only producer
+  // used to skip that resolution — every edge crisp and straight under a
+  // drag on a board whose committed render pencilled and curved them.
+  envelope: facetsArb(bundledFacetRegistry, 'canvas'),
+  // The look asked for: a theme is drawn under `'document'` and never
+  // under the library's clean default, so both have to be drawn.
+  style: fc.constantFrom(undefined, 'document' as const),
   carried: fc.uniqueArray(fc.constantFrom(...denseIds), { minLength: 1, maxLength: 3 }),
   dx: fc.constantFrom(-200, -80, 40, 160, 320),
   dy: fc.constantFrom(-160, -40, 80, 240),
 })
 
+/** The generated scenario as the canvas the layouts compare over. */
+function scenarioCanvas(scenario: {
+  readonly nodes: readonly SpatialNode[]
+  readonly edges: readonly CanvasEdge[]
+  readonly routing: NonNullable<SpatialCanvas['x-whiteboard']>['edgeRouting']
+  readonly envelope: ReturnType<typeof facetsArb> extends fc.Arbitrary<infer T> ? T : never
+}): SpatialCanvas {
+  return {
+    nodes: [...scenario.nodes],
+    edges: [...scenario.edges],
+    'x-whiteboard': { edgeRouting: scenario.routing, ...scenario.envelope },
+  }
+}
+
 describe('live-drag parity property (PBT)', () => {
   fcTest.prop([dragScenarioArb], withDefaults())(
     'mid-drag edge layout equals the committed layout of the moved canvas, obstacles and jumps included',
-    ({ nodes, edges, routing, carried, dx, dy }) => {
+    ({ nodes, edges, routing, envelope, style, carried, dx, dy }) => {
       const carriedSet = new Set<string>(carried)
-      const movedCanvas: SpatialCanvas = {
+      const movedCanvas = scenarioCanvas({
         nodes: nodes.map((n) => (carriedSet.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n)),
-        edges: [...edges],
-        'x-whiteboard': { edgeRouting: routing },
-      }
-      const options = { measure, parseBody: fakeParseBody, appearance }
+        edges,
+        routing,
+        envelope,
+      })
+      const options = { measure, parseBody: fakeParseBody, appearance, style }
       const committed = layoutSpatialCanvas(movedCanvas, options).nodes
       const live = layoutSpatialEdges(movedCanvas, options)
       expect(live.length).toBeGreaterThan(0)
       expect(live).toEqual(committed.slice(committed.length - live.length))
     },
   )
+
+  it('every registered node and canvas facet is drawn by the generator', () => {
+    // The mechanism's own failure mode: a facet the generator never produces
+    // widens the property by nothing while it still reads as covering "the
+    // facets". A construct the schema walk cannot express already throws at
+    // construction naming the path; this is the other half — every facet
+    // the bundled registry holds for either target actually arrives.
+    for (const target of ['node', 'canvas'] as const) {
+      const seen = new Set<string>()
+      for (const extension of fc.sample(facetsArb(bundledFacetRegistry, target), 300)) {
+        for (const key of Object.keys(extension?.facets ?? {})) seen.add(key)
+      }
+      expect([...seen].sort(), target).toEqual(
+        facetEntries(bundledFacetRegistry, target)
+          .map((entry) => entry.key)
+          .sort(),
+      )
+    }
+  })
+
+  it('the canvas facets the generator draws actually change the layout it compares', () => {
+    // The envelope's half of the anti-vacuity below: a scenario whose scene
+    // MOVES when its canvas facets are stripped is proof the generator
+    // reaches the per-canvas resolution the property is about.
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing, envelope }) => {
+      const options = { measure, parseBody: fakeParseBody, appearance, style: 'document' as const }
+      const canvas = scenarioCanvas({ nodes, edges, routing, envelope })
+      const stripped = scenarioCanvas({ nodes, edges, routing, envelope: undefined })
+      return (
+        JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
+        JSON.stringify(layoutSpatialCanvas(stripped, options).nodes)
+      )
+    })
+    expect(moved.length).toBeGreaterThanOrEqual(20)
+  })
+
+  it('the facets the generator draws actually change the layout it compares', () => {
+    // Anti-vacuity for the half above: payloads that parse but that this
+    // layout never reads would make the parity hold for a reason unrelated to
+    // facets. A scenario whose scene MOVES when its facets are stripped is
+    // proof the generator reaches the fold the property is about.
+    const options = { measure, parseBody: fakeParseBody, appearance }
+    const stripped = (canvas: SpatialCanvas): SpatialCanvas => ({
+      ...canvas,
+      nodes: canvas.nodes.map(({ 'x-whiteboard': _facets, ...node }) => node as SpatialNode),
+    })
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) => {
+      const canvas: SpatialCanvas = {
+        nodes: [...nodes],
+        edges: [...edges],
+        'x-whiteboard': { edgeRouting: routing },
+      }
+      return (
+        JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
+        JSON.stringify(layoutSpatialCanvas(stripped(canvas), options).nodes)
+      )
+    })
+    expect(moved.length).toBeGreaterThanOrEqual(20)
+  })
 
   it('the scenario reaches the jump geometry it claims to cover', () => {
     const options = { measure, parseBody: fakeParseBody, appearance }

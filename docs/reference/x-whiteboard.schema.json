@@ -38,14 +38,10 @@
                 "minLength": 1
               },
               "x": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
+                "type": "integer"
               },
               "y": {
-                "type": "integer",
-                "minimum": -9007199254740991,
-                "maximum": 9007199254740991
+                "type": "integer"
               },
               "text": {
                 "type": "string",

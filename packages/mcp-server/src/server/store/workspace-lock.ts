@@ -107,6 +107,36 @@ export function withDocumentWriteLock<T>(documentId: string, fn: () => Promise<T
   return withWorkspaceWriteLock(`canvas-doc:${documentId}`, fn)
 }
 
+/**
+ * Holds the write lock on SEVERAL documents for one critical section, for a
+ * tool whose batch spans documents (`wb_version_save`, `wb_facet_set`).
+ *
+ * **Sorted, and that is the whole point.** The locks nest, so two batches
+ * naming the same pair in opposite orders would each hold one and wait for
+ * the other forever — a deadlock with no error and no stack, appearing in CI
+ * as a timeout on whichever test was unlucky. A canonical acquisition order
+ * makes that impossible: whoever gets the lowest id first gets all of them.
+ * Duplicates are dropped for the same reason the workspace lock tracks
+ * reentrancy — taking one key twice in one chain is the degenerate case of
+ * the same deadlock.
+ *
+ * A batch therefore holds every one of its documents for its whole duration,
+ * which is coarser than locking each in turn. That is deliberate: locking one
+ * at a time would let another writer interleave between two documents of a
+ * batch a caller asked for as a unit.
+ */
+export function withDocumentWriteLocks<T>(
+  documentIds: readonly string[],
+  fn: () => Promise<T>,
+): Promise<T> {
+  const ordered = [...new Set(documentIds)].sort()
+  const acquire = (index: number): Promise<T> =>
+    index === ordered.length
+      ? fn()
+      : withDocumentWriteLock(ordered[index] as string, () => acquire(index + 1))
+  return acquire(0)
+}
+
 // Test-only helper.
 export function _resetWorkspaceLocksForTests(): void {
   queues.clear()

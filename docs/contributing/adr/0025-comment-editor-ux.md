@@ -130,6 +130,30 @@ two peers writing different comments concurrently both survive. This lands
 as a spike BEFORE any UI slice, because a UI wired to the fallback would
 look correct in every single-user test.
 
+### Supplement (2026-09-08): editing moves onto the message
+
+A comment's text was edited **in place** — "Edit comment" on the card a
+press opens, or on the comment's context menu, opened the same compose
+bubble pre-filled and committed one `set-comment-text`.
+
+That is retired. ADR-0026 gave a comment a CONVERSATION, and what the
+in-place editor wrote was the flat comment's `text` — which carries the
+opening message and nothing else. So the surface that can hold a
+conversation had an edit verb that reached exactly one of its messages, and
+a reply, the message a reader most often wants back because it is the one
+they just typed, could not be corrected anywhere.
+
+What replaces it: **every message carries its own Edit, beside its own
+stamp, in the card and in the rail alike**, writing `edit-thread-message`
+for that message id. The compose bubble stays as it was for CREATING a
+comment; only its editing arm is gone, and with it `set-comment-text` and
+the context menu's Edit row.
+
+What this costs, said plainly: editing a comment on the canvas is now one
+step longer — the card has to be open, where before the context menu
+reached the editor directly. That is the price of one mechanism instead of
+two, and of a verb that can name WHICH message it acts on.
+
 ### Explicitly deferred (each needs evidence, not argument)
 
 | Deferred | Trigger to revisit |

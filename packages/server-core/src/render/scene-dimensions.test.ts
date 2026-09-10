@@ -6,7 +6,7 @@
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { composeCanvasScene, computeSceneDimensions } from './compose-canvas-scene.js'
+import { composeCanvasScene, sceneEnvelope } from './compose-canvas-scene.js'
 
 const canvas = (nodes: unknown[], edges: unknown[] = []): SpatialCanvas =>
   ({ nodes, edges }) as unknown as SpatialCanvas
@@ -21,10 +21,13 @@ const node = (id: string, x: number, y: number, w = 100, h = 60) => ({
   text: id,
 })
 
-const dimensionsOf = (c: SpatialCanvas) =>
-  computeSceneDimensions(composeCanvasScene(c, constantRatioMeasureText))
+const dimensionsOf = (c: SpatialCanvas) => {
+  const { x, y, w, h } = sceneEnvelope(composeCanvasScene(c, constantRatioMeasureText))
+  // The far edge, which for a drawing that starts at the origin is the span.
+  return { width: x + w, height: y + h }
+}
 
-describe('computeSceneDimensions', () => {
+describe('sceneEnvelope', () => {
   it('an empty canvas has no size', () => {
     expect(dimensionsOf(canvas([]))).toEqual({ width: 0, height: 0 })
   })

@@ -53,13 +53,17 @@ jobs:
       # quietly does not run in CI is the exact failure the script it covers
       # exists to prevent.
       - name: Install ImageMagick (compose-figure tests)
-        # The runner image ships Microsoft's apt sources, and
-        # packages.microsoft.com intermittently answers 403 — which fails the
-        # whole `apt-get update` and this job with it, for repositories
-        # nothing here installs from. Dropping them first keeps the update
-        # scoped to the archives imagemagick actually comes from.
+        # The runner image ships third-party apt sources, and any one of them
+        # failing fails the whole `apt-get update` and this job with it, for
+        # repositories nothing here installs from: packages.microsoft.com
+        # intermittently answers 403, and dl.google.com's Chrome index has
+        # answered a Hash Sum mismatch for the better part of an hour while
+        # its mirrors caught up with a regenerated release file. Keeping only
+        # Ubuntu's own archive (`ubuntu.sources`, a deb822 file on noble)
+        # scopes the update to where imagemagick actually comes from, so the
+        # next vendor source the image adds cannot fail it either.
         run: |
-          sudo rm -f /etc/apt/sources.list.d/microsoft-prod.list /etc/apt/sources.list.d/azure-cli.sources
+          sudo find /etc/apt/sources.list.d -maxdepth 1 -type f ! -name ubuntu.sources -delete
           sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
 
       # cleanup-worktrees.mjs can force-remove worktrees and delete local
@@ -235,9 +239,17 @@ jobs:
         #
         # `pipefail` is the half that makes this loud rather than correct:
         # without it any future failure of that git command is a pass again.
+        #
+        # The existence filter is an `if`, not `[ -f ] && echo`. A while loop
+        # exits with the status of its LAST iteration, so under `-e` the
+        # short-circuited `&&` on a file the diff DELETED killed the whole
+        # step — before anything ran. Order-dependent, which is why it hid:
+        # measured, the same list passes when a surviving file happens to
+        # come last and exits 1 when a deleted one does. Found on a PR that
+        # retired sixteen test files.
         run: |
           set -o pipefail
-          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
+          files=$(git diff --name-only HEAD^1 HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do if [ -f "$f" ]; then echo "$f"; fi; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 

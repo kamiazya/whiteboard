@@ -239,74 +239,26 @@ describe('layoutSpatialCanvas', () => {
     expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
   })
 
-  it('a visual.symbol facet draws a badge: an icon by name, an emoji as a glyph', () => {
+  // A symbol is a mark for the surfaces where a node or document is TOO
+  // SMALL to read — the tab's favicon, the file row, the canvas overview. It
+  // was also drawn on the node itself, as a 16px badge in the content box's
+  // top-right corner, and that was the one place it said nothing a reader
+  // could not already see: the node is right there at full size with its own
+  // content. Removed once the three surfaces it was designed for existed.
+  it('a visual.symbol facet draws nothing on the node itself', () => {
     const iconNode = {
       ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'a' }),
       'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
     }
     const scene = layoutSpatialCanvas(canvas([iconNode]), baseOptions())
-    const badge = scene.nodes.find((n) => n.kind === 'icon')
-    expect(badge).toBeDefined()
-    if (badge?.kind !== 'icon') throw new Error('unreachable')
-    expect(badge.icon).toBe('star')
-    // Top-right of the content area, inside the node box, on top of content
-    // (emitted after it).
-    expect(badge.bbox.x + badge.bbox.w).toBeLessThanOrEqual(200)
-    expect(badge.bbox.y).toBeGreaterThanOrEqual(0)
-    expect(badge.appearance?.stroke).toBe('#303030')
+    expect(scene.nodes.find((n) => n.kind === 'icon')).toBeUndefined()
 
     const emojiNode = {
       ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'b' }),
       'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji' as const, char: '✅' } } },
     }
     const emojiScene = layoutSpatialCanvas(canvas([emojiNode]), baseOptions())
-    const glyph = emojiScene.nodes.find((n) => n.kind === 'glyph')
-    expect(glyph?.kind === 'glyph' && glyph.glyph).toBe('✅')
-  })
-
-  it('a badge on a SHAPED node sits inside the silhouette', () => {
-    const shaped = {
-      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: '' }),
-      'x-whiteboard': {
-        facets: {
-          'visual.shape/v0': { kind: 'ellipse' as const },
-          'visual.symbol/v0': { kind: 'icon' as const, name: 'star' },
-        },
-      },
-    }
-    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
-    const badge = scene.nodes.find((n) => n.kind === 'icon')
-    expect(badge).toBeDefined()
-    if (badge?.kind !== 'icon') throw new Error('unreachable')
-    const corners = [
-      { x: badge.bbox.x, y: badge.bbox.y },
-      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y },
-      { x: badge.bbox.x, y: badge.bbox.y + badge.bbox.h },
-      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y + badge.bbox.h },
-    ]
-    for (const corner of corners) {
-      expect(outlineContains('visual.ellipse', { x: 0, y: 0, w: 200, h: 100 }, corner)).toBe(true)
-    }
-  })
-
-  it('a node too narrow for a badge draws none, and never paints one outside itself', () => {
-    // The badge is a fixed 16px inset by a 4px margin, so a node has to be
-    // wider than 16 to hold one — the guard has to price the MARGIN too, or
-    // an 18px node gets a badge starting at x = -2.
-    for (const width of [8, 18, 20]) {
-      const node = {
-        ...textNode({ id: 'a', x: 0, y: 0, width, height: width, text: '' }),
-        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
-      }
-      const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
-      const badge = scene.nodes.find((n) => n.kind === 'icon')
-      if (badge === undefined) continue
-      if (badge.kind !== 'icon') throw new Error('unreachable')
-      expect(badge.bbox.x, `width ${width}`).toBeGreaterThanOrEqual(0)
-      expect(badge.bbox.x + badge.bbox.w, `width ${width}`).toBeLessThanOrEqual(width)
-      expect(badge.bbox.y, `width ${width}`).toBeGreaterThanOrEqual(0)
-      expect(badge.bbox.y + badge.bbox.h, `width ${width}`).toBeLessThanOrEqual(width)
-    }
+    expect(emojiScene.nodes.find((n) => n.kind === 'glyph')).toBeUndefined()
   })
 
   it('visual.text overrides the placement a node would otherwise choose, both ways', () => {
@@ -668,6 +620,28 @@ describe('layoutSpatialCanvas', () => {
     expect(sceneNoLabel.nodes.every((n) => n.kind !== 'textRun')).toBe(true)
   })
 
+  it('paints a group behind the nodes its box contains, whatever order the canvas lists them in', () => {
+    // Stored order is the id order of a map, not the order a caller wrote,
+    // so a group whose id sorts AFTER a member's used to paint over it: a
+    // coloured layer swallowed four of the eleven boxes in a diagram the
+    // lane drew, and the grader (which reads the store) passed it.
+    const member = textNode({ id: 'a-member', x: 40, y: 40, width: 120, height: 60, text: 'in' })
+    const group: Extract<SpatialNode, { type: 'group' }> = {
+      id: 'z-group',
+      type: 'group',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      color: '5',
+    }
+    const scene = layoutSpatialCanvas(canvas([member, group]), baseOptions())
+    const at = (id: string) => scene.nodes.findIndex((n) => 'id' in n && n.id === id)
+    expect(at('z-group')).toBeGreaterThanOrEqual(0)
+    expect(at('a-member')).toBeGreaterThanOrEqual(0)
+    expect(at('z-group')).toBeLessThan(at('a-member'))
+  })
+
   it('renders an empty canvas as an empty scene without throwing', () => {
     expect(layoutSpatialCanvas(canvas([]), baseOptions())).toEqual({ nodes: [] })
   })
@@ -880,6 +854,27 @@ describe('layoutSpatialEdges', () => {
     const full = layoutSpatialCanvas(canvas, options).nodes
     const edgesOnly = layoutSpatialEdges(canvas, options)
     expect(edgesOnly.length).toBeGreaterThan(0)
+    expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
+  })
+
+  it('resolves the canvas theme the way the full layout does: ink, routing default, paint', () => {
+    // The theme is resolved PER CANVAS inside the layout (ADR-0030 decision
+    // 5), and the edge-only producer is a second entry point into it. Left
+    // out, a live drag drew every edge crisp and straight on a board whose
+    // committed render pencilled and curved them.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 300, y: 120, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+    const options = baseOptions({ style: 'document' })
+    const full = layoutSpatialCanvas(canvas, options).nodes
+    const edgesOnly = layoutSpatialEdges(canvas, options)
+    const edge = edgesOnly.find((node) => node.kind === 'edge')
+    expect(edge?.kind === 'edge' ? edge.ink?.style : undefined).toBe('sketch')
     expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
   })
 })

@@ -57,10 +57,16 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // is injection — the layout pass takes the resolvers the way it takes
     // `highlightCode`. Worth doing when a SECOND plugin wants to change how
     // a node is drawn; before that it is indirection with one implementation.
+    // facet-engine: the theme TOKEN CONTRACT (ADR-0030 decision 3) — the one
+    // shape a registered theme has, declared in the engine so ADR-0013
+    // decision 8 can build on it without moving it; this package maps it
+    // onto its palette. zod-only, so it holds on Node, the browser and a
+    // worker alike — checked before adopting.
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-plugin-visual',
+      '@kamiazya/whiteboard-facet-engine',
     ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
@@ -135,15 +141,14 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedThirdParty: ['loro-crdt'],
   },
   '@kamiazya/whiteboard-history': {
-    // A document's history as pure mechanics over the workspace record:
-    // branch (variation) operations, merge planning, the checkpoint scheduler
-    // and version retention. Both keepers run them; what differs between the
-    // keepers is where the rows live, which stays in each composition root.
-    // loro-crdt because a tip is a frontier of the record and a merge plan is
-    // three projections of it; zod because the branch schema is the one
-    // source the wire contract re-exports.
-    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-loro-adapter'],
-    allowedThirdParty: ['loro-crdt', 'zod'],
+    // A document's history as pure mechanics over the workspace record: the
+    // checkpoint scheduler, version retention, and frontier encoding. Both
+    // keepers run them; what differs between the keepers is where the rows
+    // live, which stays in each composition root. loro-crdt because a
+    // checkpoint's identity is a frontier of the record. Branch operations
+    // and merge planning were here too until ADR-0029 retired the branch.
+    allowedInternalDeps: [],
+    allowedThirdParty: ['loro-crdt'],
   },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
@@ -211,12 +216,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // server-core: the version-entry and operator contracts the /api routes
   // publish are defined beside the routes' own logic and re-exported here.
   '@kamiazya/whiteboard-daemon-client': {
-    allowedInternalDeps: [
-      '@kamiazya/whiteboard-model',
-      '@kamiazya/whiteboard-server-core',
-      // history: the branch schema its `/branches` contract re-exports.
-      '@kamiazya/whiteboard-history',
-    ],
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-server-core'],
     // @opentelemetry/api alone: the no-op propagation surface api-client
     // injects trace headers through when the embedding page registers a real
     // SDK. The SDK packages themselves were deleted with the dead
@@ -264,10 +264,9 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',
       '@kamiazya/whiteboard-workspace-index',
-      // history: the branch, merge and checkpoint mechanics the browser
-      // keeper runs, the same ones the daemon does. Both keepers read a
-      // branch out of the workspace record now, so the rules for changing
-      // one live in a package below both rather than in either root.
+      // history: the checkpoint and retention mechanics the browser keeper
+      // runs, the same ones the daemon does — so the rules for changing one
+      // live in a package below both rather than in either root.
       '@kamiazya/whiteboard-history',
     ],
     allowedThirdParty: [],
@@ -346,8 +345,6 @@ export const KNOWN_PACKAGE_CYCLES: readonly {
  */
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'mcp/document-tools.ts -> workspace-lock',
-  'routes/branches.ts -> branch-merge',
-  'routes/branches.ts -> branches-store',
   'routes/debug.ts -> doc-cache',
   'routes/debug.ts -> document-store',
   'routes/document.ts -> auto-compact',
@@ -358,7 +355,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
   'routes/document/metadata.ts -> names-store',
-  'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
   'routes/export.ts -> document-store',
@@ -384,10 +380,17 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * server-core instead. The ADR's scheduled burn-down is COMPLETE
  * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and ws.ts
  * are all translation-only over the LiveDocuments/WorkspaceDocuments
- * seams. The 21 edges left are the unscheduled adapters — each still a
+ * seams. The 18 edges left are the unscheduled adapters — each still a
  * candidate for the same treatment, none yet ordered.
+ *
+ * Two of the 21 went when ADR-0029 retired the branch: `routes/branches.ts`
+ * reached both `branch-merge` and `branches-store`, and the route no longer
+ * exists. A third went with the version row's thumbnail —
+ * `routes/document/thumbnails.ts` reached `version-store`, and the route is
+ * gone with the feature. Debt paid by deletion rather than by relocation,
+ * which is the cheapest way this number ever comes down.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 21
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 18
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

@@ -18,8 +18,8 @@
  * the ambient chrome, and a card's controls are tap targets whose size
  * should not follow the zoom.
  */
-import type { CommentThread } from '@kamiazya/whiteboard-model'
-import { CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
+import type { CommentMessage, CommentThread } from '@kamiazya/whiteboard-model'
+import { Check, CircleCheck, Pencil, RotateCcw, X } from 'lucide-react'
 import {
   type CSSProperties,
   useCallback,
@@ -29,10 +29,9 @@ import {
   useState,
 } from 'react'
 import type { Box } from '../../lib/spatial/geometry.js'
-import { CommentBody } from '../annotations/CommentBody.js'
-import { MessageBy } from '../annotations/message-meta.js'
+import { CommentComposer } from '../annotations/CommentComposer.js'
 import { ReplyComposer } from '../annotations/ReplyComposer.js'
-import { ThreadReplies } from '../annotations/ThreadReplies.js'
+import { ThreadMessage } from '../annotations/ThreadMessage.js'
 
 /** Screen px kept between the card and the root's edge once slid inside. */
 const CARD_EDGE_MARGIN_PX = 8
@@ -45,7 +44,8 @@ export interface CommentThreadCardProps {
   readonly style: CSSProperties
   readonly onReply: (body: string) => void
   readonly onResolve: (resolved: boolean) => void
-  readonly onEdit: () => void
+  /** Rewrites ONE message of this conversation, whichever one. */
+  readonly onEditMessage: (messageId: string, body: string) => void
   readonly onClose: () => void
 }
 
@@ -55,11 +55,26 @@ export function CommentThreadCard({
   style,
   onReply,
   onResolve,
-  onEdit,
+  onEditMessage,
   onClose,
 }: CommentThreadCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null)
   const resolved = thread.status === 'resolved'
+  // The message under edit, with its draft. At most one: two open editors
+  // would be two drafts of one conversation, and the Escape that leaves an
+  // edit could only unwind one of them.
+  const [editing, setEditing] = useState<{ readonly id: string; readonly body: string } | null>(
+    null,
+  )
+
+  function commitEdit(message: CommentMessage): void {
+    if (editing === null) return
+    const body = editing.body.trim()
+    // An emptied message is a cancel, not a blank one: the schema refuses an
+    // empty body.
+    if (body !== '' && body !== message.body) onEditMessage(message.id, body)
+    setEditing(null)
+  }
   // A card opened on a bubble near the root's right or bottom edge is slid
   // back inside once its real size is measurable — the same nudge the
   // context menu gets, for the same reason: the root clips, so a card
@@ -136,10 +151,12 @@ export function CommentThreadCard({
       // a cancelled touchstart, so the Close never received its click.
       data-editor-overlay
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.stopPropagation()
-          onClose()
-        }
+        if (event.key !== 'Escape') return
+        event.stopPropagation()
+        // One layer at a time: an edit in progress first, since shutting the
+        // card would discard a draft nobody asked to discard.
+        if (editing !== null) setEditing(null)
+        else onClose()
       }}
       style={{
         position: 'absolute',
@@ -158,33 +175,67 @@ export function CommentThreadCard({
       }}
       className="flex flex-col gap-2"
     >
-      <div className="flex items-start gap-2">
-        <div className="min-w-0 flex-1">
-          <CommentBody body={thread.messages[0]?.body ?? ''} />
-          <MessageBy message={thread.messages[0]} />
-        </div>
-        {/* Top-right, where a card's own verbs belong — reachable without
-            hunting for a menu, and out of the text's way. */}
-        <div className="flex shrink-0 items-center gap-0.5">
-          <CardAction label="Edit comment" onSelect={onEdit}>
-            <Pencil className="size-3.5" />
+      {/* The THREAD's own verbs, and only those. Edit left this row when
+          every message became editable: a verb that acts on one message has
+          to sit on that message, or it can only ever mean the first one —
+          which is exactly what it meant. */}
+      <div className="flex shrink-0 items-center justify-end gap-0.5">
+        {resolved ? (
+          <CardAction label="Reopen" onSelect={() => onResolve(false)}>
+            <RotateCcw className="size-3.5" />
           </CardAction>
-          {resolved ? (
-            <CardAction label="Reopen" onSelect={() => onResolve(false)}>
-              <RotateCcw className="size-3.5" />
-            </CardAction>
-          ) : (
-            <CardAction label="Resolve" onSelect={() => onResolve(true)}>
-              <CircleCheck className="size-3.5" />
-            </CardAction>
-          )}
-          <CardAction label="Close" onSelect={onClose}>
-            <X className="size-3.5" />
+        ) : (
+          <CardAction label="Resolve" onSelect={() => onResolve(true)}>
+            <CircleCheck className="size-3.5" />
           </CardAction>
-        </div>
+        )}
+        <CardAction label="Close" onSelect={onClose}>
+          <X className="size-3.5" />
+        </CardAction>
       </div>
 
-      <ThreadReplies thread={thread} />
+      <ol className="flex flex-col gap-3">
+        {thread.messages.map((message) => (
+          <ThreadMessage
+            key={message.id}
+            message={message}
+            action={
+              editing?.id === message.id ? null : (
+                <CardAction
+                  label="Edit message"
+                  testId={`edit-${message.id}`}
+                  onSelect={() => setEditing({ id: message.id, body: message.body })}
+                >
+                  <Pencil className="size-3.5" />
+                </CardAction>
+              )
+            }
+            editor={
+              editing?.id === message.id ? (
+                <form
+                  className="flex items-end gap-1"
+                  onSubmit={(event) => {
+                    event.preventDefault()
+                    commitEdit(message)
+                  }}
+                >
+                  <CommentComposer
+                    label="Edit message text"
+                    value={editing.body}
+                    onChange={(body) => setEditing({ id: message.id, body })}
+                    onSubmit={() => commitEdit(message)}
+                    autoFocus
+                    className="min-w-0 flex-1"
+                  />
+                  <CardAction label="Save" onSelect={() => commitEdit(message)}>
+                    <Check className="size-3.5" />
+                  </CardAction>
+                </form>
+              ) : null
+            }
+          />
+        ))}
+      </ol>
       <ReplyComposer onReply={onReply} />
     </div>
   )
@@ -192,10 +243,13 @@ export function CommentThreadCard({
 
 function CardAction({
   label,
+  testId,
   onSelect,
   children,
 }: {
   readonly label: string
+  /** For the verbs there is one of PER MESSAGE, where a name cannot pick one. */
+  readonly testId?: string
   readonly onSelect: () => void
   readonly children: React.ReactNode
 }) {
@@ -204,6 +258,7 @@ function CardAction({
       type="button"
       aria-label={label}
       title={label}
+      {...(testId === undefined ? {} : { 'data-testid': testId })}
       onClick={onSelect}
       className="rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
     >

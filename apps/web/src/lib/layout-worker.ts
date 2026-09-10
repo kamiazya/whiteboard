@@ -29,9 +29,13 @@ import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-
 // `document is not defined` before a single message is handled.
 
 import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
-import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
+import {
+  ensureViewerFontLoaded,
+  registerFontBytes,
+} from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import { createSpatialContentCache } from './content-cache'
 import { outlineFromSpatial } from './document-outline.js'
 import { resolveRectColor } from './favicon.js'
@@ -45,9 +49,10 @@ import {
   type MarkdownRenderResponse,
   type OutlineRequest,
   type OutlineResponse,
+  type RegisterFaceRequest,
 } from './layout-worker-protocol.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
-import { readRenderEntry, writeRenderEntry } from './render-store.js'
+import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
 import { renderCanvasToSvgWith } from './spatial/scene-render-core.js'
 import type { ResolvedTheme } from './theme.js'
 
@@ -103,22 +108,8 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
-
-/**
- * How long a render has to take before storing it is worth the write.
- *
- * Measured in a real browser, medians of 15 interleaved rounds: an OPFS write
- * costs 2.2-3.1ms whatever the payload, while a render ranges from 2.0ms (a
- * 12-node spatial canvas) to 67.2ms (a 60-section markdown body). Below this
- * floor the store makes the FIRST visit slower to save less than a
- * millisecond on the second; above it the saving is the whole render.
- *
- * A floor rather than a per-pipeline rule because the cost is not a property
- * of the pipeline: a 400-node spatial canvas (19.9ms) clears it and a
- * four-section markdown body barely does. Timing the work that actually ran
- * is the only thing that stays true as either pipeline changes.
- */
-const STORE_FLOOR_MS = 5
+/** Every theme face posted so far, settled — what a layout waits on before it measures. */
+let facesReady: Promise<unknown> = Promise.resolve()
 
 /**
  * Answers from the persistent tier when it holds this key, and says whether
@@ -146,7 +137,7 @@ function remember(
   elapsedMs: number,
   reply: { readonly type: string; readonly id: number },
 ): void {
-  if (cacheKey === undefined || elapsedMs < STORE_FLOOR_MS) return
+  if (cacheKey === undefined || !worthStoring(elapsedMs)) return
   const { id: _id, ...rest } = reply
   // Not awaited: the reply is already posted, and a caller must never wait on
   // a cache. A write that loses its race with page teardown costs one
@@ -155,9 +146,26 @@ function remember(
 }
 
 self.onmessage = async (
-  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest>,
+  event: MessageEvent<
+    | LayoutRequest
+    | MarkdownRailRequest
+    | MarkdownRenderRequest
+    | OutlineRequest
+    | RegisterFaceRequest
+  >,
 ) => {
   const request = event.data
+  if (request.type === 'register-face') {
+    // Chained, and awaited by every later message below: an async handler
+    // returns at its first await, so the next message would otherwise run
+    // while `face.load()` is still pending and measure with the bundled
+    // family — `registerFontBytes` records the family only once the face
+    // is usable.
+    facesReady = facesReady.then(() => registerFontBytes(request.family, request.bytes))
+    await facesReady
+    return
+  }
+  await facesReady
   // Before the font gate and before any work: a stored answer is the answer,
   // and the gate exists to stop a render being MEASURED with the wrong face
   // rather than to re-check one already drawn with the right one.
@@ -201,10 +209,15 @@ self.onmessage = async (
       // belongs to a different document.
       const canvas = request.canvas ?? (await decodeSnapshot(request.snapshot))
       const startedAt = performance.now()
+      // Read here rather than on the asking thread: this is the one place
+      // the canvas is already decoded, and decoding it again to read one
+      // facet is exactly the cost the snapshot travels here to avoid.
+      const symbol = resolveCanvasSymbol(canvas)
       const done: OutlineResponse = {
         type: 'outlined',
         id: request.id,
         rects: outlineFromSpatial(canvas),
+        ...(symbol === undefined ? {} : { symbol }),
       }
       self.postMessage(done)
       remember(request.cacheKey, performance.now() - startedAt, done)
@@ -323,6 +336,7 @@ self.onmessage = async (
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
+      style: request.style,
       references,
       resolveReference: overlayReferences({
         content: references?.resolveReference,

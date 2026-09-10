@@ -7,13 +7,9 @@ import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } fro
 import { CardContent } from '../components/ui/card.js'
 import { ScrollArea } from '../components/ui/scroll-area.js'
 import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
-import { useBranches } from '../hooks/useBranches.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { buildMiniGraph } from '../lib/mini-graph.js'
-import { displayBranchName } from '../lib/utils.js'
 import { type PastDocument, VersionsRequestError } from '../lib/versions-backend.js'
 import { SquiggleLoader } from './SquiggleLoader.js'
-import { VersionThumbnail } from './VersionThumbnail.js'
 import { formatRelative } from './workspace-files/format-relative.js'
 
 const log = getAppLogger('VersionTimeline')
@@ -139,10 +135,13 @@ function versionAuthor(operator?: OperatorInfo): string | null {
  */
 function RowShell({
   interactive,
+  current,
   onActivate,
   children,
 }: {
   readonly interactive: boolean
+  /** This row is the state currently drawn on the document. */
+  readonly current: boolean
   readonly onActivate: () => void
   readonly children: ReactNode
 }) {
@@ -154,7 +153,16 @@ function RowShell({
   return (
     <button
       type="button"
-      className={`${shared} cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+      // `aria-current` rather than colour alone. Opening a version replaces
+      // the whole document and renames the top bar, but on a screen wide
+      // enough to show the list beside it the rows all still looked alike —
+      // and a ring reaches nobody who is not looking at it. Absent, not
+      // `false`, on the others: a mark every row carries says nothing about
+      // any of them.
+      {...(current ? { 'aria-current': true } : {})}
+      className={`${shared} cursor-pointer transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 ${
+        current ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'hover:bg-accent'
+      }`}
       onClick={onActivate}
     >
       {children}
@@ -244,26 +252,16 @@ export default function VersionTimeline({
     refresh()
   }, [refresh])
 
-  // Keep branch state here for head filtering and the mini-graph.
-  // Legacy versions without branchName are treated as main.
-  const {
-    state: branchesState,
-    loading: branchesLoading,
-    refetch: refetchBranches,
-  } = useBranches(workspaceId, path)
-
-  // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
-  // same tick. useBranches has no event subscription of its own, so this is
-  // the only path by which an externally-driven HEAD change (another peer
-  // switching branches, a merge from another tab) reaches this component's
-  // branch filter.
+  // Polling for new auto-versions. It used to refetch branches on the same
+  // tick, because HEAD could move under the list from another peer; there is
+  // no HEAD any more (ADR-0029) and a version row is a point in this
+  // document's past whoever wrote it.
   useEffect(() => {
     const h = setInterval(() => {
       refresh()
-      refetchBranches()
     }, 15_000)
     return () => clearInterval(h)
-  }, [refresh, refetchBranches])
+  }, [refresh])
 
   // Only a CHANGE in refreshSignal triggers a refetch — the mount-triggered
   // refresh() effect above already covers the initial load, and this ref
@@ -382,32 +380,13 @@ export default function VersionTimeline({
     })
   }, [previewing, previewPast, isRestoring, restoreError, closePreview, restorePreviewed])
 
-  const head = branchesState.head
-
-  // EVERY lane, not only the one HEAD is on. The filter that used to stand
-  // here made `mini-graph.ts`'s "rows on other branches use a ring dot" rule
-  // unreachable — each row it drew was active by construction — and meant the
-  // only way to see another variation's history was to switch onto it first.
-  const visibleVersions = versions
-  // Re-derived only off head/branches/versions — NOT off previewing,
-  // isRestoring, restoreError, stale, or loading, all of which change far
-  // more often and none of which buildMiniGraph (O(versions)) reads.
-  const { miniGraphById, versionsById } = useMemo(() => {
-    const rows = buildMiniGraph({
-      head,
-      branches: branchesState.branches,
-      versions: visibleVersions.map((v) => ({
-        id: v.id,
-        branchName: v.branchName ?? 'main',
-        createdAt: v.createdAt,
-        ...(v.restoredFrom === undefined ? {} : { restoredFrom: v.restoredFrom }),
-      })),
-    })
-    return {
-      miniGraphById: new Map(rows.map((r) => [r.versionId, r])),
-      versionsById: new Map(visibleVersions.map((v) => [v.id, v])),
-    }
-  }, [head, branchesState.branches, visibleVersions])
+  // Every row, in one column. Lanes were the branch surface's view of this
+  // list — a dot coloured by variation, a ring for the lane you were not on,
+  // an arc where a restore met the trunk. ADR-0029 retires that surface, and
+  // what History answers on its own needs no lane: what this used to be, and
+  // can I go back. The `restored from X` line survives it, carrying the one
+  // fact the arc drew that the rows cannot state on their own.
+  const versionsById = useMemo(() => new Map(versions.map((v) => [v.id, v])), [versions])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-2 p-3">
@@ -436,12 +415,12 @@ export default function VersionTimeline({
 
       <ScrollArea className="min-h-0 flex-1 -mx-1">
         <div className="flex flex-col gap-1.5 px-1">
-          {branchesLoading || (loading && visibleVersions.length === 0) ? (
+          {loading && versions.length === 0 ? (
             // Until /branches resolves, `head` is the hook's 'main' default —
             // rendering rows filtered by it would offer the wrong branch's
             // versions as restore targets during the fetch race.
             <SquiggleLoader label="Loading…" className="py-4 text-xs" />
-          ) : visibleVersions.length === 0 ? (
+          ) : versions.length === 0 ? (
             <div className="text-xs text-muted-foreground py-4 text-center">
               {/* The document's history, not one lane's: the list is no longer
                   filtered, so an empty one means there is nothing anywhere. */}
@@ -455,126 +434,21 @@ export default function VersionTimeline({
               button above, or ⌘/Ctrl+S.
             </div>
           ) : (
-            visibleVersions.map((v) => {
-              const row = miniGraphById.get(v.id)
+            versions.map((v) => {
               const author = versionAuthor(v.operator)
               const restoredSource =
-                row?.restoredFrom === undefined ? undefined : versionsById.get(row.restoredFrom)
+                v.restoredFrom === undefined ? undefined : versionsById.get(v.restoredFrom)
               const restoredFromTitle =
                 restoredSource === undefined ? null : versionTitle(restoredSource)
               return (
                 <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
-                  {/* The lane column, on every row. It was gated on the
-                      keeper having branches, widened to lineage when the
-                      browser keeper's restores needed an arc to draw, and
-                      then always true once that keeper grew variations — so
-                      what is left is a condition, not a decision.
-
-                      A single lane down a document nobody has branched is
-                      still 24px saying little, which is what the gate was
-                      originally for. That question is about the DOCUMENT
-                      (how many lanes does it have?), not about the keeper,
-                      and answering it is not this deletion's job. */}
-                  {
-                    /* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */
-                    <svg
-                      data-testid="version-lane"
-                      className="shrink-0"
-                      width={24}
-                      height={36}
-                      viewBox="0 0 24 36"
-                      aria-hidden
-                    >
-                      {row?.connectorBefore ? (
-                        <line
-                          x1={12}
-                          y1={0}
-                          x2={12}
-                          y2={14}
-                          stroke={row.dotColor}
-                          strokeWidth={1.5}
-                          strokeOpacity={0.6}
-                        />
-                      ) : null}
-                      {/* Solid on the lane HEAD is on, a ring on the others —
-                        mini-graph's own rule, reachable now that the rows are
-                        no longer pre-filtered to HEAD. */}
-                      <circle
-                        cx={12}
-                        cy={18}
-                        r={4}
-                        fill={row?.active === false ? 'none' : (row?.dotColor ?? '#94a3b8')}
-                        stroke={row?.dotColor ?? '#94a3b8'}
-                        strokeWidth={row?.active === false ? 2 : 0}
-                      />
-                      <line
-                        x1={12}
-                        y1={22}
-                        x2={12}
-                        y2={36}
-                        stroke={row?.dotColor ?? '#94a3b8'}
-                        strokeWidth={1.5}
-                        strokeOpacity={0.6}
-                      />
-                      {/* The arc a restore leaves, in the side channel at
-                          x=20 so it never sits under the trunk. Painted a row
-                          at a time — the top hook where the merge is, a
-                          straight run through the rows between, the bottom
-                          hook at the point that was restored — because one
-                          row's 24x36 box cannot hold a span of several. */}
-                      {row?.restoredFrom !== undefined && (
-                        <path
-                          d="M12 18 C20 18, 20 22, 20 36"
-                          fill="none"
-                          stroke={row.dotColor}
-                          strokeWidth={1.5}
-                          strokeDasharray="3 2"
-                        />
-                      )}
-                      {row?.isRestoreArcThrough && (
-                        <line
-                          x1={20}
-                          y1={0}
-                          x2={20}
-                          y2={36}
-                          stroke={row.dotColor}
-                          strokeWidth={1.5}
-                          strokeDasharray="3 2"
-                        />
-                      )}
-                      {row?.isRestoreSource && (
-                        <path
-                          d="M20 0 C20 14, 20 18, 12 18"
-                          fill="none"
-                          stroke={row.dotColor}
-                          strokeWidth={1.5}
-                          strokeDasharray="3 2"
-                        />
-                      )}
-                    </svg>
-                  }
-                  {/* Restore is offered on HEAD's lane only. Showing another
-                      variation's history is not the same as offering to
-                      restore from it: what restoring one variation's version
-                      into another MEANS is undecided, and an affordance that
-                      acts on an undecided semantic is worse than none. A row
-                      on another lane is context, so it is not a control. */}
                   <RowShell
-                    interactive={row?.active !== false}
+                    interactive
+                    current={previewing?.id === v.id}
                     onActivate={() => {
                       void openPreview(v)
                     }}
                   >
-                    {v.hasThumbnail && (
-                      <div className="mx-3 mb-1 border rounded overflow-hidden bg-muted/30">
-                        <VersionThumbnail
-                          workspaceId={workspaceId}
-                          path={path}
-                          versionId={v.id}
-                          hasThumbnail={v.hasThumbnail}
-                        />
-                      </div>
-                    )}
                     <CardContent className="px-3 flex items-center justify-between gap-2">
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs font-medium truncate">{versionTitle(v)}</span>
@@ -585,15 +459,6 @@ export default function VersionTimeline({
                             on is the frame the whole panel is read in —
                             repeating it on every row states the obvious and
                             makes the exceptions harder to see. */}
-                        {row?.active === false && (
-                          <span
-                            data-testid="version-lane-name"
-                            className="text-[11px] font-medium truncate"
-                            style={{ color: row.dotColor }}
-                          >
-                            {displayBranchName(v.branchName ?? 'main')}
-                          </span>
-                        )}
                         <span className="text-[11px] text-muted-foreground">
                           {/* The time is only repeated here when the TITLE is
                               a label — otherwise it is already the title. */}
@@ -616,14 +481,6 @@ export default function VersionTimeline({
                               {' · '}
                               <span data-testid="version-restored-from" className="text-primary">
                                 restored from {restoredFromTitle}
-                              </span>
-                            </>
-                          ) : null}
-                          {row?.branchOut ? (
-                            <>
-                              {' · '}
-                              <span className="text-primary">
-                                variation → {displayBranchName(row.branchOut)}
                               </span>
                             </>
                           ) : null}

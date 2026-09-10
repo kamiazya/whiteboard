@@ -117,7 +117,9 @@ the table alone.
 - The injected text-measurement seam (`measure.ts`: `FontDescriptor`,
   `TextMetrics`, `MeasureText`) — layout never imports a font or measurer.
 - The SVG backend (`svg/backend.ts` + `svg/format.ts`): scene -> SVG string,
-  one implementation shared by Node/browser/Workers.
+  one implementation shared by Node/browser/Workers. `svg/shapes.ts` draws a
+  node's silhouette and an edge's line (crisp or pencilled, with the glow
+  either takes); `svg/paint.ts` holds the presence-only paint helpers.
 - `sceneDigest` (`scene-digest.ts`): the AI-facing spatial digest, the one
   Zod-schematized output of this package. It reports one entry per
   ADDRESSABLE node — the chrome shapes carrying a document `id` — because
@@ -135,8 +137,9 @@ the table alone.
 - MathJax (or any math typesetting engine) invocation — composition roots
   own that; this package only defines the SVG-fragment node type and the
   seam for a composition root to inject an already-rendered fragment.
-- The theme/design-token layer (deferred to a later slice) — layout uses a
-  small set of fixed geometry constants, not a token system.
+- The theme TOKEN CONTRACT itself — that is facet-engine's
+  (`themeTokensSchema`, ADR-0030 decision 3); this package maps tokens onto
+  its palette (`theme/theme-asset.ts`) and never re-declares them.
 - A Canvas-API rendering backend, PNG/resvg rasterization, opentype.js /
   font loading — those are composition-root concerns that supply the
   `measure` callback, not something this package imports.
@@ -150,8 +153,10 @@ the table alone.
 - Runtime dependencies: `@kamiazya/whiteboard-model` (spatial nodes/
   edges + the `./mdast` subset), `@kamiazya/whiteboard-codec` (the DEFAULT
   `parseBody`; every consumer already bundled it to pass that same function
-  in), `css-line-break` (UAX #14 break opportunities) and `zod` (via
-  `catalog:`), for `sceneDigestSchema` only.
+  in), `@kamiazya/whiteboard-plugin-visual` (the default render
+  contribution), `@kamiazya/whiteboard-facet-engine` (the theme token
+  contract, zod-only), `css-line-break` (UAX #14 break opportunities) and
+  `zod` (via `catalog:`), for `sceneDigestSchema` only.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`/
   `HTMLElement`), `inversify`. Enforced by `src/import-guard.test.ts`, which
   captures every production source at build time via `import.meta.glob`
@@ -964,6 +969,83 @@ the table alone.
     `reference-seams-check.test.ts` refuses a seam defined outside this
     directory.
 
+15. **A canvas's theme is resolved IN LAYOUT, per canvas** (ADR-0030
+    decisions 4-6; `withCanvasTheme` in `layout/spatial-canvas.ts`,
+    `theme/theme-asset.ts`). A `RenderContribution` may register `themes`
+    (token bundles by bare name, namespaced like `shapes`) and a `readTheme`
+    that answers the id the CANVAS names; `SpatialLayoutOptions.style`
+    decides whether that is honoured — `'clean'` (the DEFAULT: decision #10's
+    agent never pays unasked) ignores it, `'document'` draws it, and a theme
+    id draws that theme unsaved (the session override). Resolution happens at
+    the top of `layoutSpatialCanvasInternal`, so an embedded canvas reads its
+    OWN facet first and inherits the host's only when it names none — the
+    same side of the line `visual.edges`/`visual.shape` already stand on in
+    an embed, and deliberately NOT a layout option spread downward through
+    `...options`, which is the shape that lets an outer document's setting
+    win over an embedded canvas's own.
+    What a theme changes: the appearance resolver (the token palette for the
+    base resolver's `mode`, through `createSpatialTheme`'s once-unused
+    `palette` swap point — so `SpatialAppearanceResolver.mode` exists and
+    `createSpatialTheme` stamps it), the label/body font family (declared
+    only where `fontAvailable` says a face exists, else the bundled family
+    plus a `font-missing` report — the declared family must be the measured
+    one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
+    `visual.edges` is silent, `nodeShape` where a node's own facet is silent
+    (never a group, which is a frame), `groupFrame` on group chrome. An
+    unknown id draws clean and reports `unknown-theme`; nothing throws.
+    `createThemedAppearance` is memoized per (tokens, mode, family) so a
+    themed canvas keeps the frozen-singleton property the editor's `useMemo`
+    relies on. The content cache key carries the label family, because two
+    themes on one cache must not hand each other the other's wrapped lines.
+    `naturalNodeContentSize` goes through the same resolution; a caller
+    sizing a node under a theme passes the theme id as `style`, since a
+    single-node canvas carries no facet to read. So does
+    `layoutSpatialEdges` — it shipped without it, and a drag drew every
+    edge crisp and straight over a pencilled, curved committed render.
+    `resolveCanvasPalette(canvas, mode)` is the same lookup for a chrome
+    that PREVIEWS paint rather than painting — the editor's paper and its
+    colour swatches — so a picker and the render read one table; it answers
+    the bundled palette for the mode wherever layout would draw clean.
+    **Ink** (decision #10's geometry half, `layout/ink/sketch.ts`): a theme
+    whose tokens say `ink: 'sketch'` puts `ink: { style, seed, fill? }` on
+    every DOCUMENT shape and edge the layout composes — a kind plus
+    `seedFromId(id)`, never coordinates, so translate/scale carry it
+    untouched and `sceneDigest` sees nothing. Comment and proposal chrome
+    are built elsewhere and stay crisp on purpose: the annotation layer has
+    to keep reading as chrome. `sketchShape` (rect, ellipse, polygon, the
+    cylinder's caps+sides+lid) and `sketchEdge` (the SAME flattened polyline
+    the hit-test uses, arrowheads as wing strokes instead of markers) are
+    the one decomposition the SVG backend draws from; a coloured node is
+    hatched (`fill: 'hatch'`) rather than tinted. Two contracts, both
+    property-tested and in the mutation lane: every named coordinate lies
+    within the semantic bounds plus `SKETCH_INK_REACH_PX`, which
+    `sceneBounds` adds for an inked node (a quadratic never leaves the
+    triangle of its three points, so checking the named points checks the
+    curve); and the randomness is `styleRandomFromSeed(seed)` with no
+    positional input, so a moved box draws the same ink moved. Curves are
+    inked from chords whose control point sits on the TRUE arc — measured
+    before that, per-vertex jitter on a 24-sample ellipse read as tick
+    marks. Ink amplitude is in canvas units and is NOT scaled by
+    `scaleScene`, the same class as arrowheads: a miniature's pencil line is
+    relatively bolder, by design.
+    **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
+    is a radius; the backend blurs the element (σ = half the radius) and
+    merges the blur twice under the element itself, so the halo is the
+    element's OWN paint and no flood colour is invented. The filter's
+    region is declared `userSpaceOnUse` over the scene bounds, one
+    definition per (radius, region) with the id derived from both — a
+    region relative to the element's box drops an AXIS-ALIGNED STRAIGHT
+    EDGE entirely, because its box has zero area; measured on resvg 2.6.2
+    and the specification's behaviour, so a browser does the same.
+    `glowReachPx` (three deviations, rounded up) is what `sceneBounds` adds
+    for a glowing node and what sizes the region, one constant with two
+    readers. `filter` is a paint attribute on every painted element (a path,
+    a text run, a symbol's `<use>`), and hoist.ts deliberately never lifts
+    it: it is not inherited. mcp-server's `glow-raster.test.ts` pins the one
+    claim only a rasterizer can check — resvg paints the halo beside a
+    horizontal edge — because an unlit export would otherwise read as a
+    working one.
+
 ## Conventions
 
 - Every scene-node variant retains semantic provenance (heading `level`,
@@ -1024,6 +1106,30 @@ the table alone.
   the scoreboard exists to report. Metrics are an independent oracle
   (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
   and never calls the wrapping code.
+- `layout/spatial-canvas.properties.test.ts`'s live-drag parity property
+  keeps `layoutSpatialEdges` equal to the edge suffix of
+  `layoutSpatialCanvas`. Its generator reads the facet REGISTRY
+  (`test-utils/facet-arbitraries.ts`, a thin shaping of facet-engine's
+  `facetsArbitrary`, which draws each facet from its own Zod schema through
+  model's `arbitraryForSchema`) for the
+  nodes' facets AND the canvas's, rather than a list of facet names,
+  because what it guards is a second entry point folding over FEWER facets
+  than the committed layout — which a named list cannot cover for a facet
+  registered later. It shipped that way
+  twice: plain generated nodes, no silhouettes on either side, the property
+  agreeing vacuously while every edge into a shaped node floated off it for
+  a whole drag; then nodes with facets and a canvas with none, agreeing
+  again while a themed board's edges dragged crisp and straight. The second
+  is why the scenario also draws `style`: a theme is drawn under
+  `'document'` and never under the library's clean default. Three guards
+  keep it honest — one fails when a registered node or canvas facet is
+  never drawn, two fail when the drawn node facets, or the drawn canvas
+  facets, stop changing the layout being compared. Adding a facet needs no
+  edit here; a schema construct the walk cannot express throws at
+  construction naming the path, which is the decision point. The generator
+  drew from form-derived samples until 2026-09-09 — a finite list with no
+  shrinking and nothing the form could not express — and that is the
+  history behind the first guard's wording.
 - `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say
@@ -1112,6 +1218,23 @@ the table alone.
   module few tests import as a weak signal, and treat its survivor list as a
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.
+  **A survivor `judged by` ZERO tests is a runner artefact, not a
+  hypothesis.** On `tidy.ts` with `coverageAnalysis: 'off'` — every mutant
+  is meant to face all 42 tests — 19 of 65 survivors came back with
+  `testsCompleted 0`, and the six of those checked by hand (the root
+  tie-break, the hop direction, both hop arithmetics, the floor's y
+  block) each failed one to three tests when the same edit was applied.
+  Read that column before the row: `0` says nothing ran, and the edit is
+  still yours to apply. The `tidy.ts` entries the ledger does hold were
+  each judged by all 42 and reasoned: `<=` on a floor admits exactly the
+  coordinate the shift then lands on, so the mutant costs a no-op
+  iteration and nothing else; skipping a zero delta is a guard around an
+  addition of zero. The margin's `<=` was one of them until a centre or
+  far-edge snap began reading the margin to decide whether it may move:
+  the report said the entry "did not show up", the edit applied by hand
+  moved the grouped scoreboard, and the entry was dropped. An entry is a
+  claim about the tests that exist, and a new reader of the same
+  comparison can make it false.
   It also pays the other way: a survivor whose LOCATION looks obviously
   killable is often a sub-expression, not the statement. `edge-crossing-
   sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,
@@ -1189,3 +1312,200 @@ the table alone.
 - Adding a second producer for geometry that is both drawn and consumed
   elsewhere (hit-testing, bounds) instead of sharing one decomposition —
   the curved-edge highlight/hit mismatch was exactly this drift.
+
+## Paint order is not stored order
+
+`layoutSpatialCanvas` paints every group first, larger before smaller, then
+everything else in stored order (`paintOrderOf` in `layout/spatial-canvas.ts`).
+Stored order is a Loro map's id order, not the order a caller wrote, so a
+group whose id sorted after a member's painted over it once it had a colour:
+four of eleven boxes vanished from a diagram the MCP eval lane drew, and the
+lane's grader, reading the store, passed it. The one test that pins this
+lists the member before the group and asserts the group's chrome comes first
+in the scene. A z-order a document actually stores would be the honest
+dissolution; until JSON Canvas gives one, containers-behind is the rule.
+
+## The drawing score judges the board, not a mechanism
+
+`quality/drawing-score.ts` (`scoreDrawing(canvas, scene)`, exported) reads
+a laid-out board as a person would: boxes over boxes, a box across a
+frame's edge, an edge's ink through a box it does not connect, a label
+over a box or under a frame, content cut to fit, a member jammed against
+its frame, a box a few pixels off its row (`nearMisses`: the nearest of
+the three anchors on an axis, since a wider box centred on a column IS
+lined up, and boxes against boxes only, since a box 6px off the centre of
+an 800-wide frame beside it is not — both from a lane reading), two boxes
+with less than a readable gap between them (`READABLE_GAP_PX`, which
+tidy's margin is held at, since the score reading tidy's own output as
+jammed is what set it) —
+each a DEBT column that targets zero — beside crossings, bends, ink,
+uneven gaps, envelope and density as PRICE. The other instruments here each judge one mechanism on
+its own terms; this one judges what any of them, or a model through the
+tool surface, actually drew, and the MCP eval lane records it per board
+as its `drawing` column. Calibrated in `drawing-score.test.ts` by planting
+one defect and reading one; pinned in `drawing-quality.test.ts` over
+`test-utils/drawing-corpus.ts`, where each diagram the lane asks for is
+drawn as a reference, as a first attempt, and after tidy. Its polyline
+geometry is `quality/polyline-geometry.ts`, shared with the routing
+scoreboard's oracle and `reversal-count.ts` so a crossing means one thing
+across every instrument — and, by a contract
+`polyline-geometry.independence.test.ts` holds, imported by nothing under
+`layout/`: an oracle sharing a primitive with the router would agree with
+its mistakes by construction, so the router keeps its own geometry and
+that duplication is the independence. A scene links a label to what it names
+through `TextRunNode.annotates`, set by the layout and read by nothing
+that paints; the flat scene has no other way back from a label's box.
+
+The first reading found what tidy left: a frame and what it holds moved
+as ONE unit, so an overlap or a near miss INSIDE a frame survived a tidy
+that cleared the straddle and the hidden label beside it, and a `tidy`
+scoped to a frame's members (`within`) moved nothing at all — measured on
+the lane's fixture before the fix, `[]` for both. **Tidy now tidies inside
+a frame** (`tidy.ts`): a frame's members are tidied as a canvas of their
+own, recursively, and the frame GROWS — never shrinks — to hold them with
+`TIDY_MARGIN_PX` on every side, when it is unlocked and it or a member is
+in scope; `TidyMove` carries the new size, which `canvas-edit.ts` and the
+editor's `applyBoxMoves` apply. Three rules around it, each from a
+reading. The frame's top-left stays put — a member hugging that corner is
+moved in to the margin instead — because growing up or left staggered the
+frame 24px against its peers (measured on `architecture/tidied`: Clients
+at x=-24 beside Services at 0, which no column charges and any reader
+sees). A frame holding a LOCKED member is held by it: the grouped
+`tidy-quality` corpus kept 10 overlapping pairs after everything else
+cleared, each a member separated from a locked neighbour inside and then
+carried back onto it when the unit moved and the locked one stayed. And a
+band that holds an immobile unit aligns to that unit's actual anchor
+rather than the grid: the lane's `add a box` task snapped a box added at
+y=300 to 304 beside out-of-scope row-mates at 300 (`nearMisses 1`), since
+a neighbour that cannot move IS the row, wherever it sits. What tidy still
+leaves is a near miss between members of DIFFERENT frames — bands run
+among a frame's members and among the frames, never across them — pinned
+as the two `architecture/tidied` owes. **Bands read every anchor the
+score does** — the near edge, then the centre, then on x the far edge —
+since a lane board put a narrower frame 20px off centre under two wider
+ones and a tidy banding on left edges alone moved nothing (`nearMisses
+2`, before and after). A unit lined up by an earlier anchor is the truth
+for the later ones and never moves again; one centred that way keeps its
+centre off the grid if it must, which is the one exception the grid
+promise now states. A centre or far-edge snap that would put a unit inside
+a neighbour's margin yields, because the fixpoint loop otherwise drifts —
+the snap jams the unit, the overlap pass hops it away, the next iteration
+snaps it back (fast-check found three boxes drifting 128px a tidy). Price:
+displacement +10% on the plain corpus, +3% grouped, every debt column
+unchanged. The grouped scoreboard's
+`stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
+replaced by `membersLeftBehind` (members may now settle inside a unit;
+what must not happen is one ending outside it).
+
+The column set follows the literature, and the module doc says which
+source each column follows (ADR-0031 §7 has the reading). Two things a
+session extending it has to know. **A column earns its place by an
+empirical ranking, not by being in a metric catalogue**: crossing angle,
+angular resolution and node resolution are all standard and all absent,
+the first two because an orthogonal route makes them read 1.0 by
+construction, the third because 450k drawings found it uninformative.
+**The columns stay a vector, and the scoreboard pins the known blind
+spot**: a board scattered so far apart that a reader would reject it
+scores debt-free, with `density` its only witness — pinned as such in
+`drawing-quality.test.ts` rather than papered over, because the same
+readings can be produced by drawings nobody would accept. Beyond
+calibration, three tests make the instrument believable: each reference
+owes no more than its draft on any debt column, tidy never adds debt, and
+each planted defect moves only the column that names it.
+
+The second reading was a router finding: the hand-drawn architecture
+reference owes three `reversals`, because the router draws a same-row
+edge inside a frame as a loop under both boxes with no side pinned. The
+column exists so that a change to the side choice is judged by it.
+
+**An edge label that would lie over a box slides off the line** —
+`edgeLabelPlacement` in `edge-label-anchor.ts`, the ONE producer for the
+renderer's label box and the editor's inline label editor alike, as
+`edgeLabelAnchor` already was for the midpoint. The midpoint stays unless a
+label of that size centred there overlaps a non-container node (its own
+endpoints included); then the nearest clear offset along the segment's
+normal wins, above or left before below or right, 8px steps to 128px, and
+nothing clear within reach leaves it on the line. The reading that set it:
+a model inserting a box into a row left 40–50px edges whose "libsql" label
+covered both boxes it joined (`lane/insert` and `lane/insert-roomy` in the
+corpus, `labelOverNode 2` before, 0 after). The editor passes its own box
+size, so on a short edge it opens beside the line where the label will be
+rather than over a box; the two agree on the rule, not on a pixel.
+
+**Two router changes for that finding were measured and rejected**, and
+the matrix is what stops them being tried again from argument. The cause
+is real: for an aligned offset `l-pair-crowding-tie-break` offers no
+L-pair, so an edge whose lane holds a box has only the facing pair and
+same-side U-hooks, and `optimizeSideChoices` adopts the FIRST candidate
+that lowers the whole cost, not the best. A `lane-l-pairs` candidate rule
+(four L-pairs when a box sits in the shared lane, first for every
+lane-sharing pair, then gated on a blocked lane) and a best-of-candidates
+adoption were each read on the reference, the 2000-layout sweep and the
+clustered board:
+
+| change | reference reversals | reference debt | sweep own-endpoint / interiorInk / borderInk | clustered violations / interiorInk / borderInk |
+|---|---|---|---|---|
+| none | 3 | 0 | 12 / 2083 / 824 | 100 / 11578 / 266 |
+| lane-l-pairs, gated | 1 | 1 edge through its own source, 23px | 13 / 2165 / 856 | 100 / 11596 / 457 |
+| best-of-candidates adoption | 1 | 0, at one new crossing | 14 / 2352 / 761 | 86 / 10327 / 516 |
+
+Neither L candidate was ever adopted — the reference's improvement came
+from `e5` reaching a top-to-top hook that a differently ordered search
+finds — and each change raised a debt column on the population. The
+drafted board also lost under the second (reversals 1 to 3). A third
+attempt starts from the sweep's debt, not from the reference's price.
+
+**The same-row loop is the cost model's answer, not a search miss** — read
+off a traced search (fifth reading) before a third attempt was made. The
+lane's architecture board puts a gateway in the same row as the two
+services it fans out to, one of them past the other: the straight
+`api→auth` plus a top hook for `api→search` crosses the three client
+edges arriving diagonally at the gateway's top (crossings 2), the under
+hook crosses `auth→sqlite` (crossings 2), and the route through the 40px
+gap crosses the straight edge (crossings 1) — so the only zero-crossing
+configuration is the bottom-bottom loop for `api→auth`, and the search
+finds it (`[0,0,0,0,0,3,6]` against the best single-edge alternative
+`[0,0,1,0,0,2,4]`). Crossings outrank reversals and bends by tier, so
+this is the drawing the model asks for; what would change it is the
+placement (a gateway in its own row), which is the drawer's, or the tier
+order, which is a population-wide change nothing here has measured. Not
+a router item; recorded so the trace is not taken again.
+
+**Every ink term reads axis-aligned segments only, and the straight
+style's routes are diagonals** — so a diagonal back through the edge's
+own box (a top-side stub, then the line down to a target below) cost the
+search nothing while the score read 63px of it (sixth reading). The tier
+swap that looked like the answer was measured first and rejected:
+endpoint-body-ink above crossings moved nothing on that board, because
+the term was blind either way, and on the sweep bought `own-endpoint` 12
+to 5 for crossings 494 to 686 — a row for the matrix above. What fixed
+the board is `diagonalInkThrough` in `overlap-and-intrusion`'s self term,
+over the edge's OWN endpoint bodies only: every legitimate straight route
+has zero of it, since the diagonal runs from one stub's end to the
+other's, so it is the defect itself and belongs at tier 0 as the straight
+form of the retrace, not at the price tier. A diagonal through a FOREIGN
+body stays the tunnel rule's business, and that rule still reads
+axis-aligned segments alone by design. The sweep cannot see any of this
+(orthogonal, no diagonals); the drawing corpus is the straight
+population, and it moved on one price.
+
+**A named side pair whose route runs through the edge's own box is
+overruled** (seventh reading: a model pinned `bottom/top` on every edge,
+same-row pairs included, and the same-row one drew a stub down and a
+diagonal up through both its boxes, 140px). A named side asks where the
+line attaches, and a line through the box it attaches to satisfies
+nobody, so `optimizeSideChoices` treats such an edge as free; `routeEdge`
+now lets the anchor pass's side win over the edge's own, since the two
+differ only where the search overruled — the overrule has to reach the
+trial that adopts it and the final render alike. Two things moved with
+it. The search is no longer gated at two edges: a lone edge can be its
+own problem, and the sweep's single-edge layouts had been keeping
+whatever the initial ranking picked, foreign body and all — `foreign` 15
+to 7, `own-endpoint` 12 to 10, `interiorInk` 2083 to 955, every price
+column down with them. And the coincident-anchor decision changed: a
+flush-stacked pair named `bottom/top` used to draw the shared point (an
+invisible edge, honouring a degenerate request); the spike its trial
+path makes is a route through its own boxes, so it is overruled into a
+visible route around the pair. The lane board with the sides the model
+named is debt-free (`edgeThroughNode` 2 to 0, bends 6 to 4, reversals 4
+to 2).

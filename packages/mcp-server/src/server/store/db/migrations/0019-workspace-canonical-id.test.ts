@@ -103,7 +103,6 @@ async function seedWorkspace(handle: Handle, workspaceId: string): Promise<void>
       operatorWorkspaceId: workspaceId,
       elementCount: 0,
       frontiers: '[]',
-      hasThumbnail: 0,
       createdAt: now,
     })
     .execute()
@@ -135,8 +134,11 @@ async function seedWorkspace(handle: Handle, workspaceId: string): Promise<void>
   // The two workspace-keyed directory trees on disk.
   await mkdir(join(dataDir, workspaceId, 'files'), { recursive: true })
   await writeFile(join(dataDir, workspaceId, 'files', 'a.png'), 'png')
-  await mkdir(join(dataDir, 'blobs', workspaceId, 'versions'), { recursive: true })
-  await writeFile(join(dataDir, 'blobs', workspaceId, 'versions', 'v1.png'), 'thumb')
+  // A sharded content-addressed blob rather than the version thumbnails this
+  // used to seed: 0024 deletes those, so a tree keyed on them would prove
+  // 0019 renamed nothing once the run reaches head.
+  await mkdir(join(dataDir, 'blobs', workspaceId, 'ab'), { recursive: true })
+  await writeFile(join(dataDir, 'blobs', workspaceId, 'ab', 'cdef'), 'bytes')
 }
 
 async function setCurrentWorkspace(handle: Handle, workspaceId: string): Promise<void> {
@@ -200,12 +202,8 @@ describe('0019-workspace-canonical-id', () => {
     await handle.migrateToHead()
     const newId = await idOf(handle, 'default')
 
-    const branch = await handle.db
-      .selectFrom('branches')
-      .select(['workspaceId'])
-      .executeTakeFirstOrThrow()
-    expect(branch.workspaceId).toBe(newId)
-
+    // The branch row 0019 also re-keyed is not asserted here: this test runs
+    // to head, and 0023 drops the table. What 0019 did to it is history.
     const version = await handle.db
       .selectFrom('versions')
       .select(['workspaceId', 'operatorWorkspaceId'])
@@ -257,7 +255,7 @@ describe('0019-workspace-canonical-id', () => {
     const newId = await idOf(handle, 'default')
 
     expect(await readdir(join(dataDir, newId, 'files'))).toEqual(['a.png'])
-    expect(await readdir(join(dataDir, 'blobs', newId, 'versions'))).toEqual(['v1.png'])
+    expect(await readdir(join(dataDir, 'blobs', newId, 'ab'))).toEqual(['cdef'])
     expect(await readdir(dataDir)).not.toContain('default')
     expect(await readdir(join(dataDir, 'blobs'))).not.toContain('default')
   })

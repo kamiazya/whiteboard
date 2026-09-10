@@ -6,7 +6,8 @@ so a symptom string can be recognised before it is investigated. One entry
 points elsewhere, and says so in the row: a test-infrastructure defect with no
 PR attached belongs beside the technique, not in the CI-flakes section.
 
-Contents: browser suites · property tests · environment · order effects.
+Contents: browser suites · property tests · measured thresholds · environment ·
+order effects.
 
 ## Browser and jsdom suites
 
@@ -19,6 +20,8 @@ Contents: browser suites · property tests · environment · order effects.
 | every test PASSED and the file exits 1, `NotFoundError: removeChild` | A teardown doing `document.body.innerHTML = ''` while React roots are mounted. Use `cleanup()` |
 | "the list does not contain this item" | No list was opened — the trigger was clicked while a menu was still dismissing. Wait for `[role="menu"]` to be gone |
 | an assertion reads an empty value that was definitely typed | The element was remounted and the held reference is detached. Query inside the assertion |
+| `stress-changed-tests` red while both `test-jsdom` shards are green | The two steps split the classes: five fresh processes catch order/module-state flakes, `--repeats=3` catches state carried BETWEEN repetitions of one test. A once-per-process record (a memoised startup attempt) passes the first and fails the second |
+| a `web-browser` test fails saying it logged a failure and carried on | Exactly what it says: something was caught and swallowed. The record is in the message; the assertion that would have broken is elsewhere. Claim it with `expectLoggedFailures()` only if the test provokes it on purpose |
 | a test times out only under the full suite | An `await import()` of a heavy module inside a test body, or a `React.lazy` page racing a `findBy*` (testing-library's budget is 1000ms). Hoist the import |
 | an assertion on a global counter or a "most recent" handle | Another test's `SharedWorker` is still alive. Scope every assertion to a handle the test itself minted |
 | a page reports `This canvas's data could not be read.` as the lone failure | Not the page. A cleanup resolved while its `deleteDatabase` was still `blocked`, so this file started on the previous one's rows. Went through `rename` and twice through `delete-confirm` reading as a missing kebab menu. Fix and measurements: `testing-techniques/resources/isolation-and-state.md` |
@@ -30,6 +33,13 @@ Contents: browser suites · property tests · environment · order effects.
 | `Test timed out in 5000ms ... (with seed=N)` | A **timeout**, not a property failure. `@fast-check/vitest` prints the seed in the test name either way. Do not hunt a counterexample; check whether the code under it got more expensive |
 | a genuine shrunk counterexample | **Never a flake**, however random it looks. Reproduce with `withDefaults({ seed })`. A different seed passing means the generator missed the input |
 | a reachability/density guard fails intermittently | The generator is too sparse. Denser domain plus a measured floor — never a pinned seed, never fewer assertions |
+
+## Measured thresholds
+
+| What you see | Verdict |
+|---|---|
+| the two numbers in the message are EQUAL (`expected 50.1 to be less than 50.1`) | The threshold was computed from the same run and the fixture is sitting on its boundary. Not a re-run — find the fixture dimension the ratio divides by, and floor it |
+| a measurement assertion that only fails on the SLOWER runner | A growth loop stopping on elapsed alone: the slow machine settles for a smaller fixture, which makes the assertion stricter. Both fixes and the worked pair: `testing-techniques/resources/stability-checks.md` |
 
 ## Environment
 

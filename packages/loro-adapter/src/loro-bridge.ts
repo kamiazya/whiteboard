@@ -155,6 +155,14 @@ function commentToFields(comment: CanvasComment): Fields {
       )
     }
   }
+  // The same class of loss one field over: the thread this comment becomes
+  // carries both references on one spatial anchor, which the anchor schema
+  // refuses, so a reader would drop the comment for everyone.
+  if (comment.targetNodeId !== undefined && comment.targetEdgeId !== undefined) {
+    throw new TypeError(
+      `canvas comment "${comment.id}" names both a node and an edge; a comment is about one of them`,
+    )
+  }
   const fields: Fields = { id: comment.id, x: comment.x, y: comment.y, text: comment.text }
   if (comment.author !== undefined) fields.author = comment.author
   if (comment.createdAt !== undefined) fields.createdAt = comment.createdAt

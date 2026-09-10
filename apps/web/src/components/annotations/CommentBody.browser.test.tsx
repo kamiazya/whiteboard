@@ -66,3 +66,21 @@ it('keeps a body that will not parse on screen rather than losing the comment', 
   const { container } = render(<CommentBody body={'| broken |\n| --'} />)
   expect(container.textContent?.length ?? 0).toBeGreaterThan(0)
 })
+
+/**
+ * `compact` is the rail saying how much room it has, and until this it
+ * changed a class the SVG never read — the prose stayed at the bubble's
+ * 16px inside a panel whose own chrome runs at 11-12px.
+ */
+it('draws a dense surface at panel size and a floating one at the bubble size', async () => {
+  const { container } = render(<CommentBody body="tighten the copy" compact />)
+  const dense = container.querySelector('[data-comment-body] text')
+  if (dense === null) throw new Error('nothing drawn')
+  expect(getComputedStyle(dense).fontSize).toBe('14px')
+
+  cleanup()
+  const roomy = render(<CommentBody body="tighten the copy" />)
+  const bubble = roomy.container.querySelector('[data-comment-body] text')
+  if (bubble === null) throw new Error('nothing drawn')
+  expect(getComputedStyle(bubble).fontSize).toBe('16px')
+})

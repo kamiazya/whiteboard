@@ -22,6 +22,8 @@ import type {
   ResolvedReference,
   Scene,
   SpatialContentCache,
+  SpatialLayoutOptions,
+  SpatialRenderStyle,
   SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -30,6 +32,7 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { hasLoadedFace } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import type {
   CommentThread,
   Proposal,
@@ -42,6 +45,15 @@ import { createEditorAppearance } from './editor-appearance.js'
 export interface RenderCanvasCoreOptions {
   readonly measure: MeasureText
   readonly theme?: ResolvedTheme
+  /**
+   * Which look to draw (ADR-0030 decision 6). This app's default is
+   * `'document'` — a person editing a board sees the theme it names, and
+   * every surface that pictures a document (row thumbnail, preview, export)
+   * pictures the same look — set HERE, in the one composition both threads
+   * share, so the worker and the main thread cannot default apart. `'clean'`
+   * is the session override; a theme id previews one without storing it.
+   */
+  readonly style?: SpatialRenderStyle
   /** The reference bundle, for what text-node bodies embed and link. */
   readonly references?: ReferenceSeams
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
@@ -102,13 +114,34 @@ export interface RenderedCanvas {
   readonly anchors: ReadonlyMap<string, EdgeAnchorPair>
 }
 
+/**
+ * What every layout this editor runs shares — the look, its resolver, and
+ * where a theme's family counts as available — in ONE place, so the edge
+ * overlay a drag re-routes per frame cannot draw a different look from
+ * the committed scene it floats over.
+ */
+export function editorLayoutBase(options: {
+  readonly measure: MeasureText
+  readonly theme?: ResolvedTheme
+  readonly style?: SpatialRenderStyle
+}): Pick<SpatialLayoutOptions, 'measure' | 'appearance' | 'style' | 'fontAvailable'> {
+  return {
+    measure: options.measure,
+    appearance: createEditorAppearance(options.theme ?? 'light'),
+    style: options.style ?? 'document',
+    // A theme's family is declared only where this realm holds a loaded
+    // face for it; otherwise layout measures and declares the bundled one,
+    // the same answer the daemon's export gives.
+    fontAvailable: hasLoadedFace,
+  }
+}
+
 export function renderCanvasToSvgWith(
   canvas: SpatialCanvas,
   options: RenderCanvasCoreOptions,
 ): RenderedCanvas {
   const { scene, anchors } = layoutSpatialCanvasWithAnchors(canvas, {
-    measure: options.measure,
-    appearance: createEditorAppearance(options.theme ?? 'light'),
+    ...editorLayoutBase(options),
     references: options.references,
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,

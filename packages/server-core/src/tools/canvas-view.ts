@@ -1,4 +1,4 @@
-import { referenceTargets } from '@kamiazya/whiteboard-canvas-render'
+import { referenceTargets, spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
@@ -42,7 +42,16 @@ export const canvasViewReferenceSchema = z
   .strict()
 
 export const canvasViewInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({
+    workspaceId: workspaceIdSchema,
+    documentId: documentIdSchema,
+    /**
+     * Which look the widget draws (ADR-0030 decision 6). Echoed, never
+     * applied here — this tool hands the widget a document to lay out, not
+     * a picture. Absent leaves the widget's own default, the bundled look.
+     */
+    style: spatialRenderStyleSchema.optional(),
+  })
   .strict()
 export type CanvasViewInput = z.infer<typeof canvasViewInputSchema>
 
@@ -69,6 +78,8 @@ export const canvasViewOutputSchema = z
      * on the node, which is what the widget's seam is called with.
      */
     references: z.record(z.string(), canvasViewReferenceSchema),
+    /** The caller's `style`, echoed so the widget draws the look that was asked for. */
+    style: spatialRenderStyleSchema.optional(),
   })
   .strict()
 export type CanvasViewOutput = z.infer<typeof canvasViewOutputSchema>
@@ -104,6 +115,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         documentId: input.documentId,
         scene: canvas,
         threads: readAnnotations(doc),
+        ...(input.style === undefined ? {} : { style: input.style }),
         // Everything THIS canvas names, through the one definition of a
         // reference rather than a node-kind filter: its file nodes AND what
         // its text nodes embed or link. Seeded without `loaded`, so it stops

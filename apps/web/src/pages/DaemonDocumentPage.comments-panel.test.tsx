@@ -343,8 +343,6 @@ describe('DaemonDocumentPage comments panel', () => {
         throw new Error('not exercised by this test')
       },
       restore: async () => {},
-      putThumbnail: async () => {},
-      loadThumbnail: async () => null,
     }
     await act(async () => {
       render(
@@ -424,8 +422,6 @@ describe('DaemonDocumentPage comments panel', () => {
         throw new Error('not exercised by this test')
       },
       restore: async () => {},
-      putThumbnail: async () => {},
-      loadThumbnail: async () => null,
     }
     await act(async () => {
       render(
@@ -454,63 +450,19 @@ describe('DaemonDocumentPage comments panel', () => {
     expect(screen.getAllByRole('combobox', { name: /type/i })).toHaveLength(1)
   })
 
-  it('opens the rail under a variation preview, but withholds the reply box', async () => {
-    // A VERSION preview cannot host the rail any more: it is entered from the
-    // History column, which holds the one inspector slot, and the preview
-    // bar hides the rail's opener. A VARIATION preview (`?v=`) keeps the
-    // ordinary top bar, so the rail can be opened over it — and a reply is
-    // still a write to the LIVE document, sent from a surface showing
-    // something else entirely.
-    mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
-    })
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async (input: RequestInfo | URL) => {
-        const url = typeof input === 'string' ? input : input.toString()
-        if (url.includes('/names')) {
-          return new Response(JSON.stringify({ documents: {}, pinned: [] }), { status: 200 })
-        }
-        if (url.endsWith('/branches/idea/document')) {
-          return new Response(JSON.stringify({ kind: 'markdown', body: '# From the idea tip' }), {
-            status: 200,
-          })
-        }
-        if (url.endsWith('/branches')) {
-          return new Response(
-            JSON.stringify({
-              head: 'main',
-              branches: [
-                { name: 'main', tipFrontiers: '', color: '#1971c2', createdAt: '2026-01-01' },
-                { name: 'idea', tipFrontiers: 'dGlw', color: '#e8590c', createdAt: '2026-01-02' },
-              ],
-            }),
-            { status: 200 },
-          )
-        }
-        return new Response('{}', { status: 404 })
-      }),
-    )
-    await act(async () => {
-      rtlRender(
-        <MemoryRouter initialEntries={['/?v=idea']}>
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            workspaceId="w1"
-            path="note"
-            createBackend={() => new FakeBackend(markdownSnapshotWithThread)}
-          />
-        </MemoryRouter>,
-        { container: document.body },
-      )
-    })
-    await screen.findByTestId('document-preview')
-
-    fireEvent.click(await screen.findByRole('button', { name: /comments/i }))
-    await waitFor(() => expect(panel().getByText('is this still true?')).toBeTruthy())
-    fireEvent.click(panel().getByText('is this still true?'))
-    expect(panel().queryByRole('textbox', { name: /reply/i })).toBeNull()
-  })
+  // A case about the `?v=` variation preview stood here, pinning that the
+  // rail opens read-only under one. ADR-0029 retires that preview, so the
+  // case went with it. The RULE it wired — a rail with no writer withholds
+  // the reply box — is asserted on the component itself
+  // (`CommentsPanel.browser.test.tsx`); what is no longer covered at the
+  // PAGE level is `writable={preview === null}`, which a version preview
+  // still exercises and nothing yet tests here.
+  //
+  // A SECOND panel now reads the same state: the Proposals index withholds
+  // its row action under a preview, because the spatial editor is unmounted
+  // there and the handle a row would call is null. Same rule, same gap —
+  // and it is one gap rather than two, so the fixture that closes it closes
+  // both.
 })
 
 /** Every thread resolved: the zero-open branch of the opener's label. */

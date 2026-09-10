@@ -8,7 +8,7 @@ justified it (how many occurrences today, what the false-positive rate would be)
 
 | Instrument | Rung | Catches |
 |---|---|---|
-| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`); a PR/issue number or `pre-fix` in a title |
+| `tools/biome-plugins/test-flake-shapes.grit` | lint (`pnpm lint`) | side effect inside `waitFor`; `afterEach` wiping `document.body`; non-ASCII in `userEvent.keyboard`/`type`; `vi.useFakeTimers` with no `useRealTimers` in the file; `.only`; un-awaited `.resolves`/`.rejects`/`toMatchFileSnapshot`/`expect.element`/`expect.poll` (plain and `.not`) and un-awaited `expectLoggedFailure`; a PR/issue number or `pre-fix` in a title |
 | `tools/biome-plugins/logger-argument-order.grit` | lint | `log.warning('msg', x)` in `mcp-server/src/server/**` (pino drops `x`) |
 | `tools/arch-lint/src/test-lazy-import-check.test.ts` | `arch-lint-node` | literal `await import()` in a test file with no mock machinery and no `lazy-import:` marker |
 | `tools/arch-lint/src/test-title-check.test.ts` | `arch-lint-node` | two tests sharing one full `describe > it` path in a file |
@@ -22,6 +22,9 @@ justified it (how many occurrences today, what the false-positive rate would be)
 | `tools/checks/src/vitest-projects.mjs` (+ `ci-verify-coverage`, `docs-contract`) | `mcp-node` | a vitest project CI never runs; a project without `name:` |
 | `.claude/scripts/quarantine.test.mjs`, `biome-plugin.test.mjs` | `pnpm test:scripts` | quarantine cap/age/undeclared skips; a GritQL pattern that stopped matching |
 | `apps/web/vitest.setup.ts`, `src/test-utils/browser-setup.ts`, `vitest.browser.shared.ts` | setup guard | unmounted trees, leaked fake timers (fails the test by name), `localStorage`, missing stylesheet, 1000ms async budget, trace growth |
+| `src/test-utils/browser-setup.ts`'s `expectLoggedFailures` | setup guard (`web-browser`) | any `console.error`/`warn` in a browser test — a failure that was caught, logged and swallowed. Strict, no allowlist; opt in per test to claim one |
+| `apps/web/vitest.setup.ts`'s act guard | setup guard (`web-jsdom`) | React's act complaints — `act` inside a `waitFor`/`findBy*`, or imported from `react` rather than RTL |
+| `src/test-utils/logged-failures.ts`'s `expectLoggedFailure` | setup guard (`web-jsdom`) | any other `console.error`/`warn` — a failure caught, logged and swallowed. The claim is an ASSERTION: it waits for the named record and fails if it never arrives |
 | `background-work-costs.test.ts` + `loop-availability.ts` | `mcp-node` | a declared stall ceiling no test asserts |
 
 ## Adding a GritQL shape
@@ -94,6 +97,197 @@ The rung for "every test in this project, at runtime". `apps/web/vitest.setup.ts
 exercise it directly (throw + restore), and reporting the offending test BY NAME rather than
 restoring silently. Order matters inside it — unmount first, so a file that also leaks fake
 timers still gets its trees torn down.
+
+## The swallowed failure, and why one project is guarded and the other is not
+
+A caught-and-logged exception is the worst failure shape a suite has: the run
+keeps going and breaks somewhere unrelated. The measured case — a
+`@codemirror/view` ViewPlugin crash that disabled the CRDT binding for the life
+of the view, surfacing ten seconds later as `expected 'untitled' to be 'Weekly
+review'`, an assertion about a document NAME in a different panel.
+
+Whether that becomes a guard or a ledger is a MEASUREMENT, not a judgement:
+
+| project | records | over | verdict |
+|---|---|---|---|
+| `web-browser` | **1**, the one a test provokes on purpose | 235 files, 1237 tests | free — strict, no allowlist |
+| `web-jsdom` | **0** unclaimed, 24 tests claiming | 368 files, 3819 collected | guarded |
+
+Both are guarded now. `web-jsdom` started at 219 records, and **two thirds of
+that was never a judgement call** — the reduction ran before the ledger, which
+is the order worth keeping:
+
+Each row is an independent measurement of the whole project on the tree at that
+point, not a delta from the row above — the test counts move between rows too,
+so subtracting two rows does not give the size of one cause. What each cause
+cost is stated in its own row: 138 of the 219, then 36 of the 43, then 8 of the
+36. (`3819` is what the project COLLECTS; the PR that landed this reports 3818
+passed, the difference being the one pre-existing wrong-Node-major failure.)
+
+| | records | tests | what it was |
+|---|---|---|---|
+| measured | 219 | 70 | |
+| after the act fixes | 82 | 63 | 138 of the 219: React's act-environment complaint (below) |
+| after mocking the fold | 43 | 35 | 36 of the 82: jsdom has no IndexedDB, so `foldWorkspaceDocuments` throws, and the guarded warn on the way spanned 29 tests in six files |
+| after fixing one fixture | 36 | 29 | 8 of the 43: a mock answered the schema-checked GET `/versions` with the catch-all `{}`, so five tests quietly exercised a schema failure none of them is about |
+| claimed | **0** unclaimed | 24 claiming | tests driving a failure path on purpose |
+
+**Before writing a ledger, subtract the entries that are the environment rather
+than a decision.** Two thirds of this one dissolved that way, and what was left
+was small enough to write honestly.
+
+### A claim that asserts beats an allowlist that exempts
+
+The 24 that remain do not get an exemption. `expectLoggedFailure('<fragment>')`
+claims the record AND waits for it, so a test that stops producing its degraded
+report fails rather than passing quietly — the direction a bare allowlist cannot
+see. Each of those tests was already asserting that a failure is SURVIVED
+(`celebrate` resolves, `reloadFresh` still reloads, the registry does not take
+the page down); the claim adds the half they were all missing, that the failure
+is also REPORTED.
+
+A third, and the one `stress-changed-tests` caught rather than a reviewer:
+**a claim must name a failure the test PROVOKES, not one the environment
+produces once per process.** `App.test.tsx` claimed
+`fold before counting failed` — jsdom having no IndexedDB — and the module
+memoises the attempt, so the record exists on the FIRST execution and never
+again. Five fresh-process runs passed and the in-process `--repeats=3` run
+failed, which is exactly the split those two steps exist to separate. The fix
+is the same as everywhere else that record appears: mock the fold, and do not
+claim it.
+
+Two mechanics it cost, both measured:
+
+- **The claim must WAIT.** These reports are fire-and-forget catches on rejected
+  promises, so they land after the body that provoked them. A synchronous
+  assertion saw `(none)` and let the record leak into the NEXT test — one cause,
+  two failing tests. `vi.waitFor`, and the fragment is claimed BEFORE the wait
+  so a record arriving during it is already spoken for.
+- **State on `globalThis`**, for the reason `browser-setup.ts` records: the
+  setup file and a test importing the helper are two module instances.
+
+### Take this measurement with a RECORDER, never a throwing guard
+
+The obvious way to size it — install the strict guard and read what turns red —
+is wrong here, and wrong in both directions at once. Throwing in `afterEach`
+breaks the shared teardown: React trees stay mounted, and every later test in
+the file cascades. Measured, same suite, same commit:
+
+|  | throwing guard | file recorder |
+|---|---|---|
+| records | ~100 | **219** |
+| tests reporting | 73 | **70** |
+| un-acted React updates | 878 | **0** |
+
+It under-reported the records (each test aborts at its FIRST one) while
+inventing 878 un-acted updates that do not exist — the cascade from its own
+broken teardown. A throwing guard is the right SHIPPING shape and the wrong
+measuring instrument.
+
+Two traps beside it, both of which produced a confident wrong number here:
+
+- **Vitest's terminal output carries no test console records in these runs.**
+  Grepping the run's stdout for a warning returns 0 whether or not it happened.
+  Every count above comes from a recorder appending to a file, with
+  `expect.getState().currentTestName` for attribution.
+- **A `console.error` format string is recorded raw.** The message is
+  `An update to %s inside a test was not wrapped in act(...)`; grepping for the
+  formatted component name finds nothing.
+
+### Which learnings became rungs, and which were refused
+
+Three candidates came out of this work. Only two became rungs, and the third is
+worth recording because refusing it was the finding:
+
+- **Un-awaited `expectLoggedFailure` → a GritQL rule.** A worse shape than the
+  assertions beside it in the same plugin: the call both CLAIMS the record
+  (silencing the guard) and WAITS for it (the assertion). Without `await` the
+  claim lands and the assertion never runs, so a forgotten one does not skip a
+  check, it disables the safety net for that test. Measured, worst case: with
+  the `await` dropped AND the provoked failure no longer happening,
+  `celebrate.test.ts` reported `3 passed`.
+
+- **An out-of-range passage is a conflict → a property.** `bodyChangeConflicts`
+  carried the same `slice` clamping trap `resolveTextAnchor` did, and its own
+  doc comment already stated the intent the code missed ("a passage that cannot
+  be placed is a conflict") — for `at === undefined` only. The property is
+  one-sided on purpose: a false positive there is friction, a false negative is
+  adopting an edit onto text the proposer was never shown.
+
+- **A lint rule on `.slice(a, b) === x` → REFUSED.** The clamping trap is real
+  and the pattern is greppable, so it looks like the obvious rung. Measured:
+  three occurrences repo-wide, and after the resolver fix ALL THREE are safe,
+  because the invariant is enforced upstream where the range is produced. A
+  rule with three false positives and no true ones is the kind nobody trusts
+  when it fires. **Fixing the producer beat guarding every consumer** — which
+  is the same judgement `storedCoreFacetsSchema` and `readCoreFacets` record:
+  remove the place wrong state can live, rather than checking for it at each
+  call site.
+
+### The act flag, measured and rejected — and what worked instead
+
+`IS_REACT_ACT_ENVIRONMENT` was set nowhere, so React logged
+`The current testing environment is not configured to support act(...)` 138
+times. Setting it in the jsdom setup looks like the obvious fix. Measured over
+the full project:
+
+| | config warning | un-acted updates | total records |
+|---|---|---|---|
+| flag off | 138, in 8 tests | 0 reported | 219 |
+| flag on | 103 | **502** | 689 |
+
+It fails to clear the noise it targets and triples the channel. **Rejected.**
+
+The real causes were two, with no syntax in common, and three mechanical fixes
+took all 138 to **0**:
+
+- **`act()` wrapping an RTL async utility** (103). `@testing-library/react`
+  sets the flag to FALSE around `waitFor`/`findBy*` on purpose, so an `act`
+  call inside one warns — measured at the warning itself, `flag=false`. The
+  wrapper is also unnecessary: those utilities manage `act` themselves. Both
+  call sites wrapped a HELPER that used `findBy*` internally, which is why
+  neither a reader nor a lint rule looking at one file could see it. Five
+  wrappers deleted, tests unchanged and still passing.
+- **`act` imported from `react`** (35). RTL's `act` sets the environment flag
+  itself; React's bare one does not, so every call warns. Two files, import
+  changed.
+
+That left the guard FREE, which is the point — it is in
+`apps/web/vitest.setup.ts` and fails any test React complains about, narrow to
+the act family rather than `console.error` at large. Mutation-checked: putting
+one wrapper back fails that test with `React complained about act() in this
+test.`
+
+Records over the whole project: **219 to 82**, over 70 tests to 63.
+
+### What the measurement found
+
+Neither of these was found by reading code. Both fell out of asking a suite to
+stop swallowing:
+
+- **502 un-acted React updates**, invisible until the flag is set, over 26
+  distinct components — about a quarter of them Radix internals (Tooltip,
+  Presence, Popper) rather than this repo's own hygiene.
+- **`[document-sync] backfilling thread marks failed Index out of bound. The
+  given pos is 20, but the length is 19`, in three PASSING tests.** Two
+  defects, one throw. `resolveTextAnchor`'s stored-offsets shortcut compared
+  `body.slice(anchor.start, anchor.end) === exact` — and `slice` CLAMPS, so on
+  a body shorter than the stored `end` it returns the tail rather than
+  nothing, and a stored range whose width disagrees with its own quote MATCHES
+  and is answered verbatim. `markThreadPassages` then handed that `end`
+  straight to `LoroText.mark`, which throws from inside the CRDT naming
+  neither the thread nor the document, into a catch that logs and carries on.
+  Consequence: those conversations never got their passage marks.
+
+  Worth recording as a diagnosis, because two confident explanations came
+  first and both were wrong. "It measures offsets against `readMarkdownBody`
+  and applies them to the text container" does not fit the numbers — a
+  non-empty container makes those the same string. "Loro indexes text by code
+  point while JS counts UTF-16" was refuted by probing the installed version:
+  `text.length` is 18 for a body JS also calls 18. The mechanism only came out
+  by reading what produces the range, and the fixture confirms it — the anchor
+  is `{ exact: 'is this still true?', start: 0, end: 20 }`, and that quote is
+  19 characters.
 
 ## Adding a source-scan test
 

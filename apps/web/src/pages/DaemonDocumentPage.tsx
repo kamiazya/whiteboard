@@ -14,9 +14,7 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsP
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { Button } from '../components/ui/button.js'
-import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { useVersionsBackend } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
@@ -24,7 +22,6 @@ import { useDocumentFavicon } from '../hooks/use-document-favicon.js'
 import type { ReferenceLoader } from '../hooks/use-reference-seams.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { createDaemonBranchesBackend } from '../lib/branches-backend.js'
 import {
   createDaemonFetch,
   getDocumentBacklinks,
@@ -33,6 +30,7 @@ import {
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
+import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import { daemonFaviconStatus } from '../lib/favicon.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import { loadedReferenceOf } from '../lib/loaded-reference-of.js'
@@ -98,7 +96,6 @@ function useDaemonDocument(
   // for the `?v=` preview below and for every consumer under the provider
   // (chip, banner, dialog), so a hosted page paired to a loopback daemon
   // cannot have half of them fall back to its own origin.
-  const branches = useMemo(() => createDaemonBranchesBackend(daemonFetch), [daemonFetch])
 
   // The WebSocket URL is derived from this locationHref (see
   // buildWhiteboardWsUrl), so it must be the daemon's own origin — a hosted
@@ -459,6 +456,18 @@ function useDaemonDocument(
   )
 
   // Tab favicon: sync state as the status dot, scene content as the minimap.
+  // The tab's mark. A SPATIAL document keeps its symbol on the canvas
+  // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
+  // keeps its own in the frontmatter facets, which are no canvas value and
+  // so arrive on the session's own `facets` reading.
+  // Memoised because the resolver PARSES: a fresh object every render
+  // would re-arm the favicon's debounce on every render rather than on
+  // a change to the document.
+  const documentSymbol = useMemo(
+    () =>
+      resolveOpenDocumentSymbol({ kind: documentKind, canvas: canvasValue, facets: sync.facets }),
+    [documentKind, canvasValue, sync.facets],
+  )
   useDocumentFavicon({
     settingsStore,
     documentId: backendState?.contentDocumentId ?? null,
@@ -466,6 +475,7 @@ function useDaemonDocument(
     revision: documentKind === 'markdown' ? markdownBody : canvasValue,
     readSource: readOutlineSource,
     status: daemonFaviconStatus({ authError, syncStatus }),
+    symbol: documentSymbol,
   })
 
   // The connection is app-level, so the App-mounted shell draws it and this
@@ -485,12 +495,6 @@ function useDaemonDocument(
     })
     return () => setShellConnection(null)
   }, [authError, syncStatus, daemonBaseUrl])
-
-  // The keeper this page's history belongs to. No provider is mounted here,
-  // so this is the daemon backend over `DaemonApiContext`'s fetch — the
-  // picture rides to the same route it always did, by the seam both pages
-  // share rather than by a URL only this one could build.
-  const versionsBackend = useVersionsBackend()
 
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one
@@ -658,7 +662,6 @@ function useDaemonDocument(
       enabled: canvas !== null,
       workspaceId: canvas?.workspaceId ?? '',
       path: canvas?.path ?? '',
-      backend: versionsBackend,
       save: async (label) => {
         if (canvas === null) throw new Error('saveVersion: no canvas')
         const res = await daemonFetch(
@@ -739,9 +742,7 @@ function useDaemonDocument(
     kind: 'render',
     model,
     wrap: (page: ReactNode) => (
-      <DaemonApiContext.Provider value={daemonFetch}>
-        <BranchesBackendContext.Provider value={branches}>{page}</BranchesBackendContext.Provider>
-      </DaemonApiContext.Provider>
+      <DaemonApiContext.Provider value={daemonFetch}>{page}</DaemonApiContext.Provider>
     ),
   }
 }

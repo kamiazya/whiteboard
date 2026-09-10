@@ -131,3 +131,31 @@ export const MARKDOWN_THEME_DOCUMENT: MarkdownTheme = Object.freeze({
   headingSpaceAbovePx: 24,
   listIndentPx: 28,
 })
+
+/**
+ * The same object typography at PANEL density, for a surface that reads a
+ * comment beside the document rather than on it: the comments rail, whose
+ * own chrome (stamps, row summaries, the reply box) runs at 11-12px.
+ *
+ * A third constant rather than a `density` multiplier over the node theme,
+ * for the reason the document theme is a constant: the ratios are not
+ * uniform. Body drops 16 -> 14 while h1 drops 24 -> 19, because a heading
+ * scaled by the same factor keeps towering over prose that got smaller; and
+ * h4-h6 stay AT body size, since no surface may set a heading below the
+ * prose under it.
+ *
+ * It is not a smaller DOCUMENT theme and must never become one — a comment
+ * is an object wherever it is drawn. What varies here is how much room the
+ * surface has, not what kind of thing the prose is.
+ */
+export const MARKDOWN_THEME_COMPACT: MarkdownTheme = Object.freeze({
+  ...MARKDOWN_THEME_NODE,
+  bodyFontSizePx: 14,
+  headingFontSizePx: Object.freeze({ 1: 19, 2: 17, 3: 15, 4: 14, 5: 14, 6: 14 }),
+  blockGapPx: 10,
+  headingSpaceAbovePx: 14,
+  listIndentPx: 18,
+  codeBlockPaddingPx: 12,
+  blockquoteGapPx: 12,
+  tableCellPaddingXPx: 10,
+})

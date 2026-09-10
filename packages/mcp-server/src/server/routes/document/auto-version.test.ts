@@ -23,6 +23,7 @@ const { clearCache } = await import('../../store/doc-cache.js')
 const { loadDocument } = await import('../../store/document-store.js')
 const { createDocumentRouter } = await import('../document.js')
 const wsModule = await import('../ws.js')
+const { FileVersionStore } = await import('../../store/version-store.js')
 
 describe('auto-version', () => {
   it('exports a quiet period, and a ceiling longer than it', () => {
@@ -52,7 +53,6 @@ describe('createAutoVersionTrigger', () => {
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 0,
       auto: true,
-      hasThumbnail: false,
     }
     const save = vi
       .fn()
@@ -84,111 +84,6 @@ describe('createAutoVersionTrigger', () => {
     trigger.stop()
   })
 
-  it('passes branchName to save when getHeadBranch is injected', async () => {
-    const doc = new LoroDoc()
-    const entry = {
-      id: 'v1',
-      path: 'canvas-a',
-      createdAt: '2026-04-23T00:00:00.000Z',
-      elementCount: 0,
-      auto: true,
-      hasThumbnail: false,
-      branchName: 'feature',
-    }
-    const save = vi.fn().mockResolvedValue(entry)
-    const getHeadBranch = vi
-      .fn<(sid: string, path: string) => Promise<string | null>>()
-      .mockResolvedValue('feature')
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-        renameBranchInVersions: vi.fn(),
-      },
-      { quietMs: 60_000, getHeadBranch },
-    )
-    trigger('session1', 'canvas-a', doc)
-    await trigger.flush()
-    expect(getHeadBranch).toHaveBeenCalledWith('session1', 'canvas-a')
-    expect(save).toHaveBeenCalledWith('session1', 'canvas-a', doc, {
-      auto: true,
-      branchName: 'feature',
-      operator: {
-        kind: 'system',
-        peerId: doc.peerIdStr,
-        displayName: 'auto-save',
-      },
-    })
-  })
-
-  it('calls save without branchName when getHeadBranch returns null', async () => {
-    const doc = new LoroDoc()
-    const save = vi.fn().mockResolvedValue({
-      id: 'v1',
-      path: 'canvas-a',
-      createdAt: '2026-04-23T00:00:00.000Z',
-      elementCount: 0,
-      auto: true,
-      hasThumbnail: false,
-      branchName: 'main',
-    })
-    const getHeadBranch = vi.fn().mockResolvedValue(null)
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-        renameBranchInVersions: vi.fn(),
-      },
-      { quietMs: 60_000, getHeadBranch },
-    )
-    trigger('session1', 'canvas-a', doc)
-    await trigger.flush()
-    expect(save).toHaveBeenCalledWith('session1', 'canvas-a', doc, {
-      auto: true,
-      operator: {
-        kind: 'system',
-        peerId: doc.peerIdStr,
-        displayName: 'auto-save',
-      },
-    })
-  })
-
-  it('does not silently fall back to save when getHeadBranch throws corruption', async () => {
-    const doc = new LoroDoc()
-    const save = vi.fn()
-    const getHeadBranch = vi
-      .fn<(sid: string, path: string) => Promise<string | null>>()
-      .mockRejectedValue(corruptStoredData('/tmp/branches.json', 'broken branch state'))
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-        renameBranchInVersions: vi.fn(),
-      },
-      { quietMs: 60_000, getHeadBranch },
-    )
-
-    // Corruption reading the head branch must not be swallowed into a save
-    // with the wrong branch on it. The trigger has no caller to reject to any
-    // more, so what the case pins is that no version is written at all.
-    trigger('session1', 'canvas-a', doc)
-    await trigger.flush()
-    expect(save).not.toHaveBeenCalled()
-    trigger.stop()
-  })
-
   it('leaves the key uncovered when the save reports corruption', async () => {
     const doc = new LoroDoc()
     const entry = {
@@ -197,7 +92,6 @@ describe('createAutoVersionTrigger', () => {
       createdAt: '2026-04-23T00:00:00.000Z',
       elementCount: 0,
       auto: true,
-      hasThumbnail: false,
       branchName: 'main',
     }
     const save = vi
@@ -287,5 +181,76 @@ describe('auto-version corruption handling', () => {
     const serverDoc = await loadDocument('session1', 'canvas-a')
     const elements = serverDoc.getMovableList('elements').toJSON() as Array<{ id: string }>
     expect(elements.map((entry) => entry.id)).toEqual(['e1'])
+  })
+})
+
+/**
+ * A checkpoint is a point somebody could come back to, so a second row
+ * holding the state the first one already holds is not one — it is noise in
+ * the list a person reads.
+ *
+ * The scheduler's diff check was in-memory only, keyed per process. Every
+ * way that memory can be empty or stale while the ROWS say otherwise gives a
+ * checkpoint over a document nothing changed in, and a reconnect is the
+ * cheapest of them: a client re-sending ops the server already has is a CRDT
+ * no-op, and the update route signals the trigger on every POST regardless.
+ */
+describe('an unchanged document', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+  })
+  afterEach(() => {
+    clearCache()
+  })
+
+  it('takes no second checkpoint when the newest version already holds this state', async () => {
+    const store = new FileVersionStore()
+    // The decision point, observed rather than waited out. "No row appeared"
+    // is a claim about something that does not happen, and the only way to
+    // wait for that on a clock is to guess how long; counting the question
+    // the scheduler asks turns it into a positive one — the keeper WAS
+    // consulted, and the list is still what it was.
+    let asked = 0
+    const askedInner = store.isUnchangedSinceLastVersion.bind(store)
+    store.isUnchangedSinceLastVersion = async (workspaceId, path) => {
+      asked += 1
+      return askedInner(workspaceId, path)
+    }
+    const clientDoc = new LoroDoc()
+    const prevVV = clientDoc.version()
+    const map = clientDoc.getMovableList('elements').insertContainer(0, new LoroMap())
+    map.set('id', 'e1')
+    map.set('type', 'rectangle')
+    clientDoc.commit()
+    const update = clientDoc.export({ mode: 'update', from: prevVV })
+
+    const post = async (app: { request: (...args: never[]) => Promise<Response> }) =>
+      (app.request as unknown as (url: string, init: RequestInit) => Promise<Response>)(
+        '/api/w/session1/document/canvas-a/update',
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/octet-stream' },
+          body: update,
+        },
+      )
+
+    const first = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    expect((await post(first)).status).toBe(200)
+    await vi.waitFor(async () => {
+      expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
+    })
+
+    // A FRESH router, so a fresh trigger with an empty diff check — which is
+    // what a daemon restart leaves behind. The same bytes again: a
+    // reconnecting client replaying ops the record already carries.
+    const askedBefore = asked
+    const second = createDocumentRouter({ autoVersionQuietMs: 0, versionStore: store })
+    expect((await post(second)).status).toBe(200)
+    await vi.waitFor(() => {
+      expect(asked).toBeGreaterThan(askedBefore)
+    })
+
+    expect(await store.list('session1', 'canvas-a')).toHaveLength(1)
   })
 })

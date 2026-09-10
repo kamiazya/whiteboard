@@ -6,7 +6,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it, vi } from 'vitest'
+import { afterEach, expect, it } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
 import { rootOf } from '../../test-utils/spatial-editor-root.js'
 import { SpatialEditor } from './SpatialEditor.js'
@@ -54,19 +54,17 @@ it('the create compose bubble wears the light theme comment chrome', async () =>
   expect(style.boxShadow).not.toBe('none')
 })
 
-it('the edit bubble wears the dark theme comment chrome over the drawn bubble', async () => {
+it('the compose bubble wears the dark theme comment chrome too', async () => {
+  // The same claim in the other theme. It used to be driven through the EDIT
+  // bubble, which is gone (2026-09-08): editing there could only ever rewrite
+  // the opening message, since what it wrote was the flat comment's `text`.
+  // The chrome is the compose bubble's either way, so the create gesture
+  // makes the claim now.
   const { container } = render(<Host theme="dark" />)
   const root = rootOf(container)
-  await vi.waitFor(() =>
-    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
-      'free note',
-    ),
-  )
-  // Through the context menu: the subject is the DRAFT's chrome, and the
-  // card a press opens would only stand between the two.
   const r = root.getBoundingClientRect()
-  fireEvent.contextMenu(root, { clientX: r.left + 625, clientY: r.top + 470, button: 2 })
-  await userEvent.click(page.getByRole('menuitem', { name: 'Edit comment' }))
+  fireEvent.contextMenu(root, { clientX: r.left + 400, clientY: r.top + 300, button: 2 })
+  await userEvent.click(page.getByRole('menuitem', { name: 'Comment here' }))
 
   const style = await composeStyle()
   expect(style.backgroundColor).toBe('rgb(38, 38, 38)')

@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { LoroDoc, LoroMap } from 'loro-crdt'
@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 
 // Tests for the native Loro version store backed by the sqlite metadata DB.
-// Frontiers and metadata live in the versions table; thumbnails live as PNG
-// blobs under blobs/{ws}/versions/.
+// Frontiers and metadata live in the versions table; nothing this store owns
+// touches the filesystem any more (the version thumbnails did, and are gone).
 
 let tempDir: string
 
@@ -73,7 +73,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.elementCount).toBe(3)
     expect(entry.auto).toBe(true)
     expect(entry.label).toBeUndefined()
-    expect(entry.hasThumbnail).toBe(false)
     expect(entry.branchName).toBe('main')
   })
 
@@ -290,72 +289,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     await expect(store.load('sess-1', '')).rejects.toThrow(/Invalid version id/i)
   })
 
-  it('round-trips saveThumbnail -> loadThumbnail and updates hasThumbnail', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: false, label: 'v1' })
-
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await store.saveThumbnail('sess-1', 'canvas-a', entry.id, png)
-    const loaded = await store.loadThumbnail('sess-1', 'canvas-a', entry.id)
-    expect(loaded).not.toBeNull()
-    expect(Array.from(loaded!)).toEqual(Array.from(png))
-
-    const list = await store.list('sess-1', 'canvas-a')
-    expect(list.find((v) => v.id === entry.id)!.hasThumbnail).toBe(true)
-  })
-
-  it('returns null from loadThumbnail for an unsaved id', async () => {
-    const res = await store.loadThumbnail('sess-1', 'canvas-a', 'whatever')
-    expect(res).toBeNull()
-  })
-
-  it('refuses saveThumbnail for an id that does not belong to the workspace, leaving no orphan PNG', async () => {
-    // Older code wrote the blob first and then ran a workspace-scoped UPDATE.
-    // A foreign / hostile / deleted version id matched zero rows but the PNG
-    // was still on disk forever. The fix is "scope check before write" — this
-    // test pins that order so a future refactor can't reintroduce the orphan.
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const ownEntry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    // ownEntry.id only exists in sess-1; pretending it belongs to sess-2 is
-    // exactly the cross-workspace case we want to reject.
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await expect(store.saveThumbnail('sess-2', 'canvas-a', ownEntry.id, png)).rejects.toThrow()
-    await expect(store.loadThumbnail('sess-2', 'canvas-a', ownEntry.id)).resolves.toBeNull()
-
-    // Sanity check: the legitimate workspace can still save / load.
-    await store.saveThumbnail('sess-1', 'canvas-a', ownEntry.id, png)
-    const loaded = await store.loadThumbnail('sess-1', 'canvas-a', ownEntry.id)
-    expect(loaded).not.toBeNull()
-  })
-
-  it('does not swallow non-missing read failures in loadThumbnail', async () => {
-    // A REAL version of this document: ownership is established before the
-    // bytes are read, so a made-up id answers "no picture here" and would
-    // never reach the corrupt-file path this case exists to pin.
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const dir = join(tempDir, 'blobs', 'sess-1', 'versions')
-    await mkdir(join(dir, `${entry.id}.png`), { recursive: true })
-
-    await expect(store.loadThumbnail('sess-1', 'canvas-a', entry.id)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining(`${entry.id}.png`),
-    })
-  })
-
-  it('rejects thumbnails larger than 2MB', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const huge = new Uint8Array(2 * 1024 * 1024 + 1)
-    await expect(store.saveThumbnail('sess-1', 'canvas-a', entry.id, huge)).rejects.toThrow(
-      /exceeds/i,
-    )
-  })
-
   it('keeps auto versions capped at 50 per canvas while preserving manual versions', async () => {
     const doc = new LoroDoc()
     appendElement(doc, 'e1')
@@ -374,24 +307,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const manuals = list.filter((v) => !v.auto)
     expect(autos.length).toBeLessThanOrEqual(50)
     expect(manuals.some((v) => v.id === manualEntry.id)).toBe(true)
-  })
-
-  it('prune also removes the thumbnail blobs of evicted auto versions', async () => {
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    // Save the first auto and attach a thumbnail before any eviction can happen.
-    const evictable = await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])
-    await store.saveThumbnail('sess-1', 'canvas-a', evictable.id, png)
-    expect(await store.loadThumbnail('sess-1', 'canvas-a', evictable.id)).not.toBeNull()
-
-    // Push 50 more autos so the original one falls out of the retention window.
-    for (let i = 0; i < 50; i++) {
-      appendElement(doc, `auto-${i}`)
-      await store.save('sess-1', 'canvas-a', doc, { auto: true })
-    }
-
-    expect(await store.loadThumbnail('sess-1', 'canvas-a', evictable.id)).toBeNull()
   })
 
   describe('branchName', () => {
@@ -492,6 +407,24 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(row).toEqual({ workspaceId: 'sess-1' })
   })
 
+  it('lists two saves from the same millisecond newest-first by insertion order', async () => {
+    // A random id was the tie-breaker, so back-to-back saves that shared a
+    // createdAt came back in random order — the lane's fixture saves two
+    // labelled versions in a row and asks which is latest.
+    const nowSpy = vi.spyOn(Date, 'now').mockImplementation(() => 1_700_000_000_000)
+    try {
+      for (const label of ['first', 'second', 'third']) {
+        const doc = new LoroDoc()
+        appendElement(doc, label)
+        await store.save('sess-1', 'canvas-z', doc, { auto: false, label })
+      }
+    } finally {
+      nowSpy.mockRestore()
+    }
+    const listed = await store.list('sess-1', 'canvas-z')
+    expect(listed.map((entry) => entry.label)).toEqual(['third', 'second', 'first'])
+  })
+
   describe('pruneSandwichedAutoVersions', () => {
     // Save a version while pinning Date.now() so chronological order is
     // deterministic regardless of how fast the test runs.
@@ -548,20 +481,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
       expect(result.deletedCount).toBe(0)
       const remaining = (await store.list('sess-1', 'canvas-y')).map((v) => v.id).sort()
       expect(remaining).toEqual([a1.id, m1.id, a2.id].sort())
-    })
-
-    it('removes the thumbnail PNG of pruned versions so disk usage actually drops', async () => {
-      await saveAt('canvas-z', 'manual', 1_000)
-      const a1 = await saveAt('canvas-z', 'auto', 2_000)
-      await saveAt('canvas-z', 'manual', 3_000)
-
-      // Stamp a thumbnail on the soon-to-be-pruned auto version.
-      await store.saveThumbnail('sess-1', 'canvas-z', a1.id, new Uint8Array([1, 2, 3]))
-      expect(await store.loadThumbnail('sess-1', 'canvas-z', a1.id)).not.toBeNull()
-
-      const result = await store.pruneSandwichedAutoVersions('sess-1', 'canvas-z')
-      expect(result.deletedIds).toEqual([a1.id])
-      expect(await store.loadThumbnail('sess-1', 'canvas-z', a1.id)).toBeNull()
     })
   })
 })

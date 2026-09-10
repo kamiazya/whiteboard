@@ -64,11 +64,12 @@ export function createFacetListTool(deps: ServerDeps) {
     inputSchema: facetListInputSchema,
     outputSchema: facetListOutputSchema,
     execute: async (input: FacetListInput): Promise<FacetListOutput> => {
-      // Parsed HERE, not only at the MCP boundary: that boundary registers
-      // `inputSchema.shape`, so the SDK rebuilds a non-strict validator and
-      // a typo'd key would be stripped rather than refused — answering an
-      // unfiltered list that looks like a result. A direct server-core
-      // caller has no boundary at all.
+      // Parsed HERE, not only at the MCP boundary: a direct server-core
+      // caller has no boundary at all, and a typo'd key stripped rather
+      // than refused would answer an unfiltered list that looks like a
+      // result. (The MCP boundary itself is strict now — every tool
+      // registers the Zod object rather than its `.shape` — but this
+      // parse is what holds the line for the other callers.)
       const parsed = facetListInputSchema.parse(input)
       const registry = deps.facetRegistry ?? bundledFacetRegistry
       const facets = registry.plugins

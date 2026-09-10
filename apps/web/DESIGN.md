@@ -472,9 +472,40 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   instead of ad-hoc numbers: `--motion-duration-fast` (150ms,
   hover/press feedback), `--motion-duration-normal` (220ms, state
   changes and small surfaces like popovers/toasts),
-  `--motion-ease-out` (soft ease-out — never bouncy in chrome).
+  `--motion-ease-out` (soft ease-out — never bouncy in chrome), and
+  `--motion-ease-enter` / `--motion-ease-exit` for anything whose perceived
+  change is OPACITY. **The last pair is not a style preference.**
+  `--motion-ease-out` is shaped for a MOVE — arrive fast, settle — and on a
+  fade it spends the declared duration on a change nobody can see. Measured
+  twice: the comment pin was 65% faded 40ms into a 220ms ramp, and the
+  inspector panel reached 0.61 opacity at 30ms and 0.85 at 60ms, so three
+  quarters of its duration went on the last 15%. Opacity's perceived moment
+  is the middle, so arriving decelerates and leaving accelerates.
   Entrances are fade + small rise/scale (0.98→1); no entrance animation
-  without an explicit reason. **Stateful colour is the one paint-property
+  without an explicit reason.
+  **A PANE's motion is decided once, in `InspectorPanel`** — all five
+  inspectors (properties, comments, proposals, connections, history) stand in
+  that one vessel, so a sixth inherits how a pane arrives rather than
+  restating it.
+  Each shape enters from where it lives: the phone sheet rises off the
+  bottom edge it is anchored to, the desktop column slides in from the edge
+  it borders. What is deliberately NOT animated there is the column's
+  WIDTH, and that is measured rather than chosen — `MarkdownEditor` observes
+  its container width, re-typesets the preview whenever it changes, and
+  flips split→write below 640px, so an animated in-flow width would
+  re-typeset every frame and change the editor's MODE mid-slide. Leaving
+  needs the pane to outlive its own unmount, which is
+  `contexts/inspector-presence.ts`; a pane that finds nothing animating
+  releases itself on the next frame rather than waiting out a ceiling.
+  **A pane that REPLACES another plays no entrance**, and that is measured
+  rather than chosen: the entrance fades in from nothing, the outgoing pane
+  leaves in the same commit, and for those frames nothing covers what is
+  under the slot. On the canvas at 390px, switching Comments to History, the
+  incoming pane read 0.00 opacity on the first frame and 0.65 by the fifth,
+  with the dock beneath showing through for all of them. The slot's previous
+  occupancy therefore reaches the pane, which reads it ONCE at mount —
+  reading it per render would flip the class mid-animation and cut the
+  entrance it exists to protect. **Stateful colour is the one paint-property
   exception**: where the colour IS the state (the shell mark's cap, a hover
   affordance), it crosses with `transition-colors` on the normal token
   rather than cutting. There is no transform/opacity encoding of "which
@@ -519,6 +550,24 @@ once there is more than one change (`Adopt 2 changes`), and each row's pair
 names what it decides (`Adopt: Move “the plan”`) — the names do the
 distinguishing that the icons deliberately do not.
 
+**The Proposals inspector is an INDEX, and decides nothing** (`ProposalsPanel`,
+ADR-0029 decisions 1 and 9). The card on the document is the one place a change
+is answered, so the panel lists what is still waiting, says how much of each
+is, and a row press moves the board onto that proposal's chrome and opens the
+card that already sits there — `SpatialEditorHandle.openProposal`, the same
+card the bubble opens. A second Adopt in the panel would be a second place
+answering one question, and the two would eventually disagree about what
+"adopt" meant.
+
+What it is FOR is the one thing the in-place surface cannot do. A proposal
+anchored four thousand pixels off-screen is drawn correctly and seen by
+nobody, and the opener is drawn at nought and pressable (user decision,
+2026-09-07) because "none waiting" is a fact worth being able to check, and a
+member that comes and goes is a control that moves under the finger reaching
+for its neighbour. A markdown document gets the index without the jump: its
+passages are drawn in the body already, and there is no viewport to move —
+so the row is not a button rather than being a dead one.
+
 Both vessels — the right-click list menu and the ⋯ grid — draw the SAME
 catalog in the SAME band order: property rows (color, z-order, arrows;
 the menu stays open), then verbs (one-shot; the menu closes), then the
@@ -536,9 +585,10 @@ share (ADR-0026 decision 5; `useCommentsRail` holds its state,
 `CommentsRailAside` is its vessel — a column where there is width, a bottom
 sheet over the editor under 768px, since a 288px column beside a 412px phone
 screen left the editor a strip a finger could not write in). The rail is one
-of four panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
+of five panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
 vessel `InspectorPanel`): a markdown document's properties, its comments, the
-documents linking to it (a daemon keeper only), its history. Opening any one
+changes somebody wants made to it, the documents linking to it (a daemon
+keeper only), its history. Opening any one
 closes the others and every opener reads released, because two panels beside
 one editor — measured on a phone as the display popover, the comments sheet
 and the history sheet all open at once — is what the header retune set out to

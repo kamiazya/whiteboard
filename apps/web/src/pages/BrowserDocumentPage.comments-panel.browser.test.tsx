@@ -318,7 +318,9 @@ it('opens a conversation from the markdown body, end to end', async () => {
   await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'why Friday?')
   await userEvent.click(screen.getByRole('button', { name: /send comment/i }))
 
-  await waitFor(() => expect(screen.getByText('why Friday?')).toBeInTheDocument(), {
+  // `getAllBy`: the conversation opens on the message it was just given, so
+  // the words are in the row's summary AND in the column's first entry.
+  await waitFor(() => expect(screen.getAllByText('why Friday?').length).toBeGreaterThan(0), {
     timeout: 15_000,
   })
   // Read back from the layer, not from the draft that was typed: the count
@@ -618,7 +620,9 @@ it('starts a conversation about the whole document from the rail, on a note', as
   await userEvent.fill(screen.getByRole('textbox', { name: /comment/i }), 'retire this note?')
   await userEvent.click(screen.getByRole('button', { name: /send comment/i }))
 
-  await waitFor(() => expect(screen.getByText('retire this note?')).toBeInTheDocument(), {
+  // `getAllBy`: see the note on the same wait above — the row's summary and
+  // the opened column's first entry both carry the message.
+  await waitFor(() => expect(screen.getAllByText('retire this note?').length).toBeGreaterThan(0), {
     timeout: 15_000,
   })
   expect(screen.getByText('whole document')).toBeInTheDocument()

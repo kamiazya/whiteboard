@@ -87,7 +87,10 @@ function alwaysOnFiles(): string[] {
 }
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
-  'AGENTS.md': 16,
+  // 17 since the MCP section gained its three-line pointer at the
+  // mcp-tool-surface skill; main sat 23 characters under the boundary, so
+  // the bucket is bought by the pointer alone.
+  'AGENTS.md': 17,
   // 16 since `packages/history` joined the table — the shared mechanics both
   // keepers read a branch, a merge plan and a checkpoint out of. A package
   // that is not in the table is a package nobody can place, so the row is
@@ -106,7 +109,11 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // ci-gate.mjs. The file had 117 characters of headroom, so this bucket is
   // bought by about 515 characters of prose, not by drift — a coarse
   // instrument charges the whole step to whoever crosses it.
-  '.claude/rules/dev-flow.md': 27,
+  // 28 since the mcp-tool-surface skill joined the "four things you cannot
+  // see by reading a diff" list and the review workflow gained its opt-in
+  // tool-surface dimension; the entry is trimmed to the pointer, and the
+  // detail is the skill's.
+  '.claude/rules/dev-flow.md': 28,
   // 14 since the CI-flakes section gained flake-watch's pointer — the
   // watcher for the section's own second-occurrence rule, whose value is
   // being discovered at session start rather than remembered. The file sat
@@ -158,7 +165,53 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // that no root writes a seam's body, and the gap the layout worker leaves.
 // Path-scoped, so paid only by a session in canvas-render — where the two
 // thousand characters are the module's design record.
-const CANVAS_RENDER_BUDGET = 80
+// 81 since the live-drag parity property's generator started reading the
+// facet REGISTRY. What bought the bucket is the account of how that property
+// shipped VACUOUS — plain nodes on both sides, agreeing about canvases that
+// carried no facets at all, while the bug it exists to catch was live. A
+// reader who does not know that will write the next generator the same way.
+// 88 since the render theme layer (ADR-0030): the in-layout resolution
+// that lets an embed read its own facet before the host's, the sketch ink
+// decomposition and why it is seeded from ids, the glow filter's
+// `userSpaceOnUse` region, the `style` default that keeps unstyled output
+// byte-identical, and the second time the live-drag parity property
+// shipped vacuous — nodes with facets, a canvas with none — each a
+// decision the next theme has to keep.
+// Plus the paint-order rule (groups behind what they hold, whatever the
+// stored order says) — a bug a person saw in a rendered diagram and no test
+// had caught.
+// 90 since the drawing score: the one instrument that judges the BOARD
+// rather than a mechanism, what it reads and where it is pinned, the
+// `annotates` link a scene needs to get from a label back to what it
+// names, and the first thing it found — tidy leaves every mistake inside a
+// frame where it was — which tidy's own scoreboard cannot see.
+// 91 once the column set was read against the literature: what a session
+// extending it has to know (a column earns its place by an empirical
+// ranking, not a catalogue; the vector stays a vector and the known blind
+// spot is pinned), and the router finding the new columns surfaced.
+// 92 for the sharing contract: the instruments read one polyline geometry,
+// the router never does, and the duplication left between them is the
+// independence — said where a session about to "deduplicate" it will read.
+// 93 for the matrix of the two router changes the drawing score rejected:
+// each cut the reference's reversals and raised the sweep's debt, and a
+// table is what stops the same shapes being argued for again.
+// 94 for the gap column: what the score reads between two boxes, and why
+// tidy's margin is held at the same number.
+// 97 for tidy inside a frame — the three rules around it each came from a
+// measurement a reader would otherwise repeat — and for the traced search
+// that shows the same-row loop is the cost model's answer, not a miss.
+// 98 for the survivor judged by zero tests: six of six hand-checked were
+// killed, so the column is read before the row.
+// 99 for the ink terms reading axis-aligned segments only: the diagonal
+// back through an edge's own box that the search could not see, the tier
+// swap measured and rejected for it, and where the fix belongs and why.
+// 101 for the named side pair the search overrules, the lone-edge gate it
+// dropped and what that moved on the sweep, and the coincident-anchor
+// decision that changed with it — each a measurement a reader would repeat.
+// 102 for tidy banding on centres and far edges, and the drift the fixpoint
+// loop fell into when such a snap could jam a unit — found by fast-check,
+// and the kind of thing a reader re-derives by breaking it again.
+const CANVAS_RENDER_BUDGET = 102
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

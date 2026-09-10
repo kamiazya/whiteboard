@@ -14,7 +14,6 @@ function mkVersionsResponse(): Response {
     elementCount: 3,
     label: `Version ${index + 1}`,
     auto: true,
-    hasThumbnail: false,
     branchName: 'main',
   }))
   return new Response(JSON.stringify({ versions }), {
@@ -57,6 +56,18 @@ afterEach(async () => {
   await page.viewport(1280, 900)
 })
 
+// The panel ARRIVES with motion now, and changes stage with a height
+// transition (`InspectorPanel`), so a rect read on the frame it mounts is a
+// rect mid-slide — measured here as 9.4px of the entrance's 16px still to
+// travel, which reads as the sheet not being anchored to the bottom edge at
+// all. This file is about the sheet's resting SHAPE; the motion itself is
+// pinned by `InspectorPanel.motion.browser.test.tsx`.
+async function settled(element: Element): Promise<void> {
+  await Promise.all(
+    element.getAnimations().map((animation) => animation.finished.catch(() => undefined)),
+  )
+}
+
 // The editor row both document pages build: a stand-in editor, the history
 // beside it, and the positioned wrapper the shell provides.
 function renderRow() {
@@ -77,6 +88,7 @@ describe('VersionPanel narrow screens', () => {
 
     const row = container.querySelector('div.relative') as HTMLElement
     const panel = await screen.findByTestId('history-panel')
+    await settled(panel)
 
     // A sheet: full width, anchored to the bottom, leaving the document
     // above it visible. A 300px column beside a 375px editor is not a
@@ -101,12 +113,14 @@ describe('VersionPanel narrow screens', () => {
 
     const collapse = await screen.findByRole('button', { name: 'Collapse history' })
     expect(collapse).toHaveAttribute('aria-expanded', 'true')
+    await settled(panel)
     const full = panel.getBoundingClientRect()
     expect(full.height / rowRect.height).toBeGreaterThan(0.9)
     expect(full.bottom).toBeCloseTo(rowRect.bottom, 0)
 
     collapse.click()
     await screen.findByRole('button', { name: 'Expand history' })
+    await settled(panel)
     expect(panel.getBoundingClientRect().height).toBeCloseTo(peek.height, 0)
   })
 
@@ -116,6 +130,7 @@ describe('VersionPanel narrow screens', () => {
 
     const row = container.querySelector('div.relative') as HTMLElement
     const panel = await screen.findByTestId('history-panel')
+    await settled(panel)
 
     const rowRect = row.getBoundingClientRect()
     const rect = panel.getBoundingClientRect()

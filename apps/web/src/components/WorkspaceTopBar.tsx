@@ -122,6 +122,27 @@ export default function WorkspaceTopBar({
         data-testid="version-preview-bar"
         className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-primary/40 bg-primary/5 px-chrome"
       >
+        {/* Native `disabled` on both: neither carries a tooltip to keep
+            alive, and an in-flight restore is exactly the state a pointer
+            should bounce off rather than queue behind. Stopping mid-restore
+            would put the live document back while the past state is still
+            landing on it. */}
+        {/* At the LEFT edge, where this bar's own way out already lives when
+            it is not previewing. The two acts are not alike — one puts the
+            live document back, the other REWRITES it — and side by side at
+            the right edge the harmless one became the frightening one to
+            reach, because a miss lands on the destructive neighbour. The
+            title between them is the separation, so it holds at any width
+            rather than resting on a margin. */}
+        <button
+          type="button"
+          aria-label="Stop viewing"
+          disabled={preview.isRestoring}
+          onClick={preview.stop}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
         <span className="min-w-0 flex-1 leading-tight">
           <b className="block truncate text-sm font-medium">Viewing {preview.title}</b>
           {preview.error === null ? (
@@ -132,20 +153,6 @@ export default function WorkspaceTopBar({
             </span>
           )}
         </span>
-        {/* Native `disabled` on both: neither carries a tooltip to keep
-            alive, and an in-flight restore is exactly the state a pointer
-            should bounce off rather than queue behind. Stopping mid-restore
-            would put the live document back while the past state is still
-            landing on it. */}
-        <button
-          type="button"
-          aria-label="Stop viewing"
-          disabled={preview.isRestoring}
-          onClick={preview.stop}
-          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
-        >
-          <X aria-hidden="true" className="size-4" />
-        </button>
         {/* The heavier of the two, so it carries the weight — a pair of
             identical round buttons would say the acts are alike. */}
         <button

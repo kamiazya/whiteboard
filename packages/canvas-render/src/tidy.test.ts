@@ -16,13 +16,21 @@ const box = (
   type: TidyNode['type'] = 'text',
 ): TidyNode => ({ id, type, x, y, width, height })
 
+const clearOfEachOther = (a: TidyNode, b: TidyNode) =>
+  a.x + a.width + 32 <= b.x ||
+  b.x + b.width + 32 <= a.x ||
+  a.y + a.height + 32 <= b.y ||
+  b.y + b.height + 32 <= a.y
+
 const applyMoves = (
   nodes: readonly TidyNode[],
-  moves: readonly { id: string; x: number; y: number }[],
+  moves: readonly { id: string; x: number; y: number; width?: number; height?: number }[],
 ) =>
   nodes.map((n) => {
     const m = moves.find((mv) => mv.id === n.id)
-    return m === undefined ? n : { ...n, x: m.x, y: m.y }
+    return m === undefined
+      ? n
+      : { ...n, x: m.x, y: m.y, width: m.width ?? n.width, height: m.height ?? n.height }
   })
 
 describe('band alignment', () => {
@@ -47,22 +55,288 @@ describe('band alignment', () => {
   })
 })
 
+describe('band alignment', () => {
+  it('a band holding an immobile unit aligns to that unit, not to the grid', () => {
+    // The row-mate is off the grid and cannot move: snapping the scoped box
+    // to the grid would slide it 4px off the row it was drawn on — aligned
+    // in intent, not in fact. Measured on the lane: a box added at y=300
+    // beside an out-of-scope box at y=300 came back at 304.
+    expect(
+      tidyNodes([box('fixed', 0, 300), box('added', 400, 300)], { scope: new Set(['added']) }),
+    ).toEqual([])
+    expect(
+      tidyNodes([box('fixed', 0, 300), box('added', 400, 296)], { scope: new Set(['added']) }),
+    ).toEqual([{ id: 'added', x: 400, y: 300 }])
+    expect(
+      tidyNodes([box('fixed', 0, 300), box('added', 400, 296)], { locked: (id) => id === 'fixed' }),
+    ).toEqual([{ id: 'added', x: 400, y: 300 }])
+  })
+})
+
+describe('band alignment by centre and far edge', () => {
+  // The score reads a box as lined up on any anchor a drawer sets — left,
+  // centre, right; top, middle — so tidy lines up on the same ones. The
+  // lane drew a narrower frame centred under a wider one, 20px off, and a
+  // tidy banding on left edges alone could not see it.
+  it('a narrower box centred under a wider one, a few px off, snaps to its centre', () => {
+    const moves = tidyNodes([box('wide', 40, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
+    expect(moves).toEqual([{ id: 'narrow', x: 140, y: 200 }])
+  })
+
+  it("a box a few px off a wider box's right edge lines up on that edge", () => {
+    const moves = tidyNodes([box('wide', 0, 0, 600, 100), box('end', 410, 200, 200, 100)])
+    expect(moves).toEqual([{ id: 'end', x: 400, y: 200 }])
+  })
+
+  it("a taller box whose middle is near a neighbour's middle lines up on the middle", () => {
+    const moves = tidyNodes([box('a', 0, 0, 100, 60), box('tall', 200, -24, 100, 120)])
+    expect(moves).toEqual([{ id: 'tall', x: 200, y: -30 }])
+  })
+
+  it('a box lined up by its edge is the truth for a centre band, and does not move again', () => {
+    const moves = tidyNodes([
+      box('a', 0, 0, 100, 60),
+      box('b', 8, 96, 100, 60),
+      box('c', -96, 200, 300, 60),
+    ])
+    expect(moves).toEqual([
+      { id: 'b', x: 0, y: 96 },
+      { id: 'c', x: -100, y: 200 },
+    ])
+  })
+
+  it('a far-edge snap that would jam a box into a third one is refused, so a second tidy moves nothing', () => {
+    // fast-check's shrunk counterexample for idempotence: n0's right edge
+    // is within a band of n2's, but lining them up puts n0 inside n1's
+    // margin; the overlap pass then hops it away, and the next iteration
+    // snaps it back — every tidy drifted the three 128px left. A centre or
+    // far-edge snap is cosmetic and separation is not, so the snap yields.
+    const nodes = [box('n0', 64, 0, 60, 40), box('n1', 0, 0, 60, 40), box('n2', 0, 0, 140, 40)]
+    const once = applyMoves(nodes, tidyNodes(nodes))
+    expect(tidyNodes(once)).toEqual([])
+  })
+
+  it('a centre snap between widths of different parity lands on a whole pixel and stays put', () => {
+    // Centres 50.5 and 60: the narrow box can only get within half a pixel
+    // of the wide one's centre, so it takes the whole pixel nearest (31,
+    // centre 51), counts as lined up, and a second tidy moves nothing.
+    const nodes = [box('wide', 0, 0, 101, 40), box('narrow', 40, 200, 40, 40)]
+    const moves = tidyNodes(nodes)
+    expect(moves).toEqual([{ id: 'narrow', x: 31, y: 200 }])
+    expect(tidyNodes(applyMoves(nodes, moves))).toEqual([])
+  })
+
+  it('a far-edge band does not follow a partner the overlap pass is about to move', () => {
+    // fast-check's shrunk counterexample: n3's far edge lined up with n1
+    // while n1 stood inside n0's margin; the overlap pass then hopped n1
+    // away and n3 was emitted at x=61, off the grid and beside nothing.
+    const raw = [
+      [0, 0, 140, 40],
+      [156, 0, 41, 40],
+      [156, 60, 100, 40],
+      [36, 0, 140, 40],
+      [0, 0, 41, 40],
+      [0, 0, 41, 40],
+    ]
+    const nodes = raw.map(([x, y, w, h], i) => box(`n${i}`, x as number, y as number, w, h))
+    const after = applyMoves(nodes, tidyNodes(nodes))
+    const orphans = after.filter((n) => {
+      const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
+      const lined = after.some(
+        (o) =>
+          o.id !== n.id &&
+          (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
+      )
+      return n.x % 8 !== 0 && !lined
+    })
+    expect(orphans).toEqual([])
+  })
+
+  it('a centred pair whose wide box is off the grid: the wide one takes the grid, the narrow one its centre', () => {
+    const moves = tidyNodes([box('wide', 42, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
+    expect(moves).toEqual([
+      { id: 'wide', x: 40, y: 0 },
+      { id: 'narrow', x: 140, y: 200 },
+    ])
+  })
+})
+
+describe('inside a frame', () => {
+  const frame = (x: number, y: number, width: number, height: number) =>
+    box('grp', x, y, width, height, 'group')
+
+  it('two overlapping members separate inside their frame, and the frame grows to keep its padding', () => {
+    const nodes = [frame(0, 0, 200, 160), box('a', 40, 40), box('b', 88, 48)]
+    const moves = tidyNodes(nodes, { scope: new Set(['a', 'b']) })
+    const after = applyMoves(nodes, [...moves])
+    const a = after.find((n) => n.id === 'a')!
+    const b = after.find((n) => n.id === 'b')!
+    const g = after.find((n) => n.id === 'grp')!
+    expect(a.y).toBe(b.y)
+    expect(b.x - (a.x + a.width)).toBeGreaterThanOrEqual(32)
+    // The frame holds both with the margin on every side, and only grew.
+    expect(g.x).toBeLessThanOrEqual(a.x - 32)
+    expect(g.x + g.width).toBeGreaterThanOrEqual(b.x + b.width + 32)
+    expect(g.width).toBeGreaterThan(200)
+    expect(g.height).toBe(160)
+  })
+
+  it("a member hugging the frame's top-left is moved in to the margin; the frame's corner stays put", () => {
+    // The corner is the frame's anchor and its alignment with its peers.
+    // Growing up or left would stagger it against them; the member moves.
+    const nodes = [frame(0, 0, 400, 240), box('a', 8, 8), box('b', 32, 136)]
+    expect(tidyNodes(nodes, { scope: new Set(['a']) })).toEqual([{ id: 'a', x: 32, y: 32 }])
+    // A locked member cannot move in, so the frame is what gives way.
+    expect(tidyNodes(nodes, { locked: (id) => id === 'a' })).toEqual([
+      { id: 'grp', x: -24, y: -24, width: 424, height: 264 },
+    ])
+  })
+
+  it('a member at the frame edge: the frame grows to give it padding and never shrinks', () => {
+    // Scoped to the member alone — the container it sits in still makes room.
+    const nodes = [frame(0, 0, 400, 200), box('a', 40, 40), box('b', 40, 136)]
+    expect(tidyNodes(nodes, { scope: new Set(['b']) })).toEqual([
+      { id: 'grp', x: 0, y: 0, width: 400, height: 228 },
+    ])
+    // Padded already: nothing to do, on any scope.
+    const roomy = [frame(0, 0, 400, 240), box('a', 40, 40), box('b', 40, 136)]
+    expect(tidyNodes(roomy)).toEqual([])
+    expect(tidyNodes(roomy, { scope: new Set(['grp']) })).toEqual([])
+  })
+
+  it('a frame in scope grows for members that are not', () => {
+    const nodes = [frame(0, 0, 400, 200), box('a', 40, 40), box('b', 40, 136)]
+    expect(tidyNodes(nodes, { scope: new Set(['grp']) })).toEqual([
+      { id: 'grp', x: 0, y: 0, width: 400, height: 228 },
+    ])
+  })
+
+  it('a locked frame keeps its size; its members still separate', () => {
+    const nodes = [frame(0, 0, 200, 160), box('a', 40, 40), box('b', 88, 48)]
+    const moves = tidyNodes(nodes, { locked: (id) => id === 'grp' })
+    expect(moves.find((m) => m.id === 'grp')).toBeUndefined()
+    const after = applyMoves(nodes, [...moves])
+    const a = after.find((n) => n.id === 'a')!
+    const b = after.find((n) => n.id === 'b')!
+    expect(clearOfEachOther(a, b)).toBe(true)
+  })
+
+  it('a frame holding a locked member stays put, and its overlapper moves instead', () => {
+    // Moving the frame would carry it away from the member that cannot
+    // follow; the lock inside holds the whole unit, as a lock on the frame
+    // itself would. The peer comes first in document order, so without the
+    // rule it is the frame that hops away from it.
+    const nodes = [box('peer', 100, -40), frame(0, 0, 200, 160), box('a', 40, 40)]
+    const moves = tidyNodes(nodes, { locked: (id) => id === 'a' })
+    expect(moves.some((mv) => mv.id === 'grp' || mv.id === 'a')).toBe(false)
+    expect(moves.find((mv) => mv.id === 'peer')).toBeDefined()
+  })
+
+  it('a frame that grew still clears its neighbours', () => {
+    // The grown frame would reach the box to its right, so the whole unit
+    // hops as it would have before growing.
+    const nodes = [frame(0, 0, 200, 160), box('a', 40, 40), box('b', 88, 48), box('c', 240, 0)]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const g = after.find((n) => n.id === 'grp')!
+    const c = after.find((n) => n.id === 'c')!
+    expect(clearOfEachOther(g, c)).toBe(true)
+  })
+})
+
 describe('units', () => {
   it('an outermost group scoops nested groups and members as ONE unit', () => {
     // outer contains inner and m; aligning outer with the peer moves all
     // of them by the same delta exactly once.
+    // Tidy inside already (on the grid, the margin kept), so the delta read
+    // below is the unit's alone.
     const nodes = [
-      box('outer', 0, 110, 300, 200, 'group'),
-      box('inner', 20, 130, 120, 80, 'group'),
-      box('m', 160, 150, 60, 40),
+      box('outer', 0, 112, 320, 200, 'group'),
+      box('inner', 40, 144, 120, 80, 'group'),
+      box('m', 200, 144, 64, 40),
       box('peer', 500, 96, 100, 60),
     ]
     const moves = tidyNodes(nodes)
     const after = applyMoves(nodes, [...moves])
-    const dy = (after.find((n) => n.id === 'outer')?.y ?? 0) - 110
+    const dy = (after.find((n) => n.id === 'outer')?.y ?? 0) - 112
     expect(dy).not.toBe(0)
-    expect(after.find((n) => n.id === 'inner')?.y).toBe(130 + dy)
-    expect(after.find((n) => n.id === 'm')?.y).toBe(150 + dy)
+    expect(after.find((n) => n.id === 'inner')?.y).toBe(144 + dy)
+    expect(after.find((n) => n.id === 'm')?.y).toBe(144 + dy)
+  })
+
+  it('the outermost group is the root whatever the document order', () => {
+    // inner is listed before outer. Were every group its own root, inner
+    // would claim m first and outer would move alone; the outermost frame
+    // must still scoop both.
+    const nodes = [
+      box('inner', 40, 144, 120, 80, 'group'),
+      box('m', 200, 144, 64, 40),
+      box('outer', 0, 112, 320, 200, 'group'),
+      box('peer', 500, 96, 100, 60),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const dy = (after.find((n) => n.id === 'outer')?.y ?? 0) - 112
+    expect(dy).not.toBe(0)
+    expect(after.find((n) => n.id === 'inner')?.y).toBe(144 + dy)
+    expect(after.find((n) => n.id === 'm')?.y).toBe(144 + dy)
+  })
+
+  it('only a GROUP can be a frame: a group inside a large text box keeps its members', () => {
+    // The text box contains the group and its member outright. Were the
+    // text box read as a frame, the group would not be a unit root and its
+    // member would be free to move on its own; instead the group rides as
+    // one unit and the member's delta equals the group's.
+    const nodes = [
+      box('big', 0, 0, 400, 300),
+      box('g', 0, 0, 200, 120, 'group'),
+      box('m', 40, 40, 60, 40),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const g = after.find((n) => n.id === 'g')!
+    const m = after.find((n) => n.id === 'm')!
+    expect([g.x, g.y]).not.toEqual([0, 0])
+    expect([m.x - 40, m.y - 40]).toEqual([g.x, g.y])
+  })
+
+  it('two identical group boxes: the earlier one is the root and the later one rides with it', () => {
+    // Mutual containment ties; the document order breaks it. Both must
+    // move by one delta, never be separated as two overlapping units.
+    const nodes = [
+      box('first', 0, 0, 200, 120, 'group'),
+      box('second', 0, 0, 200, 120, 'group'),
+      box('m', 40, 40, 60, 40),
+      box('peer', 150, 0, 100, 60),
+    ]
+    const moves = tidyNodes(nodes)
+    const after = applyMoves(nodes, [...moves])
+    const first = after.find((n) => n.id === 'first')!
+    const second = after.find((n) => n.id === 'second')!
+    // The later twin is the earlier one's member, so the earlier one grows
+    // to hold it with the margin — and carries it wherever the unit goes.
+    expect([second.x - first.x, second.y - first.y]).toEqual([32, 32])
+    expect(moves.some((mv) => mv.id === 'peer' || mv.id === 'first')).toBe(true)
+    // The root is what scope and locks are read by: a scope naming only the
+    // later twin leaves the unit's corner where it is — the later twin moves
+    // in to the margin and the root grows around it — and the peer moves.
+    const scoped = tidyNodes(nodes, { scope: new Set(['second', 'peer']) })
+    expect(scoped.find((mv) => mv.id === 'second')).toMatchObject({ x: 32, y: 32 })
+    expect(scoped.find((mv) => mv.id === 'first')).toEqual({
+      id: 'first',
+      x: 0,
+      y: 0,
+      width: 264,
+      height: 184,
+    })
+    expect(scoped.some((mv) => mv.id === 'peer')).toBe(true)
+    // Likewise a lock on the earlier twin holds the whole unit, so the later
+    // twin cannot be carried away from it; with the peer locked too, the
+    // overlap between them is accepted. The later twin still moves in to
+    // the locked frame's margin — a lock holds the frame, not what tidies
+    // inside it.
+    const held = tidyNodes(nodes, { locked: (id) => id === 'first' || id === 'peer' })
+    expect(held.some((mv) => mv.id === 'first' || mv.id === 'peer')).toBe(false)
+    expect(held.find((mv) => mv.id === 'second')).toMatchObject({ x: 32, y: 32 })
   })
 })
 
@@ -98,9 +372,63 @@ describe('scope and totality', () => {
     const nodes = [box('a', 0, 0), box('b', 200, 0)]
     expect(tidyNodes(nodes)).toEqual([])
   })
+
+  it('two boxes exactly the margin apart are tidy; one pixel closer is not', () => {
+    // The promise is 32px BETWEEN boxes, so 32 is kept and 24 is separated
+    // — the boundary a strict-versus-inclusive comparison would move. Sizes
+    // and positions sit on the 8px grid so that grid snapping cannot be the
+    // move that is read.
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 32, 0)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 24, 0)])).not.toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 32)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 24)])).not.toEqual([])
+  })
+
+  it('a box with non-finite geometry is left out, and the rest still tidy', () => {
+    // NaN compares false with everything, so an unfiltered box would sit
+    // in every band and overlap nothing; it must neither move nor block.
+    const nodes = [box('a', 0, 0), box('b', 40, 0), box('ghost', Number.NaN, 0)]
+    const moves = tidyNodes(nodes)
+    expect(moves.some((m) => m.id === 'ghost')).toBe(false)
+    expect(moves.length).toBeGreaterThan(0)
+    expect(tidyNodes([box('a', 0, 0), box('b', 40, 0, Number.POSITIVE_INFINITY)])).toEqual([])
+    // Each of the four fields on its own: a ghost with one bad field and
+    // three good ones would otherwise sit in a band and block a hop.
+    for (const ghost of [
+      box('ghost', 0, Number.NaN),
+      box('ghost', 0, 0, Number.NaN),
+      box('ghost', 0, 0, 100, Number.NaN),
+    ]) {
+      const alone = tidyNodes([box('a', 0, 0), box('b', 40, 0), ghost])
+      expect(alone.some((m) => m.id === 'ghost')).toBe(false)
+      expect(alone).toEqual(tidyNodes([box('a', 0, 0), box('b', 40, 0)]))
+    }
+  })
+
+  it('an immobile unit does not count toward the ceiling', () => {
+    // The ceiling bounds the units tidy MOVES; a locked box ahead of 300
+    // movable ones in document order takes none of their budget.
+    const nodes = [
+      box('pinned', 0, 0),
+      ...Array.from({ length: 300 }, (_, i) => box(`n${i}`, 0, 0)),
+    ]
+    const moves = tidyNodes(nodes, { locked: (id) => id === 'pinned' })
+    expect(moves.length).toBe(300)
+  })
+
+  it('past the unit ceiling the rest stay put, and stand as obstacles', () => {
+    // Best-effort bound (TIDY_MAX_UNITS = 300): the 301st movable unit is
+    // left where it is, so with every box on one spot exactly one reports
+    // no move — the last in document order — and the others clear it.
+    const nodes = Array.from({ length: 301 }, (_, i) => box(`n${i}`, 0, 0))
+    const moves = tidyNodes(nodes)
+    expect(moves.length).toBe(300)
+    expect(moves.some((m) => m.id === 'n300')).toBe(false)
+    expect(moves.every((m) => m.x >= 100 + 32 || m.y >= 60 + 32)).toBe(true)
+  })
 })
 
-const TIDY_MARGIN_PX = 24
+const TIDY_MARGIN_PX = 32
 const TIDY_GRID_PX = 8
 
 const rectOf = (n: TidyNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })
@@ -114,8 +442,11 @@ describe('tidy properties', () => {
   const nodeArb = fc.record({
     x: fc.integer({ min: 0, max: 640 }),
     y: fc.integer({ min: 0, max: 480 }),
-    w: fc.constantFrom(60, 100, 140),
-    h: fc.constantFrom(40, 60),
+    // Odd widths and heights too: a centre snap between a box of each
+    // parity lands on a half pixel, which the output rounds — a case the
+    // even-only domain never reached, and review had to point out.
+    w: fc.constantFrom(41, 60, 100, 101, 140),
+    h: fc.constantFrom(40, 41, 60),
   })
   const plainNodes = (rects: readonly { x: number; y: number; w: number; h: number }[]) =>
     rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
@@ -146,15 +477,32 @@ describe('tidy properties', () => {
   )
 
   fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
-    'every position it emits sits ON the grid',
+    "every position it emits sits ON the grid, or on a neighbour's centre or far edge",
     (rects) => {
       // Both movers land on the grid — banding snaps to it, and an overlap hop
-      // rounds AWAY from the collider onto it. Off-grid output would feed the
-      // next pass's banding and unsettle the fixpoint, so this is part of why
-      // idempotence holds rather than an independent nicety.
-      const offGrid = [...tidyNodes(plainNodes(rects))].filter(
-        (m) => m.x % TIDY_GRID_PX !== 0 || m.y % TIDY_GRID_PX !== 0,
-      )
+      // rounds AWAY from the collider onto it. The one exception is a unit
+      // lined up by its centre or far edge, which keeps that anchor exactly:
+      // the grid cannot move the neighbour it is centred under. Such a unit
+      // is never re-snapped, so off-grid output does not feed the next
+      // pass's banding, and the fixpoint idempotence needs still holds.
+      const nodes = plainNodes(rects)
+      const moves = [...tidyNodes(nodes)]
+      const after = applyMoves(nodes, moves)
+      const offGrid = moves.filter((m) => {
+        const n = after.find((c) => c.id === m.id) as TidyNode
+        // To the half pixel: two boxes of different parity cannot share a
+        // centre on whole pixels, and the output is whole pixels.
+        const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
+        const linedX = after.some(
+          (o) =>
+            o.id !== n.id &&
+            (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
+        )
+        const linedY = after.some(
+          (o) => o.id !== n.id && near(o.y + o.height / 2, n.y + n.height / 2),
+        )
+        return (m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)
+      })
       expect(offGrid).toEqual([])
     },
   )

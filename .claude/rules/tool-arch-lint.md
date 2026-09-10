@@ -14,6 +14,20 @@ Every allowlist here is guarded from BOTH sides — an entry that names nothing
 fails the build, exactly as a violation does — so a record cannot outlive the
 debt it names, or decay into decoration.
 
+## Where the compiler API comes from
+
+`scanner.ts` and `cycle-check.ts` import `@typescript/typescript6`, not
+`typescript`. That is not a pin left behind by an upgrade: the workspace runs
+TypeScript 7, whose root export is `lib/version.cjs` and carries no compiler
+API at all, so `ts.createSourceFile` and friends have to come from the 6.x API
+republished under that scoped name. Writing `import ts from 'typescript'` in a
+new scan compiles to a wall of `Property 'X' does not exist on type
+'typeof import(".../lib/version")'` that names neither the cause nor this file.
+
+`typescript/unstable/ast` exposes the same symbols natively and is the eventual
+home, but it is spelled unstable and these scans gate the build, so the stable
+republish is the right footing until that changes.
+
 ## The cycle check
 
 `cycle-check.ts` is value-aware (an `import type`-only edge does not count) and

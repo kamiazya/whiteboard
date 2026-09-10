@@ -4,7 +4,12 @@ import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   bundledPlugins,
+  resolveCanvasEdgeDefaults,
   resolveCanvasEdgeStyle,
+  resolveCanvasSymbol,
+  resolveCanvasTheme,
+  resolveDocumentSymbol,
+  resolveEffectiveCanvasEdgeStyle,
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
@@ -12,6 +17,7 @@ import {
   VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
   VISUAL_TEXT_KEY,
+  VISUAL_THEME_KEY,
   visualPlugin,
   visualSymbolFacetSchema,
 } from './data.js'
@@ -83,6 +89,50 @@ describe('resolveCanvasEdgeStyle', () => {
 
   it('answers an empty style for a canvas with neither', () => {
     expect(resolveCanvasEdgeStyle(canvasWith(undefined), registry)).toEqual({})
+  })
+})
+
+describe('resolveCanvasEdgeDefaults / resolveEffectiveCanvasEdgeStyle', () => {
+  const themed = (theme: string, facets: Record<string, unknown> = {}): SpatialCanvas => ({
+    nodes: [],
+    edges: [],
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme }, ...facets } },
+  })
+
+  it('a canvas with no theme defaults to straight routing and no jumps', () => {
+    expect(resolveCanvasEdgeDefaults({ nodes: [], edges: [] })).toEqual({
+      style: 'straight',
+      lineJumps: 'none',
+    })
+  })
+
+  it("the theme's routing default is the canvas's default (ADR-0030 decision 4)", () => {
+    expect(resolveCanvasEdgeDefaults(themed('visual.neon'))).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'none',
+    })
+    expect(resolveCanvasEdgeDefaults(themed('visual.sketch')).style).toBe('straight')
+  })
+
+  it('an unknown theme id defaults like no theme, the way the renderer degrades', () => {
+    expect(resolveCanvasEdgeDefaults(themed('visual.missing')).style).toBe('straight')
+  })
+
+  it('the effective style is the explicit facet over the defaults, field by field', () => {
+    expect(resolveEffectiveCanvasEdgeStyle(themed('visual.neon'))).toEqual({
+      style: 'orthogonal',
+      lineJumps: 'none',
+    })
+    expect(
+      resolveEffectiveCanvasEdgeStyle(
+        themed('visual.neon', { 'visual.edges/v0': { routing: 'straight' } }),
+      ),
+    ).toEqual({ style: 'straight', lineJumps: 'none' })
+    expect(
+      resolveEffectiveCanvasEdgeStyle(
+        themed('visual.neon', { 'visual.edges/v0': { lineJumps: 'arc' } }),
+      ),
+    ).toEqual({ style: 'orthogonal', lineJumps: 'arc' })
   })
 })
 
@@ -161,9 +211,13 @@ describe('visual.symbol/v0', () => {
       ...(extension === undefined ? {} : { 'x-whiteboard': extension }),
     }) as SpatialCanvas['nodes'][number]
 
-  it('registers with the visual plugin, node-targeted, under the fixed key', () => {
+  it('registers on all three targets: a node, a canvas, and a document', () => {
+    // The question is the same wherever it is asked — "what symbolises this
+    // object" — so it stays ONE facet and the value space is untouched
+    // (ADR-0013's growth rule). Only where it may attach widens, and
+    // `targets` is not payload, so `v0` does not move.
     expect(VISUAL_SYMBOL_KEY).toBe('visual.symbol/v0')
-    expect(registry.targetsOf(VISUAL_SYMBOL_KEY)).toEqual(['node'])
+    expect(registry.targetsOf(VISUAL_SYMBOL_KEY)).toEqual(['node', 'canvas', 'document'])
   })
 
   it('the payload is a union: an icon by name or an emoji by character', () => {
@@ -213,6 +267,38 @@ describe('visual.symbol/v0', () => {
       resolveNodeSymbol(nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { bogus: true } } }), registry),
     ).toBeUndefined()
   })
+
+  it('resolveCanvasSymbol reads the canvas-level bucket, the way the edges facet does', () => {
+    expect(
+      resolveCanvasSymbol(
+        canvasWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '📌' } } }),
+        registry,
+      ),
+    ).toEqual({ kind: 'emoji', char: '📌' })
+    expect(resolveCanvasSymbol(canvasWith(undefined), registry)).toBeUndefined()
+    expect(resolveCanvasSymbol(canvasWith({ facets: {} }), registry)).toBeUndefined()
+  })
+
+  it('resolveDocumentSymbol reads an OKF frontmatter facets bucket', () => {
+    // A bucket rather than a document: this package has no way to open a
+    // stored document, and the caller already holds the frontmatter it
+    // parsed.
+    expect(
+      resolveDocumentSymbol({ [VISUAL_SYMBOL_KEY]: { kind: 'icon', name: 'star' } }, registry),
+    ).toEqual({ kind: 'icon', name: 'star' })
+    expect(resolveDocumentSymbol(undefined, registry)).toBeUndefined()
+    expect(resolveDocumentSymbol({}, registry)).toBeUndefined()
+  })
+
+  it('a payload the schema refuses answers undefined on every target', () => {
+    // One reader under all three, so a surface cannot invent its own idea
+    // of what a broken payload means. `✅🔥` is two graphemes — the exact
+    // case the schema exists to refuse.
+    const broken = { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '✅🔥' } }
+    expect(resolveNodeSymbol(nodeWith({ facets: broken }), registry)).toBeUndefined()
+    expect(resolveCanvasSymbol(canvasWith({ facets: broken }), registry)).toBeUndefined()
+    expect(resolveDocumentSymbol(broken, registry)).toBeUndefined()
+  })
 })
 
 describe('visual.text/v0', () => {
@@ -261,5 +347,43 @@ describe('visual.text/v0', () => {
         registry,
       ),
     ).toBeUndefined()
+  })
+})
+
+describe('visual.theme/v0', () => {
+  it('is a canvas-target facet whose payload names a registered theme asset', () => {
+    expect(VISUAL_THEME_KEY).toBe('visual.theme/v0')
+    expect(registry.targetsOf(VISUAL_THEME_KEY)).toEqual(['canvas'])
+    expect(registry.assetIds('themes')).toEqual(['visual.sketch', 'visual.neon'])
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.sketch' }).ok).toBe(true)
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.neon' }).ok).toBe(true)
+  })
+
+  it('refuses a theme no plugin registered, and a bare name', () => {
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'visual.chalk' }).ok).toBe(false)
+    expect(registry.validateFacetWrite(VISUAL_THEME_KEY, { theme: 'sketch' }).ok).toBe(false)
+  })
+
+  it('resolveCanvasTheme reads the facet and answers undefined without one', () => {
+    expect(
+      resolveCanvasTheme(
+        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'visual.neon' } } }),
+        registry,
+      ),
+    ).toBe('visual.neon')
+    expect(resolveCanvasTheme(canvasWith(undefined), registry)).toBeUndefined()
+    // A stored id from elsewhere is data: resolved, and left to the renderer to degrade.
+    expect(
+      resolveCanvasTheme(
+        canvasWith({ facets: { [VISUAL_THEME_KEY]: { theme: 'infra.aws' } } }),
+        registry,
+      ),
+    ).toBe('infra.aws')
+  })
+
+  it('declares a segmented picker whose null segment is the bundled look', () => {
+    const facet = visualPlugin.facets.find((f) => f.name === 'theme')
+    const options = facet?.editor?.fields.theme?.options ?? []
+    expect(options.map((o) => o.value)).toEqual([null, 'visual.sketch', 'visual.neon'])
   })
 })

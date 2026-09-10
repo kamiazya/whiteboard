@@ -8,6 +8,7 @@
  */
 
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { useMemo } from 'react'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import type { FaviconStatus, FaviconStyle } from '../lib/favicon.js'
@@ -23,6 +24,7 @@ export function useDocumentFavicon({
   revision,
   readSource,
   status,
+  symbol,
 }: {
   settingsStore: UserSettingsStore
   documentId: string | null
@@ -34,6 +36,12 @@ export function useDocumentFavicon({
   revision: unknown
   readSource: (kind: DocumentKind) => DocumentOutlineSource | null
   status: FaviconStatus
+  /**
+   * This document's own mark. A VALUE like the status is, for the same
+   * reason: where it is stored differs by keeper and by kind, and this hook
+   * has no business knowing which.
+   */
+  symbol?: VisualSymbolFacet
 }): void {
   // Read once per render, effectively once at mount: the routed /settings
   // page is the only place the style toggles, and navigating there and back
@@ -58,5 +66,6 @@ export function useDocumentFavicon({
     style: faviconStyle,
     status,
     rects: documentOutline,
+    symbol,
   })
 }

@@ -67,9 +67,47 @@ describe('the mutation lane covers what it says it covers', () => {
     // mutation-checked by hand (swapping in the document theme fails them
     // with `expected 30 to be 24`). The rest is delegation to
     // `layoutMdastBlocks`, which the lane already mutates.
+    //
+    // 58 since `layout/nodes/task-checkbox.ts`, and outside the lane for the
+    // same shape of reason: it is geometry with no branch worth mutating
+    // beyond ticked-vs-not, and that one IS pinned by name — removing the
+    // filled rect fails `fills the box for a ticked item` and returning no
+    // marker at all fails the preview guard in apps/web. What a mutation
+    // score would add here is a number over two rects.
+    //
+    // 59 since `theme/theme-asset.ts`, outside the lane: it is a field-by-
+    // field copy of the token contract onto the palette plus a memo, and both
+    // are pinned by name — the round-trip test fails on any dropped field and
+    // the memo test on a fresh object per call. A mutation score would count
+    // 30 property copies.
+    //
+    // 60 and 11 since `layout/ink/sketch.ts`, which the lane DOES cover: its
+    // reach and determinism claims are properties, exactly what a survivor
+    // would expose as decorative.
+    //
+    // 63 since `svg/paint.ts` and `svg/shapes.ts` left `svg/backend.ts`:
+    // the paint helpers and the shape/edge renderers it had grown past its
+    // line ceiling with. Not in the lane — their properties are the
+    // byte-identical SVG tests, which are examples.
+    // 61 since `layout/ink/glow.ts`: one arithmetic line pinned by
+    // `glow.test.ts`'s bounds assertion, which fails on any other reach.
+    //
+    // 64 since `quality/drawing-score.ts`, outside the lane: an instrument,
+    // calibrated by examples that plant one defect each and read exactly one
+    // — the shape a mutation run would report as unsurprising survivors —
+    // and checked by hand once, four metrics mutated and six of its cases
+    // failing.
+    // 65 since `quality/polyline-geometry.ts`, the geometry the drawing score
+    // and the scoreboards' oracles share, outside the lane for the reason
+    // the oracles are: what pins it is the scoreboards it feeds, whose
+    // exact numbers move on any change to it.
+    // 66 and 12 since `layout/edges/diagonal-ink.ts`, the straight style's
+    // chord through an edge's own box, which the lane DOES cover: its
+    // sampled oracle and invariants are properties, and a survivor would be
+    // a chord read wrong.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 10,
-      production: 57,
+      mutated: 12,
+      production: 66,
     })
   })
 

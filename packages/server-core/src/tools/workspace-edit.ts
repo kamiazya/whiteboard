@@ -1,4 +1,9 @@
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  okfActorSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { wbDocumentCreate, wbDocumentDelete } from './document-crud.js'
@@ -40,7 +45,7 @@ export class WorkspaceEditError extends Error {
  * `kind`, because only a markdown document takes a body. Zod refuses two
  * branches sharing a discriminator value, so the kind split is a nested
  * union rather than two flat `document.create` branches — the same rule
- * `wb_document_create` encodes, expressed where the outer discriminator
+ * `wbDocumentCreate` encodes, expressed where the outer discriminator
  * has already been spent.
  */
 const documentCreateOpSchema = z.discriminatedUnion('kind', [
@@ -66,7 +71,17 @@ const documentCreateOpSchema = z.discriminatedUnion('kind', [
     .strict(),
 ])
 
-const workspaceOpSchema = z.union([
+/**
+ * Discriminated on `op`, not a plain `z.union`. A plain union reports a
+ * rejected op as `ops.0: Invalid input` and nothing else — it has no way to
+ * say which branch the caller meant, so the ONE thing an agent needs in
+ * order to repair the call is exactly what is missing. Discriminating picks
+ * the branch by `op` and reports that branch's own issue, naming the key.
+ *
+ * `documentCreateOpSchema` is itself a union (on `kind`), which is legal
+ * here because every one of its members carries the same `op` literal.
+ */
+const workspaceOpSchema = z.discriminatedUnion('op', [
   documentCreateOpSchema,
   z
     .object({ op: z.literal('document.set'), documentId: documentIdSchema, markdown: z.string() })
@@ -81,6 +96,23 @@ export const workspaceEditInputSchema = z
       .boolean()
       .optional()
       .describe('Set true to create the workspace if it does not exist yet.'),
+    /**
+     * ONE actor for the whole batch rather than one per op, because a batch
+     * has one producer and repeating the same string per op is the cost
+     * this shape exists to remove — the same reason `wb_facet_set` takes one
+     * shared `facets` and `wb_version_save` one shared `label`.
+     *
+     * Applies to the ops that write CONTENT (`document.create` with a body,
+     * `document.set`); a delete authors nothing to attribute. ADR-0016's
+     * rule still governs what happens to it: a document that already
+     * declares `generated` keeps its own, because that is provenance rather
+     * than a field this write owns.
+     */
+    actor: okfActorSchema
+      .optional()
+      .describe(
+        "Who is producing this batch's content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` on the documents this batch writes. Identify yourself here; omitted, the writes are attributed to the server rather than to you.",
+      ),
     ops: z
       .array(workspaceOpSchema)
       .min(1)
@@ -97,7 +129,7 @@ export const workspaceEditOutputSchema = z
      * caller that addressed an existing workspace by its segment learns the
      * id behind it, and a caller that created one learns what the server
      * minted. Without it a bootstrapping batch is unusable in the same way
-     * a bootstrapping `wb_document_create` was — the server picks an id,
+     * a bootstrapping create was — the server picks an id,
      * files the whole batch under it, and never says which.
      */
     workspaceId: workspaceIdSchema,
@@ -161,10 +193,18 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
             const created = await wbDocumentCreate(deps, {
               workspaceId,
               path: op.path,
+              // The actor rides only on the markdown arm. A spatial create
+              // authors no content — its canvas is built by `wb_canvas_edit`
+              // — so `wbDocumentCreateInputSchema`'s spatial arm has no
+              // `actor` field and, being `.strict()`, refuses one. Passing it
+              // unconditionally made a mixed-kind batch fail at the spatial
+              // op with an unrecognized-key error, which no test sending one
+              // kind at a time could see.
               ...(op.kind === 'markdown'
                 ? {
                     kind: 'markdown' as const,
                     ...(op.markdown === undefined ? {} : { markdown: op.markdown }),
+                    ...(input.actor === undefined ? {} : { actor: input.actor }),
                   }
                 : { kind: 'spatial' as const }),
               ...(op.name === undefined ? {} : { name: op.name }),
@@ -179,6 +219,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
               workspaceId,
               documentId: op.documentId,
               markdown: op.markdown,
+              ...(input.actor === undefined ? {} : { actor: input.actor }),
             })
             results.push({ op: op.op, documentId: op.documentId })
           } else {

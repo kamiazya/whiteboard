@@ -12,6 +12,8 @@
  * and `querySelectorAll('svg rect')`. A second SVG here would silently join
  * those queries and answer for the scene. Rectangles need no SVG anyway.
  */
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { canDrawSymbol, SymbolMark } from '@kamiazya/whiteboard-plugin-visual/ui'
 import {
   fitMinimap,
   type MinimapBox,
@@ -21,8 +23,45 @@ import {
 
 const PADDING_PX = 6
 
-/** A node in the overview: its box plus an already-resolved CSS colour. */
-export type MinimapNode = MinimapBox & { readonly color?: string }
+/**
+ * The mark's own size, in pixels, whatever box it lands in.
+ *
+ * ONE size, the same rule the full-size badge follows on a node of any area.
+ * Scaling it with the box was measured in one overview at 20.9px and 31.4px,
+ * which reads as a ranking of node areas rather than as identity — and the
+ * threshold below already assumed a fixed glyph, so the two had drifted: its
+ * reasoning is written for ~11px and the code drew 26 and 39.
+ *
+ * 11 is the floor for an emoji to read, and it is what the smallest box this
+ * draws in can hold with its own fill still visible around it.
+ */
+const SYMBOL_PX = 11
+
+/**
+ * The shortest side a box must project to before a mark is drawn in it.
+ *
+ * Measured rather than chosen: on a real canvas of eight ordinary notes the
+ * overview projects each one to 21x11px, which puts an 11px glyph over the
+ * whole box — and 11 sat right ON an earlier 10px guess, where an ordinary
+ * edit rescales the fit and flips every mark on and off. 14 holds
+ * `SYMBOL_PX` with a rim of box left, and lands clearly above the ordinary
+ * case rather than inside it.
+ *
+ * The consequence is deliberate and worth knowing: a busy canvas shows no
+ * marks in its overview, and a canvas of a few large nodes does. A mark
+ * appears when there is room to read one, which is the only condition under
+ * which it is worth anything.
+ */
+const SYMBOL_MIN_PX = 14
+
+/**
+ * A node in the overview: its box, an already-resolved CSS colour, and the
+ * node's own symbol when it declares one.
+ */
+export type MinimapNode = MinimapBox & {
+  readonly color?: string
+  readonly symbol?: VisualSymbolFacet
+}
 
 export interface MinimapOverlayProps {
   /**
@@ -84,6 +123,17 @@ export function MinimapOverlay({
     >
       {boxes.map((box, index) => {
         const projected = projectBox(box, fit)
+        const width = Math.max(1, projected.width)
+        const height = Math.max(1, projected.height)
+        // The mark sits IN the box rather than replacing it: the overview's
+        // job is the arrangement, and a symbol adds which node this one is
+        // without taking away where it sits. Below the threshold the box
+        // keeps its plain fill — the same judgement the node badge makes at
+        // full size, asked again at this scale.
+        const marked =
+          box.symbol !== undefined &&
+          canDrawSymbol(box.symbol) &&
+          Math.min(width, height) >= SYMBOL_MIN_PX
         return (
           <div
             // Boxes arrive in document order and carry no id of their own
@@ -92,17 +142,35 @@ export function MinimapOverlay({
             // An authored colour is the fastest way to find a node in an
             // overview too small to read labels in; an unstyled node keeps
             // the muted default rather than inventing an accent for it.
-            className={box.color === undefined ? 'absolute bg-muted-foreground/40' : 'absolute'}
+            className={
+              box.color === undefined
+                ? 'absolute flex items-center justify-center overflow-hidden bg-muted-foreground/40'
+                : 'absolute flex items-center justify-center overflow-hidden'
+            }
             style={{
               background: box.color,
               left: projected.x,
               top: projected.y,
               // A node thinner than a pixel at this scale still has to be
               // visible — an overview that drops content is worse than none.
-              width: Math.max(1, projected.width),
-              height: Math.max(1, projected.height),
+              width,
+              height,
             }}
-          />
+          >
+            {marked && box.symbol !== undefined ? (
+              <span
+                data-testid="minimap-symbol"
+                className="leading-none"
+                // The span is the glyph's own size rather than a fraction of
+                // it: an emoji is text at `fontSize` and a vendored icon is an
+                // SVG with no intrinsic size that fills its box, so the two
+                // only land at the same size when the box and the font agree.
+                style={{ fontSize: SYMBOL_PX, width: SYMBOL_PX, height: SYMBOL_PX }}
+              >
+                <SymbolMark symbol={box.symbol} />
+              </span>
+            ) : null}
+          </div>
         )
       })}
       <div

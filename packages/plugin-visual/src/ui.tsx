@@ -11,10 +11,11 @@ import { definePluginUi, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
 import { Ban } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 import { type VisualSymbolFacet, visualSymbolFacetSchema } from './data.js'
+import type { LucideIconElement } from './icons/icons.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
- * The badge picker. Icons come from this plugin's own vendored set — the same
+ * The symbol picker. Icons come from this plugin's own vendored set — the same
  * table `visual.symbol`'s schema enumerates and the renderer draws from, so
  * the row can never offer a name the canvas would silently drop; the emoji arm
  * carries a small starter set — a free-entry field is the editor-spec tier's
@@ -22,7 +23,7 @@ import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons
  */
 const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
 
-const badgeEditor: FacetEditor = ({ value, write }) => {
+const symbolEditor: FacetEditor = ({ value, write }) => {
   const current = visualSymbolFacetSchema.safeParse(value)
   const selected = current.success ? current.data : undefined
   const option = (
@@ -105,7 +106,7 @@ const badgeEditor: FacetEditor = ({ value, write }) => {
 
 /**
  * Draws a vendored icon by name, from the SAME geometry the canvas renders,
- * so the picker cannot drift from the badge it produces.
+ * so the picker cannot drift from the mark the other surfaces draw.
  */
 function BuiltInIcon({ name }: { readonly name: string }) {
   return (
@@ -128,14 +129,51 @@ function BuiltInIcon({ name }: { readonly name: string }) {
   )
 }
 
+/**
+ * A resolved symbol as DOM, for the surfaces that draw one outside a canvas
+ * — the picker's own rows, a file row, a document's settings.
+ *
+ * It lives here so every such surface draws from the geometry the RENDERER
+ * draws from: two producers of "what this symbol looks like" is how a row
+ * comes to show a mark the canvas does not.
+ *
+ * Answers null for an icon name this build does not carry, which is the one
+ * degradation every surface shares — the schema validates a name for
+ * non-emptiness only, so an unknown one reaches here from any document
+ * written elsewhere. What to show INSTEAD differs per surface (a file row
+ * has its kind icon, the favicon has the document's outline), so the
+ * decision stays with the caller and this only reports that it drew
+ * nothing.
+ */
+export function SymbolMark({ symbol }: { readonly symbol: VisualSymbolFacet }): ReactNode {
+  if (symbol.kind === 'emoji') return symbol.char
+  return geometryOf(symbol) === undefined ? null : <BuiltInIcon name={symbol.name} />
+}
+
+/**
+ * Whether `SymbolMark` will draw anything.
+ *
+ * A caller cannot ask the element: `<SymbolMark …/>` is a truthy value even
+ * when the component renders null, so a surface that chooses its fallback
+ * by testing the element renders an empty box for every unknown name. Both
+ * of these read `geometryOf`, so the answer and the drawing cannot drift.
+ */
+export function canDrawSymbol(symbol: VisualSymbolFacet): boolean {
+  return symbol.kind === 'emoji' || geometryOf(symbol) !== undefined
+}
+
+function geometryOf(symbol: VisualSymbolFacet): ReadonlyArray<LucideIconElement> | undefined {
+  return symbol.kind === 'icon' ? LUCIDE_ICONS[symbol.name] : undefined
+}
+
 export const visualUi = definePluginUi({
   plugin: 'visual',
   sections: [
     // Order is the plugin's, and it is not the registry's alphabetical one:
-    // shape is what a person reaches for most, and the badge belongs beside
+    // shape is what a person reaches for most, and the symbol belongs beside
     // it rather than after the text setting.
     { title: 'Shape', facet: 'shape' },
-    { title: 'Badge', facet: 'symbol', component: badgeEditor },
+    { title: 'Symbol', facet: 'symbol', component: symbolEditor },
     { title: 'Text placement', facet: 'text' },
   ],
 })

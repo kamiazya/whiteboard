@@ -30,6 +30,7 @@ import {
   parseMarkdownBody,
   resolveReferences,
 } from '@kamiazya/whiteboard-codec'
+import { namespacedIdSchema, type ThemeTokens } from '@kamiazya/whiteboard-facet-engine'
 import type {
   AnchorRect,
   CanvasComment,
@@ -45,7 +46,7 @@ import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-m
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
-
+import { z } from 'zod'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
@@ -55,12 +56,25 @@ import type {
   BoundingBox,
   ResolvedEdgeNode,
   Scene,
+  SceneInk,
   SceneNode,
   ShapeSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
+import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { COMMENT_TEXT_MAX_WIDTH_PX, layoutCommentBody } from './comment-body.js'
+import {
+  SPATIAL_DARK_PALETTE,
+  SPATIAL_LIGHT_PALETTE,
+  type SpatialPalette,
+} from '../theme/spatial-palette.js'
+import type { SpatialThemeMode } from '../theme/spatial-theme.js'
+import { createThemedAppearance, paletteFromTokens } from '../theme/theme-asset.js'
+import {
+  COMMENT_TEXT_MAX_WIDTH_PX,
+  layoutCommentBody,
+  PROPOSAL_TEXT_MAX_WIDTH_PX,
+} from './comment-body.js'
 import {
   commentLeaderEnd,
   nearestPointOnPolyline,
@@ -68,7 +82,7 @@ import {
 } from './comment-placement.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
-import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
+import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
 import {
   assignEdgeAnchors,
   type EdgeAnchorOverride,
@@ -99,6 +113,7 @@ import {
   nodePassagesOf,
 } from './passage-highlight.js'
 import { scaleScene } from './scale-scene.js'
+import { seedFromId } from './seed.js'
 import { translateScene } from './translate-scene.js'
 
 /**
@@ -110,6 +125,10 @@ import { translateScene } from './translate-scene.js'
  */
 export type SpatialLayoutDegradation =
   | { readonly kind: 'body-parse-failed'; readonly nodeId: string; readonly err: unknown }
+  /** The canvas (or the `style` override) names a theme no contribution registered; drawn clean. */
+  | { readonly kind: 'unknown-theme'; readonly theme: string }
+  /** The theme names a font family this surface cannot measure; declared as the bundled one. */
+  | { readonly kind: 'font-missing'; readonly family: string }
   | { readonly kind: 'unknown-node-kind'; readonly nodeId: string; readonly type: string }
   // 'repeat' tiling needs the image's intrinsic size, which this pure layer
   // never has (no image decoding behind the resolved `image`) — it
@@ -134,6 +153,14 @@ export interface FacetCardData {
   readonly title?: string
   readonly rows: readonly { readonly label: string; readonly value: string }[]
 }
+
+/**
+ * `'clean' | 'document' | <theme id>` — see `SpatialLayoutOptions.style`. A
+ * Zod schema because it crosses process boundaries (an MCP tool input, the
+ * export routes' bodies); every consumer parses this and infers the type.
+ */
+export const spatialRenderStyleSchema = z.union([z.enum(['clean', 'document']), namespacedIdSchema])
+export type SpatialRenderStyle = z.infer<typeof spatialRenderStyleSchema>
 
 export interface SpatialLayoutOptions {
   readonly measure: MeasureText
@@ -213,6 +240,25 @@ export interface SpatialLayoutOptions {
    * five.
    */
   readonly renderContributions?: readonly RenderContribution[]
+  /**
+   * Which look this render draws (ADR-0030 decision 6). `'clean'` — the
+   * DEFAULT — ignores any theme the document carries: an agent reading
+   * `wb_scene_render`'s SVG must never pay for jittered geometry or glow it
+   * did not ask for (decision #10), so every headless surface gets this by
+   * omission and a human surface opts in. `'document'` draws the theme the
+   * canvas names (and, in an embed, the host's when the child names none). A
+   * theme id draws that theme without saving it — the in-memory session
+   * override, and how a person previews a theme before choosing it.
+   */
+  readonly style?: SpatialRenderStyle
+  /**
+   * Whether a face for a family exists on THIS surface, so the family a
+   * theme names is declared only where it can be measured (font-family.ts:
+   * the declared family must be the measured one). Defaults to the bundled
+   * family alone; a theme's family that answers false is declared as the
+   * bundled one and reported as `font-missing`.
+   */
+  readonly fontAvailable?: (family: string) => boolean
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -451,6 +497,22 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly contributions: readonly RenderContribution[]
   /** Their shapes, composed to namespaced ids. */
   readonly shapeTable: ShapeTable
+  /** Their theme assets, by namespaced id. */
+  readonly themeTable: Readonly<Record<string, ThemeTokens>>
+  /** The caller's resolver — what a canvas without a theme is painted with. */
+  readonly baseAppearance: SpatialAppearanceResolver
+  /**
+   * The theme in force for the canvas being laid out, resolved by
+   * `withCanvasTheme` at every nesting level: an embedded canvas reads its
+   * own facet first and inherits this only when it names none.
+   */
+  readonly activeTheme?: { readonly id: string; readonly tokens: ThemeTokens }
+  /**
+   * The caller's per-node silhouette overrides, root-keyed by contract, so
+   * they apply to the top-level canvas only. `nodeOutlines` is recomputed
+   * per canvas from these plus that canvas's facets and the theme default.
+   */
+  readonly explicitNodeOutlines: Readonly<Record<string, string>> | undefined
   /** Document references on the CURRENT recursion path, plus its depth. */
   readonly activeEmbedPath: ReadonlySet<string>
   readonly embedDepth: number
@@ -541,7 +603,7 @@ function layoutCanvasMiniature(
   const scene = layoutSpatialCanvasInternalScene(canvas, {
     ...options,
     // Per-canvas silhouettes, for the reason composeFileEmbed gives.
-    nodeOutlines: resolveNodeOutlines(canvas, undefined, options.contributions),
+    explicitNodeOutlines: undefined,
     activeEmbedPath: new Set(box.embedPath),
     embedDepth: box.embedPath.length,
   })
@@ -575,6 +637,9 @@ function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
   const shape = options.nodeOutlines?.[node.id]
+  // A coloured node is hatched rather than tinted under a pencil; an
+  // uncoloured one keeps its flat surface fill beneath the strokes.
+  const ink = sketchInkFor(node.id, options, node.color !== undefined)
   return {
     kind: 'shape',
     id: node.id,
@@ -582,7 +647,23 @@ function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSc
     ...(resolved.radius !== undefined ? { radius: resolved.radius } : {}),
     ...(shape !== undefined ? { shape } : {}),
     ...(resolved.appearance !== undefined ? { appearance: resolved.appearance } : {}),
+    ...(ink === undefined ? {} : { ink }),
   }
+}
+
+/**
+ * The ink a DOCUMENT node or edge carries under the active theme, seeded
+ * from its id (decision #10: id-keyed, never positional). Only document
+ * content is inked — comment and proposal chrome are built elsewhere and
+ * stay crisp, so the annotation layer keeps reading as chrome.
+ */
+function sketchInkFor(
+  id: string,
+  options: ResolvedLayoutOptions,
+  hatch: boolean,
+): SceneInk | undefined {
+  if (options.activeTheme?.tokens.ink !== 'sketch') return undefined
+  return { style: 'sketch', seed: seedFromId(id), ...(hatch ? { fill: 'hatch' as const } : {}) }
 }
 
 /**
@@ -697,7 +778,10 @@ function placeAboveNode(node: SpatialNode, content: Scene): readonly SceneNode[]
     0,
     ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
   )
-  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes
+  return translateScene(content, node.x, node.y - CONTAINER_LABEL_GAP_PX - bottom).nodes.map(
+    (entry) =>
+      entry.kind === 'textRun' ? { ...entry, annotates: { kind: 'node', id: node.id } } : entry,
+  )
 }
 
 /**
@@ -750,6 +834,9 @@ function composeTextNode(
           node.height,
           node.text,
           options.nodeOutlines?.[node.id] ?? null,
+          // A theme's family fits differently; two themes on one cache must
+          // not hand each other the other's wrapped lines.
+          options.appearance.resolveLabel().fontFamily ?? null,
         ])
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
@@ -858,11 +945,12 @@ function composeFileEmbed(
 
   const childScene = layoutSpatialCanvasInternalScene(child, {
     ...options,
-    // Silhouettes resolve per CANVAS, keyed by that canvas's own node ids:
-    // spreading the parent's map both drops the child's facets and leaks a
-    // same-id root node's shape into the embedded canvas. Explicit per-node
-    // overrides are root-keyed by contract, so they do not descend.
-    nodeOutlines: resolveNodeOutlines(child, undefined, options.contributions),
+    // Silhouettes resolve per CANVAS (in withCanvasTheme), keyed by that
+    // canvas's own node ids: spreading the parent's map both drops the
+    // child's facets and leaks a same-id root node's shape into the embedded
+    // canvas. Explicit per-node overrides are root-keyed by contract, so
+    // they do not descend.
+    explicitNodeOutlines: undefined,
     activeEmbedPath: new Set([...options.activeEmbedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
@@ -1229,7 +1317,12 @@ function composeEdge(
     options.shapeTable,
   )
   const appearance = options.appearance.resolveEdge(edge)
-  return appearance === undefined ? routed : { ...routed, appearance }
+  const ink = sketchInkFor(edge.id, options, false)
+  return {
+    ...routed,
+    ...(appearance === undefined ? {} : { appearance }),
+    ...(ink === undefined ? {} : { ink }),
+  }
 }
 
 /**
@@ -1296,11 +1389,9 @@ function composeEdgeLabel(
   edge: CanvasEdge,
   routed: ResolvedEdgeNode,
   options: ResolvedLayoutOptions,
+  obstacles: ReturnType<typeof labelObstacles>, // what the label must not lie over
 ): TextRunNode | undefined {
   if (edge.label === undefined || edge.label.trim().length === 0) return undefined
-  const center = edgeLabelAnchor(routed.path, routed.rounded === true)
-  if (!center) return undefined
-
   const labelAppearance = options.appearance.resolveLabel()
   const font = {
     family: labelAppearance.fontFamily ?? 'sans-serif',
@@ -1310,14 +1401,16 @@ function composeEdgeLabel(
     sizePx: options.geometry.labelFontSizePx,
   }
   const metrics = options.measure(edge.label, font)
-  const width = metrics.advanceWidth
-  const height = metrics.ascent + metrics.descent
+  const size = { w: metrics.advanceWidth, h: metrics.ascent + metrics.descent }
+  const center = edgeLabelPlacement(routed.path, size, obstacles, routed.rounded === true)
+  if (!center) return undefined
   return {
     kind: 'textRun',
-    bbox: { x: center.x - width / 2, y: center.y - height / 2, w: width, h: height },
+    bbox: { x: center.x - size.w / 2, y: center.y - size.h / 2, w: size.w, h: size.h },
     baseline: metrics.ascent,
     text: edge.label,
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
+    annotates: { kind: 'edge', id: edge.id },
   }
 }
 
@@ -1343,17 +1436,15 @@ export function layoutSpatialCanvasWithAnchors(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const resolved = resolveContributions(options)
   return layoutSpatialCanvasInternal(canvas, {
     ...withSpatialReferenceSeams(options),
-    ...resolved,
+    ...resolveContributions(canvas, options),
     passagesByNode: groupPassages(nodePassagesOf(options.threads ?? [])),
     regionsByThread: regionsOf(options.threads ?? [], canvas),
     messagesByThread: new Map((options.threads ?? []).map((t) => [t.id, t.messages.length])),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, resolved.contributions),
     activeEmbedPath: new Set(options.embedPath ?? []),
     embedDepth: options.embedPath?.length ?? 0,
     fitToBox: true,
@@ -1380,21 +1471,30 @@ export function naturalNodeContentSize(
   node: SpatialNode,
   options: SpatialLayoutOptions,
 ): { readonly w: number; readonly h: number } {
-  const content = composeNode(node, {
-    ...withSpatialReferenceSeams(options),
-    ...resolveContributions(options),
-    // A natural size asks how big the box must be; a highlight adds no
-    // extent beyond the words it sits under, so none is composed here.
-    passagesByNode: new Map(),
-    regionsByThread: new Map(),
-    messagesByThread: new Map(),
-    geometry: resolveGeometry(options.geometry),
-    parseBody: options.parseBody ?? parseMarkdownBody,
-    highlightCode: options.highlightCode ?? highlightCode,
-    activeEmbedPath: new Set(),
-    embedDepth: 0,
-    fitToBox: false,
-  }).filter(
+  const single: SpatialCanvas = { nodes: [node], edges: [] }
+  // Through the same theme resolution a layout applies: a theme's font
+  // changes what fits, and a caller sizing a node under a theme passes its
+  // id as `style` (the single-node canvas carries no facet to read).
+  const content = composeNode(
+    node,
+    withCanvasTheme(single, {
+      ...withSpatialReferenceSeams(options),
+      // A silhouette inscribes the box its content has to fit, so the natural
+      // size of a shaped node is not the natural size of the rect around it.
+      ...resolveContributions(single, options),
+      // A natural size asks how big the box must be; a highlight adds no
+      // extent beyond the words it sits under, so none is composed here.
+      passagesByNode: new Map(),
+      regionsByThread: new Map(),
+      messagesByThread: new Map(),
+      geometry: resolveGeometry(options.geometry),
+      parseBody: options.parseBody ?? parseMarkdownBody,
+      highlightCode: options.highlightCode ?? highlightCode,
+      activeEmbedPath: new Set(),
+      embedDepth: 0,
+      fitToBox: false,
+    }),
+  ).filter(
     (entry): entry is Exclude<SceneNode, { kind: 'edge' }> =>
       entry.kind !== 'shape' && entry.kind !== 'edge' && entry.bbox.y >= node.y,
   )
@@ -1458,19 +1558,161 @@ export interface RenderContribution {
   readonly readShape?: (node: SpatialNode) => string | undefined
   readonly readTextPlacement?: (node: SpatialNode) => 'start' | 'center' | undefined
   readonly decorations?: readonly NodeDecoration[]
+  /**
+   * Theme assets by BARE name, namespaced to `${namespace}.${name}` the way
+   * `shapes` are. Unlike a shape, a theme id in a document MAY name another
+   * contribution's asset (ADR-0030 decision 2): reuse across plugins is what
+   * an asset is for, so the table is looked up by full id.
+   */
+  readonly themes?: Readonly<Record<string, ThemeTokens>>
+  /** The theme id the CANVAS names (its own facet), or undefined for none. */
+  readonly readTheme?: (canvas: SpatialCanvas) => string | undefined
 }
 
 /**
- * The contribution set in force, plus its composed shape table — resolved in
- * ONE function because three entry points build resolved options and a fourth
- * would otherwise be a silent omission rather than a type error.
+ * Everything a contribution set decides ABOUT ONE CANVAS — the set, its shape
+ * table, and the silhouette each node resolves to — in ONE function, so an
+ * entry point omitting a piece is a type error rather than a silent omission.
+ *
+ * `nodeOutlines` is here rather than beside each entry point because the edge
+ * overlay proved the point: resolved for the committed layout and not for
+ * `layoutSpatialEdges`, so an edge into a shaped node sat on the bbox border
+ * for a whole drag and snapped onto the silhouette on drop. Both call sites
+ * read as complete alone; only comparing them showed the gap.
  */
-function resolveContributions(options: SpatialLayoutOptions): {
+function resolveContributions(
+  canvas: SpatialCanvas,
+  options: SpatialLayoutOptions,
+): {
   contributions: readonly RenderContribution[]
   shapeTable: ShapeTable
+  themeTable: Readonly<Record<string, ThemeTokens>>
+  nodeOutlines: Readonly<Record<string, string>> | undefined
+  explicitNodeOutlines: Readonly<Record<string, string>> | undefined
+  baseAppearance: SpatialAppearanceResolver
 } {
   const contributions = options.renderContributions ?? [visualRenderContribution]
-  return { contributions, shapeTable: resolveShapeTable(contributions) }
+  return {
+    contributions,
+    shapeTable: resolveShapeTable(contributions),
+    themeTable: resolveThemeTable(contributions),
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, contributions),
+    explicitNodeOutlines: options.nodeOutlines,
+    baseAppearance: options.appearance,
+  }
+}
+
+/** The composed theme table a contribution set resolves to, by namespaced id. */
+export function resolveThemeTable(
+  contributions: readonly RenderContribution[],
+): Readonly<Record<string, ThemeTokens>> {
+  const table: Record<string, ThemeTokens> = {}
+  for (const contribution of contributions) {
+    for (const [name, tokens] of Object.entries(contribution.themes ?? {})) {
+      table[`${contribution.namespace}.${name}`] = tokens
+    }
+  }
+  return table
+}
+
+/**
+ * The palette ONE canvas is drawn in under a style — the theme the style
+ * resolves to (`pickThemeId`: the canvas's own under `'document'`, a named
+ * one, none under `'clean'`), for the mode, else the bundled palette for
+ * that mode. `style` defaults to `'document'`, the editor's look.
+ *
+ * For an editor chrome that previews paint rather than painting: the paper
+ * under the canvas, and a colour picker's swatches showing the strokes a
+ * pick will produce. Resolved here so the preview and the layout read the
+ * same table AND the same style; a chrome reading the saved theme while
+ * the session draws clean showed neon's night under a clean board.
+ */
+export function resolveCanvasPalette(
+  canvas: SpatialCanvas,
+  mode: SpatialThemeMode,
+  options: {
+    readonly style?: SpatialRenderStyle
+    readonly contributions?: readonly RenderContribution[]
+  } = {},
+): SpatialPalette {
+  const contributions = options.contributions ?? [visualRenderContribution]
+  const own = contributions
+    .map((contribution) => contribution.readTheme?.(canvas))
+    .find((id) => id !== undefined)
+  const themeId = pickThemeId(options.style ?? 'document', own, undefined)
+  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
+  if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+  return paletteFromTokens(tokens.palette[mode])
+}
+
+/**
+ * The theme id a canvas draws in, under the style the caller asked for:
+ * `'clean'` never has one; a theme id IS one; `'document'` takes the
+ * canvas's own, else the host's (an embed inherits), else none.
+ */
+function pickThemeId(
+  style: SpatialRenderStyle | undefined,
+  own: string | undefined,
+  inherited: string | undefined,
+): string | undefined {
+  if (style === undefined || style === 'clean') return undefined
+  if (style === 'document') return own ?? inherited
+  return style
+}
+
+/**
+ * Resolves the theme for ONE canvas (ADR-0030 decision 5) and re-derives
+ * everything that depends on it: the appearance resolver, and the
+ * silhouettes (a theme's default shape fills in where a node's facet is
+ * silent). Called at every nesting level from the canvas being laid out —
+ * never threaded down as an option, which is the shape that lets an outer
+ * document's setting win over an embedded canvas's own.
+ */
+function withCanvasTheme(
+  canvas: SpatialCanvas,
+  resolved: ResolvedLayoutOptions,
+): ResolvedLayoutOptions {
+  const own = resolved.contributions
+    .map((contribution) => contribution.readTheme?.(canvas))
+    .find((id) => id !== undefined)
+  const themeId = pickThemeId(resolved.style, own, resolved.activeTheme?.id)
+  const tokens = themeId === undefined ? undefined : resolved.themeTable[themeId]
+  if (themeId !== undefined && tokens === undefined) {
+    resolved.onDegrade?.({ kind: 'unknown-theme', theme: themeId })
+  }
+  const activeTheme =
+    themeId !== undefined && tokens !== undefined ? { id: themeId, tokens } : undefined
+  let appearance = resolved.baseAppearance
+  if (activeTheme !== undefined) {
+    const wanted = activeTheme.tokens.fontFamily
+    const available =
+      wanted === undefined
+        ? false
+        : (resolved.fontAvailable ?? ((family) => family === SPATIAL_THEME_FONT_FAMILY))(wanted)
+    if (wanted !== undefined && !available) {
+      resolved.onDegrade?.({ kind: 'font-missing', family: wanted })
+    }
+    appearance = createThemedAppearance({
+      tokens: activeTheme.tokens,
+      mode: resolved.baseAppearance.mode ?? 'light',
+      fontFamily: available && wanted !== undefined ? wanted : SPATIAL_THEME_FONT_FAMILY,
+    })
+  }
+  // The inherited theme is REPLACED, never merged under: a child naming a
+  // theme this build does not carry draws clean, so it must not keep the
+  // host's ink and routing defaults beside its own clean paint.
+  const { activeTheme: _inherited, ...rest } = resolved
+  return {
+    ...rest,
+    appearance,
+    ...(activeTheme === undefined ? {} : { activeTheme }),
+    nodeOutlines: resolveNodeOutlines(
+      canvas,
+      resolved.explicitNodeOutlines,
+      resolved.contributions,
+      activeTheme?.tokens.defaults.nodeShape,
+    ),
+  }
 }
 
 /** The composed shape table a contribution set resolves to — what the SVG
@@ -1502,11 +1744,29 @@ function composeDecorations(
   return decorations.flatMap((decorate) => decorate(node, context))
 }
 
+/**
+ * Containers paint BEHIND what they hold, whatever order the canvas lists
+ * them in: every group first, a larger one before a smaller (an outer group
+ * before the one inside it), then everything else in stored order.
+ * Stored order is a map's id order, not the order a caller wrote, so a group
+ * whose id sorted after a member's painted over it once it had a colour —
+ * four of eleven boxes vanished from a diagram whose grader, reading the
+ * store, passed it. Equal boxes keep their stored order (the sort is
+ * stable). Exported so the web app's hit-test index reads the same order.
+ */
+export function paintOrderOf(nodes: readonly SpatialNode[]): readonly SpatialNode[] {
+  const groups = nodes
+    .filter((node) => node.type === 'group')
+    .sort((a, b) => b.width * b.height - a.width * a.height)
+  return [...groups, ...nodes.filter((node) => node.type !== 'group')]
+}
+
 function layoutSpatialCanvasInternal(
   canvas: SpatialCanvas,
-  resolved: ResolvedLayoutOptions,
+  incoming: ResolvedLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const nodeContent = canvas.nodes.flatMap((node) => [
+  const resolved = withCanvasTheme(canvas, incoming)
+  const nodeContent = paintOrderOf(canvas.nodes).flatMap((node) => [
     ...composeNode(node, resolved),
     ...composeDecorations(node, resolved),
   ])
@@ -1670,28 +1930,51 @@ function composeComments(
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()
+  const visible = comments.filter(
+    (comment) => comment.resolved !== true || options.showResolved === true,
+  )
+  const anchorOf = (comment: (typeof visible)[number]): { x: number; y: number } => {
+    // A node set's pin stands at the corner of the box its LIVE nodes
+    // occupy, read from the thread: the flat projection's point is where
+    // that box was when it was last projected, and the nodes move.
+    const region = options.regionsByThread.get(comment.id)
+    return region !== undefined
+      ? { x: region.rect.x + region.rect.width, y: region.rect.y }
+      : commentAnchor(comment, canvas, edgePathOf)
+  }
   const obstacles: BoundingBox[] = [
     ...canvas.nodes
       .filter((node) => node.type !== 'group')
       .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
     ...(options.commentObstacles ?? []),
+    // EVERY pin, up front — not each one as its comment is drawn. A pin is
+    // what its comment is about, so a bubble covering one hides exactly what
+    // a reader followed the leader to find. Seeding them all is what makes
+    // that true for a comment drawn BEFORE the pin it would have covered;
+    // pushing each pin as it is emitted only protects the ones after it.
+    //
+    // This did not matter while the placer had four candidates a fixed 14px
+    // from the anchor, which clear their own pin and reach no other. It
+    // matters now: measured on the crowded forty-comment board, the ring
+    // put 3948 square pixels of bubble over other comments' pins.
+    ...visible.map((comment) => {
+      const anchor = anchorOf(comment)
+      return {
+        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
+        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
+        w: COMMENT_PIN_SIZE_PX,
+        h: COMMENT_PIN_SIZE_PX,
+      }
+    }),
   ]
   const out: SceneNode[] = []
-  for (const comment of comments) {
-    if (comment.resolved === true && options.showResolved !== true) continue
+  for (const comment of visible) {
     // Assigned, never invented: a resolved comment's muting comes only from
     // the theme's `resolvedOverlay`, never from an opacity literal here. A
     // bare resolver (no `resolveComment`) still composes full geometry with
     // no appearance at all, resolved or not.
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
-    // A node set's pin stands at the corner of the box its LIVE nodes
-    // occupy, read from the thread: the flat projection's point is where
-    // that box was when it was last projected, and the nodes move.
-    const region = options.regionsByThread.get(comment.id)
-    const anchor =
-      region !== undefined
-        ? { x: region.rect.x + region.rect.width, y: region.rect.y }
-        : commentAnchor(comment, canvas, edgePathOf)
+    const anchor = anchorOf(comment)
 
     // Through `layoutCommentBody`, which is the ONE producer of a comment's
     // prose — so the card and rail that draw this same body in the web app
@@ -1844,7 +2127,7 @@ function composeProposals(
         out.push({
           kind: 'shape',
           id: `${change.id}/outline`,
-          proposalChrome: true,
+          proposalChrome: { proposalId: proposal.id },
           bbox: box,
           radius: COMMENT_BUBBLE_RADIUS_PX,
           ...paint,
@@ -1877,7 +2160,8 @@ function composeProposals(
     // no count. This bubble borrows the comment layer's grammar throughout;
     // borrowing its producer is what keeps that true.
     const laid = layoutCommentBody(label, {
-      ...mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      ...mdastOptionsFor(PROPOSAL_TEXT_MAX_WIDTH_PX, options),
+      density: 'compact',
       parseBody: options.parseBody,
       onParseFailure: (err) =>
         options.onDegrade?.({ kind: 'body-parse-failed', nodeId: proposal.id, err }),
@@ -1910,7 +2194,7 @@ function composeProposals(
     out.push({
       kind: 'shape',
       id: `${proposal.id}/bubble`,
-      proposalChrome: true,
+      proposalChrome: { proposalId: proposal.id },
       bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(chrome === undefined ? {} : { appearance: chrome.bubble }),
@@ -2007,7 +2291,16 @@ function composeEdgesAndLabels(
   // fallback): resolution lives here rather than at the call sites for the
   // same reason the tokeniser default does — every surface that lays a
   // canvas out wants it, and the one that forgets draws different routes.
-  const edgeStyle = resolveCanvasEdgeStyle(canvas)
+  // The theme's routing is a DEFAULT under the canvas's own facet (ADR-0030
+  // decision 4): it fills in only where `visual.edges` says nothing.
+  const explicitStyle = resolveCanvasEdgeStyle(canvas)
+  const themeRouting = resolved.activeTheme?.tokens.defaults.edgeRouting
+  const edgeStyle = {
+    ...explicitStyle,
+    ...(explicitStyle.style === undefined && themeRouting !== undefined
+      ? { style: themeRouting }
+      : {}),
+  }
   const anchors = assignEdgeAnchors(
     canvas.nodes,
     canvas.edges,
@@ -2028,8 +2321,9 @@ function composeEdgesAndLabels(
           const jumps = jumpsByEdge.get(edge.id)
           return jumps === undefined ? edge : { ...edge, jumps }
         })
+  const obstacles = labelObstacles(canvas.nodes)
   const labelContent = canvas.edges
-    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved))
+    .map((edge, index) => composeEdgeLabel(edge, edgeContent[index]!, resolved, obstacles))
     .filter((label): label is TextRunNode => label !== undefined)
   return { content: [...edgeContent, ...labelContent], anchors }
 }
@@ -2047,19 +2341,26 @@ export function layoutSpatialEdges(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): SceneNode[] {
-  return composeEdgesAndLabels(canvas, {
-    ...withSpatialReferenceSeams(options),
-    ...resolveContributions(options),
-    passagesByNode: new Map(),
-    regionsByThread: new Map(),
-    messagesByThread: new Map(),
-    geometry: resolveGeometry(options.geometry),
-    parseBody: options.parseBody ?? parseMarkdownBody,
-    highlightCode: options.highlightCode ?? highlightCode,
-    activeEmbedPath: new Set(),
-    embedDepth: 0,
-    fitToBox: true,
-  }).content
+  // Through the same theme resolution the full layout applies to this
+  // canvas: the ink, the routing default and the paint an edge takes are
+  // the theme's, and a second entry point that skipped it drew a live drag
+  // crisp and straight over a pencilled, curved committed render.
+  return composeEdgesAndLabels(
+    canvas,
+    withCanvasTheme(canvas, {
+      ...withSpatialReferenceSeams(options),
+      ...resolveContributions(canvas, options),
+      passagesByNode: new Map(),
+      regionsByThread: new Map(),
+      messagesByThread: new Map(),
+      geometry: resolveGeometry(options.geometry),
+      parseBody: options.parseBody ?? parseMarkdownBody,
+      highlightCode: options.highlightCode ?? highlightCode,
+      activeEmbedPath: new Set(),
+      embedDepth: 0,
+      fitToBox: true,
+    }),
+  ).content
 }
 
 /**
@@ -2080,15 +2381,25 @@ function resolveNodeOutlines(
   canvas: SpatialCanvas,
   explicit: Readonly<Record<string, string>> | undefined,
   contributions: readonly RenderContribution[],
+  defaultShape?: string,
 ): Readonly<Record<string, string>> | undefined {
   let fromFacets: Record<string, string> | undefined
   for (const node of canvas.nodes) {
+    let chosen: string | undefined
     for (const contribution of contributions) {
       const kind = contribution.readShape?.(node)
       if (kind === undefined) continue
-      fromFacets ??= {}
-      fromFacets[node.id] = `${contribution.namespace}.${kind}`
+      chosen = `${contribution.namespace}.${kind}`
     }
+    // The theme's default is an already-namespaced id, and it fills in only
+    // where the node's own facet is silent (ADR-0030 decision 4). A group is
+    // a frame around other nodes, never a shaped thing itself.
+    if (chosen === undefined && defaultShape !== undefined && node.type !== 'group') {
+      chosen = defaultShape
+    }
+    if (chosen === undefined) continue
+    fromFacets ??= {}
+    fromFacets[node.id] = chosen
   }
   if (fromFacets === undefined) return explicit
   return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }

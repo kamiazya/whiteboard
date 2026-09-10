@@ -21,6 +21,7 @@
   },
   "dependencies": {
     "@kamiazya/whiteboard-codec": "workspace:*",
+    "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "css-line-break": "catalog:",

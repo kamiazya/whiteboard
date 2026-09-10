@@ -63,6 +63,18 @@ export const viewportRequestMessageSchema = z.object({
   zoom: z.number().finite().optional(),
 })
 
+/**
+ * What a caller may ask of a viewport: the message minus what the daemon
+ * stamps on it. Strict, because the browser reads exactly these fields and
+ * a key it has never read (`padding` was one) would otherwise be a silent
+ * no-op — and a value of the wrong type a frame the browser drops, reported
+ * to the caller as a timeout.
+ */
+export const viewportRequestParamsSchema = viewportRequestMessageSchema
+  .omit({ type: true, requestId: true })
+  .strict()
+export type ViewportRequestParams = z.infer<typeof viewportRequestParamsSchema>
+
 // The daemon no longer sends this message — canvas export is headless-only
 // (see server/routes/export.ts). Kept for apps/web's typechecking until the
 // phase that replaces the browser editor removes the last sender.

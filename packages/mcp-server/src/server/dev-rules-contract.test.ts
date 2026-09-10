@@ -8,10 +8,13 @@ import { describe, expect, it } from 'vitest'
 // same command still matched — silently running only the browser project and
 // exiting 0. .claude/rules/dev-flow.md is ALWAYS-ON context read by every
 // session in this repo, so its false claim that no such project exists was
-// what made the workaround permanent. This guard runs in mcp-node (part of
-// the lefthook pre-push gate), independent of the web-jsdom project it
-// describes, so a rebase that reinstates the false claim fails before it can
-// be pushed.
+// what made the workaround permanent. This guard runs in mcp-node, so it is
+// independent of the web-jsdom project it describes and a rebase that
+// reinstates the false claim fails in CI.
+//
+// NOT, as this said until the pre-push block was read: "part of the lefthook
+// pre-push gate". That gate runs no vitest PROJECT — only two named single-
+// file guards, and this is not one of them.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
 const RULE_AND_SKILL_FILES = [

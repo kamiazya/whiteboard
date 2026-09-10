@@ -8,6 +8,7 @@ import type { PassageRange } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   CommentThread,
   DocumentKind,
+  ExtensionFacets,
   Proposal,
   SpatialCanvas,
   StoredCoreFacets,
@@ -22,12 +23,12 @@ import {
   type DocumentSyncSession,
 } from '../lib/document-sync-session.js'
 import type { SyncStatus, UseDocumentSyncOptions } from '../lib/document-sync-types.js'
-
 import { dispatchIdentityEvent } from '../lib/document-sync-types.js'
 import { embedTextInPng } from '../lib/png-embed.js'
 import { rasterizeSvgToPng } from '../lib/rasterize-svg.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { renderCanvasToSvg } from '../lib/spatial/scene-render.js'
+import { themeFacesNamedBy } from '../lib/theme-fonts.js'
 
 const NOTHING_UNSAVED: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
 
@@ -110,6 +111,13 @@ export interface UseDocumentSyncResult {
   coreFacets: StoredCoreFacets | undefined
   setCoreFacets: (facets: StoredCoreFacets) => void
   /**
+   * The document's EXTENSION facets, republished on the same signal as
+   * `coreFacets`. What a MARKDOWN document's own mark is stored in — a
+   * spatial document keeps its on the canvas envelope, which the canvas
+   * value already carries.
+   */
+  facets: ExtensionFacets
+  /**
    * What a picture of this document would be drawn from, paired with the id
    * of the state it is. `null` until the first snapshot. See the callback for
    * why the two are read together rather than exposed separately.
@@ -132,6 +140,8 @@ const EMPTY_ANNOTATIONS: readonly CommentThread[] = []
 const EMPTY_PROPOSALS: readonly Proposal[] = []
 /** Same purpose as EMPTY_ANNOTATIONS, for the passages beside them. */
 const EMPTY_MARKS: ReadonlyMap<string, PassageRange> = new Map()
+/** And again for the facet bucket, so a document with none is stable. */
+const EMPTY_FACETS: ExtensionFacets = {}
 
 const EMPTY_CANVAS: SpatialCanvas = { nodes: [], edges: [] }
 
@@ -235,6 +245,7 @@ export function useDocumentSync(
   const [lockedNodeIds, setLockedNodeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [markdownBody, setMarkdownBodyState] = useState('')
   const [coreFacets, setCoreFacetsState] = useState<StoredCoreFacets | undefined>(undefined)
+  const [facets, setFacetsState] = useState<ExtensionFacets>(EMPTY_FACETS)
   const [lockedEdgeIds, setLockedEdgeIds] = useState<ReadonlySet<string>>(EMPTY_LOCKED_IDS)
   const [restoreInProgress, setRestoreInProgress] = useState(false)
   const [restoreLabel, setRestoreLabel] = useState<string | null>(null)
@@ -271,6 +282,7 @@ export function useDocumentSync(
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
     setCoreFacetsState(undefined)
+    setFacetsState(EMPTY_FACETS)
     // And the failure reason, for the same reason and with a sharper
     // consequence: it describes ONE document, and carried across a switch it
     // turns the next one — which may be perfectly readable — into an error
@@ -345,6 +357,7 @@ export function useDocumentSync(
     const unsubscribeBody = session.subscribeMarkdownBody(() => {
       setMarkdownBodyState(session.getMarkdownBody())
       setCoreFacetsState(session.getCoreFacets())
+      setFacetsState(session.getFacets())
     })
     // Seed from the session as well as subscribing: hydration can complete
     // BEFORE this effect runs (the backend may deliver a snapshot
@@ -455,7 +468,9 @@ export function useDocumentSync(
       // page's fonts, so without this the exported PNG is drawn in whatever
       // system font the browser picks — not the one on screen.
       const png = await rasterizeSvgToPng(
-        await withViewerFontEmbedded(svg),
+        // The theme's family travels the same way the vendored face does,
+        // and only when this picture names it: a held face is megabytes.
+        await withViewerFontEmbedded(svg, themeFacesNamedBy(svg)),
         Math.max(1, Math.round(bounds.w)),
         Math.max(1, Math.round(bounds.h)),
       )
@@ -528,6 +543,7 @@ export function useDocumentSync(
     markdownBody,
     coreFacets,
     setCoreFacets,
+    facets,
     readOutlineSource,
     lockedEdgeIds,
     setEdgeLock,

@@ -68,7 +68,9 @@ function proposalOf(changes: Proposal['changes']): Proposal {
 describe('drawing a proposal in place', () => {
   it('draws nothing at all when there is no proposal', () => {
     const bare = layout(BOARD, [])
-    expect(bare.filter((node) => node.kind === 'shape' && node.proposalChrome === true)).toEqual([])
+    expect(
+      bare.filter((node) => node.kind === 'shape' && node.proposalChrome !== undefined),
+    ).toEqual([])
   })
 
   // An addition is outlined where it WOULD be, which is why the change
@@ -210,7 +212,27 @@ describe('drawing a proposal in place', () => {
         { id: 'node:b', status: 'open', op: 'node.remove', nodeId: 'b', assumed: NODE_B },
       ]),
     ])
-    expect(shapeById(nodes, 'node:b/outline')?.proposalChrome).toBe(true)
-    expect(shapeById(nodes, 'p1/bubble')?.proposalChrome).toBe(true)
+    // The outline's own id names its CHANGE, so the proposal it belongs to is
+    // carried as data — which is what lets a reveal frame the whole chrome.
+    expect(shapeById(nodes, 'node:b/outline')?.proposalChrome).toEqual({ proposalId: 'p1' })
+    expect(shapeById(nodes, 'p1/bubble')?.proposalChrome).toEqual({ proposalId: 'p1' })
+  })
+  // The bubble is measured to `PROPOSAL_TEXT_MAX_WIDTH_PX`, which is the
+  // narrowest width that still fits this label on ONE line — five pixels
+  // below it the label wraps, and the density scoreboard measured a wrapped
+  // (taller) bubble scoring WORSE than a wider one-line one: the extra line
+  // reaches a row the box used to clear, costing the uncrowded board nine of
+  // its seventeen clean bubbles. So the one-line height is pinned as a
+  // NUMBER here. Comparing it against a longer label instead does not work
+  // and was tried: below the cliff both labels simply gain a line and the
+  // comparison stays true while the thing it claims to guard has gone.
+  it('keeps the commonest label on one line', () => {
+    const nodes = layout(BOARD, [
+      proposalOf([
+        { id: 'node:b', status: 'open', op: 'node.remove', nodeId: 'b', assumed: NODE_B },
+      ]),
+    ])
+    expect(wordsOf(nodes)).toContain('1 proposed change')
+    expect(shapeById(nodes, 'p1/bubble')?.bbox.h).toBe(37.7)
   })
 })

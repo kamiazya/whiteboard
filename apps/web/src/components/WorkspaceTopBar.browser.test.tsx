@@ -46,7 +46,6 @@ function mkVersionsResponse(count = 24): Response {
     elementCount: 58 + index,
     label: `Version ${index + 1}`,
     auto: index % 2 === 0,
-    hasThumbnail: false,
     branchName: 'main',
     operator: {
       kind: index % 3 === 0 ? ('human' as const) : ('system' as const),
@@ -141,5 +140,39 @@ describe('landscape display cutout', () => {
     // is 0px, so the floor makes `px-chrome` and `px-3` numerically identical
     // and only the declaration separates them.
     expect(header.className).toContain('px-chrome')
+  })
+})
+
+/**
+ * The two acts on a version preview are not alike: stopping puts the live
+ * document back, restoring REWRITES it. Sitting them side by side at the
+ * right edge made the harmless one frightening to reach — a miss lands on
+ * the destructive one. Real geometry rather than DOM order, because
+ * adjacency is what the hand experiences.
+ */
+describe('version preview bar', () => {
+  const preview = {
+    title: 'before the rewrite',
+    isRestoring: false,
+    error: null,
+    stop: () => {},
+    restore: () => {},
+  }
+
+  it('keeps the way out and Restore at opposite ends, with the title between them', async () => {
+    renderTopBar({ preview })
+
+    const stop = screen.getByRole('button', { name: 'Stop viewing' })
+    const restore = screen.getByRole('button', { name: 'Restore this version' })
+    const title = screen.getByText(/^Viewing before the rewrite$/)
+
+    const stopBox = stop.getBoundingClientRect()
+    const restoreBox = restore.getBoundingClientRect()
+    const titleBox = title.getBoundingClientRect()
+
+    // The title physically separates them, so no pixel threshold has to be
+    // invented: whatever the bar's width, the gap is the whole title.
+    expect(stopBox.right).toBeLessThanOrEqual(titleBox.left)
+    expect(restoreBox.left).toBeGreaterThanOrEqual(titleBox.right)
   })
 })

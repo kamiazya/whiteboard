@@ -106,6 +106,21 @@ describe('bodyChangeConflicts', () => {
     ).toBe(true)
   })
 
+  it('flags a passage that runs past the end of the body', () => {
+    // The same clamping trap `resolveTextAnchor` carried: `String.slice`
+    // CLAMPS, so a range the body no longer has returns its TAIL rather than
+    // nothing, and a tail that happens to read what was assumed answers
+    // "no conflict". Measured: `'hello world'.slice(6, 20)` is `'world'`.
+    //
+    // Every caller today derives `at` from `resolveTextAnchor`, which no
+    // longer answers out of range — so this is the boundary holding on its own
+    // rather than a live defect. It is worth holding: the direction of the
+    // mistake is adopting an edit onto text the proposer was never shown,
+    // which is the one outcome ADR-0029 decision 5 exists to prevent.
+    const change = replace('world', 'everyone')
+    expect(bodyChangeConflicts(change, 'hello world', { start: 6, end: 20 })).toBe(true)
+  })
+
   it('does not flag an edit ELSEWHERE in the body, which is somebody working', () => {
     const change = replace('ship on Friday', 'ship on Monday')
     const edited = BODY.replace('The risk is the migration.', 'The risk is the rollout.')

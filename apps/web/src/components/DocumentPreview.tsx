@@ -1,8 +1,14 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { CanvasViewer, createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { Focus } from 'lucide-react'
 import { type JSX, useMemo } from 'react'
+import { editorTextFill } from '../lib/spatial/editor-appearance.js'
+import { viewportTransformCss } from '../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../lib/theme.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { PreviewPane } from './markdown-editor/PreviewPane.js'
+import { PREVIEW_CONTROL_PROPS, usePreviewViewport } from './use-preview-viewport.js'
 
 /**
  * A past state of a document, drawn read-only.
@@ -17,11 +23,14 @@ import { PreviewPane } from './markdown-editor/PreviewPane.js'
  *
  * The consequence a reader should know: this draws the SAME pipeline the
  * editor draws through, so what you see is what the version holds — but it
- * is not the editor, so nothing here pans, selects or types.
+ * is not the editor, so nothing here selects or types. It DOES pan and zoom:
+ * a whole canvas fitted to a phone is a picture of a document rather than
+ * something anyone can read, and "look, then decide" is not a decision
+ * anybody can take on a picture they cannot get closer to.
  */
 export function DocumentPreview({
   past,
-  theme,
+  theme = 'light',
   maxWidth = 720,
 }: {
   readonly past: PastDocument
@@ -32,18 +41,81 @@ export function DocumentPreview({
   if (past.kind === 'markdown') {
     return (
       <div data-testid="document-preview" className="h-full min-h-0 overflow-auto">
-        <PreviewPane
-          value={past.body}
-          maxWidth={maxWidth}
-          measure={measure}
-          {...(theme === undefined ? {} : { theme })}
-        />
+        <PreviewPane value={past.body} maxWidth={maxWidth} measure={measure} theme={theme} />
       </div>
     )
   }
+  return <PastCanvasPreview canvas={past.canvas} theme={theme} measure={measure} />
+}
+
+/**
+ * Its own component because the viewport is state, and a hook cannot live
+ * behind the kind branch above.
+ */
+function PastCanvasPreview({
+  canvas,
+  theme,
+  measure,
+}: {
+  readonly canvas: SpatialCanvas
+  readonly theme: ResolvedTheme
+  readonly measure: MeasureText
+}): JSX.Element {
+  const { viewport, moved, reset, rootRef, surfaceHandlers } = usePreviewViewport()
   return (
-    <div data-testid="document-preview" className="h-full min-h-0 overflow-auto">
-      <CanvasViewer canvas={past.canvas} measure={measure} label="A past state of this document" />
+    <div
+      ref={rootRef}
+      data-testid="document-preview"
+      // `touch-none`: every touch here is a pan or a pinch, and letting the
+      // browser also scroll the page under it makes both unusable on a phone
+      // — which is the screen this surface is most often read on.
+      className="relative h-full min-h-0 touch-none overflow-hidden"
+      {...surfaceHandlers}
+    >
+      <div
+        data-testid="preview-viewport"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          transform: viewportTransformCss(viewport),
+          transformOrigin: '0 0',
+          // canvas-render assigns markdown body runs no `fill` at all, so
+          // they inherit one from whichever ancestor sets it — the same seam
+          // the editor uses to keep body text visible on a dark canvas. The
+          // node chrome around them carries its own fill from the theme
+          // below and is unaffected.
+          fill: editorTextFill(theme),
+        }}
+      >
+        <CanvasViewer
+          canvas={canvas}
+          measure={measure}
+          theme={theme}
+          label="A past state of this document"
+        />
+      </div>
+      {/* The dock's own view control, said the dock's way: a glyph labelled
+          "Zoom to fit", no words drawn. This was a text button reading
+          "Reset view" — the one surface in the app that spelled a view
+          control out, and in a vocabulary the dock had already retired
+          ("there is nothing to reset to", ToolPalette).
+
+          The same operation, not merely the same name: the scene is
+          rendered to fit its box, so the untouched viewport IS the fitted
+          view and returning to it is the fit. Still only shown once
+          something has moved — before that, pressing it would do nothing. */}
+      {moved && (
+        <button
+          type="button"
+          onClick={reset}
+          {...PREVIEW_CONTROL_PROPS}
+          data-testid="preview-fit-view"
+          aria-label="Zoom to fit"
+          className="bg-background/90 text-muted-foreground hover:text-foreground absolute right-2 bottom-2 inline-flex size-8 items-center justify-center rounded border"
+        >
+          <Focus aria-hidden="true" className="size-4" />
+        </button>
+      )}
     </div>
   )
 }

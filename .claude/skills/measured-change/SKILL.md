@@ -134,6 +134,14 @@ is the worked example.
   target zero. Price metrics (bends, length, crossings) have no target and
   exist so a change that buys less of one harm with more of another cannot do
   it silently.
+- **Judge the BOARD when the question is "does it read well", not a
+  mechanism.** `quality/drawing-score.ts` scores a laid-out canvas whoever
+  drew it — a model through the tool surface, a person, tidy — and its
+  corpus (`drawing-quality.test.ts`) holds each diagram as a reference, a
+  first attempt and the attempt after tidy, so the distance from "passes
+  the verifier" to "a reader would accept it" is a number. Its first
+  reading was a finding about tidy that tidy's own scoreboard could not
+  see, because that one judges tidy on tidy's terms.
 
 For a behaviour-preserving change, **the scoreboard not moving is the
 proof**: an optimisation that leaves every pinned count identical, with no

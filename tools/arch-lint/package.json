@@ -10,9 +10,10 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
-    "typescript": "catalog:"
+    "@typescript/typescript6": "^6.0.2"
   },
   "devDependencies": {
+    "typescript": "catalog:",
     "vitest": "catalog:"
   }
 }

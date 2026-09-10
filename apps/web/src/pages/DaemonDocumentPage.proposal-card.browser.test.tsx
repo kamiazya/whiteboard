@@ -164,3 +164,42 @@ it('an agent’s proposal is drawn in place, and Adopt moves the node and closes
   await vi.waitFor(() => expect(contentOf(root).textContent).not.toContain('proposed change'))
   expect(document.querySelector('[data-testid="proposal-card"]')).toBeNull()
 })
+
+// The inspector's index (ADR-0029 decision 9's place). Its whole job is to
+// say what is waiting without hunting for it, and to take you to one — so
+// the row press has to land on the SAME card the bubble opens, not on a
+// second place to decide. A proposal on a node four thousand pixels away is
+// drawn correctly and seen by nobody, which is what the index is for.
+it('the Proposals opener counts what is waiting, and a row opens the card in place', async () => {
+  sessionStorage.setItem('wb.lastTool', 'select')
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response('{}', { status: 404 })),
+  )
+  render(
+    <DaemonDocumentPage
+      daemonBaseUrl="http://127.0.0.1:3099"
+      workspaceId="w1"
+      path="board"
+      createBackend={() => new FakeBackend()}
+    />,
+  )
+  await screen.findByTestId('spatial-editor', undefined, { timeout: 15_000 })
+
+  const opener = await screen.findByRole(
+    'button',
+    { name: /^Proposals, 1 open/ },
+    { timeout: 15_000 },
+  )
+  await userEvent.click(opener)
+
+  const panel = await screen.findByTestId('proposals-panel')
+  const row = await waitFor(() =>
+    [...panel.querySelectorAll('button')].find((b) => b.textContent?.includes('1 change waiting')),
+  )
+  expect(row).toBeDefined()
+
+  expect(document.querySelector('[data-testid="proposal-card"]')).toBeNull()
+  fireEvent.click(row as HTMLButtonElement)
+  await expect.element(page.getByTestId('proposal-card')).toBeInTheDocument()
+})

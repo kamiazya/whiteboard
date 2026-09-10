@@ -21,6 +21,13 @@
  *   prose wraps to when the surface has no opinion. A surface with one — a
  *   rail wider than a bubble — passes its own, and everything else about
  *   the layout still agrees.
+ * - **The density**, and ONLY that. A surface says how much room it has
+ *   (`comfortable` on a bubble floating at canvas reading size, `compact`
+ *   in a 300px rail whose own chrome is 11-12px); it never says which
+ *   THEME, so no surface can reach document typography by picking. The
+ *   rail shipped at the bubble's 16px first and it was the largest text on
+ *   a panel of 11-12px chrome — the same sentence, drawn a third bigger
+ *   than the row summarising it directly above.
  * - **The degradation.** `parseBody` ends in a Zod parse and can throw on a
  *   body being typed, so a comment that will not parse has to keep drawing
  *   something. It degrades to one run rather than aborting the layout that
@@ -30,6 +37,7 @@
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { Scene } from '../scene-graph.js'
+import { MARKDOWN_THEME_COMPACT, MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks, type MdastLayoutOptions } from './nodes/mdast-blocks.js'
 
 /**
@@ -41,12 +49,40 @@ import { layoutMdastBlocks, type MdastLayoutOptions } from './nodes/mdast-blocks
 export const COMMENT_TEXT_MAX_WIDTH_PX = 200
 
 /**
+ * The width a PROPOSAL's bubble measures to, against the comment layer's
+ * 200. A comment carries prose somebody wrote; this carries a COUNT somebody
+ * reads at a glance, so the prose width was borrowed rather than earned.
+ *
+ * The value is the narrowest that still fits `1 proposed change` on ONE
+ * line, and the second half of that sentence is what picked it. Measured
+ * over the density corpus, HEIGHT dominates width: 120px is narrower and
+ * scores WORSE (node overlap 199048 against 165653 at forty proposals),
+ * because the label wraps to two lines and the taller box reaches a row it
+ * used to clear. The same wrap costs the uncrowded board nine of its
+ * seventeen clean bubbles — a regression the corpus's spread control is
+ * there to catch.
+ *
+ * Five pixels below this the label wraps, so `proposals.test.ts` pins the
+ * one-line height rather than leaving a measurer change to flip it and
+ * report itself as a mysterious scoreboard move. It lives here, beside the
+ * width it is measured against, because the two are one decision read
+ * together: what a comment's prose needs, and what a count does not.
+ */
+export const PROPOSAL_TEXT_MAX_WIDTH_PX = 145
+
+/**
  * What a comment body's layout needs beyond an ordinary body's.
  *
  * `theme` is absent rather than optional — the point of this function is
  * that a comment's metrics are not a per-surface choice.
  */
 export interface CommentBodyLayoutOptions extends Omit<MdastLayoutOptions, 'theme' | 'maxWidth'> {
+  /**
+   * How much room the surface drawing this has. Defaults to `comfortable`,
+   * the bubble's metrics — so a surface that says nothing keeps the answer
+   * every surface had before this axis existed.
+   */
+  readonly density?: CommentDensity
   /** markdown -> mdast. Defaults to codec's parser, like every body layout. */
   readonly parseBody?: (text: string) => MdastRoot
   /** Defaults to `COMMENT_TEXT_MAX_WIDTH_PX`. */
@@ -59,6 +95,14 @@ export interface CommentBodyLayoutOptions extends Omit<MdastLayoutOptions, 'them
   readonly onParseFailure?: (err: unknown) => void
 }
 
+/** What a surface may say about the room it has. Not a theme. */
+export type CommentDensity = 'comfortable' | 'compact'
+
+const THEME_FOR_DENSITY = {
+  comfortable: MARKDOWN_THEME_NODE,
+  compact: MARKDOWN_THEME_COMPACT,
+} as const
+
 /** The literal body, as the one paragraph a failed parse falls back to. */
 function literalRoot(text: string): MdastRoot {
   return {
@@ -68,8 +112,12 @@ function literalRoot(text: string): MdastRoot {
 }
 
 export function layoutCommentBody(text: string, options: CommentBodyLayoutOptions): Scene {
-  const { parseBody, maxWidth, onParseFailure, ...rest } = options
-  const mdast: MdastLayoutOptions = { ...rest, maxWidth: maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX }
+  const { parseBody, maxWidth, onParseFailure, density, ...rest } = options
+  const mdast: MdastLayoutOptions = {
+    ...rest,
+    maxWidth: maxWidth ?? COMMENT_TEXT_MAX_WIDTH_PX,
+    theme: THEME_FOR_DENSITY[density ?? 'comfortable'],
+  }
   let root: MdastRoot
   try {
     root = parseBody === undefined ? parseMarkdownBody(text) : parseBody(text)

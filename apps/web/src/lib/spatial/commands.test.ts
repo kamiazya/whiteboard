@@ -726,21 +726,6 @@ describe('comment commands', () => {
 
     expect(applyCommand(canvas, { kind: 'move-comment', id: 'ghost', x: 1, y: 1 })).toBe(canvas)
   })
-
-  it('set-comment-text rewrites only the target text; a missing id is a no-op', () => {
-    const canvas: SpatialCanvas = {
-      ...baseCanvas(),
-      'x-whiteboard': { comments: [COMMENT, OTHER] },
-    }
-    const next = applyCommand(canvas, { kind: 'set-comment-text', id: 'c2', text: 'nicer' })
-    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual({
-      ...OTHER,
-      text: 'nicer',
-    })
-    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c1')).toEqual(COMMENT)
-
-    expect(applyCommand(canvas, { kind: 'set-comment-text', id: 'ghost', text: 'x' })).toBe(canvas)
-  })
 })
 
 // The routing style belongs to the canvas, so the command that sets it names
@@ -799,6 +784,24 @@ describe('set-edge-routing', () => {
 
     expect(next['x-whiteboard']?.facets?.['someone.else/v1']).toEqual({ keep: true })
     expect(edgesFacet(next)).toEqual({ routing: 'orthogonal' })
+  })
+
+  // Under a theme the DEFAULT is the theme's (ADR-0030 decision 4), so the
+  // no-trace rule is judged against that: a choice that differs from the
+  // theme's default is recorded even when it is the built-in default, and a
+  // choice equal to the theme's leaves no trace. Picking Straight on a neon
+  // board used to delete the facet, and the theme drew orthogonal anyway.
+  it('under a theme, choosing straight is recorded when the theme routes otherwise', () => {
+    const neon: SpatialCanvas = {
+      ...empty,
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    }
+    const straight = applyCommand(neon, { kind: 'set-edge-routing', style: 'straight' })
+    expect(edgesFacet(straight)).toEqual({ routing: 'straight' })
+
+    const back = applyCommand(straight, { kind: 'set-edge-routing', style: 'orthogonal' })
+    expect(edgesFacet(back)).toBeUndefined()
+    expect(back['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({ theme: 'visual.neon' })
   })
 
   // Routing and jumps are fields of one facet but independent settings —
@@ -1157,5 +1160,48 @@ describe('decide-proposal', () => {
       ],
     })
     expect(next.nodes[0]?.x).toBe(40)
+  })
+})
+
+describe('set-canvas-facet', () => {
+  // The canvas-envelope twin of set-node-facet, and facet-GENERIC for the
+  // same reason: the key comes from the widget, so this module never names a
+  // domain. `visual.symbol/v0` is the first caller.
+  const base: SpatialCanvas = { nodes: [], edges: [] }
+  const facetOf = (canvas: SpatialCanvas, key: string) => canvas['x-whiteboard']?.facets?.[key]
+
+  it('stores the payload in the canvas facets bucket', () => {
+    const next = applyCommand(base, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'emoji', char: '📌' },
+    })
+    expect(facetOf(next, 'visual.symbol/v0')).toEqual({ kind: 'emoji', char: '📌' })
+  })
+
+  it('undefined removes the facet, and a canvas that reverted serializes like one that never chose', () => {
+    const marked = applyCommand(base, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'icon', name: 'star' },
+    })
+    const reverted = applyCommand(marked, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: undefined,
+    })
+    expect(reverted).toEqual(base)
+    expect('x-whiteboard' in reverted).toBe(false)
+  })
+
+  it('leaves another facet in the bucket alone', () => {
+    const withEdges = applyCommand(base, { kind: 'set-edge-routing', style: 'curved' })
+    const both = applyCommand(withEdges, {
+      kind: 'set-canvas-facet',
+      key: 'visual.symbol/v0',
+      payload: { kind: 'emoji', char: '⭐' },
+    })
+    expect(facetOf(both, 'visual.edges/v0')).toEqual({ routing: 'curved' })
+    expect(facetOf(both, 'visual.symbol/v0')).toEqual({ kind: 'emoji', char: '⭐' })
   })
 })

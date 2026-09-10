@@ -400,9 +400,7 @@ describe('DaemonDocumentPage', () => {
 
     const oldBackend = createdBackends[0]!
 
-    await act(async () => {
-      await switchDocumentViaConnections('Second board')
-    })
+    await switchDocumentViaConnections('Second board')
 
     expect(oldBackend.disconnectCount).toBe(1)
     expect(createdBackends).toHaveLength(2)
@@ -506,9 +504,7 @@ describe('DaemonDocumentPage', () => {
     })
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 
-    await act(async () => {
-      await switchDocumentViaConnections('Second board')
-    })
+    await switchDocumentViaConnections('Second board')
 
     // The stale sync-off state must not outlive the backend that produced it.
     expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
@@ -743,6 +739,20 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all reached `versionsResponseSchema` and this
+          // test quietly exercised a schema failure it is not about.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
@@ -753,7 +763,6 @@ describe('DaemonDocumentPage', () => {
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 0,
                     auto: false,
-                    hasThumbnail: false,
                     branchName: 'main',
                   },
                 }),

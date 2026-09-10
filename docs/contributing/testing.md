@@ -240,7 +240,7 @@ Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Test
 | Script | What it covers |
 |---|---|
 | `pnpm smoke` | Startup-only: MCP server starts without fatal errors and stays alive for 3 s |
-| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_document_create` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_canvas_snapshot` (default, and `layout:true`) / `wb_viewport_set` → version save/list/restore → `wb_document_set` → `wb_document_get` |
+| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_workspace_edit` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_canvas_snapshot` (default, and `layout:true`) / `wb_viewport_set` → version save/list/restore → `document.set` → `wb_document_get` |
 
 Run all mcp-smoke tests together:
 
@@ -296,6 +296,28 @@ Both `ERROR_PATH_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every 
 `src/server/mcp/tool-structured-content.property.test.ts` enforces classification invariants as a meta-property test (runs with `pnpm test --project mcp-node`). `mcp-e2e-checkpoint.smoke-impl.ts` enforces a SET equality guard between `tools/list` runtime results and `ALL_REGISTERED_TOOLS`.
 
 **Adding a new MCP tool**: Update `mcp-smoke-coverage.ts` first. If you skip this step, both the meta-property test and the smoke SET guard fail.
+
+### MCP tool-surface scoreboards (ADR-0031)
+
+Two pinned scoreboards judge the MCP tool table itself, beside the smoke that
+proves each tool works:
+
+| Instrument | Runs | Measures |
+|---|---|---|
+| `src/server/mcp/tool-surface-quality.test.ts` | `pnpm test --project mcp-node` | Per tool, off a real `tools/list`: model-visible bytes (name + description + input schema), wire bytes, description words, parameters and how many are undescribed, whether a stray key is refused or stripped, which neighbours the description names — plus the totals and that every schema-invalid call is a tool error. Pinned exactly; a change re-pins its row and says why. |
+| `src/server/mcp/tool-call-count-quality.test.ts` | `pnpm test --project mcp-node` | Calls and request/response bytes per errand in `shared/test-utils/mcp-errand-corpus.ts`. |
+| `pnpm --filter @kamiazya/whiteboard-mcp eval:tool-surface` | on demand, needs the `claude` CLI and API quota; skips cleanly without | A real model given only this server's tools, from an empty directory, on a seeded fixture (`scripts/eval/fixture.mjs`), one task at a time (`scripts/eval/tasks.mjs`). Graded by outcome — the answer string or the state read back — with calls, tools used, tool errors, tokens, cost and pass@k / pass^k over `--trials`. `--dry-run` seeds and checks the verifiers with no model call. |
+
+The oracle for the first lives in `src/shared/test-utils/tool-surface-metrics.ts`
+and never imports the registration code, so the surface cannot grade itself.
+Run the third before and after any change to a tool's name, description, schema
+or existence, and put both readings in the PR.
+
+The third also scores every board a write task names with canvas-render's
+drawing score (`packages/canvas-render/src/quality/drawing-score.ts`, pinned
+over hand-drawn references and drafts in `drawing-quality.test.ts`), so a
+drawing the verifier accepts and a reader would not is a non-zero debt column
+on the run's line rather than something only the rendered SVG could show.
 
 ---
 

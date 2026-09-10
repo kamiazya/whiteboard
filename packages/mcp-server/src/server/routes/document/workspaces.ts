@@ -29,6 +29,7 @@ import {
 import {
   followReferencesAfterRename,
   type ServerDeps,
+  WorkspaceSegmentUnusableError,
   wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
@@ -364,7 +365,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       if (err instanceof DocumentPathTakenError) {
         return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
-      getLogger('document').error({ err: err as Error }, 'wb_document_create failed unexpectedly')
+      // The refusal the comment above promises: a handle that names nothing
+      // and cannot be a segment is the caller's to change, not a failure.
+      if (err instanceof WorkspaceSegmentUnusableError) {
+        return c.json({ title: err.message } satisfies ApiErrorBody, 400)
+      }
+      getLogger('document').error({ err: err as Error }, 'wbDocumentCreate failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
   })
@@ -373,7 +379,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   // version thumbnails, and doc-cache entry. Idempotent-shaped 404 for a
   // missing canvas rather than a throw.
   //
-  // An ADAPTER over `wb_document_delete` (ADR-0018), not a second
+  // An ADAPTER over `wbDocumentDelete` (ADR-0018), not a second
   // implementation of it. The two were separate sequences performing the
   // same delete, and only one of them cleaned up; sharing the pieces closed
   // that gap once, and sharing the operation is what stops the next piece
@@ -407,7 +413,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('document').error({ err: err as Error }, 'wb_document_delete failed unexpectedly')
+        getLogger('document').error({ err: err as Error }, 'wbDocumentDelete failed unexpectedly')
         return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
       }
     },

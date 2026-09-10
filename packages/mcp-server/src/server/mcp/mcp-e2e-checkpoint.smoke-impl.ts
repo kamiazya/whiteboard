@@ -50,7 +50,8 @@ export function buildCheckpointChildEnv(
 }
 
 /**
- * Issues the first daemon-triggering tool call (wb_document_create), optionally
+ * Issues the first daemon-triggering tool call (a `wb_workspace_edit`
+ * `document.create`), optionally
  * retried across bounded cold-start windows via retryDaemonStartup. Extracted
  * so the retry wiring is unit-testable against a fake callTool without spawning
  * a real MCP child process.
@@ -60,14 +61,19 @@ export function triggerDaemonDocumentCreate(
   options: { retryDaemonStartup: boolean; maxDaemonStartupRetries: number },
 ): Promise<Record<string, unknown>> {
   const attempt = () =>
-    callTool('wb_document_create', {
+    callTool('wb_workspace_edit', {
       workspaceId: WORKSPACE_ID,
-      path: 'e2e-src',
-      // markdown, because the flow below sets a facet on it — facets are OKF
-      // frontmatter, and nothing here needs a spatial canvas: version
-      // save/list/restore is about history, not content shape.
-      kind: 'markdown',
       createWorkspace: true,
+      ops: [
+        {
+          op: 'document.create',
+          path: 'e2e-src',
+          // markdown, because the flow below sets a facet on it — facets are
+          // OKF frontmatter, and nothing here needs a spatial canvas: version
+          // save/list/restore is about history, not content shape.
+          kind: 'markdown',
+        },
+      ],
     })
   return options.retryDaemonStartup
     ? retryDaemonStartup({ attempt, maxRetries: options.maxDaemonStartupRetries })
@@ -245,41 +251,46 @@ export async function runE2eCheckpointSmoke({
       }
     }
 
-    // wb_document_create is the first daemon-dependent RPC, so its failure mode is
+    // This create is the first daemon-dependent RPC, so its failure mode is
     // the daemon cold-starting under contention. Retrying is opt-in: only the
     // tarball smoke (no fixed vitest testTimeout) enables it.
-    const created = await triggerDaemonDocumentCreate(callTool, {
+    const batch = await triggerDaemonDocumentCreate(callTool, {
       retryDaemonStartup: shouldRetryDaemonStartup,
       maxDaemonStartupRetries,
     })
-    if (typeof created.documentId !== 'string' || created.path !== 'e2e-src') {
-      throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
+    const created = (batch.results as { documentId?: unknown; path?: unknown }[] | undefined)?.[0]
+    if (typeof created?.documentId !== 'string' || created.path !== 'e2e-src') {
+      throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(batch)}`)
     }
     const documentId = created.documentId
-    console.log(`[e2e] wb_document_create → ${documentId}`)
+    console.log(`[e2e] document.create → ${documentId}`)
 
     // wb_facet_set seeds extension-facet state on the created document so the
     // version saved below has content to round-trip through restore.
     const facets = await callTool('wb_facet_set', {
       workspaceId: WORKSPACE_ID,
-      documentId,
+      documentIds: [documentId],
       facets: { 'e2e.check/v1': { note: 'before-save' } },
     })
-    if (facets.documentId !== documentId) {
+    const updatedFacets = facets.updated as Array<{ documentId?: string }> | undefined
+    if (updatedFacets?.[0]?.documentId !== documentId) {
       throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
     }
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
     const saved = await callTool('wb_version_save', {
       workspaceId: WORKSPACE_ID,
-      documentId,
+      documentIds: [documentId],
       label: 'e2e-version-1',
     })
-    const savedVersion = saved.version as
-      | { id?: string; label?: string; auto?: boolean }
-      | undefined
+    const savedRow = (
+      saved.saved as
+        | Array<{ documentId?: string; version?: { id?: string; label?: string; auto?: boolean } }>
+        | undefined
+    )?.[0]
+    const savedVersion = savedRow?.version
     if (
-      saved.documentId !== documentId ||
+      savedRow?.documentId !== documentId ||
       !savedVersion?.id ||
       savedVersion.label !== 'e2e-version-1' ||
       savedVersion.auto !== false

@@ -1,7 +1,10 @@
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
+  readCoreFacets,
+  readDocumentKind,
   readFacets,
   readSpatialCanvas,
+  writeCoreFacets,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -19,7 +22,15 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError } from './errors.js'
-import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
+import {
+  createFacetSetTool,
+  DocumentHasNoFrontmatterError,
+  FacetSetNeedsPayloadError,
+  facetSetInputSchema,
+  NodeAndCanvasTargetError,
+  NodeTargetNeedsOneDocumentError,
+  TagsTargetDocumentError,
+} from './facet-set.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -39,13 +50,12 @@ describe('wb_facet_set tool', () => {
 
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'todo' } },
     })
 
     expect(result).toEqual({
-      documentId: DOCUMENT_ID,
-      facets: { 'example.kanban/v1': { status: 'todo' } },
+      updated: [{ documentId: DOCUMENT_ID, facets: { 'example.kanban/v1': { status: 'todo' } } }],
     })
   })
 
@@ -56,7 +66,7 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'todo' } },
     })
 
@@ -78,16 +88,16 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.priority/v1': { level: 'high' } },
     })
 
-    expect(result.facets).toEqual({
+    expect(result.updated[0]?.facets).toEqual({
       'example.kanban/v1': { status: 'todo' },
       'example.priority/v1': { level: 'high' },
     })
@@ -100,16 +110,16 @@ describe('wb_facet_set tool', () => {
 
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'done' } },
     })
 
-    expect(result.facets).toEqual({ 'example.kanban/v1': { status: 'done' } })
+    expect(result.updated[0]?.facets).toEqual({ 'example.kanban/v1': { status: 'done' } })
   })
 
   test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
@@ -120,7 +130,7 @@ describe('wb_facet_set tool', () => {
     await expect(
       tool.execute({
         workspaceId: 'ws-other',
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'example.kanban/v1': { status: 'todo' } },
       }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
@@ -130,7 +140,7 @@ describe('wb_facet_set tool', () => {
     expect(() =>
       facetSetInputSchema.parse({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { title: 'not an extension facet' },
       }),
     ).toThrow()
@@ -155,7 +165,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     await expect(
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'example.sample/v1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
@@ -169,7 +179,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     await expect(
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'example.sample/v1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
@@ -189,11 +199,11 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 
     const result = await createFacetSetTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.sample/v1': { status: 'open' } },
     })
 
-    expect(result.facets).toEqual({ 'example.sample/v1': { status: 'open' } })
+    expect(result.updated[0]?.facets).toEqual({ 'example.sample/v1': { status: 'open' } })
   })
 })
 
@@ -224,10 +234,10 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     const tool = await setupWith()
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'ticket.sample/v0': { status: 'open' } },
     })
-    expect(result.facets).toEqual({ 'ticket.sample/v0': { status: 'open' } })
+    expect(result.updated[0]?.facets).toEqual({ 'ticket.sample/v0': { status: 'open' } })
   })
 
   test('rejects a registered facet with an invalid payload, storing nothing', async () => {
@@ -235,7 +245,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'ticket.sample/v0': { status: 'nope' } },
       }),
     ).rejects.toThrow(FacetWriteRejectedError)
@@ -246,10 +256,37 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'ticket.sample/v3': { status: 'open' } },
       }),
     ).rejects.toThrow(/ticket\.sample\/v0/)
+  })
+
+  test('accepts visual.symbol on a markdown document, now that it targets one', async () => {
+    // The markdown half of "a document wears a symbol" is writable through
+    // this tool the moment the facet declares the target. The SPATIAL half
+    // is not: a symbol on a canvas is a canvas-target write, which this
+    // tool has no path for (see the rejection below, and the message it
+    // carries).
+    const tool = await setupWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      facets: { 'visual.symbol/v0': { kind: 'emoji', char: '📌' } },
+    })
+    expect(result.updated[0]?.facets).toEqual({ 'visual.symbol/v0': { kind: 'emoji', char: '📌' } })
+  })
+
+  test('still refuses a symbol payload the schema rejects', async () => {
+    const tool = await setupWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        // Two graphemes is not a badge.
+        facets: { 'visual.symbol/v0': { kind: 'emoji', char: '✅🔥' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
   })
 
   test("rejects a canvas-target facet on a document (targets are the definition's to declare)", async () => {
@@ -257,7 +294,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'visual.edges/v0': { routing: 'curved' } },
       }),
     ).rejects.toThrow(/canvas/)
@@ -267,10 +304,10 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     const tool = await setupWith()
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'someone.else/v9': { anything: ['goes'] } },
     })
-    expect(result.facets).toEqual({ 'someone.else/v9': { anything: ['goes'] } })
+    expect(result.updated[0]?.facets).toEqual({ 'someone.else/v9': { anything: ['goes'] } })
   })
 
   test('the bundled registry is the default when deps carry none', async () => {
@@ -280,7 +317,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         facets: { 'visual.edges/v0': { routing: 'spiral' } },
       }),
     ).rejects.toThrow(FacetWriteRejectedError)
@@ -305,11 +342,11 @@ describe('node-target writes (nodeId)', () => {
     const { documentStore, tool } = await spatialWith()
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       nodeId: 'n1',
       facets: { 'visual.shape/v0': { kind: 'hexagon' } },
     })
-    expect(result.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
+    expect(result.updated[0]?.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
 
     const loaded = await documentStore.loadSnapshot({
       docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
@@ -327,17 +364,17 @@ describe('node-target writes (nodeId)', () => {
     const { tool } = await spatialWith()
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       nodeId: 'n1',
       facets: { 'visual.shape/v0': { kind: 'diamond' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       nodeId: 'n1',
       facets: { 'visual.shape/v0': null },
     })
-    expect(result.facets).toEqual({})
+    expect(result.updated[0]?.facets).toEqual({})
   })
 
   test('rejects a registered facet whose targets exclude node', async () => {
@@ -348,7 +385,7 @@ describe('node-target writes (nodeId)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         nodeId: 'n1',
         facets: { 'visual.edges/v0': { routing: 'curved' } },
       }),
@@ -365,7 +402,7 @@ describe('node-target writes (nodeId)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         nodeId: 'n1',
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       }),
@@ -383,7 +420,7 @@ describe('node-target writes (nodeId)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         nodeId: 'n1',
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       }),
@@ -395,7 +432,7 @@ describe('node-target writes (nodeId)', () => {
     await expect(
       tool.execute({
         workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         nodeId: 'missing',
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       }),
@@ -410,14 +447,360 @@ describe('null deletes on the document path', () => {
     const tool = createFacetSetTool(makeDeps(documentStore))
     await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': { status: 'todo' }, 'example.priority/v1': { level: 'high' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       facets: { 'example.kanban/v1': null },
     })
-    expect(result.facets).toEqual({ 'example.priority/v1': { level: 'high' } })
+    expect(result.updated[0]?.facets).toEqual({ 'example.priority/v1': { level: 'high' } })
+  })
+})
+
+describe('several documents in one call', () => {
+  const SECOND_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
+
+  test('applies the same facets to every document, in the order asked for', async () => {
+    // Axis B: tagging N documents cost N calls, because the tool took one
+    // `documentId`. The facets are shared rather than per document — "tag
+    // these as reviewed" is the thing a caller is actually doing, and two
+    // different payloads are two different writes.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID, 'second')
+    const tool = createFacetSetTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID, SECOND_ID],
+      facets: { 'example.kanban/v1': { status: 'todo' } },
+    })
+
+    expect(result.updated.map((entry) => entry.documentId)).toEqual([DOCUMENT_ID, SECOND_ID])
+    expect(result.updated.map((entry) => entry.facets)).toEqual([
+      { 'example.kanban/v1': { status: 'todo' } },
+      { 'example.kanban/v1': { status: 'todo' } },
+    ])
+  })
+
+  test('one document outside the workspace writes NOTHING, not a prefix', async () => {
+    // The payoff of checking every document before writing any. Without it
+    // the first document is tagged and the call still throws, so a caller
+    // reading the error has no way to know part of the batch landed.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createFacetSetTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, SECOND_ID],
+        facets: { 'example.kanban/v1': { status: 'todo' } },
+      }),
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
+
+    const after = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      facets: {},
+    })
+    expect(after.updated[0]?.facets).toEqual({})
+  })
+
+  test('a nodeId names a node of ONE document, so it refuses a batch', async () => {
+    // `nodeId` narrows to a node INSIDE a document. Two documents do not
+    // share a node id space, so "this node of these five documents" names
+    // nothing — better refused at the schema than applied to whichever
+    // documents happen to have a node by that name.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, SECOND_ID, 'second')
+    const tool = createFacetSetTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, SECOND_ID],
+        nodeId: 'n1',
+        facets: {},
+      }),
+    ).rejects.toThrow(NodeTargetNeedsOneDocumentError)
+  })
+})
+
+describe('wb_facet_set canvas target (ADR-0030)', () => {
+  const THEME_KEY = 'visual.theme/v0'
+
+  async function spatialStore() {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'spatial')
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hi' }],
+        edges: [],
+      })
+    })
+    return store
+  }
+
+  test("target: 'canvas' writes a canvas-target facet into the canvas envelope", async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+    })
+    expect(result).toEqual({
+      updated: [{ documentId: DOCUMENT_ID, facets: { [THEME_KEY]: { theme: 'visual.neon' } } }],
+    })
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+      [THEME_KEY]: { theme: 'visual.neon' },
+    })
+  })
+
+  test('deleting the last canvas facet removes the bucket and the empty envelope', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.sketch' } },
+    })
+    const cleared = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: null },
+    })
+    expect(cleared.updated[0]?.facets).toEqual({})
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readSpatialCanvas(doc)['x-whiteboard']).toBeUndefined()
+  })
+
+  test('refuses a theme id no plugin registered, naming what is', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        target: 'canvas',
+        facets: { [THEME_KEY]: { theme: 'visual.chalk' } },
+      }),
+    ).rejects.toThrow(/visual\.sketch/)
+  })
+
+  test("a canvas-target facet without target: 'canvas' is refused by its targets", async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
+  })
+
+  test("target: 'canvas' on a markdown document is a kind mismatch", async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+    })
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        target: 'canvas',
+        facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test("target: 'canvas' on a kind-less document writes the envelope and declares nothing", async () => {
+    // The same stance the document branch takes on a fresh document: the
+    // write replaces nothing, so it neither fails nor guesses a kind — and
+    // the message can never read "is a markdown document" about a document
+    // that declared none.
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, () => {})
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      target: 'canvas',
+      facets: { [THEME_KEY]: { theme: 'visual.neon' } },
+    })
+    expect(result.updated[0]?.facets).toEqual({ [THEME_KEY]: { theme: 'visual.neon' } })
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded!.manifest, loaded!.chunks))
+    expect(readDocumentKind(doc)).toBeUndefined()
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.facets).toEqual({
+      [THEME_KEY]: { theme: 'visual.neon' },
+    })
+  })
+
+  test('nodeId and a canvas target together name two things at once and are refused', async () => {
+    const store = await spatialStore()
+    const tool = createFacetSetTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'n1',
+        target: 'canvas',
+        facets: {},
+      }),
+    ).rejects.toThrow(NodeAndCanvasTargetError)
+  })
+})
+
+describe('tags (OKF core), the errand a caller is usually doing', () => {
+  async function reload(store: FakeDocumentStore): Promise<LoroDoc> {
+    const loaded = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
+    if (loaded === null) throw new Error('nothing stored')
+    const doc = new LoroDoc()
+    doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+    return doc
+  }
+
+  async function markdownWithTags(tags: string[]): Promise<FakeDocumentStore> {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+      writeCoreFacets(doc, { type: 'note', tags })
+    })
+    return store
+  }
+
+  test('add appends what is missing and keeps the rest; remove drops by name', async () => {
+    const store = await markdownWithTags(['retro', 'draft'])
+    const tool = createFacetSetTool(makeDeps(store))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['archived', 'retro'], remove: ['draft'] },
+    })
+    expect(result.updated[0]?.tags).toEqual(['retro', 'archived'])
+    const stored = await reload(store)
+    expect(readCoreFacets(stored)?.tags).toEqual(['retro', 'archived'])
+    // The core `type` the write did not mention is still there.
+    expect(readCoreFacets(stored)?.type).toBe('note')
+  })
+
+  test('tags and facets can travel in one call, and facets alone still work', async () => {
+    const store = await markdownWithTags([])
+    const tool = createFacetSetTool(makeDeps(store))
+    const both = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: { add: ['reviewed'] },
+      facets: { 'example.kanban/v1': { status: 'done' } },
+    })
+    expect(both.updated[0]).toEqual({
+      documentId: DOCUMENT_ID,
+      facets: { 'example.kanban/v1': { status: 'done' } },
+      tags: ['reviewed'],
+    })
+    const facetsOnly = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      facets: { 'example.kanban/v1': null },
+    })
+    expect(facetsOnly.updated[0]).toEqual({ documentId: DOCUMENT_ID, facets: {} })
+    expect(readCoreFacets(await reload(store))?.tags).toEqual(['reviewed'])
+  })
+
+  test('a call with neither tags nor facets is refused, not silently a no-op', async () => {
+    const store = await markdownWithTags([])
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+      }),
+    ).rejects.toThrow(FacetSetNeedsPayloadError)
+  })
+
+  test('an empty tags object is refused by the schema, not saved as a no-op', () => {
+    const parsed = facetSetInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      tags: {},
+    })
+    expect(parsed.success).toBe(false)
+    expect(
+      facetSetInputSchema.safeParse({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { remove: ['x'] },
+      }).success,
+    ).toBe(true)
+  })
+
+  test('tags belong to a document, so nodeId and tags together are refused', async () => {
+    const store = await markdownWithTags([])
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        nodeId: 'n1',
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(TagsTargetDocumentError)
+  })
+
+  test('a spatial document has no frontmatter to tag', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'spatial'))
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test('a markdown document with no frontmatter yet is told where a tag would go', async () => {
+    const store = new FakeDocumentStore()
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(store, DOCUMENT_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    await expect(
+      createFacetSetTool(makeDeps(store)).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID],
+        tags: { add: ['x'] },
+      }),
+    ).rejects.toThrow(DocumentHasNoFrontmatterError)
+  })
+
+  test('the tool tells a model it tags, by name', () => {
+    const tool = createFacetSetTool(makeDeps(new FakeDocumentStore()))
+    expect(tool.description).toMatch(/\btags?\b/)
   })
 })

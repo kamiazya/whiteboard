@@ -1,6 +1,35 @@
 # ADR-0029: A proposal is an anchored change, not a point in time
 
-**Status:** Accepted — design of record (human gate, 2026-09-06); nothing implemented yet. Retires the variation surface [ADR-0022](0022-variation-addressing.md) addresses.
+**Status:** Accepted — design of record (human gate, 2026-09-06). Retires the variation surface [ADR-0022](0022-variation-addressing.md) addresses.
+
+Implementation, as of 2026-09-07: decisions 1-8 have landed — the proposal
+record, the in-place card on a canvas and per-change adoption, the
+`wb_canvas_edit` mode with `propose` as its default, and `wb_body_edit` for a
+markdown note's replacement passage.
+
+Retiring the variation surface is complete down to storage, in three
+increments: the UI (chip, merge dialog, both combine banners, the `?v=`
+preview), then the browser's branch client and the version list's lane
+column, then the branch object itself — `packages/history`'s `branches/` and
+`merge/`, the daemon's `/branches` routes, the `branches` table (migration
+`0023`), and the record's branch plane.
+
+Two mechanics stopped consulting branch tips in that last increment, and both
+were measured before the change (see
+`packages/mcp-server/src/server/store/history-retention.test.ts`): compaction's
+cut is now the earliest version row alone, and file-GC no longer counts a
+tip's checkout as a live reference set.
+
+Decision 9's place in the inspector segment is done: `proposals` is a member
+of `InspectorKind`, and its panel (`apps/web`'s `ProposalsPanel`) is an INDEX
+— it counts what is waiting and a row press moves the board onto that
+proposal's chrome and opens the card already drawn there, rather than growing
+a second Adopt. What that leaves open is the half a panel cannot answer:
+what the CANVAS looks like under forty markers (see the Consequences below).
+
+What is NOT done: `versions.branchName` — a label on a version row rather
+than a branch object, which leaves through the published version wire and the
+browser's IndexedDB schema, so it is its own increment.
 
 ## Context
 
@@ -226,17 +255,71 @@ tool:
   give `Xf`), and a whole-proposal Adopt applies exactly that set — later,
   and further from the call that caused it.
 
-Still open: the in-place adopt surface, and what becomes of `wb_body_patch`.
+Still open: the in-place adopt surface.
 
-**`wb_body_patch` cannot simply be retired into `wb_canvas_edit`.** The plan
-said its text-node job would move to `node.patch`, and that destination does
-not exist: `nodePatchFieldsSchema` carries geometry, colour and the shared
-label — deliberately "not the per-type content fields", since the per-type
-node schemas are non-strict and an unrecognised key is stripped rather than
-rejected, so a `text` in a patch would be a silent no-op. Retiring the tool
-today would remove the only way to edit a text node's text through MCP.
-Closing it needs a decision first: teach `node.patch` (and therefore the
-proposal vocabulary) about a node's content, or keep a separate verb for it.
+**`wb_body_patch` is retired into `wb_canvas_edit`** (project owner's
+decision, 2026-09-09), taking the first of the two options this section left
+open: teach `node.patch` about a node's content.
+
+The blocker recorded here was **imprecise, and measuring it is what unlocked
+the decision**. It said "a `text` in a patch would be a silent no-op". Probed
+directly against `spatialNodeSchema`, a `text` patched onto a TEXT node
+works — `text` is a key that type has, so the re-parse does not strip it.
+What is silently dropped is a key the TARGET's type does not have: `label`
+onto a text node (which the tool did, and a test pinned, calling it
+"surprising enough that a reader would otherwise call it a bug"), or `url`
+onto a group. The hazard is per-TYPE, not per-field.
+
+That distinction is what makes the fix small. The patch site compares the
+keys it was handed against the node the re-parse produced and refuses the
+difference by name — one check covering every key and every type, rather
+than four per-type schemas. The stored schemas stay non-strict, which they
+must: JSON Canvas 1.0 lets a document carry another tool's extension keys,
+and `x-whiteboard` is already handled with `.catch` for exactly that reason,
+so making them strict would trade a silent no-op for unreadable documents.
+
+Two consequences beyond the call count:
+
+- **Node text comes under decision 7.** `wb_body_patch`'s `mode` was `full`
+  vs `range` and it had no `propose`, so editing a node's text was the one
+  content write that escaped the proposal layer entirely. As `node.patch` it
+  is proposed by default like every other content change.
+- **The proposal vocabulary widened for free.** `canvas-propose.ts` derives
+  its patchable fields from `nodePatchFieldsSchema.shape`, so a proposed
+  change can carry content without a second edit — which is what the
+  parenthetical "(and therefore the proposal vocabulary)" above was warning
+  would be needed.
+
+`mode: 'range'` had a real user — the smoke drives it — so it moves too, as a
+`node.splice` op. Being an op rather than a tool, it gains what
+`wb_body_patch` could not do: several nodes spliced in one call.
+
+### 6b. The bubble borrows the comment layer's grammar, but not its WIDTH
+
+*(supplement, measured)* A proposal's bubble reuses the comment layer's
+constants and grammar deliberately — a reader who has used a comment has
+already learned how to read this, and two sets of numbers for one visual
+language would drift. One number is now excepted, and the exception is
+narrower than it sounds: the WIDTH its text measures to.
+
+A comment carries prose somebody wrote, so 200px is a judgement about
+reading prose over a canvas. A proposal's bubble carries a COUNT somebody
+reads at a glance (`3 proposed changes, 1 needs a look`), so that width was
+borrowed rather than earned — and the borrowed box comes out 216px wide,
+which does not fit between columns 168px apart however many candidates the
+placer is given.
+
+`PROPOSAL_TEXT_MAX_WIDTH_PX` is 145: the narrowest width that still fits
+`1 proposed change` on ONE line. The second half of that sentence is what
+picked it, and it was not the obvious answer — **height dominates width**.
+120px is narrower and scores WORSE (node overlap 199048 against 165653 at
+forty proposals), because the label wraps and the taller box reaches a row
+it used to clear; the same wrap costs the uncrowded control board nine of
+its seventeen clean bubbles. Everything else about the bubble — padding,
+radius, the leader, the card's own grammar — stays the comment layer's.
+
+The density (`compact`) is not an exception at all: it is the axis the
+comment layer already declares for a surface with less room.
 
 ### 7. `wb_canvas_edit` gains a mode, and its default is *propose*
 
@@ -321,9 +404,9 @@ Judged by fit with the derived shape, not by whether it is wanted:
 | Annotation layer (`threads`, marks) | **Unchanged** | Anchored, follows edits, floats above content — the derived shape itself. It gains a payload. |
 | Edit ops (`wb_canvas_edit`'s union) | **Unchanged** | Already an anchored intended change. Gains `assumed value` and a mode. |
 | History (version rows over a frontier) | **Unchanged** | Answers a different question. A frontier is right for *"what did this used to be"* — a past state genuinely is a point in time. |
-| `planMerge`'s **output** shape | **Survives** | new / changed / conflict per element is what a review surface renders. Its input (two frontiers) is not what will be at hand. |
-| Branches (tip, HEAD, create/switch/merge) | **Does not fit** | Being a point in time, it can satisfy neither decision 4 nor decision 5. |
-| The variation UI (chip, `?v=`, merge dialog) | **Does not fit** | It sends a person elsewhere to look, which decision 1 rejects. |
+| `planMerge`'s **output** shape | **Survives as a shape, not as code** | new / changed / conflict per element is what a review surface renders, and the proposal record carries that per change. Its INPUT (two frontiers) is not what will be at hand, so the function went with the branch; what survived is the vocabulary, re-expressed on the proposal. |
+| Branches (tip, HEAD, create/switch/merge) | **Does not fit** — retired | Being a point in time, it can satisfy neither decision 4 nor decision 5. |
+| The variation UI (chip, `?v=`, merge dialog) | **Does not fit** — retired | It sends a person elsewhere to look, which decision 1 rejects. |
 
 **A frontier is not retired.** What is retired is *using a frontier to
 represent a proposal*. History keeps it, on its own merits.
@@ -352,13 +435,53 @@ Harder, and these are real:
   is a person expecting their edit to be a proposal, or the reverse.
 - **A pile of open proposals is a new state to design.** Decision 9 says
   collapse to a count, which is a direction, not a finished answer for what a
-  document with forty open proposals looks like.
+  document with forty open proposals looks like. The inspector segment's
+  Proposals member carries the count, and its panel is the index that finds
+  one without hunting the board for it.
+
+  The BOARD is being answered by measurement rather than by argument, and the
+  first two readings changed what the question was. **Crowding, not count, is
+  the axis**: at a 220px column pitch the covered fraction barely moves
+  between five proposals and forty (17.1% -> 20.2%), and at a 168px pitch the
+  same counts go 28.4% -> 41.4% -> 101.0% -> 124.6% — past 100% the average
+  bubble is overlapped by more than its own area. And **a clean placement
+  exists for all forty**: a wider candidate search finds zero-coverage
+  positions for every one, so this is a candidate-generation problem rather
+  than a full board. What that costs is leader length, which is the trade the
+  scoreboard prices.
+
+  `layout/annotation-density-quality.test.ts` is that scoreboard, and both
+  increments answering the board were judged by it. The first narrowed the
+  bubble (decision 6b below). The second gave the placer a RING of
+  candidates out to 180px, where it had only four boxes a fixed 14px from
+  the anchor and so could not trade distance for clarity at all. Together,
+  at forty proposals on the crowded board: total overlap 318235 -> 40961,
+  clean bubbles 1 -> 22, and the uncrowded control went to 40 of 40 clean.
+  The price is the leader, 23px in every case before and up to 198px after,
+  and about 3.4x the annotation layer's layout time (under 2ms either way).
+
+  Two things that work found, both worth keeping:
+
+  - **The comment layer had the same collapse**, and nobody had looked. It
+    shares `comment-placement.ts`, so the corpus now covers it: one clean
+    bubble in forty before, eighteen after. A change to that placer cannot
+    be judged on the proposal numbers alone, which is why the scoreboard is
+    named for the annotation layer rather than for proposals.
+  - **A wider search broke an invariant the narrow one held by accident.**
+    A bubble may be pushed anywhere except over the thing it is about — and
+    with the ring it could land on a NEIGHBOUR's pin, because pins were
+    never obstacles. They are now, seeded before placement rather than as
+    each is drawn, since pushing them in order protects only the comments
+    after each one.
 - **`wb_canvas_edit`'s default changes.** Existing callers that expect a write
   to land will propose instead. This is a published surface on a `0.0.x`
   package with no users, so it is a break taken deliberately rather than a
   migration — but it is a break.
-- **Two mechanisms for "someone else's changes" exist during the transition**,
-  until the branch surface is removed.
+- **Two mechanisms for "someone else's changes" existed during the
+  transition.** Closed: the branch surface is gone, down to the table, so the
+  proposal is the only one. Kept here rather than deleted because a
+  consequence that was real and is now discharged is what tells a later reader
+  the transition actually finished, instead of leaving them to wonder.
 
 ## Alternatives considered
 

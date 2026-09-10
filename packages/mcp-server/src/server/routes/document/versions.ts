@@ -10,7 +10,6 @@ import {
   readSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
-import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
 import {
@@ -22,7 +21,6 @@ import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
   versionStore: VersionStore
-  getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
 }
 
 // GET /api/workspaces/:workspaceId/documents/:path/versions
@@ -118,19 +116,6 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
     }
     try {
       const doc = await getDoc(workspaceId, path)
-      // Include the current HEAD branch name in manual saves too.
-      let branchName: string | undefined
-      if (options.getHeadBranch) {
-        try {
-          const head = await options.getHeadBranch(workspaceId, path)
-          if (typeof head === 'string' && head.length > 0) branchName = head
-        } catch (err) {
-          if (isCorruptStoredDataError(err)) {
-            throw err
-          }
-          /* If HEAD cannot be resolved, fall back to the previous "main" behavior. */
-        }
-      }
       const nextOperator = operator ?? {
         kind: 'human' as const,
         peerId: doc.peerIdStr,
@@ -139,7 +124,6 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const entry = await versionStore.save(workspaceId, path, doc, {
         auto: false,
         ...(label !== undefined ? { label } : {}),
-        ...(branchName !== undefined ? { branchName } : {}),
         operator: nextOperator,
       })
       const response: SaveVersionResponse = { version: entry }

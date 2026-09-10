@@ -1,6 +1,5 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { deleteSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
   Client,
@@ -8,9 +7,7 @@ import {
   StreamableHTTPClientTransport,
 } from '@modelcontextprotocol/client'
 import { Hono } from 'hono'
-import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { makeSpatialDoc } from '../shared/test-utils/spatial-doc.js'
 import { withTempDataDir } from './routes/_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-app-test-')
@@ -496,22 +493,21 @@ describe('createApp daemon mutation auth', () => {
 
     await client.connect(transport)
     const tools = await client.listTools()
-    const canvasCreateTool = tools.tools.find((tool) => tool.name === 'wb_document_create')
+    const workspaceEditTool = tools.tools.find((tool) => tool.name === 'wb_workspace_edit')
     const createResult = await client.callTool({
-      name: 'wb_document_create',
+      name: 'wb_workspace_edit',
       arguments: {
         workspaceId: 'default',
-        path: 'via-mcp',
-        kind: 'spatial',
         createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'via-mcp', kind: 'spatial' }],
       },
     })
 
-    expect(canvasCreateTool).toBeDefined()
-    expect(canvasCreateTool?.outputSchema).toBeDefined()
+    expect(workspaceEditTool).toBeDefined()
+    expect(workspaceEditTool?.outputSchema).toBeDefined()
     expect(createResult.structuredContent).toMatchObject({
-      documentId: expect.any(String),
-      path: 'via-mcp',
+      applied: 1,
+      results: [{ documentId: expect.any(String), path: 'via-mcp' }],
     })
     expect(createResult.content).toEqual([
       {
@@ -545,19 +541,18 @@ describe('createApp daemon mutation auth', () => {
     await client.connect(transport)
     expect(client.getProtocolEra()).toBe('modern')
     const tools = await client.listTools()
-    expect(tools.tools.some((tool) => tool.name === 'wb_document_create')).toBe(true)
+    expect(tools.tools.some((tool) => tool.name === 'wb_workspace_edit')).toBe(true)
     const createResult = await client.callTool({
-      name: 'wb_document_create',
+      name: 'wb_workspace_edit',
       arguments: {
         workspaceId: 'default',
-        path: 'via-modern-mcp',
-        kind: 'spatial',
         createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'via-modern-mcp', kind: 'spatial' }],
       },
     })
     expect(createResult.structuredContent).toMatchObject({
-      documentId: expect.any(String),
-      path: 'via-modern-mcp',
+      applied: 1,
+      results: [{ documentId: expect.any(String), path: 'via-modern-mcp' }],
     })
     await transport.close()
   })
@@ -797,454 +792,6 @@ describe('createApp daemon mutation auth', () => {
   // branches metadata + canvas snapshot can race the doc-cache, the precise
   // 500 propagation needs a dedicated harness. Re-add as a follow-up once the
   // version-store conversion lands and the cache invalidation path is settled.
-
-  it('PUT /head rejects invalid target tip and does not change head', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const feature = state.branches.find((branch) => branch.name === 'feature')!
-    feature.tipFrontiers = 'not-a-valid-tip'
-    await saveDocumentBranches('session1', 'canvas-a', state)
-    const before = await loadDocumentBranches('session1', 'canvas-a')
-
-    const res = await app.request('/api/workspaces/session1/documents/canvas-a/head', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ branch: 'feature' }),
-    })
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('checkout-target'),
-    })
-    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
-  })
-
-  it('merge preview rejects invalid source tip without mutating branches', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    await saveDocument('session1', 'canvas-a', new LoroDoc(), { overwrite: true })
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const feature = state.branches.find((branch) => branch.name === 'feature')!
-    feature.tipFrontiers = 'not-a-valid-tip'
-    await saveDocumentBranches('session1', 'canvas-a', state)
-    const before = await loadDocumentBranches('session1', 'canvas-a')
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main', dryRun: true }),
-      },
-    )
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('feature'),
-    })
-    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
-  })
-
-  it('merge commit rejects invalid into tip without mutating live doc or branch tips', async () => {
-    const { clearCache } = await import('./store/doc-cache.js')
-    const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    const doc = new LoroDoc()
-    const list = doc.getMovableList('elements')
-    const element = list.insertContainer(0, new LoroMap())
-    element.set('id', 'rect-1')
-    element.set('type', 'rectangle')
-    doc.commit()
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const main = state.branches.find((branch) => branch.name === 'main')!
-    main.tipFrontiers = 'not-a-valid-tip'
-    await saveDocumentBranches('session1', 'canvas-a', state)
-    const before = await loadDocumentBranches('session1', 'canvas-a')
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main' }),
-      },
-    )
-
-    expect(res.status).toBe(500)
-    await expect(res.json()).resolves.toEqual({
-      error: 'corrupt_stored_data',
-      message: expect.stringContaining('main'),
-    })
-    await expect(loadDocumentBranches('session1', 'canvas-a')).resolves.toEqual(before)
-
-    clearCache()
-    const reloaded = await loadDocument('session1', 'canvas-a')
-    const elements = reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>
-    expect(elements.map((entry) => entry.id)).toEqual(['rect-1'])
-  })
-
-  it('merge pre-snapshot save carries system/merge operator', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const { FileVersionStore } = await import('./store/version-store.js')
-    const saveSpy = vi.spyOn(FileVersionStore.prototype, 'save')
-    const app = createApp(createRuntimeOptions())
-
-    const doc = new LoroDoc()
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main' }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const mergeSaveCall = saveSpy.mock.calls.find(
-      (call) =>
-        call[0] === 'session1' &&
-        call[1] === 'canvas-a' &&
-        (call[3] as { label?: string } | undefined)?.label === 'before merge: feature → main',
-    )
-    expect(mergeSaveCall).toBeTruthy()
-    expect(mergeSaveCall?.[3]).toMatchObject({
-      auto: true,
-      branchName: 'main',
-      label: 'before merge: feature → main',
-      operator: {
-        kind: 'system',
-        displayName: 'merge',
-      },
-    })
-    expect(
-      (mergeSaveCall?.[3] as { operator?: { peerId?: string } } | undefined)?.operator?.peerId,
-    ).toMatch(/\S+/)
-  })
-
-  it('merge dry run returns nonzero element counts for a nodes-model doc', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    const doc = makeSpatialDoc({
-      nodes: [{ id: 'A', type: 'text', text: 'hi', x: 0, y: 0, width: 10, height: 10 }],
-      edges: [],
-    })
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main', dryRun: true }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      preview?: { elementCount: number }
-      target?: { elementCount: number }
-      source?: { elementCount: number }
-      previewElements?: Array<{ id: string; type: string }>
-    }
-    expect(json.preview).toEqual({ elementCount: 1 })
-    expect(json.target).toEqual({ elementCount: 1 })
-    expect(json.source).toEqual({ elementCount: 1 })
-    // The dry-run preview payload is the nodes-model equivalent of the
-    // retired Excalidraw-style elements list — MergeDialog reads its
-    // .length as a previewElementCount fallback (contents are unread today).
-    expect(json.previewElements).toEqual([expect.objectContaining({ id: 'A', type: 'text' })])
-  })
-
-  it('merge dry run element counts include edges, matching previewElements.length', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    const doc = makeSpatialDoc({
-      nodes: [
-        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'B', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
-      ],
-      edges: [{ id: 'e1', fromNode: 'A', toNode: 'B' }],
-    })
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main', dryRun: true }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      preview?: { elementCount: number }
-      target?: { elementCount: number }
-      source?: { elementCount: number }
-      previewElements?: Array<{ id: string; type: string }>
-    }
-    // 2 nodes + 1 edge = 3 elements. A nodes-only count (countAliveNodes)
-    // would report 2 here, diverging from previewElements.length.
-    expect(json.preview).toEqual({ elementCount: 3 })
-    expect(json.target).toEqual({ elementCount: 3 })
-    expect(json.source).toEqual({ elementCount: 3 })
-    expect(json.previewElements).toHaveLength(3)
-    expect(json.preview?.elementCount).toBe(json.previewElements?.length)
-  })
-
-  it('merge dry run fires a resurrected badge when target deleted a node the source retains', async () => {
-    const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const app = createApp(createRuntimeOptions())
-
-    const doc = makeSpatialDoc({
-      nodes: [
-        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'B', type: 'text', text: 'b', x: 0, y: 0, width: 10, height: 10 },
-      ],
-      edges: [],
-    })
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    // Pin feature's tip to the pre-deletion state so it stops tracking the
-    // live doc (an empty tipFrontiers always resolves to the live doc).
-    // Recorded as WORKSPACE record frontiers — the lineage the production
-    // getCurrentFrontiers hook records tips in.
-    const { workspaceFrontiersForPath } = await import('./store/document-store.js')
-    const pinnedTip = Buffer.from(
-      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
-    ).toString('base64')
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const feature = state.branches.find((branch) => branch.name === 'feature')!
-    feature.tipFrontiers = pinnedTip
-    await saveDocumentBranches('session1', 'canvas-a', state)
-
-    // Main (the live doc, still HEAD) deletes A.
-    const mainDoc = await loadDocument('session1', 'canvas-a')
-    deleteSpatialNode(mainDoc, 'A')
-    await saveDocument('session1', 'canvas-a', mainDoc, { overwrite: true })
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main', dryRun: true }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as { badges: Array<Record<string, unknown>> }
-    expect(json.badges).toContainEqual({ type: 'resurrected', elementId: 'A' })
-  })
-
-  it('committed merge returns newElementIds/changedElementIds derived from the nodes model', async () => {
-    const { saveDocument, loadDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const { writeSpatialNode } = await import('@kamiazya/whiteboard-loro-adapter')
-
-    const app = createApp(createRuntimeOptions())
-
-    const doc = makeSpatialDoc({
-      nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
-      edges: [],
-    })
-    await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    // Pin main to the A-only state so it stops tracking the live doc.
-    const { workspaceFrontiersForPath } = await import('./store/document-store.js')
-    const mainOnlyTip = Buffer.from(
-      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
-    ).toString('base64')
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const main = state.branches.find((branch) => branch.name === 'main')!
-    main.tipFrontiers = mainOnlyTip
-    await saveDocumentBranches('session1', 'canvas-a', state)
-
-    // Reload (a fresh doc instance importing the same history) and add C on
-    // top — this is what feature's tip below points at, and what becomes
-    // the live doc's new content.
-    const withC = await loadDocument('session1', 'canvas-a')
-    writeSpatialNode(withC, {
-      id: 'C',
-      type: 'text',
-      text: 'c',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
-    })
-    await saveDocument('session1', 'canvas-a', withC, { overwrite: true })
-
-    const featureTip = Buffer.from(
-      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
-    ).toString('base64')
-    const afterAddC = await loadDocumentBranches('session1', 'canvas-a')
-    const feature = afterAddC.branches.find((branch) => branch.name === 'feature')!
-    feature.tipFrontiers = featureTip
-    await saveDocumentBranches('session1', 'canvas-a', afterAddC)
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main' }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as { newElementIds?: string[]; changedElementIds?: string[] }
-    expect(json.newElementIds).toEqual(['C'])
-    expect(json.changedElementIds ?? []).toEqual([])
-  })
-
-  it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
-    const { saveDocument } = await import('./store/document-store.js')
-    const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-
-    const app = createApp(createRuntimeOptions())
-
-    // Fork point: a single node A, written by one peer.
-    const forkDoc = makeSpatialDoc({
-      nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
-      edges: [],
-    })
-    await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
-
-    await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ name: 'feature' }),
-    })
-
-    // Source side: a REPLICA of the workspace record (its own peer), forked
-    // where A is still alive, independently adding F — the shape a second
-    // keeper's concurrent edit takes after the sync cutover. Neither tip's
-    // version vector is a subset of the other — the genuine bilateral case
-    // meetVersion (per-peer min of two vectors) exists for. Getting the
-    // meet wrong is directly observable: an incorrectly-advanced base (one
-    // that already reflects target's delete of A) would silence the
-    // resurrected badge below instead of firing it.
-    const { cloneStoredWorkspaceDoc, getWorkspaceDoc, saveWorkspaceDoc, loadDocument } =
-      await import('./store/document-store.js')
-    const { resolveWorkspaceDocument, documentContainers, writeSpatialCanvas } = await import(
-      '@kamiazya/whiteboard-loro-adapter'
-    )
-    const replica = (await cloneStoredWorkspaceDoc('session1'))!
-    replica.setPeerId('999')
-    const entry = resolveWorkspaceDocument(replica, 'canvas-a')!
-    const replicaFrom = replica.version()
-    writeSpatialCanvas(documentContainers(replica, entry.documentId), {
-      nodes: [
-        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
-        { id: 'F', type: 'text', text: 'f', x: 0, y: 0, width: 10, height: 10 },
-      ],
-      edges: [],
-    })
-    replica.commit()
-    const sourceTip = Buffer.from(encodeFrontiers(replica.frontiers())).toString('base64')
-
-    // Target side: this keeper continues past the fork and deletes A.
-    const live = await loadDocument('session1', 'canvas-a')
-    deleteSpatialNode(live, 'A')
-    await saveDocument('session1', 'canvas-a', live, { overwrite: true })
-    const { workspaceFrontiersForPath: frontiersOf } = await import('./store/document-store.js')
-    const mainTip = Buffer.from((await frontiersOf('session1', 'canvas-a'))!).toString('base64')
-
-    // The replica's concurrent edit arrives exactly as the sync path
-    // delivers it: imported into the live workspace document.
-    const workspaceDoc = await getWorkspaceDoc('session1')
-    workspaceDoc.import(replica.export({ mode: 'update', from: replicaFrom }))
-    await saveWorkspaceDoc('session1', workspaceDoc)
-
-    const state = await loadDocumentBranches('session1', 'canvas-a')
-    const main = state.branches.find((branch) => branch.name === 'main')!
-    main.tipFrontiers = mainTip
-    const feature = state.branches.find((branch) => branch.name === 'feature')!
-    feature.tipFrontiers = sourceTip
-    await saveDocumentBranches('session1', 'canvas-a', state)
-
-    const res = await app.request(
-      '/api/workspaces/session1/documents/canvas-a/branches/feature/merge',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ into: 'main' }),
-      },
-    )
-
-    expect(res.status).toBe(200)
-    const json = (await res.json()) as {
-      newElementIds?: string[]
-      badges?: Array<Record<string, unknown>>
-    }
-    // The correctly-computed base is A-only (the true fork point, before
-    // target's delete): A is resurrected on commit, and F is new.
-    expect(json.badges).toContainEqual({ type: 'resurrected', elementId: 'A' })
-    expect(json.newElementIds?.sort()).toEqual(['A', 'F'])
-  })
 
   it('OPTIONS /mcp with loopback Origin carries Access-Control-Allow-Private-Network: true', async () => {
     const app = createApp(createRuntimeOptions('secret'))

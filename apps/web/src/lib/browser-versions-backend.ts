@@ -1,4 +1,3 @@
-import { readBranchesFromRecord } from '@kamiazya/whiteboard-history'
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -59,21 +58,8 @@ export function createBrowserVersionsBackend(deps: {
   return {
     list: (_workspaceId, path) => deps.store.list(getBrowserWorkspaceId(), path),
     save(_workspaceId, path, { label }) {
-      // WHICH variation this lands on is the keeper's to resolve — the seam
-      // carries a label and nothing else, and the daemon's route reads HEAD
-      // the same way before writing its row. Without this a browser document
-      // with variations files every manual save on the default lane while
-      // its automatic checkpoints lane correctly, which reads as a history
-      // that lost track of where the work happened.
-      //
-      // A record that cannot answer falls back to the store's own default,
-      // exactly as the daemon's route does.
-      const head =
-        deps.record.readRecord((doc, documentId) => readBranchesFromRecord(doc, documentId).head) ??
-        null
       return deps.store.save(getBrowserWorkspaceId(), path, {
         label,
-        ...(head === null || head === '' ? {} : { branchName: head }),
         // The person at this browser. The daemon names its humans by their
         // sync peer; the browser has one person and no peer to name.
         operator: { kind: 'human', peerId: 'browser' },
@@ -89,10 +75,6 @@ export function createBrowserVersionsBackend(deps: {
         ? { kind: 'markdown', body: readMarkdownBody(past) }
         : { kind: 'spatial', canvas: readSpatialCanvas(past) }
     },
-    putThumbnail: (_workspaceId, path, versionId, blob) =>
-      deps.store.putThumbnail(getBrowserWorkspaceId(), path, versionId, blob),
-    loadThumbnail: (_workspaceId, path, versionId) =>
-      deps.store.loadThumbnail(getBrowserWorkspaceId(), path, versionId),
     async restore(_workspaceId, path, versionId) {
       const workspaceId = getBrowserWorkspaceId()
       const past = await deps.store.loadPast(workspaceId, path, versionId)
@@ -101,12 +83,12 @@ export function createBrowserVersionsBackend(deps: {
         (v) => v.id === versionId,
       )?.label
       await deps.record.applyRestore(past, label)
-      // The merge point, recorded the same way the daemon's operation
-      // records it: a restore reconciles a past state onto the live one, so
-      // what comes out is a descendant of both, and a merge that leaves no
-      // row is a merge nobody can find afterwards. Best effort for the same
-      // reason as there — the content has already landed, so a failed row
-      // costs the history a point and the document nothing.
+      // The point the restore produced, recorded the same way the daemon's
+      // operation records it: a restore reconciles a past state onto the live
+      // one, and a restore that leaves no row is one nobody can find
+      // afterwards. Best effort for the same reason as there — the content
+      // has already landed, so a failed row costs the history a point and the
+      // document nothing.
       try {
         await deps.store.save(workspaceId, path, { restoredFrom: versionId })
       } catch {

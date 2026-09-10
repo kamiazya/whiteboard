@@ -31,6 +31,7 @@ vi.mock('@kamiazya/whiteboard-canvas-viewer', async (importOriginal) => ({
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
 import type { EditorCommand } from '../lib/spatial/commands.js'
 import { applyCommand } from '../lib/spatial/commands.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { type UseDocumentSyncResult, useDocumentSync } from './useDocumentSync.js'
 
 type FakeBackendControl = {
@@ -114,7 +115,6 @@ function versionCreatedPayload(
     createdAt: '2026-01-01T00:00:00.000Z',
     elementCount: 3,
     auto: false,
-    hasThumbnail: false,
     branchName: 'main',
     ...overrides,
   }
@@ -226,6 +226,7 @@ describe('useDocumentSync', () => {
     })
     expect(result.current.persistence.kind).toBe('saved')
     expect(result.current.persistence.lastSavedAt).not.toBeNull()
+    await expectLoggedFailure('editor command target missing')
   })
 
   it('sets syncStatus to "error" when onError fires', () => {

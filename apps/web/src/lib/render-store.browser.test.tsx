@@ -7,31 +7,10 @@
 // read costs 1.5-2.7ms; a render already runs off the main thread, so reading
 // the cache ON the main thread would move 2ms per row back onto the very
 // thread #1275 and #1293 spent their effort clearing.
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from './layout-worker-pool.js'
-import type { LayoutResponse, MarkdownRenderResponse } from './layout-worker-protocol.js'
+import type { MarkdownRenderResponse } from './layout-worker-protocol.js'
 import { clearRenderStore, readRenderEntry, writeRenderEntry } from './render-store.js'
-
-// Three nodes, not twelve: the assertion below is that this render stays
-// UNDER the floor, and a case that only just clears it is a case that clears
-// it under load. Measured warm, a 12-node canvas round-trips in 3.4ms against
-// a 5ms floor and a 20-section markdown body in 20.4ms — this shrinks the
-// lower margin further rather than resting on 1.6ms of it.
-const CHEAP: SpatialCanvas = {
-  nodes: Array.from({ length: 3 }, (_, i) => ({
-    id: `n${i}`,
-    type: 'text' as const,
-    x: (i % 4) * 260,
-    y: Math.floor(i / 4) * 160,
-    width: 220,
-    height: 120,
-    text: `node ${i}`,
-  })),
-  edges: [],
-}
 
 // Costly on purpose: text shaping is the pipeline the measurements say
 // persistence is FOR — 21.8ms at 20 sections against a 2.2ms read, where a
@@ -42,25 +21,6 @@ const COSTLY_BODY = Array.from(
   (_, i) =>
     `## Section ${i}\n\nA paragraph with enough words in it that line breaking is a real cost rather than a rounding error.\n\n- one\n- two\n`,
 ).join('\n')
-
-function snapshotOf(canvas: SpatialCanvas): Uint8Array {
-  const doc = new LoroDoc()
-  writeSpatialCanvas(doc, canvas)
-  return doc.export({ mode: 'snapshot' })
-}
-
-function askLayout(cacheKey?: string): Promise<LayoutResponse> {
-  return sharedLayoutWorkerPool().run<LayoutResponse>(
-    {
-      type: 'layout',
-      id: nextLayoutRequestId(),
-      snapshot: snapshotOf(CHEAP),
-      theme: 'light',
-      ...(cacheKey === undefined ? {} : { cacheKey }),
-    },
-    'background',
-  )
-}
 
 function askMarkdown(cacheKey?: string): Promise<MarkdownRenderResponse> {
   return sharedLayoutWorkerPool().run<MarkdownRenderResponse>(
@@ -146,26 +106,20 @@ it('stores a render that cost more than storing it does', async () => {
   expect((stored as { type?: string } | null)?.type).toBe('markdown-render-done')
 })
 
-// The gate, and the reason it exists rather than "persist everything":
-// measured, a 12-node canvas renders in 2.0ms and an OPFS write costs
-// 2.2-3.1ms, so storing it makes the FIRST visit slower to save nothing
-// worth having on the second.
-it('stores nothing for a render cheaper than the write it would cost', async () => {
-  const key = `~build-test/svg/spatial/~cheap/~v1.json`
-
-  // Warm first, with no key. The FIRST layout a worker runs pays for caches
-  // this pipeline fills once — measured, it clears the floor where the same
-  // canvas afterwards does not — and a list of twenty rows pays that once,
-  // not per row. Asserting on the cold render would be measuring startup and
-  // calling it the gate.
-  await askLayout()
-  const reply = await askLayout(key)
-  expect(reply.type).toBe('laid-out')
-
-  // A real wait, not an immediate read: an assertion that a write did NOT
-  // happen has to outlast the window in which it would have.
-  expect(await entryWithin(key, 500)).toBeNull()
-})
+// The cheap-render case is NOT here, and its absence is the point. It used to
+// lay out three nodes and assert nothing was written, which made the test's
+// premise "this machine lays out three nodes in under 5ms" — unestablishable
+// from inside the test, and false on a loaded runner, where the production
+// code then stores the render exactly as it should. Observed: shard 1 took 94s
+// on one commit and 202s on the next, and this test passed then failed with no
+// production change between them. The fixture had already been shrunk from
+// twelve nodes to three to buy margin, which is treating the symptom.
+//
+// The claim lives in `render-store.test.ts` now, over `worthStoring` itself,
+// where it is true on every machine, with a conformance check pinning that
+// this worker is its caller. What stays in this file is what only a real
+// browser can answer: that a COSTLY render survives the round trip into OPFS,
+// and that a keyless request is never remembered.
 
 // A request with no cache key is the honest state of a document whose keeper
 // reports no version: nothing may be remembered for it, in memory or on disk.

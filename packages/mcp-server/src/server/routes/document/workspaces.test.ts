@@ -229,6 +229,21 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     expect(json.title!.length).toBeGreaterThan(0)
   })
 
+  // A handle that passes the id validator but cannot be a SEGMENT is the
+  // caller's to change; the mint boundary refuses it, and that refusal used
+  // to fall through the catch-all to a 500 that named nothing.
+  it('returns 400 with a Problem Details title when the handle cannot be a workspace segment', async () => {
+    const app = createDocumentRouter()
+    const res = await app.request('/api/workspaces/-/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'board' }),
+    })
+    expect(res.status).toBe(400)
+    const json = (await res.json()) as { title?: string }
+    expect(json.title).toMatch(/segment|workspace/i)
+  })
+
   it('returns 500 with Problem Details title when saveDocument fails unexpectedly', async () => {
     // Force the snapshot export saveDocument makes internally to throw, so
     // it surfaces a non-ConflictError, exercising the catch-all 500 branch
@@ -314,7 +329,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // A dialog that collects a name has to apply it in the SAME request. Split
   // across create-then-PUT-name, the second half can fail on its own and
   // leave a document the user named sitting in the list as untitled-N, with
-  // nothing on screen explaining which half went wrong. wb_document_create
+  // nothing on screen explaining which half went wrong. wbDocumentCreate
   // has taken a name in one call since it shipped; this is the HTTP surface
   // catching up.
   it('applies an optional name in the same request that creates the document', async () => {

@@ -160,7 +160,7 @@ it('deleteDocument evacuates the tree node into the trash', async () => {
 })
 
 it('saving a workspace record registers the workspace — a tool-created workspace must not be invisible to workspaceExists', async () => {
-  // The smoke-caught shape: wb_document_create with createWorkspace goes
+  // The smoke-caught shape: wbDocumentCreate with createWorkspace goes
   // through the tree index and WorkspaceDocs alone (no saveDocument), and a
   // workspace with a stored record but no registry row answers
   // workspaceExists=false — so the WS route refuses the very workspace the

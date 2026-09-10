@@ -9,6 +9,8 @@
 
 import type { SpatialPalette, SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveNodeSymbol } from '@kamiazya/whiteboard-plugin-visual'
 import type { NodeBox } from './geometry.js'
 
 export interface MinimapBox {
@@ -141,7 +143,7 @@ export function buildMinimapNodes(
   nodes: SpatialCanvas['nodes'],
   boxes: readonly NodeBox[],
   palette: SpatialPalette,
-): readonly (MinimapBox & { readonly color?: string })[] {
+): readonly (MinimapBox & { readonly color?: string; readonly symbol?: VisualSymbolFacet })[] {
   const byId = new Map(nodes.map((node) => [node.id, node]))
   const colorOf = (id: string): string | undefined => {
     const color = byId.get(id)?.color
@@ -149,5 +151,17 @@ export function buildMinimapNodes(
     if (color.startsWith('#')) return color
     return palette.presets[color as SpatialPresetKey]?.stroke
   }
-  return boxes.map((entry) => ({ ...entry.box, color: colorOf(entry.id) }))
+  // Resolved HERE, beside the colour, for the same reason the colour is: the
+  // overview component knows nothing about palettes or facets, and an
+  // overview is exactly where a node is too small to read — which is what
+  // `visual.symbol` was built for.
+  return boxes.map((entry) => {
+    const node = byId.get(entry.id)
+    const symbol = node === undefined ? undefined : resolveNodeSymbol(node)
+    return {
+      ...entry.box,
+      color: colorOf(entry.id),
+      ...(symbol === undefined ? {} : { symbol }),
+    }
+  })
 }

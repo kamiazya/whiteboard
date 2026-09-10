@@ -5,7 +5,7 @@ the document's persisted content — neither requires a connected browser client
 
 | Tool | Output | Notes |
 | --- | --- | --- |
-| `wb_document_get` | The document's own format | A markdown document comes back as OKF Markdown (YAML frontmatter + Markdown body), lossless round-trip with `wb_document_set`. A spatial document comes back as JSON Canvas 1.0 with the `x-whiteboard` extension, round-tripping with other JSON Canvas-compatible tools. |
+| `wb_document_get` | The document's own format | A markdown document comes back as OKF Markdown (YAML frontmatter + Markdown body), lossless round-trip with `wb_workspace_edit`'s `document.set` op. A spatial document comes back as JSON Canvas 1.0 with the `x-whiteboard` extension, round-tripping with other JSON Canvas-compatible tools. |
 | `wb_scene_render` | Vector image (`.svg`) | Rendered from the document's spatial layout (canvas-render's scene graph + SVG backend) — shapes, laid-out Markdown text, and routed edges. |
 
 **The format is not a parameter.** `wb_document_get` answers in whatever
@@ -15,7 +15,7 @@ an explicitly lossy projection rather than a way to read the stored content
 (see [ADR-0009](../contributing/adr/0009-mcp-tool-naming.md)).
 
 A document created before formats were recorded has no answer here and is
-refused rather than guessed at; writing its content through `wb_document_set`
+refused rather than guessed at; writing its content through a `document.set` op
 gives it one.
 
 A `file` node renders as a labeled box when exported to SVG; its referenced image
@@ -30,7 +30,7 @@ any others. This server gives meaning to OKF's required `type`, its recommended
 and `verified`, and its own `view` and `facets` extension keys.
 
 **Every other root key is preserved verbatim.** Write a document through
-`wb_document_set` and read it back with `wb_document_get`, and keys this server
+a `document.set` op and read it back with `wb_document_get`, and keys this server
 has no model for come back at the root they were written at, unchanged. That
 covers OKF v0.2's provenance and lifecycle families — `sources`,
 `usage_window`, `status`, `stale_after` — and the Attested Computation keys
@@ -39,7 +39,7 @@ which this server interprets.
 
 ## Who wrote a document
 
-`wb_document_set` and `wb_document_create` take an optional `actor`, and record
+`wb_workspace_edit` takes an optional `actor` for the whole batch, and records
 it as OKF `generated.by` alongside the server's clock as `generated.at`. Use
 [OKF's actor convention](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
 `<producer>/<version>` for an agent or tool, `human:<id>` for a person,
@@ -128,11 +128,36 @@ above does not describe them. A daemon with no Japanese face and a browser with
 one disagree about the same canvas — which is why installing a font is worth
 doing even when the on-screen canvas looks fine.
 
+## Themes and `style`
+
+A canvas may name a theme in its `visual.theme/v0` facet (bundled: `visual.sketch`,
+`visual.neon`; see [choose-a-theme](../how-to/choose-a-theme.md)). Whether a render honours it
+is the caller's choice, through one `style` field with one meaning everywhere it appears:
+
+| `style` | draws |
+| --- | --- |
+| `clean` (default) | the bundled look, whatever the document says |
+| `document` | the theme the canvas names, if any |
+| a theme id, e.g. `visual.sketch` | that theme, without storing it — a preview |
+
+It appears on `wb_scene_render`, and on the daemon's `POST …/export` (PNG) and
+`POST …/export-svg` request bodies. The default is `clean` so an agent reading SVG never pays
+for a theme's jittered geometry or glow unasked, and a `wb_canvas_snapshot` layout analysis
+never moves because a theme did. A theme id nothing registered draws clean and is reported as a
+degradation, never an error.
+
+A theme's font family is declared in the SVG only where the daemon can measure it — the
+vendored face or an installed one — and otherwise the bundled family is declared, so the face
+named and the coordinates measured always agree. `unresolvedFamilies` reports nothing in that
+case, because nothing is missing from the page.
+
 ## Web app exports
 
 The web editor's canvas row (More actions → Export) saves the current canvas as
-SVG or PNG, rendered with the light theme regardless of the UI theme so an
-export's bytes never depend on a display preference.
+SVG or PNG, rendered with the light palette regardless of the UI mode so an
+export's bytes never depend on a display preference — and with the document's
+theme, if it names one, since that is part of the document rather than of the
+display.
 
 The PNG a browser export produces carries the editor's own font inside the
 image data it rasterises from, so it draws the text the editor showed rather

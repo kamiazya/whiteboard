@@ -3,6 +3,10 @@ import { cleanup } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
 import { BROWSER_DEFAULT_SEGMENT } from './src/lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from './src/lib/browser-workspace-id.js'
+import {
+  recordLoggedFailure,
+  takeUnclaimedLoggedFailures,
+} from './src/test-utils/logged-failures.js'
 import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 
 // jsdom page/hook tests read `getBrowserWorkspaceId()` at their existing
@@ -147,4 +151,81 @@ export async function runSharedTestTeardown(currentTestName: string | undefined)
 
 afterEach(async () => {
   await runSharedTestTeardown(expect.getState().currentTestName)
+})
+
+/**
+ * A React `act` complaint fails the test that produced it.
+ *
+ * Free, because the suite is silent: measured over the whole `web-jsdom`
+ * project, 0 records across 3947 tests. It was 138 before three mechanical
+ * fixes, and the shape of those is why this is a runtime guard rather than a
+ * lint rule — the two causes have no syntax in common, and only one of them
+ * is visible in a single file:
+ *
+ * - **`act()` wrapping an RTL async utility** (103). `@testing-library/react`
+ *   sets `IS_REACT_ACT_ENVIRONMENT` to FALSE around `waitFor`/`findBy*` on
+ *   purpose, so an `act` call inside one warns. Measured at the warning:
+ *   `flag=false`. The wrapper is also unnecessary — those utilities manage
+ *   `act` themselves. Both call sites wrapped a HELPER that used `findBy*`
+ *   internally, so nothing a lint rule can see in one file said so.
+ * - **`act` imported from `react`** (35). RTL's `act` sets the environment
+ *   flag itself; React's bare one does not, so every call warns.
+ *
+ * Setting `globalThis.IS_REACT_ACT_ENVIRONMENT = true` in this file looks like
+ * the fix for both and is not: measured, it left 103 of the 138 in place —
+ * RTL turns it back off — while switching on 502 un-acted-update reports that
+ * nothing reads. The numbers are in
+ * `testing-techniques/resources/executable-rungs.md`.
+ *
+ * Deliberately narrow: React's act family, not `console.error` at large.
+ * `web-browser` holds the wider line (any `console.error`/`warn`), which it
+ * can afford because its suite is clean; this project still has ~78 records
+ * over ~62 tests, nearly all of them tests driving a failure path on purpose.
+ */
+const REACT_ACT_COMPLAINT =
+  /configured to support act\(|not wrapped in act\(|resolves suspended data/
+let reactActComplaints: string[] = []
+// Intercepting this sink IS the guard — React reports here and nowhere else.
+// The original is called through, so nothing is swallowed by the guard itself.
+const realConsoleErrorForAct = console.error.bind(console)
+const realConsoleWarnForFailures = console.warn.bind(console)
+console.error = (...args: unknown[]): void => {
+  const message = args.map((arg) => String(arg)).join(' ')
+  if (REACT_ACT_COMPLAINT.test(message)) reactActComplaints.push(message.slice(0, 200))
+  else recordLoggedFailure('error', args)
+  realConsoleErrorForAct(...args)
+}
+console.warn = (...args: unknown[]): void => {
+  recordLoggedFailure('warn', args)
+  realConsoleWarnForFailures(...args)
+}
+
+afterEach(() => {
+  const seen = reactActComplaints
+  reactActComplaints = []
+  if (seen.length > 0) {
+    throw new Error(
+      `React complained about act() in this test.\nIf the call is inside a waitFor/findBy* (RTL turns the act environment OFF in those, deliberately), drop the act — they manage it themselves. If \`act\` came from 'react', import it from '@testing-library/react'.\n${seen.join('\n')}`,
+    )
+  }
+})
+
+/**
+ * The wider line `web-browser` already holds: a jsdom test that logs a failure
+ * and carries on fails, unless it claims the failure it meant to provoke.
+ *
+ * The claim is an assertion rather than an exemption — see
+ * `test-utils/logged-failures.ts`. Getting here was mostly subtraction: 219
+ * records at the start, of which 138 were React act complaints with two
+ * mechanical causes, 36 were jsdom having no IndexedDB, and 8 were one fixture
+ * answering a schema-checked route with `{}`. None of those was a decision
+ * anybody had taken.
+ */
+afterEach(() => {
+  const unclaimed = takeUnclaimedLoggedFailures()
+  if (unclaimed.length > 0) {
+    throw new Error(
+      `This test logged a failure and carried on. Something was caught and swallowed — the assertion that eventually breaks will be somewhere else.\nIf the test provokes this on purpose, call \`expectLoggedFailure('<fragment>')\` after the action: it claims the record AND asserts it arrived.\n${unclaimed.join('\n')}`,
+    )
+  }
 })

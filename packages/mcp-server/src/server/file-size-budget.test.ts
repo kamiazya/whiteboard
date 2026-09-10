@@ -96,7 +96,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +34 for `decide-proposal` (ADR-0029 decision 4): the union arm with the
   // reason its changes travel with the command, and a two-line fold over
   // `applyCanvasChange` — what adopting MEANS lives in model, not here.
-  'apps/web/src/lib/spatial/commands.ts': 960,
+  // +35 for `set-canvas-facet`: the union arm, and `withCanvasFacet` — the
+  // one place the canonical-emptiness rule for a canvas envelope lives, so
+  // a canvas that chose a setting and reverted serializes like one that
+  // never touched it. `withEdgeStyle` now delegates to it rather than
+  // repeating that rule, which is why the arm costs less than it reads.
+  'apps/web/src/lib/spatial/commands.ts': 995,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -134,7 +139,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // committing wrapper over a non-committing `*Into`, so `withDocumentBatch`
   // can fold a whole act into ONE commit. The bodies did not grow; these are
   // the two wrappers and the two lines saying what the split is for.
-  'packages/loro-adapter/src/loro-bridge.ts': 952,
+  // +8: `commentToFields` refuses a comment naming both a node and an edge,
+  // the same loud refusal it already gives a non-finite anchor and for the
+  // same reason — the thread it becomes is one every reader would drop.
+  'packages/loro-adapter/src/loro-bridge.ts': 960,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -145,8 +153,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decide whether it is content, and most of the growth is the note saying
   // why that line and not "propose unless told otherwise" — the widget's
   // comment box is a caller a refusing default would have broken.
-  'packages/server-core/src/tools/canvas-edit.ts': 1021,
-  'apps/web/src/App.tsx': 973,
+  // +77 for absorbing wb_body_patch: `node.splice` (its range arm, now an op
+  // that batches) and the dropped-key guard that had to exist before
+  // `node.patch` could carry content at all. This file grew and the REPO
+  // shrank — body-patch.ts (134) and its two test files (165 + 106) are
+  // deleted, so 14 files come to 295 insertions against 541 deletions.
+  'packages/server-core/src/tools/canvas-edit.ts': 1098,
+  // Shrunk from 973: the effect that fetches a theme's family from the
+  // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
+  // daemon-keyed effect belongs — App composes, it does not fetch.
+  'apps/web/src/App.tsx': 962,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit
@@ -163,8 +179,18 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // the daemon's merge before the fix, a branch tip read back as "" with
   // nothing red, which is precisely the comment's job to prevent a second
   // time.
-  'packages/loro-adapter/src/workspace-tree.ts': 1116,
-  'packages/canvas-render/src/svg/backend.ts': 991,
+  // 1144: `syncMapEntries`, so a fold or projection carries a nested
+  // container (a thread, a proposal) instead of flattening it to a value.
+  // 1165: the fold recreates a nested text or list container instead of
+  // handing it to `LoroMap.set`.
+  'packages/loro-adapter/src/workspace-tree.ts': 1165,
+  // Shrunk from 991 while the theme layer added its glow filter and pencil
+  // passes: the shape and edge renderers (crisp and sketched, with the
+  // halo either takes) moved to `svg/shapes.ts`, and the presence-only
+  // paint helpers every element shares to `svg/paint.ts`. What is left is
+  // the text, list, table, code, icon and edge cases plus the document
+  // envelope.
+  'packages/canvas-render/src/svg/backend.ts': 831,
   // Raised from 1366 by the automatic-checkpoint trigger: a narrow
   // `{signal, flush}` pair on SessionDeps, signalled from
   // `subscribeLocalUpdates` and flushed from the two page-leaving handlers
@@ -181,7 +207,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // decision has to reach two planes here.
   // +4: the decide-proposal arm moved inside `withDocumentBatch`, so its
   // three subjects land as one delta and one undo step instead of four.
-  'apps/web/src/lib/document-sync-session.ts': 1475,
+  // +18 for `getFacets`: a markdown document's own mark is a facet, which is
+  // no canvas value, so a page reading only the canvas cannot see one. One
+  // session serves both document pages, which is what keeps the two keepers
+  // from drifting on it — and most of the eighteen lines say that.
+  'apps/web/src/lib/document-sync-session.ts': 1493,
   // Raised from 1131 because compaction's retained-history cut now reads
   // branch tips from BOTH planes for the length of the migration: the record,
   // where a document goes the first time its branches are written, and the
@@ -230,8 +260,16 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +2 for the shared thread-write door: this page still chooses between the
   // markdown host and the spatial write per verb, so what it saves is the
   // command building rather than the branch.
-  'apps/web/src/pages/BrowserDocumentPage.tsx': 1033,
-  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1674,
+  // +2: the tab's mark. The resolution is memoised because the resolver
+  // PARSES — a fresh object every render re-arms the favicon's debounce on
+  // every render instead of on a change to the document — and a `useMemo`
+  // is two lines a call site cannot avoid paying.
+  'apps/web/src/pages/BrowserDocumentPage.tsx': 1035,
+  // +1 for a task list's checkbox, which is one import and one branch here:
+  // the geometry and the measurement behind it (the vendored export face
+  // carries no check glyph) live in `task-checkbox.ts`, 64 lines that never
+  // entered this file.
+  'packages/canvas-render/src/layout/nodes/mdast-blocks.ts': 1675,
   // Two layers grew this file, and the ceiling is the MEASURED total after
   // both, not either branch's number:
   //
@@ -249,8 +287,42 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +1: the leader edge carries `commentChrome`, so the keyed projection can
   // mark a conversation's whole chrome as the annotation layer. Without it the
   // leader is the one piece that cuts while the pin and bubble ramp.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2097,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
+  //
+  // +12: `resolveContributions` also resolves each node's silhouette now, so
+  // it takes the canvas and answers a third field. That is the whole growth —
+  // a signature and a return that no longer fit one line each — and it buys
+  // deleting the call site where `nodeOutlines` was resolved separately, which
+  // is where `layoutSpatialEdges` came to be missing it.
+  // +5 for the proposal bubble's own width: the import that names it grew
+  // past one line, and the call site gained `density: 'compact'`. Nothing
+  // was misfiled this time — the constant and its measured rationale live
+  // in `comment-body.ts`, beside the comment width they are judged against,
+  // so what is left here is the two lines that actually use them.
+  //
+  // +23 more for seeding every comment PIN as a placement obstacle before
+  // the loop rather than pushing each as it is emitted: an anchor helper
+  // both the pre-pass and the loop call, and the pass itself. It is the fix
+  // for a real defect the widened candidate ring exposed — a bubble landing
+  // on a neighbour's pin — and it has to be a pre-pass, since pushing each
+  // pin as it is drawn protects only the comments after it.
+  // +248 for the render theme layer (ADR-0030 decision 5): the theme is
+  // resolved PER CANVAS at every nesting level of the recursion this file
+  // owns (`withCanvasTheme`), so an embed reads its own facet before the
+  // host's, and the ink, the default shape and the default routing it
+  // implies are read where each node and edge is composed. Raised rather
+  // than split: the resolution reads and rewrites `ResolvedLayoutOptions`,
+  // and a module holding it would import the recursion's private options
+  // type back from here. The palette a chrome previews resolves through the
+  // same `pickThemeId`, so it sits here too.
+  // +17 more for `paintOrderOf`, groups behind what they hold whatever the
+  // stored order says. +4 for `annotates`, the link from a label's run back
+  // to the edge or container it names, set where each label is placed.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
+  // +21: a named side pair whose route runs through the edge's own box is
+  // overruled — the search takes the edge as free (`selfThrough`, the
+  // candidate list without its named sides), the render follows the anchor
+  // pass's side over the edge's own, and a lone edge reaches the search.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2090,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
@@ -260,7 +332,23 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // tells `useDragLayers` that a comment is in flight — both so the
   // annotation ramp is neither clipped by a re-fitted envelope nor mistaken
   // for an edit when a gesture takes the pin over.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2727,
+  // +1: it also tells `useDragLayers` whether the committed scene is CURRENT,
+  // which is what lets those layers hold their last frame until a drop's own
+  // layout lands. Only the answer is passed; the holding is that hook's.
+  //
+  // -5, NET, over a seam that added 38: `openProposal` and the proposal
+  // hit-test are geometry over the scene's chrome boxes, so they moved to
+  // `lib/spatial/viewport.ts` (`viewportRevealingProposal`, `proposalAt`)
+  // where the earlier splits put this file's pure core. This guard is what
+  // asked the question — the growth read as the feature's cost until it
+  // turned out two thirds of it was misfiled.
+  // +30 for the session's look (ADR-0030 decision 6): the `style` prop, the
+  // theme-fonts generation, the ask for the theme's family and the family
+  // the in-place editors type in are inputs the editor threads to its
+  // scene, its drag layers and its overlays, and the paper it paints is the
+  // palette's surface. Threading is this file's job; there is nothing here
+  // to move.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2753,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {
@@ -311,5 +399,49 @@ describe('file-size budget: files stay under 800 lines (shrink-only grandfather)
       (path) => !existsSync(join(REPO_ROOT, path)),
     )
     expect(missing).toEqual([])
+  })
+})
+
+/**
+ * This guard scans `apps/web/src` (and every `packages/*` and `tools/*`) while
+ * living in mcp-server, so the natural local run for a web change — the
+ * `web-jsdom` / `web-browser` projects — does not include it. Twice in one
+ * session that produced the same push: green locally, red in CI on a file
+ * this guard had been watching all along.
+ *
+ * `.claude/rules/app-web.md` had already said to run it by hand alongside the
+ * web guards. That is a prose rung, and being written down is what it can do —
+ * it cannot notice being forgotten. So pre-push runs it, and it costs the gate
+ * nothing: across two real `lefthook run pre-push` runs this took 10.71s and
+ * 7.74s, and each run's total equalled the `pnpm -r typecheck` beside it to the
+ * centisecond. The equality is the claim worth keeping — the reading itself
+ * swings ~40% with contention. That is why a guard whose failure CI would catch
+ * anyway is still worth a local rung.
+ *
+ * Asserted here rather than in a test about lefthook, because this is the file
+ * that knows WHY the entry has to exist — and the path is derived from
+ * `import.meta.url` so moving this file fails loudly instead of leaving the
+ * lefthook line pointing at nothing.
+ */
+describe('the budget guard is reachable before a push, not only in CI', () => {
+  function prePushCommands(): string[] {
+    const text = readFileSync(join(REPO_ROOT, 'lefthook.yml'), 'utf8')
+    const start = text.indexOf('\npre-push:')
+    if (start === -1) throw new Error('lefthook.yml has no `pre-push:` block')
+    const rest = text.slice(start + 1)
+    const nextTopLevel = rest.slice('pre-push:'.length).search(/\n(?=[A-Za-z_-]+:)/)
+    const block = nextTopLevel === -1 ? rest : rest.slice(0, 'pre-push:'.length + nextTopLevel)
+    return [...block.matchAll(/^ {6}run: (.+)$/gm)].map((match) => match[1].trim())
+  }
+
+  // A scan that stops matching reports its subject as satisfied — the same
+  // shape as a passing run. Checked before anything is concluded from it.
+  it('reads the pre-push block', () => {
+    expect(prePushCommands().length).toBeGreaterThanOrEqual(5)
+  })
+
+  it('is run by a pre-push command', () => {
+    const self = relativeToRepo(fileURLToPath(import.meta.url))
+    expect(prePushCommands().filter((command) => command.includes(self))).toHaveLength(1)
   })
 })

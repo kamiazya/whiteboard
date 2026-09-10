@@ -11,6 +11,7 @@ import {
   readAnnotations,
   readCoreFacets,
   readEdgeLocks,
+  readFacets,
   readMarkdownBody,
   readNodeLocks,
   readProposals,
@@ -44,6 +45,7 @@ export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers[
 
 import type {
   CommentThread,
+  ExtensionFacets,
   Proposal,
   SpatialCanvas,
   StoredCoreFacets,
@@ -77,6 +79,9 @@ const DISPOSE_DRAIN_TIMEOUT_MS = 2_000
 /** Stable empty set so a lock read before the first snapshot is referentially stable. */
 const EMPTY_LOCKS: ReadonlySet<string> = new Set()
 
+/** Stable empty bucket, for the same reason `EMPTY_LOCKS` is stable. */
+const EMPTY_FACETS: ExtensionFacets = {}
+
 /**
  * Stable key identifying the single node/edge a command targets, so a
  * debounce window can dedupe repeat edits to the SAME target down to one
@@ -101,7 +106,6 @@ function commandTargetKey(command: EditorCommand): string {
       return `comment:${command.comment.id}`
     case 'set-comment-resolved':
     case 'move-comment':
-    case 'set-comment-text':
       return `comment:${command.id}`
     case 'reply-to-thread':
       // Keyed by MESSAGE, not by thread. Every other key here dedupes to the
@@ -285,6 +289,18 @@ export interface DocumentSyncSession {
    */
   getCoreFacets(): StoredCoreFacets | undefined
   /**
+   * The document's EXTENSION facets (`{namespace}.{name}/v{n}`), from the
+   * doc's `facets` map. Empty until hydrated and for a document that
+   * declares none.
+   *
+   * Published on the same signal as `getCoreFacets`, and here for the same
+   * reason: what a markdown document wears — its `visual.symbol/v0` mark —
+   * is no canvas value, so a page reading only the canvas cannot see it.
+   * The spatial half of that mark rides the canvas envelope instead, which
+   * is why only one kind reads this.
+   */
+  getFacets(): ExtensionFacets
+  /**
    * A stable id for the document's CURRENT state — what a picture drawn from
    * it right now would be a picture OF. `null` before the first snapshot.
    *
@@ -407,8 +423,7 @@ function writeCommandTarget(
     }
     case 'create-comment':
     case 'set-comment-resolved':
-    case 'move-comment':
-    case 'set-comment-text': {
+    case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (!comment) return false
@@ -541,7 +556,6 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.comment.id) ?? false
     case 'set-comment-resolved':
     case 'move-comment':
-    case 'set-comment-text':
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
@@ -582,8 +596,7 @@ function writeSubCommand(
     }
     case 'create-comment':
     case 'set-comment-resolved':
-    case 'move-comment':
-    case 'set-comment-text': {
+    case 'move-comment': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (comment) writer.writeComment(comment)
@@ -1425,6 +1438,10 @@ export function createDocumentSyncSession(
     return doc === null ? undefined : readCoreFacets(contentOf(doc))
   }
 
+  function getFacets(): ExtensionFacets {
+    return doc === null ? EMPTY_FACETS : readFacets(contentOf(doc))
+  }
+
   function notifyBodyChanged(): void {
     for (const listener of bodyListeners) listener()
   }
@@ -1471,5 +1488,6 @@ export function createDocumentSyncSession(
     getMarkdownBody,
     subscribeMarkdownBody,
     getCoreFacets,
+    getFacets,
   }
 }

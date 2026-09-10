@@ -90,6 +90,27 @@ describe('a thread passage marked in the body', () => {
     expect(marked(reader, 't1')).toBe(PASSAGE)
   })
 
+  it('marks what remains of a passage whose range runs past the body', () => {
+    // A caller can hand over a range the text does not have. The resolver is
+    // one source (its stored-offsets shortcut has answered an out-of-range
+    // `end`), and `document-sync-session`'s create-thread path is another —
+    // it passes `thread.anchor.start`/`end` straight through with no
+    // resolution at all. Unbounded, `LoroText.mark` throws
+    // `Index out of bound. The given pos is N, but the length is M` from
+    // inside the CRDT, naming neither the thread nor the document, and every
+    // caller here has it behind a catch that logs and carries on — so the
+    // conversation silently never gets its mark.
+    const doc = withBody()
+    markThreadPassage(doc, 't1', { start: BODY.length - 6, end: BODY.length + 40 })
+    expect(marked(doc, 't1')).toBe(BODY.slice(-6))
+  })
+
+  it('marks nothing for a range that starts past the body, rather than throwing', () => {
+    const doc = withBody()
+    markThreadPassage(doc, 't1', { start: BODY.length + 5, end: BODY.length + 9 })
+    expect(readThreadMarks(doc).get('t1')).toBeUndefined()
+  })
+
   it('answers nothing for a body nobody has marked', () => {
     expect([...readThreadMarks(withBody()).keys()]).toEqual([])
   })

@@ -379,3 +379,96 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
     vi.unstubAllGlobals()
   }
 })
+
+it('pulls a live edge onto a shaped node silhouette, not its bounding box', async () => {
+  // The shaped node does not move here: `a` is dragged, `hub` stays. Two
+  // edges arrive on hub's LEFT side, so neither anchor sits at the side
+  // midpoint — the one place a diamond touches its own bbox, and the reason
+  // a single-edge fixture cannot see this. The live overlay used to
+  // terminate on the bbox border while the committed render pulled onto the
+  // silhouette, so an arrowhead floated for the whole gesture and snapped on
+  // release. Asserted mid-drag rather than against the drop: releasing moves
+  // `a`, which re-fractions the anchors, so the two phases have no stable
+  // pair of points to compare. That parity is the producer's own property
+  // (canvas-render's live-drag parity PBT); what belongs here is that the
+  // editor's live layer resolves silhouettes at all.
+  const shaped: SpatialCanvas = {
+    nodes: [
+      { id: 'a', type: 'text', x: 100, y: 150, width: 120, height: 60, text: 'A' },
+      { id: 'c', type: 'text', x: 100, y: 350, width: 120, height: 60, text: 'C' },
+      {
+        id: 'hub',
+        type: 'text',
+        x: 500,
+        y: 200,
+        width: 200,
+        height: 200,
+        text: 'Hub',
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+      },
+    ],
+    edges: [
+      { id: 'e-a', fromNode: 'a', toNode: 'hub' },
+      { id: 'e-c', fromNode: 'c', toNode: 'hub' },
+    ],
+    'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+  }
+  const { Host } = makeHost(shaped)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+
+  await dragWithoutRelease(root, [160, 180], [190, 210])
+
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live).not.toBeNull()
+  const arrivals = [...(live?.querySelectorAll('polyline') ?? [])]
+    .map((p) => (p.getAttribute('points') ?? '').split(' ').filter((s) => s.length > 0))
+    .flatMap((pts) => {
+      const last = pts[pts.length - 1]?.split(',').map(Number) ?? []
+      return last.length === 2 ? [last as [number, number]] : []
+    })
+    .filter(([x, y]) => x >= 500 && x <= 700 && y >= 200 && y <= 400)
+  expect(arrivals).toHaveLength(2)
+
+  // A diamond's left half narrows away from its vertex, so an anchor off the
+  // side midpoint sits strictly INSIDE the bbox — and exactly on the
+  // silhouette: at height h from the vertex, the border is x = 500 + h.
+  const pulled = arrivals.filter(([x]) => x > 500)
+  expect(pulled.length).toBeGreaterThan(0)
+  for (const [x, y] of pulled) expect(x).toBeCloseTo(500 + Math.abs(y - 300), 5)
+})
+
+it('a themed board keeps its look while a node is carried: ghost and backdrop alike', async () => {
+  const neon: SpatialCanvas = {
+    ...start,
+    'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+  }
+  const { Host } = makeHost(neon)
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+
+  fireEvent.pointerDown(root, {
+    pointerId: 5,
+    clientX: r.left + 160,
+    clientY: r.top + 130,
+    buttons: 1,
+  })
+  fireEvent.pointerUp(root, { pointerId: 5, clientX: r.left + 160, clientY: r.top + 130 })
+  await frame()
+  await dragWithoutRelease(root, [160, 130], [220, 160])
+
+  // The carried node travels in the ghost layer; the node staying behind is
+  // in the backdrop. A board with no comments used to hand the ghost a
+  // canvas with no envelope at all, so the theme vanished for the drag.
+  const ghost = container.querySelector('[data-testid="drag-preview"]')
+  expect(ghost?.innerHTML ?? '').toContain('Alpha')
+  expect(ghost?.innerHTML ?? '').toContain('wb-glow')
+  const backdrop = container.querySelector('[data-testid="canvas-content"]')
+  expect(backdrop?.innerHTML ?? '').toContain('wb-glow')
+  // The edge re-routed per frame floats between them, and it is the theme's
+  // edge too: it went through the edge-only producer, which used to skip
+  // the canvas's theme resolution.
+  const live = container.querySelector('[data-testid="live-edges"]')
+  expect(live?.innerHTML ?? '').toContain('wb-glow')
+})

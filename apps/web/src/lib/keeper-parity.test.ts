@@ -57,17 +57,11 @@ type KeeperReach =
   /** A real difference nobody declared, with the follow-up that closes it. */
   | { readonly reach: 'gap'; readonly missing: string; readonly followUp: string }
 
-const BROWSER_BRANCHES = 'src/lib/browser-branches-backend.ts'
 const BROWSER_VERSIONS = 'src/lib/browser-versions-backend.ts'
 const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
-  'src/components/MergeDialog.tsx': {
-    reach: 'both-keepers',
-    browser: BROWSER_BRANCHES,
-    note: 'the dialog is mounted by the chip, which both keepers now render; the browser backend plans and commits the merge behind it',
-  },
   'src/components/PairedOriginsCard.tsx': {
     reach: 'daemon-itself',
     why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
@@ -105,16 +99,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
   // `src/hooks/useBranches.ts` is deliberately absent: it stopped reaching
   // the daemon when the transport moved out of it, and this ledger's other
   // direction fails on an entry naming a module that no longer reaches.
-  'src/contexts/BranchesBackendContext.tsx': {
-    reach: 'both-keepers',
-    browser: BROWSER_BRANCHES,
-    note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
-  },
-  'src/lib/branches-backend.ts': {
-    reach: 'both-keepers',
-    browser: BROWSER_BRANCHES,
-    note: "the daemon's half of the seam; the browser's is the module named here",
-  },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -206,7 +190,7 @@ describe('every module that reaches the daemon says what the browser keeper does
   it('finds a plausible number of daemon-reaching modules', () => {
     // A regex that stopped matching would otherwise report itself below as
     // "every entry is stale", sending the reader to the wrong file entirely.
-    expect(scanned.length).toBeGreaterThanOrEqual(18)
+    expect(scanned.length).toBeGreaterThanOrEqual(15)
   })
 
   it('classifies every one of them, and names nothing that has stopped reaching', () => {

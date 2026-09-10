@@ -13,7 +13,7 @@
 // unit tests can feed fixture graphs directly.
 
 import { posix } from 'node:path'
-import ts from 'typescript'
+import ts from '@typescript/typescript6'
 import { collectModuleSpecifiers } from './scanner.js'
 
 export interface ImportEdge {

@@ -58,7 +58,10 @@ it('follows the host to another conversation rather than staying on the first', 
   await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
 
   rerender(<CommentsPanel threads={[OPEN, RESOLVED]} revealThreadId="t-resolved" />)
-  await expect.element(page.getByText('settled last week')).toBeInTheDocument()
+  // Waited on by the ROW, not by the text: an opened conversation draws its
+  // opening message as the first entry of its column, so the same words are
+  // on screen twice and a text query matches both.
+  await expect.element(page.getByRole('button', { expanded: true })).toHaveFocus()
   expect(document.activeElement?.textContent).toContain('settled last week')
 })
 
@@ -101,11 +104,11 @@ it('cancels an edit in progress instead of leaving, so Escape never discards it 
       onReturnFocus={onReturnFocus}
     />,
   )
-  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
-  await expect.element(page.getByRole('textbox', { name: 'Edit comment text' })).toBeInTheDocument()
+  await userEvent.click(page.getByTestId('edit-m1'))
+  await expect.element(page.getByRole('textbox', { name: 'Edit message text' })).toBeInTheDocument()
 
   await userEvent.keyboard('{Escape}')
-  expect(page.getByRole('textbox', { name: 'Edit comment text' }).query()).toBeNull()
+  expect(page.getByRole('textbox', { name: 'Edit message text' }).query()).toBeNull()
   // The first Escape closed the editor; leaving the panel is the second.
   expect(onReturnFocus).not.toHaveBeenCalled()
   await userEvent.keyboard('{Escape}')

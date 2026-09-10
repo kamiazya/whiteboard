@@ -39,6 +39,7 @@ import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../../theme/markdown-th
 import { jaModel } from '../../vendor/budoux/ja-model.js'
 import { Parser } from '../../vendor/budoux/parser.js'
 import { selectMarkdownSection } from './mdast-section.js'
+import { checkboxMarker } from './task-checkbox.js'
 import { fitToWidth } from './truncate.js'
 
 /**
@@ -1274,12 +1275,12 @@ function layoutListItem(
   const children: (ListItemNode['children'][number] | TextRunNode)[] = item.children.map((child) =>
     layoutBlock(child, cursor, indented, depth, embedPath),
   )
-  // The marker glyph (bullet or ordinal). Wrapper-RELATIVE like every other
-  // child (the listItem renderer translates by its own bbox.x), so the
-  // gutter to the left of the content is negative x. Checked task items
-  // keep provenance only — a checkbox affordance is a separate feature,
-  // and drawing a bullet next to it would double the glyphs.
-  if (item.checked === null || item.checked === undefined) {
+  // The gutter: a bullet, an ordinal, or a task item's checkbox INSTEAD of
+  // one (`task-checkbox.ts` says why it is rects). Wrapper-RELATIVE, so the
+  // gutter left of the content is negative x.
+  if (item.checked === true || item.checked === false) {
+    children.unshift(...checkboxMarker(options.theme, item.checked, startY, bodyLineHeightPx))
+  } else {
     const markerText = ordinal !== undefined ? `${ordinal}.` : '\u2022'
     const metrics = options.measure(
       markerText,

@@ -5,11 +5,6 @@
 // UI and auto-run policy decisions.
 // openWorldHint: false means the tool operates only on local canvas state.
 const READ_ONLY = { readOnlyHint: true, openWorldHint: false } as const
-const DESTRUCTIVE_IDEMPOTENT = {
-  destructiveHint: true,
-  idempotentHint: true,
-  openWorldHint: false,
-} as const
 const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
 const DESTRUCTIVE = { destructiveHint: true, openWorldHint: false } as const
 export const MUTATING = { openWorldHint: false } as const
@@ -38,10 +33,6 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Comment on a document through its annotation layer',
   },
   wb_body_edit: { profile: MUTATING, title: "Replace passages of a document's body" },
-  // Titled for what it reaches, which is a text NODE on a spatial canvas —
-  // a markdown document's body lives in a text container the canvas read
-  // does not see, so this tool has never been able to touch one.
-  wb_body_patch: { profile: MUTATING, title: "Patch a text node's markdown body" },
   wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_viewport_set: {
@@ -54,10 +45,8 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     profile: READ_ONLY,
     title: 'Read a spatial canvas as a compact snapshot',
   },
-  wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
   wb_document_search: { profile: READ_ONLY, title: 'Find documents by content' },
-  wb_document_create: { profile: MUTATING, title: 'Create a document' },
   wb_workspace_edit: {
     // Destructive because a batch may carry document.delete, and NOT
     // idempotent because a create refuses a path already taken. Unlike
@@ -65,11 +54,12 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     // CRDTs, so a rejected batch leaves the ops before the failure standing
     // and a blind retry would create the earlier ones twice.
     profile: DESTRUCTIVE,
-    title: 'Edit a workspace',
+    // Named for what it is FOR rather than for the object it edits: it is
+    // the one front door onto document create / set / delete, so the title
+    // an agent's tool picker reads has to say those words.
+    title: 'Create, replace and delete documents in a workspace',
   },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
-  wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },
-  wb_document_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete a document' },
   wb_version_save: { profile: MUTATING, title: 'Save a labelled version of a document' },
   wb_version_restore: { profile: MUTATING, title: 'Restore a document from a version' },
   wb_version_list: { profile: READ_ONLY, title: 'List the versions of a document' },

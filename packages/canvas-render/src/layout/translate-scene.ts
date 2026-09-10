@@ -87,6 +87,18 @@ function translateNode(
     case 'paragraph':
     case 'tableCell':
       return { ...node, bbox, runs: node.runs.map(translateChild) as readonly TextRunNode[] }
+    // A fenced block holds its lines as runs, and they are OPTIONAL: a block
+    // whose whole value renders as one `<text>` carries none, and spreading
+    // an absent field back as `undefined` would change what the backend
+    // draws.
+    case 'codeBlock':
+      return {
+        ...node,
+        bbox,
+        ...(node.runs !== undefined
+          ? { runs: node.runs.map(translateChild) as readonly TextRunNode[] }
+          : {}),
+      }
     case 'list':
       return { ...node, bbox, items: node.items.map(translateChild) as readonly ListItemNode[] }
     case 'table':

@@ -106,7 +106,7 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
     expect(row).toEqual({ workspaceId: 'ws-legacy' })
   })
 
-  it('a bare re-create (the wb_document_create createWorkspace:true path) does not clobber stored identity', async () => {
+  it('a bare re-create (the wbDocumentCreate createWorkspace:true path) does not clobber stored identity', async () => {
     const deps = await getDefaultServerDeps()
     await deps.documentIndex.createWorkspace({
       workspaceId: 'ws-preserved',

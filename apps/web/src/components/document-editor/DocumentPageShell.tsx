@@ -1,4 +1,8 @@
-import type { ReactNode } from 'react'
+import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  type InspectorPresence,
+  InspectorPresenceContext,
+} from '../../contexts/inspector-presence.js'
 
 /**
  * The two-row grid shell both document pages stand in.
@@ -22,6 +26,14 @@ import type { ReactNode } from 'react'
  * 768px it is a bottom sheet, positioned against this row so it covers the
  * editor and not the top bar above it.
  *
+ * It also owns the inspector's PRESENCE. React drops the pane the instant
+ * the page releases the slot, so a leaving animation would have nothing to
+ * run on; this keeps the outgoing pane rendered until it says it has
+ * finished (`contexts/inspector-presence.ts`). Only when the slot goes
+ * EMPTY — a SWAP between two panes is not an exit, and drawing the old one
+ * over the new for a beat would read as two inspectors open at once, which
+ * is the thing the single slot exists to prevent.
+ *
  * Nothing here goes fullscreen: the shell fullscreens the whole document
  * (`hooks/use-fullscreen.ts`), so this element needs no ref to be promoted
  * through and no ground of its own — a `<main>` promoted to the top layer
@@ -42,6 +54,60 @@ export function DocumentPageShell({
   /** The document's inspector, beside the editor row (a sheet over it when narrow). */
   aside?: ReactNode
 }) {
+  // Adjusted DURING RENDER, not in an effect — React's documented shape for
+  // reacting to a changed prop, and here it is load-bearing rather than
+  // stylistic. An effect runs after the commit in which `aside` became
+  // undefined, so that commit renders NO pane: React unmounts it, and the
+  // effect then mounts a fresh one from `leaving`. The pane "held" for the
+  // exit was a different instance every time.
+  //
+  // Measured before this was written, by tagging the live DOM node and
+  // looking for the tag after the close: `sameNode: false` on every frame.
+  // The cost was not only a flash — a remounted `VersionTimeline` refetches
+  // the version list, so closing History played its "Loading…" for two
+  // frames and made a request nobody asked for, and any state inside the
+  // pane (a scroll position, an open preview) was thrown away on the way
+  // out.
+  const [leaving, setLeaving] = useState<ReactNode>(null)
+  const [shown, setShown] = useState(aside)
+  if (aside !== shown) {
+    setShown(aside)
+    // A SWAP is not an exit: the outgoing pane is replaced outright, because
+    // the four panes share one slot exactly so two are never drawn at once.
+    setLeaving(aside === undefined ? shown : null)
+  }
+
+  // Whether the slot held a pane on the PREVIOUS render. Updated in an
+  // effect, so during the render that mounts a new pane it still holds the
+  // answer for the moment before — which is exactly the question that pane
+  // asks itself once, on mount.
+  const wasOccupied = useRef(false)
+  useEffect(() => {
+    wasOccupied.current = aside !== undefined
+  })
+
+  const closing = useMemo<InspectorPresence>(
+    () => ({ state: 'closed', slotWasOccupied: false, onLeft: () => setLeaving(null) }),
+    [],
+  )
+  const live = useMemo<InspectorPresence>(
+    () => ({ state: 'open', slotWasOccupied: wasOccupied.current, onLeft: () => {} }),
+    // Rebuilt per `aside` rather than on the ref, which is not a dependency
+    // React can track — and the pane below captures the value once on mount
+    // anyway, so a later object with a staler flag reaches nobody.
+    [aside],
+  )
+  // A pane that never animates would otherwise stay on screen forever,
+  // covering the editor. The frame is the fallback, not the mechanism:
+  // whichever arrives first wins, and under prefers-reduced-motion the
+  // 0.01ms animation ends on that same frame.
+  const drop = useCallback(() => setLeaving(null), [])
+  useEffect(() => {
+    if (leaving === null) return
+    const timer = setTimeout(drop, LEAVING_CEILING_MS)
+    return () => clearTimeout(timer)
+  }, [leaving, drop])
+
   return (
     <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
       <div className="min-w-0">
@@ -50,8 +116,27 @@ export function DocumentPageShell({
       </div>
       <div className="relative flex min-h-0 min-w-0">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
-        {aside}
+        {aside === undefined ? (
+          leaving === null ? null : (
+            <InspectorPresenceContext.Provider value={closing}>
+              {leaving}
+            </InspectorPresenceContext.Provider>
+          )
+        ) : (
+          <InspectorPresenceContext.Provider value={live}>
+            {aside}
+          </InspectorPresenceContext.Provider>
+        )}
       </div>
     </main>
   )
 }
+
+/**
+ * How long a leaving pane may stay before it is dropped regardless.
+ *
+ * A CEILING on a failure, not the exit's duration — the exit ends on its own
+ * `animationend`. It is generous on purpose: too tight and it would cut a
+ * real animation short, which is the one thing this must not do.
+ */
+const LEAVING_CEILING_MS = 1000

@@ -45,23 +45,18 @@
 export const ALL_REGISTERED_TOOLS = [
   'wb_viewport_set',
   'wb_body_edit',
-  'wb_body_patch',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_thread_edit',
-  'wb_document_set',
   'wb_scene_render',
   'wb_facet_set',
   'wb_facet_list',
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
-  'wb_document_create',
   'wb_workspace_edit',
   'wb_document_get',
   'wb_document_search',
-  'wb_document_delete',
-  'wb_document_resolve',
   'wb_document_list',
   'canvas_view',
   'wb_pairing_link_create',
@@ -69,7 +64,6 @@ export const ALL_REGISTERED_TOOLS = [
 
 export const COVERED_TOOLS = [
   'wb_viewport_set',
-  'wb_document_set',
   'wb_document_search',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
@@ -79,16 +73,12 @@ export const COVERED_TOOLS = [
   'wb_version_save',
   'wb_version_restore',
   'wb_version_list',
-  'wb_document_create',
   'wb_workspace_edit',
   'canvas_view',
   'wb_body_edit',
-  'wb_body_patch',
   'wb_scene_render',
   'wb_document_get',
   'wb_document_list',
-  'wb_document_resolve',
-  'wb_document_delete',
 ] as const
 
 // wb_pairing_link_create's smoke coverage is deliberately its error path

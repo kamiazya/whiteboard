@@ -8,7 +8,7 @@ const BOUNDS = { x: 0, y: 0, w: 640, h: 200 }
 
 function deps(over: Partial<RowRenderDeps> = {}): RowRenderDeps {
   return {
-    source: fakeFilesSource({ loadMarkdown: vi.fn(async () => '# Hi') }),
+    source: fakeFilesSource({ loadMarkdown: vi.fn(async () => ({ body: '# Hi' })) }),
     theme: 'light',
     // A fresh broker per case, so one case's memo cannot answer another's.
     broker: createInTabRenderBroker(),
@@ -128,7 +128,7 @@ describe('createRowRenderLoader', () => {
   // An empty body lays out to nothing; asking the pool for it spends a slot
   // to produce a blank picture.
   it('answers null for an empty body without touching the pool', async () => {
-    const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => '   \n  ' }) })
+    const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => ({ body: '   \n  ' }) }) })
     expect(
       await createRowRenderLoader(d)({ documentId: 'd1', path: 'a', kind: 'markdown' }),
     ).toBeNull()

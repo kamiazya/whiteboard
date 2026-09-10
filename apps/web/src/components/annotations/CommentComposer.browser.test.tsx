@@ -72,3 +72,30 @@ it('wraps a selection in bold on Mod+b, the editing verb the note pane has', asy
 
   await vi.waitFor(() => expect(box().element().textContent).toBe('**tighten**'))
 })
+
+/**
+ * A box opened ON existing prose puts the caret after it.
+ *
+ * CodeMirror's own default is offset 0, so `autoFocus` on a box holding a
+ * message left the caret in FRONT of what was written: pressing Edit and
+ * typing put the new words before the old ones. Measured on the canvas
+ * card — editing `noted` and typing ` twice` stored `twicenoted`.
+ */
+it('opens with the caret after the text it was handed, not in front of it', async () => {
+  render(
+    <CommentComposer
+      value="noted"
+      onChange={() => {}}
+      onSubmit={() => {}}
+      label="Edit message text"
+      autoFocus
+    />,
+  )
+
+  const box = page.getByRole('textbox', { name: 'Edit message text' })
+  await expect.element(box).toBeInTheDocument()
+  await vi.waitFor(() => expect(box.element().contains(document.activeElement)).toBe(true))
+  await userEvent.keyboard(' twice')
+
+  await vi.waitFor(() => expect(box.element().textContent).toBe('noted twice'))
+})

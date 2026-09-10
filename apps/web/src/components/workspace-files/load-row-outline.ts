@@ -23,6 +23,7 @@
  * the SVG family's answer for the same document.
  */
 
+import { resolveDocumentSymbol, type VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { unhandledKind } from '../../lib/exhaustive.js'
 import type { FaviconRect } from '../../lib/favicon.js'
@@ -39,6 +40,20 @@ import { cacheKeyFor, outlineKeyOf } from '../../lib/render-key.js'
  */
 const ROW_LAYOUT_WIDTH = 640
 
+/**
+ * What one row's read answers with: the document's shape, plus its own mark
+ * when it declares one.
+ *
+ * One value rather than two reads, for the same reason `DocumentOutlineSource`
+ * pairs its bytes with a version — both come out of the same decode, and a
+ * second read to fetch the symbol would be the decode this whole path exists
+ * to keep off the asking thread.
+ */
+export interface RowOutline {
+  readonly rects: readonly FaviconRect[]
+  readonly symbol?: VisualSymbolFacet
+}
+
 export interface RowOutlineDeps {
   readonly source: WorkspaceFilesSource
   /**
@@ -54,23 +69,19 @@ export interface RowOutlineDeps {
     body: string,
     maxWidth: number,
     cacheKey?: string,
-  ) => Promise<readonly FaviconRect[] | null>
+  ) => Promise<RowOutline | null>
   /** Takes the stored SNAPSHOT — the worker decodes it, not this thread. */
-  readonly outlineSpatial?: (
-    snapshot: Uint8Array,
-    cacheKey?: string,
-  ) => Promise<readonly FaviconRect[] | null>
+  readonly outlineSpatial?: (snapshot: Uint8Array, cacheKey?: string) => Promise<RowOutline | null>
 }
 
 /** The shared fleet, at idle priority: nobody is waiting on a 24px icon. */
-async function outlineInPool(
-  request: Record<string, unknown>,
-): Promise<readonly FaviconRect[] | null> {
+async function outlineInPool(request: Record<string, unknown>): Promise<RowOutline | null> {
   const reply = await sharedLayoutWorkerPool().run<OutlineResponse>(
     { type: 'outline', id: nextLayoutRequestId(), ...request },
     'idle',
   )
-  return reply.type === 'outlined' ? reply.rects : null
+  if (reply.type !== 'outlined') return null
+  return { rects: reply.rects, ...(reply.symbol === undefined ? {} : { symbol: reply.symbol }) }
 }
 
 // `cacheKey` rides ON the request rather than being applied around the call:
@@ -108,22 +119,32 @@ export function createRowOutlineLoader(deps: RowOutlineDeps) {
   const produce = async (
     document: WorkspaceDocumentEntry,
     cacheKey: string | undefined,
-  ): Promise<readonly FaviconRect[] | null> => {
+  ): Promise<RowOutline | null> => {
     if (outlinedKind(document) === 'markdown') {
-      const markdown = await deps.source.loadMarkdown(document)
-      if (markdown.trim() === '') return null
-      return await (deps.outlineMarkdown ?? outlineMarkdownInPool)(
-        markdown,
+      const { body, facets } = await deps.source.loadMarkdown(document)
+      // The mark comes off the frontmatter, which the same read carried —
+      // unlike a spatial document, whose symbol rides the canvas the worker
+      // decodes and so comes back from the worker instead.
+      const symbol = resolveDocumentSymbol(facets)
+      // A body with nothing in it has no shape to draw, and a document that
+      // wears a mark still has that. Answering null for both is how a
+      // document somebody marked and has not written yet shows a bare kind
+      // icon.
+      if (body.trim() === '') return symbol === undefined ? null : { rects: [], symbol }
+      const outline = await (deps.outlineMarkdown ?? outlineMarkdownInPool)(
+        body,
         ROW_LAYOUT_WIDTH,
         cacheKey,
       )
+      if (outline === null || symbol === undefined) return outline
+      return { ...outline, symbol }
     }
 
     const snapshot = await deps.source.loadSpatialSnapshot(document)
     return await (deps.outlineSpatial ?? outlineSpatialInPool)(snapshot, cacheKey)
   }
 
-  return async (document: WorkspaceDocumentEntry): Promise<readonly FaviconRect[] | null> => {
+  return async (document: WorkspaceDocumentEntry): Promise<RowOutline | null> => {
     // The catch stays OUTSIDE the broker: a rejection must not be remembered
     // as an answer, so the broker is allowed to see it and forget the entry,
     // and the totality this loader promises is restored here.

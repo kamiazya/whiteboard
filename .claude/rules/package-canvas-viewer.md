@@ -13,10 +13,16 @@ paths:
 - This package no longer owns its own `SpatialAppearanceResolver`.
   `viewer-appearance.ts` was deleted by the theme-layer slice
   (package-canvas-render.md decision #8): `CanvasViewer.tsx` now calls
-  canvas-render's `createSpatialTheme({ mode: 'light' })` directly (the
-  viewer is read-only with no theme switch of its own), alongside
-  codec's `parseMarkdownBody` and no `onDegrade` (this package
-  degrades silently by choice).
+  canvas-render's `createSpatialTheme` directly, alongside codec's
+  `parseMarkdownBody` and no `onDegrade` (this package degrades silently
+  by choice). It builds BOTH modes once at module scope and picks between
+  them with the `theme` prop, defaulting to `light`. The viewer has no
+  theme switch of its own — that is exactly why the host has to say: the
+  SVG is injected markup, so no stylesheet can reach the fills and strokes
+  resolved at layout time, and a preview inside a dark app drew the light
+  palette on a near-black ground until the prop existed. Body text runs are
+  the one part CSS still reaches (canvas-render assigns them no `fill`), so
+  a host that themes the viewer sets `fill` on an ancestor too.
 - `measure-text.ts`: `createBrowserMeasureText()` — the browser half of
   canvas-render's injected `MeasureText` seam (Canvas 2D `measureText`,
   with a fallback ratio-measurer for environments with no real 2D context
@@ -24,8 +30,8 @@ paths:
 - `font.ts`: `VIEWER_FONT_FAMILY` — the single constant feeding both the
   browser measurer and the widget's build-time font embedding.
 - `CanvasViewer.tsx`: builds a scene via canvas-render's shared
-  `layoutSpatialCanvas` (with `VIEWER_APPEARANCE` and codec's
-  `parseMarkdownBody` injected) and renders it via canvas-render's
+  `layoutSpatialCanvas` (with the theme's `VIEWER_APPEARANCES` entry and
+  codec's `parseMarkdownBody` injected) and renders it via canvas-render's
   `renderSceneToSvg`, injecting the resulting string with
   `dangerouslySetInnerHTML`.
 - `mount.ts`: the imperative `mountCanvasViewer` API for non-React hosts
@@ -102,7 +108,10 @@ paths:
   per parse stage, plus round-trip and totality fast-check properties.
 - Color/preset/ellipse-radius/edge-stroke appearance resolution now lives
   in canvas-render's `theme/spatial-theme.ts` tests, since
-  `createSpatialTheme` is shared, not viewer-specific.
+  `createSpatialTheme` is shared, not viewer-specific. What stays here is
+  that the `theme` prop REACHES it — `CanvasViewer.test.tsx` asserts the
+  drawn chrome stroke against each shared palette, which is what a host
+  passing the prop into a resolver nobody reads would fail.
   `canvas-viewer-geometry-conformance.test.ts` is this package's tier-2
   conformance test for the theme-layer slice (package-canvas-render.md
   decision #8): asserts `CanvasViewer.tsx` calls `layoutSpatialCanvas` with
@@ -113,6 +122,30 @@ paths:
   `sizePx`, `advanceWidth('') === 0`).
 - `smoke:widget` (`scripts/smoke-widget.mjs`) exercises the built
   single-file widget in a real browser.
+
+## Render style (ADR-0030)
+
+- `CanvasViewer` and `mountCanvasViewer` take `style` (`'clean' | 'document' |
+  <theme id>`), forwarded to `layoutSpatialCanvas`. Absent is `'clean'`: the
+  MCP Apps widget and any embedding host never pay for a theme's jitter or
+  glow unasked, the same default as the headless export. A host that wants
+  the document's look passes `'document'`.
+- `font-loading.ts`'s `hasLoadedFace(family)` is the layout's `fontAvailable`
+  seam for a browser realm: the vendored family always, any other only while
+  this realm holds a LOADED face for it. It is what the viewer passes, and
+  what `apps/web`'s composition passes on both threads through the
+  `./font-loading` subpath. A family only the operating system provides
+  answers false on purpose — Canvas 2D would draw it and the daemon's
+  export could not, and a face the two sides disagree on moves every
+  wrapped line.
+
+- `registerFontBytes(family, bytes)` registers a face from bytes in THIS
+  realm — a window's document or a worker's global — and records the family
+  so `hasLoadedFace` answers from the record rather than by scanning a face
+  set that is not iterable everywhere. Memoised per family; never rejects.
+  `withViewerFontEmbedded(svg, extraFaces)` carries such faces into a PNG
+  export beside the vendored one, and still carries them when the vendored
+  face cannot be read.
 
 ## Common mistakes (append as review finds them)
 

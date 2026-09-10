@@ -7,7 +7,7 @@
 //
 // Coverage:
 //   1. tools/list matches the authoritative set in mcp-smoke-coverage.ts
-//   2. wb_document_create → wb_facet_set → wb_version_save → wb_version_list → wb_version_restore
+//   2. wb_workspace_edit → wb_facet_set → wb_version_save → wb_version_list → wb_version_restore
 //
 // This does not consume API quota, so it is safe in CI.
 
@@ -95,6 +95,66 @@ async function callTool(name, args) {
 }
 
 /**
+ * `wb_document_get` answers with a LIST since it took `documentIds`. Most
+ * steps here read one document, so this unwraps that case and refuses a
+ * `failed` entry rather than letting `undefined.content` report as a
+ * content mismatch three lines later.
+ */
+async function readDocument(documentId, options) {
+  const out = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    ...(options ? { options } : {}),
+  })
+  if (out.failed.length > 0) {
+    throw new Error(`wb_document_get refused ${documentId}: ${out.failed[0].reason}`)
+  }
+  if (out.documents.length !== 1) {
+    throw new Error(`wb_document_get answered ${out.documents.length} documents for one id`)
+  }
+  return out.documents[0]
+}
+
+/**
+ * `wb_workspace_edit` is the ONE front door onto document create / set /
+ * delete — the standalone `wb_document_create`, `wb_document_set` and
+ * `wb_document_delete` tools are retired. These three unwrap its batch reply
+ * for the single-document steps below, so each step still reads as the thing
+ * it is testing rather than as a batch envelope.
+ *
+ * They deliberately do NOT hide the tool being called: the steps that are
+ * ABOUT the batch (an ordered multi-op run, a failing op mid-batch) still
+ * call it directly.
+ */
+async function createDocument({ workspaceId = WORKSPACE_ID, ...op }, batch = {}) {
+  const out = await callTool('wb_workspace_edit', {
+    workspaceId,
+    ...batch,
+    ops: [{ op: 'document.create', ...op }],
+  })
+  const first = out.results[0]
+  if (first === undefined) {
+    throw new Error(`wb_workspace_edit applied no op for a create: ${JSON.stringify(out)}`)
+  }
+  return { workspaceId: out.workspaceId, documentId: first.documentId, path: first.path }
+}
+
+async function setDocument({ workspaceId = WORKSPACE_ID, documentId, markdown }, batch = {}) {
+  return callTool('wb_workspace_edit', {
+    workspaceId,
+    ...batch,
+    ops: [{ op: 'document.set', documentId, markdown }],
+  })
+}
+
+async function deleteDocument({ workspaceId = WORKSPACE_ID, documentId }) {
+  return callTool('wb_workspace_edit', {
+    workspaceId,
+    ops: [{ op: 'document.delete', documentId }],
+  })
+}
+
+/**
  * `expecting` is required, and checked against the error text: isError alone
  * says a call failed, not that it failed for the reason under test. Every
  * step here refuses on a guard, and a typo'd id or an unrelated regression
@@ -135,13 +195,11 @@ const WORKSPACE_ID = 'e2e'
 const EXPECTED_TOOLS = [
   'wb_viewport_set',
   'wb_body_edit',
-  'wb_body_patch',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_thread_edit',
   'wb_document_get',
   'wb_document_search',
-  'wb_document_set',
   'wb_scene_render',
   'canvas_view',
   'wb_facet_set',
@@ -149,10 +207,7 @@ const EXPECTED_TOOLS = [
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
-  'wb_document_create',
   'wb_workspace_edit',
-  'wb_document_delete',
-  'wb_document_resolve',
   'wb_document_list',
   'wb_pairing_link_create',
 ]
@@ -200,21 +255,22 @@ async function main() {
   // Unknown-workspace guard: without createWorkspace the create must fail
   // (workspaces never materialize implicitly from a typo'd workspaceId).
   await expectToolError(
-    'wb_document_create',
-    { workspaceId: WORKSPACE_ID, path: 'e2e-src', kind: 'spatial' },
+    'wb_workspace_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      ops: [{ op: 'document.create', path: 'e2e-src', kind: 'spatial' }],
+    },
     'without createWorkspace',
     'Workspace not found',
   )
 
-  // wb_document_create: first daemon-dependent RPC (cold-start latency).
-  const created = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
-    path: 'e2e-src',
-    kind: 'spatial',
-    createWorkspace: true,
-  })
+  // The first daemon-dependent RPC (cold-start latency).
+  const created = await createDocument(
+    { path: 'e2e-src', kind: 'spatial' },
+    { createWorkspace: true },
+  )
   if (typeof created.documentId !== 'string' || created.path !== 'e2e-src') {
-    throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
+    throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(created)}`)
   }
   // ADR-0019's mint boundary, end to end through the PUBLISHED artifact.
   // The create decides the workspace's canonical id — so what it REPORTS is
@@ -224,15 +280,15 @@ async function main() {
   // value it describes can be caught travelling separately.
   if (!/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/.test(created.workspaceId ?? '')) {
     throw new Error(
-      `wb_document_create did not mint a canonical workspace id: ${JSON.stringify(created)}`,
+      `wb_workspace_edit did not mint a canonical workspace id: ${JSON.stringify(created)}`,
     )
   }
   if (created.workspaceId === WORKSPACE_ID) {
-    throw new Error(`wb_document_create echoed the handle instead of minting: ${WORKSPACE_ID}`)
+    throw new Error(`wb_workspace_edit echoed the handle instead of minting: ${WORKSPACE_ID}`)
   }
   const documentId = created.documentId
   console.log(
-    `[e2e] wb_document_create → ${documentId} in ${created.workspaceId} (segment ${WORKSPACE_ID})`,
+    `[e2e] document.create → ${documentId} in ${created.workspaceId} (segment ${WORKSPACE_ID})`,
   )
 
   // ...and every call after this one still addresses the workspace as
@@ -242,8 +298,7 @@ async function main() {
 
   // A document's name is the workspace's, not its content's (ADR-0009), so
   // it round-trips through create -> list without any document read.
-  const named = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
+  const named = await createDocument({
     path: 'e2e-named',
     kind: 'markdown',
     name: 'リリース計画 2026 / v2',
@@ -252,21 +307,45 @@ async function main() {
   // validates structuredContent against outputSchema at runtime, so this is
   // also where a discriminated-union input schema proves it survives the
   // wire: the shape a client sends is not the shape a test constructs.
-  const withBody = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
+  const withBody = await createDocument({
     path: 'e2e-with-body',
     kind: 'markdown',
     name: 'created with its body',
     markdown: '---\ntype: note\ntags:\n  - e2e\n---\nWritten at creation time.',
   })
-  const readBack = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const readBack = await readDocument(withBody.documentId)
   if (!readBack.content.includes('Written at creation time.')) {
-    throw new Error(`wb_document_create did not persist its body: ${readBack.content}`)
+    throw new Error(`document.create did not persist its body: ${readBack.content}`)
   }
-  console.log('[e2e] wb_document_create → body written in one call')
+  console.log('[e2e] document.create → body written in one call')
+
+  // Axis B on a read: the two documents come back in ONE call, each in its
+  // own format, and an id nothing was created under lands in `failed`
+  // rather than taking the other two with it. Provable only through a
+  // client — the schema alone cannot say what the server does with a mix.
+  const bulk = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId, withBody.documentId, '01ZZZZZZZZZZZZZZZZZZZZZZZZ'],
+  })
+  if (
+    bulk.documents.map((entry) => entry.documentId).join() !==
+    [documentId, withBody.documentId].join()
+  ) {
+    throw new Error(
+      `wb_document_get did not answer in the order asked: ${JSON.stringify(bulk.documents.map((entry) => entry.documentId))}`,
+    )
+  }
+  if (bulk.documents.map((entry) => entry.kind).join() !== 'spatial,markdown') {
+    throw new Error(
+      `wb_document_get did not read each document in its own format: ${JSON.stringify(bulk.documents.map((entry) => entry.kind))}`,
+    )
+  }
+  if (bulk.failed.length !== 1 || bulk.failed[0].documentId !== '01ZZZZZZZZZZZZZZZZZZZZZZZZ') {
+    throw new Error(
+      `wb_document_get did not report the unreadable id: ${JSON.stringify(bulk.failed)}`,
+    )
+  }
+  console.log('[e2e] wb_document_get → two kinds in one call, the unreadable id reported not fatal')
 
   // wb_body_edit against a REAL markdown document, which is the thing
   // wb_body_patch cannot reach at all: its canvas read never sees the body's
@@ -299,10 +378,7 @@ async function main() {
   if (edited.applied !== 1 || !edited.body.includes('Written at the smoke.')) {
     throw new Error(`wb_body_edit returned unexpected shape: ${JSON.stringify(edited)}`)
   }
-  const afterEdit = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const afterEdit = await readDocument(withBody.documentId)
   if (!afterEdit.content.includes('Written at the smoke.')) {
     throw new Error(`wb_body_edit did not persist through the store: ${afterEdit.content}`)
   }
@@ -357,10 +433,7 @@ async function main() {
   if (proposedChange.op !== 'body.replace' || proposedChange.status !== 'open') {
     throw new Error(`proposed change has an unexpected shape: ${JSON.stringify(proposedChange)}`)
   }
-  const bodyAfterPropose = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: withBody.documentId,
-  })
+  const bodyAfterPropose = await readDocument(withBody.documentId)
   if (bodyAfterPropose.content.includes('a proposal nobody adopted')) {
     throw new Error(`a proposed passage reached the body: ${bodyAfterPropose.content}`)
   }
@@ -372,12 +445,12 @@ async function main() {
   // The union's other side: a spatial document takes no markdown, and the
   // refusal must reach the client rather than the content being dropped.
   await expectToolError(
-    'wb_document_create',
+    'wb_workspace_edit',
     {
       workspaceId: WORKSPACE_ID,
-      path: 'e2e-spatial-body',
-      kind: 'spatial',
-      markdown: '# nope',
+      ops: [
+        { op: 'document.create', path: 'e2e-spatial-body', kind: 'spatial', markdown: '# nope' },
+      ],
     },
     'with markdown on a spatial document',
     'markdown',
@@ -387,6 +460,10 @@ async function main() {
   // so no round trip is needed to learn them.
   const batch = await callTool('wb_workspace_edit', {
     workspaceId: WORKSPACE_ID,
+    // One actor for the whole batch. The SDK validates it against
+    // `okfActorSchema` at the boundary, so this also proves the batch did
+    // not widen the field to a plain string.
+    actor: 'reference_agent/e2e-smoke',
     ops: [
       {
         op: 'document.create',
@@ -403,7 +480,16 @@ async function main() {
   if (batch.results.some((r) => typeof r.documentId !== 'string')) {
     throw new Error(`wb_workspace_edit did not report the ids it minted: ${JSON.stringify(batch)}`)
   }
-  console.log('[e2e] wb_workspace_edit → two documents, ids returned')
+  const batchExport = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [batch.results[0].documentId],
+  })
+  if (!batchExport.documents[0].content.includes('reference_agent/e2e-smoke')) {
+    throw new Error(
+      `wb_workspace_edit did not stamp the batch actor: ${batchExport.documents[0].content}`,
+    )
+  }
+  console.log('[e2e] wb_workspace_edit → two documents, ids returned, batch actor stamped')
 
   // A failing op stops the run, and the message must say how far it got:
   // documents are separate CRDTs, so "nothing was written" would be false
@@ -435,52 +521,49 @@ async function main() {
   if (unnamedRow === undefined || 'name' in unnamedRow) {
     throw new Error(`an unnamed document should carry no name: ${JSON.stringify(unnamedRow)}`)
   }
-  console.log('[e2e] wb_document_create/list → name round-trips, unnamed stays unnamed')
+  console.log('[e2e] document.create/list → name round-trips, unnamed stays unnamed')
 
-  // wb_document_resolve: id → placement, through the real outputSchema.
-  const resolved = await callTool('wb_document_resolve', {
-    workspaceId: WORKSPACE_ID,
-    documentId: named.documentId,
-  })
-  if (resolved.documentId !== named.documentId || resolved.path !== named.path) {
-    throw new Error(`wb_document_resolve returned unexpected shape: ${JSON.stringify(resolved)}`)
+  // id → placement is a row of wb_document_list now; the standalone
+  // wb_document_resolve is retired (ADR-0031 §4).
+  const resolvedRow = namedList.documents.find((d) => d.documentId === named.documentId)
+  if (resolvedRow === undefined || resolvedRow.path !== named.path) {
+    throw new Error(
+      `wb_document_list does not place ${named.documentId}: ${JSON.stringify(namedList)}`,
+    )
   }
-  console.log(`[e2e] wb_document_resolve → ${resolved.documentId} at ${resolved.path}`)
+  console.log(`[e2e] wb_document_list places ${resolvedRow.documentId} at ${resolvedRow.path}`)
 
-  // wb_document_delete: a throwaway document, deleted and gone from the list.
-  const doomed = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
-    path: 'doomed',
-    kind: 'spatial',
-  })
-  const deletion = await callTool('wb_document_delete', {
-    workspaceId: WORKSPACE_ID,
-    documentId: doomed.documentId,
-  })
-  if (deletion.deleted !== true) {
-    throw new Error(`wb_document_delete returned unexpected shape: ${JSON.stringify(deletion)}`)
+  // document.delete: a throwaway document, deleted and gone from the list.
+  const doomed = await createDocument({ path: 'doomed', kind: 'spatial' })
+  const deletion = await deleteDocument({ documentId: doomed.documentId })
+  if (deletion.applied !== 1) {
+    throw new Error(`document.delete returned unexpected shape: ${JSON.stringify(deletion)}`)
   }
   const afterDelete = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
   if (afterDelete.documents.some((doc) => doc.documentId === doomed.documentId)) {
-    throw new Error('wb_document_delete left the document in the listing')
+    throw new Error('document.delete left the document in the listing')
   }
-  console.log('[e2e] wb_document_delete → deleted and gone from the list')
+  console.log('[e2e] document.delete → deleted and gone from the list')
 
   // A facet is OKF frontmatter, so it belongs to the markdown document; the
   // spatial one refuses it.
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId: named.documentId,
+    documentIds: [named.documentId],
     facets: { 'e2e.check/v1': { note: 'before-save' } },
   })
-  if (facets.documentId !== named.documentId) {
+  if (facets.updated[0]?.documentId !== named.documentId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
   }
   console.log('[e2e] wb_facet_set → set on the markdown document')
 
   await expectToolError(
     'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e.check/v1': { note: 'nope' } } },
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      facets: { 'e2e.check/v1': { note: 'nope' } },
+    },
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
@@ -496,7 +579,7 @@ async function main() {
     'wb_facet_set',
     {
       workspaceId: WORKSPACE_ID,
-      documentId: named.documentId,
+      documentIds: [named.documentId],
       facets: { 'visual.edges/v0': { routing: 'spiral' } },
     },
     'with a canvas-target registered facet',
@@ -630,21 +713,21 @@ async function main() {
   // spatial document, then delete it with the null tombstone.
   const nodeFacet = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': { kind: 'hexagon' } },
   })
-  if (nodeFacet.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
+  if (nodeFacet.updated[0]?.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
     throw new Error(`wb_facet_set(nodeId) returned unexpected shape: ${JSON.stringify(nodeFacet)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → visual.shape set on a node')
   const nodeFacetCleared = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': null },
   })
-  if (Object.keys(nodeFacetCleared.facets ?? { leftover: true }).length !== 0) {
+  if (Object.keys(nodeFacetCleared.updated[0]?.facets ?? { leftover: true }).length !== 0) {
     throw new Error(`null tombstone did not delete: ${JSON.stringify(nodeFacetCleared)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → null tombstone deletes the facet')
@@ -652,33 +735,45 @@ async function main() {
   // replacing the bucket, which is what a second plugin's facet depends on.
   await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': { kind: 'ellipse' } },
   })
   const bothFacets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.symbol/v0': { kind: 'icon', name: 'star' } },
   })
   if (
-    bothFacets.facets?.['visual.symbol/v0']?.name !== 'star' ||
-    bothFacets.facets?.['visual.shape/v0']?.kind !== 'ellipse'
+    bothFacets.updated[0]?.facets?.['visual.symbol/v0']?.name !== 'star' ||
+    bothFacets.updated[0]?.facets?.['visual.shape/v0']?.kind !== 'ellipse'
   ) {
     throw new Error(`node facets did not merge: ${JSON.stringify(bothFacets)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → visual.symbol merges beside visual.shape')
   const bothCleared = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     nodeId: 'target',
     facets: { 'visual.shape/v0': null, 'visual.symbol/v0': null },
   })
-  if (Object.keys(bothCleared.facets ?? { leftover: true }).length !== 0) {
+  if (Object.keys(bothCleared.updated[0]?.facets ?? { leftover: true }).length !== 0) {
     throw new Error(`combined null tombstones did not delete: ${JSON.stringify(bothCleared)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → one call deletes both node facets')
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId, named.documentId],
+      nodeId: 'target',
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    },
+    'with a nodeId and several documentIds',
+    'nodeId names a node of ONE document',
+  )
+  console.log('[e2e] wb_facet_set → a nodeId across several documents is refused')
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(
@@ -741,10 +836,7 @@ async function main() {
 
   // The lock is editor state, never canvas content: it must not appear in
   // an export. This is the runtime guard for the sidecar-map contract.
-  const exportedWithLocks = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-  })
+  const exportedWithLocks = await readDocument(documentId)
   const exportedCanvas = JSON.parse(exportedWithLocks.content)
   const leaked = [...exportedCanvas.nodes, ...exportedCanvas.edges].filter(
     (element) => 'locked' in element,
@@ -772,6 +864,49 @@ async function main() {
   }
   console.log('[e2e] wb_scene_render → svg with chrome for the seeded text node')
 
+  // A canvas-target facet (ADR-0030): the document names a theme through
+  // wb_facet_set's canvas target, the default render stays clean, and a
+  // styled render draws it — the whole agent path, end to end.
+  const themed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+  })
+  if (themed.updated[0]?.facets?.['visual.theme/v0']?.theme !== 'visual.neon') {
+    throw new Error(
+      `wb_facet_set(target: canvas) returned unexpected shape: ${JSON.stringify(themed)}`,
+    )
+  }
+  console.log("[e2e] wb_facet_set(target: 'canvas') → visual.theme set on the canvas")
+  const cleanByDefault = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  // The glow's filter id, not the bare word: a drop shadow is a filter too.
+  if (cleanByDefault.svg.includes('wb-glow')) {
+    throw new Error('wb_scene_render drew the document theme without being asked')
+  }
+  const styled = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (!styled.svg.includes('filterUnits="userSpaceOnUse"')) {
+    throw new Error(`wb_scene_render(style: document) drew no glow: ${styled.svg.slice(0, 300)}`)
+  }
+  console.log("[e2e] wb_scene_render(style: 'document') → the neon glow; the default stayed clean")
+  const unthemed = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  if (Object.keys(unthemed.updated[0]?.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`canvas facet tombstone did not delete: ${JSON.stringify(unthemed)}`)
+  }
+  console.log("[e2e] wb_facet_set(target: 'canvas') → null tombstone clears the theme")
+
   // The opt-in reference path is a SECOND composition through the same
   // output schema, reached only when `embedReferences` is set — so the
   // default call above cannot cover it. This canvas has no file node, which
@@ -794,8 +929,7 @@ async function main() {
   // draws the canvas a `![[path]]` embed names as a miniature — the third
   // composition through the same output schema (layoutMdastBlocks with the
   // spatial composer behind it), reachable from no spatial call above.
-  await callTool('wb_document_set', {
-    workspaceId: WORKSPACE_ID,
+  await setDocument({
     documentId: withBody.documentId,
     markdown: '---\ntype: note\n---\nSee the board:\n\n![[e2e-src]]\n\nand more.',
   })
@@ -845,6 +979,17 @@ async function main() {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }
   console.log('[e2e] canvas_view → scene + references + both ids for the widget')
+  // The look is the widget's to draw, so the tool only echoes it — and the
+  // SDK validates that echo against the outputSchema.
+  const viewedStyled = await callTool('canvas_view', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (viewedStyled.style !== 'document') {
+    throw new Error(`canvas_view did not echo style: ${JSON.stringify(viewedStyled.style)}`)
+  }
+  console.log("[e2e] canvas_view(style: 'document') → style echoed for the widget")
 
   // The widget's sticky-note append, in ITS EXACT argument shape (a text
   // node with no geometry, auto-placed server-side) — the runtime guard
@@ -910,8 +1055,7 @@ async function main() {
   // with no canvas. Run against a MARKDOWN document deliberately — reaching it
   // on the spatial canvas would prove nothing the ops above do not, and the
   // gap it closes is precisely the one wb_canvas_edit cannot cross.
-  const noteForThreads = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
+  const noteForThreads = await createDocument({
     path: 'smoke/threaded-note',
     kind: 'markdown',
   })
@@ -1090,45 +1234,48 @@ async function main() {
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
 
-  // wb_body_patch's inputSchema is a z.discriminatedUnion, and only a real
-  // MCP SDK client (not a hand-rolled unit test) can prove the registered
-  // schema actually accepts both arms — this is what tools/list validates
-  // arguments against. Exercise full mode then range mode on the seeded
-  // 'target' node, and read the result back through wb_canvas_snapshot
-  // rather than trusting the tool's own echo, so persistence is what is
-  // being checked.
-  const fullPatched = await callTool('wb_body_patch', {
+  // The two arms wb_body_patch had, now as ops. Only a real MCP SDK client
+  // can prove the registered schema accepts them — this is what tools/list
+  // validates arguments against — and the result is read back through
+  // wb_canvas_snapshot rather than the tool's own echo, so persistence is
+  // what is checked.
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    mode: 'full',
-    nodeId: 'target',
-    body: 'line0\nline1\nline2',
+    mode: 'apply',
+    ops: [{ op: 'node.patch', id: 'target', patch: { text: 'line0\nline1\nline2' } }],
   })
-  if (fullPatched.node?.text !== 'line0\nline1\nline2') {
-    throw new Error(`wb_body_patch(full) returned unexpected shape: ${JSON.stringify(fullPatched)}`)
-  }
-  const rangePatched = await callTool('wb_body_patch', {
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    mode: 'range',
-    nodeId: 'target',
-    range: { startLine: 1, endLine: 1, replacement: 'patched' },
+    mode: 'apply',
+    ops: [{ op: 'node.splice', id: 'target', startLine: 1, endLine: 1, replacement: 'patched' }],
   })
-  if (rangePatched.node?.text !== 'line0\npatched\nline2') {
-    throw new Error(
-      `wb_body_patch(range) returned unexpected shape: ${JSON.stringify(rangePatched)}`,
-    )
-  }
   const afterPatch = await callTool('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId })
   const patchedNode = Array.isArray(afterPatch.nodes)
     ? afterPatch.nodes.find((node) => node.id === 'target')
     : undefined
   if (patchedNode?.text !== 'line0\npatched\nline2') {
-    throw new Error(
-      `wb_body_patch did not persist through the store: ${JSON.stringify(patchedNode)}`,
-    )
+    throw new Error(`node.patch/node.splice did not persist: ${JSON.stringify(patchedNode)}`)
   }
-  console.log('[e2e] wb_body_patch → both arms accepted, patched text persisted')
+  console.log('[e2e] wb_canvas_edit → node.patch(text) then node.splice, persisted')
+
+  // The silent no-op that retiring wb_body_patch into node.patch had to
+  // close first: `label` is on the patch allowlist because a GROUP has one,
+  // and the per-type node schemas are non-strict, so before the guard this
+  // reported success over a document it did not change.
+  await expectToolError(
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      mode: 'apply',
+      ops: [{ op: 'node.patch', id: 'target', patch: { label: 'not for a text node' } }],
+    },
+    'patching a group-only key onto a text node',
+    'has no label',
+  )
+  console.log('[e2e] wb_canvas_edit → a key the node type lacks is refused, not dropped')
 
   // wb_canvas_edit is the whole spatial-mutation surface, so the smoke has
   // to reach the parts a unit test cannot: the batch's structuredContent vs
@@ -1190,8 +1337,8 @@ async function main() {
   console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
 
   // region.set is the one op that deletes by OMISSION, so the smoke drives
-  // the full reconcile through the real wire: declare two, then declare one,
-  // and the other must be gone. The group sits far from everything else so
+  // the full reconcile through the real wire: add two inside, name both,
+  // then name one, and the other must be gone. The group sits far from everything else so
   // nothing already on this canvas is enclosed by it.
   await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
@@ -1202,15 +1349,9 @@ async function main() {
         op: 'node.add',
         node: { id: 'region', type: 'group', x: 5000, y: 5000, width: 900, height: 600 },
       },
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [
-          { id: 'in-1', type: 'text', text: 'first' },
-          { id: 'in-2', type: 'text', text: 'second' },
-        ],
-        edges: [],
-      },
+      { op: 'node.add', node: { id: 'in-1', type: 'text', text: 'first' }, within: 'region' },
+      { op: 'node.add', node: { id: 'in-2', type: 'text', text: 'second' }, within: 'region' },
+      { op: 'region.set', within: 'region', nodes: ['in-1', 'in-2'] },
     ],
     follow: false,
   })
@@ -1218,14 +1359,7 @@ async function main() {
     workspaceId: WORKSPACE_ID,
     documentId,
     mode: 'apply',
-    ops: [
-      {
-        op: 'region.set',
-        within: 'region',
-        nodes: [{ id: 'in-1', type: 'text', text: 'first' }],
-        edges: [],
-      },
-    ],
+    ops: [{ op: 'region.set', within: 'region', nodes: ['in-1'] }],
     follow: false,
   })
   const survivors = reconciled.snapshot.nodes.map((node) => node.id)
@@ -1240,6 +1374,19 @@ async function main() {
     throw new Error(`region.set reached outside its region: ${JSON.stringify(survivors)}`)
   }
   console.log('[e2e] wb_canvas_edit(region.set) → region reconciled, rest of the board untouched')
+  // A selector where an id goes: `within` names the group, not its members.
+  const lockedRegion = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [{ op: 'node.lock', within: 'region', locked: true }],
+    follow: false,
+  })
+  const lockedIds = lockedRegion.snapshot.nodes.filter((node) => node.locked).map((node) => node.id)
+  if (!lockedIds.includes('in-1') || lockedIds.includes('lockable')) {
+    throw new Error(`node.lock within reached the wrong nodes: ${JSON.stringify(lockedIds)}`)
+  }
+  console.log("[e2e] wb_canvas_edit(node.lock within) → only the region's member locked")
 
   // wb_viewport_set with nobody watching. This smoke runs headless, so
   // delivered:false IS the success path — the point is that asking a
@@ -1314,27 +1461,49 @@ async function main() {
   // answer is the panel's row shape.
   const saved = await callTool('wb_version_save', {
     workspaceId: WORKSPACE_ID,
-    documentId,
+    documentIds: [documentId],
     label: 'e2e',
   })
+  const savedRow = saved.saved[0]
   if (
-    saved.documentId !== documentId ||
-    !saved.version?.id ||
-    saved.version.label !== 'e2e' ||
-    saved.version.auto !== false ||
-    !saved.version.createdAt ||
-    saved.version.operator?.kind !== 'ai'
+    savedRow?.documentId !== documentId ||
+    !savedRow.version?.id ||
+    savedRow.version.label !== 'e2e' ||
+    savedRow.version.auto !== false ||
+    !savedRow.version.createdAt ||
+    savedRow.version.operator?.kind !== 'ai'
   ) {
     throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
   }
-  console.log(`[e2e] wb_version_save → ${saved.version.id}`)
+  console.log(`[e2e] wb_version_save → ${savedRow.version.id}`)
+
+  // Axis B on a write: one call, one shared label, two documents. The
+  // batch also proves the write lock nests without deadlocking, which no
+  // unit test of the tool alone can show.
+  const batchSaved = await callTool('wb_version_save', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId, named.documentId],
+    label: 'one checkpoint, two documents',
+  })
+  if (
+    batchSaved.saved.map((entry) => entry.documentId).join() !==
+    [documentId, named.documentId].join()
+  ) {
+    throw new Error(
+      `wb_version_save did not answer in the order asked: ${JSON.stringify(batchSaved.saved.map((entry) => entry.documentId))}`,
+    )
+  }
+  if (batchSaved.saved.some((entry) => entry.version.label !== 'one checkpoint, two documents')) {
+    throw new Error(`wb_version_save did not share the label: ${JSON.stringify(batchSaved.saved)}`)
+  }
+  console.log('[e2e] wb_version_save → two documents, one label, one call')
 
   // wb_version_list
   const listed = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
   if (
     listed.documentId !== documentId ||
     !Array.isArray(listed.versions) ||
-    !listed.versions.some((v) => v.id === saved.version.id)
+    !listed.versions.some((v) => v.id === savedRow.version.id)
   ) {
     throw new Error(`wb_version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
@@ -1344,12 +1513,12 @@ async function main() {
   const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    versionId: saved.version.id,
+    versionId: savedRow.version.id,
   })
   if (
     restored.mode !== 'in-place' ||
     restored.documentId !== documentId ||
-    restored.restoredVersionId !== saved.version.id ||
+    restored.restoredVersionId !== savedRow.version.id ||
     restored.label !== 'e2e'
   ) {
     throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
@@ -1361,7 +1530,7 @@ async function main() {
   const copied = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    versionId: saved.version.id,
+    versionId: savedRow.version.id,
     targetPath: 'e2e-restored-copy',
   })
   if (
@@ -1378,7 +1547,7 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      versionId: saved.version.id,
+      versionId: savedRow.version.id,
       targetPath: 'e2e-restored-copy',
     },
     'into a targetPath that already exists',
@@ -1397,36 +1566,33 @@ async function main() {
   // The subtree is addressed by PATH PREFIX (`p === path || p.startsWith(
   // `${path}/`)`), so the fixture needs a real descendant rather than a
   // second sibling.
-  const treeRoot = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
+  const treeRoot = await createDocument({
     path: 'e2e-tree',
     kind: 'markdown',
     markdown: '---\ntype: note\n---\nroot at the saved point',
   })
-  const treeChild = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
+  const treeChild = await createDocument({
     path: 'e2e-tree/child',
     kind: 'markdown',
     markdown: '---\ntype: note\n---\nchild at the saved point',
   })
   const treeVersion = await callTool('wb_version_save', {
     workspaceId: WORKSPACE_ID,
-    documentId: treeRoot.documentId,
+    documentIds: [treeRoot.documentId],
     label: 'e2e-subtree-point',
   })
   // Move the DESCENDANT away from the saved state. Asserting the rollback
   // reached it is what makes this step about the mode rather than only its
   // shape — a subtree restore that quietly touched the addressed document
   // alone would satisfy every field above.
-  await callTool('wb_document_set', {
-    workspaceId: WORKSPACE_ID,
+  await setDocument({
     documentId: treeChild.documentId,
     markdown: '---\ntype: note\n---\nchild after the saved point',
   })
   const rolledBack = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId: treeRoot.documentId,
-    versionId: treeVersion.version.id,
+    versionId: treeVersion.saved[0].version.id,
     subtree: true,
   })
   if (rolledBack.mode !== 'subtree' || rolledBack.restoredCount !== 2) {
@@ -1434,10 +1600,7 @@ async function main() {
       `wb_version_restore(subtree) returned unexpected shape: ${JSON.stringify(rolledBack)}`,
     )
   }
-  const childAfter = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: treeChild.documentId,
-  })
+  const childAfter = await readDocument(treeChild.documentId)
   if (!childAfter.content.includes('child at the saved point')) {
     throw new Error(
       `subtree rollback did not reach the descendant: ${JSON.stringify(childAfter.content)}`,
@@ -1448,7 +1611,7 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId: treeRoot.documentId,
-      versionId: treeVersion.version.id,
+      versionId: treeVersion.saved[0].version.id,
       subtree: true,
       targetPath: 'e2e-tree-elsewhere',
     },
@@ -1459,26 +1622,25 @@ async function main() {
     `[e2e] wb_version_restore(subtree) → ${rolledBack.restoredCount} document(s) rolled back`,
   )
 
-  // wb_document_set → wb_document_get round-trip, including the core
+  // document.set → wb_document_get round-trip, including the core
   // facets (type/title/tags) — these are stored via writeCoreFacets, a
   // separate code path from the extension `facets` bucket below, so this is
   // the runtime guard for structuredContent-vs-outputSchema drift on both.
   // A MARKDOWN document for the OKF round-trip. The spatial one above reads
   // back as JSON Canvas now, so asking it for frontmatter would be asking a
   // diagram for its markdown — exactly what wb_document_get stopped doing.
-  const mdCreated = await callTool('wb_document_create', {
-    workspaceId: WORKSPACE_ID,
-    path: 'e2e-okf',
-    kind: 'markdown',
-  })
+  const mdCreated = await createDocument({ path: 'e2e-okf', kind: 'markdown' })
   const mdCanvasId = mdCreated.documentId
 
   // A write in the format the document is not in destroys rather than
   // fails: OKF into the spatial one replaces its nodes, a node into the
   // markdown one lands beside the text node holding its body.
   await expectToolError(
-    'wb_document_set',
-    { workspaceId: WORKSPACE_ID, documentId, markdown: '---\ntype: note\n---\nBody.' },
+    'wb_workspace_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      ops: [{ op: 'document.set', documentId, markdown: '---\ntype: note\n---\nBody.' }],
+    },
     'on a spatial document',
     'This writes OKF Markdown',
   )
@@ -1514,16 +1676,14 @@ async function main() {
     '---',
     'Imported body.',
   ].join('\n')
-  const imported = await callTool('wb_document_set', {
-    workspaceId: WORKSPACE_ID,
-    documentId: mdCanvasId,
-    markdown: importMarkdown,
-    actor: 'process:mcp-e2e-smoke',
-  })
-  if (!imported.imported || imported.documentId !== mdCanvasId) {
-    throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
+  const imported = await setDocument(
+    { documentId: mdCanvasId, markdown: importMarkdown },
+    { actor: 'process:mcp-e2e-smoke' },
+  )
+  if (imported.applied !== 1 || imported.results[0].documentId !== mdCanvasId) {
+    throw new Error(`document.set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
-  console.log('[e2e] wb_document_set → imported')
+  console.log('[e2e] document.set → imported')
 
   // wb_document_search over the body just imported — the runtime guard for
   // this tool's structuredContent-vs-outputSchema drift, plus tag filtering.
@@ -1552,10 +1712,7 @@ async function main() {
   }
   console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
 
-  const exported = await callTool('wb_document_get', {
-    workspaceId: WORKSPACE_ID,
-    documentId: mdCanvasId,
-  })
+  const exported = await readDocument(mdCanvasId)
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
   }
@@ -1578,7 +1735,7 @@ async function main() {
   const generated = exported.frontmatter.generated
   if (generated?.by !== 'process:mcp-e2e-smoke' || !Number.isFinite(Date.parse(generated?.at))) {
     throw new Error(
-      `wb_document_set did not stamp the declared actor: ${JSON.stringify(exported.frontmatter)}`,
+      `document.set did not stamp the declared actor: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
   if (exported.frontmatter.description !== 'An issue written by the e2e smoke.') {

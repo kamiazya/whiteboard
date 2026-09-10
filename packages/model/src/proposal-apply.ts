@@ -210,5 +210,12 @@ export function bodyChangeConflicts(
   at: ResolvedPassage | undefined,
 ): boolean {
   if (at === undefined) return true
+  // A range the body does not have is unplaceable, and this function's own
+  // rule for that is above: it is a conflict. Said explicitly because
+  // `String.slice` CLAMPS — a range past the end returns the body's TAIL
+  // rather than nothing, and a tail that happens to read what was assumed
+  // answers "no conflict". The direction of that mistake is adopting an edit
+  // onto text the proposer was never shown.
+  if (at.end > body.length || at.start > at.end) return true
   return body.slice(at.start, at.end) !== change.assumed
 }

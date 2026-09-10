@@ -16,7 +16,8 @@ assuming a full-featured drawing-app tool set.
 
 Use these tools:
 
-- `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
+- `wb_workspace_edit` — create, replace and delete documents in one call (`document.create` / `document.set` / `document.delete` ops)
+- `wb_document_list` — find documents (each row carries the id and the path, so an id needs no second call to place)
 - `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction. **Pass `mode: "apply"`**: the default proposes content changes for a person to adopt, because nobody watches an agent type — but somebody just asked you to draw this, and they are looking at it
 - `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
@@ -66,7 +67,7 @@ The moment it feels like "drawing would be faster than prose," propose it and us
 
 **When in doubt, draw.**
 The cost of drawing is low; the cost of proceeding under false alignment is high.
-If the diagram turns out unnecessary, `wb_document_delete` it.
+If the diagram turns out unnecessary, delete it with a `wb_workspace_edit` `document.delete` op.
 
 ### Explicit User Triggers
 
@@ -94,7 +95,7 @@ Once the intent is fixed, choose the node shape that fits:
 
 | Content | Node type |
 | --- | --- |
-| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting, no auto-wrap) |
+| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width; omit the height and the box is sized to its text) |
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
@@ -102,7 +103,7 @@ Once the intent is fixed, choose the node shape that fits:
 ### Step 2: Create The Document
 
 ```js
-wb_document_create({ workspaceId, path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" })
+wb_workspace_edit({ workspaceId, ops: [{ op: "document.create", path: "diagrams/checkout-flow", kind: "spatial", name: "Checkout flow" }] })
 ```
 
 `kind: "spatial"` is required and cannot change later — a document is either a JSON Canvas (spatial) or OKF Markdown, decided at creation.
@@ -134,13 +135,18 @@ coordinates only when the layout itself carries meaning — a comparison matrix,
 left-to-right flow. For everything else, let placement happen and finish with a `tidy` op.
 
 `color` is either a hex string like `#1971c2` or a JSON Canvas preset `"1"`-`"6"`; there is no
-semantic color name like `"primary"`. There is no auto-wrap, so if you do set a width, pick one
-generous enough for the label.
+semantic color name like `"primary"`. Text wraps at the box's width but the box never grows on its
+own: omit `height` and a text box is made tall enough for its text, while a height you name that is
+too short for the text is refused with the height it needs — so name a height only when you know it
+holds the text, or leave it out.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
-worth naming yourself. `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd`
-(`none`/`arrow`) are the only routing hints; `wb_scene_render` computes the actual drawn path.
+worth naming yourself. `fromEnd`/`toEnd` (`none`/`arrow`) set the arrowheads. `fromSide`/`toSide`
+(`top`/`right`/`bottom`/`left`) exist but are best left out: the router picks the side that keeps
+the line clear of the other boxes, and a side you name is kept even when it runs the line through
+one — a `bottom`/`top` pair on an edge between two boxes on the SAME row loops under both and
+tunnels back through its own source. `wb_scene_render` computes the actual drawn path.
 
 **Ids you omit are minted for you** and reported under `touched`. Name them yourself for any node an
 edge has to reach.
@@ -173,23 +179,33 @@ wb_scene_render({ workspaceId, documentId, embedReferences: true })
 // One part only: a group by its label on a canvas, or a heading's section of a
 // markdown document — the same names `[[path#...]]` addresses.
 wb_scene_render({ workspaceId, documentId, fragment: "Launch" })
+// The look. Default is the bundled one whatever the document says, so a read
+// never pays for a theme's jitter or glow unasked; "document" draws the theme
+// the canvas names (`visual.theme/v0`, set with wb_facet_set's canvas target);
+// a theme id such as "visual.sketch" previews one without storing it.
+wb_scene_render({ workspaceId, documentId, style: "document" })
 ```
 
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
-parameters — it is a one-shot auto-arrange, not a configurable layout engine. It refuses a markdown
-document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it moved
-comes back under `geometry`.
+parameters — it is a one-shot auto-arrange, not a configurable layout engine. It tidies inside a
+group as well: members separate and line up within it, and the group grows (never shrinks) to hold
+them with a 32px margin — `within: "<group id>"` scopes it to one group's members. It refuses a
+markdown document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it
+moved comes back under `geometry`, a grown group with its new size.
 
 `wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format. It
 renders a markdown document too, as a page. `fragment` is the only way to render less than the
 whole document, and it addresses a group by label or a heading by text, never a region.
 Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
-- is text overflowing out of boxes? (there is no auto-wrap, so this is a real risk)
+- is text overflowing out of boxes? (a write naming a height too short for its text is refused, so
+  this is a box resized by hand in the editor; omit the height and the box is sized to its text)
 - do edges connect to the intended nodes?
 - does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
-- are gaps between nodes wide enough?
+- are gaps between nodes wide enough? Keep at least 32px between neighbours — under that an edge
+  between them has no room for its label or arrowhead, and inserting a box into a gap the size of a
+  box means moving the neighbour over, not squeezing the box in
 
 If you cannot see the rendered image, read the board instead. The two reads answer different
 questions and neither replaces the other:
@@ -218,7 +234,8 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
-| structure or intent is wrong | create a fresh document with `wb_document_create` and redraw |
+| put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", label } }` with no position, then `region.set` naming them — the group is placed around them where they sit, gutter included. The same holds for members added with `within` after it: a group added with no position is placed around what goes in it, wherever you put them. `within` on a node.add places that node inside a group that already exists (or was added earlier in the batch); `within: null` means no group |
+| structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
 reconciles a group's contents to the list you give it, so anything strictly
@@ -258,7 +275,7 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - [ ] did you choose the diagram family from [`visual-vocabulary.md`](./visual-vocabulary.md)?
 - [ ] did you draw the whole diagram in ONE `wb_canvas_edit` call rather than one call per node?
 - [ ] if you set coordinates at all, did you plan a rigid grid — or let placement happen and finish with a `tidy` op?
-- [ ] if you set widths, did you size boxes generously, since there is no auto-wrap?
+- [ ] if you named heights, do they hold their text? (omit the height and it is sized to fit)
 - [ ] did you use semantic, consistent colors even though the tool has no named color keys?
 - [ ] can the main path / supporting info / problem / proposal be distinguished visually?
 - [ ] are edge labels duplicating what node text already says?
@@ -272,16 +289,19 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
   separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
   leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
-  `wb_version_save({ workspaceId, documentId, label })` before a risky one and call
-  `wb_version_restore({ workspaceId, documentId, versionId: version.id })` to roll back if it goes
-  wrong. The version lands in the same history the person's History panel shows, so they can see
+  `wb_version_save({ workspaceId, documentIds, label })` before a risky one and call
+  `wb_version_restore({ workspaceId, documentId, versionId: saved[0].version.id })` to roll back if
+  it goes wrong. `documentIds` is plural and the label is shared, so a change spanning several
+  documents gets ONE checkpoint across all of them in one call. The version lands in the same history the person's History panel shows, so they can see
   the checkpoint and restore it themselves. To try an alternative without touching the original,
   restore the checkpoint into a new document with `targetPath` instead of in place.
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;
-  `kind: "markdown"` gives you an OKF Markdown body — `wb_document_set` replaces the whole
+  `kind: "markdown"` gives you an OKF Markdown body — a `document.set` op replaces the whole
   document, `wb_body_edit` replaces individual passages of its body — and has no nodes or edges of
-  its own. (`wb_body_patch` is for a text NODE on a spatial canvas and cannot reach a markdown
-  document's body at all.) There is no format parameter on read — `wb_document_get`
+  its own. (A text NODE on a spatial canvas is edited with `wb_canvas_edit`'s `node.patch`
+  — `text` replaces the whole body — or `node.splice` for a line range; neither can reach a
+  markdown document's body, which lives in a text container the canvas read does not see.)
+  There is no format parameter on read — `wb_document_get`
   answers in whichever format the document already is.

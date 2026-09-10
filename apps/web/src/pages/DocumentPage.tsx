@@ -1,3 +1,4 @@
+import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   lazy,
   type ReactNode,
@@ -21,10 +22,7 @@ import {
   DocumentFacetsEditor,
   DocumentProperties,
 } from '../components/document-properties/DocumentProperties.js'
-import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
-import { HeaderBranchChip } from '../components/HeaderBranchChip.js'
-import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
-import { MergeToast } from '../components/MergeToast.js'
+import { ProposalsPanel } from '../components/proposals/ProposalsPanel.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { VersionPreviewSession } from '../components/VersionTimeline'
 import { BookmarkAction } from '../components/workspace-top-bar/BookmarkAction.js'
@@ -33,29 +31,26 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
-import { useBranchesBackend } from '../contexts/BranchesBackendContext.js'
 import { useCommentsRail } from '../hooks/use-comments-rail.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useFullscreen } from '../hooks/use-fullscreen.js'
 import { useReferenceSeams } from '../hooks/use-reference-seams.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { captureBookmarkPicture } from '../lib/bookmark-picture.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import type { InspectorKind } from '../lib/inspector.js'
 import { fileRefOptions } from '../lib/link-entries.js'
+import { openProposals } from '../lib/open-proposals.js'
 import { applyCommand } from '../lib/spatial/commands.js'
+import type { SpatialEditorHandle } from '../lib/spatial/editor-handle.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import { buildVersionSaveBody } from '../lib/version-save-body.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentKeeper, DocumentKeeperEvents } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
-import { useVariationPreview } from './use-variation-preview.js'
 import { useVersionSaveFlow } from './use-version-save-flow.js'
 
-// WorkspaceTopBar statically imports Radix, lucide, VersionTimeline,
-// HeaderBranchChip and the Zod-validated daemon-client api-contracts. None
+// WorkspaceTopBar statically imports Radix, lucide and VersionTimeline. None
 // of that weight is needed for a page's own entry chunk, so it loads as a
 // sibling chunk. Kicked at page-module evaluation (this module is itself
 // behind a lazy route), so it is a parallel prefetch, not a render-time
@@ -123,6 +118,10 @@ function DocumentPageBody({
   versionRefreshSignal: number
 }) {
   const { sync, documentKind, documentKey, versions, files, threads } = model
+  // The session's look override (ADR-0030 decision 6): what THIS tab draws
+  // this document as, never written to it. Per document: a preview chosen
+  // for one board must not follow the reader to the next.
+  const [drawAs, setDrawAs] = useState<SpatialRenderStyle | undefined>(undefined)
 
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render. Owned here rather than threaded down from
@@ -142,6 +141,29 @@ function DocumentPageBody({
   const toggleInspector = (kind: InspectorKind) =>
     setInspector((open) => (open === kind ? null : kind))
   const setCommentsOpen = useCallback((open: boolean) => setInspector(open ? 'comments' : null), [])
+
+  /**
+   * The page's own hold on the spatial editor, so an inspector row can reach
+   * back into the board (ADR-0029 decision 1: the panel is an index, and a
+   * row press takes you to where the change is already drawn — it does not
+   * open a second place to decide).
+   *
+   * Merged with whatever ref the keeper supplied rather than replacing it:
+   * the daemon page holds one for MCP viewport requests, and both want the
+   * same handle.
+   */
+  const spatialHandle = useRef<SpatialEditorHandle | null>(null)
+  const keeperEditorRef = model.spatial.editorRef
+  const attachSpatialHandle = useCallback(
+    (node: SpatialEditorHandle | null) => {
+      spatialHandle.current = node
+      if (typeof keeperEditorRef === 'function') keeperEditorRef(node)
+      else if (keeperEditorRef !== null && keeperEditorRef !== undefined) {
+        keeperEditorRef.current = node
+      }
+    },
+    [keeperEditorRef],
+  )
   // Bumped by whoever asks for a bookmark (see requestBookmark below), which
   // opens the column with its naming field ready. Nothing here takes one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
@@ -168,6 +190,7 @@ function DocumentPageBody({
   useEffect(() => {
     setBookmarkArmed(0)
     setPreview(null)
+    setDrawAs(undefined)
   }, [model.scopeKey])
 
   // Mirrors the scope itself, rewritten every render: an async save that
@@ -185,26 +208,17 @@ function DocumentPageBody({
   } = useVersionSaveFlow(currentScopeRef, model.scopeKey, async (label) => {
     // Narrowed by the precondition in `saveVersionFromPanel` below, which
     // never calls `run` (so never reaches this body) while history is off.
-    if (versions.backend === null) {
+    if (!versions.enabled) {
       throw new Error('saveVersionFromPanel: this keeper has no history for the document')
     }
-    // The shared body pins the beats: capture BEFORE the save, announce,
-    // thumbnail riding along unawaited, re-announce once the picture lands
-    // (see buildVersionSaveBody). Which pipeline draws the picture follows
-    // the KIND — asking the spatial exporter for a markdown document drew
-    // an empty box on every markdown version row.
-    return buildVersionSaveBody({
-      capture: () =>
-        captureBookmarkPicture(documentKind, {
-          exportScene: sync.exportScene,
-          body: model.markdown.body,
-        }),
-      save: versions.save,
-      backend: versions.backend,
-      announceRefresh: versions.announceRefresh,
-      ...(versions.announceOnce === undefined ? {} : { announceOnce: versions.announceOnce }),
-      onThumbnailFailed: () => log.warn('bookmark thumbnail failed'),
-    })(label)
+    await versions.save(label)
+    // Returned rather than fired here: `useVersionSaveFlow` runs it only
+    // once it has confirmed the saved document is still the one on screen,
+    // so a save that lands after the reader moved on refreshes nothing.
+    return () => {
+      versions.announceRefresh()
+      versions.announceOnce?.()
+    }
   })
   const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (!versions.enabled) return
@@ -314,6 +328,11 @@ function DocumentPageBody({
         // (ADR-0009 decision 3); the keeper answers none for a spatial one.
         ...(model.properties.facets === undefined ? {} : { properties: {} }),
         comments: { count: commentsRail.openThreadCount },
+        // Always offered, and pressable at nought (user decision,
+        // 2026-09-07): a document with no proposals is a fact worth being
+        // able to check, and a member that comes and goes is a control that
+        // moves under the finger reaching for its neighbour.
+        proposals: { count: openProposals(threads.proposals).length },
         // `null` until the backlinks fetch answers: the member waits rather
         // than claiming zero, which is what the chip did before it moved.
         ...(model.connections === undefined
@@ -328,8 +347,11 @@ function DocumentPageBody({
     <>
       {inspectorSegment}
       {/* The one divider in the row: inspect on the left of it, act on the
-          right. Before this the act menu sat BETWEEN two inspect toggles. */}
-      <span aria-hidden="true" className="bg-border mx-0.5 h-4 w-px shrink-0" />
+          right. Before this the act menu sat BETWEEN two inspect toggles.
+          Its margin is what makes the segment read as one group now that
+          the segment draws no box: 2px between its members, 6px out to
+          here, so proximity does the work the outline used to. */}
+      <span aria-hidden="true" className="bg-border mx-1.5 h-4 w-px shrink-0" />
       {model.slots.rowAlerts}
       {exportError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">
@@ -344,7 +366,16 @@ function DocumentPageBody({
         // gear of their own — the row's only VIEW control, against width
         // the title wanted.
         {...(documentKind === 'spatial'
-          ? { display: <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} /> }
+          ? {
+              display: (
+                <CanvasDisplaySettings
+                  canvas={sync.canvas}
+                  onChange={sync.onChange}
+                  style={drawAs}
+                  onStyleChange={setDrawAs}
+                />
+              ),
+            }
           : {})}
         {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
@@ -358,51 +389,14 @@ function DocumentPageBody({
   )
 
   const topBar = model.topBar
-  // ADR-0022's `?v=`, owned here because it is keeper-agnostic: it reads the
-  // branches seam and the address, and neither is a keeper's business. It sat
-  // on the daemon page from when variations were a daemon concept, which is
-  // why a browser-kept variation could be switched and combined but not
-  // linked to.
-  const branchesBackend = useBranchesBackend()
-  const variation = useVariationPreview({
-    workspaceId: topBar?.workspaceId ?? null,
-    path: topBar?.path ?? null,
-    branches: branchesBackend,
-    ...(topBar?.branchRefreshSignal === undefined
-      ? {}
-      : { refreshSignal: topBar.branchRefreshSignal }),
-    ...(topBar?.onBranchesChanged === undefined ? {} : { onHeadChanged: topBar.onBranchesChanged }),
-  })
-  // A variation's tip is a read-only state drawn in place of the editor —
-  // the same slot a version preview uses, and the only thing that ever put
-  // one there.
-  const readOnlyPast = variation.preview?.past ?? null
-
-  // Identity, not act: which variation you are on is WHICH document you are
-  // looking at, the same question the title answers. It renders in
-  // `DocumentProperties`'s identity slot — beside the name — rather than in
-  // `WorkspaceTopBar`, where it sat after `titleSlot` and so ended up to the
-  // RIGHT of the act menu once P4 moved the row's actions INTO that slot.
+  // No variation chrome here, and no `?v=`: ADR-0029 retires the surface.
+  // A proposal is drawn on the document a person is already looking at, so
+  // a lane to switch onto — and an address that names which one — is the
+  // shape that decision rejects. What used to stand here was the chip, the
+  // preview hook that owned `?v=`, and the read-only tip it rendered.
   //
-  // Whether to draw it at all is the BACKEND's answer rather than a keeper
-  // flag: both keepers have variations, and a document with no
-  // record-holding backend (a markdown body, or one still loading) has none.
-  // `previewVariation` comes from the same hook that owns `?v=`, so the chip
-  // and the address cannot disagree about what is being previewed.
-  const branchIdentity =
-    topBar === null || !branchesBackend.hasBranches ? null : (
-      <>
-        <span className="bg-border mx-1 hidden h-4 w-px shrink-0 sm:inline-block" aria-hidden />
-        <HeaderBranchChip
-          workspaceId={topBar.workspaceId}
-          path={topBar.path}
-          {...(topBar.branchRefreshSignal === undefined
-            ? {}
-            : { refreshSignal: topBar.branchRefreshSignal })}
-          onPreviewVariation={variation.previewVariation}
-        />
-      </>
-    )
+  // The read-only slot itself SURVIVES: a past version still renders there
+  // (History is unchanged by ADR-0029), and `preview` below is that one.
   // Fullscreen means the DOCUMENT, maximised: the whole top-bar row —
   // back, title, menus — steps aside with the shell's row above it, which
   // owns the control and floats the way back out. The dock stays because
@@ -443,8 +437,26 @@ function DocumentPageBody({
           <CommentsRailAside
             rail={commentsRail}
             threads={threads.annotations}
-            writable={preview === null && readOnlyPast === null}
+            writable={preview === null}
           />
+        ) : inspector === 'proposals' ? (
+          <InspectorPanel kind="proposals" onClose={() => setInspector(null)}>
+            <ProposalsPanel
+              proposals={threads.proposals}
+              // Two ways to have no viewport to move, and the panel wants
+              // the same answer for both. A markdown body draws its
+              // passages where they are already; and while a past state is
+              // on screen the live editor is UNMOUNTED (`preview ?
+              // DocumentPreview : DocumentEditorSurface` below), so the
+              // handle is null and a row would be a button that does
+              // nothing. The index still counts either way — it just has
+              // nowhere to send you, which the panel draws as a row that is
+              // not a button rather than a dead one.
+              {...(documentKind === 'spatial' && preview === null
+                ? { onOpen: (id: string) => spatialHandle.current?.openProposal(id) }
+                : {})}
+            />
+          </InspectorPanel>
         ) : inspector === 'connections' &&
           model.connections !== undefined &&
           model.connections.backlinks !== null ? (
@@ -508,7 +520,6 @@ function DocumentPageBody({
                           ? {}
                           : { status: model.properties.status })}
                         actions={rowActions}
-                        {...(branchIdentity === null ? {} : { identity: branchIdentity })}
                       />
                     ) : null}
                   </>
@@ -523,56 +534,6 @@ function DocumentPageBody({
               />
             </Suspense>
           )}
-          {/* Variation chrome, for BOTH keepers. It lived on the daemon page
-              from when variations were a daemon concept; they are not one now,
-              and the banner reads the same seam either keeper answers. It
-              draws nothing until HEAD is a variation with work on it, so a
-              document without variations is unaffected. */}
-          {topBar !== null && variation.preview !== null && (
-            <HeaderVariationBanner
-              workspaceId={topBar.workspaceId}
-              path={topBar.path}
-              name={variation.preview.name}
-              head={variation.preview.head}
-              branches={variation.preview.branches}
-              onSwitch={variation.switchToPreviewed}
-              onExit={variation.exitPreview}
-              runMerge={(src, args) =>
-                branchesBackend.merge(topBar.workspaceId, topBar.path, src, args)
-              }
-            />
-          )}
-          {variation.notice !== null && (
-            // role="alert", not "status": every notice here reports a failure
-            // (unknown name, unreadable tip, failed switch), and an alert
-            // injected with its content is the supported pattern — a
-            // conditionally-mounted status region is not
-            // (polite-live-region.test.ts).
-            <div
-              role="alert"
-              data-testid="variation-preview-notice"
-              className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
-            >
-              <span className="min-w-0 flex-1 truncate">{variation.notice}</span>
-              <button
-                type="button"
-                aria-label="Dismiss"
-                className="shrink-0 rounded-md p-1 hover:bg-accent"
-                onClick={variation.dismissNotice}
-              >
-                ×
-              </button>
-            </div>
-          )}
-          {topBar !== null && (
-            <HeaderBranchBanner
-              workspaceId={topBar.workspaceId}
-              path={topBar.path}
-              {...(topBar.branchRefreshSignal === undefined
-                ? {}
-                : { refreshSignal: topBar.branchRefreshSignal })}
-            />
-          )}
           {model.slots.headerExtras}
         </>
       }
@@ -581,8 +542,6 @@ function DocumentPageBody({
         <div className="relative h-full min-h-0 min-w-0">
           {preview ? (
             <DocumentPreview past={preview.past} theme={resolvedTheme} />
-          ) : readOnlyPast ? (
-            <DocumentPreview past={readOnlyPast} theme={resolvedTheme} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}
@@ -621,9 +580,7 @@ function DocumentPageBody({
                   className="relative h-full min-h-0"
                   editorKey={documentKey}
                   canvasLoaded={sync.loaded}
-                  {...(model.spatial.editorRef === undefined
-                    ? {}
-                    : { editorRef: model.spatial.editorRef })}
+                  editorRef={attachSpatialHandle}
                   {...(model.spatial.agentTouchedNodeIds === undefined
                     ? {}
                     : { agentTouchedNodeIds: model.spatial.agentTouchedNodeIds })}
@@ -631,6 +588,7 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
+                  style={drawAs}
                   // File-node reference = the target's immutable id; the
                   // same rows the link picker offers (open document
                   // excluded), so the two pickers cannot label one
@@ -661,13 +619,6 @@ function DocumentPageBody({
             />
           )}
         </div>
-      )}
-      {topBar !== null && (
-        <MergeToast
-          workspaceId={topBar.workspaceId}
-          path={topBar.path}
-          onRestored={model.sync.clearLocalUndo}
-        />
       )}
       {model.slots.footer}
     </DocumentPageShell>

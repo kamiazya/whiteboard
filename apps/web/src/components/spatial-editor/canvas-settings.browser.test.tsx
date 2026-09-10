@@ -94,6 +94,52 @@ it('the Display row opens the popover with both option rows', async () => {
   await openPanel(container)
   expect(menu()?.textContent).toContain('Edge routing')
   expect(menu()?.textContent).toContain('Line jumps')
+  expect(menu()?.textContent).toContain('Theme')
+})
+
+it('a theme pick writes visual.theme to the canvas envelope; Default clears it', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const themeRadio = (label: string) =>
+    menu()?.querySelector(`input[type="radio"][aria-label="${label}"]`) as HTMLInputElement
+
+  await openPanel(container)
+  await vi.waitFor(() => expect(themeRadio('Neon')).toBeTruthy())
+  fireEvent.click(themeRadio('Neon'))
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toEqual({
+      theme: 'visual.neon',
+    })
+  })
+  expect(menu()).toBeTruthy()
+  expect(themeRadio('Neon').checked).toBe(true)
+
+  fireEvent.click(themeRadio('Default'))
+  await vi.waitFor(() => {
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.theme/v0']).toBeUndefined()
+  })
+})
+
+it('under a theme the routing row marks the theme default, and Straight over it sticks', async () => {
+  // The theme's routing is the canvas's DEFAULT (ADR-0030 decision 4), so
+  // the row has to show it as current — and a person choosing Straight over
+  // it is making a choice, which must be recorded rather than dropped as
+  // "the default" for the theme to overrule.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const themeRadio = (label: string) =>
+    menu()?.querySelector(`input[type="radio"][aria-label="${label}"]`) as HTMLInputElement
+
+  await openPanel(container)
+  await vi.waitFor(() => expect(themeRadio('Neon')).toBeTruthy())
+  fireEvent.click(themeRadio('Neon'))
+  await vi.waitFor(() => expect(option('Orthogonal')?.getAttribute('aria-pressed')).toBe('true'))
+  expect(edgesFacetOf(latest.canvas)).toBeUndefined()
+
+  fireEvent.click(option('Straight') as HTMLElement)
+  await vi.waitFor(() => expect(edgesFacetOf(latest.canvas)?.routing).toBe('straight'))
+  expect(option('Straight')?.getAttribute('aria-pressed')).toBe('true')
+  expect(option('Orthogonal')?.getAttribute('aria-pressed')).toBe('false')
 })
 
 it('a pick applies canvas-wide and keeps the popover open; current values are marked', async () => {
@@ -216,4 +262,34 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
   const { container: bare } = render(<BareHost />)
   await openPanel(bare)
   expect(menu()?.querySelector('[role="tab"]')).toBeNull()
+})
+
+it('lets a person give the document its own mark, and take it back', async () => {
+  // The entry point everything else this facet feeds depends on: the tab,
+  // the file row and — where there is room — the overview all read what this
+  // writes. The picker is the plugin's OWN, so the canvas offers exactly the
+  // set a node does.
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+
+  const pick = await vi.waitFor(() => {
+    const el = menu()?.querySelector('[aria-label="Emoji ⭐"]')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+  fireEvent.click(pick)
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toEqual({
+      kind: 'emoji',
+      char: '⭐',
+    }),
+  )
+
+  fireEvent.click(menu()?.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  // Removed without a trace: a canvas that chose and reverted serializes
+  // like one that never chose.
+  await vi.waitFor(() =>
+    expect(latest.canvas['x-whiteboard']?.facets?.['visual.symbol/v0']).toBeUndefined(),
+  )
 })

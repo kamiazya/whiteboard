@@ -18,8 +18,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
  *
  * `path`-addressed like the routes are, because a version belongs to a
  * document at the name it had. Every method throws on failure — a rejected
- * save or restore is the caller's signal to keep its dialog open — and
- * `putThumbnail` is absent where the keeper renders none.
+ * save or restore is the caller's signal to keep its dialog open.
  */
 /**
  * A past state, as the panel PREVIEWS it before deciding to restore.
@@ -43,15 +42,6 @@ export interface VersionsBackend {
   loadPast(workspaceId: string, path: string, versionId: string): Promise<PastDocument | null>
   save(workspaceId: string, path: string, input: { label: string }): Promise<VersionEntry>
   restore(workspaceId: string, path: string, versionId: string): Promise<void>
-  /**
-   * Keep the picture drawn for a saved point. Not optional, and neither is
-   * its reader: a keeper that drew none was the difference nobody declared —
-   * the panel asked the daemon's route directly, so the same row in the
-   * browser had nowhere to get a picture from and simply showed less.
-   */
-  putThumbnail(workspaceId: string, path: string, versionId: string, blob: Blob): Promise<void>
-  /** The picture, or `null` for a point that has none — and for one this document does not own. */
-  loadThumbnail(workspaceId: string, path: string, versionId: string): Promise<Blob | null>
 }
 
 /**
@@ -126,33 +116,6 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       if (!res.ok) {
         throw new VersionsRequestError(res.status, 'restore request', await refusalReason(res))
       }
-    },
-    async loadThumbnail(workspaceId, path, versionId) {
-      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'thumbnail'))
-      // 404 is "not this document's, or no such point".
-      if (res.status === 404) return null
-      if (!res.ok) throw new VersionsRequestError(res.status, 'thumbnail request')
-      const blob = await res.blob()
-      // An empty body is the same answer as a 404 — there is no picture —
-      // and it must not become a zero-byte object URL, which renders as a
-      // broken image rather than as nothing. This is also how the daemon's
-      // "none yet" arrives: 204 is a SUCCESS status that slips past `res.ok`,
-      // and it carries no body, so it needs no branch of its own. Measured:
-      // with only a `status === 204` check the empty-200 case fails; with
-      // only this one both pass.
-      return blob.size === 0 ? null : blob
-    },
-    async putThumbnail(workspaceId, path, versionId, blob) {
-      const res = await fetchFn(versionUrl(workspaceId, path, versionId, 'thumbnail'), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/png' },
-        body: blob,
-      })
-      // A fetch RESOLVES for 4xx and 5xx, so without this the daemon
-      // refusing the upload is indistinguishable from it accepting one, and
-      // the caller's failure path is unreachable by anything but a network
-      // error.
-      if (!res.ok) throw new VersionsRequestError(res.status, 'thumbnail upload')
     },
   }
 }

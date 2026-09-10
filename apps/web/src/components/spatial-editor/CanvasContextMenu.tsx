@@ -1,6 +1,6 @@
+import { resolveCanvasPalette, type SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
-import type { EdgePathLookup } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   AnnotationAnchor,
@@ -82,13 +82,6 @@ export interface CommentComposeState {
    * the selection's top-right corner for a set.
    */
   readonly threadAnchor?: AnnotationAnchor
-  /**
-   * Present when the bubble edits an EXISTING comment rather than drafting
-   * a new one: the commit rewrites that comment's text instead of creating.
-   * `point` is then the comment's own anchor, so the bubble opens exactly
-   * over the drawn one.
-   */
-  readonly editing?: { readonly id: string; readonly initialText: string }
 }
 
 /**
@@ -140,8 +133,9 @@ export interface CanvasContextMenuProps {
   readonly setContextMenu: (target: ContextMenuTarget | null) => void
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
-  readonly edgePathOf: EdgePathLookup
   readonly theme: ResolvedTheme
+  /** The session's look (ADR-0030 decision 6): the swatches preview the palette it draws in. */
+  readonly style?: SpatialRenderStyle
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly fileRefOptions?: readonly FileRefOption[]
@@ -163,8 +157,8 @@ export function CanvasContextMenu({
   setContextMenu,
   canvas,
   canvasRef,
-  edgePathOf,
   theme,
+  style,
   gestureState,
   isEdgeLocked,
   fileRefOptions,
@@ -253,7 +247,7 @@ export function CanvasContextMenu({
             : {}),
         })
       : comment !== undefined
-        ? commentMenuItems({ comment, canvasRef, edgePathOf, setCommentCompose, applyResult })
+        ? commentMenuItems({ comment, applyResult })
         : contextMenu.verbs === 'annotation'
           ? annotationVerbItems({
               node,
@@ -268,7 +262,7 @@ export function CanvasContextMenu({
                 edge,
                 point: contextMenu.point,
                 setCommentCompose,
-                theme,
+                palette: resolveCanvasPalette(canvas, theme, { style }),
                 isEdgeLocked,
                 edgeLockEnabled,
                 applyResult,
@@ -300,7 +294,7 @@ export function CanvasContextMenu({
                   node,
                   canvas,
                   canvasRef,
-                  theme,
+                  palette: resolveCanvasPalette(canvas, theme, { style }),
                   gestureState,
                   isLocked,
                   lockEnabled,

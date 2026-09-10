@@ -4,7 +4,7 @@
 //
 // Purpose:
 // Ensure the Codex subprocess can discover the repo-local whiteboard MCP and
-// complete wb_document_create -> wb_canvas_edit -> wb_version_save. The final response is
+// complete wb_workspace_edit -> wb_canvas_edit -> wb_version_save. The final response is
 // constrained by JSON Schema, and the resulting files under WHITEBOARD_DATA_DIR
 // are also verified.
 //

@@ -82,6 +82,9 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
       const dir = join(getDataDir(), workspaceId, 'files')
       const filePath = join(dir, `${fileId}${ext}`)
       const bytes = new Uint8Array(await c.req.arrayBuffer())
+      if (bytes.length === 0) {
+        return c.json({ error: 'empty_body', message: 'An upload carries the file bytes.' }, 400)
+      }
       // file-gc's purge pass stat()s then unlink()s dangling files while
       // holding this same per-workspace lock (file-gc.ts / workspace-lock.ts).
       // Without joining that lock here, a retried upload could land between
@@ -125,16 +128,16 @@ export function createFilesRouter(options: FilesRouterOptions = {}) {
     try {
       const dir = join(getDataDir(), workspaceId, 'files')
       const files = await readStoredFileNames(dir)
-      if (!files) {
-        return c.notFound()
-      }
+      // JSON like every other refusal here: `c.notFound()` is plain text,
+      // which the browser client cannot read.
+      const notFound = () =>
+        c.json({ error: 'not_found', message: `No file ${fileId} on this document.` }, 404)
+      if (!files) return notFound()
 
       // startsWith(fileId) would allow prefix matches and can return the wrong file,
       // so check basename + extname for exact equality.
       const match = files.find((f) => basename(f, extname(f)) === fileId)
-      if (!match) {
-        return c.notFound()
-      }
+      if (!match) return notFound()
 
       const filePath = join(dir, match)
       let data: Uint8Array

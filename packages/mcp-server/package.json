@@ -104,6 +104,7 @@
     "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs",
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",
+    "eval:tool-surface": "node scripts/eval/mcp-tool-surface-eval.mjs",
     "smoke:codex": "node scripts/smoke/mcp-codex-cli-smoke.mjs",
     "smoke:daemon-origin": "node --import tsx/esm scripts/smoke/mcp-daemon-origin-smoke.mjs",
     "smoke:lna-transport": "node scripts/smoke/mcp-lna-transport-smoke.mjs",
@@ -181,7 +182,7 @@
     "react-dom": "catalog:",
     "tsup": "^8.5.0",
     "tsx": "^4.23.1",
-    "typescript": "catalog:",
+    "typescript": "^6.0.3",
     "vite": "catalog:",
     "vitest": "catalog:"
   }

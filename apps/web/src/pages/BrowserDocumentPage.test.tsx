@@ -24,6 +24,7 @@ import type { LoroLoadResult } from '../lib/loro-store.js'
 import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
@@ -259,9 +260,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     expect(screen.getByRole('alertdialog')).toBeTruthy()
     const cancelBtn = screen.getByRole('button', { name: /cancel/i })
     await act(async () => {
@@ -556,9 +555,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
@@ -589,9 +586,7 @@ describe('BrowserDocumentPage', () => {
         />,
       )
     })
-    await act(async () => {
-      await openDeleteConfirm()
-    })
+    await openDeleteConfirm()
     const confirmBtn = await screen.findByRole('button', { name: /^delete$/i })
     await act(async () => {
       confirmBtn.click()
@@ -990,6 +985,7 @@ describe('?new=canvas launch shortcut', () => {
       expect((await store.listDocuments()).length).toBe(1)
     })
     window.history.replaceState(null, '', '/')
+    await expectLoggedFailure('launcher shortcut create failed')
   })
 })
 

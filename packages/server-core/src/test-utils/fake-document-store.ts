@@ -80,8 +80,9 @@ export class FakeDocumentStore implements DocumentStore {
     throw new Error('not implemented')
   }
 
-  async readFrontier(_input: ReadFrontierInput): Promise<ReadFrontierResult> {
-    throw new Error('not implemented')
+  async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
+    const stored = this.saved.get(docRefKey(input.docRef))
+    return stored === undefined ? null : ({ frontier: stored.frontier } as ReadFrontierResult)
   }
 
   async deleteDoc(input: DeleteDocInput): Promise<void> {

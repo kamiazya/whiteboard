@@ -1,22 +1,16 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import type { RestoreProgressEvent } from '../operations/restore-version.js'
-import type {
-  CanvasClientNotifier,
-  LiveDocuments,
-  ServerDeps,
-  VersionCreated,
-  VersionHistory,
-} from '../server-deps.js'
+import type { CanvasClientNotifier, ServerDeps, VersionCreated } from '../server-deps.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { FakeLiveDocuments } from '../test-utils/fake-live-documents.js'
+import { FakeVersionHistory } from '../test-utils/fake-version-history.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import type { VersionEntry } from '../versions/version-entry.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
 import {
@@ -46,91 +40,6 @@ function textOf(doc: LoroDoc): string | undefined {
   return node?.type === 'text' ? node.text : undefined
 }
 
-/**
- * The history as the tools see it: rows keyed by path, each holding a
- * snapshot of the doc as it was saved. Records every `save` call so a test
- * can assert what the tool asked for, not only what came back.
- */
-class FakeVersionHistory implements VersionHistory {
-  readonly saves: { path: string; options: Parameters<VersionHistory['save']>[3] }[] = []
-  private readonly rows = new Map<string, { entry: VersionEntry; snapshot: Uint8Array }>()
-  private next = 0
-
-  async save(
-    _workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-    options: Parameters<VersionHistory['save']>[3],
-  ): Promise<VersionEntry> {
-    this.saves.push({ path, options })
-    this.next += 1
-    const entry: VersionEntry = {
-      id: `v${this.next}`,
-      path,
-      createdAt: new Date(this.next * 1000).toISOString(),
-      elementCount: readSpatialCanvas(doc).nodes.length,
-      auto: options.auto,
-      hasThumbnail: false,
-      branchName: options.branchName ?? 'main',
-      ...(options.label === undefined ? {} : { label: options.label }),
-      ...(options.operator === undefined ? {} : { operator: options.operator }),
-    }
-    this.rows.set(entry.id, { entry, snapshot: doc.export({ mode: 'snapshot' }) })
-    return entry
-  }
-  async load(_workspaceId: string, id: string): Promise<LoroDoc | null> {
-    const row = this.rows.get(id)
-    if (row === undefined) return null
-    const doc = new LoroDoc()
-    doc.import(row.snapshot)
-    return doc
-  }
-  async loadWorkspaceAt(): Promise<LoroDoc | null> {
-    return null
-  }
-  async list(_workspaceId: string, path: string): Promise<readonly VersionEntry[]> {
-    return [...this.rows.values()]
-      .map((row) => row.entry)
-      .filter((entry) => entry.path === path)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-  }
-}
-
-/** Live docs by path — what the restore operation reconciles onto. */
-class FakeLiveDocuments implements LiveDocuments {
-  readonly docs = new Map<string, LoroDoc>()
-  async get(_workspaceId: string, path: string): Promise<LoroDoc> {
-    let doc = this.docs.get(path)
-    if (doc === undefined) {
-      doc = new LoroDoc()
-      this.docs.set(path, doc)
-    }
-    return doc
-  }
-  async save(_workspaceId: string, path: string, doc: LoroDoc): Promise<void> {
-    this.docs.set(path, doc)
-  }
-  async exists(_workspaceId: string, path: string): Promise<boolean> {
-    return this.docs.has(path)
-  }
-  async kind(): Promise<DocumentKind | null> {
-    return 'spatial'
-  }
-  async list(): Promise<readonly { id?: string; path: string }[]> {
-    return [...this.docs.keys()].map((path) => ({ path }))
-  }
-  async rename(): Promise<void> {
-    throw new Error('not exercised')
-  }
-  async delete(): Promise<void> {
-    throw new Error('not exercised')
-  }
-  evict(): void {}
-  async withWriteLock<T>(_workspaceId: string, fn: () => Promise<T>): Promise<T> {
-    return fn()
-  }
-}
-
 class RecordingNotifier implements CanvasClientNotifier {
   readonly versions: VersionCreated[] = []
   readonly restores: RestoreProgressEvent[] = []
@@ -144,6 +53,19 @@ class RecordingNotifier implements CanvasClientNotifier {
   restoreProgress(event: RestoreProgressEvent): void {
     this.restores.push(event)
   }
+}
+
+/** A second document in the same workspace, for the batch cases. */
+async function addDocument(deps: ServerDeps, documentId: string, path: string): Promise<string> {
+  const store = deps.documentStore as FakeDocumentStore
+  await registerDocumentInWorkspace(store, WORKSPACE_ID, documentId, path)
+  await seedDoc(store, documentId, (doc) => {
+    writeSpatialCanvas(doc, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'other' }],
+      edges: [],
+    })
+  })
+  return documentId
 }
 
 async function setup(text = 'original') {
@@ -174,15 +96,22 @@ describe('wb_version_save', () => {
 
     const result = await createVersionSaveTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       label: 'before the risky edit',
     })
 
     expect(versions.saves).toEqual([
       { path: PATH, options: { auto: false, label: 'before the risky edit' } },
     ])
-    expect(result.documentId).toBe(DOCUMENT_ID)
-    expect(result.version).toMatchObject({ id: 'v1', path: PATH, label: 'before the risky edit' })
+    expect(result.saved[0]?.documentId).toBe(DOCUMENT_ID)
+    // The row as an agent reads it: the id to restore by, the label, who
+    // saved it — not the path it already named, nor the panel's columns.
+    expect(result.saved[0]?.version).toEqual({
+      id: 'v1',
+      createdAt: '1970-01-01T00:00:01.000Z',
+      label: 'before the risky edit',
+      auto: false,
+    })
   })
 
   test('tells a watching client, addressed by documentId, with the row it just saved', async () => {
@@ -190,13 +119,18 @@ describe('wb_version_save', () => {
 
     const result = await createVersionSaveTool(deps).execute({
       workspaceId: WORKSPACE_ID,
-      documentId: DOCUMENT_ID,
+      documentIds: [DOCUMENT_ID],
       label: 'v1',
     })
 
-    expect(notifier.versions).toEqual([
-      { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, version: result.version },
-    ])
+    // The client gets the WHOLE row (the History panel draws its columns);
+    // the agent gets the projection, and the two name the same version.
+    expect(notifier.versions).toHaveLength(1)
+    expect(notifier.versions[0]).toMatchObject({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      version: { id: result.saved[0]?.version.id, path: PATH, branchName: 'main' },
+    })
   })
 
   test('refuses a workspaceId that does not own the document, before recording anything', async () => {
@@ -205,11 +139,49 @@ describe('wb_version_save', () => {
     await expect(
       createVersionSaveTool(deps).execute({
         workspaceId: 'ws-other',
-        documentId: DOCUMENT_ID,
+        documentIds: [DOCUMENT_ID],
         label: 'v1',
       }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
     expect(versions.saves).toEqual([])
+  })
+
+  test('saves one version per document in a single call, in the order asked for', async () => {
+    // Axis B: the cost of checkpointing N documents was N calls, because the
+    // tool took one `documentId`. The label is shared rather than per
+    // document — one label across a set is what makes them ONE checkpoint,
+    // and a caller wanting different labels is asking for different saves.
+    const { deps, versions } = await setup()
+    const second = await addDocument(deps, '01H8XJZ9K5N4M3P2Q1R0S9T8V8', 'notes/other')
+
+    const result = await createVersionSaveTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID, second],
+      label: 'before the risky edit',
+    })
+
+    expect(versions.saves.map((save) => save.path)).toEqual([PATH, 'notes/other'])
+    expect(result.saved.map((entry) => entry.documentId)).toEqual([DOCUMENT_ID, second])
+  })
+
+  test('one document outside the workspace records NOTHING, not a prefix', async () => {
+    // The payoff of resolving every document before saving any. Without it
+    // the good document is checkpointed and the call still fails, so a
+    // caller who retries gets two rows for it — and cannot tell from the
+    // error that it happened.
+    const { deps, versions, notifier } = await setup()
+    const stranger = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+
+    await expect(
+      createVersionSaveTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentIds: [DOCUMENT_ID, stranger],
+        label: 'v1',
+      }),
+    ).rejects.toThrow(WorkspaceDocumentNotFoundError)
+
+    expect(versions.saves).toEqual([])
+    expect(notifier.versions).toEqual([])
   })
 })
 
@@ -217,8 +189,8 @@ describe('wb_version_list', () => {
   test("answers the history's rows for the document's path, newest first", async () => {
     const { deps } = await setup()
     const save = createVersionSaveTool(deps)
-    await save.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'first' })
-    await save.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'second' })
+    await save.execute({ workspaceId: WORKSPACE_ID, documentIds: [DOCUMENT_ID], label: 'first' })
+    await save.execute({ workspaceId: WORKSPACE_ID, documentIds: [DOCUMENT_ID], label: 'second' })
 
     const result = await createVersionListTool(deps).execute({
       workspaceId: WORKSPACE_ID,

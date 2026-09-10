@@ -40,7 +40,6 @@ export function countFixedSleeps(source: string): number {
 
 /** Repo-relative file -> fixed sleeps it held when last pinned. */
 const LEDGER: Record<string, number> = {
-  'apps/web/src/components/HeaderBranchChip.browser.test.tsx': 1,
   'apps/web/src/components/PairedOriginsCard.test.tsx': 2,
   'apps/web/src/components/StorageReportCard.test.tsx': 1,
   'apps/web/src/components/document-editor/canvas-verb-bar.browser.test.tsx': 1,
@@ -81,7 +80,6 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.script.test.ts': 1,
   'packages/mcp-server/src/cli/dispatcher-mcp.test.ts': 1,
   'packages/mcp-server/src/cli/dispatcher.routing.test.ts': 1,
-  'packages/mcp-server/src/server/app.merge-race.test.ts': 1,
   'packages/mcp-server/src/server/http-server.test.ts': 2,
   'packages/mcp-server/src/server/routes/document/auto-version.test.ts': 1,
   'packages/mcp-server/src/server/routes/document/restore-race.test.ts': 2,
@@ -93,12 +91,11 @@ const LEDGER: Record<string, number> = {
   'packages/mcp-server/src/server/store/backup-blob-mirror.test.ts': 2,
   'packages/mcp-server/src/server/store/backup-in-progress.test.ts': 1,
   'packages/mcp-server/src/server/store/backup-scheduler.test.ts': 2,
-  'packages/mcp-server/src/server/store/branches-store.test.ts': 4,
   // The sleeps ride with the auto-compact describes, split out of document-store.test.ts.
   'packages/mcp-server/src/server/store/document-store.compact.test.ts': 6,
   'packages/mcp-server/src/server/store/document-write-lock.test.ts': 1,
   'packages/mcp-server/src/server/store/lease.test.ts': 1,
-  'packages/mcp-server/src/server/store/workspace-lock.test.ts': 2,
+  'packages/mcp-server/src/server/store/workspace-lock.test.ts': 0,
   'packages/mcp-server/src/shared/mkdir-lock.test.ts': 2,
 }
 

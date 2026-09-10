@@ -4,7 +4,8 @@ import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-st
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createDocumentGetTool } from './document-get.js'
-import { createWorkspaceEditTool } from './workspace-edit.js'
+import { exportOkf } from './export-okf.js'
+import { createWorkspaceEditTool, workspaceEditInputSchema } from './workspace-edit.js'
 
 const WS = 'batch'
 
@@ -42,9 +43,9 @@ describe('wb_workspace_edit', () => {
     const read = createDocumentGetTool(deps)
     const first = await read.execute({
       workspaceId: WS,
-      documentId: out.results[0]?.documentId ?? '',
+      documentIds: [out.results[0]?.documentId ?? ''],
     })
-    expect(first.content).toContain('one')
+    expect(first.documents[0]?.content).toContain('one')
   })
 
   it('stops at the failing op and says how far it got', async () => {
@@ -110,8 +111,11 @@ describe('wb_workspace_edit', () => {
         { op: 'document.create', path: 'doomed', kind: 'markdown' },
       ],
     })
-    const read = await createDocumentGetTool(deps).execute({ workspaceId: WS, documentId })
-    expect(read.content).toContain('after')
+    const read = await createDocumentGetTool(deps).execute({
+      workspaceId: WS,
+      documentIds: [documentId],
+    })
+    expect(read.documents[0]?.content).toContain('after')
 
     const listed = await deps.documentIndex.listDocuments({ workspaceId: WS })
     const doomed = listed.find((d) => d.path === 'doomed')
@@ -155,5 +159,115 @@ describe('wb_workspace_edit', () => {
     expect(workspaces[0]?.segment).toBe(WS)
     const listed = await deps.documentIndex.listDocuments({ workspaceId: out.workspaceId })
     expect(listed.map((d) => d.path).sort()).toEqual(['first', 'second'])
+  })
+
+  /**
+   * One `actor` for the whole batch, not one per op: a batch comes from a
+   * single producer, and repeating the same string N times is the cost
+   * axis-B consolidation exists to remove.
+   *
+   * This is the capability that decides whether the standalone
+   * `wb_document_create` / `wb_document_set` can be retired at all. They
+   * take `actor` and stamp OKF `generated.by` (ADR-0016 §5.2); without it
+   * here, retiring them would delete an agent's only way to say who wrote
+   * a document, which is a loss no byte count would show.
+   */
+  it('stamps the batch actor on both a created body and a replaced one', async () => {
+    const deps = await makeDeps()
+    const tool = createWorkspaceEditTool(deps)
+    const made = await tool.execute({
+      workspaceId: WS,
+      actor: 'reference_agent/gemini-2.5-pro',
+      ops: [{ op: 'document.create', path: 'attributed', kind: 'markdown', markdown: body('one') }],
+    })
+    const documentId = made.results[0]?.documentId ?? ''
+    const created = await exportOkf(deps, { workspaceId: WS, documentId })
+    expect(created.frontmatter.generated).toMatchObject({
+      by: 'reference_agent/gemini-2.5-pro',
+    })
+
+    await tool.execute({
+      workspaceId: WS,
+      actor: 'human:someone',
+      ops: [{ op: 'document.set', documentId, markdown: body('two') }],
+    })
+    const replaced = await exportOkf(deps, { workspaceId: WS, documentId })
+    // The replacement markdown declares no `generated` of its own, so this
+    // write authors the content and stamps its own actor. ADR-0016's
+    // honour-what-is-declared rule is about a `generated` arriving IN the
+    // payload (an imported bundle), and `trust-stamp.test.ts` owns it — the
+    // batch changes nothing there, it only carries the actor to the write.
+    expect(replaced.frontmatter.generated).toMatchObject({ by: 'human:someone' })
+  })
+
+  // The batch reuses `okfActorSchema` rather than declaring `z.string()`,
+  // so a malformed actor is refused at the boundary the same way
+  // `wb_document_set` refuses one. Pinned because widening it here would be
+  // invisible to every behavioural case above — they all send a valid actor.
+  it('refuses an actor that is not a single-line string', () => {
+    const base = {
+      workspaceId: WS,
+      ops: [{ op: 'document.delete', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' }],
+    }
+    expect(workspaceEditInputSchema.safeParse({ ...base, actor: 'human:a' }).success).toBe(true)
+    for (const actor of ['', ' human:a', 'human:a ', 'human:a\nhuman:b']) {
+      expect(workspaceEditInputSchema.safeParse({ ...base, actor }).success, actor).toBe(false)
+    }
+  })
+
+  /**
+   * The mixed-kind case, which the single-kind cases above cannot reach.
+   * `wbDocumentCreateInputSchema`'s spatial arm is `.strict()` and has no
+   * `actor` — a spatial document authors no content — so a batch that put
+   * the actor on every create failed at the first spatial op with an
+   * unrecognized-key error. Found by the e2e smoke, not by a unit test.
+   */
+  it('carries the actor past a spatial create in the same batch', async () => {
+    const deps = await makeDeps()
+    const out = await createWorkspaceEditTool(deps).execute({
+      workspaceId: WS,
+      actor: 'reference_agent/mixed',
+      ops: [
+        { op: 'document.create', path: 'diagram', kind: 'spatial', name: 'D' },
+        { op: 'document.create', path: 'prose', kind: 'markdown', markdown: body('one') },
+      ],
+    })
+    expect(out.applied).toBe(2)
+    const exported = await exportOkf(deps, {
+      workspaceId: WS,
+      documentId: out.results[1]?.documentId ?? '',
+    })
+    expect(exported.frontmatter.generated).toMatchObject({ by: 'reference_agent/mixed' })
+  })
+
+  /**
+   * What a REJECTED op says. `ops` was a plain `z.union`, which reports
+   * `ops.0: Invalid input` and nothing more — it cannot know which branch
+   * the caller meant, so the one fact needed to repair the call is the one
+   * that is missing. Discriminating on `op` picks the branch and reports
+   * that branch's own issue. Measured against the offending payload: a
+   * spatial create carrying `markdown` now answers `Unrecognized key:
+   * "markdown"`.
+   */
+  it('names the offending key when an op is refused, not just "Invalid input"', () => {
+    const parsed = workspaceEditInputSchema.safeParse({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'diagram', kind: 'spatial', markdown: '# nope' }],
+    })
+    expect(parsed.success).toBe(false)
+    expect(JSON.stringify(parsed.error?.issues)).toContain('markdown')
+  })
+
+  it('names the server when a batch does not identify itself', async () => {
+    const deps = await makeDeps()
+    const out = await createWorkspaceEditTool(deps).execute({
+      workspaceId: WS,
+      ops: [{ op: 'document.create', path: 'anon', kind: 'markdown', markdown: body('one') }],
+    })
+    const exported = await exportOkf(deps, {
+      workspaceId: WS,
+      documentId: out.results[0]?.documentId ?? '',
+    })
+    expect(exported.frontmatter.generated).toMatchObject({ by: 'process:whiteboard-server' })
   })
 })

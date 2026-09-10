@@ -99,19 +99,15 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
   })
 
-  it('removes the tree entry, deletes branches/versions rows explicitly, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('removes the tree entry and deletes version rows explicitly, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
-    const { createBranch } = await import('./branches-store.js')
-    const { stat } = await import('node:fs/promises')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'canvas-a', doc)
     await saveDocument('session1', 'canvas-b', doc)
     const store = new FileVersionStore()
-    const version = await store.save('session1', 'canvas-a', doc, { auto: true })
-    await store.saveThumbnail('session1', 'canvas-a', version.id, new Uint8Array([1, 2, 3]))
-    await createBranch('session1', 'canvas-a', { name: 'feature' })
+    await store.save('session1', 'canvas-a', doc, { auto: true })
 
     const db = await getDb(tempDir)
     const { resolveDocumentIdAtPath } = await import('./document-store.js')
@@ -119,17 +115,8 @@ describe('deleting a document', () => {
     if (documentId === null) throw new Error('document missing from the tree')
     const libsqlStore = new LibsqlDocumentStore(db)
 
-    const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
-    await expect(stat(thumbPath)).resolves.toBeDefined()
-
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
 
-    const branchesAfter = await db
-      .selectFrom('branches')
-      .selectAll()
-      .where('documentId', '=', documentId)
-      .execute()
-    expect(branchesAfter).toEqual([])
     const versionsAfter = await db
       .selectFrom('versions')
       .selectAll()
@@ -147,7 +134,6 @@ describe('deleting a document', () => {
     expect(stored).not.toBeNull()
     expect(resolveWorkspaceDocumentById(stored!, documentId)).toBeNull()
     expect(readTrashEntries(stored!).map((t) => t.documentId)).toContain(documentId)
-    await expect(stat(thumbPath)).rejects.toThrow()
 
     const wsRow = await db
       .selectFrom('workspaces')
@@ -160,15 +146,14 @@ describe('deleting a document', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['canvas-b'])
   })
 
-  // The defect this closes: wb_document_delete removed the index row and the
+  // The defect this closes: wbDocumentDelete removed the index row and the
   // Libsql bytes and stopped there, so a document an agent deleted left its
-  // thumbnails, its blob and a cached doc instance behind — while the same
-  // document deleted through the HTTP route did not. Both paths now run the
-  // same teardown, and this asserts on the FILES, not on the tool answering
+  // version rows and a cached doc instance behind — while the same document
+  // deleted through the HTTP route did not. Both paths now run the same
+  // teardown, and this asserts on what is LEFT, not on the tool answering
   // { deleted: true }, which it did throughout the whole defect.
-  it('leaves the same state when the delete comes through wb_document_delete as through the HTTP path', async () => {
+  it('leaves the same state when the delete comes through wbDocumentDelete as through the HTTP path', async () => {
     const { getDb } = await import('./db/index.js')
-    const { stat } = await import('node:fs/promises')
     const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
     const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
     const { FsBlobStore } = await import('./fs/fs-blob-store.js')
@@ -182,7 +167,6 @@ describe('deleting a document', () => {
     await saveDocument('session1', 'agent-deleted', doc)
     const store = new FileVersionStore()
     const version = await store.save('session1', 'agent-deleted', doc, { auto: true })
-    await store.saveThumbnail('session1', 'agent-deleted', version.id, new Uint8Array([1, 2, 3]))
     // Populate the doc cache the way a read would, so eviction has something
     // to evict — otherwise this half of the assertion passes vacuously.
     // getDoc, not loadDocument: only the former goes through the LRU.
@@ -194,9 +178,6 @@ describe('deleting a document', () => {
     const documentId = await resolveDocumentIdAtPath('session1', 'agent-deleted')
     expect(documentId).not.toBeNull()
     if (documentId === null) throw new Error('unreachable')
-    const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
-    await expect(stat(thumbPath)).resolves.toBeDefined()
-
     await wbDocumentDelete(
       {
         documentStore: new LibsqlDocumentStore(db),
@@ -210,7 +191,12 @@ describe('deleting a document', () => {
       { workspaceId: 'session1', documentId },
     )
 
-    await expect(stat(thumbPath)).rejects.toThrow()
+    const survivors = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('id', '=', version.id)
+      .execute()
+    expect(survivors).toEqual([])
     expect(peekDoc('session1', 'agent-deleted')).toBeUndefined()
     expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
   })
@@ -248,13 +234,11 @@ describe('renameDocumentPath', () => {
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('moves only the path: branches, version rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
+  it('moves only the path: version rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
-    const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'a', doc)
-    await createBranch('session1', 'a', { name: 'feature' })
     const store = new FileVersionStore()
     const version = await store.save('session1', 'a', doc, { auto: true })
 
@@ -290,14 +274,6 @@ describe('renameDocumentPath', () => {
 
     // Content is untouched by the move — same documentId, same value.
     expect((await loadDocument('session1', 'b')).toJSON()).toEqual(contentBefore)
-
-    // Branches survive the move and resolve under the new path. This used to
-    // read the `branches` rows as well; branches live on the workspace
-    // record now, and the record is keyed by documentId, so the path change
-    // cannot reach them — which is the property, stated once through the
-    // reader everything else uses.
-    const branches = await loadDocumentBranches('session1', 'b')
-    expect(branches.branches.map((b) => b.name).sort()).toEqual(['feature', 'main'])
   })
 
   it('returns null (never throws) for a missing source canvas', async () => {

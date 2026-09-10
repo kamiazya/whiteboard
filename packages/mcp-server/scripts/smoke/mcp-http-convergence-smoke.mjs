@@ -266,14 +266,14 @@ async function main() {
   await notify('notifications/initialized', {})
 
   // ── Step 2: real MCP tool calls create a spatial document with known content ──
-  const created = await callTool('wb_document_create', {
+  const batch = await callTool('wb_workspace_edit', {
     workspaceId: WORKSPACE_ID,
-    path: DOCUMENT_PATH,
-    kind: 'spatial',
     createWorkspace: true,
+    ops: [{ op: 'document.create', path: DOCUMENT_PATH, kind: 'spatial' }],
   })
+  const created = { ...batch.results[0], workspaceId: batch.workspaceId }
   if (typeof created.documentId !== 'string') {
-    throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
+    throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(batch)}`)
   }
   const documentId = created.documentId
   // ADR-0019's mint: the server chose this workspace's canonical id, and
@@ -281,7 +281,7 @@ async function main() {
   // by that segment — only a lookup that compares against a served row needs
   // the canonical id, which is why it is captured here.
   const workspaceId = created.workspaceId
-  log(`[e2e] wb_document_create → ${documentId} in ${workspaceId} (segment ${WORKSPACE_ID})`)
+  log(`[e2e] document.create → ${documentId} in ${workspaceId} (segment ${WORKSPACE_ID})`)
 
   // ── Step 2b: ADR-0019 — GET /api/workspaces serves the displayName a
   //    plain HTTP PUT set, through the published listWorkspacesResponseSchema.
@@ -459,8 +459,14 @@ async function main() {
   }
   log('[e2e] wb_canvas_snapshot → nodes A, B, C all named by id')
 
-  const got = await callTool('wb_document_get', { workspaceId: WORKSPACE_ID, documentId })
-  const exportedCanvas = JSON.parse(got.content)
+  const got = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  if (got.documents.length !== 1) {
+    throw new Error(`wb_document_get refused the document: ${JSON.stringify(got.failed)}`)
+  }
+  const exportedCanvas = JSON.parse(got.documents[0].content)
   for (const node of [NODE_A, NODE_B, NODE_C]) {
     const found = exportedCanvas.nodes.find((n) => n.id === node.id)
     if (found?.text !== node.text) {

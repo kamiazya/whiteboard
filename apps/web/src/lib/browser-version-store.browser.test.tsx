@@ -71,7 +71,6 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
       auto: false,
       elementCount: 1,
       branchName: 'main',
-      hasThumbnail: false,
     })
 
     // A reload: nothing held in memory survives, only IndexedDB.
@@ -100,50 +99,6 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
     expect(await store.loadPast(workspaceId, 'canvas-a', theirs.id)).toBeNull()
     expect(await store.loadPast(workspaceId, 'canvas-a', 'no-such-version')).toBeNull()
     expect(await store.list(workspaceId, 'canvas-a')).toEqual([])
-  })
-  it("keeps a saved point's picture, and says on the row that there is one", async () => {
-    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
-    const docs = new BrowserWorkspaceDocs()
-    await writeContent(docs, documentId, 'drawn')
-    const store = new BrowserVersionStore({ docs, index })
-    const saved = await store.save(workspaceId, 'canvas-a', { label: 'with a picture' })
-
-    // A row says it has none until one lands, which is what the panel reads
-    // to decide whether to leave room for a picture at all.
-    expect((await store.list(workspaceId, 'canvas-a'))[0]?.hasThumbnail).toBe(false)
-
-    await store.putThumbnail(
-      workspaceId,
-      'canvas-a',
-      saved.id,
-      new Blob(['png-ish'], {
-        type: 'image/png',
-      }),
-    )
-
-    // A reload, because a picture that lives only in memory is not kept.
-    const reloaded = new BrowserVersionStore({
-      docs: new BrowserWorkspaceDocs(),
-      index: new FoldingBrowserIndex(),
-    })
-    expect((await reloaded.list(workspaceId, 'canvas-a'))[0]?.hasThumbnail).toBe(true)
-    const blob = await reloaded.loadThumbnail(workspaceId, 'canvas-a', saved.id)
-    expect(await blob?.text()).toBe('png-ish')
-  })
-
-  it("refuses a picture belonging to another document's history", async () => {
-    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
-    const other = await index.createDocument({ workspaceId, path: 'canvas-b', kind: 'spatial' })
-    const docs = new BrowserWorkspaceDocs()
-    await writeContent(docs, documentId, 'mine')
-    await writeContent(docs, other.documentId, 'theirs')
-    const store = new BrowserVersionStore({ docs, index })
-    const theirs = await store.save(workspaceId, 'canvas-b', {})
-    await store.putThumbnail(workspaceId, 'canvas-b', theirs.id, new Blob(['theirs']))
-
-    // The refusal loadPast makes, for the same reason: an id alone must not
-    // read a history that is not this document's.
-    expect(await store.loadThumbnail(workspaceId, 'canvas-a', theirs.id)).toBeNull()
   })
 })
 
@@ -221,5 +176,48 @@ describe('automatic checkpoints', () => {
     const ids = new Set((await store.list(workspaceId, 'canvas-lineage')).map((r) => r.id))
     expect(ids.has(merge.id)).toBe(true)
     expect(ids.has(named.id)).toBe(true)
+  })
+})
+
+/**
+ * The question the checkpoint scheduler asks before writing a row, answered
+ * here rather than by comparing frontiers across the two — a version's
+ * frontier is the RECORD's, and the doc a scheduler holds is not, so a
+ * comparison spanning that boundary is never equal whatever the state.
+ */
+describe('has this state already been checkpointed', () => {
+  beforeEach(async () => {
+    await clearWhiteboardDb()
+  })
+
+  it('says no with no versions, yes right after one, and no again once the record moves', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'first')
+    const store = new BrowserVersionStore({ docs, index })
+
+    // Nothing saved yet: a document with no history has no point to
+    // duplicate, so the first checkpoint must always go through.
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
+
+    await store.save(workspaceId, 'canvas-a', { auto: true })
+    // Nothing has happened since, so a second row would hold what the first
+    // one holds. This is the reconnect and the after-a-bookmark case both:
+    // the store is asked, so no scheduler's memory is involved.
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
+
+    await writeContent(docs, documentId, 'second')
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(false)
+  })
+
+  it('answers a manual save the same way, since a bookmark is a point too', async () => {
+    const { index, workspaceId, documentId } = await seedDocument('canvas-a')
+    const docs = new BrowserWorkspaceDocs()
+    await writeContent(docs, documentId, 'first')
+    const store = new BrowserVersionStore({ docs, index })
+
+    await store.save(workspaceId, 'canvas-a', { label: 'a point I named' })
+
+    expect(await store.isUnchangedSinceLastVersion(workspaceId, 'canvas-a')).toBe(true)
   })
 })

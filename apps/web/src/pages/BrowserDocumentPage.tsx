@@ -1,10 +1,9 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { createCheckpointScheduler, readBranchesFromRecord } from '@kamiazya/whiteboard-history'
+import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Trash2 } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
@@ -21,7 +20,6 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import { BranchesBackendContext } from '../contexts/BranchesBackendContext.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { spatialThreadWrite } from '../hooks/spatial-thread-write.js'
 import type { CommentsRailWrite } from '../hooks/use-comments-rail.js'
@@ -37,7 +35,6 @@ import {
   workspacePath,
 } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
-import { createBrowserBranchesBackend } from '../lib/browser-branches-backend.js'
 import { BrowserVersionStore } from '../lib/browser-version-store.js'
 import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
@@ -46,6 +43,7 @@ import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import type { DocumentOutlineSource } from '../lib/document-outline.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
+import { resolveOpenDocumentSymbol } from '../lib/document-symbol.js'
 import {
   DOCUMENT_SYNC_VERSION_SAVED_EVENT,
   dispatchIdentityEvent,
@@ -55,6 +53,7 @@ import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import { linkEntries, linkTargets, linkTitles } from '../lib/link-entries.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { loroTextSync } from '../lib/loro-codemirror-sync.js'
 import { composeOutlineSource } from '../lib/outline-source.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
@@ -237,18 +236,22 @@ function useBrowserDocument(
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
-  // Binds CodeMirror straight to the document's 'body' text container:
-  // edits land in the CRDT with real deltas (not the wholesale replace
-  // setBody does), and an external change moves the local caret exactly.
-  // The hook's doc subscription keeps body state and the save schedule in
-  // step with the binding's commits, so onChange has nothing left to do.
+  // Binds CodeMirror straight to the document's 'body' text container: each
+  // change is written at its OWN position, and an external change moves the
+  // local caret exactly. The hook's doc subscription keeps body state and the
+  // save schedule in step, so onChange has nothing left to do.
+  //
+  // NOT, as this said until it was measured, "unlike setBody's wholesale
+  // replace": `minimalChange` is minimal, and identical for one keystroke.
+  // They differ on a transaction editing two places at once, where one span
+  // covers both — the untouched middle re-inserted, its passage marks gone.
   const markdownBinding = useMemo(
     () =>
       markdownDoc.doc === null
         ? undefined
         : // bodyTextOf, not a root getText: in workspace mode the doc is the
           // WORKSPACE document and this document's body sits on its tree node.
-          [LoroSyncPlugin(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
+          [loroTextSync(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
     [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
@@ -483,19 +486,16 @@ function useBrowserDocument(
   // the store saves. Keying on the content doc would compare a frontier
   // against a row taken from a different one, and never match.
   const checkpoints = useMemo(() => {
-    const scheduler = createCheckpointScheduler<VersionEntry>({
-      save: (workspaceId, path, _doc, branchName) =>
+    return createCheckpointScheduler<VersionEntry>({
+      alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
+      save: (workspaceId, path) =>
         versionStore.save(workspaceId, path, {
           auto: true,
-          ...(branchName === null ? {} : { branchName }),
           // The person at this browser is not who took this one.
           operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
         }),
-      getHeadBranch: async (_workspaceId, _path) =>
-        backend?.readRecord((doc, id) => readBranchesFromRecord(doc, id)?.head ?? null) ?? null,
       onError: (err) => log.warn('automatic checkpoint failed', err),
     })
-    return scheduler
   }, [backend, versionStore])
 
   // Bound to the record the backend holds, and a no-op until one is there.
@@ -600,13 +600,6 @@ function useBrowserDocument(
   // through to the context's daemon fallback and issuing a request to a
   // daemon that is not there — which was this provider's whole job while the
   // keeper had no branches, and remains true now that it has them.
-  const branchesBackend = useMemo(
-    // The version store rides along so a merge can leave the point before it.
-    // Same instance the versions seam uses, so a pre-merge point is an
-    // ordinary row in the same history rather than a second kind of record.
-    () => createBrowserBranchesBackend({ backend, versions: versionStore }),
-    [backend, versionStore],
-  )
   // A manual save announces itself on the window (dispatched after the
   // keeper confirmed the save), and the page's history column re-reads on
   // it. Scoped to THIS document's identity — an unchecked listener refreshed
@@ -741,6 +734,17 @@ function useBrowserDocument(
       composeOutlineSource(kind, readOutlineSource, markdownDoc),
     [readOutlineSource, markdownDoc],
   )
+  // The tab's mark. A SPATIAL document keeps its symbol on the canvas
+  // envelope, the same bucket the edge-style facet uses; a MARKDOWN one
+  // keeps its own in the frontmatter facets, which are no canvas value and
+  // so arrive on the session's own `facets` reading.
+  // Memoised because the resolver PARSES: a fresh object every render
+  // would re-arm the favicon's debounce on every render rather than on
+  // a change to the document.
+  const documentSymbol = useMemo(
+    () => resolveOpenDocumentSymbol({ kind: documentKind, canvas, facets: sync.facets }),
+    [documentKind, canvas, sync.facets],
+  )
   useDocumentFavicon({
     settingsStore,
     documentId,
@@ -748,6 +752,7 @@ function useBrowserDocument(
     revision: documentKind === 'markdown' ? markdownDoc.body : canvas,
     readSource: readDocumentOutlineSource,
     status: browserFaviconStatus(storageHealth),
+    symbol: documentSymbol,
   })
 
   // The facts themselves, published for tests and nothing else: hidden, so
@@ -890,7 +895,6 @@ function useBrowserDocument(
       enabled: versionsEnabled,
       workspaceId,
       path: loadedPath,
-      backend: versionsBackend,
       save: async (label) => {
         if (versionsBackend === null) {
           throw new Error('saveVersionFromPanel: no versions backend')
@@ -1014,9 +1018,7 @@ function useBrowserDocument(
     model,
     wrap: (page: ReactNode) => (
       <VersionsBackendContext.Provider value={versionsBackend}>
-        <BranchesBackendContext.Provider value={branchesBackend}>
-          {page}
-        </BranchesBackendContext.Provider>
+        {page}
       </VersionsBackendContext.Provider>
     ),
   }

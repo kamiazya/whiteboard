@@ -15,6 +15,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { expectLoggedFailure } from '../test-utils/logged-failures.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 function MemoryRouterWrapper({ children }: { children: ReactNode }) {
@@ -163,6 +164,21 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // and every one of these tests quietly exercised a schema failure it
+          // is not about, logging it and carrying on.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
@@ -173,7 +189,6 @@ describe('DaemonDocumentPage versions', () => {
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: false,
-                    hasThumbnail: false,
                     branchName: 'main',
                   },
                 }),
@@ -232,6 +247,21 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // and every one of these tests quietly exercised a schema failure it
+          // is not about, logging it and carrying on.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             return Promise.resolve(
               new Response(
@@ -242,7 +272,6 @@ describe('DaemonDocumentPage versions', () => {
                     createdAt: '2026-01-01T00:00:00Z',
                     elementCount: 3,
                     auto: false,
-                    hasThumbnail: false,
                     branchName: 'main',
                   },
                 }),
@@ -319,6 +348,21 @@ describe('DaemonDocumentPage versions', () => {
               }),
             )
           }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // and every one of these tests quietly exercised a schema failure it
+          // is not about, logging it and carrying on.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/workspaces/w1/documents/main/versions') && init?.method === 'POST') {
             // Malformed 200: missing the `version` envelope the schema requires.
             return Promise.resolve(
@@ -353,6 +397,7 @@ describe('DaemonDocumentPage versions', () => {
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
 
       vi.unstubAllGlobals()
+      await expectLoggedFailure('POST /versions response did not match')
     })
 
     it('shows an inline error when the save request fails', async () => {
@@ -362,6 +407,21 @@ describe('DaemonDocumentPage versions', () => {
           if (url.includes('/branches')) {
             return Promise.resolve(
               new Response(JSON.stringify({ head: 'main', branches: [] }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
+          // The panel LISTS versions on mount, and this mock only answered the
+          // POST — so the catch-all `{}` below reached `versionsResponseSchema`
+          // and every one of these tests quietly exercised a schema failure it
+          // is not about, logging it and carrying on.
+          if (
+            url.includes('/workspaces/w1/documents/main/versions') &&
+            (init?.method ?? 'GET') === 'GET'
+          ) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ versions: [] }), {
                 status: 200,
                 headers: { 'Content-Type': 'application/json' },
               }),
@@ -441,7 +501,6 @@ describe('DaemonDocumentPage versions', () => {
                       createdAt: '2026-01-01T00:00:00Z',
                       elementCount: 3,
                       auto: true,
-                      hasThumbnail: false,
                       branchName: 'main',
                     },
                   ],
@@ -576,7 +635,6 @@ describe('DaemonDocumentPage versions', () => {
                       createdAt: '2026-01-01T00:00:00Z',
                       elementCount: 3,
                       auto: true,
-                      hasThumbnail: false,
                       branchName: 'main',
                     },
                   ],

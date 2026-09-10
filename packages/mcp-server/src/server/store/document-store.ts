@@ -1,23 +1,4 @@
-/**
- * The daemon's document store: a Loro snapshot per document, persisted
- * through the same `LibsqlDocumentStore` the MCP tool surface writes
- * (`document:<documentId>` rows), addressed through the workspace tree —
- * the tree is the whole address book (migration 0017 dropped the legacy
- * `documents` row-plane it used to fold in at startup). Everything the web
- * app shows and edits goes through here (ADR-0007's workspace/path store),
- * and reads/writes the SAME bytes a `wb_document_*` tool call would.
- *
- * `listDocuments` here is NOT `DocumentIndex`'s method of the same name —
- * that is the agent-facing side of the same split, reached
- * as `deps.documentIndex.*` and addressing documents by ULID rather than by
- * `(workspaceId, path)`. The names match because the concept does; the two
- * stores are what do not see each other. Both now write the same
- * `LibsqlDocumentStore` rows, which is why `saveDocument`/`compactDocument`
- * additionally take `withDocumentWriteLock` — see their comments.
- */
-import { unlink } from 'node:fs/promises'
 import type { DocumentSummary } from '@kamiazya/whiteboard-daemon-client/api-contracts/document'
-import { readWorkspaceBranchTips } from '@kamiazya/whiteboard-history'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -52,16 +33,12 @@ import {
   type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
-import {
-  corruptStoredData,
-  isCorruptStoredDataError,
-  isMissingFileError,
-} from './corrupt-stored-data.js'
+import { corruptStoredData, isCorruptStoredDataError } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -70,7 +47,6 @@ import { DocumentNotFoundError } from './document-not-found-error.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
-import { thumbnailPath } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Chunk size shared with the MCP tool write path (server-core's
@@ -124,12 +100,6 @@ function workspaceDocCacheKey(workspaceId: string): string {
   return `${getDataDir()}::${workspaceId}`
 }
 
-/**
- * The STORED workspace record's frontiers when the tree serves `path`, null
- * on the legacy plane. What a branch head stores for a tree-served document:
- * a projection's frontiers die with the process, the workspace record's
- * outlive it.
- */
 /** The documentId at `path`, or null when the workspace tree does not serve it. */
 export async function resolveDocumentIdAtPath(
   workspaceId: string,
@@ -161,9 +131,9 @@ export async function workspaceFrontiersForPath(
 /**
  * The document at `path` as it stood at `frontiers` of the WORKSPACE
  * document — null when the tree does not serve the path (legacy plane).
- * Throws when the frontiers cannot be checked out (a tip recorded against a
- * different lineage, e.g. a pre-cutover branch of a since-folded document —
- * that history was deliberately not carried by the fold).
+ * Throws when the frontiers cannot be checked out — a point recorded against
+ * a different lineage, e.g. a pre-cutover version of a since-folded document,
+ * whose history the fold deliberately did not carry.
  */
 export async function projectDocumentAtWorkspaceFrontiers(
   workspaceId: string,
@@ -182,7 +152,7 @@ export async function projectDocumentAtWorkspaceFrontiers(
 
 /**
  * A detached clone of the STORED workspace record, or null when none is
- * stored. What version/branch machinery forks and checks out: the stored
+ * stored. What the version machinery forks and checks out: the stored
  * record's oplog is durable across restarts, where a projection's is
  * per-process.
  */
@@ -708,72 +678,37 @@ export async function documentExists(workspaceId: string, path: string): Promise
   return (await resolveDocumentIdAtPath(workspaceId, path)) !== null
 }
 
-async function unlinkIfExists(path: string): Promise<void> {
-  try {
-    await unlink(path)
-  } catch (error) {
-    if (!isMissingFileError(error)) throw error
-  }
-}
-
 // ── delete a canvas and every file it owns ──
 // Returns false (never throws) for a missing canvas so callers can treat
 // "already gone" and "just deleted" the same way an idempotent DELETE
 // should.
 //
-// Order matters for the crash-safety story: the DB row goes first, so a
-// crash between the row delete and the thumbnail unlinks below leaves
-// orphan thumbnail files (invisible — nothing lists the deleted documentId
-// anymore) rather than the reverse — a listed canvas whose content is
-// already gone.
-// ponytail: orphaned files from that crash window are not swept by
-// file-gc (its collectReferencedFileIds targets uploaded images, not these
-// version thumbnails); revisit if orphan blobs start showing up in the
-// storage report.
 /**
  * Everything about a document that is neither Libsql bytes nor a workspace
- * tree node: one thumbnail per version, and the cached doc instance.
- * server-core cannot name any of it, so it reaches this through
- * `ServerDeps.documentTeardown` — which is what makes `wb_document_delete`
- * clean up the way the HTTP DELETE does instead of leaving stale files and a
- * stale cache entry behind.
+ * tree node: its versions rows and the cached doc instance. server-core
+ * cannot name any of it, so it reaches this through
+ * `ServerDeps.documentTeardown` — which is what makes `wbDocumentDelete`
+ * clean up the way the HTTP DELETE does instead of leaving a stale cache
+ * entry behind.
  *
- * Two phases because a thumbnail is filed under a VERSION id, and the
- * versions rows are deleted right after the document goes (explicitly,
- * since 0016 dropped the cascade FK): the ids have to be captured while
- * the document is still whole. The row delete and the two sweeps are
- * separate statements, not one transaction — a crash between them leaves
- * orphaned versions/branches rows.
+ * The row delete and the document delete are separate statements, not one
+ * transaction — a crash between them leaves orphaned versions rows.
  * ponytail: acceptable while nothing lists rows by dangling documentId;
  * a boot-time orphan sweep is the upgrade path if they ever show up.
  */
 export const documentTeardown: DocumentTeardown = {
   around({ workspaceId, documentId, path }, deleteDocument) {
-    // The whole delete runs under this workspace's write barrier, capture
-    // included. A version saved between the capture and the row delete
-    // would otherwise have its row cascaded away while its thumbnail was
-    // never in the captured set — an orphaned file, from the one seam that
-    // exists to prevent them.
+    // The whole delete runs under this workspace's write barrier, so a
+    // version saved mid-delete cannot land after the sweep below.
     return withWorkspaceWriteLock(workspaceId, async () => {
       const db = await dbReady()
-      const versionRows = await db
-        .selectFrom('versions')
-        .select(['id'])
-        .where('documentId', '=', documentId)
-        .execute()
-
       const result = await deleteDocument()
 
-      // Version/branch rows no longer cascade from a documents row
-      // (migration 0016 dropped the FK — a tree-only document has no row to
-      // cascade from), so delete-completeness for every delete path that
-      // runs through this bracket lives here.
+      // Version rows no longer cascade from a documents row (migration 0016
+      // dropped the FK — a tree-only document has no row to cascade from), so
+      // delete-completeness for every delete path that runs through this
+      // bracket lives here.
       await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
-      await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
-
-      for (const { id: versionId } of versionRows) {
-        await unlinkIfExists(thumbnailPath(workspaceId, versionId))
-      }
 
       // Force the next getDoc() to reload from disk (there is nothing left to
       // reload from — a fresh create should not inherit a doc instance that
@@ -791,12 +726,11 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   const documentId = await resolveDocumentIdAtPath(workspaceId, path)
   if (documentId === null) return false
 
-  // The same bracket wb_document_delete runs in (server-core's
+  // The same bracket wbDocumentDelete runs in (server-core's
   // document-crud.ts) — deliberately, because the two used to be separate
   // implementations and only one of them cleaned up. The bracket takes the
-  // workspace write lock, captures thumbnail ids while the document is
-  // whole, and deletes versions/branches rows after (migration 0016 dropped
-  // the cascade).
+  // workspace write lock and deletes the versions rows after the document
+  // goes (migration 0016 dropped the cascade).
   return documentTeardown.around({ workspaceId, documentId, path }, async () => {
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete
@@ -857,89 +791,11 @@ export interface CompactResult {
  * every document now lives in the one workspace record, they all compact the
  * same thing — a second call right after answers 'no-gain'.
  *
- * Risk parity with the retired per-document compaction, not an improvement
- * on it: the cut considers version rows only, so a branch head recorded
- * before the workspace's earliest version can lose the history its checkout
- * needs, exactly as the old design could per document.
+ * The cut is the earliest workspace-scoped version frontier, full stop.
+ * Branch tips used to hold it back — ADR-0029 retired the branch, so there is
+ * no second pin and no checkout to protect. Measured on a one-tip fixture
+ * before they went: the folded record was ~75% larger with the pin.
  */
-/**
- * The earliest history any reader still needs: the pointwise-minimum version
- * vector across the earliest version row and every branch tip recorded for
- * the workspace, converted back to a frontiers cut. A peer absent from any
- * pin's vector means that pin includes none of the peer's ops, so the
- * minimum excludes the peer entirely — the cut only ever moves BACKWARD
- * from the version-only cut, never forward.
- */
-async function retainedHistoryCut(
-  workspaceId: string,
-  doc: LoroDoc,
-  earliestVersion: Frontiers,
-): Promise<Frontiers> {
-  const db = await dbReady()
-  const rows = await db
-    .selectFrom('branches')
-    .select(['tipFrontiers', 'name', 'documentId'])
-    .where('workspaceId', '=', workspaceId)
-    .execute()
-  // Both readings, because the move off rows is per document: a document
-  // written since the move has its branches on the record and no rows, one
-  // written before has rows and no plane. Never both, so this is a union
-  // rather than a merge — and a tip counted twice would be harmless anyway,
-  // since the cut is a pointwise MINIMUM.
-  const tips = [
-    ...readWorkspaceBranchTips(doc),
-    ...rows.map((row) => ({
-      documentId: row.documentId,
-      name: row.name,
-      tipFrontiers: row.tipFrontiers,
-    })),
-  ]
-  const pins: { frontiers: Frontiers; branch: string }[] = []
-  for (const tip of tips) {
-    // An empty tip is a branch nothing has written to yet — it pins nothing.
-    if (tip.tipFrontiers.length === 0) continue
-    try {
-      pins.push({
-        frontiers: decodeFrontiers(new Uint8Array(Buffer.from(tip.tipFrontiers, 'base64'))),
-        branch: `${tip.documentId}#${tip.name}`,
-      })
-    } catch (error) {
-      throw corruptStoredData(
-        `${workspaceId}/branches/${tip.documentId}#${tip.name}`,
-        `tipFrontiers could not be decoded (${error instanceof Error ? error.message : String(error)})`,
-      )
-    }
-  }
-  if (pins.length === 0) return earliestVersion
-  const vvs = [doc.frontiersToVV(earliestVersion).toJSON()]
-  for (const pin of pins) {
-    try {
-      vvs.push(doc.frontiersToVV(pin.frontiers).toJSON())
-    } catch {
-      // A frontier the workspace record's oplog does not contain: a branch
-      // tip captured on the retired per-document plane, whose ops the boot
-      // fold copied by VALUE rather than importing. Such a branch cannot be
-      // checked out on the workspace record no matter what the cut keeps, so
-      // it pins nothing — and it must not disable compaction for the whole
-      // workspace by throwing here.
-      getLogger('document-store').warning(
-        { workspaceId, branch: pin.branch },
-        'branch tip frontier is foreign to the workspace record; not pinning history',
-      )
-    }
-  }
-  if (vvs.length === 1) return earliestVersion
-  const min = new Map(vvs[0])
-  for (const vv of vvs.slice(1)) {
-    for (const [peer, counter] of [...min]) {
-      const other = vv.get(peer)
-      if (other === undefined) min.delete(peer)
-      else if (other < counter) min.set(peer, other)
-    }
-  }
-  return doc.vvToFrontiers(VersionVector.parseJSON(min))
-}
-
 export async function compactDocument(
   workspaceId: string,
   path: string,
@@ -988,14 +844,10 @@ export async function compactDocument(
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId)
 
-    // Branch tips pin history exactly like version rows do: Loro refuses a
-    // checkout before the shallow start, so a cut past a branch tip breaks
-    // that branch's switch, merge and file-gc scan. The cut is held back to
-    // the pointwise-minimum version vector across the earliest version and
-    // every recorded branch tip — strictly conservative, and the version
-    // requirement stays: no version row still means no compaction at all.
-    const cut = await retainedHistoryCut(workspaceId, doc, earliestVersion)
-    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
+    // The earliest version row is the whole cut: it is the oldest point any
+    // reader can still ask to see. No version row still means no compaction
+    // at all, which is the guard above.
+    const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: earliestVersion })
     if (shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }

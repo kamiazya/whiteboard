@@ -1,12 +1,23 @@
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  createFacetRegistry,
+  defineFacet,
+  definePlugin,
+  namespacedIdSchema,
+} from '@kamiazya/whiteboard-facet-engine'
+import type {
+  EdgeRoutingStyle,
+  ExtensionFacets,
+  LineJumps,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { VISUAL_THEMES } from './themes.js'
 
 /**
  * `visual.edges/v0` — how this canvas's edges are drawn. The facet-shaped
@@ -93,6 +104,22 @@ export type VisualTextFacet = z.infer<typeof visualTextFacetSchema>
 export const VISUAL_TEXT_KEY = 'visual.text/v0'
 
 /**
+ * `visual.theme/v0` — how this canvas is DRAWN, as the id of a registered
+ * theme asset (ADR-0030 decision 2): `visual.sketch`, `visual.neon`, or a
+ * theme another plugin registers. The payload never carries raw styles; the
+ * asset supplies the tokens, and the registry refuses an id nobody
+ * registered at write time. ABSENT is the bundled look, which is why the
+ * picker's first segment is `null` rather than a stored `'default'`.
+ */
+export const visualThemeFacetSchema = z.object({
+  theme: namespacedIdSchema,
+})
+
+export type VisualThemeFacet = z.infer<typeof visualThemeFacetSchema>
+
+export const VISUAL_THEME_KEY = 'visual.theme/v0'
+
+/**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
  * through the same registry, validation and ordering as any deployment's
  * added plugins, and a deployment may disable it.
@@ -158,13 +185,40 @@ export const visualPlugin = definePlugin({
       },
     }),
     defineFacet({
+      name: 'theme',
+      displayName: 'Theme',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: visualThemeFacetSchema,
+      assetRefs: { theme: 'themes' },
+      editor: {
+        fields: {
+          theme: {
+            widget: 'segmented',
+            label: 'Theme',
+            quick: true,
+            options: [
+              { value: null, label: 'Default' },
+              { value: 'visual.sketch', label: 'Sketch' },
+              { value: 'visual.neon', label: 'Neon' },
+            ],
+          },
+        },
+      },
+    }),
+    defineFacet({
       name: 'symbol',
       displayName: 'Symbol',
       version: 'v0',
-      targets: ['node'],
+      // All three: a symbol answers "what symbolises this object", and the
+      // object may be a node, a spatial document's canvas, or a markdown
+      // document. Widening `targets` is a change to WHERE a payload may
+      // attach, never to the payload — so the version does not move.
+      targets: ['node', 'canvas', 'document'],
       schema: visualSymbolFacetSchema,
     }),
   ],
+  assets: { themes: VISUAL_THEMES },
 })
 
 export const bundledPlugins = [visualPlugin]
@@ -213,6 +267,60 @@ export function resolveCanvasEdgeStyle(
 }
 
 /**
+ * What this canvas's edges default to where its facet is silent: the theme
+ * it names (ADR-0030 decision 4 — a theme's `edgeRouting` fills in only
+ * where `visual.edges` says nothing), else the built-in straight line, and
+ * never a jump. A theme the registry does not carry defaults like none, the
+ * way the renderer degrades on it.
+ *
+ * The write path canonicalises against THIS, not against the built-in: a
+ * choice equal to the canvas's default leaves no trace, and a choice that
+ * differs from it is recorded even when it is the built-in default. Judged
+ * against the built-in alone, choosing Straight on an orthogonal-by-theme
+ * board deleted the facet, and the theme drew orthogonal anyway.
+ */
+export function resolveCanvasEdgeDefaults(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const themeId = resolveCanvasTheme(canvas, registry)
+  const themed = themeId === undefined ? undefined : registry.themeAsset(themeId)
+  const routing = edgeRoutingStyleSchema.safeParse(themed?.defaults.edgeRouting)
+  return { style: routing.success ? routing.data : 'straight', lineJumps: 'none' }
+}
+
+/** The routing and jumps this canvas draws with under its own theme: the explicit facet, field by field, over `resolveCanvasEdgeDefaults`. */
+export function resolveEffectiveCanvasEdgeStyle(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const explicit = resolveCanvasEdgeStyle(canvas, registry)
+  const defaults = resolveCanvasEdgeDefaults(canvas, registry)
+  return {
+    style: explicit.style ?? defaults.style,
+    lineJumps: explicit.lineJumps ?? defaults.lineJumps,
+  }
+}
+
+/**
+ * The one read path for "which theme does this canvas name": the
+ * `visual.theme/v0` facet when it resolves, else undefined — the bundled
+ * look. Answers the ID only; whether the id resolves to an asset is the
+ * renderer's question, and an id this deployment does not carry degrades
+ * there, never here.
+ */
+export function resolveCanvasTheme(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): string | undefined {
+  const stored = canvas['x-whiteboard']?.facets?.[VISUAL_THEME_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_THEME_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  return visualThemeFacetSchema.parse(resolution.value).theme
+}
+
+/**
  * The one read path for "what silhouette does this node draw": the
  * `visual.shape/v0` facet when it resolves, else undefined — which every
  * consumer already treats as the historic rect.
@@ -229,18 +337,53 @@ export function resolveNodeShape(
 }
 
 /**
- * The one read path for "what badge does this node wear": the
- * `visual.symbol/v0` facet when it resolves, else undefined — no badge.
+ * The one read path for "what symbol does this object wear", over the facets
+ * bucket the object stores. Every surface that draws a symbol — the node
+ * badge, the minimap, the favicon, a file row — goes through here, so an
+ * unresolvable payload means the same thing everywhere: no symbol, never a
+ * different fallback per surface. An unknown icon NAME still resolves here
+ * (the schema only checks non-emptiness) and degrades where it is drawn.
  */
+function readSymbol(
+  facets: ExtensionFacets | undefined,
+  registry: FacetRegistry,
+): VisualSymbolFacet | undefined {
+  const stored = facets?.[VISUAL_SYMBOL_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_SYMBOL_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  // Re-parse rather than cast: the registry resolved through this very
+  // schema, so this cannot fail — it keeps the type honest, and a throw
+  // here would mean the registry and this schema had come apart.
+  return visualSymbolFacetSchema.parse(resolution.value)
+}
+
+/** The badge a NODE wears. */
 export function resolveNodeSymbol(
   node: SpatialCanvas['nodes'][number],
   registry: FacetRegistry = bundledFacetRegistry,
 ): VisualSymbolFacet | undefined {
-  const stored = node['x-whiteboard']?.facets?.[VISUAL_SYMBOL_KEY]
-  if (stored === undefined) return undefined
-  const resolution = registry.resolveFacetPayload(VISUAL_SYMBOL_KEY, stored)
-  if (resolution.kind !== 'resolved') return undefined
-  return visualSymbolFacetSchema.parse(resolution.value)
+  return readSymbol(node['x-whiteboard']?.facets, registry)
+}
+
+/** The symbol a SPATIAL document wears, stored on its canvas envelope. */
+export function resolveCanvasSymbol(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualSymbolFacet | undefined {
+  return readSymbol(canvas['x-whiteboard']?.facets, registry)
+}
+
+/**
+ * The symbol a MARKDOWN document wears, from its OKF frontmatter facets.
+ * Takes the bucket rather than a document: this package cannot open stored
+ * content, and every caller has already parsed the frontmatter it holds.
+ */
+export function resolveDocumentSymbol(
+  facets: ExtensionFacets | undefined,
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualSymbolFacet | undefined {
+  return readSymbol(facets, registry)
 }
 
 /**

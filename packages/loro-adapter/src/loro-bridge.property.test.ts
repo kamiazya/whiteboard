@@ -36,6 +36,13 @@ describe('loro-bridge properties', () => {
       const result = readSpatialCanvas(doc)
       expect(byId(result.nodes)).toEqual(byId(canvas.nodes))
       expect(byId(result.edges)).toEqual(byId(canvas.edges))
+      // The envelope too — routing preferences and the canvas's facets —
+      // because this bridge is the path the app saves through, and a JSON
+      // round-trip is no evidence a field persists here. Comments are
+      // projected from the threads plane and compared in their own tests.
+      const { comments: _written, ...envelope } = canvas['x-whiteboard'] ?? {}
+      const { comments: _read, ...readBack } = result['x-whiteboard'] ?? {}
+      expect(readBack).toEqual(envelope)
     },
   )
 

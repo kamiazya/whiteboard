@@ -58,7 +58,12 @@
  * diagram that needs a shape uses an image node.
  */
 
-import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MeasureText,
+  ReferenceWire,
+  SpatialRenderStyle,
+} from '@kamiazya/whiteboard-canvas-render'
+import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type {
   CommentThread,
@@ -76,6 +81,12 @@ import {
   useRef,
   useState,
 } from 'react'
+import { editThreadMessageCommand } from '../../hooks/spatial-thread-write.js'
+import {
+  useEditingFontFamily,
+  useThemeFaceFor,
+  useThemeFontsGeneration,
+} from '../../hooks/useThemeFonts.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import type { EditorTool } from '../../lib/editor-tool.js'
 import { hapticTick } from '../../lib/haptics.js'
@@ -99,13 +110,15 @@ import {
   fitViewportToBoxes,
   type Point,
   panBy,
+  proposalAt,
   screenToCanvas,
+  viewportRevealingProposal,
   viewportTransformCss,
   zoomAt,
 } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { getActiveMarkdownEditor } from '../markdown-editor/active-markdown-editor.js'
-import type { BoxMove } from './align.js'
+import { type BoxMove, boxMoveCommand } from './align.js'
 import { CanvasContextMenu } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
 import { CommentThreadCard } from './CommentThreadCard.js'
@@ -219,6 +232,13 @@ export interface SpatialEditorProps {
    * `resolvedTheme` or its nodes/edges go invisible in dark mode.
    */
   readonly theme?: ResolvedTheme
+  /**
+   * The session's look override (ADR-0030 decision 6): `'clean'` draws the
+   * bundled look, a theme id previews that theme. View state the page holds
+   * for this tab — never written to the canvas. Absent draws the document's
+   * own theme, on this thread and in the worker alike.
+   */
+  readonly style?: SpatialRenderStyle
   /**
    * The tool active on mount. Pages resolve it from the canvas's own shape
    * and the tab's last choice (`resolveInitialTool`): an empty canvas opens
@@ -407,6 +427,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       className,
       testId = DEFAULT_TEST_ID,
       theme = 'light',
+      style,
       defaultTool = 'hand',
       initialTool,
       lockedNodeIds,
@@ -543,15 +564,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       facetPanelOpen,
       setFacetPanelOpen,
     } = useEditSessionState({ canvas, selectedId })
+    const fontsGeneration = useThemeFontsGeneration()
+    useThemeFaceFor(canvas, style)
+    const editingFontFamily = useEditingFontFamily(canvas, style)
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       {
         measure: resolvedMeasure,
         theme,
+        style,
         suppressedBodyNodeIds,
         showResolved: showResolvedComments,
         threads,
         proposals,
+        fontsGeneration,
       },
       fileSeamOptions,
       { fileRefLabels: fileRefOptions, missingFileRefs, references: canvasWire, expandedFileIds },
@@ -579,7 +605,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       hitTestComment,
       commentById,
       toggleCommentCard,
-      openCommentEditor,
       commentCompose,
       setCommentCompose,
       openCommentId,
@@ -587,7 +612,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       pressedCommentRef,
       commentDrag,
       setCommentDrag,
-    } = useCommentState({ canvasRef, edgePathOf, commentChromeBoxes })
+    } = useCommentState({ canvasRef, commentChromeBoxes })
     /**
      * The proposal opened in place — at most one, for the reason a
      * conversation is: a card is where ONE thing is decided.
@@ -603,22 +628,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const pressedProposalRef = useRef<{ readonly id: string; readonly startScreen: Point } | null>(
       null,
     )
-    const hitTestProposal = (point: Point): string | undefined => {
-      for (let i = proposalChromeBoxes.length - 1; i >= 0; i -= 1) {
-        const entry = proposalChromeBoxes[i]
-        if (entry === undefined) continue
-        const { bbox } = entry
-        if (
-          point.x >= bbox.x &&
-          point.x <= bbox.x + bbox.w &&
-          point.y >= bbox.y &&
-          point.y <= bbox.y + bbox.h
-        ) {
-          return entry.proposalId
-        }
-      }
-      return undefined
-    }
+    const hitTestProposal = (point: Point): string | undefined =>
+      proposalAt(proposalChromeBoxes, point)
     // The committed surface without the comment in flight (see
     // keyedWithoutPrefix for why it leaves rather than hides).
     const draggedCommentId = commentDrag?.comment.id
@@ -675,9 +686,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lockedNodeIds,
         resolvedMeasure,
         theme,
+        style,
         fileSeamOptions,
         scene,
         anchors,
+        sceneCurrent,
         keyed: surfaceKeyed,
         commentInFlight: draggedCommentId !== undefined,
         showResolved: showResolvedComments,
@@ -694,8 +707,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           const scoped = nodeIds === undefined ? boxes : boxes.filter((b) => nodeIds.includes(b.id))
           setViewport(fitViewportToBoxes(scoped.map((b) => b.box)))
         },
+        openProposal(proposalId) {
+          const at = viewportRevealingProposal(proposalChromeBoxes, proposalId)
+          if (at === null) return false
+          setViewport(at)
+          setOpenProposalId(proposalId)
+          return true
+        },
       }),
-      [boxes],
+      [boxes, proposalChromeBoxes],
     )
 
     const isMultiSelection = selectionMembers.length > 1
@@ -1677,10 +1697,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const applyBoxMoves = (moves: readonly BoxMove[]): boolean => {
       if (moves.length === 0) return true
-      const command: EditorCommand = {
-        kind: 'batch',
-        commands: moves.map((move) => ({ kind: 'move-node' as const, ...move })),
-      }
+      const command: EditorCommand = { kind: 'batch', commands: moves.map(boxMoveCommand) }
       const running = applyCommand(canvasRef.current, command)
       if (running !== canvasRef.current) onChange(running, command)
       return true
@@ -1901,6 +1918,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           style={{
             position: 'relative',
             flex: '1 1 auto',
+            // The paper is the palette's surface for the UI mode (ADR-0030):
+            // a theme carries one per mode, and the bundled palette's is the
+            // page background, so an unthemed canvas looks exactly as before.
+            backgroundColor: resolveCanvasPalette(canvas, theme, { style }).surface,
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
@@ -2070,11 +2091,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     commands: [{ kind: 'set-comment-resolved', id: thread.id, resolved } as const],
                   })
                 }
-                onEdit={() => {
-                  const comment = commentById(thread.id)
-                  if (comment === undefined) return
-                  setOpenCommentId(null)
-                  openCommentEditor(comment)
+                onEditMessage={(messageId, body) => {
+                  const command = editThreadMessageCommand(thread, messageId, body)
+                  if (command === null) return
+                  applyResult({ state: { kind: 'idle' }, commands: [command] })
                 }}
                 onClose={() => setOpenCommentId(null)}
               />
@@ -2264,6 +2284,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           )}
           {contextMenu !== null && (
             <CanvasContextMenu
+              style={style}
               commands={{
                 applyResult,
                 applyBoxMoves,
@@ -2294,7 +2315,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setContextMenu={setContextMenu}
               canvas={canvas}
               canvasRef={canvasRef}
-              edgePathOf={edgePathOf}
               theme={theme}
               gestureState={gestureState}
               isEdgeLocked={isEdgeLocked}
@@ -2631,6 +2651,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <EdgeLabelEditorOverlay
                 editId={edgeLabelEditId}
                 canvas={canvas}
+                fontFamily={editingFontFamily}
                 edgePaths={edgePaths}
                 zoom={viewport.zoom}
                 theme={theme}
@@ -2642,6 +2663,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               <GroupLabelEditorOverlay
                 editId={groupLabelEditId}
                 canvas={canvas}
+                fontFamily={editingFontFamily}
                 zoom={viewport.zoom}
                 theme={theme}
                 applyResult={applyResult}
@@ -2653,7 +2675,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 compose={commentCompose}
                 canvas={canvas}
                 edgePathOf={edgePathOf}
-                obstacles={commentPlacementObstacles(commentCompose.editing?.id)}
+                obstacles={commentPlacementObstacles()}
                 createId={createId}
                 zoom={viewport.zoom}
                 theme={theme}
@@ -2666,6 +2688,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               selection !== undefined && (
                 <MarkdownBodyEditorOverlay
                   node={selectedNode}
+                  fontFamily={editingFontFamily}
                   selectionBox={selection.box}
                   sceneNodes={scene.nodes}
                   sceneCurrent={sceneCurrent}

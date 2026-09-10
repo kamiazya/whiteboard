@@ -60,6 +60,51 @@ paths:
   lines changed in `apps/web`. If a new facet needs a vessel edit to be
   usable, the editor spec is the thing to extend, not the vessel.
 
+- `testing/` (the `./testing` subpath; fast-check and model as dev
+  dependencies): the property-test generators over facets.
+  `facetsArbitrary(registry, target)` draws each facet the registry holds
+  for a target from its own Zod schema — through model's
+  `arbitraryForSchema` (`@kamiazya/whiteboard-model/test-utils`, where the
+  zod-to-fast-check walk lives so every package above model reaches it) —
+  an `assetRefs` field drawing the registered ids, every payload filtered
+  by `validateFacetWrite` itself. Not a per-consumer helper and not in a
+  test folder, because the question is the engine's: what CAN this build
+  write for a facet it was told about at distribution time? A consumer that
+  folds over a node's facets — a layout, an exporter, an editor's drag
+  layer — is property-testable against the registry rather than against a
+  list of facet names, which is the difference between a property that
+  covers the facet added next month and one that silently does not. Two
+  disciplines keep it honest, each with a test: a construct the walk has no
+  generator for THROWS naming the path, never yields nothing; and a filter
+  nothing drawn would pass — a refinement, an asset kind with nothing
+  registered — throws at construction with the first rejection, because
+  fast-check's `filter` otherwise retries forever, synchronously, with no
+  timeout to catch it (measured: the first draft keyed an override on the
+  wrong path and the suite hung at collection). `canvas-render` and
+  `apps/web` are the consumers; each keeps one guard that every facet of
+  the BUNDLED registry is actually drawn, since this package cannot see the
+  plugin. The form-derived sampler this replaced (`facetPayloadSamples`)
+  was a finite list with no shrinking and nothing `deriveFacetForm` could
+  not express. The walk itself started here and moved to model the day
+  model's own generators were derived from their schemas: a dev dependency
+  on model is allowed in this direction, and the reverse is not.
+
+- The THEME TOKEN CONTRACT and plugin ASSETS (ADR-0030 decision 3,
+  `theme-tokens.ts` + the registry): `themeTokensSchema` is the one shape a
+  registered theme has — ink, an optional font FAMILY name, an optional
+  glow, BOTH mode palettes (six-digit hex only; resvg parses no oklch), and
+  `defaults` for what is drawn. A plugin registers `assets.themes` /
+  `assets.icons` by bare name and the registry composes `<plugin>.<name>`,
+  exactly as silhouettes are namespaced; `assetIds` / `themeAsset` /
+  `iconAsset` answer them. A facet declares `assetRefs: { field: kind }`
+  and `validateFacetWrite` then refuses a payload naming an asset no plugin
+  registered (the message lists what is registered) — while
+  `resolveFacetPayload` never checks, because a stored id another
+  deployment registered is data and the renderer degrades on it. The
+  contract lives HERE rather than in canvas-render so it is a prefix of
+  ADR-0013 decision 8: when views and slots land, neither the type nor any
+  asset moves.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's
@@ -99,6 +144,10 @@ paths:
 - Compat-chain behavior is property-tested with injective migrations so the
   exact output is asserted, and the property is mutation-checked (skipping
   the final chain step must go red).
+- Asset registration is property-tested (`assets.property.test.ts`): every
+  listed id resolves, `(plugin, name)` → id is injective, and
+  `validateFacetWrite` accepts an id iff it is listed. Mutation-checked:
+  dropping the ref check in `validateFacetWrite` fails two tests.
 
 ## Common mistakes (append as review finds them)
 

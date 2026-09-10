@@ -58,8 +58,3 @@ export function makeSpatialDocWithImage(fileId: string): LoroDoc {
 export function setSpatialDocImage(doc: LoroDoc, fileId: string): void {
   writeSpatialCanvas(doc, imageOnlyCanvas(fileId))
 }
-
-/** Clears all nodes/edges from an existing doc — the nodes-model equivalent of emptying the legacy 'elements' list. */
-export function clearSpatialDocNodes(doc: LoroDoc): void {
-  writeSpatialCanvas(doc, { nodes: [], edges: [] })
-}
