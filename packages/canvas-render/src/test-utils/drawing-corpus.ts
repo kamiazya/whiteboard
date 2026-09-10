@@ -228,7 +228,9 @@ const laneArchitecture: SpatialCanvas = {
 
 /** The draft after `tidyNodes`, every move applied. */
 function tidied(canvas: SpatialCanvas): SpatialCanvas {
-  const moves = new Map(tidyNodes(canvas.nodes, {}).map((m) => [m.id, m] as const))
+  const moves = new Map(
+    tidyNodes(canvas.nodes, { edges: canvas.edges }).map((m) => [m.id, m] as const),
+  )
   return {
     ...canvas,
     nodes: canvas.nodes.map((n) => {
@@ -290,6 +292,7 @@ export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'sequence/tidied', canvas: tidied(sequenceDrafted) },
   { name: 'fixture/architecture', canvas: fixtureArchitecture },
   { name: 'lane/architecture', canvas: laneArchitecture },
+  { name: 'lane/architecture-tidied', canvas: tidied(laneArchitecture) },
   { name: 'lane/insert', canvas: laneInsert },
   { name: 'lane/insert-roomy', canvas: laneInsertRoomy },
 ]

@@ -925,6 +925,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
             const moved = tidyNodes(nodes, {
               scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
+              edges,
             })
             const target = new Map(moved.map((move) => [move.id, move]))
             nodes = nodes.map((node) => {

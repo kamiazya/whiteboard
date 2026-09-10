@@ -189,7 +189,9 @@ wb_scene_render({ workspaceId, documentId, style: "document" })
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
 parameters — it is a one-shot auto-arrange, not a configurable layout engine. It tidies inside a
 group as well: members separate and line up within it, and the group grows (never shrinks) to hold
-them with a 32px margin — `within: "<group id>"` scopes it to one group's members. It refuses a
+them with a 32px margin — `within: "<group id>"` scopes it to one group's members. It also orders a
+row by its edges: a box whose connections along its row all lie to one side of it is swapped with the
+nearest of them, so a box that fans out sits between the boxes it fans out to. It refuses a
 markdown document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it
 moved comes back under `geometry`, a grown group with its new size.
 

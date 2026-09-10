@@ -117,7 +117,10 @@ export function canvasMenuItems({
     emptyItems.push({
       label: 'Tidy canvas',
       icon: <Sparkles />,
-      onSelect: () => applyBoxMoves(tidyNodes(canvasRef.current.nodes, { locked: isLocked })),
+      onSelect: () =>
+        applyBoxMoves(
+          tidyNodes(canvasRef.current.nodes, { locked: isLocked, edges: canvasRef.current.edges }),
+        ),
     })
   }
   // Its own band: a comment is not content, so it sits apart from the

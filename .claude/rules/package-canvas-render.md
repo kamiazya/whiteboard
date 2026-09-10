@@ -1392,7 +1392,18 @@ a neighbour's margin yields, because the fixpoint loop otherwise drifts —
 the snap jams the unit, the overlap pass hops it away, the next iteration
 snaps it back (fast-check found three boxes drifting 128px a tidy). Price:
 displacement +10% on the plain corpus, +3% grouped, every debt column
-unchanged. The grouped scoreboard's
+unchanged. **A row is ORDERED by its edges as well, when the caller passes
+them** (`TidyOptions.edges`; the tidy op and the editor both do): a box
+whose connections along its row all lie to one side swaps with the nearest
+of them, so a fan-out hub sits between its targets. Measured on the lane's
+layered board, the hub at the end of its row reads crossings 1, bends 4,
+reversals 2 and the same hub between them 0, 0, 0 with a third less ink;
+the skill saying so was read by six trials and followed by none, and a
+note on the call's answer by three and acted on by none, so tidy does it
+(user decision, 2026-09-10: tidy's side effects are a given, and it goes
+in the direction that raises the score). The swap ends the condition that
+caused it, which is what keeps a second tidy a no-op; the property that
+says so draws edges. The grouped scoreboard's
 `stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).

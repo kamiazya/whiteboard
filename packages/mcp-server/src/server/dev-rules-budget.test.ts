@@ -211,7 +211,9 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 102 for tidy banding on centres and far edges, and the drift the fixpoint
 // loop fell into when such a snap could jam a unit — found by fast-check,
 // and the kind of thing a reader re-derives by breaking it again.
-const CANVAS_RENDER_BUDGET = 102
+// 103 for row order by edges: the measurement that made tidy the place for
+// it, and the two affordances measured and withdrawn before it.
+const CANVAS_RENDER_BUDGET = 103
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

@@ -861,6 +861,31 @@ not reach that order. If the fan-out hub is to move, something the model
 cannot skip has to move it — the result of the call it just made, or
 tidy — and that is the next question, not another sentence.
 
+**The thirteenth reading (2026-09-10): tidy moves it.** The twelfth
+tried the answer — `wb_canvas_edit` naming the hub and where to put it —
+and three trials received the note and made no further edit, so that came
+out too. What is left is the pass a model already runs and does not
+compose: `tidy` now ORDERS a row by its edges, given them. A box whose
+connections along its row all lie to one side swaps with the nearest of
+them, so a fan-out hub sits between its targets. On the corpus, the lane's
+own layered board reads crossings 1, bends 4, reversals 2 as the model
+drew it and 0, 0, 0 after a tidy that can see the edges, with a third
+less ink and every debt column still zero — pinned as
+`lane/architecture-tidied` beside the board it comes from.
+
+The lane's own reading is thinner than the corpus's and says so: of three
+layered trials, one ran a `tidy` and read 0, 0, 0; the other two did not
+tidy at all, one landing 1, 2, 1 and one 0, 0, 0 by its own placement.
+Whether a model tidies is not something this change can decide, and the
+price columns of a lane where two thirds of trials skip the pass are
+evidence about the models, not about the pass. What the change buys is
+that the tidy a model DOES run now repairs the placement it could not be
+told to avoid — measured on the board, not argued from the tool surface.
+
+The user's decision that made this the right place (2026-09-10): tidy
+already has side effects on a drawing somebody made, so the question is
+not whether it may move boxes but whether the move raises the score.
+
 **The twelfth reading (2026-09-10), refuted.** The result of the call
 said it: `wb_canvas_edit` answered with a `notes` line naming a touched
 box whose connections along its own row all ran one way, the near and

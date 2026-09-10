@@ -298,6 +298,28 @@ describe('drawing quality across the corpus', () => {
         overlapsPerPair: 0,
         density: 0.27,
       },
+      'lane/architecture-tidied': {
+        nodes: 11,
+        edges: 8,
+        ...DEBT_FREE,
+        // Tidy, handed the edges, swaps API gateway with Auth: the hub sits
+        // between the two boxes it fans out to instead of at the end of its
+        // row, and the router has nothing left to pay for — one crossing,
+        // four bends and two reversals become none, and the ink drops by a
+        // third. The sides the model pinned stay pinned.
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 1881,
+        unevenGaps: 2,
+        envelopePx: { w: 820, h: 804 },
+        reversals: 0,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.27,
+      },
       'lane/insert': {
         nodes: 8,
         edges: 4,

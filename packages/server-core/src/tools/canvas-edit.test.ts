@@ -1642,6 +1642,38 @@ describe('wb_canvas_edit — region.set', () => {
  * lane: a model then declares full geometry for every box instead, which is
  * the arithmetic the optional geometry exists to spare it.
  */
+describe('wb_canvas_edit — tidy orders a row by its edges', () => {
+  test('a hub drawn at the end of its row swaps with the nearest box it fans out to', async () => {
+    // The wiring, not the rule: tidy is handed the batch's edges. Without
+    // them the rule cannot see a fan-out and this board stays as drawn.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'apigw', type: 'text', x: 40, y: 400, width: 160, height: 60, text: 'apigw' },
+        { id: 'auth', type: 'text', x: 264, y: 400, width: 160, height: 60, text: 'auth' },
+        { id: 'search', type: 'text', x: 488, y: 400, width: 160, height: 60, text: 'search' },
+      ],
+      edges: [
+        { id: 'e1', fromNode: 'apigw', toNode: 'auth' },
+        { id: 'e2', fromNode: 'apigw', toNode: 'search' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'tidy' }],
+    })
+
+    expect(result.geometry.map((g) => [g.id, g.x])).toEqual([
+      ['apigw', 264],
+      ['auth', 40],
+    ])
+  })
+})
+
 describe('wb_canvas_edit — node.add within a group', () => {
   const GROUP = {
     id: 'g',

@@ -161,6 +161,99 @@ describe('band alignment by centre and far edge', () => {
   })
 })
 
+describe('row order by edges', () => {
+  // Measured on the lane's layered board: a gateway at the left end of its
+  // row, fanning out to the two services beside it, reads crossings 1,
+  // bends 2, reversals 1; the same gateway between them reads 0, 0, 0 and
+  // a quarter less ink. Telling the model so, in the skill or in the call's
+  // answer, moved nothing in nine trials; tidy moves it.
+  const edges = (pairs: readonly (readonly [string, string])[]) =>
+    pairs.map(([fromNode, toNode]) => ({ fromNode, toNode }))
+
+  it('a box whose same-row connections all lie to one side swaps with the nearest of them', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves).toEqual([
+      { id: 'hub', x: 264, y: 0 },
+      { id: 'near', x: 40, y: 0 },
+    ])
+  })
+
+  it('a box with connections on both sides of it stays where it is', () => {
+    const nodes = [box('a', 40, 0, 160, 60), box('hub', 264, 0, 160, 60), box('b', 488, 0, 160, 60)]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['hub', 'a'],
+          ['hub', 'b'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
+  it('a single same-row connection is not a fan-out', () => {
+    const nodes = [box('a', 40, 0, 160, 60), box('b', 264, 0, 160, 60), box('c', 488, 0, 160, 60)]
+    expect(tidyNodes(nodes, { edges: edges([['a', 'c']]) })).toEqual([])
+  })
+
+  it('a connection to a box in another row does not count', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('below', 488, 200, 160, 60),
+    ]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['hub', 'near'],
+          ['hub', 'below'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
+  it('a locked partner is not swapped with, and the hub stays', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+      locked: (id) => id === 'near',
+    })
+    expect(moves).toEqual([])
+  })
+
+  it('a second tidy with the same edges moves nothing', () => {
+    const nodes = [
+      box('hub', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('far', 488, 0, 160, 60),
+    ]
+    const options = {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    }
+    const once = applyMoves(nodes, tidyNodes(nodes, options))
+    expect(tidyNodes(once, options)).toEqual([])
+  })
+})
+
 describe('inside a frame', () => {
   const frame = (x: number, y: number, width: number, height: number) =>
     box('grp', x, y, width, height, 'group')
@@ -450,6 +543,24 @@ describe('tidy properties', () => {
   })
   const plainNodes = (rects: readonly { x: number; y: number; w: number; h: number }[]) =>
     rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
+
+  fcTest.prop(
+    [
+      fc.array(nodeArb, { minLength: 2, maxLength: 8 }),
+      fc.array(fc.tuple(fc.nat({ max: 7 }), fc.nat({ max: 7 })), { maxLength: 8 }),
+    ],
+    withDefaults({ numRuns: 80 }),
+  )('with edges, tidy is still idempotent: a second pass moves nothing', (rects, pairs) => {
+    // Row order by edges swaps a hub with its nearest same-row target, and
+    // the swap ends the condition that caused it — but the overlap pass runs
+    // after, so the promise has to be checked over generated graphs too.
+    const nodes = plainNodes(rects)
+    const edges = pairs
+      .filter(([a, b]) => a !== b && a < nodes.length && b < nodes.length)
+      .map(([a, b]) => ({ fromNode: `n${a}`, toNode: `n${b}` }))
+    const once = applyMoves(nodes, tidyNodes(nodes, { edges }))
+    expect(tidyNodes(once, { edges })).toEqual([])
+  })
 
   fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
     'tidy is idempotent: a second pass moves nothing',
