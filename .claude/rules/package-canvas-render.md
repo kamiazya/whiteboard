@@ -1503,6 +1503,33 @@ The grouped scoreboard's
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).
 
+**Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
+— by the composition score, on its first use as a decision instrument.**
+The idea is sound and the mechanism worked: cluster every input anchor at
+`TIDY_BAND_PX`, keep the clusters two or more nodes hold, and let a unit
+that would take the bare grid take a line the board already nearly has
+instead. A constructed case passes that nothing else can fix — a second
+column in one frame and a second column in another, 8px apart, which bands
+cannot see because they run among a frame's members and among the frames,
+never across them.
+
+It buys nothing on the corpus. `offGuide` is already 0 on nine of eleven
+boards and `perGuide` 2.6-3.0, so alignment is not where these drawings are
+weak; the measured movement was `worstRatio` 1.4 to 1.33 and 0.29 to 0.24
+and one board's `perGuide` 2.67 to 2.83, with `apart` and `offGuide`
+unmoved. Against that it broke two things: a member snapped to its frame's
+margin was pulled back off it by a guide 8px away, and the idempotence
+property failed on two seeds — the guide set is read from the input, tidy
+changes the input, and a second tidy re-clusters into a different set. Made
+convergent, it would need the guide set to be a fixpoint of tidy, which is
+a substantially larger change than the one being justified.
+
+Recorded rather than retried, and NOT as "the idea is wrong": what the
+reading says is that the corpus has no board with the shape this fixes.
+The honest next step is a corpus case that has it — which is worth doing
+only when a real drawing produces one, since inventing the fixture that
+justifies the change is how a fixture becomes the convention by accident.
+
 ## The composition score judges what the board hands its reader
 
 `quality/composition-score.ts` (`scoreComposition(canvas, scene)`) is
