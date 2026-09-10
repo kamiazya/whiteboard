@@ -1471,3 +1471,24 @@ body stays the tunnel rule's business, and that rule still reads
 axis-aligned segments alone by design. The sweep cannot see any of this
 (orthogonal, no diagonals); the drawing corpus is the straight
 population, and it moved on one price.
+
+**A named side pair whose route runs through the edge's own box is
+overruled** (seventh reading: a model pinned `bottom/top` on every edge,
+same-row pairs included, and the same-row one drew a stub down and a
+diagonal up through both its boxes, 140px). A named side asks where the
+line attaches, and a line through the box it attaches to satisfies
+nobody, so `optimizeSideChoices` treats such an edge as free; `routeEdge`
+now lets the anchor pass's side win over the edge's own, since the two
+differ only where the search overruled — the overrule has to reach the
+trial that adopts it and the final render alike. Two things moved with
+it. The search is no longer gated at two edges: a lone edge can be its
+own problem, and the sweep's single-edge layouts had been keeping
+whatever the initial ranking picked, foreign body and all — `foreign` 15
+to 7, `own-endpoint` 12 to 10, `interiorInk` 2083 to 955, every price
+column down with them. And the coincident-anchor decision changed: a
+flush-stacked pair named `bottom/top` used to draw the shared point (an
+invisible edge, honouring a degenerate request); the spike its trial
+path makes is a route through its own boxes, so it is overruled into a
+visible route around the pair. The lane board with the sides the model
+named is debt-free (`edgeThroughNode` 2 to 0, bends 6 to 4, reversals 4
+to 2).

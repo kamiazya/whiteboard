@@ -318,7 +318,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // stored order says. +4 for `annotates`, the link from a label's run back
   // to the edge or container it names, set where each label is placed.
   'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
+  // +21: a named side pair whose route runs through the edge's own box is
+  // overruled — the search takes the edge as free (`selfThrough`, the
+  // candidate list without its named sides), the render follows the anchor
+  // pass's side over the edge's own, and a lone edge reaches the search.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2090,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.
