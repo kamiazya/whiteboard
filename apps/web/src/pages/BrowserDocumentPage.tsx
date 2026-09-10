@@ -1,6 +1,4 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
-import { createCheckpointScheduler } from '@kamiazya/whiteboard-history'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -68,6 +66,7 @@ import type {
 } from './document-keeper.js'
 import type { DocumentPageModel } from './document-page-model.js'
 import { mergePersistence } from './merge-persistence.js'
+import { useAutoCheckpoint } from './use-auto-checkpoint.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
@@ -486,16 +485,6 @@ function useBrowserDocument(
     [store],
   )
 
-  // Automatic checkpoints, on the same mechanic the daemon runs
-  // (`@kamiazya/whiteboard-history`): a trailing debounce that lands a point
-  // once the document has been quiet, so a row marks where a person stopped
-  // rather than an arbitrary interval.
-  //
-  // The `doc` the scheduler is handed is the WORKSPACE RECORD, not this
-  // document's content — it uses the frontier only to ask "has anything
-  // changed since the last checkpoint", and the record's frontier is what
-  // the store saves. Keying on the content doc would compare a frontier
-  // against a row taken from a different one, and never match.
   // Who holds the workspace record for THIS document. A markdown note gets no
   // backend at all (see the `backend` memo above), so the hook that owns its
   // doc supplies the seam instead. Named once because two consumers need it —
@@ -503,63 +492,12 @@ function useBrowserDocument(
   // `backend` alone until a markdown note turned out to arm no checkpoint ever.
   const recordSource = backend ?? markdownDoc.records
 
-  const checkpoints = useMemo(() => {
-    return createCheckpointScheduler<VersionEntry>({
-      alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
-      save: (workspaceId, path) =>
-        versionStore.save(workspaceId, path, {
-          auto: true,
-          // The person at this browser is not who took this one.
-          operator: { kind: 'system', peerId: 'browser', displayName: 'auto-save' },
-        }),
-      onError: (err) => log.warn('automatic checkpoint failed', err),
-    })
-  }, [backend, versionStore])
-
-  // Bound to the record the backend holds, and a no-op until one is there.
-  const checkpointPair = useMemo(() => {
-    const signal = (): void => {
-      // A document with no path yet has nowhere to file a row; the record
-      // is what a checkpoint points at, so both must be there.
-      if (documentPath === null) return
-      // Total, and deliberately so. This runs inside Loro's local-update
-      // subscriber, where a throw does not fail the edit — it escapes as an
-      // UNHANDLED REJECTION, which vitest reports as `Errors 1` with every
-      // test still passing and only the exit code red. A missed checkpoint is
-      // not worth that, and nothing here is worth failing an edit for either:
-      // a backend that cannot answer for a record has no record to bookmark.
-      try {
-        const record = recordSource?.readRecord?.((doc) => doc) ?? null
-        if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
-      } catch (err) {
-        log.warn('could not arm an automatic checkpoint', err)
-      }
-    }
-    return {
-      signal,
-      // Signal, THEN flush. The session flushes the pending edit before
-      // calling this, but the commit that performs reaches
-      // `subscribeLocalUpdates` — where `signal` lives — only on a later
-      // microtask, so flushing alone finds nothing armed and a person who
-      // edits and closes the tab leaves no checkpoint. Signalling here arms
-      // it against the record as it stands, which is what a checkpoint
-      // points at anyway: the store saves the frontier that is ON DISK, so
-      // an edit still in flight is simply not part of this point, rather
-      // than making it wrong.
-      flush: () => {
-        signal()
-        void checkpoints.flush()
-      },
-    }
-  }, [recordSource, checkpoints, documentPath])
+  const checkpointPair = useAutoCheckpoint(recordSource, versionStore, documentPath)
 
   // Handed to the markdown hook, which has no sync session to ride: a spatial
   // document arms this from `subscribeLocalUpdates`, and a markdown one from
   // its own doc subscription through here.
   checkpointSignalRef.current = checkpointPair.signal
-
-  // Nothing pending survives leaving this document for another.
-  useEffect(() => () => checkpoints.stop(), [checkpoints])
 
   // useDocumentSync tolerates a null backend (idle, no writes) and reconnects
   // whenever the backend identity changes, so the not-yet-loaded state is
