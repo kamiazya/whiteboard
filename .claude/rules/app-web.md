@@ -222,3 +222,15 @@ to defaults on ANY parse failure, so a migration emitting one key the live
 schema does not admit discards a user's whole payload silently. The
 schemas and the two migrations are exported for it and for nothing else.
 
+### The SharedWorker protocol is posted through its own type
+
+`lib/sse-shared-worker-protocol.ts` declares both directions of the tab <->
+SharedWorker contract as Zod, and `postWorkerRequest` / `postWorkerEvent`
+are the only way either side posts: a literal handed straight to
+`postMessage` is `unknown` on the wire, so a field renamed on one side and
+not the other is a message nobody handles, silently. Passing it through
+`z.infer` of the schema makes that drift a typecheck error. The parsing
+side was already there (`sseWorkerRequestSchema.safeParse` in the worker,
+`sseWorkerEventSchema.safeParse` in the stream source); this closes the
+emitting side, which is where the inventory found four raw literals.
+

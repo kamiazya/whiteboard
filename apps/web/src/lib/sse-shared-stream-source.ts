@@ -11,7 +11,7 @@ import type {
   SseStreamSource,
 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
 import { fromBase64, toBase64 } from '@kamiazya/whiteboard-daemon-client/sse-stream-hub'
-import { sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
+import { postWorkerRequest, sseWorkerEventSchema } from './sse-shared-worker-protocol.js'
 
 const sources = new Map<string, { source: SseStreamSource; port: MessagePort }>()
 
@@ -26,7 +26,7 @@ export function createSharedSseStreamSource(
     // The source is cached per origin but the pairing token is rotated under
     // it, so a caller arriving with a fresher credential hands it on rather
     // than silently reusing the one the worker was told about first.
-    cached.port.postMessage({ type: 'init', baseUrl, token })
+    postWorkerRequest(cached.port, { type: 'init', baseUrl, token })
     return cached.source
   }
 
@@ -107,7 +107,7 @@ export function createSharedSseStreamSource(
     for (const l of set) l.onMessage(evt.raw)
   }
   port.start()
-  port.postMessage({ type: 'init', baseUrl, token })
+  postWorkerRequest(port, { type: 'init', baseUrl, token })
 
   const source: SseStreamSource = {
     subscribe(doc, listener) {
@@ -117,7 +117,7 @@ export function createSharedSseStreamSource(
         listeners.set(doc, set)
         // The worker refcounts across tabs; this port refcounts within the tab,
         // so it announces a document once however many documents here want it.
-        port.postMessage({ type: 'subscribe', doc })
+        postWorkerRequest(port, { type: 'subscribe', doc })
       }
       set.add(listener)
       return () => {
@@ -126,11 +126,11 @@ export function createSharedSseStreamSource(
         current.delete(listener)
         if (current.size > 0) return
         listeners.delete(doc)
-        port.postMessage({ type: 'unsubscribe', doc })
+        postWorkerRequest(port, { type: 'unsubscribe', doc })
       }
     },
     sendMessage(doc, message) {
-      port.postMessage({ type: 'control', doc, message })
+      postWorkerRequest(port, { type: 'control', doc, message })
     },
     push(doc, update) {
       // To the worker's replica, not to the daemon. The replica merges this
@@ -138,7 +138,7 @@ export function createSharedSseStreamSource(
       // daemon's — and is what carries the result onward in both directions,
       // so a tab posting to the daemon itself would be writing around the very
       // thing meant to order these writes.
-      port.postMessage({ type: 'push', doc, update: toBase64(update) })
+      postWorkerRequest(port, { type: 'push', doc, update: toBase64(update) })
     },
     snapshot(doc) {
       // From the worker's replica, not the daemon: the worker seeds itself
@@ -153,7 +153,7 @@ export function createSharedSseStreamSource(
           snapshotWaiters.set(doc, waiters)
         }
         waiters.add(resolve)
-        port.postMessage({ type: 'snapshot-request', doc })
+        postWorkerRequest(port, { type: 'snapshot-request', doc })
       })
     },
   }
@@ -161,7 +161,7 @@ export function createSharedSseStreamSource(
   // A port has no close event, so a navigating-away tab has to hand its claims
   // back explicitly or the worker keeps routing documents nobody is watching.
   globalThis.addEventListener?.('pagehide', () => {
-    for (const doc of listeners.keys()) port.postMessage({ type: 'unsubscribe', doc })
+    for (const doc of listeners.keys()) postWorkerRequest(port, { type: 'unsubscribe', doc })
     listeners.clear()
   })
 

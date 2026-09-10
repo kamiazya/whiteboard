@@ -101,6 +101,10 @@ paths:
   OKF cannot parse (an empty string, prose with no frontmatter) answered
   500 — `OkfParseError` escaped `mapDocumentError`, which now maps it to
   400 with the stage in the message.
+  Every 2xx it gets is also parsed with the route's OUTPUT schema (the one
+  a typed client reads with): the handler is typed, but nothing parses on
+  the way out, so a field added to what a route emits and not to its
+  schema — or the reverse — is drift only a reader would find.
 
 ## Render style and canvas-target facets (ADR-0030)
 

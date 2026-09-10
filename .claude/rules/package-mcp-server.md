@@ -28,6 +28,11 @@ scan says.
   true; `skip:` names why a route is not requested (the SSE stream holds
   the response open, font install reaches the network, RFC 9728 discovery
   answers a bare 404 by design).
+  A rule may also name the `response` schema the web client reads that
+  route's answer with (daemon-client's `api-contracts`), and every 2xx is
+  parsed under it: the handlers are typed, but nothing parses on the way
+  out, so a field the route emits and the contract lacks — or the reverse
+  — is drift only a reader would find.
 - **Its seed composes the app the way production does, and the reason is a
   trap.** `createContainer()` defaults to the IN-MEMORY store, so an app
   built from it has `/api/v1` and the legacy `/api/workspaces` routes
