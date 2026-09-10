@@ -441,6 +441,18 @@ export function useMarkdownDocument(
   loro: LoroStoreLike,
   documentId: string | null,
   enabled: boolean,
+  /**
+   * "This document just changed locally" — the markdown analogue of the
+   * update `document-sync-session` rides to arm an automatic checkpoint.
+   *
+   * A parameter rather than something this hook reaches for, because what a
+   * local commit is worth is the page's business, not the editor's. Spatial
+   * documents get this from the sync session's `subscribeLocalUpdates`;
+   * markdown documents never went through that session, so before this they
+   * armed nothing and the quiet-timer checkpoint the History panel promises
+   * never arrived for them.
+   */
+  onLocalCommit?: () => void,
 ): MarkdownDocumentState {
   const [body, setBodyState] = useState<string | null>(null)
   const [saveState, setSaveState] = useState<BrowserPersistenceState>(INITIAL_SAVE_STATE)
@@ -448,6 +460,10 @@ export function useMarkdownDocument(
   // and neither may re-arm the timer by depending on the setter's identity.
   const setSaveStateRef = useRef(setSaveState)
   setSaveStateRef.current = setSaveState
+  // Same reason as the ref above: the doc subscription closes over this once,
+  // so it reads the current callback instead of re-subscribing per render.
+  const onLocalCommitRef = useRef(onLocalCommit)
+  onLocalCommitRef.current = onLocalCommit
   // Mirrors the scope itself, rewritten every render: a scheduler outlives
   // the document it was made for (its flush settles after the switch), so at
   // report time it has to ask who the hook is about NOW, not who it was
@@ -553,7 +569,12 @@ export function useMarkdownDocument(
           setCoreMetaState(readCoreFacets(containers) ?? DEFAULT_MARKDOWN_CORE_FACETS)
           // Last, so a failure here cannot cost the refresh above.
           publishAnnotations()
-          if (event.by === 'local') scheduleSaveRef.current?.()
+          if (event.by === 'local') {
+            scheduleSaveRef.current?.()
+            // After the save schedule, for the ordering the session uses: the
+            // edit is what the checkpoint would be bookmarking.
+            onLocalCommitRef.current?.()
+          }
         })
         setContentHost(host)
         setDoc(host.doc)

@@ -235,7 +235,18 @@ function useBrowserDocument(
   const documentPath = pageState.kind === 'editing' ? pageState.snapshot.path : null
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
-  const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
+  // Filled in below, once the checkpoint pair exists. A ref because the hook
+  // runs before that point in this component and a callback identity is not
+  // what the subscription should depend on — the same shape the hook uses for
+  // its own save scheduler.
+  const checkpointSignalRef = useRef<(() => void) | null>(null)
+  const signalCheckpoint = useCallback(() => checkpointSignalRef.current?.(), [])
+  const markdownDoc = useMarkdownDocument(
+    resolvedLoro,
+    documentId,
+    documentKind === 'markdown',
+    signalCheckpoint,
+  )
   // Binds CodeMirror straight to the document's 'body' text container: each
   // change is written at its OWN position, and an external change moves the
   // local caret exactly. The hook's doc subscription keeps body state and the
@@ -485,6 +496,13 @@ function useBrowserDocument(
   // changed since the last checkpoint", and the record's frontier is what
   // the store saves. Keying on the content doc would compare a frontier
   // against a row taken from a different one, and never match.
+  // Who holds the workspace record for THIS document. A markdown note gets no
+  // backend at all (see the `backend` memo above), so the hook that owns its
+  // doc supplies the seam instead. Named once because two consumers need it —
+  // the version controls below, and the automatic checkpoint here, which read
+  // `backend` alone until a markdown note turned out to arm no checkpoint ever.
+  const recordSource = backend ?? markdownDoc.records
+
   const checkpoints = useMemo(() => {
     return createCheckpointScheduler<VersionEntry>({
       alreadyCheckpointed: (w, p) => versionStore.isUnchangedSinceLastVersion(w, p),
@@ -511,7 +529,7 @@ function useBrowserDocument(
       // not worth that, and nothing here is worth failing an edit for either:
       // a backend that cannot answer for a record has no record to bookmark.
       try {
-        const record = backend?.readRecord?.((doc) => doc) ?? null
+        const record = recordSource?.readRecord?.((doc) => doc) ?? null
         if (record !== null) checkpoints(getBrowserWorkspaceId(), documentPath, record)
       } catch (err) {
         log.warn('could not arm an automatic checkpoint', err)
@@ -533,7 +551,12 @@ function useBrowserDocument(
         void checkpoints.flush()
       },
     }
-  }, [backend, checkpoints, documentPath])
+  }, [recordSource, checkpoints, documentPath])
+
+  // Handed to the markdown hook, which has no sync session to ride: a spatial
+  // document arms this from `subscribeLocalUpdates`, and a markdown one from
+  // its own doc subscription through here.
+  checkpointSignalRef.current = checkpointPair.signal
 
   // Nothing pending survives leaving this document for another.
   useEffect(() => () => checkpoints.stop(), [checkpoints])
@@ -580,7 +603,7 @@ function useBrowserDocument(
   // were written by the checkpoint scheduler and reachable by nothing. Null
   // only while nothing is loaded, and then the control is hidden rather
   // than left to fall back onto the daemon's routes.
-  const versionsRecord = backend ?? markdownDoc.records
+  const versionsRecord = recordSource
   const versionsBackend = useMemo(
     () =>
       versionsRecord === null
