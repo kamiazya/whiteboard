@@ -43,17 +43,28 @@ import { documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkfInputSchema } from './tools/export-okf.js'
 import { linkifyMentionsInputSchema } from './tools/linkify-mentions.js'
 
+/**
+ * A path segment the URL parser leaves alone. `.` and `..` are resolved
+ * away before any route sees them (`/workspaces/./documents` routes as
+ * `/workspaces/documents`), so a draw of either asks a question of the
+ * parser, not of the route — and gets Hono's plain-text 404 for a path
+ * nothing registered, which is neither a route answering nor refusing.
+ */
+const reachesRoute = (segment: string) =>
+  new URL(`http://fuzz/${encodeURIComponent(segment)}`).pathname ===
+  `/${encodeURIComponent(segment)}`
+
 /** The seeded workspace mostly, a workspace that does not exist, and a segment that is not even well-formed. */
 const workspaceArb = fc.oneof(
   { weight: 6, arbitrary: fc.constant(SEEDED_WORKSPACE_ID) },
   { weight: 1, arbitrary: fc.constant('nowhere') },
-  { weight: 1, arbitrary: fc.string({ minLength: 1, maxLength: 8 }) },
+  { weight: 1, arbitrary: fc.string({ minLength: 1, maxLength: 8 }).filter(reachesRoute) },
 )
 const documentArb = fc.oneof(
   { weight: 3, arbitrary: fc.constant(SEEDED_SPATIAL_ID) },
   { weight: 3, arbitrary: fc.constant(SEEDED_MARKDOWN_ID) },
   { weight: 1, arbitrary: fc.constant(MISSING_DOCUMENT_ID) },
-  { weight: 1, arbitrary: fc.string({ minLength: 1, maxLength: 8 }) },
+  { weight: 1, arbitrary: fc.string({ minLength: 1, maxLength: 8 }).filter(reachesRoute) },
 )
 
 const OKF_NOTE = '---\ntype: note\ntags: [a]\n---\n# Title\n\nA body.\n'
