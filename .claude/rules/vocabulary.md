@@ -203,9 +203,10 @@ dropped: a field nobody reads does not need a better name. `lastBrowserCanvasId`
 was also the last `canvas`-as-container-noun in a stored shape, retired by
 deletion instead of a rename.
 
-`user-settings-store.ts` and its test are therefore exempt from the daemon
-guard, for the reason a migration always is: spelling the old key is how they
-read a payload written under it.
+`user-settings-store.ts` and its tests (the example file and the migration
+property) are therefore exempt from the daemon guard, for the reason a
+migration always is: spelling the old key is how they read a payload written
+under it.
 
 `slug` is the one word retired outright, and `vocabulary-check.test.ts` in
 `tools/arch-lint` keeps it retired — the only part of this rule that is not

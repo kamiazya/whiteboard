@@ -96,8 +96,30 @@ describe('the mutation lane covers what it says it covers', () => {
     // scene`. Nothing about the lane changed: the file was types only, so it
     // was never mutable and never in it — a module count moving without the
     // mutated set moving is what an extraction of pure types looks like.
+    // 64 since `quality/drawing-score.ts`, outside the lane: an instrument,
+    // calibrated by examples that plant one defect each and read exactly one
+    // — the shape a mutation run would report as unsurprising survivors —
+    // and checked by hand once, four metrics mutated and six of its cases
+    // failing.
+    // 65 since `quality/polyline-geometry.ts`, the geometry the drawing score
+    // and the scoreboards' oracles share, outside the lane for the reason
+    // the oracles are: what pins it is the scoreboards it feeds, whose
+    // exact numbers move on any change to it.
+    // 66 and 12 since `layout/edges/diagonal-ink.ts`, the straight style's
+    // chord through an edge's own box, which the lane DOES cover: its
+    // sampled oracle and invariants are properties, and a survivor would be
+    // a chord read wrong.
+    // 67 since `quality/composition-score.ts`, outside the lane for the
+    // reason `drawing-score.ts` is: an instrument whose calibration plants
+    // one defect and reads one column, which a mutation run reports as
+    // unsurprising survivors. Hand-checked instead — three predicates
+    // mutated (the apart threshold, the shared-line minimum, the gap's
+    // axis), and the first survived, which is how the tie case came to be
+    // pinned.
     //
-    // 63 since `layout/contributed-router.ts`, and outside the lane: every
+    // Still 67 with `layout/contributed-router.ts`, which arrived in the same
+    // increment that moved `scene-graph.ts` out: one module in, one out.
+    // The router is outside the lane, because every
     // branch it has is a way of DECLINING — no contribution claims the edge,
     // the name is one nobody registered, the router answers `null`, the path
     // is under two points, an endpoint is missing — and each falls back to
@@ -105,8 +127,8 @@ describe('the mutation lane covers what it says it covers', () => {
     // survivor there would say a fallback is unobserved, and the fallbacks
     // are the whole module.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 11,
-      production: 63,
+      mutated: 12,
+      production: 67,
     })
   })
 

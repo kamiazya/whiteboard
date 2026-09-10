@@ -156,11 +156,6 @@ swallowed the second press and failed every case in
 `edge-label-edit.browser.test.tsx` while the bend tests stayed green — two
 affordances aiming at the same pixel.
 
-The same `unsupported` answer is why the facet DECLARES `samples`. Anything
-generating payloads off the registry (canvas-render's live-drag parity
-property) would otherwise cover this facet by nothing while still reading as
-covering the edge facets. Two are declared: one bend, which is the shape a
-person places, and three, which is what makes the ORDER observable.
 
 The end-to-end guard is `pnpm smoke:e2e`. Nothing in the type system
 connects the facet `wb_facet_set` writes to the polyline the daemon emits,

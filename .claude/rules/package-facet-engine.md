@@ -61,34 +61,34 @@ paths:
   lines changed in `apps/web`. If a new facet needs a vessel edit to be
   usable, the editor spec is the thing to extend, not the vessel.
 
-- `payload-samples.ts`: `facetPayloadSamples`, valid payloads for a facet
-  derived from its own declaration. Not test-only machinery in a test
-  folder, and not a per-consumer helper, because the question it answers is
-  the engine's: what CAN this build write for a facet it was told about at
-  distribution time? A consumer that folds over a node's facets — a layout,
-  an exporter — is property-testable against the registry rather than
-  against a list of facet names, which is the difference between a property
-  that covers the facet added next month and one that silently does not.
-  Its vocabulary is `deriveFacetForm`'s, deliberately: a schema the form
-  layer answers `unsupported` for derives no payloads, which is the same
-  honest signal one level along, and a caller turns the empty list into a
-  failure naming the facet. Every candidate is re-parsed through the
-  facet's schema before it is returned, so a constraint the form layer
-  cannot see (`visual.symbol`'s single-grapheme refinement) drops the
-  payloads it rejects rather than handing back ones no reader resolves.
-  `canvas-render` is the first consumer, through a dev-only dependency.
-
-  A facet in that `unsupported` case may DECLARE its payloads instead
-  (`FacetDefinition.samples`) — the escape the editor ladder already gives
-  a facet that needs a hand-written widget, so a generator asking the
-  registry still covers it. `visual.path/v0` is the first: a list of points
-  has no control in the derived vocabulary and never will, and the facet
-  was reaching the layout's own property test as nothing. The declaration
-  is bounded on both sides. `defineFacet` REFUSES it on a facet whose form
-  IS derivable, because a dead hand-written list beside a live derived one
-  is exactly the drift this layer exists to avoid; and the declared
-  payloads go through the same schema filter as derived ones, since a hand-
-  written list is what a schema change outgrows silently.
+- `testing/` (the `./testing` subpath; fast-check and model as dev
+  dependencies): the property-test generators over facets.
+  `facetsArbitrary(registry, target)` draws each facet the registry holds
+  for a target from its own Zod schema — through model's
+  `arbitraryForSchema` (`@kamiazya/whiteboard-model/test-utils`, where the
+  zod-to-fast-check walk lives so every package above model reaches it) —
+  an `assetRefs` field drawing the registered ids, every payload filtered
+  by `validateFacetWrite` itself. Not a per-consumer helper and not in a
+  test folder, because the question is the engine's: what CAN this build
+  write for a facet it was told about at distribution time? A consumer that
+  folds over a node's facets — a layout, an exporter, an editor's drag
+  layer — is property-testable against the registry rather than against a
+  list of facet names, which is the difference between a property that
+  covers the facet added next month and one that silently does not. Two
+  disciplines keep it honest, each with a test: a construct the walk has no
+  generator for THROWS naming the path, never yields nothing; and a filter
+  nothing drawn would pass — a refinement, an asset kind with nothing
+  registered — throws at construction with the first rejection, because
+  fast-check's `filter` otherwise retries forever, synchronously, with no
+  timeout to catch it (measured: the first draft keyed an override on the
+  wrong path and the suite hung at collection). `canvas-render` and
+  `apps/web` are the consumers; each keeps one guard that every facet of
+  the BUNDLED registry is actually drawn, since this package cannot see the
+  plugin. The form-derived sampler this replaced (`facetPayloadSamples`)
+  was a finite list with no shrinking and nothing `deriveFacetForm` could
+  not express. The walk itself started here and moved to model the day
+  model's own generators were derived from their schemas: a dev dependency
+  on model is allowed in this direction, and the reverse is not.
 
 - The THEME TOKEN CONTRACT and plugin ASSETS (ADR-0030 decision 3,
   `theme-tokens.ts` + the registry): `themeTokensSchema` is the one shape a

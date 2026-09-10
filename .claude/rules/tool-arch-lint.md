@@ -33,16 +33,31 @@ republish is the right footing until that changes.
 `cycle-check.ts` is value-aware (an `import type`-only edge does not count) and
 static-analysis-only, which is why it cannot see a cross-package cycle at all.
 
-It runs over `packages/mcp-server/src`, the eight shared-layer packages
-(`model`, `codec`, `canvas-render`, `ports`, `facet-engine`, `search`,
-`loro-adapter`, `server-core`), `canvas-viewer/src` and `apps/web/src`.
+It runs over the `src` of every entry in `repo-coverage.test.ts`'s
+`CYCLE_SCAN_PACKAGES` — every package the `SHARED_LAYER_PACKAGES` list names,
+plus both composition roots — over `.ts` and `.tsx` alike, which the boundary
+scans beside it do not. Test files and `test-utils/` are out, the same line
+those scans draw.
 
-**It follows `@/...` path aliases, and had to before `apps/web` could join**:
-that package writes 115 of its 554 intra-package value edges that way, a fifth
-of them. Measured — with alias resolution removed, a real two-file cycle
-planted in `apps/web/src` passes green. A package that adds an alias must
-declare it in `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES` or its edges
-silently leave the graph.
+**It follows path aliases, and had to before `apps/web` could join**: that
+package wrote 115 of its 554 intra-package value edges as `@/...`, a fifth of
+them. Measured — with alias resolution removed, a real two-file cycle planted
+in `apps/web/src` passes green.
+
+So a package that adds an alias must declare it in `CYCLE_SCAN_ALIASES`, and
+that sentence is no longer prose alone. `path aliases the cycle scan has to be
+told about` classifies every BARE specifier in the same file set: one naming
+no dependency the importing package declares resolves through some alias
+mechanism, and it is either a declared `CYCLE_SCAN_ALIASES` prefix or a
+`NON_PATH_BARE_SPECIFIERS` entry saying why it carries no intra-package edge
+(three today, all of them virtual modules or a prefix pointing outside every
+scanned tree). Probing the IMPORT rather than the mechanism is what makes it
+one check instead of a list of mechanisms — tsconfig `paths`, a vite or
+vitest `resolve.alias`, and a plugin's virtual module all surface the same
+way. Mutation-checked in three directions: an undeclared `@/` import fails
+naming the file, a fabricated exemption fails as stale, and declaring the
+alias makes the same import pass — so the branch that accepts one is live
+rather than dead code over an empty map.
 
 `KNOWN_IMPORT_CYCLES` is the allowlist for cycles found and not yet fixed. It
 is **currently empty**.

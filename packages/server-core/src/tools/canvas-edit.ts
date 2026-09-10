@@ -1,4 +1,5 @@
 import {
+  constantRatioMeasureText,
   type MeasureText,
   naturalNodeContentSize,
   SPATIAL_THEME_GEOMETRY,
@@ -68,8 +69,38 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
  * width, not a position.
  */
 function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  const natural = naturalNodeContentSize(node, { measure, appearance: MCP_SCENE_APPEARANCE })
-  return Math.max(fallback, natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+  // The taller of two readings: the composition root's own font, and the
+  // ratio measurer every machine has. The daemon's font is narrower than
+  // the ratio, so a box it fits can still read as cut to the drawing score
+  // and to a client drawing with a wider font; the floor is what makes
+  // "fits" mean the same thing to the tool and to what judges it.
+  const under = (m: MeasureText) =>
+    naturalNodeContentSize(node, { measure: m, appearance: MCP_SCENE_APPEARANCE }).h
+  const natural = Math.max(under(measure), under(constantRatioMeasureText))
+  return Math.max(fallback, natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+}
+
+/**
+ * Refuses a text node whose named height cannot hold its text at its width,
+ * naming the height it needs. A named height used to be kept however small
+ * — "no height" and "a small height" are different inputs — until the lane
+ * read what a model does with that: it names its neighbours' size to match
+ * them and the sentence is cut where nothing it can see says so. Growing
+ * the box silently would put it into whatever sits below, so the number
+ * goes back to the caller instead.
+ */
+function assertTextFits(index: number, opName: string, node: SpatialNode, measure: MeasureText) {
+  if (node.type !== 'text') return
+  // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
+  // is a box the renderer draws without a fade.
+  const needs = Math.floor(fittedHeight(node, measure, 0))
+  if (node.height < needs) {
+    fail(
+      index,
+      opName,
+      `its text needs ${needs}px of height at width ${node.width}; name at least that, or omit height and the box is sized to fit`,
+    )
+  }
 }
 
 /**
@@ -210,15 +241,30 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
+      /**
+       * Groups this batch put at the cursor, with the sizes they were given
+       * (a default is not a choice). A caller that adds a group with no
+       * position and then declares its members has said where the group
+       * goes: around them. Placing it at the cursor and pulling the members
+       * in put a row the caller had just drawn into a column inside a
+       * default box, and every model then spent two calls undoing it.
+       */
+      const placedByCursor = new Map<string, { width?: number; height?: number; placed?: true }>()
 
-      // Resolved once, and only when some op actually creates a text node
-      // without naming a height — the composition root's measurer parses a
-      // font on first use, and a batch of patches should not pay for that.
-      // `region.set` is deliberately NOT included: what it declares must fit
-      // inside its group, so growing a node there could refuse the very op
-      // that asked for it. A node created there keeps the flat default.
+      // Resolved once, and only when some op creates a text node or changes
+      // what decides whether one's text fits — the composition root's
+      // measurer parses a font on first use, and a batch of moves and locks
+      // should not pay for that. `region.set` is deliberately NOT included:
+      // what it declares must fit inside its group, so growing a node there
+      // could refuse the very op that asked for it. A node created there
+      // keeps the flat default.
       const wantsFit = input.ops.some(
-        (op) => op.op === 'node.add' && op.node.type === 'text' && op.node.height === undefined,
+        (op) =>
+          (op.op === 'node.add' && op.node.type === 'text') ||
+          (op.op === 'node.patch' &&
+            (op.patch.text !== undefined ||
+              op.patch.width !== undefined ||
+              op.patch.height !== undefined)),
       )
       const measure: MeasureText | undefined = wantsFit
         ? (await resolveTextMeasurer(deps)).measure
@@ -233,7 +279,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           fail(
             index,
             opName,
-            `"${id}" is not a group on the canvas; within names one to place inside`,
+            `"${id}" is not a group on the canvas; within names one to place inside — to wrap boxes that already exist in a new group, add the group and then region.set`,
           )
         }
         return group
@@ -249,18 +295,22 @@ export function createCanvasEditTool(deps: ServerDeps) {
           node.y + node.height <= group.y + group.height
       /**
        * Grows a group so that every rect is inside it, gutter included.
-       * Grow-only, only on an actual overflow past the right or bottom
-       * edge, and the top-left stays put, so re-applying the same op stays
-       * a no-op; what it can do is enclose a neighbour that sat just past
-       * the old edge, which the next region.set will then see in scope —
-       * geometry is geometry, and the result reports the size. A rect
-       * before the top-left is the caller's to move; callers refuse it.
+       * Grow-only, only when a rect reaches past the right or bottom edge
+       * less `keep` (a caller's own position is honoured to the edge; a
+       * position this batch chose keeps the gutter, since flush with the
+       * frame reads as jammed), and the top-left stays put, so re-applying
+       * the same op stays a no-op; what it can do is enclose a neighbour
+       * that sat just past the old edge, which the next region.set will
+       * then see in scope — geometry is geometry, and the result reports
+       * the size. A rect before the top-left is the caller's to move;
+       * callers refuse it.
        */
       const growToHold = (
         index: number,
         opName: string,
         group: SpatialNode,
         rects: readonly Rect[],
+        keep = 0,
       ): void => {
         const bounds = nodeAt(group.id) ?? group
         const needed = rects.reduce(
@@ -269,11 +319,11 @@ export function createCanvasEditTool(deps: ServerDeps) {
             const bottom = rect.y + rect.height
             return {
               width:
-                right > bounds.x + bounds.width
+                right + keep > bounds.x + bounds.width
                   ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
                   : acc.width,
               height:
-                bottom > bounds.y + bounds.height
+                bottom + keep > bounds.y + bounds.height
                   ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
                   : acc.height,
             }
@@ -332,8 +382,74 @@ export function createCanvasEditTool(deps: ServerDeps) {
           opName,
           bounds,
           placements.map((at, i) => ({ ...at, ...(sizes[i] ?? { width: 0, height: 0 }) })),
+          PLACEMENT_GUTTER_PX,
         )
         return placements
+      }
+
+      /**
+       * Puts a group this batch placed at the cursor around what is put in
+       * it: the rects' bounds plus the gutter, joined with the group's
+       * current box when it already holds something, never smaller than a
+       * size it was given. A bystander in that box would become a member
+       * the next region.set deletes by omission, so it is a wall; a frame
+       * the box nests inside is not.
+       */
+      const placeAround = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        rects: readonly SpatialNode[],
+        given: { width?: number; height?: number; placed?: true },
+      ): SpatialNode => {
+        // The cursor's box holds nothing, whatever it happens to cover: only
+        // a box already placed around members is joined with the next.
+        const holding = given.placed === true
+        const around = rects.map((r) => ({
+          x: r.x - PLACEMENT_GUTTER_PX,
+          y: r.y - PLACEMENT_GUTTER_PX,
+          width: r.width + 2 * PLACEMENT_GUTTER_PX,
+          height: r.height + 2 * PLACEMENT_GUTTER_PX,
+        }))
+        const all = holding ? [...around, group] : around
+        const left = Math.min(...all.map((r) => r.x))
+        const top = Math.min(...all.map((r) => r.y))
+        const right = Math.max(...all.map((r) => r.x + r.width))
+        const bottom = Math.max(...all.map((r) => r.y + r.height))
+        const box = {
+          x: left,
+          y: top,
+          width: Math.max(given.width ?? 0, right - left),
+          height: Math.max(given.height ?? 0, bottom - top),
+        }
+        const members = new Set(rects.map((r) => r.id))
+        // Another group this batch put at the cursor, still holding
+        // nothing, is not a wall: it follows its own members when they
+        // come, and until then the cursor's spot is nobody's choice.
+        const unsettled = (node: SpatialNode) =>
+          placedByCursor.has(node.id) && placedByCursor.get(node.id)?.placed !== true
+        const wall = nodes.find(
+          (node) =>
+            node.id !== group.id &&
+            !members.has(node.id) &&
+            !enclosedBy(group)(node) &&
+            !unsettled(node) &&
+            overlaps(node, box) &&
+            !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
+        )
+        if (wall !== undefined) {
+          fail(
+            index,
+            opName,
+            `"${group.id}" placed around its members would reach "${wall.id}"; move "${wall.id}", or give "${group.id}" a position and size`,
+          )
+        }
+        const placed = { ...group, ...box }
+        nodes = nodes.map((node) => (node.id === group.id ? placed : node))
+        touchedNodes.add(group.id)
+        geometry.set(group.id, { id: group.id, ...box })
+        placedByCursor.set(group.id, { ...given, placed: true })
+        return placed
       }
 
       /** The node ids one target selects, in canvas order; never empty. */
@@ -407,6 +523,12 @@ export function createCanvasEditTool(deps: ServerDeps) {
               'accepted and silently dropped, so it is refused instead',
           )
         }
+        if (
+          measure !== undefined &&
+          (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
+        ) {
+          assertTextFits(index, opName, updated, measure)
+        }
         nodes = nodes.map((existing) => (existing.id === id ? updated : existing))
         touchedNodes.add(id)
       }
@@ -438,7 +560,8 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // y has no position, and guessing the other half would put it
             // somewhere the caller did not ask for either.
             const positioned = draft.x !== undefined && draft.y !== undefined
-            const group = op.within === undefined ? undefined : groupNamed(index, op.op, op.within)
+            const within = op.within ?? undefined
+            const group = within === undefined ? undefined : groupNamed(index, op.op, within)
             const at = positioned
               ? { x: draft.x as number, y: draft.y as number }
               : group === undefined
@@ -448,18 +571,29 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
             const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            if (draft.height !== undefined && measure !== undefined) {
+              assertTextFits(index, op.op, parsed.data, measure)
+            }
             // A position the CALLER chose, in a group the caller named: both
             // are explicit, and the group grows so both hold — except before
             // its top-left, which growth keeps, so that one is refused.
             if (positioned && group !== undefined) {
-              if (parsed.data.x < group.x || parsed.data.y < group.y) {
-                fail(index, op.op, outsideDetail(id, parsed.data, group))
+              const unplaced = placedByCursor.get(group.id)
+              if (unplaced !== undefined) {
+                placeAround(index, op.op, group, [parsed.data], unplaced)
+              } else {
+                if (parsed.data.x < group.x || parsed.data.y < group.y) {
+                  fail(index, op.op, outsideDetail(id, parsed.data, group))
+                }
+                growToHold(index, op.op, group, [parsed.data])
               }
-              growToHold(index, op.op, group, [parsed.data])
             }
             nodes = [...nodes, parsed.data]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
+            if (!positioned && group === undefined && draft.type === 'group') {
+              placedByCursor.set(id, { width: draft.width, height: draft.height })
+            }
             return
           }
 
@@ -613,8 +747,12 @@ export function createCanvasEditTool(deps: ServerDeps) {
             return
 
           case 'region.set': {
-            const group = groupNamed(index, op.op, op.within)
-            const inScope = nodes.filter(enclosedBy(group))
+            let group = groupNamed(index, op.op, op.within)
+            // A group this batch put at the cursor and never placed around
+            // anything holds nothing, whatever the cursor's box covers.
+            const unsettled =
+              placedByCursor.get(group.id)?.placed !== true && placedByCursor.has(group.id)
+            const inScope = unsettled ? [] : nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
             const members = new Set(op.nodes)
             if (members.has(group.id)) {
@@ -646,6 +784,17 @@ export function createCanvasEditTool(deps: ServerDeps) {
                   `node "${id}" is locked; unlock it before moving it into "${group.id}"`,
                 )
               }
+            }
+
+            // A group this batch placed at the cursor, still holding nothing,
+            // goes around its members where they sit: their bounds plus the
+            // gutter, never smaller than a size it was given. A bystander in
+            // that box would become a member the next region.set deletes by
+            // omission, so it is a wall; a frame the box nests inside is not.
+            const unplaced = placedByCursor.get(group.id)
+            if (unplaced !== undefined && unsettled && members.size > 0) {
+              const rects = [...members].map((id) => nodeAt(id) as SpatialNode)
+              group = placeAround(index, op.op, group, rects, unplaced)
             }
 
             const dropped = inScope.filter((node) => !members.has(node.id))
@@ -777,20 +926,20 @@ export function createCanvasEditTool(deps: ServerDeps) {
             const moved = tidyNodes(nodes, {
               scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
+              edges,
             })
             const target = new Map(moved.map((move) => [move.id, move]))
             nodes = nodes.map((node) => {
               const move = target.get(node.id)
               if (move === undefined) return node
-              geometry.set(node.id, {
-                id: node.id,
-                x: move.x,
-                y: move.y,
-                width: node.width,
-                height: node.height,
-              })
+              // A frame that grew to hold its members carries its new size.
+              const size = {
+                width: move.width ?? node.width,
+                height: move.height ?? node.height,
+              }
+              geometry.set(node.id, { id: node.id, x: move.x, y: move.y, ...size })
               touchedNodes.add(node.id)
-              return { ...node, x: move.x, y: move.y }
+              return { ...node, x: move.x, y: move.y, ...size }
             })
             return
           }

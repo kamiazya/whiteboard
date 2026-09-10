@@ -5,10 +5,11 @@ import { z } from 'zod'
 // daemon, so a wire-format change has exactly one place to update.
 
 // ── POST /api/w/:workspaceId/document/<path>/viewport ───────────────────────
-// The request body is forwarded to the browser unchanged (mode / elementIds /
-// padding / animate / scrollX / scrollY / zoom) with no server-side schema —
-// the canonical shape lives in shared/ws-messages.ts as
-// viewportRequestMessageSchema.
+// The request body is what the browser reads off the `viewport_request`
+// frame (mode / elementIds / animate / scrollX / scrollY / zoom), checked
+// against `viewportRequestParamsSchema` in daemon-client's ws-messages.ts —
+// derived from the frame's own schema, so the route and the browser cannot
+// disagree about what a viewport may be asked.
 export const viewportResponseSchema = z.object({
   ok: z.literal(true),
 })

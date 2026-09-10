@@ -95,7 +95,7 @@ Once the intent is fixed, choose the node shape that fits:
 
 | Content | Node type |
 | --- | --- |
-| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting, no auto-wrap) |
+| a labeled box, the default building block | `text` (has a plain `text` string; no rich formatting; wraps at the width; omit the height and the box is sized to its text) |
 | a reference to another document, image, or file | `file` |
 | a link out to a URL | `link` |
 | a lightweight visual boundary (label + background) | `group` |
@@ -135,13 +135,18 @@ coordinates only when the layout itself carries meaning — a comparison matrix,
 left-to-right flow. For everything else, let placement happen and finish with a `tidy` op.
 
 `color` is either a hex string like `#1971c2` or a JSON Canvas preset `"1"`-`"6"`; there is no
-semantic color name like `"primary"`. There is no auto-wrap, so if you do set a width, pick one
-generous enough for the label.
+semantic color name like `"primary"`. Text wraps at the box's width but the box never grows on its
+own: omit `height` and a text box is made tall enough for its text, while a height you name that is
+too short for the text is refused with the height it needs — so name a height only when you know it
+holds the text, or leave it out.
 
 Edges reference node ids, not coordinates — an `edge.add` fails if either endpoint is not on the
 canvas by the time that op runs. A node added EARLIER IN THE SAME CALL counts, which is why ids are
-worth naming yourself. `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) and `fromEnd`/`toEnd`
-(`none`/`arrow`) are the only routing hints; `wb_scene_render` computes the actual drawn path.
+worth naming yourself. `fromEnd`/`toEnd` (`none`/`arrow`) set the arrowheads. `fromSide`/`toSide`
+(`top`/`right`/`bottom`/`left`) exist but are best left out: the router picks the side that keeps
+the line clear of the other boxes, and a side you name is kept even when it runs the line through
+one — a `bottom`/`top` pair on an edge between two boxes on the SAME row loops under both and
+tunnels back through its own source. `wb_scene_render` computes the actual drawn path.
 
 **Ids you omit are minted for you** and reported under `touched`. Name them yourself for any node an
 edge has to reach.
@@ -182,20 +187,27 @@ wb_scene_render({ workspaceId, documentId, style: "document" })
 ```
 
 The `tidy` op re-lays-out node positions automatically; it has no `direction`, `pins`, or `groups`
-parameters — it is a one-shot auto-arrange, not a configurable layout engine. It refuses a markdown
-document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it moved
-comes back under `geometry`.
+parameters — it is a one-shot auto-arrange, not a configurable layout engine. It tidies inside a
+group as well: members separate and line up within it, and the group grows (never shrinks) to hold
+them with a 32px margin — `within: "<group id>"` scopes it to one group's members. It also orders a
+row by its edges: a box whose connections along its row all lie to one side of it is swapped with the
+nearest of them, so a box that fans out sits between the boxes it fans out to. It refuses a
+markdown document (there is nothing spatial to tidy) and treats a locked node as fixed. Whatever it
+moved comes back under `geometry`, a grown group with its new size.
 
 `wb_scene_render` returns `{ svg, width, height }` — SVG is the only rendered export format. It
 renders a markdown document too, as a page. `fragment` is the only way to render less than the
 whole document, and it addresses a group by label or a heading by text, never a region.
 Open the returned SVG (or write it to a file and view it) to inspect it visually:
 
-- is text overflowing out of boxes? (there is no auto-wrap, so this is a real risk)
+- is text overflowing out of boxes? (a write naming a height too short for its text is refused, so
+  this is a box resized by hand in the editor; omit the height and the box is sized to its text)
 - do edges connect to the intended nodes?
 - does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
-- are gaps between nodes wide enough?
+- are gaps between nodes wide enough? Keep at least 32px between neighbours — under that an edge
+  between them has no room for its label or arrowhead, and inserting a box into a gap the size of a
+  box means moving the neighbour over, not squeezing the box in
 
 If you cannot see the rendered image, read the board instead. The two reads answer different
 questions and neither replaces the other:
@@ -224,6 +236,7 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
+| put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", label } }` with no position, then `region.set` naming them — the group is placed around them where they sit, gutter included. The same holds for members added with `within` after it: a group added with no position is placed around what goes in it, wherever you put them. `within` on a node.add places that node inside a group that already exists (or was added earlier in the batch); `within: null` means no group |
 | structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
@@ -264,7 +277,7 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - [ ] did you choose the diagram family from [`visual-vocabulary.md`](./visual-vocabulary.md)?
 - [ ] did you draw the whole diagram in ONE `wb_canvas_edit` call rather than one call per node?
 - [ ] if you set coordinates at all, did you plan a rigid grid — or let placement happen and finish with a `tidy` op?
-- [ ] if you set widths, did you size boxes generously, since there is no auto-wrap?
+- [ ] if you named heights, do they hold their text? (omit the height and it is sized to fit)
 - [ ] did you use semantic, consistent colors even though the tool has no named color keys?
 - [ ] can the main path / supporting info / problem / proposal be distinguished visually?
 - [ ] are edge labels duplicating what node text already says?

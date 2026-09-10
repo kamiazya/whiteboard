@@ -33,7 +33,7 @@ export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
-export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
+export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export {
   assignEdgeAnchors,
@@ -114,6 +114,15 @@ export {
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { CompositionScore } from './quality/composition-score.js'
+export { scoreComposition } from './quality/composition-score.js'
+export type { DrawingScore } from './quality/drawing-score.js'
+export {
+  EVEN_GAP_TOLERANCE_PX,
+  GROUP_PADDING_PX,
+  NEAR_MISS_PX,
+  scoreDrawing,
+} from './quality/drawing-score.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export {
   overlayReferences,

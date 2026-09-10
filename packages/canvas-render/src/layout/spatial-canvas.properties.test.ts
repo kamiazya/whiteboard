@@ -1,10 +1,11 @@
+import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
-import { facetCoverage, facetsArb } from '../test-utils/facet-arbitraries.js'
+import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
@@ -458,6 +459,15 @@ const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
       ) as SpatialNode
     })
 
+/**
+ * Built ONCE. `facetsArbitrary` walks every facet's Zod schema and validates
+ * a sample at construction, and `denseEdgeArb` is called per edge per draw
+ * inside a `.chain` — rebuilding it there put every case seconds over the
+ * budget and the property reported a timeout, which reads exactly like a
+ * property that failed.
+ */
+const edgeFacetsArb = facetsArb(bundledFacetRegistry, 'edge')
+
 const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
   fc
     .record({
@@ -470,7 +480,7 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
       // contributed router draws, and both change the geometry this
       // property compares — so a generator that drew none would agree about
       // canvases where the two entry points have nothing to disagree over.
-      facets: facetsArb(bundledFacetRegistry, 'edge'),
+      facets: edgeFacetsArb,
     })
     .map(({ label, facets, ...edge }) => ({
       ...edge,
@@ -566,20 +576,23 @@ describe('live-drag parity property (PBT)', () => {
     },
   )
 
-  it('every registered node, canvas and edge facet contributes payloads the generator can draw', () => {
-    // The mechanism's own failure mode: a facet whose schema `facetPayloadSamples`
-    // cannot express widens the generator by nothing while the property still
-    // reads as covering "the facets". Naming it here is what turns that into a
-    // decision — give the facet a derivable schema, or declare the facet's
-    // own `samples` where its shape is outside that vocabulary for good.
-    const empty = [
-      ...facetCoverage(bundledFacetRegistry, 'node'),
-      ...facetCoverage(bundledFacetRegistry, 'canvas'),
-      ...facetCoverage(bundledFacetRegistry, 'edge'),
-    ]
-      .filter((entry) => entry.samples.length === 0)
-      .map((entry) => entry.key)
-    expect(empty).toEqual([])
+  it('every registered node, canvas and edge facet is drawn by the generator', () => {
+    // The mechanism's own failure mode: a facet the generator never produces
+    // widens the property by nothing while it still reads as covering "the
+    // facets". A construct the schema walk cannot express already throws at
+    // construction naming the path; this is the other half — every facet
+    // the bundled registry holds for any of the three targets arrives.
+    for (const target of ['node', 'canvas', 'edge'] as const) {
+      const seen = new Set<string>()
+      for (const extension of fc.sample(facetsArb(bundledFacetRegistry, target), 300)) {
+        for (const key of Object.keys(extension?.facets ?? {})) seen.add(key)
+      }
+      expect([...seen].sort(), target).toEqual(
+        facetEntries(bundledFacetRegistry, target)
+          .map((entry) => entry.key)
+          .sort(),
+      )
+    }
   })
 
   it('the canvas facets the generator draws actually change the layout it compares', () => {

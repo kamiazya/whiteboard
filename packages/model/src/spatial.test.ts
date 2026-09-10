@@ -416,6 +416,21 @@ describe('canvasCommentSchema', () => {
       canvasCommentSchema.safeParse({ ...minimal, createdAt: '2026-09-01T10:00:00' }).success,
     ).toBe(false)
   })
+
+  it('rejects a comment naming both a node and an edge — the anchor it becomes names one', () => {
+    // `threadFromCanvasComment` carries both targets onto one spatial
+    // anchor, and `annotationAnchorSchema` refuses an anchor naming two
+    // objects — so a comment shaped this way was accepted here, written,
+    // and then silently dropped by every reader of the thread it became.
+    expect(canvasCommentSchema.safeParse({ ...minimal, targetNodeId: 'n1' }).success).toBe(true)
+    expect(canvasCommentSchema.safeParse({ ...minimal, targetEdgeId: 'e1' }).success).toBe(true)
+    const both = canvasCommentSchema.safeParse({
+      ...minimal,
+      targetNodeId: 'n1',
+      targetEdgeId: 'e1',
+    })
+    expect(both.success).toBe(false)
+  })
 })
 
 describe('canvas comments on the canvas-level extension', () => {

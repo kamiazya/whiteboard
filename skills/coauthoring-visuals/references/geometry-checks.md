@@ -7,7 +7,8 @@ overlap or overflow warning on this tool surface — the check is entirely visua
 ## What To Check After Rendering
 
 - overlap: nodes, labels, and edges do not collide
-- clipped label: text is not cut off inside a node (there is no auto-wrap, so this is common)
+- clipped label: text is not cut off inside a node (a write naming a height too short for its text
+  is refused, so this is a box resized by hand in the editor)
 - dangling connection: an edge does not visually touch its node, or appears to connect to the wrong side
 - edge-through-node: an edge passes through an unrelated node
 - stacked parallel edges: multiple edges visually collapse into one path
@@ -28,9 +29,10 @@ But if the meaning is already solid, geometry failures are usually the fastest t
 ## Local Surgery
 
 - overlap: widen the gap, shift one node down a row, or shorten the label — a `node.patch` op (or
-  just a `tidy` op, which separates overlaps for you)
+  just a `tidy` op, which separates overlaps for you, inside a group too, growing it to fit)
 - clipped label: widen the node (`width`/`height`) or shorten the text
-- dangling connection: `edge.patch` the `fromSide`/`toSide` hint, or nudge the node it targets
+- dangling connection: nudge the node it targets, or `edge.patch` a `fromSide`/`toSide` the author
+  named back to nothing so the router chooses the face
 - edge-through-node: move the intervening node aside, since edges have no manual routing points to bend around it
 - stacked parallel edges: offset the nodes vertically, or demote one edge into a side path
 - stray element: `node.remove` it if it should not be there, or `node.patch` it back near the rest

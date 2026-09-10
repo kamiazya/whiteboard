@@ -1,11 +1,12 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
+import ts from '@typescript/typescript6'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
 import { exemptedBoundaryViolationKinds, KNOWN_IMPORT_CYCLES } from './architecture-map.js'
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
-import { scanSourceForBoundaryViolations } from './scanner.js'
+import { collectModuleSpecifiers, scanSourceForBoundaryViolations } from './scanner.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -90,9 +91,8 @@ function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): stri
  * `cycle-check.test.ts` pins a cycle that exists ONLY through an alias so
  * the capability cannot be dropped silently.
  */
-const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web'].map(
-  (packageDir) => join(REPO_ROOT, packageDir, 'src'),
-)
+const CYCLE_SCAN_PACKAGES = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web']
+const CYCLE_SCAN_DIRS = CYCLE_SCAN_PACKAGES.map((packageDir) => join(REPO_ROOT, packageDir, 'src'))
 
 /**
  * No scanned package declares a path alias any more — apps/web's `@/` was
@@ -101,6 +101,11 @@ const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/
  * The map stays because the alias-following capability is pinned by
  * cycle-check.test.ts with its own fixture: a package that adds an alias
  * must declare it here or its edges silently leave the cycle graph.
+ *
+ * That last sentence used to be prose alone, which is the weakest place for
+ * a rule whose whole symptom is a scan reporting a clean result over a graph
+ * it could not see. `path aliases the cycle scan has to be told about`, below,
+ * is the executable half.
  */
 const CYCLE_SCAN_ALIASES = {} as const
 
@@ -197,6 +202,151 @@ describe('circular value-import check (real source coverage)', () => {
   })
 })
 
+/**
+ * Bare specifiers the scan below finds that are NOT package names, each with
+ * why it cannot be a path alias into a scanned tree.
+ *
+ * The distinction is the whole point: `CYCLE_SCAN_ALIASES` exists because a
+ * prefix standing for an intra-package DIRECTORY carries import edges, and a
+ * resolver blind to it builds the cycle graph out of a subset of the real
+ * one. A virtual module carries no such edge, and neither does a prefix
+ * pointing outside every scanned tree.
+ */
+const NON_PATH_BARE_SPECIFIERS: Record<string, string> = {
+  'virtual:pwa-register':
+    "vite-plugin-pwa generates this module's source at build time. It is not a directory, so " +
+    'there is no import edge for the cycle graph to be missing',
+  'virtual:widget-fonts':
+    'the widget build generates it from build-fonts-module.ts, same as above — generated source, ' +
+    'not a directory',
+  '@docs-assets/':
+    'vitest.docs-snapshots.config.ts maps it to `docs/assets/`, which is outside every scanned ' +
+    'tree. An edge that leaves the scan cannot close a cycle inside it, and the files it names ' +
+    'are `.canvas` fixtures rather than modules',
+}
+
+/** `@scope/name` or `name` — everything after that is a subpath. */
+function packageNameOf(specifier: string): string {
+  const segments = specifier.split('/')
+  return specifier.startsWith('@') ? segments.slice(0, 2).join('/') : (segments[0] as string)
+}
+
+/**
+ * Every bare (non-relative, non-`node:`) specifier in the cycle scan's own
+ * file set, paired with the package that imports it.
+ *
+ * The same file set on purpose: what this classifies is exactly what
+ * `buildValueImportGraph` had to resolve, so a specifier it could not follow
+ * is one the graph is missing.
+ */
+function bareSpecifiersInScannedTrees(): { packageDir: string; specifier: string; file: string }[] {
+  return CYCLE_SCAN_PACKAGES.flatMap((packageDir) =>
+    listTsFiles(join(REPO_ROOT, packageDir, 'src'), ['.ts', '.tsx']).flatMap((file) => {
+      const sourceFile = ts.createSourceFile(
+        file,
+        readFileSync(file, 'utf-8'),
+        ts.ScriptTarget.Latest,
+        true,
+      )
+      return collectModuleSpecifiers(sourceFile)
+        .map(({ specifier }) => specifier)
+        .filter(
+          (specifier) =>
+            !specifier.startsWith('.') &&
+            !specifier.startsWith('node:') &&
+            specifier.trim() === specifier,
+        )
+        .map((specifier) => ({ packageDir, specifier, file: relative(REPO_ROOT, file) }))
+    }),
+  )
+}
+
+function declaredDependencies(packageDir: string): ReadonlySet<string> {
+  const manifest = JSON.parse(readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'))
+  return new Set([
+    manifest.name,
+    ...Object.keys(manifest.dependencies ?? {}),
+    ...Object.keys(manifest.devDependencies ?? {}),
+    ...Object.keys(manifest.peerDependencies ?? {}),
+  ])
+}
+
+/**
+ * A specifier that names no declared dependency resolves through SOME alias
+ * mechanism — tsconfig `paths`, a vite/vitest `resolve.alias`, a plugin's
+ * virtual module. Which one does not matter here; that it is not plain node
+ * resolution does, because that is precisely what `resolveSpecifier` in
+ * cycle-check.ts cannot follow on its own.
+ */
+function aliasedSpecifiers(): { packageDir: string; specifier: string; file: string }[] {
+  const declaredPerPackage = new Map(
+    CYCLE_SCAN_PACKAGES.map((packageDir) => [packageDir, declaredDependencies(packageDir)]),
+  )
+  return bareSpecifiersInScannedTrees().filter(
+    ({ packageDir, specifier }) =>
+      !(declaredPerPackage.get(packageDir) as ReadonlySet<string>).has(packageNameOf(specifier)),
+  )
+}
+
+/**
+ * The one thing `CYCLE_SCAN_ALIASES` could not say about itself: that it is
+ * COMPLETE.
+ *
+ * `cycle-check.test.ts` pins that a declared alias is followed, and pins a
+ * cycle that exists only through one. Neither can notice a package that adds
+ * an alias and does not declare it here — and the symptom of that is the
+ * cycle check reporting a clean result from a graph missing those edges,
+ * which reads exactly like a clean codebase. Measured once already: `apps/web`
+ * wrote 115 of its 554 intra-package value edges as `@/...`.
+ *
+ * So the probe is the IMPORT rather than the mechanism. A tsconfig `paths`
+ * entry, a vite `resolve.alias`, a plugin's virtual module and whatever
+ * arrives next all surface the same way — a bare specifier naming no declared
+ * dependency — and one probe covers a list of mechanisms nobody has to keep.
+ */
+describe('path aliases the cycle scan has to be told about', () => {
+  const aliased = aliasedSpecifiers()
+
+  it('reads the scanned trees and finds ordinary package imports', () => {
+    // A walk that collected nothing would report every entry below as stale
+    // AND every alias as absent — two green assertions over an empty set.
+    // 2000+ when written, almost all of them plain dependencies.
+    expect(
+      bareSpecifiersInScannedTrees().length,
+      'the module-specifier walk found almost nothing; check it against how imports are written now',
+    ).toBeGreaterThan(500)
+  })
+
+  it('classifies every bare specifier that node resolution cannot reach', () => {
+    const aliasPrefixes = Object.keys(CYCLE_SCAN_ALIASES as Readonly<Record<string, string>>)
+    const unclassified = aliased.filter(
+      ({ specifier }) =>
+        !aliasPrefixes.some((prefix) => specifier.startsWith(prefix)) &&
+        !Object.keys(NON_PATH_BARE_SPECIFIERS).some((prefix) => specifier.startsWith(prefix)),
+    )
+    expect(
+      unclassified,
+      'this specifier names no declared dependency, so it resolves through an alias. If the alias ' +
+        'stands for a directory inside a scanned package, declare it in CYCLE_SCAN_ALIASES — ' +
+        'otherwise the cycle check builds its graph without those edges and reports a clean result ' +
+        'it cannot see. If it does not (a virtual module, or a directory outside every scanned ' +
+        'tree), record it in NON_PATH_BARE_SPECIFIERS with that reason.\n' +
+        JSON.stringify(unclassified, null, 2),
+    ).toEqual([])
+  })
+
+  it('every NON_PATH_BARE_SPECIFIERS entry is still a specifier the source writes', () => {
+    const stale = Object.keys(NON_PATH_BARE_SPECIFIERS).filter(
+      (prefix) => !aliased.some(({ specifier }) => specifier.startsWith(prefix)),
+    )
+    expect(
+      stale,
+      'NON_PATH_BARE_SPECIFIERS names a specifier nothing imports any more — drop the entry, so it ' +
+        'cannot go on exempting a mechanism the repo no longer has',
+    ).toEqual([])
+  })
+})
+
 describe('architecture-map.md doc sync', () => {
   const doc = readFileSync(ARCHITECTURE_MAP_DOC, 'utf-8')
 
@@ -223,5 +373,141 @@ describe('architecture-map.md doc sync', () => {
 
   it('names the circular-value-import enforcer', () => {
     expect(doc).toContain('cycle-check.ts')
+  })
+})
+
+/**
+ * `dev-flow.md`: "Every PR that adds a package ships its path-scoped rule in
+ * the same increment." That was prose with nothing behind it. 17 of 18
+ * workspaces held one when this was written, so the convention was holding by
+ * habit — and a convention held by habit reads exactly like one held by a
+ * guard, right up until the PR that forgets.
+ *
+ * The second `it` is the half worth having. A rule file that EXISTS but whose
+ * `paths:` never matches its own package is loaded by nobody: the file is
+ * there, the reviewer sees it, and the reader who needed it never got it.
+ * That is the same failure as a biome plugin whose include pattern matches
+ * nothing — registered, green, never run — one level up, in the layer that is
+ * supposed to be teaching people about layers.
+ */
+describe('every workspace ships the path-scoped rule that teaches it', () => {
+  /** How a rule file is named, per top-level directory. */
+  const RULE_PREFIX: Record<string, string> = {
+    packages: 'package',
+    apps: 'app',
+    tools: 'tool',
+  }
+
+  /**
+   * Workspaces with no rule file of their own, and why that is right rather
+   * than missing.
+   *
+   * Guarded from both sides below, and the reason is CHECKED rather than
+   * asserted: an entry names the always-on rule that carries this workspace's
+   * load-bearing part and a phrase that rule must still contain. An exemption
+   * whose justification has quietly gone away fails with the workspace it
+   * exempts.
+   */
+  const NO_RULE_OF_ITS_OWN: Record<
+    string,
+    { readonly reason: string; readonly documentedIn: string; readonly mentions: string }
+  > = {
+    'tools/checks': {
+      reason:
+        'its load-bearing part is the CI gate aggregation, which the INTEGRATOR reads before ' +
+        'touching this directory rather than while inside it — so it is always-on in dev-flow.md ' +
+        'instead. The rest is script orchestration a reader does not need taught.',
+      documentedIn: '.claude/rules/dev-flow.md',
+      mentions: 'ci-gate',
+    },
+  }
+
+  /** Every directory carrying a package.json under the three workspace roots. */
+  function workspaceDirs(): string[] {
+    return Object.keys(RULE_PREFIX).flatMap((root) =>
+      readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `${root}/${entry.name}`)
+        .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
+    )
+  }
+
+  /**
+   * Where a workspace's rule lives, by convention: the top-level directory
+   * picks the prefix and the workspace's own name follows it, so
+   * `packages/search` is `package-search.md`. The convention is what makes
+   * this checkable at all — a rule filed under a name nobody can derive is
+   * one this guard reads as absent, which is the right answer.
+   */
+  function ruleFileFor(dir: string): string {
+    const [root, name] = dir.split('/')
+    return join(REPO_ROOT, '.claude', 'rules', `${RULE_PREFIX[root as string]}-${name}.md`)
+  }
+
+  /** The globs a rule's frontmatter scopes it to. */
+  function declaredPaths(ruleFile: string): string[] {
+    const frontmatter = /^---\n([\s\S]*?)\n---/.exec(readFileSync(ruleFile, 'utf-8'))?.[1] ?? ''
+    return [...frontmatter.matchAll(/^\s*-\s*"?([^"\n#]+?)"?\s*(?:#.*)?$/gm)].map((m) => m[1] ?? '')
+  }
+
+  it('finds the workspaces it is meant to check', () => {
+    // A readdir that stopped matching would report every entry as exempt-only,
+    // which sends the reader to the wrong file entirely. 18 when written.
+    expect(workspaceDirs().length, 'the workspace scan found almost nothing').toBeGreaterThan(12)
+  })
+
+  it('gives every workspace a rule file, or an exemption that says why', () => {
+    const undocumented = workspaceDirs().filter(
+      (dir) => !existsSync(ruleFileFor(dir)) && NO_RULE_OF_ITS_OWN[dir] === undefined,
+    )
+    expect(
+      undocumented,
+      'a workspace has no path-scoped rule — write .claude/rules/<prefix>-<name>.md scoped to it, or add it to NO_RULE_OF_ITS_OWN with the always-on rule that carries it instead',
+    ).toEqual([])
+  })
+
+  it('scopes each rule at the whole package it teaches, so it actually loads there', () => {
+    // `<dir>/**` exactly, not a glob that merely starts with `<dir>/`: a rule
+    // scoped at `packages/history/src/**` does not load for that package's
+    // manifest, its config, or anything beside `src/`, and the reader who
+    // opened one of those is the reader this rule exists for. Every rule in
+    // the repo already uses this one form, so the check costs nothing today
+    // and the failure message names it.
+    const unscoped = workspaceDirs()
+      .filter((dir) => existsSync(ruleFileFor(dir)))
+      .filter((dir) => !declaredPaths(ruleFileFor(dir)).includes(`${dir}/**`))
+    expect(
+      unscoped,
+      'a rule file exists but its `paths:` frontmatter does not cover the whole package it is named for, so it loads for nobody who opens the rest of it — add exactly "<dir>/**"',
+    ).toEqual([])
+  })
+
+  it('keeps every exemption pointing at a workspace and a reason that still holds', () => {
+    const dirs = new Set(workspaceDirs())
+    const stale = Object.keys(NO_RULE_OF_ITS_OWN).filter(
+      (dir) => !dirs.has(dir) || existsSync(ruleFileFor(dir)),
+    )
+    expect(
+      stale,
+      'NO_RULE_OF_ITS_OWN names a workspace that is gone or now has its own rule — drop the entry',
+    ).toEqual([])
+
+    // The workspace and its subject have to appear in the SAME passage.
+    // `mentions` alone is satisfied by any passing use of the word, so an
+    // exemption could rest on prose that says nothing about the directory it
+    // exempts — the same shape as a check satisfied by an incidental import.
+    // Requiring both terms independently is only half a fix: a later edit can
+    // scatter them into unrelated paragraphs and still pass. These rules are
+    // written one paragraph per line, so a shared line IS a shared passage,
+    // and splitting the paragraph fails loudly rather than silently — which
+    // is the right way round for a reference somebody has to re-point.
+    const unbacked = Object.entries(NO_RULE_OF_ITS_OWN).filter(([dir, entry]) => {
+      const doc = readFileSync(join(REPO_ROOT, entry.documentedIn), 'utf-8')
+      return !doc.split('\n').some((line) => line.includes(dir) && line.includes(entry.mentions))
+    })
+    expect(
+      unbacked,
+      'an exemption says an always-on rule carries this workspace, and no single passage in that rule names both the workspace and its subject — write the path-scoped rule, or re-point the reason at the passage that does',
+    ).toEqual([])
   })
 })

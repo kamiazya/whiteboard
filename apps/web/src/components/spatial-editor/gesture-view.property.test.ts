@@ -4,10 +4,11 @@
 // that carries a node and the layer that stays. A theme is an envelope
 // facet (ADR-0030), so dropping the envelope on one layer is a board that
 // changes look for the length of a drag.
+
+import { facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect } from 'vitest'
-import { facetsArbitrary } from '../../test-utils/facet-arbitrary.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { commentExtensionFor } from './gesture-view.js'
 

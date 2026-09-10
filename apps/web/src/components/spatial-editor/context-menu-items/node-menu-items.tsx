@@ -431,6 +431,7 @@ export function nodeMenuItems({
           tidyNodes(canvasRef.current.nodes, {
             scope: new Set([node.id, ...extraIds]),
             locked: isLocked,
+            edges: canvasRef.current.edges,
           }),
         ),
     })

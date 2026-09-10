@@ -1,5 +1,9 @@
 import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
-import { edgeLabelAnchor, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import {
+  edgeLabelPlacement,
+  labelObstacles,
+  SPATIAL_THEME_GEOMETRY,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasEdge, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { reduceGesture } from './gestures.js'
@@ -29,9 +33,11 @@ function labelEditorStyle(palette: SpatialPalette, fontFamily: string) {
 
 type ApplyResult = (result: ReturnType<typeof reduceGesture>) => void
 
-/** The in-place editor for an edge's label, opened over the drawn line's
- * midpoint — `edgePaths` is already the DRAWN (flattened) line, so the
- * shared anchor needs no second rounding pass here. */
+/** The in-place editor for an edge's label, opened where the label sits —
+ * the drawn line's midpoint, or beside it when a box is in the way, from the
+ * same producer the renderer places the label with. `edgePaths` is already
+ * the DRAWN (flattened) line, so the shared anchor needs no second rounding
+ * pass here. */
 export function EdgeLabelEditorOverlay({
   editId,
   canvas,
@@ -55,7 +61,11 @@ export function EdgeLabelEditorOverlay({
   const edge: CanvasEdge | undefined = canvas.edges.find((entry) => entry.id === editId)
   const path = edgePaths.find((entry) => entry.id === editId)?.path
   if (edge === undefined || path === undefined) return null
-  const mid = edgeLabelAnchor(path)
+  const mid = edgeLabelPlacement(
+    path,
+    { w: EDGE_LABEL_EDITOR_WIDTH_PX, h: EDGE_LABEL_EDITOR_HEIGHT_PX },
+    labelObstacles(canvas.nodes),
+  )
   if (mid === undefined) return null
   return (
     <TextNodeEditor

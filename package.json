@@ -82,11 +82,11 @@
     "@huggingface/transformers": "^4.2.0",
     "@secretlint/secretlint-rule-pattern": "13.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.5",
-    "@tanstack/intent": "^0.0.40",
+    "@tanstack/intent": "^0.3.8",
     "concurrently": "^9",
     "knip": "6.26.0",
     "lefthook": "^2.1.10",
-    "secretlint": "13.0.2",
+    "secretlint": "13.0.5",
     "@vitest/browser-playwright": "catalog:",
     "@vitest/ui": "catalog:",
     "vitest": "catalog:"

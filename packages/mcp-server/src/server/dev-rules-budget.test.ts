@@ -187,25 +187,83 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // Plus the paint-order rule (groups behind what they hold, whatever the
 // stored order says) — a bug a person saw in a rendered diagram and no test
 // had caught.
-// 90 since the theme polish wave: the two THEMED pixel goldens and why they
-// stay text-free, the markdown-embed path taking the same `style`, and the
-// content cache's theme axis beside the render key that deliberately has
-// none — each the record of a defect that shipped green.
-// 92 since the sketch look was made to read as a hand: the constants a
-// test reverts (relative bow, continuous overshooting passes, the lighter
-// second pass, the seeded hatch), the theme line-weight token behind them,
-// and the edge anchoring that stopped erasing hops and short bends.
-// 93 since a theme's palette reaches the markdown BODY's furniture: what
-// `markdownChrome` paints, that a comment body is deliberately not one of
-// them, and why a mono FAMILY is its own slice rather than a second token.
-// 95 since a contribution may supply the edge ALGORITHM: what crosses the
+// 90 since the drawing score: the one instrument that judges the BOARD
+// rather than a mechanism, what it reads and where it is pinned, the
+// `annotates` link a scene needs to get from a label back to what it
+// names, and the first thing it found — tidy leaves every mistake inside a
+// frame where it was — which tidy's own scoreboard cannot see.
+// 91 once the column set was read against the literature: what a session
+// extending it has to know (a column earns its place by an empirical
+// ranking, not a catalogue; the vector stays a vector and the known blind
+// spot is pinned), and the router finding the new columns surfaced.
+// 92 for the sharing contract: the instruments read one polyline geometry,
+// the router never does, and the duplication left between them is the
+// independence — said where a session about to "deduplicate" it will read.
+// 93 for the matrix of the two router changes the drawing score rejected:
+// each cut the reference's reversals and raised the sweep's debt, and a
+// table is what stops the same shapes being argued for again.
+// 94 for the gap column: what the score reads between two boxes, and why
+// tidy's margin is held at the same number.
+// 97 for tidy inside a frame — the three rules around it each came from a
+// measurement a reader would otherwise repeat — and for the traced search
+// that shows the same-row loop is the cost model's answer, not a miss.
+// 98 for the survivor judged by zero tests: six of six hand-checked were
+// killed, so the column is read before the row.
+// 99 for the ink terms reading axis-aligned segments only: the diagonal
+// back through an edge's own box that the search could not see, the tier
+// swap measured and rejected for it, and where the fix belongs and why.
+// 101 for the named side pair the search overrules, the lone-edge gate it
+// dropped and what that moved on the sweep, and the coincident-anchor
+// decision that changed with it — each a measurement a reader would repeat.
+// 102 for tidy banding on centres and far edges, and the drift the fixpoint
+// loop fell into when such a snap could jam a unit — found by fast-check,
+// and the kind of thing a reader re-derives by breaking it again.
+// 103 for row order by edges: the measurement that made tidy the place for
+// it, and the two affordances measured and withdrawn before it.
+// 104 for the passes that CYCLE rather than settle: why the loop stops at a
+// state it has already seen, and the four fixes aimed at the snap instead
+// that measurement rejected — each one a session would otherwise re-try.
+// 105 for membership by majority: the orphaned member no debt column could
+// see, and why neither scoreboard caught it — the shape of blind spot a
+// reader has to be told about, since the instrument reads clean.
+// 106 for the margin-as-anchor attempt measured and rejected: it clears the
+// two near misses a reader would want cleared, and flips the board's flow
+// to `left` doing it, which is exactly the trade a later session would
+// otherwise make again on the same reasoning.
+// 109 for the flow vote that made that verdict wrong: why one vote per edge
+// let an arrow near 45 degrees decide a board's whole reading, the first
+// fix the corpus rejected in one run (weighting AWAY from the diagonal
+// silences the diagonals a layered board is made of), and the rejection
+// above re-priced against the corrected instrument — kept in full, because
+// the first verdict was published and "rejected" alone would send the next
+// reader after a number that has changed.
+// 112 for the composition axis: its four columns and their sources, and the
+// four things its calibration DECIDED — a group is a frame and not a
+// component, `guides` alone is not a verdict, a tie counts as apart, and
+// tidy is not promised to buy proximity. Each was measured out of a wrong
+// first definition, which is the part a reader would otherwise redo.
+// 113 for the guide-line attempt the composition score rejected on its
+// first use as a decision instrument: the mechanism works on a constructed
+// case and buys nothing on a corpus whose `offGuide` is already 0 — which
+// is a statement about the CORPUS, and the next reader needs to know that
+// before either retrying it or inventing the fixture that justifies it.
+// 114 for the proximity owe measured and NOT chased: what the rule the
+// column implies would cost (+15% ink, +19% envelope, systemic), and why
+// the owe is mild — C1 scores only groups with a drawn border, and common
+// region is a stronger cue than proximity. Both are things a later session
+// would otherwise re-derive, one of them by shipping the change first.
+// 117 for what the eval lane found that the corpus could not — the margin
+// anchor pulling a member off another board's column — and for the standing
+// frame-idempotence bug the same investigation surfaced, with the evidence
+// that it predates this session and the three partial fixes that did not
+// close it.
+// 123 since a contribution may supply the edge ALGORITHM: what crosses the
 // seam (a route, never a scene node) and why, that the side pass runs first
 // so sides are a router's input, the four ways it falls back, and the
-// measured reason selection is a reader rather than a widened payload — a
-// widened `routing` left the facet with no derived form, so the inspector's
-// routing control and the drag-parity property's payload samples both went
-// silently empty.
-const CANVAS_RENDER_BUDGET = 95
+// measured reason selection is a reader rather than a widened payload —
+// with the half of that measurement that the schema-drawn generator has
+// since retired, said plainly so the surviving half stays readable.
+const CANVAS_RENDER_BUDGET = 123
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

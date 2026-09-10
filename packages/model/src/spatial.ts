@@ -76,8 +76,14 @@ const sharedNodeFieldsSchema = z.object({
   id: nodeIdSchema,
   x: positionFieldSchema,
   y: positionFieldSchema,
-  width: sizeFieldSchema,
-  height: sizeFieldSchema,
+  // Described on the stored shape for the reason the edge sides are: every
+  // writer's schema derives from it, and a writer that names a size too
+  // small for its text gets the size it named, so the description is where
+  // it learns what leaving the size out buys.
+  width: sizeFieldSchema.describe('Box width; text wraps at it. Omit it for the default.'),
+  height: sizeFieldSchema.describe(
+    'Box height. Omit it and a text box is made tall enough for its text; a named one too short for the text is refused with the height it needs.',
+  ),
   color: canvasColorSchema.optional(),
   // `.catch` rather than a reject: an unrecognised extension payload — a
   // variant this project has dropped, or one a future version writes — must
@@ -123,8 +129,20 @@ export const canvasEdgeSchema = z.object({
   id: nodeIdSchema,
   fromNode: nodeIdSchema,
   toNode: nodeIdSchema,
-  fromSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
-  toSide: z.enum(['top', 'right', 'bottom', 'left']).optional(),
+  // Described here, on the stored shape, because every writer's schema is
+  // derived from it: the description says what leaving a side out buys,
+  // since a router that honours a pinned side draws whatever the pin makes
+  // it draw.
+  fromSide: z
+    .enum(['top', 'right', 'bottom', 'left'])
+    .optional()
+    .describe(
+      'The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
+    ),
+  toSide: z
+    .enum(['top', 'right', 'bottom', 'left'])
+    .optional()
+    .describe('The side the edge arrives at. Omit it for the same reason as fromSide.'),
   fromEnd: z.enum(['none', 'arrow']).optional(),
   toEnd: z.enum(['none', 'arrow']).optional(),
   color: canvasColorSchema.optional(),
@@ -199,7 +217,7 @@ export const edgeRoutingSchema = z.object({
  * is an OKF timestamp. Both optional: identity is a keeper concern this
  * model does not solve.
  */
-export const canvasCommentSchema = z.object({
+const canvasCommentFieldsSchema = z.object({
   id: nodeIdSchema,
   x: integerSchema,
   y: integerSchema,
@@ -210,13 +228,36 @@ export const canvasCommentSchema = z.object({
   /**
    * The edge the comment is about, the way `targetNodeId` names a node: a
    * renderer keeps the pin on the edge's routed path and falls back to the
-   * anchor point when the edge is gone. Never both.
+   * anchor point when the edge is gone. Never both — enforced below,
+   * because the thread a comment becomes carries both onto one spatial
+   * anchor, and `annotationAnchorSchema` refuses an anchor naming two
+   * objects. Accepted here and refused there, the comment was written and
+   * then silently dropped by every reader.
    */
   targetEdgeId: nodeIdSchema.optional(),
   resolved: z.boolean().optional(),
 })
 
+const namesOneTarget = (comment: { targetNodeId?: string; targetEdgeId?: string }): boolean =>
+  comment.targetNodeId === undefined || comment.targetEdgeId === undefined
+const ONE_TARGET = { message: 'a comment is about a node or an edge, not both' }
+
+export const canvasCommentSchema = canvasCommentFieldsSchema.refine(namesOneTarget, ONE_TARGET)
+
 export type CanvasComment = z.infer<typeof canvasCommentSchema>
+
+/**
+ * A comment as a caller DRAFTS it: the id may be minted and the anchor
+ * point derived from the node it names, so both are optional here. Declared
+ * beside the stored shape because zod refuses `.partial()` over a refined
+ * object, and the one-target rule has to hold for a draft too — a draft that
+ * escaped it would be stored, become a thread naming two objects, and vanish.
+ */
+export const canvasCommentDraftSchema = canvasCommentFieldsSchema
+  .partial({ id: true, x: true, y: true })
+  .refine(namesOneTarget, ONE_TARGET)
+
+export type CanvasCommentDraft = z.infer<typeof canvasCommentDraftSchema>
 
 /**
  * `x-whiteboard` at the CANVAS level — separate from the node-level key of the

@@ -60,3 +60,28 @@ imports it — the resolve error is loud if forgotten.
 
 Vitest project `daemon-client-node`. Contract round-trips use the package's
 own `test-utils/fast-check.ts` (per-package numRuns default, the repo norm).
+
+**The WebSocket text messages are guarded from the emitting side, not
+only the parsing side.** `ws-messages.property.test.ts` here draws every
+arm of `serverTextMessageSchema` and round-trips it through
+`parseServerTextMessage`, which says only that what the schema admits is
+what JSON carries — its generator is built from the parser's own schema,
+so narrowing the schema narrows the generator and a drift between the two
+ends passes (measured: dropping a union arm and turning `scrollX` into an
+integer both stayed green). The drift guard is mcp-server's
+`routes/ws-emitters.property.test.ts`: it drives the daemon's hand-written
+emitters (`sendVersionCreated`, `sendRestoreEvent`, `sendAgentActivity`,
+`sendHeadChanged`, `sendViewportRequest`) with what their parameters
+admit, reads the frame off a connected fake socket, and requires it to
+parse under this package's schema AND equal, raw, the message composed
+from the arguments — the second because the parser strips a key it does
+not know, so an emitter adding a field the schema never learned passes the
+first. Mutation-checked both ways (a wrapped `head`, an extra `padding`).
+
+`viewportRequestParamsSchema` is the viewport message minus what the
+daemon stamps on it, strict, and it is what the daemon's viewport route
+checks a body against. Before it existed the route forwarded its raw JSON
+body into the frame, and the browser dropped a frame it could not read —
+so a wrong-typed `zoom` answered 504 after the timeout rather than 400,
+and `padding`, which the browser has never read, was accepted as a silent
+no-op.

@@ -11,6 +11,7 @@
  * rounding, so the no-op filter compares the value that will actually be
  * stored.
  */
+import type { EditorLeafCommand } from '../../lib/spatial/commands.js'
 
 export interface AlignableBox {
   readonly id: string
@@ -49,6 +50,23 @@ export interface BoxMove {
   readonly id: string
   readonly x: number
   readonly y: number
+  /** A frame tidy grew to hold its members carries its new size. */
+  readonly width?: number
+  readonly height?: number
+}
+
+/** The command that applies one move: a resize when the box carries a size. */
+export function boxMoveCommand(move: BoxMove): EditorLeafCommand {
+  return move.width !== undefined && move.height !== undefined
+    ? {
+        kind: 'resize-node',
+        id: move.id,
+        x: move.x,
+        y: move.y,
+        width: move.width,
+        height: move.height,
+      }
+    : { kind: 'move-node', id: move.id, x: move.x, y: move.y }
 }
 
 export type AlignMode = 'left' | 'center-x' | 'right' | 'top' | 'center-y' | 'bottom'

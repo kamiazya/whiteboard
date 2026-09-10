@@ -143,12 +143,93 @@ function hasNoBackslashText(node: { type?: string; value?: unknown; children?: u
     : true
 }
 
+type AnyNode = { type?: string; depth?: number; value?: unknown; children?: unknown[] }
+
+const isText = (node: unknown): node is { type: 'text'; value: string } =>
+  typeof node === 'object' && node !== null && (node as AnyNode).type === 'text'
+
+/**
+ * A line ending at the very start or end of a block's inline content is
+ * the block boundary itself, not content: CommonMark has nowhere to put
+ * it, and `mdast-util-to-markdown` encodes a boundary SPACE as `&#x20;`
+ * but writes a boundary line ending raw, where the parser reads it as the
+ * paragraph ending. Measured: `text "*\n"` serializes to `\*` and comes
+ * back as `*`; the same `\n` one text node in from the edge, or inside an
+ * emphasis, survives as `&#xA;`. Only the block's first and last direct
+ * text child are affected, so that is all this excludes.
+ */
+function hasNoBlockEdgeNewline(node: AnyNode): boolean {
+  if (!Array.isArray(node.children)) return true
+  const first = node.children[0]
+  const last = node.children[node.children.length - 1]
+  if (isText(first) && first.value.startsWith('\n')) return false
+  if (isText(last) && last.value.endsWith('\n')) return false
+  return node.children.every((child) => hasNoBlockEdgeNewline(child as AnyNode))
+}
+
+/**
+ * A line ending inside a code span or inline math. CommonMark reads a code
+ * span's line ending as a space, and `mdast-util-to-markdown` writes it as
+ * one whenever the character after it could open a block construct at a
+ * line start — `\n~` is written `` ` ~` `` and comes back as ` ~` — while a
+ * blank line inside a span ends the paragraph and leaves a stray backtick.
+ * Where the span sits in a heading that can only be ATX (depth 3 and up)
+ * the raw line ending splits the heading instead;
+ * `markdown-writer-limits-round-trip.test.ts` pins that instance.
+ */
+function hasNoNewlineInSpan(node: AnyNode): boolean {
+  if (
+    (node.type === 'inlineCode' || node.type === 'inlineMath') &&
+    typeof node.value === 'string' &&
+    node.value.includes('\n')
+  ) {
+    return false
+  }
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoNewlineInSpan(child as AnyNode))
+    : true
+}
+
+/**
+ * A blank line inside a text value is a paragraph break, not text: markdown
+ * has no way to write two consecutive line endings that stay inside one
+ * paragraph, so `a\n\nb` comes back as two paragraphs and a trailing
+ * `\n\n` as nothing.
+ */
+function hasNoBlankLineInText(node: AnyNode): boolean {
+  if (isText(node) && /\n[ \t]*\n/.test(node.value)) return false
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoBlankLineInText(child as AnyNode))
+    : true
+}
+
+/**
+ * A link, image or definition destination that starts with `<`.
+ * `mdast-util-to-markdown` writes it raw — `![x](<)`, `[x](<a)` — where the
+ * parser reads `<` as the start of a pointy-bracket destination, so an
+ * unclosed one turns the whole construct into text and `<a>` comes back
+ * as `a`. CommonMark allows `\<` in a destination, so this is the
+ * writer's gap rather than the format's; `<` anywhere else in a
+ * destination survives. `markdown-writer-limits-round-trip.test.ts` pins
+ * it, so this exclusion goes when upstream escapes it.
+ */
+function hasNoLeadingAngleInDestination(node: AnyNode & { url?: unknown }): boolean {
+  if (typeof node.url === 'string' && node.url.startsWith('<')) return false
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoLeadingAngleInDestination(child as AnyNode))
+    : true
+}
+
 function nonListFlowArbitrary(maxDepth: number) {
   return mdastFlowContentArbitrary(maxDepth)
     .filter((node) => !EXCLUDED_ROUND_TRIP_TYPES.has(node.type))
     .filter(hasNoEmptyContainer)
     .filter(hasNoExcludedDescendant)
     .filter(hasNoBackslashText)
+    .filter(hasNoBlockEdgeNewline)
+    .filter(hasNoNewlineInSpan)
+    .filter(hasNoBlankLineInText)
+    .filter(hasNoLeadingAngleInDestination)
 }
 
 const rootArbitrary = fc

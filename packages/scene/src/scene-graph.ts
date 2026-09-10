@@ -129,6 +129,16 @@ export interface TextRunNode {
   /** Horizontal bleed (px) of `backdrop` past the run's own box. */
   readonly backdropPadXPx?: number
   /**
+   * The canvas element this run is the LABEL of, when it is one: an edge's
+   * label drawn at its midpoint, or a container's name drawn above its
+   * frame. The scene is flat and paints these after the things they name,
+   * so nothing else links a label's box back to what it annotates — and a
+   * label's box means nothing on its own. Read by the drawing score (a
+   * label over a box, a container's name under a box) and by nothing that
+   * paints.
+   */
+  readonly annotates?: { readonly kind: 'edge' | 'node'; readonly id: string }
+  /**
    * Distance (px) from `bbox.y` (the line TOP) down to the text baseline,
    * i.e. the measured font ascent. `bbox` stays a true top-left box either
    * way — sceneBounds/sceneDigest read `bbox`, never this field — so an

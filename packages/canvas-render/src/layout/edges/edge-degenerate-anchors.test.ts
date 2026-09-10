@@ -72,19 +72,25 @@ describe('coincident anchors', () => {
     }
   })
 
-  it('draws the shared point, not a spike, when authored sides force the collision', () => {
-    // Naming both sides is a request for that geometry. The re-siding above
-    // deliberately leaves it alone, so the router still has to handle a pair
-    // with no distance in it — and its answer is nothing, not 20px into one
-    // box and 40px back through both.
-    const { path } = routeWith({
+  it('a named pair with no distance in it is overruled into a visible route, not a spike', () => {
+    // Naming both sides is a request for where the line attaches; it is not
+    // a request for the spike a pair with no distance in it produces (20px
+    // into one box and 40px back through both). That spike is a route
+    // through the edge's own boxes, which the search overrules like any
+    // other — so the edge is drawn, around the pair, with no ink in either.
+    const { path, fromSide, toSide } = routeWith({
       id: 'e',
       fromNode: 'n0',
       toNode: 'n1',
       fromSide: 'bottom',
       toSide: 'top',
     })
-    expect(path.map((p) => `${p.x},${p.y}`)).toEqual(['38.5,40', '38.5,40'])
+    expect({ fromSide, toSide }).not.toEqual({ fromSide: 'bottom', toSide: 'top' })
+    const length = path.slice(1).reduce((sum, p, i) => {
+      const q = path[i] as { x: number; y: number }
+      return sum + Math.hypot(p.x - q.x, p.y - q.y)
+    }, 0)
+    expect(length).toBeGreaterThan(0)
     for (const n of nodes) {
       expect({ node: n.id, ink: interiorInk(path, n) }).toEqual({ node: n.id, ink: 0 })
     }

@@ -41,7 +41,13 @@ export function createDebugRouter(options: CreateDebugRouterOptions = {}) {
   const enabled = options.enabled ?? process.env.WHITEBOARD_DEBUG === '1'
 
   if (!enabled) {
-    app.all('/api/debug', (c) => c.notFound())
+    // JSON, like every other refusal on this daemon's `/api/` surface: the
+    // built-in 404 answers text/plain, so a caller parsing the body to find
+    // out why gets a SyntaxError instead of the reason. The STATUS is
+    // unchanged — an endpoint that is not enabled is not there.
+    app.all('/api/debug', (c) =>
+      c.json({ error: 'not_found', message: 'Debug endpoint is not enabled' }, 404),
+    )
     return app
   }
 

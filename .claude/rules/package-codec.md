@@ -114,7 +114,17 @@ rather than in a string, so joining its runs yields `tightenthis`.
   markdown body (modulo `normalizeMdast`, over a syntax subset that excludes constructs with
   inherent CommonMark/GFM encoding ambiguities — adjacent same-delimiter inline spans, emphasis/
   strikethrough flanking-rule interactions, reference-style links/definitions, and non-HTML-shaped
-  `html` node values; each exclusion is commented at its filter).
+  `html` node values, a line ending at a block's first or last text — the block boundary itself,
+  which the writer emits raw where it encodes a boundary space as `&#x20;` — a blank line inside a
+  text value (a paragraph break), a line ending inside a code span or inline math (CommonMark reads
+  it as a space and the writer writes one whenever the next character could open a block; in an
+  ATX-only heading it splits the heading), and a destination starting with `<` (the writer leaves
+  it raw where the parser reads a pointy-bracket destination) — the last two pinned by
+  `markdown-writer-limits-round-trip.test.ts`; each exclusion is commented at its filter). The
+  text those properties draw is dense on purpose — words with spaces, markdown punctuation, line
+  endings, characters outside ASCII (model's `markdownTextArbitrary`) — and the property held at
+  1500 runs once the two newline exclusions were in; before the densification no text value
+  carried a line ending at all.
 - Every fast-check counterexample this package's own round-trip property found was pinned as an
   example test in `markdown/normalize.test.ts` before the corresponding `normalizeMdast` fix landed.
 

@@ -22,7 +22,7 @@
 import { movesForPathChange, scanReferences } from '@kamiazya/whiteboard-codec'
 import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
-import { describe, expect } from 'vitest'
+import { describe, expect, vi } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
@@ -253,6 +253,14 @@ function tokenText(model: Model, slots: (string | null)[], token: Token): string
   const id = slots[token.slot]
   return id !== null && id !== undefined && model.docs.has(id) ? id : null
 }
+
+// A ceiling sized on a reading, not a delay: 40 runs measure 12–14s on an
+// idle machine (0.3s a run) and reached 34s under CI's full parallel run,
+// where the 30s default timed the property out with no counterexample —
+// the load-dependent family in integrator-flow.md. Three times the loaded
+// reading; the runs stay at 40 rather than fewer, since the density is what
+// the property is for.
+vi.setConfig({ testTimeout: 90_000 })
 
 describe('reference semantics under command sequences', () => {
   fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 12 })], withDefaults({ numRuns: 40 }))(
@@ -615,7 +623,11 @@ describe('reference semantics under command sequences', () => {
     // Budget, not numRuns: the seeded state + per-command full-content
     // assertions price a 40-run pass at 3.5-6s on an idle machine (worst
     // observed 7.3s under load), so the 5s default reads as a property
-    // failure that never happened.
-    30_000,
+    // failure that never happened. Re-measured 2026-09-10 on a cloud
+    // container: 22-23s alone and 34-39s with three vitest projects in
+    // flight, both over the previous 30s ceiling — a timeout that named
+    // this test while the property never failed. Sixty seconds is the
+    // ceiling those measurements size, not a delay.
+    60_000,
   )
 })

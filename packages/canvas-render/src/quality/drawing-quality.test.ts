@@ -1,0 +1,492 @@
+// The drawing scoreboard: what the two diagrams the tool-surface lane asks
+// for score as a person would draw them, as a first attempt draws them, and
+// after tidy — plus the fixture board every lane write starts from.
+//
+// A REFERENCE row carrying debt is a finding about the reference or the
+// instrument, never accepted as the drawing's cost. A DRAFT row is what the
+// instrument is for: each planted mistake shows up in exactly the column that
+// names it, so a reader of a lane result knows what a non-zero there looks
+// like on a board. The TIDIED rows say what `tidyNodes` buys and what it
+// leaves — and the first reading found something it leaves that nothing had
+// said: a frame and what it holds move as ONE unit, so an overlap INSIDE a
+// frame is invisible to tidy. The architecture draft keeps its overlapping
+// pair and all five near misses through a tidy that cleared its straddle
+// and its hidden label.
+//
+// Pinned EXACTLY, like every scoreboard in this package: an improvement is
+// as loud as a regression, and whoever moves a number says why in the diff.
+import { describe, expect, it } from 'vitest'
+import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
+import { constantRatioMeasureText } from '../measure.js'
+import { DRAWING_CORPUS, type DrawingCase } from '../test-utils/drawing-corpus.js'
+import { createSpatialTheme } from '../theme/spatial-theme.js'
+import { type DrawingScore, scoreDrawing } from './drawing-score.js'
+
+// The measurer the lane and `wb_scene_render` fall back to, so a pin here
+// and a `drawing` column there are the same number for the same board.
+const measure = constantRatioMeasureText
+const appearance = createSpatialTheme({ mode: 'light' })
+
+const scores = new Map(
+  DRAWING_CORPUS.map((c) => [
+    c.name,
+    scoreDrawing(c.canvas, layoutSpatialCanvas(c.canvas, { measure, appearance })),
+  ]),
+)
+
+const DEBT_FREE = {
+  nodeOverlaps: 0,
+  overlapAreaPx: 0,
+  straddles: 0,
+  edgeThroughNode: 0,
+  throughInkPx: 0,
+  labelOverNode: 0,
+  labelOverLabel: 0,
+  labelCovered: 0,
+  textOverflow: 0,
+  crampedMembers: 0,
+  nearMisses: 0,
+  tightGaps: 0,
+  edgeThroughFrame: 0,
+  edgeOverlaps: 0,
+  sharedInkPx: 0,
+}
+const DEBT_COLUMNS = Object.keys(DEBT_FREE) as (keyof typeof DEBT_FREE)[]
+
+describe('drawing quality across the corpus', () => {
+  it('reports every board', () => {
+    expect(Object.fromEntries(scores)).toEqual({
+      'architecture/reference': {
+        nodes: 11,
+        edges: 8,
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 6,
+        edgeLengthPx: 3208,
+        unevenGaps: 0,
+        envelopePx: { w: 800, h: 860 },
+        // Even the reference: the router draws the two same-row edges inside
+        // the Services frame as loops — down from the box's bottom, along,
+        // back up — one reversal on api->auth and two on api->search, which
+        // also climbs over Auth. Nothing else on the board turns back. A
+        // finding about the router's side choice for a neighbour on the same
+        // row, which this column exists to expose; a fix is judged here.
+        reversals: 3,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.75,
+        overlapsPerPair: 0,
+        density: 0.19,
+      },
+      'architecture/drafted': {
+        nodes: 11,
+        edges: 8,
+        // `auth` over `api` by 40px of a row.
+        nodeOverlaps: 1,
+        overlapAreaPx: 3200,
+        // `search` across the Services frame's right edge.
+        straddles: 1,
+        edgeThroughNode: 0,
+        throughInkPx: 0,
+        labelOverNode: 0,
+        labelOverLabel: 0,
+        // "Storage", drawn inside the Services frame above it.
+        labelCovered: 1,
+        textOverflow: 0,
+        // `cli` 8px from its frame's left; `mobile` 10px from its right.
+        crampedMembers: 2,
+        // `web` 2px below its row-mates and 6px right of `blob`; `cli` 8px
+        // right of the two frames it is not in.
+        // Three, all box-to-box (two rows 2px off, one column 6px off): the two
+        // it owed against FRAMES it is not in went when boxes stopped being
+        // asked to line up with frames.
+        nearMisses: 3,
+        tightGaps: 0,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
+        crossings: 0,
+        bends: 2,
+        edgeLengthPx: 2680,
+        // The Clients row's gaps differ by 14px; the Services row has an
+        // overlap where a gap should be.
+        unevenGaps: 2,
+        envelopePx: { w: 840, h: 750 },
+        // Only api->auth loops; api->search is drawn straight, because Auth
+        // moved onto API gateway and the line starts inside it.
+        reversals: 1,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.25,
+        overlapsPerPair: 0.04,
+        density: 0.2,
+      },
+      'architecture/tidied': {
+        nodes: 11,
+        edges: 8,
+        // Tidy clears what is wrong between units and, since it tidies
+        // inside a frame, what is wrong among a frame's members too: the
+        // overlap and the cramped members go. What it leaves is the two
+        // near misses between members of DIFFERENT frames (`cli` moved in
+        // to its frame's 32px margin; `api` and `sqlite` sit at 40 in
+        // theirs), which no band sees — bands run among a frame's members
+        // and among the frames, never across them.
+        nodeOverlaps: 0,
+        overlapAreaPx: 0,
+        straddles: 0,
+        edgeThroughNode: 0,
+        throughInkPx: 0,
+        labelOverNode: 0,
+        labelOverLabel: 0,
+        labelCovered: 0,
+        textOverflow: 0,
+        crampedMembers: 0,
+        nearMisses: 0,
+        tightGaps: 0,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
+        // Debt-free — `nearMisses` included, since the frame's margin
+        // became an anchor and every frame's first column now sits at its
+        // own: `cli` at 32 in one frame beside `api` and `sqlite` at 40 in
+        // theirs was one column to a reader and 8px apart to the score, and
+        // no band could see it (bands run among a frame's members and among
+        // the frames, never across them). Also price-free, once a box more
+        // than half inside a frame counts as its member. `search` was drawn across the
+        // Services frame's right edge, so containment said it belonged to
+        // nothing: it became its own unit and the overlap pass hopped it
+        // out from under the frame entirely, which cost a crossing and a
+        // bend and left it orphaned between two frames. Claimed, it stays
+        // in its row at (640, 384) and the frame grows to 872 to hold it.
+        crossings: 0,
+        bends: 0,
+        // 2663 -> 2047, a fifth of the ink, and a shorter envelope for a
+        // wider one: 824x884 -> 872x772, 8% less area. Earlier readings on
+        // this row: 2708 before tidy banded on centres, 2663 after; 2019
+        // once the frame's margin became an anchor.
+        edgeLengthPx: 2019,
+        // One more gap that is not like its neighbours, paid for the above:
+        // the frame that grew is wider than the two it sits between.
+        unevenGaps: 3,
+        envelopePx: { w: 872, h: 772 },
+        reversals: 0,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.19,
+      },
+      'sequence/reference': {
+        nodes: 7,
+        edges: 4,
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 1,
+        edgeLengthPx: 1270,
+        unevenGaps: 0,
+        envelopePx: { w: 1000, h: 580 },
+        // Messages are boxes whose arrows point up to the participant heads,
+        // three of the four along the column, so the board flows up.
+        reversals: 0,
+        flow: 'up',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0.25,
+        overlapsPerPair: 0,
+        density: 0.17,
+      },
+      'sequence/drafted': {
+        nodes: 7,
+        edges: 4,
+        // The first message drawn over the Browser head.
+        nodeOverlaps: 1,
+        overlapAreaPx: 2000,
+        straddles: 0,
+        // The last message's route to Browser runs up through the first.
+        edgeThroughNode: 1,
+        throughInkPx: 62,
+        labelOverNode: 0,
+        labelOverLabel: 0,
+        labelCovered: 0,
+        textOverflow: 0,
+        crampedMembers: 0,
+        // Daemon's head 6px below the others; SQLite's 10px right of `m2`.
+        // Two: the heads 6px off each other's row. The message box
+        // overlapping two of them ends within 20px of their bottoms, and
+        // a bottom is not an anchor anyone set.
+        nearMisses: 2,
+        tightGaps: 0,
+        edgeThroughFrame: 0,
+        edgeOverlaps: 0,
+        sharedInkPx: 0,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 937,
+        unevenGaps: 1,
+        envelopePx: { w: 1010, h: 520 },
+        // `right` with two arrows against it until the vote stopped being
+        // one-per-edge: two arrows headed right and two up, a tie broken by
+        // the fixed order, and the two upward arrows then read as against a
+        // flow the tie-break had invented. Each arrow now votes for both
+        // axes in proportion to its own displacement, so the draft reads
+        // `up` like the reference it is a draft OF, and nothing is against
+        // it. The draft's debt is where it always was, in its overlaps.
+        reversals: 0,
+        flow: 'up',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0.05,
+        density: 0.18,
+      },
+      'sequence/tidied': {
+        nodes: 7,
+        edges: 4,
+        // No frames, so every unit is a box and tidy reaches all of it.
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 0,
+        // 1010 -> 1055 when a diagonal back through an edge's own box became an
+        // intrusion: the first message's right-to-bottom pair had a clean drawn
+        // route but an unaligned TRIAL path that cut its own box, so the search
+        // now settles on top-to-left, 45px longer. Price, not debt: no column
+        // that targets zero moved.
+        edgeLengthPx: 1055,
+        unevenGaps: 0,
+        envelopePx: { w: 1008, h: 524 },
+        // Tidy moves boxes, not the direction their arrows travel: the
+        // draft's reading is this one, and the draft's `right` was a
+        // tie-break artefact (see its row).
+        reversals: 0,
+        flow: 'up',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.18,
+      },
+      'fixture/architecture': {
+        nodes: 7,
+        edges: 3,
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 620,
+        unevenGaps: 0,
+        envelopePx: { w: 1000, h: 900 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.11,
+      },
+      'lane/architecture': {
+        nodes: 11,
+        edges: 8,
+        // The same numbers the lane's `drawing` column printed for this
+        // board, which is the point of scoring both with one measurer.
+        ...DEBT_FREE,
+        // API gateway's two edges to the boxes beside it are pinned to leave
+        // from its bottom and arrive from their top, which used to tunnel
+        // back through API gateway on the way round (2 boxes, 174px); a
+        // named pair that forces a route through its own box is overruled
+        // now, so the board is debt-free with the sides the model named.
+        edgeThroughNode: 0,
+        throughInkPx: 0,
+        // One of them across the Web app edge.
+        crossings: 1,
+        bends: 4,
+        edgeLengthPx: 2957,
+        // The layers sit 300 and 280 apart.
+        unevenGaps: 2,
+        envelopePx: { w: 820, h: 800 },
+        // The two loops under API gateway: each dips and comes back up, and
+        // one also doubles back along the row.
+        reversals: 2,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0.13,
+        bendsPerEdge: 0.5,
+        overlapsPerPair: 0,
+        density: 0.27,
+      },
+      'lane/architecture-tidied': {
+        nodes: 11,
+        edges: 8,
+        ...DEBT_FREE,
+        // Tidy, handed the edges, swaps API gateway with Auth: the hub sits
+        // between the two boxes it fans out to instead of at the end of its
+        // row, and the router has nothing left to pay for — one crossing,
+        // four bends and two reversals become none, and the ink drops by a
+        // third. The sides the model pinned stay pinned.
+        crossings: 0,
+        bends: 0,
+        // 1881 -> 1902 and two more uneven gaps when the frame's margin
+        // became an anchor: the price this board pays for the two near
+        // misses that change clears on the architecture one. Debt down,
+        // price mixed, which is the ordering §7 gives (user, 2026-09-10).
+        edgeLengthPx: 1902,
+        unevenGaps: 4,
+        envelopePx: { w: 820, h: 804 },
+        reversals: 0,
+        flow: 'down',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.27,
+      },
+      'lane/insert': {
+        nodes: 8,
+        edges: 4,
+        ...DEBT_FREE,
+        // Cache narrowed to 150 and centred in a 200px gap: 25px to the
+        // daemon and 25px to SQLite. "libsql" is wider than its 25px edge,
+        // so it slides above the row (`edgeLabelPlacement`) instead of
+        // lying over both boxes, which is the 16px the envelope grew by.
+        tightGaps: 2,
+        labelOverNode: 0,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 470,
+        // The row's gaps: 200 between Browser and Daemon, 25 after it.
+        unevenGaps: 1,
+        envelopePx: { w: 1000, h: 916 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.12,
+      },
+      'lane/insert-roomy': {
+        nodes: 8,
+        edges: 4,
+        // Debt-free: the neighbour moved instead of the box shrinking, and
+        // "libsql", wider than its 50px edge, sits above the row (the 16px
+        // of envelope) rather than over both boxes.
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 520,
+        // 200 between Browser and Daemon, 50 after it, twice.
+        unevenGaps: 1,
+        envelopePx: { w: 1100, h: 916 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.11,
+      },
+    })
+  })
+
+  it('the lane board is debt-free with the sides the model pinned, since a pair routed through its own box is overruled', () => {
+    const lane = scores.get('lane/architecture') as DrawingScore
+    const unpinned = DRAWING_CORPUS.find((c) => c.name === 'lane/architecture') as DrawingCase
+    const withoutSides = {
+      ...unpinned.canvas,
+      edges: unpinned.canvas.edges.map(({ fromSide: _from, toSide: _to, ...edge }) => edge),
+    }
+    const free = scoreDrawing(
+      withoutSides,
+      layoutSpatialCanvas(withoutSides, { measure, appearance }),
+    )
+    // With the sides as the model named them the board used to owe two
+    // edges through API gateway; a named pair whose route runs through
+    // its own box is overruled now, and the two readings differ only in
+    // price.
+    expect(lane).toMatchObject(DEBT_FREE)
+    expect([lane.crossings, lane.bends]).toEqual([1, 4])
+    // Debt-free without them; what the router then draws on its own for
+    // eight edges converging on one box is price, and pinned as such.
+    expect(free).toMatchObject(DEBT_FREE)
+    expect([free.crossings, free.bends]).toEqual([2, 7])
+  })
+
+  it('every reference carries no debt', () => {
+    for (const name of ['architecture/reference', 'sequence/reference', 'fixture/architecture']) {
+      expect(scores.get(name), name).toMatchObject(DEBT_FREE)
+    }
+  })
+
+  it('tidy clears what is wrong between units and inside a frame alike', () => {
+    const drafted = scores.get('architecture/drafted') as DrawingScore
+    const tidied = scores.get('architecture/tidied') as DrawingScore
+    expect([drafted.straddles, tidied.straddles]).toEqual([1, 0])
+    expect([drafted.labelCovered, tidied.labelCovered]).toEqual([1, 0])
+    // Inside the Services frame: `api` over `auth`, and two members within
+    // the padding of their frame. Both used to survive tidy.
+    expect([drafted.nodeOverlaps, tidied.nodeOverlaps]).toEqual([1, 0])
+    expect([drafted.crampedMembers, tidied.crampedMembers]).toEqual([2, 0])
+    // Members of different frames were aligned by nobody until the frame's
+    // margin became an anchor a member within a band snaps onto; the pair
+    // that used to stay is the last two of these.
+    expect([drafted.nearMisses, tidied.nearMisses]).toEqual([3, 0])
+  })
+})
+
+// What makes the instrument believable beyond its calibration: the pairs
+// a person would order with confidence, ordered the same way by every debt
+// column. A metric set can be satisfied by a drawing nobody would accept
+// ("Same Quality Metrics, Different Graph Drawings", 2025 — the same
+// readings for a grid and a dinosaur), so the last case pins the blind
+// spot this set is known to have rather than pretending it has none.
+describe('drawing quality: the instrument orders what a reader would', () => {
+  const debtOf = (name: string) => {
+    const s = scores.get(name) as DrawingScore
+    return DEBT_COLUMNS.map((c) => [c, s[c]] as const)
+  }
+
+  it.each([
+    'architecture',
+    'sequence',
+  ])('the %s reference owes no more than its draft on any column, and less in all', (diagram) => {
+    const reference = debtOf(`${diagram}/reference`)
+    const drafted = debtOf(`${diagram}/drafted`)
+    for (const [i, [column, value]] of reference.entries()) {
+      expect(value, column).toBeLessThanOrEqual(drafted[i]?.[1] as number)
+    }
+    const total = (rows: readonly (readonly [string, number])[]) =>
+      rows.reduce((sum, [, v]) => sum + v, 0)
+    expect(total(reference)).toBeLessThan(total(drafted))
+  })
+
+  it.each(['architecture', 'sequence'])('tidy never adds debt to the %s draft', (diagram) => {
+    const drafted = debtOf(`${diagram}/drafted`)
+    const tidied = debtOf(`${diagram}/tidied`)
+    for (const [i, [column, value]] of tidied.entries()) {
+      expect(value, column).toBeLessThanOrEqual(drafted[i]?.[1] as number)
+    }
+  })
+
+  it('a board of boxes scattered far apart reads debt-free: density is its only witness', () => {
+    // No column names "too far apart" — every debt is a thing touching a
+    // thing it should not. A reader would still call this board unusable,
+    // and the number that says so is the price column `density`, which has
+    // no target. Pinned so the gap is a known one.
+    const scattered = {
+      nodes: [0, 1, 2, 3].map((i) => ({
+        id: `b${i}`,
+        type: 'text' as const,
+        x: i * 3000,
+        y: (i % 2) * 2500,
+        width: 200,
+        height: 80,
+        text: `box ${i}`,
+      })),
+      edges: [],
+    }
+    const s = scoreDrawing(scattered, layoutSpatialCanvas(scattered, { measure, appearance }))
+    expect(s).toMatchObject(DEBT_FREE)
+    expect(s.density).toBeLessThan(0.01)
+  })
+})

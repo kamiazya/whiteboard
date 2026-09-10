@@ -123,10 +123,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        // +181 for `themeFont` (a family and a URL), which the widget needs
-        // and the model never reads: it is an OUTPUT field, so `visibleBytes`
-        // — what the model is charged on every turn — does not move.
-        wireBytes: 15781,
+        wireBytes: 18105,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -140,7 +137,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 19450,
+        wireBytes: 22556,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -169,12 +166,36 @@ describe('what the tool table costs to read', () => {
       // two trials of three (the snapshot that only learned the ids was
       // skipped), and "colour every box inside the Clients group" from two
       // ops to one; six trials of six reached for the selector unprompted.
+      // +508 for `fromSide`/`toSide` described on the stored edge schema,
+      // which edge.add and edge.patch each derive, so four parameters
+      // gained a description at once. Described because the lane's
+      // architecture board owed every one of its debts to a model writing
+      // bottom/top on all eight edges, two of them between boxes on one
+      // row (ADR-0031 §7): the sides now say what leaving them out buys.
+      // +1,045 for `width`/`height` described on the stored node schema and
+      // the patch: ten parameters, because node.add emits them per node
+      // type. Described because the lane's long-sentence task named a
+      // height too small for its text and the sentence was cut; the
+      // description alone moved nothing (3 of 3 still cut), so a height too
+      // short for its text is now refused with the number, and the
+      // description says so.
+      // +124 for `within` on node.add saying what a NEW group over boxes
+      // that already exist takes (add it, then region.set): the lane's
+      // wrap-a-chain trials wrote `within: null` or the group's own id on
+      // the group and found region.set on a second call.
+      // +104 for region.set saying a group added in the batch with no
+      // position is placed around its members: with the sentence above
+      // the trials wrote one batch, then two more calls undoing where the
+      // cursor had put the group and the column it had pulled the row into.
+      // +107 for `within` accepting null (models write it to say "no group",
+      // and the refusal cost the whole call) and saying a group added in
+      // the batch with no position is placed around what goes in it.
       wb_canvas_edit: {
-        visibleBytes: 11098,
-        wireBytes: 31782,
+        visibleBytes: 12986,
+        wireBytes: 36776,
         descriptionWords: 169,
         parameters: 151,
-        undescribed: 137,
+        undescribed: 123,
         strays: 'refused',
         names: [],
       },
@@ -253,10 +274,6 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
-      // Re-pinned when `style` stopped being ignored on a markdown document
-      // (ADR-0030 decision 5): +32 visible bytes say what it does there —
-      // it draws the canvases the body embeds — instead of saying it does
-      // nothing.
       wb_scene_render: {
         visibleBytes: 2221,
         wireBytes: 2568,
@@ -368,19 +385,17 @@ describe('what the tool table costs to read', () => {
       // +940 when the render theme layer landed on main (ADR-0030): `style`
       // on canvas_view and wb_scene_render, `target` on wb_facet_set; the
       // two new undescribed parameters are that layer's, not this sweep's.
-      // +32 for `style` answering on a markdown document too (see
-      // wb_scene_render).
-      // +580 when the edge facet slot landed (ADR-0013 decision 5's third
-      // site): `edgeId` on wb_facet_set with the sentence saying what it
-      // targets, plus the `x-whiteboard` bucket reaching `edge.patch` for
-      // free from the derived edge patch schema. The four new undescribed
-      // parameters are that bucket's own shape, which no tool describes.
-      visibleBytes: 34041,
-      // +1,835: the same bucket, spelled out in every edge-shaped payload
-      // the wire carries.
-      wireBytes: 100147,
+      // +508 for the two edge sides described where the stored schema
+      // declares them (see wb_canvas_edit); the wire moves on every tool
+      // whose output carries an edge.
+      // +1,045 for the box sizes described where the stored schema declares
+      // them (see wb_canvas_edit); wire moves on every tool whose output
+      // carries a node.
+      // +124 for `within` on node.add (see wb_canvas_edit).
+      visibleBytes: 35929,
+      wireBytes: 110571,
       parameters: 273,
-      undescribed: 205,
+      undescribed: 191,
     })
   })
 

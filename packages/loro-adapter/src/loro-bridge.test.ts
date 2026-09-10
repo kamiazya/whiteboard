@@ -1089,6 +1089,18 @@ describe('canvas comments bridge', () => {
     expect(() => writeCanvasComment(doc, { ...COMMENT, x: Number.NaN })).toThrow(TypeError)
   })
 
+  test('refuses a comment naming both a node and an edge loudly, for the same reason', () => {
+    // The thread this comment becomes carries both references on one
+    // spatial anchor, which the anchor schema refuses — so the reader would
+    // drop the comment for everyone. Found by a property drawing comments
+    // from the schema: two peers wrote different comments, and one vanished.
+    const doc = makeDoc()
+    expect(() =>
+      writeCanvasComment(doc, { ...COMMENT, targetNodeId: 'n1', targetEdgeId: 'e1' }),
+    ).toThrow(TypeError)
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []).toEqual([])
+  })
+
   test('the non-finite-anchor refusal also propagates through withSpatialBatch, and the batch commits NOTHING (no undo step)', () => {
     const doc = makeDoc()
     writeCanvasComment(doc, COMMENT)

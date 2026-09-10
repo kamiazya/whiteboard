@@ -241,15 +241,87 @@ App test that mounts a daemon target.
 
 ### A property over "a canvas with facets" draws them from the registry
 
-`test-utils/facet-arbitrary.ts` turns each facet the registry holds for a
-target into a fast-check arbitrary by walking its Zod schema (zod v4's
-`_zod.def`), substituting an `assetRefs` field with the registered asset
-ids, and filtering by the schema itself so a `.refine` the walk cannot see
-is still honoured. `facetsArbitrary(registry, 'canvas')` is what a property
-about envelopes uses (`gesture-view.property.test.ts`), so it follows a
-facet a plugin registers tomorrow without an edit. Two things keep it
-honest: a construct it has no generator for THROWS naming the path rather
-than yielding nothing for that facet, and `facet-arbitrary.test.ts` pins
-that every canvas facet in the bundled registry is produced and that
-nothing produced is refused by `validateFacetWrite`.
+`facetsArbitrary(registry, 'canvas')` from facet-engine's `/testing`
+subpath is what a property about envelopes uses
+(`gesture-view.property.test.ts`): each facet the registry holds for the
+target, drawn from its own Zod schema by model's `arbitraryForSchema`
+(`@kamiazya/whiteboard-model/test-utils`), an `assetRefs` field drawing
+the registered asset ids, and every payload filtered by
+`validateFacetWrite` itself so a `.refine` the walk cannot see is still
+honoured. It follows a facet a plugin registers tomorrow without an edit.
+The generator's own honesty is facet-engine's to test; what this app keeps
+is `test-utils/facet-arbitrary.test.ts`, which pins that every canvas facet
+in the BUNDLED registry is produced and nothing produced is refused — the
+check that the plugin this app ships has no facet the walk throws on at
+construction and none it quietly skips. It used to be a walker of its own
+here, beside a second one in canvas-render that drew from form samples; two
+properties on one PR passed over the defect they exist to catch because
+each generator had a schema it had never met, and one walk in model — the
+package every generator can reach — is the permanent answer.
+
+### The settings migrations are total, and say so under a property
+
+`lib/user-settings-store.property.test.ts` draws whole v1 and v2 payloads
+from the legacy schemas (URL fields overridden to real http(s) URLs, since
+a random string is never one) and requires `migrateV2(migrateV1(v1))` and
+`migrateV2(v2)` to parse under the live `.strict()` schema while carrying
+each field across by name, then reads both through the real store from
+`localStorage` and round-trips a live payload through `save`/`load`. The
+class it closes is the one `vocabulary.md` records: the loader falls back
+to defaults on ANY parse failure, so a migration emitting one key the live
+schema does not admit discards a user's whole payload silently. The
+schemas and the two migrations are exported for it and for nothing else.
+
+### The SharedWorker protocol is posted through its own type
+
+`lib/sse-shared-worker-protocol.ts` declares both directions of the tab <->
+SharedWorker contract as Zod, and `postWorkerRequest` / `postWorkerEvent`
+are the only way either side posts: a literal handed straight to
+`postMessage` is `unknown` on the wire, so a field renamed on one side and
+not the other is a message nobody handles, silently. Passing it through
+`z.infer` of the schema makes that drift a typecheck error. The parsing
+side was already there (`sseWorkerRequestSchema.safeParse` in the worker,
+`sseWorkerEventSchema.safeParse` in the stream source); this closes the
+emitting side, which is where the inventory found four raw literals.
+
+### Every IndexedDB stored shape round-trips under a property
+
+`lib/idb-stored-shapes.property.browser.test.tsx` writes through each
+production writer and reads through its reader, against the real
+IndexedDB: the blob store, the document-file store (its v2 record and the
+v1 record it rewrites on read), the document index's workspace and
+document rows, the document store's snapshot and delta log, and the
+version store's rows. Inputs are drawn from the writer's input space, or
+from the port's schema where the writer takes one; a `z.custom` /
+`z.instanceof` field is overridden by path, since the walk cannot know
+what a custom check wants. Every reader here fails soft — a record that
+does not parse is a miss, a missing image, a skipped row — which is why a
+property rather than an example: the loss is silent. It found one the day
+it was written: `IdbBlobStore.put` stores the content type it is handed,
+and a `Blob` answers `''` for a type it will not carry (one with a
+character outside printable ASCII), while the reader
+said `.min(1)` — so such a blob was stored, `has` said so, and `get`
+answered null, and the image never drew. The reader now accepts any
+string. Run counts stay inside the browser layer's budget (single digits to
+~20), which is exactly why the arrangement that finds the defect — an empty
+content type — is a weighted arm AND a pinned `example`, with a tally that
+fails the file if it stops being drawn: at one draw in six it was missed by
+one mutation run in three. `test-utils/fast-check.ts`'s `withDefaults` is
+generic for that, since `fc.Parameters<never>` types `examples` as `never[]`.
+An example is the CASE, not the RNG state, so it is not a pinned seed.
+Locally the browser project runs with
+`WHITEBOARD_CHROME_PATH=/opt/pw-browsers/chromium_headless_shell-<rev>/chrome-linux/headless_shell`
+when the installed Playwright revision is not the one the config pins.
+
+`lib/idb-stored-shapes-surface.test.ts` is what keeps that lane honest as the
+app grows: it scans `lib/` for a module that names an object store AND hands
+a record to a schema, and every one is `round-tripped: <the lane's describe>`
+or `not modelled: <what covers it instead>`. Both halves of the probe are
+needed — the store constants alone catch writers that validate nothing, a
+schema parse alone catches every network client in `lib/`. The round-tripped
+side names a describe TITLE rather than a module because an import-shaped
+check could not fail here at all: the lane imports both not-modelled modules
+as fixtures, so "the lane imports it" was true of exactly the entries it was
+supposed to refuse. Its twin is
+`packages/mcp-server/src/server/persisted-json-surface.test.ts`.
 

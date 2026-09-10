@@ -1,3 +1,4 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
   createSpatialTheme,
@@ -14,6 +15,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
 import type { AgentActivity, ServerDeps, ViewportRequest } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -97,7 +99,7 @@ describe('wb_canvas_edit tool', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+            node: { id: 'b', type: 'text', x: 50, y: 0, width: 100, height: 48, text: 'B' },
           },
           // 'ghost' is not on the canvas — this op cannot apply.
           { op: 'node.patch', id: 'ghost', patch: { x: 5 } },
@@ -558,6 +560,119 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         ops: [{ op: 'node.patch', id: 'a', patch: { width: 1 } }],
       }).success,
     ).toBe(true)
+  })
+
+  test('every edge side a writer can name says to leave it to the router', () => {
+    // A model drawing layers wrote bottom/top on every edge, including the
+    // two between boxes on one row, and the router honours a pinned side:
+    // those looped under both boxes and back through their own source. The
+    // schema is the one place every writer reads, so the sides say there
+    // what omitting them buys — on the add and on the patch alike.
+    const found: string[] = []
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item)
+        return
+      }
+      const props = (node as { properties?: Record<string, unknown> }).properties
+      if (props !== undefined) {
+        for (const side of ['fromSide', 'toSide']) {
+          const field = props[side] as { description?: string } | undefined
+          if (field !== undefined) found.push(`${side}: ${field.description ?? ''}`)
+        }
+      }
+      for (const value of Object.values(node)) walk(value)
+    }
+    walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
+    // edge.add and edge.patch each carry both sides.
+    expect(found).toHaveLength(4)
+    for (const line of found) expect(line, line).toMatch(/Omit/)
+  })
+
+  test('every box size a writer can name says what leaving it out buys', () => {
+    // A model adding a long sentence named 220x100 and the sentence was
+    // cut: a named height is kept (the decision below), so the schema is
+    // where a writer learns that omitting it buys a box tall enough.
+    const found: string[] = []
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item)
+        return
+      }
+      const props = (node as { properties?: Record<string, unknown> }).properties
+      // A node draft or patch, told from a bare region box by carrying a colour.
+      if (props !== undefined && props.color !== undefined) {
+        for (const field of ['width', 'height']) {
+          const entry = props[field] as { description?: string } | undefined
+          if (entry !== undefined) found.push(`${field}: ${entry.description ?? ''}`)
+        }
+      }
+      for (const value of Object.values(node)) walk(value)
+    }
+    walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
+    // node.add's four node types and node.patch each carry both, and each
+    // says what the size does to the TEXT: the add's that omitting the
+    // height fits it, the patch's that a named height is kept regardless.
+    expect(found.length).toBeGreaterThanOrEqual(10)
+    for (const line of found) expect(line, line).toMatch(/text/)
+  })
+
+  test('a key that belongs inside `node` says so, instead of just naming itself', () => {
+    // Round 11 of the LLM lane: a trial wrote `id` beside `op`, where
+    // node.patch / node.remove / node.lock all take it, instead of inside
+    // `node` where node.add takes it. `.strict()` refused the op — and the
+    // SDK refuses the whole CALL when one op fails validation, so every
+    // other op in the batch went with it — over `Unrecognized key: "id"`,
+    // which names the key and not the one thing needed to repair it.
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'node.add',
+          id: 'hub',
+          node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('"id"')
+    expect(message).toContain('inside `node`')
+  })
+
+  test('the same for an edge draft flattened onto the op', () => {
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'edge.add', fromNode: 'a', toNode: 'b', edge: { fromNode: 'a', toNode: 'b' } }],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('inside `edge`')
+  })
+
+  test('a key that belongs nowhere keeps the plain refusal', () => {
+    // The hint is for a key the draft actually has. A typo has no place to
+    // point at, and telling it to look inside `node` would be a wrong
+    // answer stated as confidently as the right one.
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'node.add',
+          wihtin: 'g',
+          node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('wihtin')
+    expect(message).not.toContain('inside `node`')
   })
 
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
@@ -1266,6 +1381,309 @@ describe('wb_canvas_edit — region.set', () => {
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['smuggled'])
   })
+
+  test('a group added without a position is placed around the members it is set to, which stay put', async () => {
+    // The lane's wrap-a-chain task: boxes drawn in a row, then a group
+    // with no geometry, then region.set. The group used to land at the
+    // cursor and pull the row into a column inside it; every trial then
+    // spent two calls putting the boxes back and sizing the frame by hand.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'q3', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'Q3' }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'a', type: 'text', x: 0, y: 300, width: 200, height: 80, text: 'A' },
+        },
+        {
+          op: 'node.add',
+          node: { id: 'b', type: 'text', x: 300, y: 300, width: 200, height: 80, text: 'B' },
+        },
+        {
+          op: 'node.add',
+          node: { id: 'c', type: 'text', x: 600, y: 300, width: 200, height: 80, text: 'C' },
+        },
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pipeline' } },
+        { op: 'region.set', within: 'g', nodes: ['a', 'b', 'c'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('a')).toEqual([0, 300, 200, 80])
+    expect(at('b')).toEqual([300, 300, 200, 80])
+    expect(at('c')).toEqual([600, 300, 200, 80])
+    // The members' bounds plus the gutter on every side.
+    expect(at('g')).toEqual([
+      -PLACEMENT_GUTTER_PX,
+      300 - PLACEMENT_GUTTER_PX,
+      800 + 2 * PLACEMENT_GUTTER_PX,
+      80 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+    expect(result.geometry.find((entry) => entry.id === 'g')).toEqual({
+      id: 'g',
+      x: -PLACEMENT_GUTTER_PX,
+      y: 300 - PLACEMENT_GUTTER_PX,
+      width: 800 + 2 * PLACEMENT_GUTTER_PX,
+      height: 80 + 2 * PLACEMENT_GUTTER_PX,
+    })
+  })
+
+  test('a group placed around its members keeps a size it was given, and never a default one', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
+        },
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Wide', width: 1000 } },
+        { op: 'region.set', within: 'g', nodes: ['a'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const g = canvas.nodes.find((node) => node.id === 'g') as SpatialNode
+    expect([g.x, g.y, g.width, g.height]).toEqual([
+      100 - PLACEMENT_GUTTER_PX,
+      100 - PLACEMENT_GUTTER_PX,
+      1000,
+      80 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+  })
+
+  test('a group placed around its members refuses to swallow a bystander, naming it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+        { id: 'between', type: 'text', x: 300, y: 0, width: 200, height: 80, text: 'not mine' },
+        { id: 'c', type: 'text', x: 600, y: 0, width: 200, height: 80, text: 'C' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pair' } },
+          { op: 'region.set', within: 'g', nodes: ['a', 'c'] },
+        ],
+      }),
+    ).rejects.toThrow(/"between"/)
+  })
+
+  test('a positioned member added within a group this batch placed at the cursor moves the group around it', async () => {
+    // The node.add twin of the region.set case: the lane's layered board
+    // added a group with no geometry and then its members, positioned and
+    // within it; the group had landed at the cursor and the member was
+    // refused as "before the group's top-left". Each member added this way
+    // grows the group in every direction, gutter included.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Clients' } },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'web', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'Web' },
+        },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'cli', type: 'text', x: 40, y: 60, width: 160, height: 60, text: 'CLI' },
+        },
+        {
+          op: 'node.add',
+          within: 'g',
+          node: {
+            id: 'mobile',
+            type: 'text',
+            x: 440,
+            y: 140,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('web')).toEqual([240, 140, 160, 60])
+    expect(at('cli')).toEqual([40, 60, 160, 60])
+    expect(at('mobile')).toEqual([440, 140, 160, 60])
+    expect(at('g')).toEqual([
+      40 - PLACEMENT_GUTTER_PX,
+      60 - PLACEMENT_GUTTER_PX,
+      560 + 2 * PLACEMENT_GUTTER_PX,
+      140 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+  })
+
+  test('another group this batch placed at the cursor, still empty, is not a wall — it will follow its own members', async () => {
+    // The lane added three groups with no geometry first, then the
+    // members: the cursor put the groups side by side, and the first
+    // group's box around its members reached the second, empty one.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'clients', type: 'group', label: 'Clients' } },
+        { op: 'node.add', node: { id: 'services', type: 'group', label: 'Services' } },
+        {
+          op: 'node.add',
+          within: 'clients',
+          node: { id: 'cli', type: 'text', x: 100, y: 100, width: 160, height: 60, text: 'CLI' },
+        },
+        {
+          op: 'node.add',
+          within: 'clients',
+          node: {
+            id: 'mobile',
+            type: 'text',
+            x: 540,
+            y: 100,
+            width: 160,
+            height: 60,
+            text: 'Mobile',
+          },
+        },
+        {
+          op: 'node.add',
+          within: 'services',
+          node: { id: 'auth', type: 'text', x: 100, y: 320, width: 160, height: 60, text: 'Auth' },
+        },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('clients')).toEqual([60, 60, 680, 140])
+    expect(at('services')).toEqual([60, 280, 240, 140])
+  })
+
+  test('a member added within a cursor-placed group refuses to swallow a bystander, naming it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'between', type: 'text', x: 240, y: 140, width: 160, height: 60, text: 'not mine' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pair' } },
+          {
+            op: 'node.add',
+            within: 'g',
+            node: { id: 'a', type: 'text', x: 40, y: 140, width: 160, height: 60, text: 'A' },
+          },
+          {
+            op: 'node.add',
+            within: 'g',
+            node: { id: 'c', type: 'text', x: 440, y: 140, width: 160, height: 60, text: 'C' },
+          },
+        ],
+      }),
+    ).rejects.toThrow(/"between"/)
+  })
+
+  test('within: null on node.add reads as no group', async () => {
+    // Models write null to say "not in a group"; refusing it costs the
+    // whole call, and the second call is the same batch without the null.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute(
+      canvasEditInputSchema.parse({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
+          },
+          { op: 'node.add', within: null, node: { id: 'g', type: 'group', label: 'Later' } },
+        ],
+      }),
+    )
+    expect(result.applied).toBe(2)
+  })
+
+  test('a group placed around members that sit in a frame nests inside it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'outer', type: 'group', x: 0, y: 0, width: 1000, height: 400, label: 'Outer' },
+        { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
+        { id: 'b', type: 'text', x: 400, y: 100, width: 200, height: 80, text: 'B' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'inner', type: 'group', label: 'Inner' } },
+        { op: 'region.set', within: 'inner', nodes: ['a', 'b'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const inner = canvas.nodes.find((node) => node.id === 'inner') as SpatialNode
+    expect([inner.x, inner.y, inner.width, inner.height]).toEqual([60, 60, 580, 160])
+  })
 })
 
 /**
@@ -1280,6 +1698,38 @@ describe('wb_canvas_edit — region.set', () => {
  * lane: a model then declares full geometry for every box instead, which is
  * the arithmetic the optional geometry exists to spare it.
  */
+describe('wb_canvas_edit — tidy orders a row by its edges', () => {
+  test('a hub drawn at the end of its row swaps with the nearest box it fans out to', async () => {
+    // The wiring, not the rule: tidy is handed the batch's edges. Without
+    // them the rule cannot see a fan-out and this board stays as drawn.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'apigw', type: 'text', x: 40, y: 400, width: 160, height: 60, text: 'apigw' },
+        { id: 'auth', type: 'text', x: 264, y: 400, width: 160, height: 60, text: 'auth' },
+        { id: 'search', type: 'text', x: 488, y: 400, width: 160, height: 60, text: 'search' },
+      ],
+      edges: [
+        { id: 'e1', fromNode: 'apigw', toNode: 'auth' },
+        { id: 'e2', fromNode: 'apigw', toNode: 'search' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'tidy' }],
+    })
+
+    expect(result.geometry.map((g) => [g.id, g.x])).toEqual([
+      ['apigw', 264],
+      ['auth', 40],
+    ])
+  })
+})
+
 describe('wb_canvas_edit — node.add within a group', () => {
   const GROUP = {
     id: 'g',
@@ -1363,8 +1813,11 @@ describe('wb_canvas_edit — node.add within a group', () => {
     expect(mobile.x).toBeGreaterThanOrEqual(group.x)
     expect(mobile.x + mobile.width).toBeLessThanOrEqual(group.x + group.width)
     expect(mobile.y + mobile.height).toBeLessThanOrEqual(group.y + group.height)
-    // It fit in the room the group had, so the group did not grow.
-    expect(group).toMatchObject({ width: 700, height: 300 })
+    // It fit in the room the group had, but flush with the bottom edge —
+    // the lane's board read that as a cramped member — so the group grows
+    // by the gutter it keeps for what it places.
+    expect(mobile.y).toBe(820)
+    expect(group).toMatchObject({ width: 700, height: 340 })
   })
 
   test('grows the group to hold the nodes it placed inside it', async () => {
@@ -1714,6 +2167,67 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
     expect(result.touched.nodes).not.toContain('g')
   })
 
+  test('tidy within a group moves a member off the frame corner to its margin, and grows the frame for one at the far edge', async () => {
+    // `a` sits 20px from the frame's top-left: it moves in to the 32px
+    // margin (the corner stays put). `c` is flush with the bottom-right,
+    // where moving in would mean moving every member, so the frame grows
+    // and the result reports its size. `far` is outside and untouched.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      ...BOARD,
+      nodes: [
+        ...BOARD.nodes,
+        { id: 'c', type: 'text' as const, x: 416, y: 456, width: 80, height: 40, text: 'c' },
+      ],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [{ op: 'tidy', within: 'g' }],
+    })
+
+    expect(result.geometry.find((entry) => entry.id === 'a')).toMatchObject({ x: 32, y: 32 })
+    const frame = result.geometry.find((entry) => entry.id === 'g')
+    expect(frame).toMatchObject({ x: 0, y: 0, width: 528, height: 528 })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes.find((n) => n.id === 'g')).toMatchObject({ width: 528, height: 528 })
+    expect(result.touched.nodes).not.toContain('far')
+  })
+
+  test('a member placed inside a group keeps the gutter to the frame edge; the group grows when it cannot', async () => {
+    // Two rows fit exactly: 40 + 80 + 40 + 80 = 240 of a 240-tall frame, so
+    // the second row would end flush with the bottom edge. Flush is what a
+    // reader sees as jammed, so the frame grows by the gutter instead.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 240 },
+        { id: 'a', type: 'text', x: 40, y: 40, width: 200, height: 80, text: 'a' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          within: 'g',
+          node: { id: 'b', type: 'text', text: 'b', width: 200, height: 80 },
+        },
+      ],
+    })
+
+    expect(result.geometry.find((entry) => entry.id === 'b')).toMatchObject({ x: 40, y: 160 })
+    expect(result.geometry.find((entry) => entry.id === 'g')).toMatchObject({ height: 280 })
+  })
+
   test('exactly one of id, within and all, at the schema', () => {
     const tool = createCanvasEditTool(makeDeps(new FakeDocumentStore()))
     const parse = (op: Record<string, unknown>) =>
@@ -1779,12 +2293,87 @@ describe('wb_canvas_edit — a node created without a height', () => {
     expect(node.height).toBe(needs)
   })
 
-  test('respects a height that was named, however small', async () => {
-    // "no height" and "a small height" are different inputs. Someone who
-    // asked for 40 gets 40 — the fade is the honest answer there.
-    const { node } = await addAndMeasure(LONG_JA, 40)
+  test('refuses a named height its text cannot fit, naming the height it needs', async () => {
+    // This used to keep the 40 — "no height" and "a small height" are
+    // different inputs — until the lane read what a model does with that:
+    // it names its neighbours' size to match them, three trials of three,
+    // and the sentence is cut where nothing it can see says so. Growing
+    // silently would put the box into whatever sits below it, so the
+    // answer is a refusal that carries the number.
+    const { needs } = await addAndMeasure(LONG_JA)
+    await expect(addAndMeasure(LONG_JA, 40)).rejects.toThrow(
+      new RegExp(`needs ${needs}px of height at width 260`),
+    )
+  })
 
-    expect(node.height).toBe(40)
+  test('the ratio measurer is a floor: a narrow font cannot pass a box the score reads as cut', async () => {
+    // The daemon measures with its real font and the lane's score with the
+    // ratio measurer every machine has, which reads wider; the one board
+    // the score charged after the refusal landed was one the daemon's font
+    // had let through. The tool takes the taller of the two, so what it
+    // accepts is what the score, and a narrower client font, would accept.
+    const hairline: MeasureText = (text, font) => ({
+      advanceWidth: text.length,
+      ascent: font.sizePx * 0.8,
+      descent: font.sizePx * 0.2,
+      lineGap: 0,
+    })
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+    const tool = createCanvasEditTool({
+      ...makeDeps(store),
+      textMeasurer: async () => ({ measure: hairline, measurableFamilies: new Set<string>() }),
+    })
+    const add = (height?: number) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'n',
+              type: 'text',
+              text: LONG_JA,
+              ...(height === undefined ? {} : { height }),
+            },
+          },
+        ],
+      })
+    const { needs } = await addAndMeasure(LONG_JA)
+    await expect(add(40)).rejects.toThrow(new RegExp(`needs ${needs}px`))
+    await add()
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]?.height).toBe(needs)
+  })
+
+  test('keeps a named height that holds the text', async () => {
+    const { needs } = await addAndMeasure(LONG_JA)
+    const { node } = await addAndMeasure(LONG_JA, needs + 8)
+    expect(node.height).toBe(needs + 8)
+  })
+
+  test('a patch that makes the text outgrow the box, or the box too short for it, is refused', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width: 260, height: 120, text: 'short' }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+    const patch = (fields: Record<string, unknown>) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', id: 'n', patch: fields }],
+      })
+    await expect(patch({ text: LONG_JA })).rejects.toThrow(/needs \d+px of height at width 260/)
+    await expect(patch({ height: 24 })).rejects.toThrow(/needs \d+px of height/)
+    // A patch that leaves the text fitting still applies.
+    await patch({ text: 'still short' })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]).toMatchObject({ text: 'still short', height: 120 })
   })
 
   test('does not shrink a short node below the default', async () => {
@@ -1803,7 +2392,9 @@ describe('node.patch and a node type that does not have the key', () => {
     x: 0,
     y: 0,
     width: 100,
-    height: 50,
+    // Tall enough for the heading a test below patches in: a text patch is
+    // refused when the box cannot hold the new text.
+    height: 80,
     text: 'hello',
   }
 

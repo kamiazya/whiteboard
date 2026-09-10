@@ -15,6 +15,7 @@ import type {
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
+  integerSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -62,8 +63,11 @@ const MAX_WAYPOINTS = 64
  * built to give: bends want a drag affordance, not a form.
  */
 export const visualPathFacetSchema = z.object({
+  // Integers, the way every other coordinate in the model is stored: the
+  // drag rounds before it writes, and a fractional anchor is the class that
+  // survives one session and vanishes on the next reload.
   waypoints: z
-    .array(z.object({ x: z.number().finite(), y: z.number().finite() }))
+    .array(z.object({ x: integerSchema, y: integerSchema }))
     .min(1)
     .max(MAX_WAYPOINTS),
 })
@@ -207,23 +211,6 @@ export const visualPlugin = definePlugin({
       // board-wide list of points would mean nothing.
       targets: ['edge'],
       schema: visualPathFacetSchema,
-      // A list of points has no control in the derived vocabulary, so this
-      // facet derives no payloads — and a generator that asks the registry
-      // what a facet accepts would cover it by nothing while still reading
-      // as covering "the edge facets". Declared, it draws a real bend.
-      //
-      // One bend and three: one is the shape a person places, and three is
-      // what makes the ORDER observable, which a single point cannot.
-      samples: [
-        { waypoints: [{ x: 140, y: 260 }] },
-        {
-          waypoints: [
-            { x: 90, y: 300 },
-            { x: 210, y: 300 },
-            { x: 260, y: 120 },
-          ],
-        },
-      ],
     }),
     defineFacet({
       name: 'shape',

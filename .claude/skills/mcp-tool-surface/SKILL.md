@@ -147,6 +147,16 @@ with every tool call, tool-error text, token and cost figure.
   and a coloured group painted over its members — on drawings the grader
   had passed, because the grader reads the store and a person reads the
   picture. A layout task without its picture has been half-graded.
+- **Read the `drawing` column before the picture.** Each board a write
+  task names is also scored by canvas-render's `scoreDrawing` (the
+  instrument `package-canvas-render.md` describes), and the run's line
+  prints every non-zero DEBT column by name — `overlaps 1 straddles 1
+  nearMisses 5` — with the full score under `drawing` in `--out`. A pass
+  with debt is a drawing the verifier accepted and a reader would not;
+  the column says which mistake, and `drawing-quality.test.ts`'s drafted
+  rows show what each looks like on a board. `--dry-run --out=<file>`
+  scores the fixture's own boards with no model call, which is how the
+  wiring is checked.
 - **Every read costs ~69k input tokens even at two calls.** The table is
   ~8.7k of that; the rest is the CLI's own system prompt. That is why the
   lane reports cost beside tokens, and why a change is judged on C1
