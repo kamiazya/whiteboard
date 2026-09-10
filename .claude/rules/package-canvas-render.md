@@ -1382,8 +1382,12 @@ ones and a tidy banding on left edges alone moved nothing (`nearMisses
 2`, before and after). A unit lined up by an earlier anchor is the truth
 for the later ones and never moves again; one centred that way keeps its
 centre off the grid if it must, which is the one exception the grid
-promise now states. Price: displacement +8.5% on the plain corpus, +4.4%
-grouped, every debt column unchanged. The grouped scoreboard's
+promise now states. A centre or far-edge snap that would put a unit inside
+a neighbour's margin yields, because the fixpoint loop otherwise drifts —
+the snap jams the unit, the overlap pass hops it away, the next iteration
+snaps it back (fast-check found three boxes drifting 128px a tidy). Price:
+displacement +10% on the plain corpus, +3% grouped, every debt column
+unchanged. The grouped scoreboard's
 `stillOverlapping` went 283 to 0 with this, its `unitTornApart` column
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).

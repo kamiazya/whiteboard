@@ -105,6 +105,17 @@ describe('band alignment by centre and far edge', () => {
     ])
   })
 
+  it('a far-edge snap that would jam a box into a third one is refused, so a second tidy moves nothing', () => {
+    // fast-check's shrunk counterexample for idempotence: n0's right edge
+    // is within a band of n2's, but lining them up puts n0 inside n1's
+    // margin; the overlap pass then hops it away, and the next iteration
+    // snaps it back — every tidy drifted the three 128px left. A centre or
+    // far-edge snap is cosmetic and separation is not, so the snap yields.
+    const nodes = [box('n0', 64, 0, 60, 40), box('n1', 0, 0, 60, 40), box('n2', 0, 0, 140, 40)]
+    const once = applyMoves(nodes, tidyNodes(nodes))
+    expect(tidyNodes(once)).toEqual([])
+  })
+
   it('a centred pair whose wide box is off the grid: the wide one takes the grid, the narrow one its centre', () => {
     const moves = tidyNodes([box('wide', 42, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
     expect(moves).toEqual([

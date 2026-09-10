@@ -220,9 +220,23 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
       unit.dy += delta
     }
   }
+  // A centre or far-edge snap is cosmetic and separation is not, so one
+  // that would put a unit inside a neighbour's margin yields. Without this
+  // the fixpoint loop drifts: the snap jams the unit, the overlap pass hops
+  // it away, and the next iteration snaps it back — an edge band can never
+  // do that, since a hop carries a unit out of its own band's reach, but a
+  // band measured against a third unit can.
+  const clearAfter = (unit: Unit, delta: number): boolean => {
+    const moved =
+      axis === 'x'
+        ? { ...unit.bbox, x: unit.bbox.x + delta }
+        : { ...unit.bbox, y: unit.bbox.y + delta }
+    return units.every((other) => other === unit || !overlapsWithMargin(moved, other.bbox))
+  }
   const lined = new Set<Unit>()
   for (const fraction of axis === 'x' ? [0, 0.5, 1] : [0, 0.5]) {
     const anchor = (u: Unit) => edge(u) + extent(u) * fraction
+    const guarded = fraction !== 0
     for (const band of bandsBy(units, anchor)) {
       if (band.length < 2) continue
       // An immobile member is the band's truth, and so is one an earlier
@@ -232,13 +246,22 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
       // puts its first member's edge on the grid and follows it.
       const fixed = band.find((u) => !u.movable || lined.has(u))
       const first = band[0] as Unit
-      if (fixed === undefined) shift(first, roundToGrid(edge(first)) - edge(first))
+      if (fixed === undefined) {
+        const toGrid = roundToGrid(edge(first)) - edge(first)
+        if (!guarded || clearAfter(first, toGrid)) shift(first, toGrid)
+      }
       const target = anchor(fixed ?? first)
       for (const unit of band) {
         if (!unit.movable || lined.has(unit)) continue
-        shift(unit, target - anchor(unit))
+        const delta = target - anchor(unit)
+        if (guarded && delta !== 0 && !clearAfter(unit, delta)) continue
+        shift(unit, delta)
       }
-      for (const unit of band) lined.add(unit)
+      // Lined up means sharing the anchor with SOMETHING: a band whose
+      // every other snap yielded leaves its first member alone, and alone
+      // it takes the grid below like any other.
+      const atTarget = band.filter((u) => anchor(u) === target)
+      if (atTarget.length >= 2) for (const unit of atTarget) lined.add(unit)
     }
   }
   for (const unit of units) {
