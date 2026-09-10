@@ -1325,6 +1325,145 @@ describe('wb_canvas_edit — region.set', () => {
     const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
     expect(canvas.edges.map((edge) => edge.id)).toEqual(['smuggled'])
   })
+
+  test('a group added without a position is placed around the members it is set to, which stay put', async () => {
+    // The lane's wrap-a-chain task: boxes drawn in a row, then a group
+    // with no geometry, then region.set. The group used to land at the
+    // cursor and pull the row into a column inside it; every trial then
+    // spent two calls putting the boxes back and sizing the frame by hand.
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'q3', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'Q3' }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'a', type: 'text', x: 0, y: 300, width: 200, height: 80, text: 'A' },
+        },
+        {
+          op: 'node.add',
+          node: { id: 'b', type: 'text', x: 300, y: 300, width: 200, height: 80, text: 'B' },
+        },
+        {
+          op: 'node.add',
+          node: { id: 'c', type: 'text', x: 600, y: 300, width: 200, height: 80, text: 'C' },
+        },
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pipeline' } },
+        { op: 'region.set', within: 'g', nodes: ['a', 'b', 'c'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const at = (id: string) => {
+      const n = canvas.nodes.find((node) => node.id === id) as SpatialNode
+      return [n.x, n.y, n.width, n.height]
+    }
+    expect(at('a')).toEqual([0, 300, 200, 80])
+    expect(at('b')).toEqual([300, 300, 200, 80])
+    expect(at('c')).toEqual([600, 300, 200, 80])
+    // The members' bounds plus the gutter on every side.
+    expect(at('g')).toEqual([
+      -PLACEMENT_GUTTER_PX,
+      300 - PLACEMENT_GUTTER_PX,
+      800 + 2 * PLACEMENT_GUTTER_PX,
+      80 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+    expect(result.geometry.find((entry) => entry.id === 'g')).toEqual({
+      id: 'g',
+      x: -PLACEMENT_GUTTER_PX,
+      y: 300 - PLACEMENT_GUTTER_PX,
+      width: 800 + 2 * PLACEMENT_GUTTER_PX,
+      height: 80 + 2 * PLACEMENT_GUTTER_PX,
+    })
+  })
+
+  test('a group placed around its members keeps a size it was given, and never a default one', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
+        },
+        { op: 'node.add', node: { id: 'g', type: 'group', label: 'Wide', width: 1000 } },
+        { op: 'region.set', within: 'g', nodes: ['a'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const g = canvas.nodes.find((node) => node.id === 'g') as SpatialNode
+    expect([g.x, g.y, g.width, g.height]).toEqual([
+      100 - PLACEMENT_GUTTER_PX,
+      100 - PLACEMENT_GUTTER_PX,
+      1000,
+      80 + 2 * PLACEMENT_GUTTER_PX,
+    ])
+  })
+
+  test('a group placed around its members refuses to swallow a bystander, naming it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+        { id: 'between', type: 'text', x: 300, y: 0, width: 200, height: 80, text: 'not mine' },
+        { id: 'c', type: 'text', x: 600, y: 0, width: 200, height: 80, text: 'C' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          { op: 'node.add', node: { id: 'g', type: 'group', label: 'Pair' } },
+          { op: 'region.set', within: 'g', nodes: ['a', 'c'] },
+        ],
+      }),
+    ).rejects.toThrow(/"between"/)
+  })
+
+  test('a group placed around members that sit in a frame nests inside it', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        { id: 'outer', type: 'group', x: 0, y: 0, width: 1000, height: 400, label: 'Outer' },
+        { id: 'a', type: 'text', x: 100, y: 100, width: 200, height: 80, text: 'A' },
+        { id: 'b', type: 'text', x: 400, y: 100, width: 200, height: 80, text: 'B' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      mode: 'apply',
+      ops: [
+        { op: 'node.add', node: { id: 'inner', type: 'group', label: 'Inner' } },
+        { op: 'region.set', within: 'inner', nodes: ['a', 'b'] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    const inner = canvas.nodes.find((node) => node.id === 'inner') as SpatialNode
+    expect([inner.x, inner.y, inner.width, inner.height]).toEqual([60, 60, 580, 160])
+  })
 })
 
 /**

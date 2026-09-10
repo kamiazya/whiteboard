@@ -779,6 +779,25 @@ trials: tool errors 3 to 0, calls 4.67 to 4.33 a trial, every board
 debt-free — each trial added the group and `region.set` in one batch
 where the round before wrote `within: null` or the group's own id on it.
 
+**The eighth reading (2026-09-10).** The whole lane with the `within`
+description: 24 of 24 pass, tool errors 5 to 0, `debtFreePowK` 0.8, two
+trials owing. One was a model's arithmetic: three frames whose centres
+sit 20px apart, drawn that way and kept by tidy (`nearMisses 2`), which
+no affordance answers yet. The other was the surface's, and every
+wrap-a-chain trial paid for it: each sent one batch — three boxes in a
+row, two arrows, a group with no geometry, `region.set`, `tidy` — and then
+two more calls putting the boxes back where it had drawn them and sizing
+the frame by hand, since the group had landed at the cursor's default
+spot and `region.set` had pulled the row into a column inside it. The
+hand-sized frame is where the one `crampedMembers` came from. So a group
+added in the batch with no position, still holding nothing, is placed
+around the members it is set to — their bounds plus the gutter, never
+smaller than a size it was given, refused when the box would swallow a
+bystander and nested when a frame already holds them — and `region.set`'s
+description says so. Rung 1: +104 bytes on `wb_canvas_edit`. Rung 3 on
+the task, three trials: calls 5.0 to 3.0, one batch each, every board
+debt-free.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
