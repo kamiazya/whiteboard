@@ -709,6 +709,28 @@ model choosing zero crossings over a loop, given where the model put the
 gateway — a placement finding, recorded beside the rejected router
 matrix so the search is not traced again.
 
+**The sixth reading: the whole lane on the tidy-inside-frames tree
+(2026-09-10).** 24 of 24 pass; the three board-editing tasks that owed a
+trial each are debt-free three of three; `debtFreePowK` stays at 0.7
+because three OTHER tasks now owe one trial each, and a whole-lane
+reading is a different set of drawings every time. Two of the three were
+the same finding, and it was the instrument's: a flowchart whose 200-wide
+decision box is centred on a 160-wide column (`nearMisses 4`), and a
+220-wide sentence box centred under a 200-wide one (`nearMisses 1`). Both
+are aligned on the anchor the drawer chose, and the column judged the
+left edge alone. It now judges the nearest of the three anchors on an
+axis (left/centre/right, top/middle/bottom), and only boxes against boxes
+and frames against frames — the first draft of that charged a box for
+sitting 6px off the centre of the 800-wide frame beside it. Rescored, both
+boards read 0; the corpus moved as pinned (`architecture/drafted` 5 to 3,
+`sequence/drafted` 2 to 5, each with its reason). The third is a router
+finding for the next reading: on one architecture trial a client's edge
+left its box's top, hooked, and cut back through its own box on the way
+down (`edgeThroughNode 1`, 63px of its own source) — the search's
+endpoint-body-ink tier sits below crossings, so a route through its own
+box outranked a crossing. Whether that order is right is a population
+question for the 2000-layout sweep, not a reading of one board.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
