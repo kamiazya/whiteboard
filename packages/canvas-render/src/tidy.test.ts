@@ -126,6 +126,32 @@ describe('band alignment by centre and far edge', () => {
     expect(tidyNodes(applyMoves(nodes, moves))).toEqual([])
   })
 
+  it('a far-edge band does not follow a partner the overlap pass is about to move', () => {
+    // fast-check's shrunk counterexample: n3's far edge lined up with n1
+    // while n1 stood inside n0's margin; the overlap pass then hopped n1
+    // away and n3 was emitted at x=61, off the grid and beside nothing.
+    const raw = [
+      [0, 0, 140, 40],
+      [156, 0, 41, 40],
+      [156, 60, 100, 40],
+      [36, 0, 140, 40],
+      [0, 0, 41, 40],
+      [0, 0, 41, 40],
+    ]
+    const nodes = raw.map(([x, y, w, h], i) => box(`n${i}`, x as number, y as number, w, h))
+    const after = applyMoves(nodes, tidyNodes(nodes))
+    const orphans = after.filter((n) => {
+      const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
+      const lined = after.some(
+        (o) =>
+          o.id !== n.id &&
+          (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
+      )
+      return n.x % 8 !== 0 && !lined
+    })
+    expect(orphans).toEqual([])
+  })
+
   it('a centred pair whose wide box is off the grid: the wide one takes the grid, the narrow one its centre', () => {
     const moves = tidyNodes([box('wide', 42, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
     expect(moves).toEqual([

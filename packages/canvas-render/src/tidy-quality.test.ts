@@ -174,12 +174,12 @@ describe('tidy quality scoreboard', () => {
       // tidy's own output as jammed (a 25px gap fits neither a label nor an
       // arrow's runway): every separation is a grid step wider, so the same
       // corpus is pushed 23% further and its worst case 55% further.
-      // 63515 -> 69869 and 1939 -> 1942 when banding grew from edges to the
+      // 63515 -> 69515 and 1939 -> 1941 when banding grew from edges to the
       // centre and far edge as well: a unit alone at its edge but a few px
       // off a neighbour's centre now moves to it, unless that would jam it
       // into a third unit, in which case the snap yields to separation.
-      movedNodes: 1942,
-      displacement: 69869,
+      movedNodes: 1941,
+      displacement: 69515,
       maxDisplacement: 725,
     })
   })
@@ -273,8 +273,8 @@ describe('tidy quality scoreboard', () => {
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
       movedNodes: 1958,
-      // 139357 -> 144049 with banding on centres and far edges (above).
-      displacement: 144049,
+      // 139357 -> 143650 with banding on centres and far edges (above).
+      displacement: 143650,
     })
   })
 })

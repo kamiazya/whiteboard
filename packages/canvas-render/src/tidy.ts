@@ -246,11 +246,17 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
       // puts its first member's edge on the grid and follows it.
       const fixed = band.find((u) => !u.movable || lined.has(u))
       const first = band[0] as Unit
+      // A partner inside a neighbour's margin is about to be hopped away by
+      // the overlap pass, and a unit lined up to it this iteration would be
+      // left off the grid, lined up with nothing. So a centre or far-edge
+      // band follows only a partner that is standing still.
+      const partner = fixed ?? first
+      if (guarded && !clearAfter(partner, 0)) continue
       if (fixed === undefined) {
         const toGrid = roundToGrid(edge(first)) - edge(first)
         if (!guarded || clearAfter(first, toGrid)) shift(first, toGrid)
       }
-      const target = anchor(fixed ?? first)
+      const target = anchor(partner)
       for (const unit of band) {
         if (!unit.movable || lined.has(unit)) continue
         // A centre between a box of each parity is a half pixel; the edge
