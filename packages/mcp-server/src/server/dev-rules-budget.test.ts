@@ -261,7 +261,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // all, and the fact that a guessed ceiling of 4 shipped and CI's stress
 // lane found the board needing 5. A ceiling with no measurement beside it
 // is the next session's guess as well.
-const CANVAS_RENDER_BUDGET = 121
+// 124 for the THIRD axis (ADR-0033, `quality/facet-score.ts`): what a board
+// says with appearance rather than with position, and the first reading of
+// it — every board in the corpus, the hand-drawn references included, spends
+// one treatment and owes all 22 constructs. A reader who does not know that
+// will read the scoreboard's zeroes as health.
+const CANVAS_RENDER_BUDGET = 124
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
