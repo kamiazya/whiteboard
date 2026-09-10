@@ -802,6 +802,24 @@ description says so. Rung 1: +104 bytes on `wb_canvas_edit`. Rung 3 on
 the task, three trials: calls 5.0 to 3.0, one batch each, every board
 debt-free.
 
+**The ninth reading (2026-09-10).** The whole lane with `region.set`
+placing an unpositioned group around its members and tidy banding on
+centres: 24 of 24 pass, `debtFreePowK` 0.9, three tool errors. The one
+owing trial was the layered board again, its frames two pixels off
+centre after a tidy — the server the lane had started ran the banding
+before its fixpoint guard, and the guarded tidy reads that board at no
+debt. The errors were two shapes. Two trials wrote `within: null` on the
+group's own `node.add`, the description notwithstanding: a model saying
+"no group" as null is not wrong, and the refusal cost the whole call, so
+`within` now takes null as none. The third was the `node.add` twin of the
+eighth reading's finding — a group added with no geometry, then its
+members positioned and `within` it: the group had landed at the cursor
+(x=440, beside the first) and the member at x=40 was refused as before
+its top-left. A group this batch placed at the cursor is now placed
+around what goes in it, growing in every direction as members arrive,
+with the same wall and nesting rules as `region.set`, and `within`'s
+description says so. Rung 1: +107 bytes on `wb_canvas_edit`.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

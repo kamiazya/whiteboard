@@ -234,7 +234,7 @@ Every one of these is an op inside a `wb_canvas_edit` call, and several can trav
 | protect a node/edge from further edits (by anyone) | `{ op: "node.lock", id, locked: true }` / `{ op: "edge.lock", ... }` |
 | re-run automatic layout | `{ op: "tidy" }` (optionally scoped) |
 | make a group's contents match a list exactly | `{ op: "region.set", within: groupId, nodes, edges }` |
-| put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", label } }` with no position, then `region.set` naming them — the group is placed around them where they sit, gutter included; `within` on a node.add only places that node inside a group that already exists (or was added earlier in the batch) |
+| put boxes that already exist in a NEW group | `{ op: "node.add", node: { type: "group", label } }` with no position, then `region.set` naming them — the group is placed around them where they sit, gutter included. The same holds for members added with `within` after it: a group added with no position is placed around what goes in it, wherever you put them. `within` on a node.add places that node inside a group that already exists (or was added earlier in the batch); `within: null` means no group |
 | structure or intent is wrong | create a fresh document with a `document.create` op and redraw |
 
 **`region.set` is the one op that deletes what you did NOT mention.** It
