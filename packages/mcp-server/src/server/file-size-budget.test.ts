@@ -349,7 +349,14 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // scene, its drag layers and its overlays, and the paper it paints is the
   // palette's surface. Threading is this file's job; there is nothing here
   // to move.
-  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2780,
+  // +8 NET for the bend affordance, over a block that started at 53. What
+  // came out: the handles are `EdgeBendHandles.tsx`, their wiring to the
+  // gesture machine is `EdgeBendLayer.tsx`, and `clientPointToRootLocal`
+  // moved to `lib/spatial/viewport.ts` — an overlay taking its own press
+  // needs the same client-to-root mapping, and two of them is how the
+  // pointer and the geometry come to disagree about where a press landed.
+  // The eight that remain are the mount plus the selected edge it needs.
+  'apps/web/src/components/spatial-editor/SpatialEditor.tsx': 2788,
 }
 
 describe('file-size budget: files stay under 800 lines (shrink-only grandfather)', () => {

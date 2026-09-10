@@ -143,8 +143,18 @@ Three decisions worth not re-litigating:
 
 The derived editor answers `unsupported` for it — a list of points is
 outside `deriveFacetForm`'s vocabulary — so the inspector shows the bends
-read-only. That is the form layer's honest signal rather than a gap: bends
-want a drag affordance, which is its own slice.
+read-only. That is the form layer's honest signal rather than a gap, and
+the affordance a person uses is a DRAG on the canvas
+(`apps/web`'s `EdgeBendHandles`), not a form.
+
+One thing that surface measured belongs here, because it is a property of
+where a bend LIVES rather than of the editor: the midpoint of a run is
+already spoken for. `edgeLabelAnchor` draws an edge's label there and
+double-pressing there opens its editor, so the add-a-bend ghosts sit at a
+third and two thirds of each run instead. Placed at the midpoint they
+swallowed the second press and failed every case in
+`edge-label-edit.browser.test.tsx` while the bend tests stayed green — two
+affordances aiming at the same pixel.
 
 The same `unsupported` answer is why the facet DECLARES `samples`. Anything
 generating payloads off the registry (canvas-render's live-drag parity

@@ -105,6 +105,7 @@ import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import {
   canvasToScreen,
+  clientPointToRootLocal,
   fitViewportToBoxes,
   type Point,
   panBy,
@@ -126,6 +127,7 @@ import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
+import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
@@ -392,11 +394,6 @@ function travelled(from: Point, to: Point): number {
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const ZOOM_WHEEL_FACTOR = 1.1
-function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
-  const rect = root.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
-}
-
 /**
  * Pointer capture is best-effort chrome, not a correctness requirement: a
  * browser can reject it (e.g. `NotFoundError` for a pointerId the platform
@@ -599,6 +596,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
     )
+    const selectedEdge =
+      selectedEdgeId === null ? undefined : canvas.edges.find((edge) => edge.id === selectedEdgeId)
     const {
       commentPlacementObstacles,
       hitTestComment,
@@ -2638,6 +2637,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             )}
             {selectedEdgeId !== null && (
               <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
+            )}
+            {selectedEdge !== undefined && (
+              <EdgeBendLayer
+                edge={selectedEdge}
+                path={edgePathOf(selectedEdge.id) ?? []}
+                viewport={viewport}
+                begin={beginOverlayGesture}
+                dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
+              />
             )}
             {gestureState.kind === 'connecting' && (
               <ConnectOverlay
