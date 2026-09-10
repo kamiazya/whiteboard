@@ -269,7 +269,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
           fail(
             index,
             opName,
-            `"${id}" is not a group on the canvas; within names one to place inside`,
+            `"${id}" is not a group on the canvas; within names one to place inside — to wrap boxes that already exist in a new group, add the group and then region.set`,
           )
         }
         return group

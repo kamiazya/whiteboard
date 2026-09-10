@@ -179,9 +179,13 @@ describe('what the tool table costs to read', () => {
       // description alone moved nothing (3 of 3 still cut), so a height too
       // short for its text is now refused with the number, and the
       // description says so.
+      // +124 for `within` on node.add saying what a NEW group over boxes
+      // that already exist takes (add it, then region.set): the lane's
+      // wrap-a-chain trials wrote `within: null` or the group's own id on
+      // the group and found region.set on a second call.
       wb_canvas_edit: {
-        visibleBytes: 12323,
-        wireBytes: 35457,
+        visibleBytes: 12447,
+        wireBytes: 35581,
         descriptionWords: 169,
         parameters: 147,
         undescribed: 119,
@@ -380,8 +384,9 @@ describe('what the tool table costs to read', () => {
       // +1,045 for the box sizes described where the stored schema declares
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
-      visibleBytes: 34982,
-      wireBytes: 108188,
+      // +124 for `within` on node.add (see wb_canvas_edit).
+      visibleBytes: 35106,
+      wireBytes: 108312,
       parameters: 268,
       undescribed: 187,
     })
