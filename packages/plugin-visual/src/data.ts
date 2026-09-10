@@ -1,12 +1,23 @@
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import type { ExtensionFacets, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  createFacetRegistry,
+  defineFacet,
+  definePlugin,
+  namespacedIdSchema,
+} from '@kamiazya/whiteboard-facet-engine'
+import type {
+  EdgeRoutingStyle,
+  ExtensionFacets,
+  LineJumps,
+  SpatialCanvas,
+} from '@kamiazya/whiteboard-model'
 import {
   type edgeRoutingSchema,
   edgeRoutingStyleSchema,
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { VISUAL_THEMES } from './themes.js'
 
 /**
  * `visual.edges/v0` — how this canvas's edges are drawn. The facet-shaped
@@ -93,6 +104,22 @@ export type VisualTextFacet = z.infer<typeof visualTextFacetSchema>
 export const VISUAL_TEXT_KEY = 'visual.text/v0'
 
 /**
+ * `visual.theme/v0` — how this canvas is DRAWN, as the id of a registered
+ * theme asset (ADR-0030 decision 2): `visual.sketch`, `visual.neon`, or a
+ * theme another plugin registers. The payload never carries raw styles; the
+ * asset supplies the tokens, and the registry refuses an id nobody
+ * registered at write time. ABSENT is the bundled look, which is why the
+ * picker's first segment is `null` rather than a stored `'default'`.
+ */
+export const visualThemeFacetSchema = z.object({
+  theme: namespacedIdSchema,
+})
+
+export type VisualThemeFacet = z.infer<typeof visualThemeFacetSchema>
+
+export const VISUAL_THEME_KEY = 'visual.theme/v0'
+
+/**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
  * through the same registry, validation and ordering as any deployment's
  * added plugins, and a deployment may disable it.
@@ -158,6 +185,28 @@ export const visualPlugin = definePlugin({
       },
     }),
     defineFacet({
+      name: 'theme',
+      displayName: 'Theme',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: visualThemeFacetSchema,
+      assetRefs: { theme: 'themes' },
+      editor: {
+        fields: {
+          theme: {
+            widget: 'segmented',
+            label: 'Theme',
+            quick: true,
+            options: [
+              { value: null, label: 'Default' },
+              { value: 'visual.sketch', label: 'Sketch' },
+              { value: 'visual.neon', label: 'Neon' },
+            ],
+          },
+        },
+      },
+    }),
+    defineFacet({
       name: 'symbol',
       displayName: 'Symbol',
       version: 'v0',
@@ -169,6 +218,7 @@ export const visualPlugin = definePlugin({
       schema: visualSymbolFacetSchema,
     }),
   ],
+  assets: { themes: VISUAL_THEMES },
 })
 
 export const bundledPlugins = [visualPlugin]
@@ -214,6 +264,60 @@ export function resolveCanvasEdgeStyle(
     }
   }
   return extension?.edgeRouting ?? {}
+}
+
+/**
+ * What this canvas's edges default to where its facet is silent: the theme
+ * it names (ADR-0030 decision 4 — a theme's `edgeRouting` fills in only
+ * where `visual.edges` says nothing), else the built-in straight line, and
+ * never a jump. A theme the registry does not carry defaults like none, the
+ * way the renderer degrades on it.
+ *
+ * The write path canonicalises against THIS, not against the built-in: a
+ * choice equal to the canvas's default leaves no trace, and a choice that
+ * differs from it is recorded even when it is the built-in default. Judged
+ * against the built-in alone, choosing Straight on an orthogonal-by-theme
+ * board deleted the facet, and the theme drew orthogonal anyway.
+ */
+export function resolveCanvasEdgeDefaults(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const themeId = resolveCanvasTheme(canvas, registry)
+  const themed = themeId === undefined ? undefined : registry.themeAsset(themeId)
+  const routing = edgeRoutingStyleSchema.safeParse(themed?.defaults.edgeRouting)
+  return { style: routing.success ? routing.data : 'straight', lineJumps: 'none' }
+}
+
+/** The routing and jumps this canvas draws with under its own theme: the explicit facet, field by field, over `resolveCanvasEdgeDefaults`. */
+export function resolveEffectiveCanvasEdgeStyle(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): { readonly style: EdgeRoutingStyle; readonly lineJumps: LineJumps } {
+  const explicit = resolveCanvasEdgeStyle(canvas, registry)
+  const defaults = resolveCanvasEdgeDefaults(canvas, registry)
+  return {
+    style: explicit.style ?? defaults.style,
+    lineJumps: explicit.lineJumps ?? defaults.lineJumps,
+  }
+}
+
+/**
+ * The one read path for "which theme does this canvas name": the
+ * `visual.theme/v0` facet when it resolves, else undefined — the bundled
+ * look. Answers the ID only; whether the id resolves to an asset is the
+ * renderer's question, and an id this deployment does not carry degrades
+ * there, never here.
+ */
+export function resolveCanvasTheme(
+  canvas: SpatialCanvas,
+  registry: FacetRegistry = bundledFacetRegistry,
+): string | undefined {
+  const stored = canvas['x-whiteboard']?.facets?.[VISUAL_THEME_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_THEME_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  return visualThemeFacetSchema.parse(resolution.value).theme
 }
 
 /**

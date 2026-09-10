@@ -29,7 +29,10 @@ import { overlayReferences, referenceSeamsFromWire } from '@kamiazya/whiteboard-
 // `document is not defined` before a single message is handled.
 
 import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
-import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
+import {
+  ensureViewerFontLoaded,
+  registerFontBytes,
+} from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveCanvasSymbol } from '@kamiazya/whiteboard-plugin-visual'
@@ -46,6 +49,7 @@ import {
   type MarkdownRenderResponse,
   type OutlineRequest,
   type OutlineResponse,
+  type RegisterFaceRequest,
 } from './layout-worker-protocol.js'
 import { layoutMarkdownOutline, renderMarkdownPreview } from './render-preview.js'
 import { readRenderEntry, worthStoring, writeRenderEntry } from './render-store.js'
@@ -104,6 +108,8 @@ async function decodeSnapshot(bytes: Uint8Array): Promise<SpatialCanvas> {
 // fallback metrics, which is exactly the divergence this worker must not
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
+/** Every theme face posted so far, settled — what a layout waits on before it measures. */
+let facesReady: Promise<unknown> = Promise.resolve()
 
 /**
  * Answers from the persistent tier when it holds this key, and says whether
@@ -140,9 +146,26 @@ function remember(
 }
 
 self.onmessage = async (
-  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest | OutlineRequest>,
+  event: MessageEvent<
+    | LayoutRequest
+    | MarkdownRailRequest
+    | MarkdownRenderRequest
+    | OutlineRequest
+    | RegisterFaceRequest
+  >,
 ) => {
   const request = event.data
+  if (request.type === 'register-face') {
+    // Chained, and awaited by every later message below: an async handler
+    // returns at its first await, so the next message would otherwise run
+    // while `face.load()` is still pending and measure with the bundled
+    // family — `registerFontBytes` records the family only once the face
+    // is usable.
+    facesReady = facesReady.then(() => registerFontBytes(request.family, request.bytes))
+    await facesReady
+    return
+  }
+  await facesReady
   // Before the font gate and before any work: a stored answer is the answer,
   // and the gate exists to stop a render being MEASURED with the wrong face
   // rather than to re-check one already drawn with the right one.
@@ -313,6 +336,7 @@ self.onmessage = async (
     const { svg, bounds, scene, anchors } = renderCanvasToSvgWith(canvas, {
       measure,
       theme: request.theme,
+      style: request.style,
       references,
       resolveReference: overlayReferences({
         content: references?.resolveReference,

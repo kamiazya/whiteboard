@@ -57,7 +57,6 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_workspace_edit',
   'wb_document_get',
   'wb_document_search',
-  'wb_document_resolve',
   'wb_document_list',
   'canvas_view',
   'wb_pairing_link_create',
@@ -80,7 +79,6 @@ export const COVERED_TOOLS = [
   'wb_scene_render',
   'wb_document_get',
   'wb_document_list',
-  'wb_document_resolve',
 ] as const
 
 // wb_pairing_link_create's smoke coverage is deliberately its error path

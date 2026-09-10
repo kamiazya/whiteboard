@@ -85,7 +85,26 @@ export function InspectorSegment({ open, onToggle, tabs }: InspectorSegmentProps
       role="group"
       aria-label="Inspect this document"
       data-testid="inspector-segment"
-      className="border-border flex shrink-0 items-center gap-0.5 rounded-lg border p-0.5"
+      // Grouped by PROXIMITY, with nothing drawn around it.
+      //
+      // The outline this used to carry, plus its padding, made the group
+      // 50px on a coarse pointer against a 48px row: it crossed the row's
+      // top edge and landed on the header's bottom rule, two lines a pixel
+      // apart. `inspector-segment-fit.browser.test.tsx` computes that
+      // footprint from the fine render, since no test can produce a coarse
+      // one.
+      //
+      // A GROUND instead of the outline was tried and measured worse: the
+      // pressed member's `bg-accent` and any `muted` ground come from the
+      // same token family, so the ground swallows the one state a toggle
+      // has to show. Against the row it is 0.97 on 1.0 (light) and 0.269 on
+      // 0.145 (dark); against `bg-muted/50` it is 0.97 on ~0.985 and 0.269
+      // on ~0.207 — about half the separation, in both themes.
+      //
+      // So the group spends no ink at all. What still says these belong
+      // together is that they touch (`gap-0.5`) while the divider beside
+      // them does not, plus the `role="group"` a reader hears.
+      className="flex shrink-0 items-center gap-0.5"
     >
       {INSPECTOR_ORDER.filter((kind) => tabs[kind] !== undefined).map((kind) => {
         const { count } = tabs[kind] as InspectorTabState

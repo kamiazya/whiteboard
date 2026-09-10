@@ -240,5 +240,13 @@ describe('GET /api/debug', () => {
     })
 
     expect(res.status).toBe(404)
+    // JSON, not Hono's plain-text 404: a caller parsing the body to find out
+    // why gets a SyntaxError otherwise, which is the shape the files router
+    // shipped until #1521. `route-refusal-shapes.grit` is the rung that stops
+    // a new one being written; this is the one that stops this one regressing.
+    await expect(res.json()).resolves.toEqual({
+      error: 'not_found',
+      message: 'Debug endpoint is not enabled',
+    })
   })
 })

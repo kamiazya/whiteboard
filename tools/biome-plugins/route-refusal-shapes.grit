@@ -1,0 +1,41 @@
+language js
+
+// Executable half of "a daemon route refuses in JSON", the rule the route
+// fuzz lanes enforce at RUNTIME (a plain-text body is a failure there).
+// Guarded by .claude/scripts/biome-plugin.test.mjs, which reads the rules OUT
+// OF THIS FILE and requires the bad fixture to reach each one.
+//
+// `c.notFound()` is Hono's built-in 404 and answers `text/plain`. Every
+// refusal under `/api/` in this daemon is a JSON object with an `error` code,
+// so a caller parsing the body gets a SyntaxError instead of the reason —
+// which is how a missing file came to answer plain text while every other
+// refusal on the same router answered JSON (fixed in #1521, found by the
+// fuzz lane rather than by a reader).
+//
+// SCOPED in biome.json to packages/mcp-server/src/server/routes/**, and it
+// has to be: `c.notFound()` is CORRECT three times outside that directory,
+// and a rule reaching them would flag working code.
+//
+//   - `app.ts`'s `/.well-known/oauth-protected-resource` pair answers a bare
+//     404 by design (RFC 9728 discovery; the fuzz lane's ledger skips them
+//     for the same reason).
+//   - `app.ts`'s two UI catch-alls (`app.get('*')`) serve a browser, not an
+//     API client, and a reserved UI path 404s with no body on purpose.
+//
+// What this rule deliberately does NOT ban, so the scope stays honest rather
+// than exempted: `c.text` and `c.html` inside `routes/`. The OAuth approval
+// page is HTML by design and its body-limit error is `c.text('Payload too
+// large', 413)` on a browser-facing endpoint. Only the built-in 404 is
+// unambiguous — nothing under `/api/` wants it.
+//
+// The receiver is not constrained: the Hono context is `c` at every site
+// here, and keying on the name would buy nothing while missing a handler
+// that spells it otherwise. Measured 0 non-Hono `.notFound()` calls in the
+// scoped directory.
+`$c.notFound()` where {
+  register_diagnostic(
+    span = $c,
+    message = "c.notFound() answers text/plain, and every refusal under /api/ in this daemon is JSON: a caller parsing the body gets a SyntaxError instead of the reason. Answer c.json({ error: 'not_found', message }, 404) instead.",
+    severity = "error"
+  )
+}

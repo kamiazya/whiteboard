@@ -34,16 +34,32 @@ export interface Errand {
   readonly name: string
   /** How many documents the corpus seeds before this errand runs. */
   readonly seedDocuments: number
+  /** What kind the seeded documents are; spatial unless the errand says. */
+  readonly seedKind?: 'spatial' | 'markdown'
   /** What the errand is FOR, in the caller's terms rather than the tool's. */
   readonly run: (context: ErrandContext) => Promise<void>
 }
 
+/**
+ * A refused call is a THROWN one here. The scoreboard counts calls, and a
+ * refusal is a call that did nothing — an errand that keeps counting past
+ * one reports itself as cheap while achieving nothing, which is how the
+ * tag errand measured a refused write for a week: its payload used a key
+ * the tool never accepted, and the count was 1 all the same.
+ */
 const call = async (
   context: ErrandContext,
   name: string,
   args: Record<string, unknown>,
-): Promise<void> => {
-  await context.client.callTool({ name, arguments: args })
+): Promise<Awaited<ReturnType<ErrandContext['client']['callTool']>>> => {
+  const result = await context.client.callTool({ name, arguments: args })
+  if (result.isError) {
+    const text = (result.content as { type?: string; text?: string }[] | undefined)?.find(
+      (block) => block.type === 'text',
+    )?.text
+    throw new Error(`${name} refused: ${text ?? 'no message'}`)
+  }
+  return result
 }
 
 export const MCP_ERRAND_CORPUS: readonly Errand[] = [
@@ -58,17 +74,14 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     name: 'author a canvas of 8 nodes and 6 edges',
     seedDocuments: 0,
     run: async (context) => {
-      const created = await context.client.callTool({
-        name: 'wb_workspace_edit',
-        arguments: {
-          workspaceId: context.workspaceId,
-          // Workspaces are never materialised implicitly, so a first
-          // document in a fresh workspace carries this flag rather than
-          // costing a separate call. Without it the create fails loudly,
-          // which is the design and not a quirk of the fixture.
-          createWorkspace: true,
-          ops: [{ op: 'document.create', path: 'drawing', kind: 'spatial' }],
-        },
+      const created = await call(context, 'wb_workspace_edit', {
+        workspaceId: context.workspaceId,
+        // Workspaces are never materialised implicitly, so a first
+        // document in a fresh workspace carries this flag rather than
+        // costing a separate call. Without it the create fails loudly,
+        // which is the design and not a quirk of the fixture.
+        createWorkspace: true,
+        ops: [{ op: 'document.create', path: 'drawing', kind: 'spatial' }],
       })
       const documentId = documentIdOf(created)
       const ops = [
@@ -98,6 +111,49 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     },
   },
   {
+    // Axis A on the one DECLARATIVE op: a group's contents made to match a
+    // list. One call, because the group, its members (node.add with
+    // `within`) and the reconciliation ride the same batch; the price
+    // column is what that payload costs, which is what any change to the
+    // op's shape is judged against.
+    name: 'make a group hold exactly three boxes',
+    seedDocuments: 1,
+    run: async (context) => {
+      await call(context, 'wb_canvas_edit', {
+        workspaceId: context.workspaceId,
+        documentId: context.documentIds[0],
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'g',
+              type: 'group',
+              label: 'Clients',
+              x: 0,
+              y: 600,
+              // Too narrow for three default-size boxes in a row on purpose:
+              // the third wraps and the group grows to hold it, which is
+              // the path a model without geometry actually takes.
+              width: 700,
+              height: 300,
+            },
+          },
+          ...[
+            { id: 'cli', text: 'CLI' },
+            { id: 'web', text: 'Web app' },
+            { id: 'mobile', text: 'Mobile app' },
+          ].map((box) => ({
+            op: 'node.add' as const,
+            node: { id: box.id, type: 'text' as const, text: box.text },
+            within: 'g',
+          })),
+          { op: 'region.set', within: 'g', nodes: ['cli', 'web', 'mobile'] },
+        ],
+      })
+    },
+  },
+  {
     // Axis B, reads. `wb_document_list` answers with METADATA only — id,
     // path, name, kind, updatedAt, shadowed — so the content of five
     // documents genuinely needs a second call; it no longer needs five.
@@ -113,14 +169,18 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
   },
   {
     // Axis B, writes: one call, because `wb_facet_set` takes `documentIds`
-    // and one shared payload.
+    // and one shared payload. Markdown documents, because tags are OKF
+    // frontmatter and a canvas has none; and the errand's shape (`add`,
+    // not the whole list) is what lets one payload tag five documents
+    // that each already carry tags of their own.
     name: 'tag 5 documents',
     seedDocuments: 5,
+    seedKind: 'markdown',
     run: async (context) => {
       await call(context, 'wb_facet_set', {
         workspaceId: context.workspaceId,
         documentIds: [...context.documentIds],
-        facets: { 'core/v1': { tags: ['reviewed'] } },
+        tags: { add: ['reviewed'] },
       })
     },
   },

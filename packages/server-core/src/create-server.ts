@@ -26,17 +26,20 @@ import {
 } from './tools/document-crud.js'
 import {
   WB_DOCUMENT_LIST_DESCRIPTION,
-  WB_DOCUMENT_RESOLVE_DESCRIPTION,
   wbDocumentCreateInputSchema,
   wbDocumentDeleteInputSchema,
   wbDocumentListInputSchema,
   wbDocumentListOutputSchema,
   wbDocumentResolveInputSchema,
-  wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
-import { createDocumentSearchTool, documentSearchInputSchema } from './tools/document-search.js'
+import {
+  createDocumentSearchTool,
+  documentSearchInputSchema,
+  SearchNeedsQueryOrFilterError,
+} from './tools/document-search.js'
+import { OkfParseError } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetListTool } from './tools/facet-list.js'
@@ -255,14 +258,6 @@ export function createServer(deps: ServerDeps) {
       outputSchema: wbDocumentListOutputSchema,
       execute: (input: z.infer<typeof wbDocumentListInputSchema>) => wbDocumentList(deps, input),
     },
-    documentResolve: {
-      name: 'wb_document_resolve' as const,
-      description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
-      inputSchema: wbDocumentResolveInputSchema,
-      outputSchema: wbDocumentResolveOutputSchema,
-      execute: (input: z.infer<typeof wbDocumentResolveInputSchema>) =>
-        wbDocumentResolve(deps, input),
-    },
     workspaceEdit: createWorkspaceEditTool(deps),
     facetList: createFacetListTool(deps),
     facetSet: createFacetSetTool(deps),
@@ -302,7 +297,18 @@ function mapDocumentError(c: Context, err: unknown) {
   // segment (ADR-0019). 400, not 500: the request is well-formed and the
   // server is fine — the NAME is the problem, and only the caller can pick
   // another one.
+  // Same reason: a search naming neither words nor a filter is a request
+  // the schema admits and the tool has nothing to do with.
+  if (err instanceof SearchNeedsQueryOrFilterError) {
+    return c.json({ error: err.message }, 400)
+  }
   if (err instanceof WorkspaceSegmentUnusableError) {
+    return c.json({ error: err.message }, 400)
+  }
+  // A markdown body the schema admits (any string) that OKF cannot parse:
+  // the reason names the stage, and only the caller can supply a body that
+  // reaches the next one.
+  if (err instanceof OkfParseError) {
     return c.json({ error: err.message }, 400)
   }
   throw err

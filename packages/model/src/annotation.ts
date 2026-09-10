@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { nodeIdSchema } from './ids.js'
+import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import type { CanvasComment } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
@@ -22,9 +23,18 @@ export const annotationIdSchema = z.string().min(1, 'annotation id must not be e
  */
 export const textQuoteSelectorSchema = z
   .object({
-    prefix: z.string().optional(),
-    exact: z.string().min(1, 'a text anchor must quote at least one character'),
-    suffix: z.string().optional(),
+    prefix: z
+      .string()
+      .optional()
+      .describe('Text just before the passage, to tell it from a repeat.'),
+    exact: z
+      .string()
+      .min(1, 'a text anchor must quote at least one character')
+      .describe('The passage, quoted exactly as the body has it.'),
+    suffix: z
+      .string()
+      .optional()
+      .describe('Text just after the passage, to tell it from a repeat.'),
   })
   .strict()
 
@@ -43,10 +53,16 @@ export const textAnchorSchema = z
   .object({
     kind: z.literal('text'),
     /** The text node whose text the passage is in; absent, the document's own body. */
-    nodeId: nodeIdSchema.optional(),
-    quote: textQuoteSelectorSchema,
-    start: z.number().int().nonnegative(),
-    end: z.number().int().nonnegative(),
+    nodeId: nodeIdSchema
+      .optional()
+      .describe("The text node the passage is in; omit for a markdown document's own body."),
+    quote: textQuoteSelectorSchema.describe(
+      'What the passage says; this is what finds it if the text has moved.',
+    ),
+    start: nonnegativeIntegerSchema.describe(
+      'Character offset where the passage starts in the body (or node text) as you read it.',
+    ),
+    end: nonnegativeIntegerSchema.describe('Character offset just past the end of the passage.'),
   })
   .strict()
   .refine((anchor) => anchor.end >= anchor.start, {
@@ -107,11 +123,11 @@ export const annotationAnchorSchema = z.discriminatedUnion('kind', [
       // Integer, matching JSON Canvas geometry and `canvasCommentSchema`: a
       // fractional anchor taken from a zoomed viewport survives the session
       // and then vanishes, because the next read drops what fails the schema.
-      x: z.number().int(),
-      y: z.number().int(),
+      x: integerSchema,
+      y: integerSchema,
       /** With `height`: the anchor is a REGION with `x`/`y` its top-left corner. */
-      width: z.number().int().nonnegative().optional(),
-      height: z.number().int().nonnegative().optional(),
+      width: nonnegativeIntegerSchema.optional(),
+      height: nonnegativeIntegerSchema.optional(),
     })
     .strict()
     .refine(

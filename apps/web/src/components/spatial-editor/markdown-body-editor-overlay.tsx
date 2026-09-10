@@ -3,7 +3,6 @@ import {
   BODY_LINE_HEIGHT_PX,
   outlineContentBox,
   type SceneNode,
-  SPATIAL_THEME_FONT_FAMILY,
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
@@ -33,6 +32,7 @@ export function MarkdownBodyEditorOverlay({
   canvas,
   gestureState,
   applyResult,
+  fontFamily,
 }: {
   /** The text node being edited (the caller has already narrowed the type). */
   readonly node: SpatialNode & { readonly type: 'text'; readonly text: string }
@@ -46,6 +46,8 @@ export function MarkdownBodyEditorOverlay({
   readonly canvas: SpatialCanvas
   readonly gestureState: GestureState
   readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
+  /** The family the scene declares under the canvas's look (`useEditingFontFamily`). */
+  readonly fontFamily: string
 }) {
   return (
     <MarkdownNodeEditor
@@ -94,7 +96,7 @@ export function MarkdownBodyEditorOverlay({
                   : '#ffffff'
             })(),
         color: editorTextFill(theme),
-        fontFamily: SPATIAL_THEME_FONT_FAMILY,
+        fontFamily,
         fontSize: BODY_FONT_SIZE_PX,
         // The overlay must advance by the SAME line box the committed
         // render uses, or the text moves under the cursor on entering

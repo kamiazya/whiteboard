@@ -99,10 +99,17 @@ export function createExportRouter() {
           unresolvedFamilies,
         } = await renderHeadless(workspaceId, path, body))
       } catch (err) {
-        const errBody: ExportErrorBody = {
-          error: 'headless_export_failed',
-          message: err instanceof Error ? err.message : String(err),
+        const message = err instanceof Error ? err.message : String(err)
+        // A positive scale can still size the target below one pixel; the
+        // renderer refuses that, and the size came from the request.
+        if (/target size is zero/i.test(message)) {
+          const errBody: ExportErrorBody = {
+            error: 'invalid_request',
+            message: `invalid export options: ${message}`,
+          }
+          return c.json(errBody, 400)
         }
+        const errBody: ExportErrorBody = { error: 'headless_export_failed', message }
         return c.json(errBody, 500)
       }
 
@@ -151,6 +158,7 @@ async function renderHeadless(
       frameId: body.frameId,
       minFontPx: body.minFontPx,
       theme: body.theme,
+      style: body.style,
     },
   })
   return {

@@ -1,7 +1,7 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { versionEntrySchema } from '../versions/version-entry.js'
+import { versionEntryForAgent, versionEntryForAgentSchema } from '../versions/version-entry.js'
 import { resolveDocumentInWorkspace } from './assert-document-in-workspace.js'
 
 export const versionListInputSchema = z
@@ -16,7 +16,7 @@ export const versionListOutputSchema = z
   .object({
     documentId: documentIdSchema,
     /** Newest first. Includes automatic checkpoints (`auto: true`) and versions saved by people. */
-    versions: z.array(versionEntrySchema),
+    versions: z.array(versionEntryForAgentSchema),
   })
   .strict()
 export type VersionListOutput = z.infer<typeof versionListOutputSchema>
@@ -32,7 +32,7 @@ export function createVersionListTool(deps: ServerDeps) {
       const { workspaceId, documentId } = versionListInputSchema.parse(input)
       const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
       const versions = await deps.versions.list(workspaceId, entry.path)
-      return { documentId, versions: [...versions] }
+      return { documentId, versions: versions.map(versionEntryForAgent) }
     },
   }
 }

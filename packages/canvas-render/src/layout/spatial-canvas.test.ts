@@ -620,6 +620,28 @@ describe('layoutSpatialCanvas', () => {
     expect(sceneNoLabel.nodes.every((n) => n.kind !== 'textRun')).toBe(true)
   })
 
+  it('paints a group behind the nodes its box contains, whatever order the canvas lists them in', () => {
+    // Stored order is the id order of a map, not the order a caller wrote,
+    // so a group whose id sorts AFTER a member's used to paint over it: a
+    // coloured layer swallowed four of the eleven boxes in a diagram the
+    // lane drew, and the grader (which reads the store) passed it.
+    const member = textNode({ id: 'a-member', x: 40, y: 40, width: 120, height: 60, text: 'in' })
+    const group: Extract<SpatialNode, { type: 'group' }> = {
+      id: 'z-group',
+      type: 'group',
+      x: 0,
+      y: 0,
+      width: 300,
+      height: 200,
+      color: '5',
+    }
+    const scene = layoutSpatialCanvas(canvas([member, group]), baseOptions())
+    const at = (id: string) => scene.nodes.findIndex((n) => 'id' in n && n.id === id)
+    expect(at('z-group')).toBeGreaterThanOrEqual(0)
+    expect(at('a-member')).toBeGreaterThanOrEqual(0)
+    expect(at('z-group')).toBeLessThan(at('a-member'))
+  })
+
   it('renders an empty canvas as an empty scene without throwing', () => {
     expect(layoutSpatialCanvas(canvas([]), baseOptions())).toEqual({ nodes: [] })
   })
@@ -832,6 +854,27 @@ describe('layoutSpatialEdges', () => {
     const full = layoutSpatialCanvas(canvas, options).nodes
     const edgesOnly = layoutSpatialEdges(canvas, options)
     expect(edgesOnly.length).toBeGreaterThan(0)
+    expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
+  })
+
+  it('resolves the canvas theme the way the full layout does: ink, routing default, paint', () => {
+    // The theme is resolved PER CANVAS inside the layout (ADR-0030 decision
+    // 5), and the edge-only producer is a second entry point into it. Left
+    // out, a live drag drew every edge crisp and straight on a board whose
+    // committed render pencilled and curved them.
+    const canvas: SpatialCanvas = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 300, y: 120, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+    const options = baseOptions({ style: 'document' })
+    const full = layoutSpatialCanvas(canvas, options).nodes
+    const edgesOnly = layoutSpatialEdges(canvas, options)
+    const edge = edgesOnly.find((node) => node.kind === 'edge')
+    expect(edge?.kind === 'edge' ? edge.ink?.style : undefined).toBe('sketch')
     expect(edgesOnly).toEqual(full.slice(full.length - edgesOnly.length))
   })
 })

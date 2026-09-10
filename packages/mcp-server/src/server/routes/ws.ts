@@ -3,6 +3,7 @@ import type { VersionEntry } from '@kamiazya/whiteboard-daemon-client/api-contra
 import type {
   AgentActivityMessage,
   ServerTextMessage,
+  ViewportRequestParams,
 } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { SpanKind } from '@opentelemetry/api'
@@ -189,17 +190,10 @@ export function sendViewportRequest(
   workspaceId: string,
   path: string,
   requestId: string,
-  params: {
-    mode?: 'fit' | 'move'
-    elementIds?: string[]
-    animate?: boolean
-    scrollX?: number
-    scrollY?: number
-    zoom?: number
-  } = {},
+  params: ViewportRequestParams = {},
 ): void {
-  const message = {
-    type: 'viewport_request' as const,
+  const message: ServerTextMessage = {
+    type: 'viewport_request',
     requestId,
     ...omitUndefined(params),
   }

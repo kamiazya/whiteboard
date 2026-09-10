@@ -180,12 +180,18 @@ describe('routing quality across the synthetic corpus', () => {
       length: Math.round(length),
       shortArrowRunway: shortRunway,
     }).toEqual({
-      violations: { 'own-endpoint': 12, foreign: 15, degenerate: 0 },
-      interiorInk: 2083,
-      borderInk: 824,
-      bends: 8152,
+      // 12/15/2083 -> 10/7/955 when a lone edge started reaching the
+      // search: the optimizer was gated at two edges, so a single-edge
+      // layout kept whatever the initial ranking picked, foreign body and
+      // all. Every price column moved down with it (bends 8152 -> 8046,
+      // border ink 824 -> 770, length 1341164 -> 1338795); crossings and
+      // short runways did not move.
+      violations: { 'own-endpoint': 10, foreign: 7, degenerate: 0 },
+      interiorInk: 955,
+      borderInk: 770,
+      bends: 8046,
       crossings: 494,
-      length: 1341164,
+      length: 1338795,
       shortArrowRunway: 136,
     })
   })

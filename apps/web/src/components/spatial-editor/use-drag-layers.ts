@@ -12,6 +12,7 @@ import type {
   KeyedSvgRender,
   MeasureText,
   Scene,
+  SpatialRenderStyle,
   TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
@@ -21,10 +22,9 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useEffect, useMemo, useRef } from 'react'
-import { createEditorAppearance } from '../../lib/spatial/editor-appearance.js'
 import type { NodeBox } from '../../lib/spatial/geometry.js'
 import { type RenderedCanvas, renderCanvasToSvg } from '../../lib/spatial/scene-render.js'
-import { renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
+import { editorLayoutBase, renderedCanvasKeyed } from '../../lib/spatial/scene-render-core.js'
 import type { Point } from '../../lib/spatial/viewport.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
@@ -57,6 +57,8 @@ export interface DragLayersInputs {
   lockedNodeIds: ReadonlySet<string> | undefined
   resolvedMeasure: MeasureText
   theme: ResolvedTheme
+  /** The session's look override, so a dragged node keeps the look the committed scene has. */
+  style?: SpatialRenderStyle
   fileSeamOptions: ReturnType<typeof useFileSeamScene>['fileSeamOptions']
   /** The committed layout the worker (or sync path) delivered. */
   scene: Scene
@@ -95,6 +97,7 @@ export function useDragLayers({
   lockedNodeIds,
   resolvedMeasure,
   theme,
+  style,
   fileSeamOptions,
   scene,
   anchors,
@@ -162,6 +165,7 @@ export function useDragLayers({
       {
         measure: resolvedMeasure,
         theme,
+        style,
         ...fileSeamOptions,
         showResolved,
         commentObstacles: ghostObstacles,
@@ -181,6 +185,7 @@ export function useDragLayers({
     lockedNodeIds,
     resolvedMeasure,
     theme,
+    style,
     fileSeamOptions,
     gestureCommitted,
     showResolved,
@@ -226,6 +231,7 @@ export function useDragLayers({
     const rendered = renderCanvasToSvg(base, {
       measure: resolvedMeasure,
       theme,
+      style,
       ...fileSeamOptions,
       showResolved,
     })
@@ -262,6 +268,7 @@ export function useDragLayers({
     lockedNodeIds,
     resolvedMeasure,
     theme,
+    style,
     fileSeamOptions,
     showResolved,
   ])
@@ -377,8 +384,7 @@ export function useDragLayers({
     const nodes = layoutSpatialEdges(
       { ...canvas, nodes: liveNodes },
       {
-        measure: dragStatic.measure,
-        appearance: createEditorAppearance(theme),
+        ...editorLayoutBase({ measure: dragStatic.measure, theme, style }),
         edgeSideOverrides: overrides,
       },
     )
@@ -404,7 +410,7 @@ export function useDragLayers({
       ),
       bounds: liveBounds,
     }
-  }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
+  }, [gestureState, dragPreview, dragStatic, canvas, theme, style, gestureCommitted])
 
   /**
    * The resized node's own content, re-rendered at its PREVIEW size each
@@ -449,12 +455,13 @@ export function useDragLayers({
       {
         measure: dragStatic.measure,
         theme,
+        style,
         ...fileSeamOptions,
         showResolved,
       },
     )
     return { svg: rendered.svg, bounds: rendered.bounds }
-  }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
+  }, [gestureState, dragPreview, dragStatic, canvas, theme, style, fileSeamOptions])
 
   return { dragContentSvg, dragStatic, dragPreview, liveEdges, liveNode, canvasContentRef }
 }

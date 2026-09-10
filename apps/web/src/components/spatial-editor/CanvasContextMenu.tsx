@@ -1,3 +1,4 @@
+import { resolveCanvasPalette, type SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 /** Right-click menu: node, edge, and empty-canvas actions. */
 
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
@@ -133,6 +134,8 @@ export interface CanvasContextMenuProps {
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
   readonly theme: ResolvedTheme
+  /** The session's look (ADR-0030 decision 6): the swatches preview the palette it draws in. */
+  readonly style?: SpatialRenderStyle
   readonly gestureState: GestureState
   readonly isEdgeLocked: (edgeId: string) => boolean
   readonly fileRefOptions?: readonly FileRefOption[]
@@ -155,6 +158,7 @@ export function CanvasContextMenu({
   canvas,
   canvasRef,
   theme,
+  style,
   gestureState,
   isEdgeLocked,
   fileRefOptions,
@@ -258,7 +262,7 @@ export function CanvasContextMenu({
                 edge,
                 point: contextMenu.point,
                 setCommentCompose,
-                theme,
+                palette: resolveCanvasPalette(canvas, theme, { style }),
                 isEdgeLocked,
                 edgeLockEnabled,
                 applyResult,
@@ -290,7 +294,7 @@ export function CanvasContextMenu({
                   node,
                   canvas,
                   canvasRef,
-                  theme,
+                  palette: resolveCanvasPalette(canvas, theme, { style }),
                   gestureState,
                   isLocked,
                   lockEnabled,

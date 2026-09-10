@@ -126,4 +126,25 @@ describe('mountCanvasViewer', () => {
     window.dispatchEvent(new MessageEvent('message', { data: { hello: 'again' } }))
     expect(messageHandler).not.toHaveBeenCalled()
   })
+
+  it("forwards style, so a host can ask for the document's theme (ADR-0030)", () => {
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+    const scene = {
+      nodes: [
+        { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
+        { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
+      ],
+      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    }
+
+    const plain = mountCanvasViewer(container, { scene })
+    expect(container.innerHTML).not.toContain('wb-glow')
+    plain.dispose()
+
+    const themed = mountCanvasViewer(container, { scene, style: 'document' })
+    expect(container.innerHTML).toContain('wb-glow')
+    themed.dispose()
+  })
 })

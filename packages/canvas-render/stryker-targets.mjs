@@ -20,6 +20,9 @@
 export const MUTATED = [
   // The cost model and the searches the differential oracles cover.
   'src/layout/edges/edge-rules.ts',
+  // The diagonal clip the intrusion tier reads: a sampled oracle and two
+  // invariants, so a survivor here would be a chord read wrong.
+  'src/layout/edges/diagonal-ink.ts',
   'src/layout/edges/edge-crossing-sweep.ts',
   'src/layout/edges/grid-route.ts',
   // Serialization: escaping and character legality, byte-identical output.
@@ -33,6 +36,10 @@ export const MUTATED = [
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',
+  // The sketch ink decomposition: reach, determinism and translation
+  // equivariance are properties over random boxes and seeds, and the
+  // silhouette per outline kind is pinned by example.
+  'src/layout/ink/sketch.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:
@@ -119,6 +126,27 @@ export const KNOWN_EQUIVALENT = {
   // 1008-test suite. Two neighbours of these are NOT here and were pinned
   // instead — writing every hoistable name unconditionally erases a container's
   // own attribute, and the every-child comparison throws on an attr-less child.
+  // Skipping a zero delta guards an addition of zero. Two entries for the
+  // frame floor's `<` used to sit here, on the reasoning that `<=` admits
+  // exactly the coordinate the shift lands on and costs one no-op iteration:
+  // they are gone because the floor is gone — the margin is an ANCHOR now,
+  // and its comparison is a band, whose boundary a test pins. The margin's
+  // own `<=` left for a like reason earlier, when a centre or far-edge snap
+  // started reading the margin to decide whether it may move: a pair exactly
+  // the margin apart then answers differently, and the grouped tidy
+  // scoreboard kills it. Each hand-verified; the reasoning is
+  // `package-canvas-render.md`.
+  'src/tidy.ts': {
+    'ConditionalExpression: delta === 0 -> false': 1,
+  },
+  // `p` is a signed segment delta that the axis-aligned skip above the loop
+  // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit
+  // parameters coincide adds zero length under either comparison. Judged by
+  // all 635 tests and hand-read.
+  'src/layout/edges/diagonal-ink.ts': {
+    'EqualityOperator: p < 0 -> p <= 0': 1,
+    'EqualityOperator: t1 > t0 -> t1 >= t0': 1,
+  },
   'src/svg/hoist.ts': {
     'ConditionalExpression: !isVNode(child) -> false': 1,
     'ConditionalExpression: attrs === undefined -> false': 1,

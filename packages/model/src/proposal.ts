@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { annotationIdSchema, textAnchorSchema } from './annotation.js'
 import { nodeIdSchema } from './ids.js'
+import { integerSchema, nonnegativeIntegerSchema } from './integer.js'
 import { canvasColorSchema, canvasEdgeSchema, spatialNodeSchema } from './spatial.js'
 import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
@@ -63,10 +64,12 @@ import { okfActorSchema, okfTimestampSchema } from './trust.js'
  */
 export const nodePatchFieldsSchema = z
   .object({
-    x: z.number().int().optional(),
-    y: z.number().int().optional(),
-    width: z.number().int().nonnegative().optional(),
-    height: z.number().int().nonnegative().optional(),
+    x: integerSchema.optional(),
+    y: integerSchema.optional(),
+    width: nonnegativeIntegerSchema.optional().describe('Box width; text wraps at it.'),
+    height: nonnegativeIntegerSchema
+      .optional()
+      .describe('Box height; one too short for the text is refused with the height it needs.'),
     color: canvasColorSchema.optional(),
     // Per-type content. `id` and `type` are deliberately absent: a patch
     // changes what a node SAYS, never which node it is or what kind.
@@ -109,7 +112,7 @@ export type ProposedChangeStatus = z.infer<typeof proposedChangeStatusSchema>
 /** What every change carries regardless of verb: its own identity and its verdict. */
 const changeIdentity = {
   /** The change's own id — what an Adopt or a Dismiss names. */
-  id: annotationIdSchema,
+  id: annotationIdSchema.describe('Your id for this change; any short unique string.'),
   status: proposedChangeStatusSchema,
 } as const
 
@@ -170,9 +173,13 @@ export const bodyReplaceChangeSchema = z
   .object({
     ...changeIdentity,
     op: z.literal('body.replace'),
-    anchor: textAnchorSchema,
-    text: z.string(),
-    assumed: z.string(),
+    anchor: textAnchorSchema.describe('Which passage to replace.'),
+    text: z.string().describe('What the passage becomes; empty deletes it.'),
+    assumed: z
+      .string()
+      .describe(
+        'What the passage said when you wrote this; refused by name if it has changed since.',
+      ),
   })
   .strict()
 

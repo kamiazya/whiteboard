@@ -2,7 +2,7 @@ export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
-export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
+export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export {
   assignEdgeAnchors,
@@ -12,6 +12,14 @@ export {
   routeEdge,
 } from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
+export { GLOW_STD_DEVIATION_RATIO, glowReachPx } from './layout/ink/glow.js'
+export {
+  SKETCH_INK_REACH_PX,
+  type SketchEdgeOptions,
+  type SketchInk,
+  sketchEdge,
+  sketchShape,
+} from './layout/ink/sketch.js'
 export { layoutMdastBlocks, type MarkdownBodyLayoutOptions } from './layout/markdown-body.js'
 export type {
   CodeToken,
@@ -40,7 +48,7 @@ export type {
 } from './layout/nodes/spatial-appearance.js'
 export { findPassage } from './layout/passage-highlight.js'
 export { scaleScene } from './layout/scale-scene.js'
-export { createStyleRandom, seedFromId } from './layout/seed.js'
+export { createStyleRandom, seedFromId, styleRandomFromSeed } from './layout/seed.js'
 export type {
   DecorationContext,
   FacetCardData,
@@ -50,6 +58,7 @@ export type {
   SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
+  SpatialRenderStyle,
 } from './layout/spatial-canvas.js'
 export {
   COMMENT_BUBBLE_OFFSET_PX,
@@ -64,11 +73,24 @@ export {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
+  paintOrderOf,
+  resolveCanvasPalette,
   resolveShapeTable,
+  resolveThemeTable,
+  spatialRenderStyleSchema,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
+export type { CompositionScore } from './quality/composition-score.js'
+export { scoreComposition } from './quality/composition-score.js'
+export type { DrawingScore } from './quality/drawing-score.js'
+export {
+  EVEN_GAP_TOLERANCE_PX,
+  GROUP_PADDING_PX,
+  NEAR_MISS_PX,
+  scoreDrawing,
+} from './quality/drawing-score.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export {
   overlayReferences,
@@ -107,6 +129,7 @@ export type {
   RawHtmlNode,
   ResolvedEdgeNode,
   Scene,
+  SceneInk,
   SceneNode,
   ShapeId,
   ShapeSceneNode,
@@ -141,5 +164,7 @@ export type {
 export { SPATIAL_DARK_PALETTE, SPATIAL_LIGHT_PALETTE } from './theme/spatial-palette.js'
 export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-theme.js'
 export { createSpatialTheme } from './theme/spatial-theme.js'
+export type { ThemedAppearanceOptions } from './theme/theme-asset.js'
+export { createThemedAppearance, paletteFromTokens } from './theme/theme-asset.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyNodes } from './tidy.js'

@@ -94,7 +94,12 @@ export function createDocumentSvgExportRouter() {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
           path,
-          options: { padding: body.padding, frameId: body.frameId, theme: body.theme },
+          options: {
+            padding: body.padding,
+            frameId: body.frameId,
+            theme: body.theme,
+            style: body.style,
+          },
         })
         svg = result.svg
         undrawable = result.undrawable

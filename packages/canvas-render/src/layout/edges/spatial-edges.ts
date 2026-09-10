@@ -1,5 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '../../scene-graph.js'
+import { diagonalInkThrough } from './diagonal-ink.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
   centerOf,
@@ -759,9 +760,17 @@ export function routeCacheKey(edge: CanvasEdge, a: EdgeAnchorPair | undefined): 
  * overlaps, or retraces) comes from rankedSidePairs' last rule,
  * `u-hook-span-exposed-first` — one producer, not a second list here.
  */
-function sideCandidatesFor(edge: CanvasEdge, byId: ReadonlyMap<string, SpatialNode>): SidePair[] {
+function sideCandidatesFor(
+  edge: CanvasEdge,
+  byId: ReadonlyMap<string, SpatialNode>,
+  // A named pair is not a candidate's business — unless its route runs
+  // through the edge's own box, which no named side asked for.
+  overruleAuthored = false,
+): SidePair[] {
   if (edge.fromNode === edge.toNode) return []
-  if (edge.fromSide !== undefined && edge.toSide !== undefined) return []
+  const authored = edge.fromSide !== undefined && edge.toSide !== undefined
+  if (authored && !overruleAuthored) return []
+  const keepAuthored = !overruleAuthored
   const fromNode = byId.get(edge.fromNode)
   const toNode = byId.get(edge.toNode)
   if (fromNode === undefined || toNode === undefined) return []
@@ -779,8 +788,8 @@ function sideCandidatesFor(edge: CanvasEdge, byId: ReadonlyMap<string, SpatialNo
   const seen = new Set<string>()
   return pairs
     .map((pair) => ({
-      fromSide: edge.fromSide ?? pair.fromSide,
-      toSide: edge.toSide ?? pair.toSide,
+      fromSide: keepAuthored ? (edge.fromSide ?? pair.fromSide) : pair.fromSide,
+      toSide: keepAuthored ? (edge.toSide ?? pair.toSide) : pair.toSide,
     }))
     .filter((pair) => {
       const key = `${pair.fromSide} ${pair.toSide}`
@@ -1049,6 +1058,11 @@ function createConfigScore(
     contribution,
     evaluateTrial,
     adopt,
+    /** Whether the edge's current route runs through one of its own boxes. */
+    selfThrough: (i: number): boolean =>
+      interiorInkThrough(paths[i] ?? [], endpointRectsFor[i] ?? []) +
+        diagonalInkThrough(paths[i] ?? [], endpointRectsFor[i] ?? []) >
+      0,
   }
 }
 
@@ -1123,7 +1137,11 @@ function optimizeSideChoices(
       if (locked?.has(edge.id)) continue
       const chosen = score.sideOf(edge.id)
       if (chosen === undefined) continue
-      for (const candidate of sideCandidatesFor(edge, byId)) {
+      const forced =
+        edge.fromSide !== undefined &&
+        edge.toSide !== undefined &&
+        score.selfThrough(edgeIndexById.get(edge.id) ?? -1)
+      for (const candidate of sideCandidatesFor(edge, byId, forced)) {
         if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
         const trial = new Map(score.sides())
         trial.set(edge.id, candidate)
@@ -1420,12 +1438,14 @@ export function assignEdgeAnchors(
     // through, and this branch exists precisely to serve those frames. A
     // canvas past the gate drags exactly as fast as it does today and picks
     // up its regional repair on drop.
-    if (edges.length >= 2 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
+    if (edges.length >= 1 && edges.length <= CROSSING_OPT_MAX_EDGES && locked.size < edges.length) {
       liveSides = optimizeAcrossRegions(nodes, edges, style, merged, locked, sideOverrides)
     }
     return anchorsWithoutCoincidentEnds(nodes, edges, liveSides, style, true, sideOverrides)
   }
-  if (edges.length >= 2) {
+  // A lone edge can be its own problem (a named pair routed through its own
+  // box); a clean one short-circuits after one scoring sweep.
+  if (edges.length >= 1) {
     sides = optimizeAcrossRegions(nodes, edges, style, sides)
   }
   return anchorsWithoutCoincidentEnds(nodes, edges, sides, style, true)
@@ -1994,14 +2014,15 @@ export function routeEdge(
   }
 
   // The anchor pass resolves sides with whole-edge-set crowding knowledge a
-  // single call lacks; when it spoke, follow it (authored sides still win).
-  // Deriving is an occlusion scan over every node, and the search calls this
-  // a thousand times per layout with both sides already decided, so it only
-  // runs when a side is actually missing.
+  // single call lacks; when it spoke, follow it — it applies a named side
+  // itself, and differs from one only where the search overruled a pair
+  // routed through its own box, which has to reach the adopting trial and
+  // the render alike. Deriving is an occlusion scan over every node, so it
+  // only runs when a side is actually missing.
   let derived: SidePair | undefined
   const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
-  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derive().fromSide
-  const toSide = edge.toSide ?? anchors?.toSide ?? derive().toSide
+  const fromSide = anchors?.fromSide ?? edge.fromSide ?? derive().fromSide
+  const toSide = anchors?.toSide ?? edge.toSide ?? derive().toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)

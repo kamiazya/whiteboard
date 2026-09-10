@@ -13,14 +13,27 @@
 //
 // The numbers are pinned EXACTLY. An improvement has to be as loud as a
 // regression, because the point is that someone says why it moved.
+import { writeCoreFacets, writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
+import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
+import { InMemoryVersionHistory } from '../../shared/test-utils/in-memory-version-history.js'
 import { MCP_ERRAND_CORPUS } from '../../shared/test-utils/mcp-errand-corpus.js'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
+
+/** A markdown note with the frontmatter a tag needs somewhere to live. */
+function makeMarkdownDoc(): LoroDoc {
+  const doc = new LoroDoc()
+  writeDocumentKind(doc, 'markdown')
+  writeCoreFacets(doc, { type: 'note', tags: ['seeded'] })
+  doc.commit()
+  return doc
+}
+
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { registerDocumentTools } from './document-tools.js'
 
@@ -39,7 +52,10 @@ interface Tally {
   responseBytes: number
 }
 
-async function harness(seedDocuments: number): Promise<{
+async function harness(
+  seedDocuments: number,
+  seedKind: 'spatial' | 'markdown' = 'spatial',
+): Promise<{
   client: Client
   documentIds: string[]
   tally: Tally
@@ -54,9 +70,9 @@ async function harness(seedDocuments: number): Promise<{
       workspaceId: WORKSPACE_ID,
       documentId,
       path: `doc-${i}`,
-      kind: 'spatial',
+      kind: seedKind,
     })
-    const doc = makeSpatialDoc(SEED_CANVAS)
+    const doc = seedKind === 'spatial' ? makeSpatialDoc(SEED_CANVAS) : makeMarkdownDoc()
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await documentStore.saveSnapshot({
       docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
@@ -67,7 +83,12 @@ async function harness(seedDocuments: number): Promise<{
   }
 
   const server = new McpServer({ name: 'whiteboard-call-count', version: '0.0.0' })
-  registerDocumentTools(server, { documentStore, blobStore: {} as never, documentIndex })
+  registerDocumentTools(server, {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex,
+    versions: new InMemoryVersionHistory(),
+  } as never)
   const [clientSide, serverSide] = InMemoryTransport.createLinkedPair()
   await server.connect(serverSide)
   const client = new Client({ name: 'call-count', version: '0.0.0' })
@@ -92,7 +113,7 @@ async function harness(seedDocuments: number): Promise<{
 async function score(name: string): Promise<Tally> {
   const errand = MCP_ERRAND_CORPUS.find((entry) => entry.name === name)
   if (errand === undefined) throw new Error(`no errand named ${name}`)
-  const { client, documentIds, tally } = await harness(errand.seedDocuments)
+  const { client, documentIds, tally } = await harness(errand.seedDocuments, errand.seedKind)
   await errand.run({ client, workspaceId: WORKSPACE_ID, documentIds })
   return tally
 }
@@ -158,18 +179,43 @@ describe('what an errand costs in tool calls', () => {
       // envelope collapses to one, so its bytes go down with its calls.
       // The shape of the batch decides which happens, not the fact of
       // batching, and that is exactly what the price column is for.
+      //
+      // Both write rows below were RE-PINNED when the corpus started
+      // refusing a refused call: for a week this row measured
+      // `facets: { 'core/v1': ... }`, a key the tool never accepted, and the
+      // one below measured a `versions` seam the harness never supplied.
+      // Both answered a tool error in one call and the count was 1 either
+      // way. The bytes are the real writes now — five documents' facets and
+      // tags, four version entries — and the tag errand tags MARKDOWN
+      // documents through `tags.add`, since a canvas has no frontmatter and
+      // the old payload could not have tagged anything even if accepted.
       'tag 5 documents': {
         calls: 1,
-        requestBytes: 266,
-        responseBytes: 227,
+        requestBytes: 251,
+        responseBytes: 998,
       },
       // The same shape on a different verb, which is the point of having
       // it: the cost tracks the number of SUBJECTS, not anything about
       // facets.
+      // Response 1,948 -> 1,316 when the version tools stopped answering
+      // the History panel's row (path, counts, thumbnail, the retired
+      // branch column) and answered what an agent acts on.
       'save a labelled version of 4 documents': {
         calls: 1,
         requestBytes: 223,
-        responseBytes: 106,
+        responseBytes: 1316,
+      },
+      // Axis A on `region.set`. Request 425 -> 549 when the op stopped
+      // taking node declarations and the three boxes became `node.add`
+      // ops with `within` plus a member list: +124 bytes on the wire for
+      // the op wrappers, against -3,391 on the table every turn reads
+      // (see tool-surface-quality). Response 2,060 is unchanged — the
+      // placed boxes and the grown group, reported under `geometry`;
+      // before growth, this same call at width 700 was refused whole.
+      'make a group hold exactly three boxes': {
+        calls: 1,
+        requestBytes: 549,
+        responseBytes: 2060,
       },
     })
   })

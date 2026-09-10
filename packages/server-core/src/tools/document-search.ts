@@ -12,17 +12,39 @@ import { assertVectorWidth, rankByVector } from '../search/embedder.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
+/** Neither words nor a filter names nothing to find; the list is wb_document_list's. */
+export class SearchNeedsQueryOrFilterError extends Error {
+  constructor() {
+    super(
+      'Nothing to search for: pass `query` (words to match), or `tags` / `kind` (a filter to answer alone), or both. To list every document, use wb_document_list.',
+    )
+    this.name = 'SearchNeedsQueryOrFilterError'
+  }
+}
+
 export const documentSearchInputSchema = z
   .object({
-    workspaceId: workspaceIdSchema,
-    query: z.string().min(1).describe('What to find. Japanese matches without a dictionary.'),
+    workspaceId: workspaceIdSchema.describe('The workspace to search.'),
+    query: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        'What to find, matched against content. Japanese matches without a dictionary. Omit it to answer every document the filters admit — a tag is frontmatter, not content, so "which documents carry this tag" is a filter alone.',
+      ),
     kind: documentKindSchema.optional().describe('Restrict to markdown or spatial documents.'),
     tags: z
       .array(z.string().min(1))
       .min(1)
       .optional()
       .describe('Restrict to documents carrying EVERY listed tag exactly.'),
-    limit: z.number().int().min(1).max(50).default(10),
+    limit: z
+      .number()
+      .int()
+      .min(1)
+      .max(50)
+      .default(10)
+      .describe('How many results to answer, at most.'),
   })
   .strict()
 export type DocumentSearchInput = z.input<typeof documentSearchInputSchema>
@@ -101,11 +123,14 @@ export function createDocumentSearchTool(
   return {
     name: 'wb_document_search' as const,
     description:
-      'Find documents by content: full-text over markdown bodies and canvas text (nodes, group labels, edge labels), plus names and paths. Japanese works without a dictionary (character bigrams). Optional kind/tags filters. Returns ranked matches with context excerpts; scores compare within one response only.',
+      'Find documents by content, or by tag. `query` is full-text over markdown bodies and canvas text (nodes, group labels, edge labels), plus names and paths; Japanese works without a dictionary. `tags` and `kind` filter, and stand alone without a query — "every document tagged X" is a filter, since a tag is frontmatter rather than content. Returns ranked matches with context excerpts; scores compare within one response only.',
     inputSchema: documentSearchInputSchema,
     outputSchema: documentSearchOutputSchema,
     async execute(input: DocumentSearchInput): Promise<DocumentSearchOutput> {
       const parsed = documentSearchInputSchema.parse(input)
+      if (parsed.query === undefined && parsed.tags === undefined && parsed.kind === undefined) {
+        throw new SearchNeedsQueryOrFilterError()
+      }
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
       const content = await cache.factsFor(deps, parsed.workspaceId, entries)
 
@@ -150,6 +175,19 @@ export function createDocumentSearchTool(
         }
       }
 
+      // A filter with no words: every admitted document, in path order,
+      // with nothing ranked and the opening of its text for context — the
+      // shape a semantic-only hit already has, so a reader needs no third.
+      if (parsed.query === undefined) {
+        const admitted = [...searchable].sort((a, b) => a.path.localeCompare(b.path))
+        return {
+          results: admitted
+            .slice(0, parsed.limit)
+            .map((doc) => describe(doc.documentId, 0, openingOf(doc), {})),
+        }
+      }
+      const query = parsed.query
+
       // The optional semantic half. Absent, this returns exactly what it
       // returned before embeddings existed; supplied, its ranking is FUSED
       // with BM25's by rank rather than mixed by score, and any failure
@@ -158,7 +196,7 @@ export function createDocumentSearchTool(
       if (embedder === undefined) {
         // The returned page IS the prefix of the full ranking here, so the
         // index is the rank.
-        const hits = fullTextSearch(searchable, parsed.query, { limit: parsed.limit })
+        const hits = fullTextSearch(searchable, query, { limit: parsed.limit })
         return {
           results: hits.map((hit, index) =>
             describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
@@ -168,13 +206,13 @@ export function createDocumentSearchTool(
 
       // Fusion needs the WHOLE lexical ranking, not the page the caller asked
       // for: a document the vector half also likes can climb from rank 20.
-      const lexical = fullTextSearch(searchable, parsed.query, { limit: searchable.length })
+      const lexical = fullTextSearch(searchable, query, { limit: searchable.length })
       const semantic = await rankSemantically(
         deps,
         cache,
         parsed.workspaceId,
         entries.filter((entry) => byId.has(entry.documentId)),
-        parsed.query,
+        query,
         embedder,
       )
       if (semantic === undefined) {

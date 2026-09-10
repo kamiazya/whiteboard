@@ -6,7 +6,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, plugin-visual, zod, css-line-break, lowlight |
+| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest, and the render theme layer (ADR-0030) | model, codec, plugin-visual, facet-engine, zod, css-line-break, lowlight |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
@@ -60,9 +60,13 @@ know, because the reader who trips them is elsewhere:
 - **The cycle check (`cycle-check.ts`) is static and value-aware, so a
   CROSS-PACKAGE cycle is invisible to it.** The one that exists is guarded by
   hand, below.
-- **A package that adds an `@/...` path alias must declare it** in
+- **A package that adds a path alias must declare it** in
   `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES`, or that package's edges
-  silently leave the cycle graph.
+  silently leave the cycle graph — 115 of `apps/web`'s 554 while its `@/` was
+  live, and the check then reports clean over a picture it cannot see. That
+  is executable now: a bare specifier naming no declared dependency is either
+  a declared alias prefix or a recorded non-path one (a virtual module), and
+  a fabricated record fails too.
 - **An ADAPTER may not import a MECHANIC** — `adapter-mechanic-check.ts`
   enforcing [ADR-0018](../../docs/contributing/adr/0018-operation-vs-mechanic.md)'s
   one invariant. An adapter is an HTTP route under `server/routes/**` or an MCP

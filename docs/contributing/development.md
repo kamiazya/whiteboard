@@ -158,7 +158,7 @@ pnpm smoke           # MCP smoke
 pnpm smoke:e2e       # version / route / no_client wiring smoke
 pnpm smoke:claude    # Claude subprocess smoke (uses API quota)
 pnpm smoke:codex     # Codex subprocess smoke (uses API quota)
-pnpm intent:validate # TanStack Intent validate
+pnpm eval:tool-surface # LLM-driven tool-surface eval on a seeded fixture (uses API quota; ADR-0031)
 ```
 
 `packages/canvas-viewer`'s self-contained widget bundle (`dist/widget/canvas-viewer.html` — all JS/CSS/fonts inlined, zero external requests) is regenerated with:

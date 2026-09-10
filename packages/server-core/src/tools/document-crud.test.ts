@@ -108,6 +108,30 @@ describe('wbDocumentCreate', () => {
     )
   })
 
+  // The refusal is what a model reads to repair its next call, so it names
+  // the parameter on the TOOL that has it. A create can carry
+  // `createWorkspace: true` on the same call; a read cannot, and telling a
+  // reader to pass a parameter its tool does not take sends it to the wrong
+  // place. Neither says "canvas" for the thing a workspace holds.
+  it('the create refusal says which call takes createWorkspace, and the read refusal does not ask for it', async () => {
+    const deps = await makeDeps()
+    const create = await wbDocumentCreate(deps, {
+      workspaceId: 'nope',
+      path: 'doc-a',
+      kind: 'spatial',
+    }).catch((err: Error) => err.message)
+    expect(create).toContain('createWorkspace: true')
+    expect(create).toContain('wb_workspace_edit')
+    expect(create).not.toContain('canvas')
+
+    const list = await wbDocumentList(deps, { workspaceId: 'nope' }).catch(
+      (err: Error) => err.message,
+    )
+    expect(list).toContain('wb_workspace_edit')
+    expect(list).not.toContain('Pass createWorkspace')
+    expect(list).not.toContain('canvas')
+  })
+
   it('materializes the workspace when createWorkspace: true is passed', async () => {
     const deps = await makeDeps()
     const created = await wbDocumentCreate(deps, {

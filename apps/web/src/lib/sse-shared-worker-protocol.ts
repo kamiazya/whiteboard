@@ -61,3 +61,19 @@ export const sseWorkerEventSchema = z.discriminatedUnion('type', [
   // it is ordered and deduplicated against everything else the worker knows.
   z.object({ type: z.literal('authority-update'), doc: z.string(), update: z.string() }),
 ])
+
+export type SseWorkerRequest = z.infer<typeof sseWorkerRequestSchema>
+export type SseWorkerEvent = z.infer<typeof sseWorkerEventSchema>
+
+/**
+ * The typed way to post on either side. A literal passed straight to
+ * `postMessage` is `unknown` on the wire, so a field renamed on one side
+ * and not the other is a message nobody handles; passing it through the
+ * schema's own type makes that drift a typecheck error instead.
+ */
+export function postWorkerRequest(port: MessagePort, request: SseWorkerRequest): void {
+  port.postMessage(request)
+}
+export function postWorkerEvent(port: MessagePort, event: SseWorkerEvent): void {
+  port.postMessage(event)
+}

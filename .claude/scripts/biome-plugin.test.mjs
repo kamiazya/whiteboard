@@ -14,9 +14,9 @@
 // property a hand-written list cannot have.
 import assert from 'node:assert/strict'
 import { execFileSync } from 'node:child_process'
-import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { test } from 'node:test'
 
 const REPO_ROOT = join(import.meta.dirname, '../..')
@@ -44,6 +44,13 @@ const PLUGINS = [
     plugin: 'tools/biome-plugins/logger-argument-order.grit',
     bad: 'bad-logger.ts',
     good: 'good-logger.ts',
+    probe: 'packages/mcp-server/src/server/biome-plugin-scope-probe.ts',
+  },
+  {
+    plugin: 'tools/biome-plugins/route-refusal-shapes.grit',
+    bad: 'bad-route-refusal.ts',
+    good: 'good-route-refusal.ts',
+    probe: 'packages/mcp-server/src/server/routes/biome-plugin-scope-probe.ts',
   },
 ]
 
@@ -105,6 +112,84 @@ for (const { plugin, bad, good } of PLUGINS) {
   test(`${name}: the good fixture trips nothing`, () => {
     const out = lint(join(FIXTURES, good), plugin)
     assert.doesNotMatch(out, PLUGIN_DIAGNOSTIC, out)
+  })
+}
+
+/**
+ * A plugin's `includes` patterns, as biome.json declares them.
+ *
+ * `entry.includes` is optional: a plugin registered as a bare path string
+ * applies everywhere, which needs no shape check.
+ */
+function declaredIncludes(entry) {
+  return typeof entry === 'string' ? [] : (entry.includes ?? [])
+}
+
+// A pattern that does not start with `**` matches NOTHING, and biome says so
+// nowhere — the plugin is registered, `pnpm lint` is green, and the rule has
+// never run.
+//
+// That is not a hypothesis. `logger-argument-order` shipped with
+// `packages/mcp-server/src/server/[**]/[*].ts` and had never fired; measured on
+// one real violating file under that exact directory, with only the pattern
+// changed between runs (globs written with [] around each wildcard segment
+// here, since a literal one would close this comment):
+//
+//   packages/mcp-server/src/server/[**]/[*].ts   -> 0 diagnostics
+//   [**]/packages/mcp-server/src/server/[**]/[*].ts -> 1
+//   [**]/mcp-server/src/server/[**]/[*].ts        -> 1
+//   [**]/src/server/[**]/[*].ts                  -> 1
+//
+// The fixture pairs above could not catch it: they lint through a config
+// that carries the plugin and no `includes` at all, so they prove the RULES
+// match and say nothing about the SCOPE.
+test('every plugin include pattern is anchored so it can match at all', () => {
+  const config = JSON.parse(readFileSync(join(REPO_ROOT, 'biome.json'), 'utf8'))
+  const unanchored = (config.plugins ?? []).flatMap((entry) =>
+    declaredIncludes(entry)
+      .filter((pattern) => !pattern.startsWith('!'))
+      .filter((pattern) => !pattern.startsWith('**'))
+      .map((pattern) => `${typeof entry === 'string' ? entry : entry.path}: ${pattern}`),
+  )
+  assert.deepEqual(
+    unanchored,
+    [],
+    'a plugin include pattern not starting with ** matches no file, and biome reports nothing — prefix it with **/',
+  )
+})
+
+// The empirical half, for the plugins whose scope is a PATH rather than a
+// filename suffix: write the bad fixture at a real path inside the declared
+// scope and lint it through the repo's own config. A suffix-scoped plugin
+// (`**/*.test.ts`) has no probe because the only paths matching its scope are
+// test files, and a `.test.ts` appearing in the tree for the length of one
+// lint is collectable by a vitest run happening at the same moment. The probe
+// files below are plain `.ts`, which nothing collects.
+for (const { plugin, bad, probe } of PLUGINS.filter((entry) => entry.probe !== undefined)) {
+  const name = plugin.split('/').pop()
+
+  test(`${name}: the repo's own config applies it inside its declared scope`, () => {
+    const target = join(REPO_ROOT, probe)
+    mkdirSync(dirname(target), { recursive: true })
+    writeFileSync(target, readFileSync(join(FIXTURES, bad), 'utf8'))
+    try {
+      let out = ''
+      try {
+        execFileSync(join(REPO_ROOT, 'node_modules/.bin/biome'), ['lint', probe], {
+          cwd: REPO_ROOT,
+          encoding: 'utf8',
+        })
+      } catch (err) {
+        out = `${err.stdout ?? ''}${err.stderr ?? ''}`
+      }
+      assert.match(
+        out,
+        PLUGIN_DIAGNOSTIC,
+        `biome.json registers ${plugin} but it produced no diagnostic on ${probe}, which its own includes claim to cover. Check the include pattern is anchored with **/.`,
+      )
+    } finally {
+      rmSync(target, { force: true })
+    }
   })
 }
 

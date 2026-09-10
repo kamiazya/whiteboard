@@ -86,6 +86,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('Weekly notes')
@@ -101,6 +102,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('Weekly notes')
@@ -121,6 +123,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(byDefault.svg).not.toContain('Weekly notes')
@@ -152,6 +155,7 @@ describe('wb_scene_render reference resolution', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('INNER')
@@ -163,7 +167,12 @@ describe('wb_scene_render reference resolution', () => {
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
     await expect(
-      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, embedReferences: true }),
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        embedReferences: true,
+        style: 'clean',
+      }),
     ).resolves.toMatchObject({ svg: expect.stringContaining('<svg') })
   })
 })
@@ -185,6 +194,7 @@ describe('reference resolution edge cases', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('Weekly')
@@ -203,6 +213,7 @@ describe('reference resolution edge cases', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: true,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('Weekly')

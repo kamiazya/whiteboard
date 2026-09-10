@@ -1,3 +1,4 @@
+import { viewportRequestParamsSchema } from '@kamiazya/whiteboard-daemon-client/ws-messages'
 import { Hono } from 'hono'
 import { nanoid } from 'nanoid'
 import type {
@@ -26,11 +27,21 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
   const app = new Hono()
 
   onDocumentAction(app, 'post', 'viewport', async (c, workspaceId, path) => {
-    // The body is optional. Forward all viewport parameters (mode / elementIds /
-    // padding / animate / scrollX / scrollY / zoom) to the browser, which applies defaults.
-    const body = await c.req
-      .json<Record<string, unknown>>()
-      .catch(() => ({}) as Record<string, unknown>)
+    // The body is optional. What it may carry is exactly what the browser
+    // reads off the frame (`viewportRequestParamsSchema`), and it is checked
+    // HERE: the browser drops a frame it cannot parse, so an unchecked body
+    // used to turn a caller's typo into a 504.
+    const body = await c.req.json<unknown>().catch(() => ({}))
+    const params = viewportRequestParamsSchema.safeParse(body)
+    if (!params.success) {
+      const invalid: ViewportErrorBody = {
+        error: 'invalid_request',
+        message: `Invalid viewport request: ${params.error.issues
+          .map((issue) => `${issue.path.join('.') || '(body)'}: ${issue.message}`)
+          .join('; ')}`,
+      }
+      return c.json(invalid, 400)
+    }
 
     // Fast-fail with 503 if no WS client is connected.
     if (getClientCount(workspaceId, path) === 0) {
@@ -51,7 +62,7 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
     try {
       await new Promise<void>((resolve, reject) => {
         pendingViewport.set(requestId, { resolve, reject })
-        sendViewportRequest(workspaceId, path, requestId, body)
+        sendViewportRequest(workspaceId, path, requestId, params.data)
 
         timer = setTimeout(() => {
           if (pendingViewport.has(requestId)) {

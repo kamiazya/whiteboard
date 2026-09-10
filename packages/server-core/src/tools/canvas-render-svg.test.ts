@@ -7,7 +7,7 @@ import { describe, expect, test } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
-import { createCanvasRenderSvgTool } from './canvas-render-svg.js'
+import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
 import { SnapshotNotFoundError } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -35,9 +35,14 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
-    expect(result.svg).toContain('<svg xmlns="http://www.w3.org/2000/svg">')
+    // Enveloped: the viewBox is the scene's own bounds, so a consumer that
+    // rasterises it gets the whole drawing and not a 0,0-anchored crop.
+    expect(result.svg).toMatch(
+      /<svg xmlns="http:\/\/www.w3.org\/2000\/svg" width="100" height="50" viewBox="0 0 100 50"/,
+    )
     expect(result.svg).toContain('hi')
     // The node's chrome — absent from every MCP-rendered SVG before this
     // migration, since the old builder degraded every node to an empty
@@ -45,6 +50,37 @@ describe('wb_scene_render tool', () => {
     expect(result.svg).toContain('<rect')
     expect(result.width).toBe(100)
     expect(result.height).toBe(50)
+  })
+
+  test('a group label above the frame is inside the envelope, not cropped off the top', async () => {
+    // The lane drew an architecture diagram with its first layer at y=0 and
+    // the render came back with that layer's label missing: a container's
+    // label sits ABOVE its frame, and an SVG with no viewBox is anchored at
+    // 0,0, so everything at negative y was clipped. The envelope has to
+    // be the scene's bounds, label included.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 300, height: 100, label: 'Clients' }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasRenderSvgTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+
+    const viewBox = /viewBox="(-?[\d.]+) (-?[\d.]+) ([\d.]+) ([\d.]+)"/.exec(result.svg)
+    expect(viewBox).not.toBeNull()
+    if (viewBox === null) throw new Error('unreachable')
+    expect(Number(viewBox[2])).toBeLessThan(0)
+    expect(Number(viewBox[4])).toBeGreaterThan(100)
+    expect(result.height).toBe(Number(viewBox[4]))
+    expect(result.svg).toContain('Clients')
   })
 
   test('rejects when the canvas has no stored snapshot', async () => {
@@ -55,6 +91,7 @@ describe('wb_scene_render tool', () => {
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
         embedReferences: false,
+        style: 'clean',
       }),
     ).rejects.toThrow(SnapshotNotFoundError)
   })
@@ -71,6 +108,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('Real prose')
@@ -98,6 +136,7 @@ describe('wb_scene_render tool', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(result.svg).toContain('row-kind only')
@@ -128,9 +167,67 @@ describe('wb_scene_render measurer injection', () => {
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       embedReferences: false,
+      style: 'clean',
     })
 
     expect(measured).toContain('hi')
     expect(result.svg).toContain('hi')
+  })
+})
+
+describe('wb_scene_render style (ADR-0030 decision 6)', () => {
+  async function neonStore() {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
+          { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 50, text: 'b' },
+        ],
+        edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+        'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+      })
+    })
+    return store
+  }
+
+  test('defaults to clean: an agent reading the SVG never pays for a theme unasked', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'clean',
+    })
+    expect(result.svg).not.toContain('wb-glow')
+  })
+
+  test("style: 'document' draws the theme the document names", async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'document',
+    })
+    expect(result.svg).toContain('filterUnits="userSpaceOnUse"')
+  })
+
+  test('a theme id draws that theme without the document naming it', async () => {
+    const tool = createCanvasRenderSvgTool(makeDeps(await neonStore()))
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+      style: 'visual.sketch',
+    })
+    expect(result.svg).toContain('stroke-linecap="round"')
+    expect(result.svg).not.toContain('wb-glow')
+  })
+
+  test('the input schema defaults style to clean and refuses a bare name', () => {
+    const base = { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }
+    expect(canvasRenderSvgInputSchema.parse(base).style).toBe('clean')
+    expect(canvasRenderSvgInputSchema.safeParse({ ...base, style: 'sketch' }).success).toBe(false)
   })
 })

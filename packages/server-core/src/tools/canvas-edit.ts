@@ -14,47 +14,44 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
-  annotationIdSchema,
   type CanvasComment,
   type CanvasEdge,
   canvasCommentSchema,
   canvasEdgeSchema,
-  documentIdSchema,
-  edgePatchFieldsSchema,
-  nodeIdSchema,
-  nodePatchFieldsSchema,
-  proposalSchema,
+  type nodePatchFieldsSchema,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
   spatialNodeSchema,
-  workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
+import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
+import {
+  type CanvasEditInput,
+  type CanvasEditOutput,
+  canvasEditInputSchema,
+  canvasEditOutputSchema,
+  type geometryEntrySchema,
+  type Target,
+} from './canvas-edit-ops.js'
+import {
+  DEFAULT_SIZE,
+  outsideDetail,
+  overlaps,
+  PLACEMENT_GUTTER_PX,
+  PlacementCursor,
+  placeWithin,
+  type Rect,
+} from './canvas-edit-placement.js'
 import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
-import { canvasSnapshotSchema, projectCanvasSnapshot } from './canvas-snapshot.js'
+import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 
-/** How many auto-placed nodes go in a row before the next one wraps. */
-export const PLACEMENT_COLUMNS = 4
-/** Gap left between auto-placed nodes, and between them and existing content. */
-export const PLACEMENT_GUTTER_PX = 40
-
-/**
- * Size given to a node that names none. A model asked to invent four
- * integers per node spends its attention on arithmetic instead of on the
- * diagram, so every geometry field is optional and these fill the gap.
- */
-const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: number }> = {
-  text: { width: 260, height: 120 },
-  file: { width: 260, height: 120 },
-  link: { width: 260, height: 120 },
-  group: { width: 400, height: 300 },
-}
+export { canvasEditInputSchema } from './canvas-edit-ops.js'
+export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.js'
 
 /**
  * The height a node needs for its own text, never less than the default it
@@ -71,8 +68,38 @@ const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: number 
  * width, not a position.
  */
 function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  const natural = naturalNodeContentSize(node, { measure, appearance: MCP_SCENE_APPEARANCE })
-  return Math.max(fallback, natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+  // The taller of two readings: the composition root's own font, and the
+  // ratio measurer every machine has. The daemon's font is narrower than
+  // the ratio, so a box it fits can still read as cut to the drawing score
+  // and to a client drawing with a wider font; the floor is what makes
+  // "fits" mean the same thing to the tool and to what judges it.
+  const under = (m: MeasureText) =>
+    naturalNodeContentSize(node, { measure: m, appearance: MCP_SCENE_APPEARANCE }).h
+  const natural = Math.max(under(measure), under(constantRatioMeasureText))
+  return Math.max(fallback, natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+}
+
+/**
+ * Refuses a text node whose named height cannot hold its text at its width,
+ * naming the height it needs. A named height used to be kept however small
+ * — "no height" and "a small height" are different inputs — until the lane
+ * read what a model does with that: it names its neighbours' size to match
+ * them and the sentence is cut where nothing it can see says so. Growing
+ * the box silently would put it into whatever sits below, so the number
+ * goes back to the caller instead.
+ */
+function assertTextFits(index: number, opName: string, node: SpatialNode, measure: MeasureText) {
+  if (node.type !== 'text') return
+  // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
+  // is a box the renderer draws without a fade.
+  const needs = Math.floor(fittedHeight(node, measure, 0))
+  if (node.height < needs) {
+    fail(
+      index,
+      opName,
+      `its text needs ${needs}px of height at width ${node.width}; name at least that, or omit height and the box is sized to fit`,
+    )
+  }
 }
 
 /**
@@ -93,233 +120,6 @@ class CanvasEditError extends Error {
     this.name = 'CanvasEditError'
   }
 }
-
-// Derived from the stored node schemas rather than restated beside them, so
-// a field added to a node type reaches this tool's input for free. Only the
-// id and the four geometry fields become optional; `type` stays required
-// because it is the discriminator, and the per-type content fields stay
-// required because there is no sensible default for a link with no url.
-const GEOMETRY_OPTIONAL = { x: true, y: true, width: true, height: true } as const
-const DRAFT_OPTIONAL = { id: true, ...GEOMETRY_OPTIONAL } as const
-const [textOption, fileOption, linkOption, groupOption] = spatialNodeSchema.options
-const nodeDraftSchema = z.discriminatedUnion('type', [
-  textOption.partial(DRAFT_OPTIONAL),
-  fileOption.partial(DRAFT_OPTIONAL),
-  linkOption.partial(DRAFT_OPTIONAL),
-  groupOption.partial(DRAFT_OPTIONAL),
-])
-
-/**
- * A node as `region.set` declares it: geometry still optional, but the id is
- * REQUIRED. Reconciliation is matching by id — a declared node with no id
- * could only ever be a create, which is `node.add`'s job, and would make the
- * op non-idempotent.
- */
-const regionNodeSchema = z.discriminatedUnion('type', [
-  textOption.partial(GEOMETRY_OPTIONAL),
-  fileOption.partial(GEOMETRY_OPTIONAL),
-  linkOption.partial(GEOMETRY_OPTIONAL),
-  groupOption.partial(GEOMETRY_OPTIONAL),
-])
-
-const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
-
-/**
- * One step of a batch. The verbs are the ones the retired single-purpose
- * tools carried, so nothing an agent could do before is missing here — plus
- * `node.remove` / `edge.remove`, which had no tool at all: the only way to
- * delete anything used to be a whole-document replace.
- */
-const canvasOpSchema = z.discriminatedUnion('op', [
-  z.object({ op: z.literal('node.add'), node: nodeDraftSchema }).strict(),
-  z
-    .object({ op: z.literal('node.patch'), id: nodeIdSchema, patch: nodePatchFieldsSchema })
-    .strict(),
-  /**
-   * A line-range splice of a text node's body, `[startLine, endLine]`
-   * inclusive and 0-indexed. `node.patch`'s `text` replaces the whole body;
-   * this replaces part of it, so a caller editing one line of a long note
-   * sends that line. Retired `wb_body_patch` into this tool: as an op it
-   * batches with everything else, and it falls under the propose-by-default
-   * rule that tool had no mode for.
-   */
-  z
-    .object({
-      op: z.literal('node.splice'),
-      id: nodeIdSchema,
-      startLine: z.number().int().nonnegative(),
-      endLine: z.number().int().nonnegative(),
-      replacement: z.string(),
-    })
-    .strict()
-    .refine((value) => value.startLine <= value.endLine, {
-      message: 'startLine must be <= endLine',
-    }),
-  z.object({ op: z.literal('node.remove'), id: nodeIdSchema }).strict(),
-  z.object({ op: z.literal('edge.add'), edge: edgeDraftSchema }).strict(),
-  z
-    .object({ op: z.literal('edge.patch'), id: nodeIdSchema, patch: edgePatchFieldsSchema })
-    .strict(),
-  z.object({ op: z.literal('edge.remove'), id: nodeIdSchema }).strict(),
-  z.object({ op: z.literal('node.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
-  z.object({ op: z.literal('edge.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
-  z.object({ op: z.literal('tidy'), scope: z.array(nodeIdSchema).min(1).optional() }).strict(),
-  /**
-   * The annotation layer (ADR-0024). A draft may omit the id (minted) and
-   * the anchor point — a comment about a NODE names `targetNodeId` and the
-   * server anchors it at that node's top-right corner. `createdAt` defaults
-   * to now, stamped by the server so the record orders without trusting
-   * every caller's clock format.
-   */
-  z
-    .object({
-      op: z.literal('comment.add'),
-      comment: canvasCommentSchema.partial({ id: true, x: true, y: true }),
-    })
-    .strict(),
-  /**
-   * Resolution keeps the record in the document (the conversation is the
-   * point); `resolved: false` reopens. There is deliberately NO remove op:
-   * resolving is the only way to close a comment, for a person in the
-   * editor and for an agent alike (ADR-0025 decision 2) — a verb one side
-   * had and the other did not would let an agent erase feedback a person
-   * could only close.
-   */
-  z
-    .object({
-      op: z.literal('comment.resolve'),
-      id: nodeIdSchema,
-      resolved: z.boolean().optional(),
-    })
-    .strict(),
-  /**
-   * "This group should look like this." The ONE declarative op, and so the
-   * only one that deletes something it was not told about.
-   *
-   * Scope is STRICT containment in `within`'s stored box. That rule is what
-   * makes the boundary safe rather than a judgement call: a node straddling
-   * the edge — a human mid-drag — is not enclosed, so it is out of scope and
-   * survives. Edges follow the same rule: in scope only when BOTH endpoints
-   * are.
-   *
-   * A declared node that already exists is MERGED, not replaced, so omitting
-   * geometry leaves it where it is and re-applying the same region is a
-   * no-op. The cost of that choice is that this op cannot clear a field;
-   * use `node.patch` for that.
-   */
-  z
-    .object({
-      op: z.literal('region.set'),
-      within: nodeIdSchema,
-      nodes: z.array(regionNodeSchema),
-      edges: z.array(canvasEdgeSchema),
-    })
-    .strict(),
-])
-
-/**
- * 200 is a ceiling on one request, not on a board: a batch past this size is
- * almost always a model looping, and a rejected oversized batch is cheaper
- * to recover from than a half-understood one.
- */
-const MAX_OPS = 200
-
-export const canvasEditInputSchema = z
-  .object({
-    workspaceId: workspaceIdSchema,
-    documentId: documentIdSchema,
-    ops: z.array(canvasOpSchema).min(1).max(MAX_OPS),
-    /**
-     * Whether this batch CHANGES the document or PROPOSES a change to it
-     * (ADR-0029). A proposal is stored beside the content, drawn on the live
-     * document, and adopted or dismissed by a person.
-     *
-     * **The default is decided by what the batch CARRIES, not by who is
-     * calling.** Content — node and edge adds, patches and removes — is
-     * proposed, because nobody watches an agent type and there is no moment
-     * at which a person could object (decision 3). A batch carrying anything
-     * else applies: `comment.*` is the annotation layer, a lock is a claim on
-     * a document rather than a change to it, and `tidy`/`region.set` have no
-     * anchor to follow — the same line the layer already drew when it said
-     * which verbs a proposal can carry.
-     *
-     * A default that refused those instead would refuse a verb this tool
-     * supports, and one of its callers is the widget's comment box: a person
-     * typing there would get an error rather than a comment.
-     *
-     * A MIXED batch applies, because the batch is all-or-nothing and
-     * splitting it would be a third thing neither mode means.
-     *
-     * `apply` is therefore still what a surface a person is looking at
-     * should pass explicitly — the product's drawing skills do, since a
-     * person who asked for a drawing right now is the case decision 3
-     * exempts.
-     */
-    mode: z.enum(['apply', 'propose']).optional(),
-    /**
-     * Add to the proposal already open under this id instead of opening a
-     * new one — decision 8's "one request, not one call". Only meaningful
-     * with `mode: 'propose'`; a batch that touches an element the proposal
-     * already carries REPLACES that change rather than stacking a second
-     * opinion beside it.
-     */
-    proposalId: annotationIdSchema.optional(),
-    /**
-     * Move a watching browser's viewport onto what this batch touched.
-     * Defaults to true: an agent editing a board a human is looking at
-     * should not leave them hunting for the change. Set false for
-     * housekeeping edits that do not deserve to steal someone's view.
-     */
-    follow: z.boolean().optional(),
-  })
-  .strict()
-type CanvasEditInput = z.infer<typeof canvasEditInputSchema>
-
-const geometryEntrySchema = z
-  .object({
-    id: nodeIdSchema,
-    x: z.number().int(),
-    y: z.number().int(),
-    width: z.number().int(),
-    height: z.number().int(),
-  })
-  .strict()
-
-const canvasEditOutputSchema = z
-  .object({
-    documentId: documentIdSchema,
-    applied: z.number().int().nonnegative(),
-    /**
-     * Every element the batch created, changed, moved, locked or deleted.
-     * Sorted, so the payload is reproducible across runs rather than
-     * carrying Set iteration order.
-     */
-    touched: z
-      .object({
-        nodes: z.array(nodeIdSchema),
-        edges: z.array(nodeIdSchema),
-        comments: z.array(nodeIdSchema),
-      })
-      .strict(),
-    /**
-     * Final geometry of every node this batch positioned WITHOUT being told
-     * the numbers — an auto-placed add, or a node `tidy` moved. A node whose
-     * coordinates the caller supplied is not listed: the caller already
-     * knows them.
-     */
-    geometry: z.array(geometryEntrySchema),
-    /** The board after the batch, so no second round trip is needed to read it. */
-    snapshot: canvasSnapshotSchema,
-    /**
-     * What was proposed, present only in `propose` mode. The whole proposal
-     * rather than a summary of it: the caller does not know the ids minted
-     * or the geometry placed, and this is the same schema the document
-     * stores, so there is no second shape to keep in step.
-     */
-    proposed: proposalSchema.optional(),
-  })
-  .strict()
-type CanvasEditOutput = z.infer<typeof canvasEditOutputSchema>
 
 /**
  * Declared as a function rather than a closure so TypeScript narrows through
@@ -363,88 +163,6 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   // `ops` is `.min(1)`, and every op kind above contributes, so this is
   // unreachable rather than a fallback anyone should see.
   return parts.length === 0 ? 'edited the canvas' : parts.join(', ')
-}
-
-function contentBottomLeft(nodes: readonly SpatialNode[]): { x: number; y: number } {
-  if (nodes.length === 0) return { x: 0, y: 0 }
-  const left = Math.min(...nodes.map((node) => node.x))
-  const bottom = Math.max(...nodes.map((node) => node.y + node.height))
-  return { x: left, y: bottom + PLACEMENT_GUTTER_PX }
-}
-
-/**
- * Lays coordinate-less nodes out in a fixed grid below whatever is already
- * on the board. Deliberately dumb and therefore explainable: an agent can
- * predict where its nodes will land, and `tidy` is one more op away when
- * the result wants refining.
- *
- * ponytail: fixed `PLACEMENT_COLUMNS`-wide grid below existing content;
- * upgrade to free-region packing (`sceneDigest`'s `freeRegions`) if
- * placement quality turns out to matter more than predictability.
- */
-class PlacementCursor {
-  private started = false
-  private baseX = 0
-  private x = 0
-  private y = 0
-  private rowHeight = 0
-  private column = 0
-
-  next(nodes: readonly SpatialNode[], width: number, height: number): { x: number; y: number } {
-    if (!this.started) {
-      // Anchored ONCE, off the board as it stood at the first placement —
-      // re-reading it per node would chase the nodes this batch is adding.
-      const origin = contentBottomLeft(nodes)
-      this.baseX = origin.x
-      this.x = origin.x
-      this.y = origin.y
-      this.started = true
-    }
-    const at = { x: this.x, y: this.y }
-    this.x += width + PLACEMENT_GUTTER_PX
-    this.rowHeight = Math.max(this.rowHeight, height)
-    this.column += 1
-    if (this.column >= PLACEMENT_COLUMNS) {
-      this.x = this.baseX
-      this.y += this.rowHeight + PLACEMENT_GUTTER_PX
-      this.rowHeight = 0
-      this.column = 0
-    }
-    return at
-  }
-}
-
-/**
- * Lays coordinate-less nodes out INSIDE a box, wrapping at its right edge.
- *
- * `region.set` cannot use the board-level cursor: that one places below all
- * existing content, which for a region op lands the node outside the very
- * region it was declared in — and therefore out of scope on the next call,
- * so the op would not be idempotent.
- *
- * ponytail: rows from the box's top-left, and a node wider than the box
- * overflows it rather than being shrunk. Pack properly if regions turn out to
- * be used for dense layouts.
- */
-function placeWithin(
-  box: { x: number; y: number; width: number; height: number },
-  sizes: readonly { width: number; height: number }[],
-): { x: number; y: number }[] {
-  const out: { x: number; y: number }[] = []
-  let x = box.x + PLACEMENT_GUTTER_PX
-  let y = box.y + PLACEMENT_GUTTER_PX
-  let rowHeight = 0
-  for (const size of sizes) {
-    if (x !== box.x + PLACEMENT_GUTTER_PX && x + size.width > box.x + box.width) {
-      x = box.x + PLACEMENT_GUTTER_PX
-      y += rowHeight + PLACEMENT_GUTTER_PX
-      rowHeight = 0
-    }
-    out.push({ x, y })
-    x += size.width + PLACEMENT_GUTTER_PX
-    rowHeight = Math.max(rowHeight, size.height)
-  }
-  return out
 }
 
 function mintId(taken: ReadonlySet<string>, prefix: string): string {
@@ -522,15 +240,30 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
+      /**
+       * Groups this batch put at the cursor, with the sizes they were given
+       * (a default is not a choice). A caller that adds a group with no
+       * position and then declares its members has said where the group
+       * goes: around them. Placing it at the cursor and pulling the members
+       * in put a row the caller had just drawn into a column inside a
+       * default box, and every model then spent two calls undoing it.
+       */
+      const placedByCursor = new Map<string, { width?: number; height?: number; placed?: true }>()
 
-      // Resolved once, and only when some op actually creates a text node
-      // without naming a height — the composition root's measurer parses a
-      // font on first use, and a batch of patches should not pay for that.
-      // `region.set` is deliberately NOT included: what it declares must fit
-      // inside its group, so growing a node there could refuse the very op
-      // that asked for it. A node created there keeps the flat default.
+      // Resolved once, and only when some op creates a text node or changes
+      // what decides whether one's text fits — the composition root's
+      // measurer parses a font on first use, and a batch of moves and locks
+      // should not pay for that. `region.set` is deliberately NOT included:
+      // what it declares must fit inside its group, so growing a node there
+      // could refuse the very op that asked for it. A node created there
+      // keeps the flat default.
       const wantsFit = input.ops.some(
-        (op) => op.op === 'node.add' && op.node.type === 'text' && op.node.height === undefined,
+        (op) =>
+          (op.op === 'node.add' && op.node.type === 'text') ||
+          (op.op === 'node.patch' &&
+            (op.patch.text !== undefined ||
+              op.patch.width !== undefined ||
+              op.patch.height !== undefined)),
       )
       const measure: MeasureText | undefined = wantsFit
         ? ((await deps.measure?.()) ?? constantRatioMeasureText)
@@ -539,10 +272,267 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)
       const edgeAt = (id: string) => edges.find((edge) => edge.id === id)
 
-      input.ops.forEach((op, index) => {
-        const issues = (error: z.ZodError): string =>
-          error.issues.map((issue) => issue.message).join('; ')
+      const groupNamed = (index: number, opName: string, id: string): SpatialNode => {
+        const group = nodeAt(id)
+        if (group === undefined || group.type !== 'group') {
+          fail(
+            index,
+            opName,
+            `"${id}" is not a group on the canvas; within names one to place inside — to wrap boxes that already exist in a new group, add the group and then region.set`,
+          )
+        }
+        return group
+      }
+      /** Strict containment in a group's CURRENT box, the group itself excluded. */
+      const enclosedBy =
+        (group: SpatialNode) =>
+        (node: SpatialNode): boolean =>
+          node.id !== group.id &&
+          node.x >= group.x &&
+          node.y >= group.y &&
+          node.x + node.width <= group.x + group.width &&
+          node.y + node.height <= group.y + group.height
+      /**
+       * Grows a group so that every rect is inside it, gutter included.
+       * Grow-only, only when a rect reaches past the right or bottom edge
+       * less `keep` (a caller's own position is honoured to the edge; a
+       * position this batch chose keeps the gutter, since flush with the
+       * frame reads as jammed), and the top-left stays put, so re-applying
+       * the same op stays a no-op; what it can do is enclose a neighbour
+       * that sat just past the old edge, which the next region.set will
+       * then see in scope — geometry is geometry, and the result reports
+       * the size. A rect before the top-left is the caller's to move;
+       * callers refuse it.
+       */
+      const growToHold = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        rects: readonly Rect[],
+        keep = 0,
+      ): void => {
+        const bounds = nodeAt(group.id) ?? group
+        const needed = rects.reduce(
+          (acc, rect) => {
+            const right = rect.x + rect.width
+            const bottom = rect.y + rect.height
+            return {
+              width:
+                right + keep > bounds.x + bounds.width
+                  ? Math.max(acc.width, right + PLACEMENT_GUTTER_PX - bounds.x)
+                  : acc.width,
+              height:
+                bottom + keep > bounds.y + bounds.height
+                  ? Math.max(acc.height, bottom + PLACEMENT_GUTTER_PX - bounds.y)
+                  : acc.height,
+            }
+          },
+          { width: bounds.width, height: bounds.height },
+        )
+        if (needed.width <= bounds.width && needed.height <= bounds.height) return
+        // Never over a neighbour. Growth that swallows a node just past the
+        // old edge makes it a member the next region.set deletes by
+        // omission — so a node the old box did not overlap is a wall, and
+        // the refusal names it.
+        const grownBox = { ...bounds, width: needed.width, height: needed.height }
+        const wall = nodes.find(
+          (node) => node.id !== bounds.id && !overlaps(node, bounds) && overlaps(node, grownBox),
+        )
+        if (wall !== undefined) {
+          fail(
+            index,
+            opName,
+            `"${bounds.id}" would have to grow to ${needed.width}x${needed.height} and that reaches "${wall.id}"; move "${wall.id}" or place the node elsewhere`,
+          )
+        }
+        if (nodeLocks.has(bounds.id)) {
+          fail(
+            index,
+            opName,
+            `"${bounds.id}" is locked and too small for what goes in it (needs ${needed.width}x${needed.height}); unlock it, or keep each node inside it`,
+          )
+        }
+        const grown: SpatialNode = { ...bounds, width: needed.width, height: needed.height }
+        nodes = nodes.map((node) => (node.id === grown.id ? grown : node))
+        touchedNodes.add(grown.id)
+        geometry.set(grown.id, {
+          id: grown.id,
+          x: grown.x,
+          y: grown.y,
+          width: grown.width,
+          height: grown.height,
+        })
+      }
+      /**
+       * Places sizes inside a group around what it already holds. A
+       * placement is this batch's own arithmetic, so a placement that lands
+       * outside is its to fix, not the caller's: the group grows.
+       */
+      const placeInside = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        sizes: readonly { width: number; height: number }[],
+      ): { x: number; y: number }[] => {
+        const bounds = nodeAt(group.id) ?? group
+        const placements = placeWithin(bounds, sizes, nodes.filter(enclosedBy(bounds)))
+        growToHold(
+          index,
+          opName,
+          bounds,
+          placements.map((at, i) => ({ ...at, ...(sizes[i] ?? { width: 0, height: 0 }) })),
+          PLACEMENT_GUTTER_PX,
+        )
+        return placements
+      }
 
+      /**
+       * Puts a group this batch placed at the cursor around what is put in
+       * it: the rects' bounds plus the gutter, joined with the group's
+       * current box when it already holds something, never smaller than a
+       * size it was given. A bystander in that box would become a member
+       * the next region.set deletes by omission, so it is a wall; a frame
+       * the box nests inside is not.
+       */
+      const placeAround = (
+        index: number,
+        opName: string,
+        group: SpatialNode,
+        rects: readonly SpatialNode[],
+        given: { width?: number; height?: number; placed?: true },
+      ): SpatialNode => {
+        // The cursor's box holds nothing, whatever it happens to cover: only
+        // a box already placed around members is joined with the next.
+        const holding = given.placed === true
+        const around = rects.map((r) => ({
+          x: r.x - PLACEMENT_GUTTER_PX,
+          y: r.y - PLACEMENT_GUTTER_PX,
+          width: r.width + 2 * PLACEMENT_GUTTER_PX,
+          height: r.height + 2 * PLACEMENT_GUTTER_PX,
+        }))
+        const all = holding ? [...around, group] : around
+        const left = Math.min(...all.map((r) => r.x))
+        const top = Math.min(...all.map((r) => r.y))
+        const right = Math.max(...all.map((r) => r.x + r.width))
+        const bottom = Math.max(...all.map((r) => r.y + r.height))
+        const box = {
+          x: left,
+          y: top,
+          width: Math.max(given.width ?? 0, right - left),
+          height: Math.max(given.height ?? 0, bottom - top),
+        }
+        const members = new Set(rects.map((r) => r.id))
+        // Another group this batch put at the cursor, still holding
+        // nothing, is not a wall: it follows its own members when they
+        // come, and until then the cursor's spot is nobody's choice.
+        const unsettled = (node: SpatialNode) =>
+          placedByCursor.has(node.id) && placedByCursor.get(node.id)?.placed !== true
+        const wall = nodes.find(
+          (node) =>
+            node.id !== group.id &&
+            !members.has(node.id) &&
+            !enclosedBy(group)(node) &&
+            !unsettled(node) &&
+            overlaps(node, box) &&
+            !(node.type === 'group' && enclosedBy(node)({ ...group, ...box })),
+        )
+        if (wall !== undefined) {
+          fail(
+            index,
+            opName,
+            `"${group.id}" placed around its members would reach "${wall.id}"; move "${wall.id}", or give "${group.id}" a position and size`,
+          )
+        }
+        const placed = { ...group, ...box }
+        nodes = nodes.map((node) => (node.id === group.id ? placed : node))
+        touchedNodes.add(group.id)
+        geometry.set(group.id, { id: group.id, ...box })
+        placedByCursor.set(group.id, { ...given, placed: true })
+        return placed
+      }
+
+      /** The node ids one target selects, in canvas order; never empty. */
+      const nodeTargets = (index: number, opName: string, target: Target): string[] => {
+        if (target.id !== undefined) {
+          if (nodeAt(target.id) === undefined) {
+            fail(index, opName, `node "${target.id}" is not on the canvas`)
+          }
+          return [target.id]
+        }
+        if (target.within !== undefined) {
+          const group = groupNamed(index, opName, target.within)
+          const ids = nodes.filter(enclosedBy(group)).map((node) => node.id)
+          if (ids.length === 0) fail(index, opName, `no node is inside "${group.id}"`)
+          return ids
+        }
+        if (nodes.length === 0) fail(index, opName, 'the canvas has no nodes')
+        return nodes.map((node) => node.id)
+      }
+      const edgeTargets = (index: number, opName: string, target: Target): string[] => {
+        if (target.id !== undefined) {
+          if (edgeAt(target.id) === undefined) {
+            fail(index, opName, `edge "${target.id}" is not on the canvas`)
+          }
+          return [target.id]
+        }
+        if (target.within !== undefined) {
+          const group = groupNamed(index, opName, target.within)
+          const inside = new Set(nodes.filter(enclosedBy(group)).map((node) => node.id))
+          const ids = edges
+            .filter((edge) => inside.has(edge.fromNode) && inside.has(edge.toNode))
+            .map((edge) => edge.id)
+          if (ids.length === 0) fail(index, opName, `no edge has both ends inside "${group.id}"`)
+          return ids
+        }
+        if (edges.length === 0) fail(index, opName, 'the canvas has no edges')
+        return edges.map((edge) => edge.id)
+      }
+
+      const issues = (error: z.ZodError): string =>
+        error.issues.map((issue) => issue.message).join('; ')
+      const patchNode = (
+        index: number,
+        opName: string,
+        id: string,
+        patch: z.infer<typeof nodePatchFieldsSchema>,
+      ): void => {
+        const node = nodeAt(id)
+        if (node === undefined) fail(index, opName, `node "${id}" is not on the canvas`)
+        const parsed = spatialNodeSchema.safeParse({ ...node, ...patch })
+        if (!parsed.success) fail(index, opName, issues(parsed.error))
+        const updated = parsed.data
+        // The per-type node schemas are non-strict on purpose — JSON
+        // Canvas 1.0 lets a document carry another tool's extension keys,
+        // and refusing them would make those documents unreadable. The
+        // cost is that a patch key the TARGET's type does not have is
+        // stripped by the re-parse above rather than rejected, so the
+        // write would report success over a document it did not change.
+        // `label` on a text node is the case that exists today: it is on
+        // the patch allowlist because a group has one.
+        //
+        // Caught here rather than by narrowing the allowlist per type,
+        // because one check covers every key and every type — including
+        // whichever content field a later increment allows.
+        const dropped = Object.keys(patch).filter((key) => !(key in updated))
+        if (dropped.length > 0) {
+          fail(
+            index,
+            opName,
+            `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
+              'accepted and silently dropped, so it is refused instead',
+          )
+        }
+        if (
+          measure !== undefined &&
+          (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
+        ) {
+          assertTextFits(index, opName, updated, measure)
+        }
+        nodes = nodes.map((existing) => (existing.id === id ? updated : existing))
+        touchedNodes.add(id)
+      }
+
+      input.ops.forEach((op, index) => {
         switch (op.op) {
           case 'node.add': {
             const draft = op.node
@@ -569,50 +559,53 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // y has no position, and guessing the other half would put it
             // somewhere the caller did not ask for either.
             const positioned = draft.x !== undefined && draft.y !== undefined
+            const within = op.within ?? undefined
+            const group = within === undefined ? undefined : groupNamed(index, op.op, within)
             const at = positioned
               ? { x: draft.x as number, y: draft.y as number }
-              : cursor.next(nodes, width, height)
+              : group === undefined
+                ? cursor.next(nodes, width, height)
+                : placeInside(index, op.op, group, [{ width, height }])[0]
+            if (at === undefined) fail(index, op.op, 'no placement')
 
             const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            if (draft.height !== undefined && measure !== undefined) {
+              assertTextFits(index, op.op, parsed.data, measure)
+            }
+            // A position the CALLER chose, in a group the caller named: both
+            // are explicit, and the group grows so both hold — except before
+            // its top-left, which growth keeps, so that one is refused.
+            if (positioned && group !== undefined) {
+              const unplaced = placedByCursor.get(group.id)
+              if (unplaced !== undefined) {
+                placeAround(index, op.op, group, [parsed.data], unplaced)
+              } else {
+                if (parsed.data.x < group.x || parsed.data.y < group.y) {
+                  fail(index, op.op, outsideDetail(id, parsed.data, group))
+                }
+                growToHold(index, op.op, group, [parsed.data])
+              }
+            }
             nodes = [...nodes, parsed.data]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
+            if (!positioned && group === undefined && draft.type === 'group') {
+              placedByCursor.set(id, { width: draft.width, height: draft.height })
+            }
             return
           }
 
           case 'node.patch': {
-            const node = nodeAt(op.id)
-            if (node === undefined) fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (nodeLocks.has(op.id)) {
-              fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+            const ids = nodeTargets(index, op.op, op)
+            // Locks are checked for the whole selection before any of it
+            // changes, so a refusal leaves nothing half-applied.
+            for (const id of ids) {
+              if (nodeLocks.has(id)) {
+                fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+              }
             }
-            const parsed = spatialNodeSchema.safeParse({ ...node, ...op.patch })
-            if (!parsed.success) fail(index, op.op, issues(parsed.error))
-            const updated = parsed.data
-            // The per-type node schemas are non-strict on purpose — JSON
-            // Canvas 1.0 lets a document carry another tool's extension keys,
-            // and refusing them would make those documents unreadable. The
-            // cost is that a patch key the TARGET's type does not have is
-            // stripped by the re-parse above rather than rejected, so the
-            // write would report success over a document it did not change.
-            // `label` on a text node is the case that exists today: it is on
-            // the patch allowlist because a group has one.
-            //
-            // Caught here rather than by narrowing the allowlist per type,
-            // because one check covers every key and every type — including
-            // whichever content field a later increment allows.
-            const dropped = Object.keys(op.patch).filter((key) => !(key in updated))
-            if (dropped.length > 0) {
-              fail(
-                index,
-                op.op,
-                `a ${updated.type} node has no ${dropped.join(', ')} — the patch would have been ` +
-                  'accepted and silently dropped, so it is refused instead',
-              )
-            }
-            nodes = nodes.map((existing) => (existing.id === op.id ? updated : existing))
-            touchedNodes.add(op.id)
+            for (const id of ids) patchNode(index, op.op, id, op.patch)
             return
           }
 
@@ -653,22 +646,25 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'node.remove': {
-            if (nodeAt(op.id) === undefined)
-              fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (nodeLocks.has(op.id)) {
-              fail(index, op.op, `node "${op.id}" is locked; unlock it with a node.lock op first`)
+            const ids = new Set(nodeTargets(index, op.op, op))
+            for (const id of ids) {
+              if (nodeLocks.has(id)) {
+                fail(index, op.op, `node "${id}" is locked; unlock it with a node.lock op first`)
+              }
             }
             // Edges touching a removed node go with it. Left behind they are
             // a canvas spatialCanvasSchema refuses on the next read, so
             // "apply exactly the op I was handed" would store a board that
             // cannot be loaded.
             for (const edge of edges) {
-              if (edge.fromNode === op.id || edge.toNode === op.id) touchedEdges.add(edge.id)
+              if (ids.has(edge.fromNode) || ids.has(edge.toNode)) touchedEdges.add(edge.id)
             }
-            edges = edges.filter((edge) => edge.fromNode !== op.id && edge.toNode !== op.id)
-            nodes = nodes.filter((node) => node.id !== op.id)
-            nodeLocks.delete(op.id)
-            touchedNodes.add(op.id)
+            edges = edges.filter((edge) => !ids.has(edge.fromNode) && !ids.has(edge.toNode))
+            nodes = nodes.filter((node) => !ids.has(node.id))
+            for (const id of ids) {
+              nodeLocks.delete(id)
+              touchedNodes.add(id)
+            }
             return
           }
 
@@ -719,185 +715,160 @@ export function createCanvasEditTool(deps: ServerDeps) {
           }
 
           case 'edge.remove': {
-            if (edgeAt(op.id) === undefined)
-              fail(index, op.op, `edge "${op.id}" is not on the canvas`)
-            if (edgeLocks.has(op.id)) {
-              fail(index, op.op, `edge "${op.id}" is locked; unlock it with an edge.lock op first`)
+            const ids = new Set(edgeTargets(index, op.op, op))
+            for (const id of ids) {
+              if (edgeLocks.has(id)) {
+                fail(index, op.op, `edge "${id}" is locked; unlock it with an edge.lock op first`)
+              }
             }
-            edges = edges.filter((edge) => edge.id !== op.id)
-            edgeLocks.delete(op.id)
-            touchedEdges.add(op.id)
+            edges = edges.filter((edge) => !ids.has(edge.id))
+            for (const id of ids) {
+              edgeLocks.delete(id)
+              touchedEdges.add(id)
+            }
             return
           }
 
-          case 'node.lock': {
-            if (nodeAt(op.id) === undefined)
-              fail(index, op.op, `node "${op.id}" is not on the canvas`)
-            if (op.locked) nodeLocks.add(op.id)
-            else nodeLocks.delete(op.id)
-            touchedNodes.add(op.id)
+          case 'node.lock':
+            for (const id of nodeTargets(index, op.op, op)) {
+              if (op.locked) nodeLocks.add(id)
+              else nodeLocks.delete(id)
+              touchedNodes.add(id)
+            }
             return
-          }
 
-          case 'edge.lock': {
-            if (edgeAt(op.id) === undefined)
-              fail(index, op.op, `edge "${op.id}" is not on the canvas`)
-            if (op.locked) edgeLocks.add(op.id)
-            else edgeLocks.delete(op.id)
-            touchedEdges.add(op.id)
+          case 'edge.lock':
+            for (const id of edgeTargets(index, op.op, op)) {
+              if (op.locked) edgeLocks.add(id)
+              else edgeLocks.delete(id)
+              touchedEdges.add(id)
+            }
             return
-          }
 
           case 'region.set': {
-            const group = nodeAt(op.within)
-            if (group === undefined || group.type !== 'group') {
-              fail(
-                index,
-                op.op,
-                `"${op.within}" is not a group on the canvas; region.set needs one to bound the region`,
-              )
-            }
-            const bounds = group
-            const encloses = (node: SpatialNode): boolean =>
-              node.id !== bounds.id &&
-              node.x >= bounds.x &&
-              node.y >= bounds.y &&
-              node.x + node.width <= bounds.x + bounds.width &&
-              node.y + node.height <= bounds.y + bounds.height
-
-            const inScope = nodes.filter(encloses)
+            let group = groupNamed(index, op.op, op.within)
+            // A group this batch put at the cursor and never placed around
+            // anything holds nothing, whatever the cursor's box covers.
+            const unsettled =
+              placedByCursor.get(group.id)?.placed !== true && placedByCursor.has(group.id)
+            const inScope = unsettled ? [] : nodes.filter(enclosedBy(group))
             const inScopeIds = new Set(inScope.map((node) => node.id))
-            const inScopeEdges = edges.filter(
-              (edge) => inScopeIds.has(edge.fromNode) && inScopeIds.has(edge.toNode),
-            )
-            // Refused up front, before anything is removed: this op deletes by
-            // OMISSION, and silently dropping a locked element would be the
-            // worst possible reading of that.
+            const members = new Set(op.nodes)
+            if (members.has(group.id)) {
+              fail(index, op.op, `"${group.id}" is the group itself, not one of its members`)
+            }
+            for (const id of members) {
+              if (nodeAt(id) === undefined) {
+                fail(
+                  index,
+                  op.op,
+                  `node "${id}" is not on the canvas; region.set names members that exist — create it with node.add and within "${group.id}"`,
+                )
+              }
+            }
+            // Refused up front, before anything is removed or moved: this op
+            // deletes by OMISSION, and silently dropping a locked element
+            // would be the worst possible reading of that. A listed node
+            // that is elsewhere is about to be moved, so its lock counts too.
             for (const node of inScope) {
               if (nodeLocks.has(node.id)) {
                 fail(index, op.op, `node "${node.id}" inside the region is locked`)
               }
             }
-            for (const edge of inScopeEdges) {
-              if (edgeLocks.has(edge.id)) {
-                fail(index, op.op, `edge "${edge.id}" inside the region is locked`)
+            for (const id of members) {
+              if (!inScopeIds.has(id) && nodeLocks.has(id)) {
+                fail(
+                  index,
+                  op.op,
+                  `node "${id}" is locked; unlock it before moving it into "${group.id}"`,
+                )
               }
             }
 
-            const declaredNodes = new Set(op.nodes.map((node) => node.id))
-            const declaredEdges = new Set(op.edges.map((edge) => edge.id))
-            const dropped = inScope.filter((node) => !declaredNodes.has(node.id))
+            // A group this batch placed at the cursor, still holding nothing,
+            // goes around its members where they sit: their bounds plus the
+            // gutter, never smaller than a size it was given. A bystander in
+            // that box would become a member the next region.set deletes by
+            // omission, so it is a wall; a frame the box nests inside is not.
+            const unplaced = placedByCursor.get(group.id)
+            if (unplaced !== undefined && unsettled && members.size > 0) {
+              const rects = [...members].map((id) => nodeAt(id) as SpatialNode)
+              group = placeAround(index, op.op, group, rects, unplaced)
+            }
+
+            const dropped = inScope.filter((node) => !members.has(node.id))
             const droppedIds = new Set(dropped.map((node) => node.id))
             for (const node of dropped) {
               touchedNodes.add(node.id)
               nodeLocks.delete(node.id)
             }
-            // An edge goes if it was in scope and undeclared, OR if either
-            // endpoint just went — a dangling edge stores a canvas the next
-            // read refuses.
+            nodes = nodes.filter((node) => !droppedIds.has(node.id))
+
+            // Members that are elsewhere come in, placed around the ones
+            // already inside; the group grows if it has no room. A member
+            // ACROSS the boundary is neither: that is the mid-drag case the
+            // scope rule protects, so it is left exactly where it is.
+            const arriving = op.nodes.filter((id) => {
+              if (inScopeIds.has(id)) return false
+              const node = nodeAt(id)
+              return node === undefined || !overlaps(node, group)
+            })
+            const placements = placeInside(
+              index,
+              op.op,
+              group,
+              arriving.map((id) => {
+                const node = nodeAt(id)
+                return { width: node?.width ?? 0, height: node?.height ?? 0 }
+              }),
+            )
+            arriving.forEach((id, at) => {
+              const placed = placements[at]
+              const node = nodeAt(id)
+              if (placed === undefined || node === undefined) return
+              const moved = { ...node, ...placed }
+              nodes = nodes.map((candidate) => (candidate.id === id ? moved : candidate))
+              touchedNodes.add(id)
+              geometry.set(id, { id, ...placed, width: node.width, height: node.height })
+            })
+
+            // An edge goes if either endpoint just went — a dangling edge
+            // stores a canvas the next read refuses — or, when `edges` is
+            // given, if it runs between two members and is not listed.
             // Scoped to THIS op. `touchedEdges` spans the whole batch, so an
-            // edge an earlier op merely touched is not this region's to delete.
+            // edge an earlier op merely touched is not this region's to
+            // delete.
+            const keep = op.edges === undefined ? undefined : new Set(op.edges)
+            if (keep !== undefined) {
+              for (const id of keep) {
+                const edge = edgeAt(id)
+                if (edge === undefined) fail(index, op.op, `edge "${id}" is not on the canvas`)
+                for (const endpoint of [edge.fromNode, edge.toNode]) {
+                  if (!members.has(endpoint)) {
+                    fail(
+                      index,
+                      op.op,
+                      `edge "${id}" ends at "${endpoint}", which is not a member; an edge is in the region only when both ends are`,
+                    )
+                  }
+                }
+              }
+            }
             const removedEdges = new Set<string>()
             for (const edge of edges) {
               const strandedBy = droppedIds.has(edge.fromNode) || droppedIds.has(edge.toNode)
-              const undeclaredInRegion =
-                inScopeEdges.some((candidate) => candidate.id === edge.id) &&
-                !declaredEdges.has(edge.id)
-              if (strandedBy || undeclaredInRegion) {
+              const unlistedAmongMembers =
+                keep !== undefined &&
+                members.has(edge.fromNode) &&
+                members.has(edge.toNode) &&
+                !keep.has(edge.id)
+              if (strandedBy || unlistedAmongMembers) {
                 removedEdges.add(edge.id)
                 touchedEdges.add(edge.id)
                 edgeLocks.delete(edge.id)
               }
             }
-            nodes = nodes.filter((node) => !droppedIds.has(node.id))
             edges = edges.filter((edge) => !removedEdges.has(edge.id))
-
-            // Placement for the declared nodes that carry no position, all at
-            // once so they tile rather than stack.
-            const needPlacing = op.nodes.filter(
-              (node) =>
-                nodeAt(node.id) === undefined && (node.x === undefined || node.y === undefined),
-            )
-            const placements = placeWithin(
-              bounds,
-              needPlacing.map((node) => ({
-                width: node.width ?? DEFAULT_SIZE[node.type].width,
-                height: node.height ?? DEFAULT_SIZE[node.type].height,
-              })),
-            )
-            const placementFor = new Map(
-              needPlacing.map((node, at) => [node.id, placements[at]] as const),
-            )
-
-            for (const declared of op.nodes) {
-              const existing = nodeAt(declared.id)
-              const size = DEFAULT_SIZE[declared.type]
-              const width = declared.width ?? existing?.width ?? size.width
-              const height = declared.height ?? existing?.height ?? size.height
-              const placed = placementFor.get(declared.id)
-              const at =
-                declared.x !== undefined && declared.y !== undefined
-                  ? { x: declared.x, y: declared.y }
-                  : existing !== undefined
-                    ? { x: existing.x, y: existing.y }
-                    : (placed ?? { x: bounds.x, y: bounds.y })
-              // MERGED over what is already there, not replaced: that is what
-              // makes re-applying the same region a no-op.
-              const parsed = spatialNodeSchema.safeParse({
-                ...(existing ?? {}),
-                ...declared,
-                ...at,
-                width,
-                height,
-              })
-              if (!parsed.success) fail(index, op.op, issues(parsed.error))
-              const next = parsed.data
-              // A declaration names what the region CONTAINS, so its result has
-              // to be inside it. Without this an op scoped to one group could
-              // move any node on the board — and since the lock preflight only
-              // walks what is in scope, a locked one at that.
-              if (!encloses(next)) {
-                fail(
-                  index,
-                  op.op,
-                  `node "${declared.id}" would not be inside "${bounds.id}"; region.set declares what the region contains`,
-                )
-              }
-              nodes =
-                existing === undefined
-                  ? [...nodes, next]
-                  : nodes.map((node) => (node.id === declared.id ? next : node))
-              touchedNodes.add(declared.id)
-              if (placed !== undefined) {
-                geometry.set(declared.id, { id: declared.id, ...placed, width, height })
-              }
-            }
-
-            for (const declared of op.edges) {
-              for (const endpoint of [declared.fromNode, declared.toNode]) {
-                const node = nodeAt(endpoint)
-                if (node === undefined) {
-                  fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
-                }
-                // Same rule as the nodes above, and the same reason: an edge is
-                // in this region only when BOTH its endpoints are.
-                if (!encloses(node)) {
-                  fail(
-                    index,
-                    op.op,
-                    `endpoint "${endpoint}" is not inside "${bounds.id}"; an edge is in the region only when both ends are`,
-                  )
-                }
-              }
-              const parsed = canvasEdgeSchema.safeParse(declared)
-              if (!parsed.success) fail(index, op.op, issues(parsed.error))
-              const next = parsed.data
-              edges =
-                edgeAt(declared.id) === undefined
-                  ? [...edges, next]
-                  : edges.map((edge) => (edge.id === declared.id ? next : edge))
-              touchedEdges.add(declared.id)
-            }
             return
           }
 
@@ -949,23 +920,25 @@ export function createCanvasEditTool(deps: ServerDeps) {
           case 'tidy': {
             // Locks bind tidy exactly as they bind the editor: a locked node
             // is a fixed obstacle it routes around, never one it moves.
+            const scope =
+              op.within !== undefined ? nodeTargets(index, op.op, { within: op.within }) : op.scope
             const moved = tidyNodes(nodes, {
-              scope: op.scope === undefined ? undefined : new Set(op.scope),
+              scope: scope === undefined ? undefined : new Set(scope),
               locked: (id) => nodeLocks.has(id),
+              edges,
             })
             const target = new Map(moved.map((move) => [move.id, move]))
             nodes = nodes.map((node) => {
               const move = target.get(node.id)
               if (move === undefined) return node
-              geometry.set(node.id, {
-                id: node.id,
-                x: move.x,
-                y: move.y,
-                width: node.width,
-                height: node.height,
-              })
+              // A frame that grew to hold its members carries its new size.
+              const size = {
+                width: move.width ?? node.width,
+                height: move.height ?? node.height,
+              }
+              geometry.set(node.id, { id: node.id, x: move.x, y: move.y, ...size })
               touchedNodes.add(node.id)
-              return { ...node, x: move.x, y: move.y }
+              return { ...node, x: move.x, y: move.y, ...size }
             })
             return
           }

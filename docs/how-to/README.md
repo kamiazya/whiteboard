@@ -20,6 +20,8 @@ Guides:
   Chinese, Korean and other scripts as empty boxes.
 - **[report-a-gesture-problem](report-a-gesture-problem.md)** — copy the built-in pointer-event
   trace from Settings when a touch or drag misbehaved.
+- **[choose-a-theme](choose-a-theme.md)** — draw a canvas hand-drawn or neon, from the Display
+  panel or through `wb_facet_set`, and ask `wb_scene_render` or an export for that look.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
   view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
   notice).

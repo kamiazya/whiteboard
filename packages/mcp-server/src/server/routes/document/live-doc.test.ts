@@ -154,6 +154,22 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     expect(elements[0].type).toBe('ellipse')
   })
 
+  // A body Loro cannot decode used to escape the handler as a thrown
+  // decode error — the sibling workspace-document route already answers
+  // this with 400, and a client sending garbage is not a server failure.
+  it('refuses bytes Loro cannot decode with 400, and leaves the document as it was', async () => {
+    const app = createDocumentRouter()
+    for (const bytes of [new Uint8Array(), new Uint8Array([1, 2, 3])]) {
+      const res = await app.request('/api/w/session1/document/canvas-a/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/octet-stream' },
+        body: bytes,
+      })
+      expect(res.status, `${bytes.length} bytes`).toBe(400)
+      expect(await res.json()).toMatchObject({ error: 'invalid_body' })
+    }
+  })
+
   it('rejects an oversized update body with 413 payload_too_large', async () => {
     const app = createDocumentRouter()
     const oversized = new Uint8Array(16 * 1024 * 1024 + 1)

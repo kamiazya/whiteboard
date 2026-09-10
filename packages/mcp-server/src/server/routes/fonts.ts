@@ -1,13 +1,25 @@
+import { readFile } from 'node:fs/promises'
 import { basename, extname } from 'node:path'
 import type { ApiErrorBody } from '@kamiazya/whiteboard-daemon-client/api-contracts/errors'
-import type {
-  InstallFontResponse,
-  ListFontsResponse,
+import {
+  FONT_CATALOGUE,
+  type InstallFontResponse,
+  type ListFontsResponse,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import { Hono } from 'hono'
-import { FONT_CATALOGUE } from '../export/font-catalogue.js'
 import { FontInstallError, installFont } from '../export/install-font.js'
 import { installedFontFiles } from '../export/installed-fonts.js'
+
+/**
+ * What the browser is told a font file is. The daemon only ever installs
+ * the extensions `installedFontFiles` admits, so a stem it found has one of
+ * these; anything else is a file somebody dropped in by hand.
+ */
+const FONT_CONTENT_TYPE: Readonly<Record<string, string>> = {
+  '.ttf': 'font/ttf',
+  '.otf': 'font/otf',
+  '.ttc': 'font/collection',
+}
 
 /**
  * The font picker's daemon surface.
@@ -36,6 +48,29 @@ export function createFontsRouter({ install = installFont }: FontsRouterDeps = {
       })),
     }
     return c.json(response)
+  })
+
+  // The bytes of an installed font, for the browser half of ADR-0012
+  // decision 4: the app registers the same face the export draws with, so
+  // a theme's family measures the same on screen and in a PNG. The id is
+  // matched against what is on disk — never joined into a path — so a
+  // request cannot name a file outside the font directory.
+  app.get('/api/fonts/:id/file', async (c) => {
+    const id = c.req.param('id')
+    const file = (await installedFontFiles()).find((path) => basename(path, extname(path)) === id)
+    if (file === undefined) {
+      return c.json(
+        { error: 'not_found', message: `No installed font ${id}.` } satisfies ApiErrorBody,
+        404,
+      )
+    }
+    const bytes = await readFile(file)
+    return c.body(bytes, 200, {
+      'Content-Type': FONT_CONTENT_TYPE[extname(file).toLowerCase()] ?? 'application/octet-stream',
+      // Immutable for as long as the id names these bytes: a reinstall
+      // writes the same catalogue file under the same id.
+      'Cache-Control': 'private, max-age=86400',
+    })
   })
 
   app.post('/api/fonts/:id/install', async (c) => {

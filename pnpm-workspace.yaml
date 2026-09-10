@@ -33,7 +33,7 @@ catalog:
   # reached it. That pin is gone — mcp-server builds with tsdown, whose dts
   # plugin has a `tsgo` generator that reads TypeScript 7 directly.
   typescript: "^7.0.2"
-  vite: "^8.2.0"
+  vite: "^8.2.2"
   vitest: "^5.0.0"
   "@vitest/browser-playwright": "^5.0.0"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
@@ -80,17 +80,6 @@ minimumReleaseAgeExclude:
   # older than the window and these entries stop doing anything.
   - vitest
   - "@vitest/*"
-  # TEMPORARY, and not a security patch: these let the tsup -> tsdown move be
-  # verified before the window elapses. tsdown 0.23.0 and rolldown-plugin-dts
-  # 0.28.5 were published 2026-09-03, so they age past it at 2026-09-10T17:46Z.
-  # REMOVE THESE THREE BEFORE MERGING — the entries exist only so the migration
-  # could be judged today, and the merged tree must install under the plain
-  # policy.
-  - tsdown
-  - rolldown-plugin-dts
-  # tsdown's own transitive dep, in the same window and only reachable
-  # through it.
-  - tinyexec
 minimumReleaseAgeIgnoreMissingTime: false
 minimumReleaseAgeStrict: true
 

@@ -10,3 +10,4 @@
 export * from './data.js'
 export type { LucideIconElement } from './icons/icons.js'
 export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX, VISUAL_ICONS } from './icons/icons.js'
+export * from './themes.js'

@@ -71,6 +71,16 @@ describe('PUT /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(saved[0]).toBe(0x89) // PNG magic
   })
 
+  it('refuses an empty upload with 400 rather than storing a zero-byte file', async () => {
+    const app = createFilesRouter()
+    const res = await app.request('/api/w/session1/document/canvas-a/file/file-002', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'image/png' },
+    })
+    expect(res.status).toBe(400)
+    expect(await res.json()).toMatchObject({ error: 'empty_body' })
+  })
+
   it('writes the upload inside the per-workspace write lock, the same barrier file-gc holds across its stat+unlink pass', async () => {
     withWorkspaceWriteLockMock.mockClear()
     const imageData = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
@@ -154,19 +164,24 @@ describe('GET /api/w/:workspaceId/document/:path/file/:fileId', () => {
     expect(new Uint8Array(buf)[0]).toBe(0x89)
   })
 
-  it('returns 404 for a missing fileId', async () => {
+  // A JSON 404, like every other refusal on this surface: the browser
+  // client reads the body, and a plain-text one is a refusal it cannot read.
+  it('returns a JSON 404 for a missing fileId', async () => {
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/nonexistent')
     expect(res.status).toBe(404)
+    expect(res.headers.get('Content-Type')).toContain('json')
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
   })
 
-  it('returns 404 when the files directory does not exist yet', async () => {
+  it('returns a JSON 404 when the files directory does not exist yet', async () => {
     await rm(join(tempDir, 'session1', 'files'), { recursive: true, force: true })
 
     const app = createFilesRouter()
     const res = await app.request('/api/w/session1/document/canvas-a/file/file-001')
 
     expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: 'not_found' })
   })
 
   it('returns structured 500 when the files path is corrupt instead of a directory', async () => {
