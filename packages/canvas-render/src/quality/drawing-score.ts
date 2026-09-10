@@ -76,10 +76,11 @@ export interface DrawingScore {
   readonly crampedMembers: number
   /**
    * Pairs of boxes that nearly line up on an axis and do not: the closest
-   * of their three anchors (left/centre/right, or top/middle/bottom)
-   * differs by less than `NEAR_MISS_PX` but not by zero. Aligned in
-   * intent, not in fact — while a wider box centred on a narrower one, or
-   * flush with its far edge, IS aligned, on the anchor the drawer chose.
+   * of their anchors (left/centre/right, or top/middle — a bottom follows
+   * from a text-fitted height and is nobody's choice) differs by less than
+   * `NEAR_MISS_PX` but not by zero. Aligned in intent, not in fact — while
+   * a wider box centred on a narrower one, or flush with its far edge, IS
+   * aligned, on the anchor the drawer chose.
    */
   readonly nearMisses: number
   /**
@@ -423,16 +424,25 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   // and a reader calls that lined up; judged by the left edge alone, a box
   // in one frame was also charged for sitting 6px off the CENTRE of the
   // 800-wide frame beside it, which nobody reads as a miss.
-  const nearest = (a0: number, a1: number, b0: number, b1: number): number =>
-    Math.min(Math.abs(a0 - b0), Math.abs((a0 + a1) / 2 - (b0 + b1) / 2), Math.abs(a1 - b1))
+  // Only anchors a drawer SETS count. A width is named, so left, centre and
+  // right are all choices; a height is usually fitted to the text by the
+  // tool, so a bottom edge is where the text ended, not where anyone put
+  // it — a sentence box under one column read a miss against the bottom of
+  // a box in another, 10px apart on an edge nobody placed.
+  const nearest = (a0: number, a1: number, b0: number, b1: number, far: boolean): number =>
+    Math.min(
+      Math.abs(a0 - b0),
+      Math.abs((a0 + a1) / 2 - (b0 + b1) / 2),
+      far ? Math.abs(a1 - b1) : Number.POSITIVE_INFINITY,
+    )
   let nearMisses = 0
   pairs(nodes, (a, b) => {
     if ((a.type === 'group') !== (b.type === 'group')) return
     const ra = rectOf(a)
     const rb = rectOf(b)
     if (contains(ra, rb) || contains(rb, ra)) return
-    const dx = nearest(ra.x, ra.x + ra.w, rb.x, rb.x + rb.w)
-    const dy = nearest(ra.y, ra.y + ra.h, rb.y, rb.y + rb.h)
+    const dx = nearest(ra.x, ra.x + ra.w, rb.x, rb.x + rb.w, true)
+    const dy = nearest(ra.y, ra.y + ra.h, rb.y, rb.y + rb.h, false)
     if (dx > 0 && dx < NEAR_MISS_PX) nearMisses++
     if (dy > 0 && dy < NEAR_MISS_PX) nearMisses++
   })

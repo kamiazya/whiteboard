@@ -322,6 +322,14 @@ describe('scoreDrawing: fit and spacing', () => {
 
   it('a group and its member are never a near miss of each other', () => {
     expect(score(canvasOf([group('g', 0, 0, 400, 300), box('a', 16, 16)])).nearMisses).toBe(0)
+    // Bottoms 10px apart are not a miss: a height is fitted to the text, so
+    // the bottom edge is where the text ended (the lane's sentence box).
+    expect(score(canvasOf([box('a', 0, 0, 200, 80), box('b', 400, 50, 200, 40)])).nearMisses).toBe(
+      0,
+    )
+    expect(score(canvasOf([box('a', 0, 0, 200, 80), box('b', 400, 10, 200, 80)])).nearMisses).toBe(
+      1,
+    )
   })
 
   it('two neighbours on a row jammed closer than a readable gap are one tight gap; apart, none', () => {
