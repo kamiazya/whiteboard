@@ -280,16 +280,17 @@ describe('drawing quality across the corpus', () => {
         edges: 4,
         ...DEBT_FREE,
         // Cache narrowed to 150 and centred in a 200px gap: 25px to the
-        // daemon and 25px to SQLite, and "libsql" over both of the boxes
-        // its 25px edge joins.
+        // daemon and 25px to SQLite. "libsql" is wider than its 25px edge,
+        // so it slides above the row (`edgeLabelPlacement`) instead of
+        // lying over both boxes, which is the 16px the envelope grew by.
         tightGaps: 2,
-        labelOverNode: 2,
+        labelOverNode: 0,
         crossings: 0,
         bends: 0,
         edgeLengthPx: 470,
         // The row's gaps: 200 between Browser and Daemon, 25 after it.
         unevenGaps: 1,
-        envelopePx: { w: 1000, h: 900 },
+        envelopePx: { w: 1000, h: 916 },
         reversals: 0,
         flow: 'right',
         againstFlow: 0,
@@ -297,6 +298,27 @@ describe('drawing quality across the corpus', () => {
         bendsPerEdge: 0,
         overlapsPerPair: 0,
         density: 0.12,
+      },
+      'lane/insert-roomy': {
+        nodes: 8,
+        edges: 4,
+        // Debt-free: the neighbour moved instead of the box shrinking, and
+        // "libsql", wider than its 50px edge, sits above the row (the 16px
+        // of envelope) rather than over both boxes.
+        ...DEBT_FREE,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 520,
+        // 200 between Browser and Daemon, 50 after it, twice.
+        unevenGaps: 1,
+        envelopePx: { w: 1100, h: 916 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.11,
       },
     })
   })

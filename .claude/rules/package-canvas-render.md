@@ -1362,6 +1362,20 @@ reference owes three `reversals`, because the router draws a same-row
 edge inside a frame as a loop under both boxes with no side pinned. The
 column exists so that a change to the side choice is judged by it.
 
+**An edge label that would lie over a box slides off the line** —
+`edgeLabelPlacement` in `edge-label-anchor.ts`, the ONE producer for the
+renderer's label box and the editor's inline label editor alike, as
+`edgeLabelAnchor` already was for the midpoint. The midpoint stays unless a
+label of that size centred there overlaps a non-container node (its own
+endpoints included); then the nearest clear offset along the segment's
+normal wins, above or left before below or right, 8px steps to 128px, and
+nothing clear within reach leaves it on the line. The reading that set it:
+a model inserting a box into a row left 40–50px edges whose "libsql" label
+covered both boxes it joined (`lane/insert` and `lane/insert-roomy` in the
+corpus, `labelOverNode 2` before, 0 after). The editor passes its own box
+size, so on a short edge it opens beside the line where the label will be
+rather than over a box; the two agree on the rule, not on a pixel.
+
 **Two router changes for that finding were measured and rejected**, and
 the matrix is what stops them being tried again from argument. The cause
 is real: for an aligned offset `l-pair-crowding-tie-break` offers no

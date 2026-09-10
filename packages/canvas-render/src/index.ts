@@ -2,7 +2,7 @@ export { selectCanvasFragment } from './canvas-fragment.js'
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
 export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
-export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
+export { edgeLabelPlacement, labelObstacles } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
 export {
   assignEdgeAnchors,

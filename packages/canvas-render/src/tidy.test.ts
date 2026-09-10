@@ -98,6 +98,27 @@ describe('scope and totality', () => {
     const nodes = [box('a', 0, 0), box('b', 200, 0)]
     expect(tidyNodes(nodes)).toEqual([])
   })
+
+  it('two boxes exactly the margin apart are tidy; one pixel closer is not', () => {
+    // The promise is 32px BETWEEN boxes, so 32 is kept and 24 is separated
+    // — the boundary a strict-versus-inclusive comparison would move. Sizes
+    // and positions sit on the 8px grid so that grid snapping cannot be the
+    // move that is read.
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 32, 0)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 96), box('b', 96 + 24, 0)])).not.toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 32)])).toEqual([])
+    expect(tidyNodes([box('a', 0, 0, 100, 56), box('b', 0, 56 + 24)])).not.toEqual([])
+  })
+
+  it('a box with non-finite geometry is left out, and the rest still tidy', () => {
+    // NaN compares false with everything, so an unfiltered box would sit
+    // in every band and overlap nothing; it must neither move nor block.
+    const nodes = [box('a', 0, 0), box('b', 40, 0), box('ghost', Number.NaN, 0)]
+    const moves = tidyNodes(nodes)
+    expect(moves.some((m) => m.id === 'ghost')).toBe(false)
+    expect(moves.length).toBeGreaterThan(0)
+    expect(tidyNodes([box('a', 0, 0), box('b', 40, 0, Number.POSITIVE_INFINITY)])).toEqual([])
+  })
 })
 
 const TIDY_MARGIN_PX = 32

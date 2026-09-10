@@ -257,6 +257,22 @@ const laneInsert: SpatialCanvas = {
   ],
 }
 
+/**
+ * The same errand after the server instructions said to move the
+ * neighbours over rather than squeeze the box (2026-09-10), verbatim from
+ * the lane's first trial: SQLite moved right by 100, Cache kept its full
+ * width, and the row's two new gaps are 50px — room for a box but not for
+ * the "libsql" label its 50px edge carries, which is what
+ * `edgeLabelPlacement` then answers.
+ */
+const laneInsertRoomy: SpatialCanvas = {
+  nodes: [
+    ...fixtureArchitecture.nodes.map((n) => (n.id === 'sqlite' ? { ...n, x: 900 } : n)),
+    box('cache', 'Cache', 650, 0),
+  ],
+  edges: laneInsert.edges,
+}
+
 export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'architecture/reference', canvas: architectureReference },
   { name: 'architecture/drafted', canvas: architectureDrafted },
@@ -267,4 +283,5 @@ export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'fixture/architecture', canvas: fixtureArchitecture },
   { name: 'lane/architecture', canvas: laneArchitecture },
   { name: 'lane/insert', canvas: laneInsert },
+  { name: 'lane/insert-roomy', canvas: laneInsertRoomy },
 ]

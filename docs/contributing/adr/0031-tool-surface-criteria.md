@@ -623,6 +623,28 @@ model that moves the neighbour — is measured against it. The summary now
 also carries `debtFreePowK`, the share of drawing tasks whose boards owed
 nothing in every trial, beside pass^k: 4 of 5 on this reading.
 
+**The third reading: room for the box, and where its label goes
+(2026-09-10).** Two changes, each measured on the insert task three
+trials at a time. First a sentence in the server instructions — boxes
+need about 32px between them, and a box going between two others means
+moving the neighbours over in the same batch, not shrinking it or
+squeezing it in. With it the model patched SQLite right and kept the box
+its full width in every trial: `tightGaps 2 → 0, 0, 0`, with 50, 50 and
+40px gaps. What stayed was `labelOverNode 2, 2, 4` — "libsql" on a 40–50px
+edge is wider than the edge and lay over both boxes it joined, which no
+instruction to a model should have to solve. So the renderer solves it:
+`edgeLabelPlacement` keeps the midpoint unless a label of that size would
+lie over a box, and then slides it off the line along the segment's
+normal, nearest clear offset first, above before below; the editor's
+inline label editor opens through the same producer. After both, the task
+read no debt three trials of three, `debtFreePowK 1`, at two calls of
+drawing per trial; the two boards are in the corpus as `lane/insert`
+(`labelOverNode 2 → 0`, still `tightGaps 2`) and `lane/insert-roomy`
+(debt-free). What this round did not need was a placement affordance on
+`node.add` — a `between` that shifts the row — because a sentence was
+enough for the model to do the arithmetic itself; the affordance stays
+filed for the day a reading says the sentence is not.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
