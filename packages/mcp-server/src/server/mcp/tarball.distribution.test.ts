@@ -34,7 +34,7 @@ describe('packed tarball smoke', () => {
 describe('assertTarballFileList', () => {
   const validEntries = [
     'package/package.json',
-    'package/dist/server/mcp/index.js',
+    'package/dist/server/mcp/stdio.js',
     'package/dist/web-app/index.html',
     'package/dist/widget/canvas-viewer.html',
   ]

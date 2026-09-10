@@ -8,7 +8,7 @@ import { runE2eCheckpointSmoke } from './mcp-e2e-checkpoint.smoke-impl.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../../..')
-const entry = resolve(root, 'dist/server/mcp/index.js')
+const entry = resolve(root, 'dist/server/mcp/stdio.js')
 
 beforeAll(() => {
   if (!existsSync(entry)) {
@@ -19,7 +19,7 @@ beforeAll(() => {
 })
 
 describe('packaged dist smoke', () => {
-  it('dist/server/mcp/index.js passes full e2e checkpoint flow', async () => {
+  it('dist/server/mcp/stdio.js passes full e2e checkpoint flow', async () => {
     await runE2eCheckpointSmoke({ entry, root })
   }, 60_000)
 })

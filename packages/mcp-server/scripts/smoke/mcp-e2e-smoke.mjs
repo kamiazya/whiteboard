@@ -23,7 +23,7 @@ const tmpDataDir = mkdtempSync(`${tmpdir()}/whiteboard-e2e-`)
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
 const entry = resolve(
   root,
-  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts',
+  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/stdio.ts',
 )
 const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
 

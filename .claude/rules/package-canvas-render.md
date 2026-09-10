@@ -1618,20 +1618,83 @@ are, and the corpus loses exactly the alignment the anchor was added to buy
 ever YIELDS, never attracts, which is what keeps it clear of the drift the
 guide-line attempt below brought.
 
-**A standing bug the same investigation surfaced, and did NOT fix: tidy is
-not idempotent on a board with a frame.** Widening the idempotence
-generator to draw one finds a counterexample in seconds — and finds it on
-`9a26587e~1` too, before the margin anchor existed, so it dates from when
-tidy began tidying inside frames rather than from anything this session
-did. Both idempotence properties generate PLAIN boxes, so nothing the frame
-passes do has ever been under a property. Three partial fixes were measured
-and reverted (the margin relative to the frame's own edge; the frame's
-corner put on the grid before its members are placed; the margin anchor
-yielding to a neighbour it would jam) — each closes one family and none
-closes the class, because inside a frame the grid and the margin are two
-rules that disagree by the frame's own offset and each call resolves that
-disagreement from a different starting point. The likely fix is a grid
-relative to the frame's origin, which is its own increment.
+**Tidy SETTLES: it returns a state it would not move again, and it checks.**
+This was a standing bug for a long time and the fix is worth reading as one
+piece. On a board with a FRAME tidy was not idempotent — measured over 20000
+crowded generated boards (one or two frames, 2-7 boxes, locks, scopes and
+edges), **11853 moved again on a second tidy**, and 43 in 3000 grew a frame
+by 1-4px on every tidy for ever. Both idempotence properties generated PLAIN
+boxes, so nothing the frame passes do had ever been under one; the bug
+predates the margin anchor and dates from when tidy began tidying inside
+frames.
+
+Three local fixes and one structural one, each measured:
+
+- **A member's grid is laid from its FRAME's corner, not the board's zero**
+  (`roundToGrid(v, origin)`). A frame off the grid is snapped like anything
+  else, and every member placed against the board's grid is carried that far
+  off it — 2446 of 3000 boards needed exactly two tidies for this reason
+  alone. Laid from the frame, a member's position is a fact about the frame
+  and the two move together. Only a frame that CAN move lays its own grid:
+  an immobile one carries nothing, so its members stay on the board's grid,
+  which is what the lane's `does not pull a member off a row` example wants.
+- **A band may not push a member back OUT past the margin.** The floor runs
+  once, before the level's passes, so without this a band undoes it — and
+  that is what grew a frame for ever: a far-edge band snapped one member's
+  left edge to the grid, dragged its row-mate 3px past the margin, the frame
+  grew to hold the escapee, and the level's own snap carried the unit back,
+  3px wider every tidy with no member moving at all. Applying the floor
+  AFTER the passes instead was tried and is worse than the bug: the overlap
+  pass stops getting the last word and the grouped corpus goes from 0
+  overlapping pairs to 109.
+- **`tidyNodes` re-enters until the state repeats** (`TIDY_MAX_SETTLE_PASSES`).
+  The tail the local fixes leave is not a family: membership is GEOMETRIC, so
+  a frame that grows to hold a straddler can swallow the box past it, and a
+  member the overlap pass pushes out of a frame that cannot grow stops being
+  one — 129 of the last 130 failures were exactly that. Rather than make
+  membership a fixpoint by hand, the entry point computes the fixpoint it was
+  already promising. Cost: one more settling pass on a board tidy actually
+  changed — 19ms -> 45ms on a 300-box, 8-frame board, 0.8s -> 1.9s over the
+  20000-board sweep.
+  **Its ceiling is a measurement, and the first one was a guess that CI
+  caught.** Over 40000 boards drawn as the property draws them (one or two
+  frames, a lock always, a partial scope half the time), reaching a repeated
+  state took 2 passes on 34885, 3 on 4759, and 7 at the worst — and 6 of
+  those 40000 never reach a FIXPOINT at all, which is why the stop is at a
+  state already SEEN. A ceiling of 4 shipped and `stress-changed-tests`
+  found the board needing 5 within the hour: a locked frame overlapping a
+  scoped one, each pass moving a member the next had to grow a frame around.
+  It is pinned as an example, and the ceiling is 12.
+- **The frame pass INSIDE the level's loop was implemented, measured and
+  DROPPED.** It is the obvious structural fix and it works: it settles far
+  more boards in one pass (400 of 20000 still needed a second, against 1394).
+  It is also 50% slower for the same answer — 2.4s against 1.6s over the
+  sweep, 56ms against 45ms on the big board — with every scoreboard column
+  identical, because the second settling pass is cheaper than doing that work
+  on every iteration. Recorded rather than retried.
+
+Result: **0 of 20000**, and the grouped `tidy-quality` displacement 127187 ->
+125615 with every debt column unchanged. The drawing corpus moves on price
+only (`architecture/tidied` ink 2019 -> 2068, `lane/architecture-tidied` 1902
+-> 1893) and the composition axis reads the same change as `worstRatio` 1.4
+-> 1.16 — the proximity owe narrowed, not paid.
+
+The property that guards it is deliberately harsher than the plain-box ones:
+a frame drawn off the grid AND off a whole multiple of the margin (on the
+grid the two coincide and the commonest class cannot arise), members drawn to
+straddle its edges, a second frame, a lock, a partial scope and edges. Every
+defect above needed two of those ingredients at once. Five deterministic
+examples sit beside it, one per shape, because a property reaches a shape
+only on some seeds — an earlier fix in this same investigation survived five
+fresh property runs and then failed the example the property had itself
+produced.
+
+`tidy.ts` passed the 800-line budget in this change and gave up `tidy-units.ts`
+— the units half: what a box, a caller's options and a UNIT are, and
+`buildUnits`, which decides who belongs to whom. It is in the mutation lane
+because that is where `tidy.ts`'s own survivors had migrated once its
+scoreboard existed, so leaving it out would have shrunk the lane's reach while
+the report read the same.
 
 **Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
 — by the composition score, on its first use as a decision instrument.**

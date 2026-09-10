@@ -257,13 +257,24 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // frame-idempotence bug the same investigation surfaced, with the evidence
 // that it predates this session and the three partial fixes that did not
 // close it.
+// 120 when that bug was CLOSED: the standing-bug paragraph became the fix —
+// three measured changes, the structural one that was measured and dropped
+// for costing 50% more time to reach the same answer, and the 11853-of-20000
+// -> 0 reading either half of it has to be judged against. A later session
+// asking "was that ever fixed, and what did it cost" reads it here rather
+// than reconstructing it from four commits.
+// 121 for where that fix's SETTLING CEILING came from: the pass
+// distribution over 40000 boards, the six that never reach a fixpoint at
+// all, and the fact that a guessed ceiling of 4 shipped and CI's stress
+// lane found the board needing 5. A ceiling with no measurement beside it
+// is the next session's guess as well.
 // 123 since a contribution may supply the edge ALGORITHM: what crosses the
 // seam (a route, never a scene node) and why, that the side pass runs first
 // so sides are a router's input, the four ways it falls back, and the
 // measured reason selection is a reader rather than a widened payload —
 // with the half of that measurement that the schema-drawn generator has
 // since retired, said plainly so the surviving half stays readable.
-const CANVAS_RENDER_BUDGET = 123
+const CANVAS_RENDER_BUDGET = 127
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

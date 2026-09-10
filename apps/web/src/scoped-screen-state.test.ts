@@ -50,6 +50,7 @@ const sources = import.meta.glob(
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
     './pages/BrowserDocumentPage.tsx',
+    './pages/use-auto-checkpoint.ts',
     './pages/DaemonDocumentPage.tsx',
     './pages/DocumentPage.tsx',
     './pages/use-version-save-flow.ts',
@@ -89,6 +90,9 @@ const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
+// The page's automatic-checkpoint wiring, extracted when its file-size budget
+// said so; same SCREEN by the same rule the panel's hooks are.
+const AUTO_CHECKPOINT_HOOK = './pages/use-auto-checkpoint.ts'
 const DAEMON_DOCUMENT_PAGE = './pages/DaemonDocumentPage.tsx'
 // The shared page both keepers render through (ADR-0004 decision 1). The
 // history column, the armed bookmark and the version being looked at moved
@@ -322,6 +326,8 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
   loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
   scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',
   setSaveStateRef: 'no subject: mirrors the state setter, reassigned on every render',
+  onLocalCommitRef:
+    'no subject: mirrors the page’s onLocalCommit, reassigned on every render — it is how the doc subscription reaches the CURRENT checkpoint signal without re-subscribing per render',
   currentDocumentIdRef:
     'no subject: mirrors the scope itself, reassigned on every render — it is what a scheduler outliving its document asks to find out whether its report still belongs on screen',
   schedulerRef:
@@ -419,6 +425,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   lastKnownCanvasIdRef:
     'no subject: holds the previously loaded id ON PURPOSE, to tell an external navigation from this page’s own pending push — clearing it is exactly what breaks that',
   shortcutHandledRef: 'no subject: a once-per-page-load flag for the ?new=canvas launcher param',
+  checkpointSignalRef:
+    'no subject: mirrors the current checkpoint pair’s signal, reassigned every render — the pair is memoised on the record source and the path, so a switch replaces it before the markdown hook can reach the departed document’s',
 }
 
 const DAEMON_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
@@ -472,7 +480,7 @@ const CASES = [
     scanRefs: true,
   },
   {
-    files: [BROWSER_DOCUMENT_PAGE],
+    files: [BROWSER_DOCUMENT_PAGE, AUTO_CHECKPOINT_HOOK],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,

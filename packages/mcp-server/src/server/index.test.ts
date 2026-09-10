@@ -29,10 +29,11 @@ vi.mock('./export/headless-renderer.js', () => ({
   prewarmHeadlessExporter: vi.fn(async () => undefined),
 }))
 
-// isDirectEntryPoint gates the auto-invoked `main()` at module load; it is
-// false under vitest (argv1 is the test runner, not this file), so importing
-// this module never triggers the top-level `main().catch(...)` path — tests
-// call the exported `main` directly instead.
+// This module has no top-level `main()` call: starting the daemon is
+// `daemon-entry.ts`'s job. So importing it here is inert, and these tests call
+// the exported `main` directly. It used to self-start behind an
+// `isDirectEntryPoint` check that happened to be false under vitest; the split
+// makes that inertness structural rather than a property of argv.
 const { main } = await import('./index.js')
 
 describe('server/index main() data dir startup log', () => {
@@ -286,6 +287,14 @@ describe('server/index main() config-file wiring', () => {
   afterEach(() => {
     vi.clearAllMocks()
     delete process.env.WHITEBOARD_TOKEN
+    // Applying a config-file token writes WHITEBOARD_DAEMON_TOKEN as well
+    // (config-file.ts), and the apply is skipped when EITHER is already set.
+    // Leaving this one behind therefore makes the next run of this test a
+    // silent no-op: the token never lands and the assertion reads `undefined`
+    // as if the file had not been read at all. Only `--repeats` runs the body
+    // twice in one process, which is why it survived until this file was
+    // touched and the stress job picked it up.
+    delete process.env.WHITEBOARD_DAEMON_TOKEN
     delete process.env.WHITEBOARD_DATA_DIR
     if (originalCwd) process.chdir(originalCwd)
     if (dir) rmSync(dir, { recursive: true, force: true })

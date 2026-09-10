@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const root = resolve(__dirname, '../..')
-const entry = resolve(root, 'src/server/mcp/index.ts')
+const entry = resolve(root, 'src/server/mcp/stdio.ts')
 
 try {
   const { runStartupSmoke } = await import(resolve(root, 'src/server/mcp/startup.smoke-impl.ts'))
