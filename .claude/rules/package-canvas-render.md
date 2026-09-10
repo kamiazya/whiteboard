@@ -1419,7 +1419,22 @@ the overlap pass moves the unit, both left `offGrid 1` (the PARTNER moves,
 not the unit); guarded anchors on iteration 0 only broke six centre-band
 examples, since the grid fallback undoes centre alignment; and seeding
 `lined` with every unit already on an anchor read `offGrid 81` and moved
-both scoreboards. **A unit's members are what is more than HALF inside a frame, not what
+both scoreboards. **Making the frame's margin an ANCHOR rather than only a floor was
+measured and REJECTED.** The two `nearMisses` left on `architecture/tidied`
+are a member moved in to its frame's 32px margin beside members that were
+already at 40 in theirs — one column to a reader, 8px apart to the score,
+and no band can see it. Snapping any member within `TIDY_BAND_PX` of the
+margin onto it clears them (`nearMisses` 2 to 0, ink 2047 to 2019) and
+costs more than it buys: the board's `flow` flips from `down` to `left`
+with `againstFlow` 0 to 2 — a layered architecture diagram that no longer
+reads top-down — and the lane's board pays ink 1881 to 1902 with
+`unevenGaps` 2 to 4. It also contradicts a promise a test already pins,
+that a frame padded to 40 is padded and tidy leaves it alone. A narrower
+rule that only fires when two frames' edges agree is cross-frame reasoning
+with the cross-frame band hidden inside it, which is complexity for two
+near misses. Left owed, as the row's comment says.
+
+**A unit's members are what is more than HALF inside a frame, not what
 its box fully contains.** A box drawn across a frame's edge belonged to
 no unit under containment: it became a singleton, and the overlap pass
 hopped it clear of the frame entirely — so tidy answered a straddle by

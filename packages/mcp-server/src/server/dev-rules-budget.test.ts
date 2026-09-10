@@ -219,7 +219,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 105 for membership by majority: the orphaned member no debt column could
 // see, and why neither scoreboard caught it — the shape of blind spot a
 // reader has to be told about, since the instrument reads clean.
-const CANVAS_RENDER_BUDGET = 105
+// 106 for the margin-as-anchor attempt measured and rejected: it clears the
+// two near misses a reader would want cleared, and flips the board's flow
+// to `left` doing it, which is exactly the trade a later session would
+// otherwise make again on the same reasoning.
+const CANVAS_RENDER_BUDGET = 106
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
