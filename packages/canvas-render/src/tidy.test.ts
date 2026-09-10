@@ -329,6 +329,36 @@ describe('inside a frame', () => {
     expect(g.height).toBe(160)
   })
 
+  it('claims a box mostly inside the frame, instead of ejecting the one that straddles its edge', () => {
+    // Membership is CONTAINMENT, so a box drawn across the frame's right
+    // edge belonged to no unit: it became a singleton, and the overlap pass
+    // pushed it clear of the frame entirely — leaving a member the author
+    // drew inside a group orphaned outside it, with every debt column of
+    // the drawing score still reading zero. Measured on the corpus's
+    // architecture draft, where `search` (640..840 across a frame ending at
+    // 800) settled below the frame, between it and the one underneath.
+    const nodes = [frame(0, 0, 800, 200), box('a', 40, 60, 200, 80), box('b', 640, 60, 200, 80)]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const g = after.find((n) => n.id === 'grp') as (typeof after)[number]
+    const b = after.find((n) => n.id === 'b') as (typeof after)[number]
+    // It stays in its row rather than being hopped out of the frame, and
+    // the frame grew to hold it with the margin it gives every member.
+    expect(b.y).toBe(after.find((n) => n.id === 'a')?.y)
+    expect(g.x + g.width).toBeGreaterThanOrEqual(b.x + b.width + 32)
+    expect(b.x).toBeGreaterThanOrEqual(g.x)
+  })
+
+  it('leaves a box only just touching the frame outside it', () => {
+    // The claim is by MAJORITY, not by contact: a box a reader would say is
+    // beside the frame stays its own unit, and the frame does not swallow
+    // it by growing around a corner it barely overlaps.
+    const nodes = [frame(0, 0, 400, 200), box('a', 40, 60, 200, 80), box('far', 360, 60, 200, 80)]
+    const after = applyMoves(nodes, [...tidyNodes(nodes)])
+    const g = after.find((n) => n.id === 'grp') as (typeof after)[number]
+    const far = after.find((n) => n.id === 'far') as (typeof after)[number]
+    expect(far.x).toBeGreaterThan(g.x + g.width - far.width)
+  })
+
   it("a member hugging the frame's top-left is moved in to the margin; the frame's corner stays put", () => {
     // The corner is the frame's anchor and its alignment with its peers.
     // Growing up or left would stagger it against them; the member moves.

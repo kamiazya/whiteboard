@@ -216,7 +216,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 104 for the passes that CYCLE rather than settle: why the loop stops at a
 // state it has already seen, and the four fixes aimed at the snap instead
 // that measurement rejected — each one a session would otherwise re-try.
-const CANVAS_RENDER_BUDGET = 104
+// 105 for membership by majority: the orphaned member no debt column could
+// see, and why neither scoreboard caught it — the shape of blind spot a
+// reader has to be told about, since the instrument reads clean.
+const CANVAS_RENDER_BUDGET = 105
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
