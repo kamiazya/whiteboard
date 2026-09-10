@@ -198,7 +198,9 @@ Open the returned SVG (or write it to a file and view it) to inspect it visually
 - do edges connect to the intended nodes?
 - does the main subject read without reading every edge label?
 - are colors distinct and legible enough?
-- are gaps between nodes wide enough?
+- are gaps between nodes wide enough? Keep at least 32px between neighbours — under that an edge
+  between them has no room for its label or arrowhead, and inserting a box into a gap the size of a
+  box means moving the neighbour over, not squeezing the box in
 
 If you cannot see the rendered image, read the board instead. The two reads answer different
 questions and neither replaces the other:

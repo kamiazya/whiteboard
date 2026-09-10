@@ -59,6 +59,9 @@ const linked = (board, a, b) =>
   board.edges.some(
     (e) => (e.fromNode === a.id && e.toNode === b.id) || (e.fromNode === b.id && e.toNode === a.id),
   )
+const linkedFrom = (board, a, b) =>
+  board.edges.some((e) => e.fromNode === a.id && e.toNode === b.id)
+const centreX = (n) => n.x + n.width / 2
 
 /** @type {readonly Task[]} */
 export const TASKS = [
@@ -402,6 +405,88 @@ export const TASKS = [
         }
       }
       return { ok: true, detail: 'three layers, lined up, connected' }
+    },
+  },
+  {
+    // The errand that stresses a layout somebody else made: a box has to go
+    // INTO a row whose gap is narrower than a box, between two boxes that
+    // are wired to each other. Graded on the wiring and on the row staying a
+    // row with nothing overlapping; whether the model narrowed the box,
+    // moved the neighbour, or jammed it in is what the drawing column reads.
+    name: 'insert a box between two connected boxes',
+    boards: ['boards/architecture'],
+    prompt:
+      'On the architecture board, put a box that says "Cache" between the daemon and SQLite: the daemon should connect to the cache and the cache to SQLite, and the daemon should no longer connect straight to SQLite. Keep the browser, daemon and SQLite boxes on their row, and keep the boxes from overlapping. Apply it directly; I am looking at the board.',
+    verify: async (wb, ids) => {
+      const board = await snapshot(wb, ids, 'boards/architecture')
+      const cache = byText(board, 'Cache')
+      if (cache === undefined) return { ok: false, detail: 'no such box' }
+      const daemon = byText(board, 'Daemon')
+      const sqlite = byText(board, 'SQLite')
+      const browser = byText(board, 'Browser')
+      if (!linkedFrom(board, daemon, cache) || !linkedFrom(board, cache, sqlite)) {
+        return { ok: false, detail: 'not wired daemon -> cache -> sqlite' }
+      }
+      if (linked(board, daemon, sqlite))
+        return { ok: false, detail: 'daemon still linked to sqlite' }
+      const rowYs = [browser, daemon, sqlite, cache].map((n) => n.y)
+      if (Math.max(...rowYs) - Math.min(...rowYs) > 2) {
+        return { ok: false, detail: `not on one row (y ${rowYs.join(', ')})` }
+      }
+      if (centreX(cache) <= centreX(daemon) || centreX(cache) >= centreX(sqlite)) {
+        return { ok: false, detail: 'cache is not between daemon and sqlite' }
+      }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: 'inserted, wired, row kept' }
+    },
+  },
+  {
+    // A state diagram with a transition that goes BACK: the one shape the
+    // two diagram tasks above never draw, and the one the drawing score's
+    // flow columns exist for. Graded on the states, the transitions and
+    // nothing overlapping; the back edge's price is the diagnostic.
+    name: 'draw a state diagram with a loop back',
+    boards: ['boards/order-states'],
+    prompt:
+      'Create a board at boards/order-states and draw the order lifecycle as a state diagram. States, left to right in this order: Draft, Submitted, Approved, Shipped; and Rejected below Submitted. Transitions, each drawn as an arrow with its label: Draft to Submitted "submit"; Submitted to Approved "approve"; Submitted to Rejected "reject"; Rejected back to Draft "revise"; Approved to Shipped "ship". Nothing should overlap. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/order-states')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/order-states' }
+      const names = ['Draft', 'Submitted', 'Approved', 'Shipped', 'Rejected']
+      const states = Object.fromEntries(names.map((n) => [n, byText(board, n)]))
+      const missing = names.filter((n) => states[n] === undefined)
+      if (missing.length > 0) return { ok: false, detail: `missing states: ${missing.join(', ')}` }
+      const row = ['Draft', 'Submitted', 'Approved', 'Shipped'].map((n) => states[n])
+      for (let i = 1; i < row.length; i++) {
+        if (centreX(row[i - 1]) >= centreX(row[i])) {
+          return { ok: false, detail: 'states are not left to right' }
+        }
+      }
+      if (states.Rejected.y <= states.Submitted.y) {
+        return { ok: false, detail: 'Rejected is not below Submitted' }
+      }
+      const wanted = [
+        ['Draft', 'Submitted'],
+        ['Submitted', 'Approved'],
+        ['Submitted', 'Rejected'],
+        ['Rejected', 'Draft'],
+        ['Approved', 'Shipped'],
+      ]
+      const unlinked = wanted.filter(([a, b]) => !linkedFrom(board, states[a], states[b]))
+      if (unlinked.length > 0) {
+        return {
+          ok: false,
+          detail: `not connected: ${unlinked.map((p) => p.join('->')).join(', ')}`,
+        }
+      }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: 'five states, five transitions, one back' }
     },
   },
   {

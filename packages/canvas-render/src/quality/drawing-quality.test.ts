@@ -46,6 +46,7 @@ const DEBT_FREE = {
   textOverflow: 0,
   crampedMembers: 0,
   nearMisses: 0,
+  tightGaps: 0,
   edgeThroughFrame: 0,
   edgeOverlaps: 0,
   sharedInkPx: 0,
@@ -98,6 +99,7 @@ describe('drawing quality across the corpus', () => {
         // `web` 2px below its row-mates and 6px right of `blob`; `cli` 8px
         // right of the two frames it is not in.
         nearMisses: 5,
+        tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
@@ -135,21 +137,22 @@ describe('drawing quality across the corpus', () => {
         textOverflow: 0,
         crampedMembers: 2,
         nearMisses: 5,
+        tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
         crossings: 0,
         bends: 3,
-        edgeLengthPx: 2855,
+        edgeLengthPx: 2874,
         unevenGaps: 1,
-        envelopePx: { w: 840, h: 868 },
+        envelopePx: { w: 840, h: 884 },
         reversals: 1,
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0,
         bendsPerEdge: 0.38,
         overlapsPerPair: 0.04,
-        density: 0.18,
+        density: 0.17,
       },
       'sequence/reference': {
         nodes: 7,
@@ -187,6 +190,7 @@ describe('drawing quality across the corpus', () => {
         crampedMembers: 0,
         // Daemon's head 6px below the others; SQLite's 10px right of `m2`.
         nearMisses: 2,
+        tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
         sharedInkPx: 0,
@@ -214,7 +218,7 @@ describe('drawing quality across the corpus', () => {
         ...DEBT_FREE,
         crossings: 0,
         bends: 0,
-        edgeLengthPx: 1006,
+        edgeLengthPx: 1010,
         unevenGaps: 0,
         envelopePx: { w: 1008, h: 524 },
         // Tidy moves boxes, not the direction their arrows travel.
@@ -270,6 +274,29 @@ describe('drawing quality across the corpus', () => {
         bendsPerEdge: 0.75,
         overlapsPerPair: 0,
         density: 0.27,
+      },
+      'lane/insert': {
+        nodes: 8,
+        edges: 4,
+        ...DEBT_FREE,
+        // Cache narrowed to 150 and centred in a 200px gap: 25px to the
+        // daemon and 25px to SQLite, and "libsql" over both of the boxes
+        // its 25px edge joins.
+        tightGaps: 2,
+        labelOverNode: 2,
+        crossings: 0,
+        bends: 0,
+        edgeLengthPx: 470,
+        // The row's gaps: 200 between Browser and Daemon, 25 after it.
+        unevenGaps: 1,
+        envelopePx: { w: 1000, h: 900 },
+        reversals: 0,
+        flow: 'right',
+        againstFlow: 0,
+        crossingsPerEdge: 0,
+        bendsPerEdge: 0,
+        overlapsPerPair: 0,
+        density: 0.12,
       },
     })
   })

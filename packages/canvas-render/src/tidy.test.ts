@@ -100,7 +100,7 @@ describe('scope and totality', () => {
   })
 })
 
-const TIDY_MARGIN_PX = 24
+const TIDY_MARGIN_PX = 32
 const TIDY_GRID_PX = 8
 
 const rectOf = (n: TidyNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })

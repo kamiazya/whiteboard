@@ -73,6 +73,7 @@ const DEBT_FREE = {
   textOverflow: 0,
   crampedMembers: 0,
   nearMisses: 0,
+  tightGaps: 0,
   edgeThroughFrame: 0,
   edgeOverlaps: 0,
   sharedInkPx: 0,
@@ -308,6 +309,27 @@ describe('scoreDrawing: fit and spacing', () => {
 
   it('a group and its member are never a near miss of each other', () => {
     expect(score(canvasOf([group('g', 0, 0, 400, 300), box('a', 16, 16)])).nearMisses).toBe(0)
+  })
+
+  it('two neighbours on a row jammed closer than a readable gap are one tight gap; apart, none', () => {
+    // 200 wide, so b at 208 leaves 8px; at 200 they touch; at 260 there is room.
+    expect(score(canvasOf([box('a', 0, 0), box('b', 208, 0)])).tightGaps).toBe(1)
+    expect(score(canvasOf([box('a', 0, 0), box('b', 200, 0)])).tightGaps).toBe(1)
+    expect(score(canvasOf([box('a', 0, 0), box('b', 260, 0)])).tightGaps).toBe(0)
+  })
+
+  it('a column is judged the same way, and boxes that overlap are an overlap, not a tight gap', () => {
+    expect(score(canvasOf([box('a', 0, 0), box('b', 0, 88)])).tightGaps).toBe(1)
+    expect(score(canvasOf([box('a', 0, 0), box('b', 150, 0)])).tightGaps).toBe(0)
+  })
+
+  it('boxes close on one axis but not beside each other on the other keep no gap between them', () => {
+    // b sits diagonally off a: 8px to the right of a's edge, but wholly below it.
+    expect(score(canvasOf([box('a', 0, 0), box('b', 208, 300)])).tightGaps).toBe(0)
+  })
+
+  it('a group and its member are never a tight gap of each other', () => {
+    expect(score(canvasOf([group('g', 0, 0, 400, 300), box('a', 4, 4)])).tightGaps).toBe(0)
   })
 
   it('a row whose gaps differ by more than a grid step has one uneven gap', () => {
@@ -617,6 +639,12 @@ describe('scoreDrawing: one planted defect moves one debt column', () => {
       score(canvasOf([box('a', 0, 0), box('b', 400, 0)])),
       score(canvasOf([box('a', 0, 0), box('b', 400, 10)])),
       ['nearMisses'],
+    ],
+    [
+      'a box jammed against its neighbour',
+      score(canvasOf([box('a', 0, 0), box('b', 400, 0)])),
+      score(canvasOf([box('a', 0, 0), box('b', 208, 0)])),
+      ['tightGaps'],
     ],
     [
       "a box over a frame's name",

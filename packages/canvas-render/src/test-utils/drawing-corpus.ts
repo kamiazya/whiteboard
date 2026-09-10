@@ -238,6 +238,25 @@ function tidied(canvas: SpatialCanvas): SpatialCanvas {
   }
 }
 
+/**
+ * The fixture board after a model inserted a box between two connected
+ * boxes on the lane's first run of that task (2026-09-10), verbatim: the
+ * row's gap was 200px, the box 200 wide, and the model narrowed the box to
+ * 150 and centred it, leaving 25px on each side with an edge label to fit
+ * in one of them. Nothing overlaps and the row is kept, which is all the
+ * verifier asks; what a reader sees is a row jammed shut. The board that
+ * made `tightGaps` a column, kept so a fix — room made for the box, or a
+ * surface that offers it — is measured against it.
+ */
+const laneInsert: SpatialCanvas = {
+  nodes: [...fixtureArchitecture.nodes, box('cache', 'Cache', 625, 0, 150, 80)],
+  edges: [
+    ...fixtureArchitecture.edges.filter((e) => e.id !== 'db'),
+    { id: 'daemon-cache', fromNode: 'daemon', toNode: 'cache', label: '', toEnd: 'arrow' },
+    { id: 'cache-sqlite', fromNode: 'cache', toNode: 'sqlite', label: 'libsql', toEnd: 'arrow' },
+  ],
+}
+
 export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'architecture/reference', canvas: architectureReference },
   { name: 'architecture/drafted', canvas: architectureDrafted },
@@ -247,4 +266,5 @@ export const DRAWING_CORPUS: readonly DrawingCase[] = [
   { name: 'sequence/tidied', canvas: tidied(sequenceDrafted) },
   { name: 'fixture/architecture', canvas: fixtureArchitecture },
   { name: 'lane/architecture', canvas: laneArchitecture },
+  { name: 'lane/insert', canvas: laneInsert },
 ]

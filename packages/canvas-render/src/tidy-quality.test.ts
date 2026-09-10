@@ -19,7 +19,7 @@ import { fc } from './test-utils/fast-check.js'
 import type { TidyNode } from './tidy.js'
 import { tidyNodes } from './tidy.js'
 
-const TIDY_MARGIN_PX = 24
+const TIDY_MARGIN_PX = 32
 const TIDY_GRID_PX = 8
 
 /**
@@ -154,9 +154,13 @@ describe('tidy quality scoreboard', () => {
       stillOverlapping: 0,
       offGrid: 0,
       noOpMoves: 0,
-      movedNodes: 1940,
-      displacement: 51647,
-      maxDisplacement: 469,
+      // The margin went 24 -> 32 when the drawing score's `tightGaps` read
+      // tidy's own output as jammed (a 25px gap fits neither a label nor an
+      // arrow's runway): every separation is a grid step wider, so the same
+      // corpus is pushed 23% further and its worst case 55% further.
+      movedNodes: 1939,
+      displacement: 63515,
+      maxDisplacement: 725,
     })
   })
 
@@ -233,9 +237,12 @@ describe('tidy quality scoreboard', () => {
       // that overlapped inside the group still does, and a locked node is an
       // obstacle tidy cannot move out of the way. The number is here so that
       // a change making it WORSE has to say so.
-      stillOverlapping: 241,
-      movedNodes: 1934,
-      displacement: 65160,
+      // 241 -> 283 with the 32px margin: a wider promise is harder to keep
+      // around an obstacle that cannot move, and the oracle judges by the
+      // margin tidy promises, so the count rose with it.
+      stillOverlapping: 283,
+      movedNodes: 1933,
+      displacement: 72976,
     })
   })
 })

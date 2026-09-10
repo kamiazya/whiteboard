@@ -596,6 +596,33 @@ router half of the question was measured and REJECTED first — two side-choice
 changes each raised the sweep's debt while cutting the reference's
 reversals — and `package-canvas-render.md` carries that matrix.
 
+**The second surface reading, and what it found in the instrument
+(2026-09-10).** With the sides described, every board the lane's tasks
+drew read debt-free three trials of three — the two diagrams, the box
+added to the architecture board, the pipeline wrapped in a group. So the
+lane gained two tasks that stress what those never did: a box INSERTED
+between two connected boxes in a row whose gap is narrower than a box,
+and a state diagram with a transition that goes back. The state diagram
+came out debt-free (one arrow against the flow, as drawn). The insert did
+not, and what it owed was mostly invisible: the model narrowed the box to
+150 and centred it in the 200px gap, leaving 25px each side with "libsql"
+over the boxes its edge joins — `labelOverNode 2` — and in one trial set
+the box flush against both neighbours, which read as NO debt. Nothing in
+the column set judged the space between two boxes; `nearMisses` judges
+whether they line up. `tightGaps` now does: pairs of boxes side by side
+with under 32px between them, touching included — twice the frame padding,
+set from that reading rather than a catalogue, since ELK's default node
+spacing (20) and tidy's own margin (24) would both have passed the 25px
+board. Tidy's margin is raised to the same 32, because the invariant that
+tidy never adds debt held only until the score could see a jammed row:
+its scoreboard pays 23% more displacement for it, and 42 more pairs stay
+within the margin around a locked obstacle, re-pinned with the reason.
+The board is in the corpus as `lane/insert` (`tightGaps 2, labelOverNode
+2`), so whatever makes room for the box — a surface that offers it, or a
+model that moves the neighbour — is measured against it. The summary now
+also carries `debtFreePowK`, the share of drawing tasks whose boards owed
+nothing in every trial, beside pass^k: 4 of 5 on this reading.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A
