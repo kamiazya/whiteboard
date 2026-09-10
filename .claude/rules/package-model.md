@@ -105,7 +105,23 @@ paths:
   arms and empty arrays that need no expansion; a construct with no
   generator throws naming the path; a filter nothing passes throws at
   construction, from a seeded preflight, so the decision is the same on
-  every run.
+  every run. An unbounded string runs up to twelve characters past its
+  minimum, printable ASCII six draws in nine and whole graphemes two, so a
+  serializer meets two of its own delimiters in one value — measured
+  before: half of every string was one of four fixed clusters and none was
+  longer than four characters.
+- **Density is measured, not assumed.** What the canvas generator reaches
+  per 1000 draws (2026-09-10): every node type at a quarter each, an
+  optional node field present about half the time it can be, an edge's
+  sides/ends/colour/label each at half, `x-whiteboard` on 84% of canvases
+  with `edgeRouting` on 40% and canvas facets on 41%, comments on 32%; the
+  anchor union at a third per arm with every reference reached. Eight
+  mutation checks — dropping an edge label, a canvas facet, a routing
+  field, a group background in codec's serializer; the same four fields
+  plus the envelope in loro-adapter's bridge — each turned the round-trip
+  property red. Re-measure with a scratch `fc.sample` tally when a
+  generator or a schema changes shape; a property that draws a field it
+  never lands is the vacuity this file exists to close.
 - Its first catch, the day the model generators were derived: a canvas
   comment naming both `targetNodeId` and `targetEdgeId` was accepted by
   `canvasCommentSchema`, written, and dropped by every reader — the thread

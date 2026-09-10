@@ -67,10 +67,19 @@ paths:
   per-tool fix-up over a share of draws for what one field cannot know
   about its siblings (a facet payload for the target the write names, a
   passage edit's `assumed` equal to what the passage says, one canvas op
-  at a time). The `afterAll` ledger fails when a tool never reached its
-  answering path, so a tool added to the record that the seeding cannot
-  reach is visible rather than green; `FUZZ_TALLY=1` prints each tool's
-  tally and refusal reasons. The refusing doubles this lane does not
+  at a time, each fitted to what the canvas holds). A batch tool's op union
+  is ALSO driven one arm at a time, because a wide union passes on the arms
+  a random batch happens to reach — measured: 100 batches of
+  `wb_canvas_edit` answered with 7 of its 13 op kinds, and `node.patch`,
+  `node.splice`, `edge.remove`, `comment.resolve` and `region.set` never
+  reached the answering path. `OP_REACH` is the ledger over those arms in
+  the repo's sense (`coverage-ledger.md`): read off the schema in both
+  directions, `answers` checked against the run, and a `refused-only:`
+  entry says why the seeding cannot reach an arm and is checked to still be
+  true. The `afterAll` also fails when a whole tool never answered, so a
+  tool added to the record that the seeding cannot reach is visible rather
+  than green; `FUZZ_TALLY=1` prints each tool's tally, its refusal reasons
+  and the shapes it answered with. The refusing doubles this lane does not
   replace (`unused*`) count as `environment`, never as a pass.
 
 ## Render style and canvas-target facets (ADR-0030)

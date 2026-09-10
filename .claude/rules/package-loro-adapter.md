@@ -210,6 +210,13 @@ implementations live in the composition roots.
 - `readSpatialCanvas`/`writeSpatialCanvas` tests: round-trip all node types
   (text/file/link/group), edges, x-whiteboard extensions, overwrite/delete
   semantics, and CRDT merge of independent node additions.
+- `loro-bridge.property.test.ts` draws canvases from the model schemas and
+  round-trips nodes, edges AND the canvas envelope (`edgeRouting`, the
+  canvas's facets) — the envelope because this bridge is the path the app
+  saves through and a JSON round-trip is no evidence a field persists here.
+  Mutation-checked: dropping a node's `subpath`, a group's
+  `backgroundStyle`, an edge's `label` or the envelope's `facets` in the
+  write path each turns it red.
 
 ## Common mistakes (append as review finds them)
 

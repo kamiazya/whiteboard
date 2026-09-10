@@ -110,6 +110,8 @@ export interface SchemaArbitraryOptions {
 const NUMBER_SPAN = 1000
 /** Single grapheme clusters, so a one-character refinement keeps a share of the draws. */
 const GRAPHEMES = ['a', '✅', '🔥', '字'] as const
+/** Strings run this far past their minimum unless the schema bounds them tighter. */
+const STRING_SPAN = 12
 const DEFAULT_MAX_DEPTH = 3
 /** Stands in for an optional key that is not drawn; stripped before the record is handed back. */
 const ABSENT = Symbol('absent')
@@ -173,10 +175,20 @@ function stringArbitrary(def: ZodDef, path: string): fc.Arbitrary<string> {
   }
   const exact = checks.find((c) => c.check === 'length_equals')?.length
   const minLength = exact ?? checks.find((c) => c.check === 'min_length')?.minimum ?? 0
-  const maxLength = exact ?? checks.find((c) => c.check === 'max_length')?.maximum ?? minLength + 4
+  const maxLength =
+    exact ?? checks.find((c) => c.check === 'max_length')?.maximum ?? minLength + STRING_SPAN
+  const length = { minLength, maxLength: Math.max(minLength, maxLength) }
+  // Printable ASCII most of the time, so a parser meets its own delimiters;
+  // whole graphemes some of the time, so a length check meets a surrogate
+  // pair; and the single clusters at a small share, so a one-character
+  // refinement keeps a share of the draws. Measured before the split: half
+  // of every draw was one of the four clusters, and no draw was longer
+  // than four characters — too short for a serializer to meet two
+  // delimiters in one value.
   return fc.oneof(
-    fc.string({ minLength, maxLength: Math.max(minLength, maxLength) }),
-    fc.constantFrom(...GRAPHEMES),
+    { weight: 6, arbitrary: fc.string(length) },
+    { weight: 2, arbitrary: fc.string({ ...length, unit: 'grapheme' }) },
+    { weight: 1, arbitrary: fc.constantFrom(...GRAPHEMES) },
   )
 }
 
