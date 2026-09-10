@@ -146,11 +146,21 @@ Three consequences, each with its guard:
   The bundled palette's surface IS the page background in both modes, so an
   unthemed canvas is byte-identical to before; neon gets its night.
   `SpatialEditor.test.tsx` pins both.
-- **Colour swatches preview the palette the canvas is drawn in.**
-  `colorRow` takes a `SpatialPalette` rather than a mode, and
-  `CanvasContextMenu` resolves it once with `resolveCanvasPalette` — a
+- **The editor's own chrome is painted from the palette the board is drawn
+  in, and takes it as a `SpatialPalette` rather than a mode.** The colour
+  swatches (`colorRow`, resolved once by `CanvasContextMenu`), the minimap's
+  preset boxes, the comment compose bubble, the proposal card, and the
+  in-place drafts (node body, edge label, group label) all read the one
+  `resolveCanvasPalette(canvas, theme, { style })` lookup — the SESSION's
+  style, so **Draw as: clean** takes the chrome back to the bundled look with
+  the scene. `useSceneProjection` resolves it beside the scene it projects and
+  hands it out; the editor threads it down. Passing a mode instead is how a
+  neon board came to show bundled tints in its overview and type its drafts in
+  the bundled ink over the theme's night. `resolveCanvasPalette` is a
   canvas-render export, so the point-owning surfaces still name no facet
-  domain (`facet-wiring-guard.test.ts`).
+  domain (`facet-wiring-guard.test.ts`). Pinned by
+  `use-scene-projection.test.ts`, `comment-compose-style.test.ts`,
+  `editor-chrome-palette.test.tsx` and `SpatialEditor.style.test.tsx`.
 
 The Theme row in the Display panel is `derivedCanvasFacetRow` in
 `facet-widgets/index.tsx`: `facet-ui`'s `DerivedFacetForm` over the plugin's

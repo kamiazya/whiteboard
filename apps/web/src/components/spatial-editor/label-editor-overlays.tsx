@@ -1,8 +1,7 @@
+import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import { edgeLabelAnchor, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasEdge, SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Point } from '../../lib/spatial/viewport.js'
-import type { ResolvedTheme } from '../../lib/theme.js'
 import type { reduceGesture } from './gestures.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 
@@ -13,12 +12,13 @@ const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
  * Opaque surface + label typography for the edge/group label editors. The
  * CSS reset makes form controls transparent, so without an explicit
  * background the object being edited (an edge line, the frame border)
- * shows through the draft.
+ * shows through the draft — so it takes the board's own paper and ink
+ * (ADR-0030), which is what the label becomes on commit.
  */
-function labelEditorStyle(theme: ResolvedTheme, fontFamily: string) {
+function labelEditorStyle(palette: SpatialPalette, fontFamily: string) {
   return {
-    background: theme === 'dark' ? 'oklch(0.145 0 0)' : '#ffffff',
-    color: editorTextFill(theme),
+    background: palette.surface,
+    color: palette.labelFill,
     // The family the scene declares under the canvas's look — the theme's
     // where its face is held, the bundled one otherwise — so the draft and
     // the label it becomes are written in one hand.
@@ -38,7 +38,7 @@ export function EdgeLabelEditorOverlay({
   fontFamily,
   edgePaths,
   zoom,
-  theme,
+  palette,
   applyResult,
   onClose,
 }: {
@@ -47,7 +47,8 @@ export function EdgeLabelEditorOverlay({
   readonly fontFamily: string
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
-  readonly theme: ResolvedTheme
+  /** The palette the board is drawn in, so the draft matches the label it becomes. */
+  readonly palette: SpatialPalette
   readonly applyResult: ApplyResult
   readonly onClose: () => void
 }) {
@@ -67,7 +68,7 @@ export function EdgeLabelEditorOverlay({
       }}
       initialText={edge.label ?? ''}
       testId="edge-label-editor"
-      style={labelEditorStyle(theme, fontFamily)}
+      style={labelEditorStyle(palette, fontFamily)}
       onCommit={(label) => {
         applyResult({
           state: { kind: 'idle' },
@@ -87,7 +88,7 @@ export function GroupLabelEditorOverlay({
   canvas,
   fontFamily,
   zoom,
-  theme,
+  palette,
   applyResult,
   onClose,
 }: {
@@ -95,7 +96,8 @@ export function GroupLabelEditorOverlay({
   readonly canvas: SpatialCanvas
   readonly fontFamily: string
   readonly zoom: number
-  readonly theme: ResolvedTheme
+  /** The palette the board is drawn in, so the draft matches the label it becomes. */
+  readonly palette: SpatialPalette
   readonly applyResult: ApplyResult
   readonly onClose: () => void
 }) {
@@ -107,7 +109,7 @@ export function GroupLabelEditorOverlay({
       box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
       initialText={group.label ?? ''}
       testId="group-label-editor"
-      style={labelEditorStyle(theme, fontFamily)}
+      style={labelEditorStyle(palette, fontFamily)}
       onCommit={(label) => {
         applyResult({
           state: { kind: 'idle' },

@@ -26,9 +26,8 @@ import {
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
+  type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type {
   Proposal,
@@ -39,9 +38,7 @@ import type {
 import { canvasChangeConflicts } from '@kamiazya/whiteboard-model'
 import { CircleCheck, CircleX, ListChecks, X } from 'lucide-react'
 import { type CSSProperties, useEffect, useLayoutEffect, useRef, useState } from 'react'
-import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { Box } from '../../lib/spatial/geometry.js'
-import type { ResolvedTheme } from '../../lib/theme.js'
 import { cn } from '../../lib/utils.js'
 import { ICON_VERB_CLASS } from '../ui/icon-verb.js'
 
@@ -57,7 +54,8 @@ export interface ProposalCardProps {
   readonly canvas: SpatialCanvas
   /** Where the bubble is drawn, in SCREEN coordinates (root-relative). */
   readonly box: Box
-  readonly theme: ResolvedTheme
+  /** The palette the board is drawn in, so the card wears its proposal chrome. */
+  readonly palette: SpatialPalette
   /**
    * Decides `changes` — the whole open set, or the one row that was pressed.
    * The card passes what it decided rather than an id the caller re-resolves,
@@ -71,7 +69,7 @@ export function ProposalCard({
   proposal,
   canvas,
   box,
-  theme,
+  palette,
   onDecide,
   onClose,
 }: ProposalCardProps) {
@@ -130,7 +128,7 @@ export function ProposalCard({
         // Above the ambient chrome (z-10), below the dialogs (z-30) — the
         // band CommentThreadCard measured.
         zIndex: 20,
-        ...proposalCardStyle(theme),
+        ...proposalCardStyle(palette),
       }}
       className="flex flex-col gap-2"
     >
@@ -346,11 +344,11 @@ function CardAction({
  * bubble opened rather than as a panel that replaced it. Indigo against the
  * comment layer's amber is the whole of what says which layer this is.
  */
-function proposalCardStyle(theme: ResolvedTheme): CSSProperties {
-  const { proposal } = theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
+function proposalCardStyle(palette: SpatialPalette): CSSProperties {
+  const { proposal } = palette
   return {
     background: proposal.bubbleFill,
-    color: editorTextFill(theme),
+    color: palette.labelFill,
     border: `1px solid ${proposal.edge}`,
     borderRadius: COMMENT_BUBBLE_RADIUS_PX,
     padding: COMMENT_BUBBLE_PADDING_PX,

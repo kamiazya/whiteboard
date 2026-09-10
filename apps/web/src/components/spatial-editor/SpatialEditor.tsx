@@ -63,7 +63,6 @@ import type {
   ReferenceWire,
   SpatialRenderStyle,
 } from '@kamiazya/whiteboard-canvas-render'
-import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type {
   CommentThread,
@@ -95,7 +94,6 @@ import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
-import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import {
   distanceToPolyline,
@@ -584,13 +582,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const {
       keyed,
+      palette,
       edgePaths,
       commentChromeBoxes,
       proposalChromeBoxes,
       selectionMembers,
       selectionBox,
       minimapNodes,
-    } = useSceneProjection({ scene, bounds, boxes, canvas, theme, selectedId, extraIds })
+    } = useSceneProjection({ scene, bounds, boxes, canvas, theme, style, selectedId, extraIds })
     /**
      * The routed path of an edge, as drawn — for a comment about an edge to
      * open its bubble on the path (canvas-render's `commentAnchor`), the
@@ -1924,7 +1923,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // The paper is the palette's surface for the UI mode (ADR-0030):
             // a theme carries one per mode, and the bundled palette's is the
             // page background, so an unthemed canvas looks exactly as before.
-            backgroundColor: resolveCanvasPalette(canvas, theme, { style }).surface,
+            backgroundColor: palette.surface,
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
@@ -2069,7 +2068,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
                 })()}
-                style={commentComposeStyle(theme)}
+                style={commentComposeStyle(palette)}
                 onReply={(body) =>
                   applyResult({
                     state: { kind: 'idle' },
@@ -2119,7 +2118,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
                 })()}
-                theme={theme}
+                palette={palette}
                 onDecide={(decision, changes) => {
                   // Closed here rather than waiting for the write to come
                   // back: the card asked a question that has been answered,
@@ -2422,7 +2421,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // carry its own `fill` presentation attribute is unaffected
               // (presentation attributes win over an inherited value), which
               // is every shape the selection overlay draws.
-              fill: editorTextFill(theme),
+              fill: palette.labelFill,
             }}
           >
             <div
@@ -2657,7 +2656,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 fontFamily={editingFontFamily}
                 edgePaths={edgePaths}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setEdgeLabelEditId(null)}
               />
@@ -2668,7 +2667,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 canvas={canvas}
                 fontFamily={editingFontFamily}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setGroupLabelEditId(null)}
               />
@@ -2681,7 +2680,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 obstacles={commentPlacementObstacles()}
                 createId={createId}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setCommentCompose(null)}
               />
@@ -2706,6 +2705,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   }}
                   zoom={viewport.zoom}
                   theme={theme}
+                  palette={palette}
                   canvas={canvas}
                   gestureState={gestureState}
                   applyResult={applyResult}
