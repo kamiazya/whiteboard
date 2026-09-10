@@ -619,6 +619,62 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     for (const line of found) expect(line, line).toMatch(/text/)
   })
 
+  test('a key that belongs inside `node` says so, instead of just naming itself', () => {
+    // Round 11 of the LLM lane: a trial wrote `id` beside `op`, where
+    // node.patch / node.remove / node.lock all take it, instead of inside
+    // `node` where node.add takes it. `.strict()` refused the op — and the
+    // SDK refuses the whole CALL when one op fails validation, so every
+    // other op in the batch went with it — over `Unrecognized key: "id"`,
+    // which names the key and not the one thing needed to repair it.
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'node.add',
+          id: 'hub',
+          node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('"id"')
+    expect(message).toContain('inside `node`')
+  })
+
+  test('the same for an edge draft flattened onto the op', () => {
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [{ op: 'edge.add', fromNode: 'a', toNode: 'b', edge: { fromNode: 'a', toNode: 'b' } }],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('inside `edge`')
+  })
+
+  test('a key that belongs nowhere keeps the plain refusal', () => {
+    // The hint is for a key the draft actually has. A typo has no place to
+    // point at, and telling it to look inside `node` would be a wrong
+    // answer stated as confidently as the right one.
+    const parsed = canvasEditInputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'node.add',
+          wihtin: 'g',
+          node: { type: 'text', text: 'Hub', x: 0, y: 0, width: 200, height: 80 },
+        },
+      ],
+    })
+    expect(parsed.success).toBe(false)
+    const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
+    expect(message).toContain('wihtin')
+    expect(message).not.toContain('inside `node`')
+  })
+
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
