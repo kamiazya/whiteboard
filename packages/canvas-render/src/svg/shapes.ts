@@ -127,9 +127,30 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
     'stroke-opacity': paint['stroke-opacity'],
     'stroke-dasharray': paint['stroke-dasharray'],
   }
-  const underlay: SvgChild =
-    strokes.hatch !== undefined
-      ? el(
+  // The crisp silhouette with its stroke removed: a hand draws no 6px
+  // fillet, so the rect underlay drops its radius too. A hatched node keeps
+  // this tint UNDER its lines — a label sits on a coloured surface, not on
+  // bare accent strokes.
+  const tint: SvgChild =
+    paint.fill === undefined || paint.fill === 'none'
+      ? []
+      : renderCrispShape(
+          {
+            ...node,
+            radius: undefined,
+            appearance: {
+              fill: paint.fill,
+              ...(paint['fill-opacity'] === undefined
+                ? {}
+                : { fillOpacity: paint['fill-opacity'] }),
+            },
+          },
+          tables,
+        )
+  const hatch: SvgChild =
+    strokes.hatch === undefined
+      ? []
+      : el(
           'g',
           { 'stroke-linecap': 'round' },
           strokes.hatch.map((d) =>
@@ -142,23 +163,7 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
             }),
           ),
         )
-      : paint.fill === undefined || paint.fill === 'none'
-        ? []
-        : // The crisp silhouette with its stroke removed: a hand draws no
-          // 6px fillet, so the rect underlay drops its radius too.
-          renderCrispShape(
-            {
-              ...node,
-              radius: undefined,
-              appearance: {
-                fill: paint.fill,
-                ...(paint['fill-opacity'] === undefined
-                  ? {}
-                  : { fillOpacity: paint['fill-opacity'] }),
-              },
-            },
-            tables,
-          )
+  const underlay: SvgChild = [tint, hatch]
   const outlineStrokes = el(
     'g',
     { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },

@@ -184,10 +184,11 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // stay text-free, the markdown-embed path taking the same `style`, and the
 // content cache's theme axis beside the render key that deliberately has
 // none — each the record of a defect that shipped green.
-// 91 since the sketch strokes were made to read as a hand: the three
-// constants a test reverts (relative bow, continuous overshooting passes,
-// the lighter second pass) and the theme line-weight token behind them.
-const CANVAS_RENDER_BUDGET = 91
+// 92 since the sketch look was made to read as a hand: the constants a
+// test reverts (relative bow, continuous overshooting passes, the lighter
+// second pass, the seeded hatch), the theme line-weight token behind them,
+// and the edge anchoring that stopped erasing hops and short bends.
+const CANVAS_RENDER_BUDGET = 92
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

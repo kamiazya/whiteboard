@@ -242,6 +242,26 @@ describe('what reads as a hand rather than a tremor', () => {
     for (const d of ellipse.strokes) expect(d.match(/M /g)).toHaveLength(1)
   })
 
+  it("the hatch angle and gap are the node's own, drawn near a base rather than ruled identically on every box", () => {
+    const b = rect(200, 120)
+    const angleOf = (d: string): number => {
+      const [from, , to] = pointsOf(d)
+      return (Math.atan2(to!.y - from!.y, to!.x - from!.x) * 180) / Math.PI
+    }
+    const angles = Array.from({ length: 20 }, (_, i) => {
+      const ink = sketchShape(null, b, i + 1, { hatch: true })
+      return angleOf(ink.hatch![Math.floor(ink.hatch!.length / 2)]!)
+    })
+    // Every hand hatches at roughly the same slant, but no two boxes at exactly the same one.
+    for (const a of angles) expect(Math.abs(a - -41)).toBeLessThan(14)
+    expect(new Set(angles.map((a) => Math.round(a))).size).toBeGreaterThan(3)
+    const gaps = Array.from(
+      { length: 6 },
+      (_, i) => sketchShape(null, b, i + 1, { hatch: true }).hatch!.length,
+    )
+    expect(new Set(gaps).size).toBeGreaterThan(1)
+  })
+
   it('a straight-sided outline closes PAST its start — the overshoot a pen leaves at the last corner', () => {
     const b = rect(120, 80)
     for (const s of [1, 2, 3]) {

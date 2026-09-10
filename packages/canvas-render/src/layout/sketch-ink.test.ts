@@ -61,6 +61,21 @@ describe('sketch ink assignment', () => {
     })
   })
 
+  it('a coloured group frame is inked but never hatched — a container is not a filled box', () => {
+    const framed: SpatialCanvas = {
+      ...canvas,
+      nodes: [
+        { id: 'g', type: 'group', x: -20, y: -20, width: 400, height: 300, label: 'G', color: '2' },
+        ...canvas.nodes,
+      ],
+    }
+    const scene = layoutSpatialCanvas(framed, options({ style: 'demo.pencil' }))
+    expect(shapes(scene).find((s) => s.id === 'g')?.ink).toEqual({
+      style: 'sketch',
+      seed: seedFromId('g'),
+    })
+  })
+
   it('a clean theme, and no theme, assign no ink', () => {
     for (const style of ['demo.crisp', 'clean'] as const) {
       const scene = layoutSpatialCanvas(canvas, options({ style }))

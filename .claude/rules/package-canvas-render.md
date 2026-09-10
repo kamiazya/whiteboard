@@ -1060,8 +1060,12 @@ the table alone.
     erased a hop (nine samples over ten pixels) and any bend inside the
     step, so a sketched edge crossed other edges flat and cut its own
     corners. A vertex's shake shrinks with its spacing, so the hop's dense
-    samples are not shaken into a burr. The themed pixel golden is the
-    instrument that sees all of this.
+    samples are not shaken into a burr. A hatched node draws its slant and
+    pitch from its own seed near one base (`HATCH_ANGLE_SPREAD`,
+    `HATCH_GAP_SPREAD`) and keeps the preset TINT under the lines — a label
+    sits on a coloured surface, not on bare accent strokes — and a coloured
+    group is inked but never hatched, since a frame is not a filled box. The
+    themed pixel golden is the instrument that sees all of this.
     **Glow** (ADR-0030 decision 8, `layout/ink/glow.ts`): `Appearance.glow`
     is a radius; the backend blurs the element (σ = half the radius) and
     merges the blur twice under the element itself, so the halo is the

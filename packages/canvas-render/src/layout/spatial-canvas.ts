@@ -637,9 +637,9 @@ function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
   const shape = options.nodeOutlines?.[node.id]
-  // A coloured node is hatched rather than tinted under a pencil; an
-  // uncoloured one keeps its flat surface fill beneath the strokes.
-  const ink = sketchInkFor(node.id, options, node.color !== undefined)
+  // A coloured node is hatched over its tint under a pencil; a group is a
+  // frame around its members, never a filled box, so its colour stays on the line.
+  const ink = sketchInkFor(node.id, options, node.color !== undefined && node.type !== 'group')
   return {
     kind: 'shape',
     id: node.id,

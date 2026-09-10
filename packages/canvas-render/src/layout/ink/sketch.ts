@@ -68,6 +68,9 @@ const EDGE_STEP_PX = 24
 const FULL_SHAKE_SPACING_PX = 12
 const HATCH_GAP_PX = 6
 const HATCH_ANGLE = (-41 * Math.PI) / 180
+/** Each box hatches at its own slant near the base, ± this, and its own gap, ± this share. */
+const HATCH_ANGLE_SPREAD = (10 * Math.PI) / 180
+const HATCH_GAP_SPREAD = 0.25
 /** Hatch lines are lighter than the outline and barely displaced. */
 const HATCH_JITTER_PX = 0.5
 const HATCH_BOW_PX = 0.6
@@ -346,13 +349,17 @@ function clipToConvex(
 }
 
 function hatchLines(rng: Rng, polygon: readonly Point[], box: BoundingBox): string[] {
-  const dir = { x: Math.cos(HATCH_ANGLE), y: Math.sin(HATCH_ANGLE) }
+  // One slant and one gap per box, from its own seed: ruling every node at
+  // the same angle and pitch is what made the hatch read as machine-drawn.
+  const angle = HATCH_ANGLE + (rng() * 2 - 1) * HATCH_ANGLE_SPREAD
+  const gap = HATCH_GAP_PX * (1 + (rng() * 2 - 1) * HATCH_GAP_SPREAD)
+  const dir = { x: Math.cos(angle), y: Math.sin(angle) }
   const normal = { x: -dir.y, y: dir.x }
   const cx = box.x + box.w / 2
   const cy = box.y + box.h / 2
   const reach = Math.hypot(box.w, box.h) / 2
   const lines: string[] = []
-  for (let offset = -reach; offset <= reach; offset += HATCH_GAP_PX) {
+  for (let offset = -reach; offset <= reach; offset += gap) {
     const origin = { x: cx + normal.x * offset, y: cy + normal.y * offset }
     const clipped = clipToConvex(origin, dir, polygon)
     if (clipped === undefined) continue

@@ -53,12 +53,16 @@ describe('sketch ink in the SVG backend', () => {
     expect(edgePaths[2]).not.toContain('stroke-opacity')
   })
 
-  it('a hatched fill draws hatch lines in the stroke colour and no solid fill', () => {
+  it('a hatched fill keeps its tint beneath hatch lines in the stroke colour', () => {
     const svg = renderSceneToSvg({
       nodes: [{ ...inkedRect, ink: { style: 'sketch', seed: 42, fill: 'hatch' } }],
     })
-    expect(svg).not.toMatch(/<rect /)
+    // The tint stays under the lines — a label sits on a coloured surface,
+    // not on bare accent strokes — and the underlay carries no stroke.
+    expect(svg).toMatch(/<rect [^>]*fill="#ffffff"/)
+    expect(svg).not.toMatch(/<rect [^>]*stroke=/)
     expect(svg.match(/<path /g)!.length).toBeGreaterThan(4)
+    expect(svg.indexOf('<rect ')).toBeLessThan(svg.indexOf('<path '))
   })
 
   it('an inked edge is stroke paths with an inked arrowhead and no marker', () => {
