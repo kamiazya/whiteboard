@@ -52,7 +52,7 @@ const SCAN_DIRS = [
  * that stops covering a form fails rather than going quiet.
  */
 const attr = (name: string, value: string): RegExp =>
-  new RegExp(`${name}=\\{?\\s*["'\`]${value}["'\`]`)
+  new RegExp(`${name}\\s*=\\s*\\{?\\s*["'\`]${value}["'\`]`)
 
 const MARKERS: readonly { readonly pattern: RegExp; readonly what: string }[] = [
   { pattern: attr('role', 'radiogroup'), what: 'role="radiogroup"' },
@@ -170,11 +170,18 @@ describe('one selection control', () => {
       '<button role="menuitemradio" />',
       '<input type="radio" name="x" />',
       '<div aria-checked={selected} />',
-      // The expression forms, which a plain `role="radio"` scan misses.
+      // The expression forms, which a plain `role="radio"` scan misses —
+      // and the SPACED ones, which JSX permits around `=`. The formatter
+      // normalises those away in committed source, which is exactly why
+      // they belong here: a guard that only works because something else
+      // ran first is one that stops working the day it does not.
       "<button role={'radio'} />",
       '<button role={"menuitemradio"} />',
       '<input type={`radio`} />',
       "<span role={ 'radiogroup' }>",
+      "<button role = {'radio'} />",
+      '<input type = "radio" />',
+      '<span role\t=\t"radiogroup">',
     ]
     for (const sample of samples) {
       expect(
