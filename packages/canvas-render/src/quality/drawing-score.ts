@@ -443,8 +443,10 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
     if (contains(ra, rb) || contains(rb, ra)) return
     const dx = nearest(ra.x, ra.x + ra.w, rb.x, rb.x + rb.w, true)
     const dy = nearest(ra.y, ra.y + ra.h, rb.y, rb.y + rb.h, false)
-    if (dx > 0 && dx < NEAR_MISS_PX) nearMisses++
-    if (dy > 0 && dy < NEAR_MISS_PX) nearMisses++
+    // A whole pixel or more: two boxes of different parity cannot share a
+    // centre on whole pixels, and half a pixel is below what is drawn.
+    if (dx >= 1 && dx < NEAR_MISS_PX) nearMisses++
+    if (dy >= 1 && dy < NEAR_MISS_PX) nearMisses++
   })
 
   // Boxes only: a member's distance from its frame is `crampedMembers`, and a

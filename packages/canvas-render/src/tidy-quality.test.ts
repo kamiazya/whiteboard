@@ -134,12 +134,17 @@ describe('tidy quality scoreboard', () => {
         // Off the grid AND lined up with nothing: a unit centred under a
         // wider neighbour, or flush with its far edge, keeps that anchor.
         const n = { ...before, x: m.x, y: m.y }
+        // To the half pixel: two boxes of different parity cannot share a
+        // centre on whole pixels, and the output is whole pixels.
+        const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
         const linedX = after.some(
           (o) =>
             o.id !== n.id &&
-            (o.x + o.width / 2 === n.x + n.width / 2 || o.x + o.width === n.x + n.width),
+            (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
         )
-        const linedY = after.some((o) => o.id !== n.id && o.y + o.height / 2 === n.y + n.height / 2)
+        const linedY = after.some(
+          (o) => o.id !== n.id && near(o.y + o.height / 2, n.y + n.height / 2),
+        )
         if ((m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)) {
           offGrid++
         }
@@ -268,8 +273,8 @@ describe('tidy quality scoreboard', () => {
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
       movedNodes: 1958,
-      // 139357 -> 143903 with banding on centres and far edges (above).
-      displacement: 143903,
+      // 139357 -> 144049 with banding on centres and far edges (above).
+      displacement: 144049,
     })
   })
 })

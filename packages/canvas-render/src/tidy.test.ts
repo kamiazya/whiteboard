@@ -116,6 +116,16 @@ describe('band alignment by centre and far edge', () => {
     expect(tidyNodes(once)).toEqual([])
   })
 
+  it('a centre snap between widths of different parity lands on a whole pixel and stays put', () => {
+    // Centres 50.5 and 60: the narrow box can only get within half a pixel
+    // of the wide one's centre, so it takes the whole pixel nearest (31,
+    // centre 51), counts as lined up, and a second tidy moves nothing.
+    const nodes = [box('wide', 0, 0, 101, 40), box('narrow', 40, 200, 40, 40)]
+    const moves = tidyNodes(nodes)
+    expect(moves).toEqual([{ id: 'narrow', x: 31, y: 200 }])
+    expect(tidyNodes(applyMoves(nodes, moves))).toEqual([])
+  })
+
   it('a centred pair whose wide box is off the grid: the wide one takes the grid, the narrow one its centre', () => {
     const moves = tidyNodes([box('wide', 42, 0, 600, 100), box('narrow', 160, 200, 400, 100)])
     expect(moves).toEqual([
@@ -406,8 +416,11 @@ describe('tidy properties', () => {
   const nodeArb = fc.record({
     x: fc.integer({ min: 0, max: 640 }),
     y: fc.integer({ min: 0, max: 480 }),
-    w: fc.constantFrom(60, 100, 140),
-    h: fc.constantFrom(40, 60),
+    // Odd widths and heights too: a centre snap between a box of each
+    // parity lands on a half pixel, which the output rounds — a case the
+    // even-only domain never reached, and review had to point out.
+    w: fc.constantFrom(41, 60, 100, 101, 140),
+    h: fc.constantFrom(40, 41, 60),
   })
   const plainNodes = (rects: readonly { x: number; y: number; w: number; h: number }[]) =>
     rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
@@ -451,12 +464,17 @@ describe('tidy properties', () => {
       const after = applyMoves(nodes, moves)
       const offGrid = moves.filter((m) => {
         const n = after.find((c) => c.id === m.id) as TidyNode
+        // To the half pixel: two boxes of different parity cannot share a
+        // centre on whole pixels, and the output is whole pixels.
+        const near = (a: number, b: number) => Math.abs(a - b) <= 0.5
         const linedX = after.some(
           (o) =>
             o.id !== n.id &&
-            (o.x + o.width / 2 === n.x + n.width / 2 || o.x + o.width === n.x + n.width),
+            (near(o.x + o.width / 2, n.x + n.width / 2) || o.x + o.width === n.x + n.width),
         )
-        const linedY = after.some((o) => o.id !== n.id && o.y + o.height / 2 === n.y + n.height / 2)
+        const linedY = after.some(
+          (o) => o.id !== n.id && near(o.y + o.height / 2, n.y + n.height / 2),
+        )
         return (m.x % TIDY_GRID_PX !== 0 && !linedX) || (m.y % TIDY_GRID_PX !== 0 && !linedY)
       })
       expect(offGrid).toEqual([])

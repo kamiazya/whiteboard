@@ -253,14 +253,17 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
       const target = anchor(fixed ?? first)
       for (const unit of band) {
         if (!unit.movable || lined.has(unit)) continue
-        const delta = target - anchor(unit)
+        // A centre between a box of each parity is a half pixel; the edge
+        // takes the whole pixel nearest, since the output is rounded and a
+        // snap the rounding undoes is not a snap.
+        const delta = Math.round(edge(unit) + target - anchor(unit)) - edge(unit)
         if (guarded && delta !== 0 && !clearAfter(unit, delta)) continue
         shift(unit, delta)
       }
-      // Lined up means sharing the anchor with SOMETHING: a band whose
-      // every other snap yielded leaves its first member alone, and alone
-      // it takes the grid below like any other.
-      const atTarget = band.filter((u) => anchor(u) === target)
+      // Lined up means sharing the anchor with SOMETHING, to the half pixel
+      // parity allows: a band whose every other snap yielded leaves its
+      // first member alone, and alone it takes the grid below like any other.
+      const atTarget = band.filter((u) => Math.abs(anchor(u) - target) <= 0.5)
       if (atTarget.length >= 2) for (const unit of atTarget) lined.add(unit)
     }
   }
