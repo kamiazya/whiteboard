@@ -991,7 +991,19 @@ the table alone.
     plus a `font-missing` report — the declared family must be the measured
     one), and DEFAULTS an explicit facet always beats: `edgeRouting` where
     `visual.edges` is silent, `nodeShape` where a node's own facet is silent
-    (never a group, which is a frame), `groupFrame` on group chrome. An
+    (never a group, which is a frame), `groupFrame` on group chrome.
+    A body's FURNITURE is themed with its prose: the palette's optional
+    `markdownChrome` becomes the `MarkdownTheme`'s `chromeColor` for every
+    body `mdastOptionsFor` composes (`markdownTheme` in `theme-asset.ts`), so
+    a code panel, an inline-code backdrop, a blockquote rail, a table's rules
+    and a task checkbox belong to the theme rather than to one bundled slate
+    — a palette naming none keeps `#818b98`, which is what leaves every
+    un-themed board byte-identical. A comment or proposal body is NOT themed
+    by it: `layoutCommentBody` sets the theme its density picks, and that
+    chrome stays chrome. A mono FAMILY is deliberately not a token — a family
+    needs a face on every surface (ADR-0011/0012) and the declared family
+    must be the measured one, so it is its own slice, recorded as a
+    `ponytail:` on `markdown-theme.ts`'s stack. An
     unknown id draws clean and reports `unknown-theme`; nothing throws.
     `createThemedAppearance` is memoized per (tokens, mode, family) so a
     themed canvas keeps the frozen-singleton property the editor's `useMemo`

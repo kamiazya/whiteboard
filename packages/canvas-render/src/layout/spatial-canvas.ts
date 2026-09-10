@@ -69,7 +69,7 @@ import {
   type SpatialPalette,
 } from '../theme/spatial-palette.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { createThemedAppearance, paletteFromTokens } from '../theme/theme-asset.js'
+import { createThemedAppearance, markdownTheme, paletteFromTokens } from '../theme/theme-asset.js'
 import {
   COMMENT_TEXT_MAX_WIDTH_PX,
   layoutCommentBody,
@@ -562,21 +562,21 @@ function resolveGeometry(geometry: SpatialGeometry | undefined): SpatialGeometry
  * the fragment seams came to be wired on one surface only.
  */
 function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): MdastLayoutOptions {
+  const label = options.appearance.resolveLabel()
+  const syntax = options.appearance.resolveSyntax?.()
   return {
     measure: options.measure,
     maxWidth,
+    // A body's FURNITURE takes the canvas's theme too, not only its prose.
+    theme: markdownTheme(options.activeTheme?.tokens, options.appearance.mode),
     // Body content is measured and declared with the SAME family the label
     // path resolves, so one theme drives every glyph in a node — and painted
     // with the SAME fill, for the same reason. `resolveLabel` is already the
     // seam for "a degraded body fallback run"; a body that renders owes its
     // colour to the same producer as one that does not.
-    fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
-    ...(options.appearance.resolveLabel().fill !== undefined
-      ? { textFill: options.appearance.resolveLabel().fill }
-      : {}),
-    ...(options.appearance.resolveSyntax !== undefined
-      ? { syntax: options.appearance.resolveSyntax() }
-      : {}),
+    fontFamily: label.fontFamily ?? 'sans-serif',
+    ...(label.fill === undefined ? {} : { textFill: label.fill }),
+    ...(syntax === undefined ? {} : { syntax }),
     ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),

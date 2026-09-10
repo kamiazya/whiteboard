@@ -45,6 +45,9 @@ const SKETCH_LIGHT: PaletteTokens = {
     bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
   proposal: { edge: '#4f46e5', bubbleFill: '#ffffff' },
+  // A warm pencil grey: the furniture in a body is drawn in the same hand
+  // as the boxes around it, not in the bundled cool slate.
+  markdownChrome: '#8a8378',
 }
 
 const SKETCH_DARK: PaletteTokens = {
@@ -73,6 +76,9 @@ const SKETCH_DARK: PaletteTokens = {
     bubble: { fill: '#262626', stroke: '#fbbf24' },
   },
   proposal: { edge: '#818cf8', bubbleFill: '#262626' },
+  // Chalk dust rather than paper: the same warm neutral, lifted to read on
+  // the board.
+  markdownChrome: '#8f8a80',
 }
 
 /**
@@ -141,6 +147,10 @@ const NEON_DARK: PaletteTokens = {
     bubble: { fill: '#0f172a', stroke: '#fbbf24' },
   },
   proposal: { edge: '#a5b4fc', bubbleFill: '#0f172a' },
+  // Slate, deliberately NOT one of the theme's lit hues: a code panel and a
+  // quote rail are furniture, and a board whose every rule glows leaves the
+  // strokes nothing to be brighter than.
+  markdownChrome: '#475569',
 }
 
 const NEON_LIGHT: PaletteTokens = {
@@ -173,6 +183,8 @@ const NEON_LIGHT: PaletteTokens = {
     bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
   proposal: { edge: '#4f46e5', bubbleFill: '#ffffff' },
+  // The same slate at the light end: furniture on a pale ground.
+  markdownChrome: '#94a3b8',
 }
 
 /**

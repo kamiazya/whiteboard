@@ -29,6 +29,11 @@ row thumbnails in the document list keep drawing the saved look.
 The colour swatches in a node's or edge's menu preview the theme's own palette, so the chip you
 pick is the stroke you get.
 
+A theme reaches inside a node whose text is markdown, too: the panel behind a code fence, a
+quote's rail and a task checkbox are drawn in the theme's own neutral rather than the bundled
+grey. Code stays in the theme's syntax colours, and the monospace face is the system one on
+every theme.
+
 A theme can carry its own **Edge routing** default (neon routes orthogonally; sketch keeps
 straight lines). The routing row shows whichever is in force, and a routing you choose there
 beats the theme's — including choosing **Straight** on a board whose theme routes otherwise.

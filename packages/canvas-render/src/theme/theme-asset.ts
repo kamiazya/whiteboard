@@ -11,6 +11,7 @@ import type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
 } from '../layout/nodes/spatial-appearance.js'
+import { MARKDOWN_THEME_NODE, type MarkdownTheme } from './markdown-theme.js'
 import type { SpatialPalette } from './spatial-palette.js'
 import { createSpatialTheme, type SpatialThemeMode } from './spatial-theme.js'
 
@@ -45,7 +46,28 @@ export function paletteFromTokens(tokens: PaletteTokens): SpatialPalette {
       bubble: { fill: tokens.comment.bubble.fill, stroke: tokens.comment.bubble.stroke },
     },
     proposal: { edge: tokens.proposal.edge, bubbleFill: tokens.proposal.bubbleFill },
+    // Spread rather than assigned: the bundled palettes declare none, and a
+    // present-but-undefined key would make the two shapes differ by a key.
+    ...(tokens.markdownChrome === undefined ? {} : { markdownChrome: tokens.markdownChrome }),
   }
+}
+
+/**
+ * The markdown metrics a body inside a THEMED canvas is laid out with: the
+ * node theme, with the theme's own neutral where its palette names one.
+ *
+ * A body is two-thirds furniture — the code panel, the blockquote rail, the
+ * checkbox — and without this the prose took the theme while the furniture
+ * around it stayed the bundled slate on every board.
+ */
+export function markdownTheme(
+  tokens: ThemeTokens | undefined,
+  mode: SpatialThemeMode | undefined,
+): MarkdownTheme {
+  const chrome = tokens?.palette[mode ?? 'light'].markdownChrome
+  return chrome === undefined
+    ? MARKDOWN_THEME_NODE
+    : { ...MARKDOWN_THEME_NODE, chromeColor: chrome }
 }
 
 export interface ThemedAppearanceOptions {

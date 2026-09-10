@@ -61,6 +61,18 @@ describe('bundled theme assets', () => {
           }
         })
 
+        it('names a markdown chrome that is visible without competing with the prose', () => {
+          // Furniture, not text: a code panel, a quote rail and a checkbox
+          // are what prose sits IN, and they are painted at 12-35% opacity
+          // over the surface — so this is a visibility floor (2:1), not the
+          // 4.5:1 the words in front of them owe. A theme that named the
+          // label colour here would draw a body that is all frame.
+          const chrome = palette.markdownChrome
+          expect(chrome, 'every bundled theme paints a body in its own hand').toBeDefined()
+          expect(contrast(chrome ?? '#000000', palette.surface)).toBeGreaterThanOrEqual(2)
+          expect(contrast(chrome ?? '#000000', palette.labelFill)).toBeGreaterThanOrEqual(1.5)
+        })
+
         it('comment and proposal chrome keep their text legible and their accents visible', () => {
           expect(contrast(palette.labelFill, palette.comment.bubble.fill)).toBeGreaterThanOrEqual(
             4.5,

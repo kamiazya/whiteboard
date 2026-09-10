@@ -2,9 +2,10 @@ import { SAMPLE_THEME_TOKENS, themeTokensSchema } from '@kamiazya/whiteboard-fac
 import { edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
+import { MARKDOWN_THEME_NODE } from './markdown-theme.js'
 import { SPATIAL_LIGHT_PALETTE } from './spatial-palette.js'
 import { createSpatialTheme } from './spatial-theme.js'
-import { createThemedAppearance, paletteFromTokens } from './theme-asset.js'
+import { createThemedAppearance, markdownTheme, paletteFromTokens } from './theme-asset.js'
 
 describe('paletteFromTokens', () => {
   it('maps every field the renderer palette has — a token bundle can say everything the bundled palette says', () => {
@@ -19,6 +20,22 @@ describe('paletteFromTokens', () => {
     // renderer's palette and not the contract (or the reverse), this fails.
     const tokens = themeTokensSchema.shape.palette.shape.light.parse(SPATIAL_LIGHT_PALETTE)
     expect(paletteFromTokens(tokens)).toEqual(SPATIAL_LIGHT_PALETTE)
+  })
+
+  it("carries a theme's markdown chrome, and leaves the bundled body neutral alone without one", () => {
+    const tokens = themeTokensSchema.shape.palette.shape.light.parse({
+      ...SPATIAL_LIGHT_PALETTE,
+      markdownChrome: '#8a8378',
+    })
+    expect(paletteFromTokens(tokens).markdownChrome).toBe('#8a8378')
+    expect(
+      markdownTheme({ ...SAMPLE_THEME_TOKENS, palette: { light: tokens, dark: tokens } }, 'light')
+        .chromeColor,
+    ).toBe('#8a8378')
+    // Absent everywhere the bundled palettes are: same key set, same theme.
+    expect(paletteFromTokens(SAMPLE_THEME_TOKENS.palette.light).markdownChrome).toBeUndefined()
+    expect(markdownTheme(SAMPLE_THEME_TOKENS, 'light')).toBe(MARKDOWN_THEME_NODE)
+    expect(markdownTheme(undefined, undefined)).toBe(MARKDOWN_THEME_NODE)
   })
 
   it('the token contract spells edge routing exactly as the model does', () => {

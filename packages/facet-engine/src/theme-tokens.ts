@@ -77,6 +77,19 @@ export const paletteTokensSchema = z.object({
     edge: hexColorSchema,
     bubbleFill: hexColorSchema,
   }),
+  /**
+   * The ONE neutral a markdown body's furniture is drawn in — the code
+   * panel, the inline-code backdrop, the blockquote rail, a table's rules,
+   * a thematic break, a task checkbox. Optional: a theme that says nothing
+   * keeps the renderer's bundled neutral, so an asset written before this
+   * field draws exactly as it did.
+   *
+   * One colour rather than a set, because the renderer already draws all of
+   * it as one neutral at three opacities (canvas-render's `MarkdownTheme`),
+   * and it is FURNITURE — held to a visibility floor against the surface,
+   * never to the text floor the prose in front of it owes.
+   */
+  markdownChrome: hexColorSchema.optional(),
 })
 
 export type PaletteTokens = z.infer<typeof paletteTokensSchema>

@@ -188,7 +188,10 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // test reverts (relative bow, continuous overshooting passes, the lighter
 // second pass, the seeded hatch), the theme line-weight token behind them,
 // and the edge anchoring that stopped erasing hops and short bends.
-const CANVAS_RENDER_BUDGET = 92
+// 93 since a theme's palette reaches the markdown BODY's furniture: what
+// `markdownChrome` paints, that a comment body is deliberately not one of
+// them, and why a mono FAMILY is its own slice rather than a second token.
+const CANVAS_RENDER_BUDGET = 93
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
