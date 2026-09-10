@@ -675,7 +675,9 @@ ratio measurer every machine has and reads one line more, `textOverflow
 closed on the tool's side: the fit takes the taller of the two readings,
 its own font's and the ratio measurer's, so what the tool accepts is what
 the score and a client drawing with a wider font would accept, at the
-price of a box a line taller than the daemon's font strictly needs.
+price of a box a line taller than the daemon's font strictly needs. Read
+again with the floor: no debt three trials of three, no tool error, and
+the task's `debtFreePowK` back at 1.
 
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
