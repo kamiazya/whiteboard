@@ -44,6 +44,7 @@ const VALID_ENTRY = {
     { path: 'LICENSE' },
     { path: 'package.json' },
     { path: 'dist/server/mcp/index.js' },
+    { path: 'dist/server/mcp/stdio.js' },
     { path: 'dist/widget/canvas-viewer.html' },
     { path: 'dist/assets/fonts/Roboto/Roboto-Regular.ttf' },
     { path: 'dist/assets/fonts/Roboto/Roboto-Bold.ttf' },
@@ -70,7 +71,7 @@ describe('verifyPackContents (pure core)', () => {
     expect(result.ok).toBe(true)
     expect(result.missing).toEqual([])
     expect(result.forbidden).toEqual([])
-    expect(result.fileCount).toBe(9)
+    expect(result.fileCount).toBe(10)
     expect(result.sizeBytes).toBe(1024)
   })
 
@@ -79,6 +80,7 @@ describe('verifyPackContents (pure core)', () => {
     'LICENSE',
     'package.json',
     'dist/server/mcp/index.js',
+    'dist/server/mcp/stdio.js',
     'dist/widget/canvas-viewer.html',
     'dist/assets/fonts/Roboto/Roboto-Regular.ttf',
     'dist/assets/fonts/Roboto/Roboto-Bold.ttf',

@@ -113,7 +113,7 @@ function buildDaemonSpawnArgs(options: {
 
   return {
     command: 'node',
-    args: [join(WHITEBOARD_ROOT, 'dist/server/index.js'), ...baseArgs],
+    args: [join(WHITEBOARD_ROOT, 'dist/server/daemon-entry.js'), ...baseArgs],
   }
 }
 

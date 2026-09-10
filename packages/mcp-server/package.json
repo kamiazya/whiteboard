@@ -44,7 +44,7 @@
     "CHANGELOG.md"
   ],
   "sideEffects": [
-    "./dist/server/mcp/index.js"
+    "./dist/server/mcp/stdio.js"
   ],
   "engines": {
     "node": "^22 || ^24 || >=26"
@@ -82,7 +82,7 @@
     "mcp:inspect": "npx @modelcontextprotocol/inspector",
     "mcp:inspect:stdio": "npx @modelcontextprotocol/inspector node --import tsx/esm src/server/mcp/index.ts",
     "mcp:debug:http": "concurrently \"pnpm mcp:http:dev\" \"pnpm mcp:inspect\"",
-    "daemon": "node dist/server/index.js --daemon",
+    "daemon": "node dist/server/daemon-entry.js --daemon",
     "daemon:dev": "tsx watch src/server/index.ts --daemon",
     "build:server": "tsup && node scripts/prepend-cli-shebang.mjs && chmod +x dist/cli/index.js",
     "build": "pnpm build:server && node scripts/copy-widget-into-dist.mjs && node scripts/copy-export-font-into-dist.mjs",
@@ -100,7 +100,7 @@
     "typecheck": "tsc -p tsconfig.server.json --noEmit",
     "smoke": "node scripts/smoke/mcp-smoke.mjs",
     "smoke:e2e": "node scripts/smoke/mcp-e2e-smoke.mjs && node --import tsx/esm scripts/smoke/mcp-http-convergence-smoke.mjs",
-    "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/index.js",
+    "smoke:packaged": "node scripts/smoke/mcp-e2e-smoke.mjs --entry=dist/server/mcp/stdio.js",
     "smoke:tarball": "node --import tsx/esm scripts/smoke/mcp-packed-tarball-smoke.mjs",
     "smoke:codex-config": "node --import tsx/esm scripts/smoke/mcp-codex-config-smoke.mjs",
     "smoke:claude": "node scripts/smoke/mcp-claude-cli-smoke.mjs",

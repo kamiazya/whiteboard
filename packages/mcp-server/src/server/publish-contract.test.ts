@@ -104,7 +104,7 @@ describe('publish contract', () => {
   })
 
   it('declares sideEffects explicitly for bundlers', () => {
-    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/index.js'])
+    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/stdio.js'])
   })
 
   it('publishes to npm via OIDC trusted publisher (no NPM_TOKEN, with provenance)', () => {
@@ -157,7 +157,7 @@ describe('publish contract', () => {
     expect(rootReadme).toContain('command = "npx"')
     expect(rootReadme).toContain('args = ["-y", "@kamiazya/whiteboard-mcp@latest"]')
     expect(rootReadme).not.toContain(
-      'node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/index.js',
+      'node_modules/@kamiazya/whiteboard-mcp/dist/server/mcp/stdio.js',
     )
 
     // The marketplace plugin manifest points at the release-gated stable branch

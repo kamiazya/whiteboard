@@ -48,7 +48,7 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
   })
 
   it('sideEffects is exactly the mcp server entry, no legacy browser-app CSS glob', () => {
-    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/index.js'])
+    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/stdio.js'])
   })
 
   it('vite.config.ts does not exist', () => {

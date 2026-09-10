@@ -14,10 +14,10 @@ import { fileURLToPath } from 'node:url'
 import { deriveDevPort, isMainCheckout } from './dev-port-lib.mjs'
 
 const packageRoot = join(dirname(fileURLToPath(import.meta.url)), '../..')
-const entry = join(packageRoot, 'dist/server/index.js')
+const entry = join(packageRoot, 'dist/server/daemon-entry.js')
 if (!existsSync(entry)) {
   process.stderr.write(
-    '[mcp:http] dist/server/index.js is missing — this script runs the BUILT daemon; run `pnpm build` first (or use `pnpm mcp:http:dev` for watch-mode source).\n',
+    '[mcp:http] dist/server/daemon-entry.js is missing — this script runs the BUILT daemon; run `pnpm build` first (or use `pnpm mcp:http:dev` for watch-mode source).\n',
   )
   process.exit(1)
 }

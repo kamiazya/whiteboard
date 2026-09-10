@@ -53,7 +53,7 @@ const SEED_CANVAS_PATH = 'canvas-backup-restore-smoke'
 // `/api/workspaces` can list back.
 const WORKSPACE_ID = 'sess-backup-restore-smoke'
 
-const DAEMON_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/server/index.js')
+const DAEMON_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/server/daemon-entry.js')
 const CLI_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/cli/index.js')
 const BACKUP_ENTRY = resolve(REPO_ROOT, 'packages/mcp-server/dist/server/backup-restore.js')
 

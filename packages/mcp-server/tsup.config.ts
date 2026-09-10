@@ -16,7 +16,9 @@ import { defineConfig } from 'tsup'
 export default defineConfig({
   entry: {
     'server/mcp/index': 'src/server/mcp/index.ts',
+    'server/mcp/stdio': 'src/server/mcp/stdio.ts',
     'server/index': 'src/server/index.ts',
+    'server/daemon-entry': 'src/server/daemon-entry.ts',
     'server/app': 'src/server/app.ts',
     'server/backup-restore': 'src/server/backup-restore.ts',
     // The server-mode variant of the entry above. It was reachable only as a

@@ -2,7 +2,7 @@
 //
 // 1. Prepend the Node shebang to dist/cli/index.js — tsup's `banner` applies
 //    to every output file, so we do it here instead.
-// 2. Append the auto-run side effect to dist/server/mcp/index.js — tsup code
+// 2. Append the auto-run side effect to dist/server/mcp/stdio.js — tsup code
 //    splitting moves implementation into chunks, leaving the entry as a thin
 //    re-export wrapper. The `isDirectEntryPoint` guard + `main()` call that
 //    the source file has at module scope gets lost in the chunk where
