@@ -188,6 +188,42 @@ describe('row order by edges', () => {
     ])
   })
 
+  it('a hub at the RIGHT end of its row swaps left, the mirror of the case above', () => {
+    // The mirror is its own branch, and the mutation lane found it pinned by
+    // nothing: deleting it left all 53 tests green.
+    const nodes = [
+      box('far', 40, 0, 160, 60),
+      box('near', 264, 0, 160, 60),
+      box('hub', 488, 0, 160, 60),
+    ]
+    const moves = tidyNodes(nodes, {
+      edges: edges([
+        ['hub', 'near'],
+        ['hub', 'far'],
+      ]),
+    })
+    expect(moves).toEqual([
+      { id: 'near', x: 488, y: 0 },
+      { id: 'hub', x: 264, y: 0 },
+    ])
+  })
+
+  it('a group is neither hub nor partner: a row of frames keeps its order', () => {
+    const nodes = [
+      { id: 'g1', type: 'group' as const, x: 40, y: 0, width: 160, height: 60 },
+      { id: 'g2', type: 'group' as const, x: 264, y: 0, width: 160, height: 60 },
+      { id: 'g3', type: 'group' as const, x: 488, y: 0, width: 160, height: 60 },
+    ]
+    expect(
+      tidyNodes(nodes, {
+        edges: edges([
+          ['g1', 'g2'],
+          ['g1', 'g3'],
+        ]),
+      }),
+    ).toEqual([])
+  })
+
   it('a box with connections on both sides of it stays where it is', () => {
     const nodes = [box('a', 40, 0, 160, 60), box('hub', 264, 0, 160, 60), box('b', 488, 0, 160, 60)]
     expect(
