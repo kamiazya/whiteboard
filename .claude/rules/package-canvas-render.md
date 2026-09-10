@@ -1503,6 +1503,40 @@ The grouped scoreboard's
 replaced by `membersLeftBehind` (members may now settle inside a unit;
 what must not happen is one ending outside it).
 
+**The margin anchor yields to a row the margin rule cannot move, and the
+EVAL LANE is what found that it had to.** Round 12, three trials of three,
+deterministic: a model wrapped a new chain in a group on a board whose own
+row starts at x=0, `region.set` put the frame at -40, and the first member
+was snapped from 0 to the margin at -8 — 8px off a row it had been lined up
+with. `debtFreePowK` 1.0 to 0.8, and the corpus never saw it because no
+corpus board has a frame straddling another board's column. So the margin
+anchor now yields when a member's anchor already agrees with something at
+that level that the margin rule CANNOT reach: anything locked, out of
+scope, or held by no frame at all.
+
+The narrowing is the rule, and both directions are pinned. Yielding to any
+outside anchor also protects two members of two DIFFERENT frames that are
+each about to snap to their own margin — they hold each other where they
+are, and the corpus loses exactly the alignment the anchor was added to buy
+(`nearMisses` 0 back to 2). Yielding to none is the lane's finding. It only
+ever YIELDS, never attracts, which is what keeps it clear of the drift the
+guide-line attempt below brought.
+
+**A standing bug the same investigation surfaced, and did NOT fix: tidy is
+not idempotent on a board with a frame.** Widening the idempotence
+generator to draw one finds a counterexample in seconds — and finds it on
+`9a26587e~1` too, before the margin anchor existed, so it dates from when
+tidy began tidying inside frames rather than from anything this session
+did. Both idempotence properties generate PLAIN boxes, so nothing the frame
+passes do has ever been under a property. Three partial fixes were measured
+and reverted (the margin relative to the frame's own edge; the frame's
+corner put on the grid before its members are placed; the margin anchor
+yielding to a neighbour it would jam) — each closes one family and none
+closes the class, because inside a frame the grid and the margin are two
+rules that disagree by the frame's own offset and each call resolves that
+disagreement from a different starting point. The likely fix is a grid
+relative to the frame's origin, which is its own increment.
+
 **Board-wide GUIDE LINES in tidy were implemented, measured and REJECTED
 — by the composition score, on its first use as a decision instrument.**
 The idea is sound and the mechanism worked: cluster every input anchor at

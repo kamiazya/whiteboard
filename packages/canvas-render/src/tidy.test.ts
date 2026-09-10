@@ -348,6 +348,30 @@ describe('inside a frame', () => {
     expect(after.find((n) => n.id === 'b')?.x).toBe(second.x + 32)
   })
 
+  it('does not pull a member off a row it shares with a box the frame does not hold', () => {
+    // Found by the eval lane, three trials of three, after the margin
+    // became an anchor: a model wrapped a new chain in a group on a board
+    // whose own row starts at x=0, `region.set` put the frame at -40, and
+    // the first member was snapped from 0 to the margin at -8 — 8px off a
+    // row it had been lined up with, which the drawing score read as a near
+    // miss the board did not have before. A neighbour the margin rule
+    // cannot move IS the row, wherever it sits, and that holds across a
+    // frame's edge as much as inside it.
+    const nodes = [
+      box('outside', 0, 0, 200, 80),
+      box('grp', -40, 260, 880, 160, 'group'),
+      box('ingest', 0, 296, 200, 80),
+      box('transform', 304, 296, 200, 80),
+      box('publish', 600, 296, 200, 80),
+    ]
+    const moves = tidyNodes(nodes, { scope: new Set(['ingest', 'transform', 'publish']) })
+    expect(moves.find((m) => m.id === 'ingest')).toBeUndefined()
+    // ...and unscoped, where the row's box is movable but no frame holds
+    // it, so the margin rule still cannot reach it. The member may move
+    // vertically with its frame; what it keeps is the COLUMN.
+    expect(tidyNodes(nodes).find((m) => m.id === 'ingest')?.x ?? 0).toBe(0)
+  })
+
   it('leaves a member a whole band past the margin where it is', () => {
     // The boundary of the snap above. A member deliberately indented is
     // indented; only one within a band of the margin is read as meaning to

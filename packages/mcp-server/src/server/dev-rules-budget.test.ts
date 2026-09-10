@@ -245,7 +245,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // the owe is mild — C1 scores only groups with a drawn border, and common
 // region is a stronger cue than proximity. Both are things a later session
 // would otherwise re-derive, one of them by shipping the change first.
-const CANVAS_RENDER_BUDGET = 114
+// 117 for what the eval lane found that the corpus could not — the margin
+// anchor pulling a member off another board's column — and for the standing
+// frame-idempotence bug the same investigation surfaced, with the evidence
+// that it predates this session and the three partial fixes that did not
+// close it.
+const CANVAS_RENDER_BUDGET = 117
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
