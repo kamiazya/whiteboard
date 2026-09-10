@@ -10,7 +10,9 @@ export that asks for it see the same look. Two themes ship with the bundled `vis
 | `visual.neon` | glowing strokes on a deep-navy night (light mode gets a pale paper and darker strokes) |
 
 The paper follows your UI mode: every theme carries a light and a dark palette, and the editor
-picks the one matching your settings.
+picks the one matching your settings. A themed export comes back on that same paper — the
+daemon's PNG and SVG routes use the theme's surface for the mode they were asked for, unless
+the request names a `background` of its own.
 
 ## From the editor
 
@@ -74,9 +76,11 @@ editor when you double-click a node or a label; a board already open redraws whe
 Nothing is fetched for a board that names no theme, and the face is held for the tab.
 
 For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
-Fonts** while connected and install **Yomogi**. The daemon keeps the file and measures and
-declares it from then on; the web app takes the daemon's copy when it has one, and the catalogue
-source otherwise.
+Fonts** while connected and install **Yomogi**. The daemon keeps the file, and lays text out
+with that face as well as naming it, so a wrapped line breaks where it is drawn; it reads the
+directory when it warms its renderer, so a face installed while it is running is used from its
+next start. The web app takes the daemon's copy when it has one, and the catalogue source
+otherwise.
 
 Offline, or where the source cannot be reached, the theme still draws its hand-drawn strokes and
 the lettering uses the bundled family. The SVG names the family that was actually measured,

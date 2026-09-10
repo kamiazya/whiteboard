@@ -146,10 +146,18 @@ for a theme's jittered geometry or glow unasked, and a `wb_canvas_snapshot` layo
 never moves because a theme did. A theme id nothing registered draws clean and is reported as a
 degradation, never an error.
 
+A themed render also comes back on that theme's **paper**: the background is the theme
+palette's surface for the mode asked for (`theme: "dark"` on a neon canvas gives `#030711`),
+so an export is the board a person drawing on it sees rather than the theme's strokes on the
+bundled sheet. A `clean` render keeps the bundled white or near-black surface, and an explicit
+`background` in the request wins over both.
+
 A theme's font family is declared in the SVG only where the daemon can measure it — the
 vendored face or an installed one — and otherwise the bundled family is declared, so the face
 named and the coordinates measured always agree. `unresolvedFamilies` reports nothing in that
-case, because nothing is missing from the page.
+case, because nothing is missing from the page. The daemon reads its fonts directory when it
+warms the renderer, so a face installed while it is running is measured and declared from its
+next start.
 
 ## Web app exports
 
