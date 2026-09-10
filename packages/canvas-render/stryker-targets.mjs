@@ -136,6 +136,14 @@ export const KNOWN_EQUIVALENT = {
     'EqualityOperator: unit.bbox.x < floor.x -> unit.bbox.x <= floor.x': 1,
     'EqualityOperator: unit.bbox.y < floor.y -> unit.bbox.y <= floor.y': 1,
   },
+  // `p` is a signed segment delta that the axis-aligned skip above the loop
+  // keeps nonzero, so `<=` and `<` agree; a chord whose entry and exit
+  // parameters coincide adds zero length under either comparison. Judged by
+  // all 635 tests and hand-read.
+  'src/layout/edges/diagonal-ink.ts': {
+    'EqualityOperator: p < 0 -> p <= 0': 1,
+    'EqualityOperator: t1 > t0 -> t1 >= t0': 1,
+  },
   'src/svg/hoist.ts': {
     'ConditionalExpression: !isVNode(child) -> false': 1,
     'ConditionalExpression: attrs === undefined -> false': 1,
