@@ -111,11 +111,17 @@ paths:
   before: half of every string was one of four fixed clusters and none was
   longer than four characters.
 - **Density is measured, not assumed.** What the canvas generator reaches
-  per 1000 draws (2026-09-10): every node type at a quarter each, an
-  optional node field present about half the time it can be, an edge's
-  sides/ends/colour/label each at half, `x-whiteboard` on 84% of canvases
-  with `edgeRouting` on 40% and canvas facets on 41%, comments on 32%; the
-  anchor union at a third per arm with every reference reached. Eight
+  per 1000 draws (2026-09-10): zero to six nodes at an even spread, zero
+  to five edges, every node type at a quarter each, an optional node field
+  present about half the time it can be, an edge's sides/ends/colour/label
+  each at half, a self-loop on one edge in seven (endpoints are drawn as a
+  distinct pair seven times in eight — two independent draws over four ids
+  made two edges in five a loop), `x-whiteboard` on 84% of canvases with
+  `edgeRouting` on 40% and canvas facets on 41%, comments on 32%; the
+  anchor union at a third per arm with every reference reached. mdast text
+  values (`markdownTextArbitrary`, on every `value`/`alt`/`title`/`label`
+  /`identifier`/`lang`/`meta`) carry a space in 40%, markdown punctuation in
+  45%, a line ending in 6% and a character outside ASCII in 15%. Eight
   mutation checks — dropping an edge label, a canvas facet, a routing
   field, a group background in codec's serializer; the same four fields
   plus the envelope in loro-adapter's bridge — each turned the round-trip

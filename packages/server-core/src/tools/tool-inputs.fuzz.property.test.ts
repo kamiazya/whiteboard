@@ -28,6 +28,7 @@ import { facetsArbitrary } from '@kamiazya/whiteboard-facet-engine/testing'
 import {
   writeCoreFacets,
   writeDocumentKind,
+  writeFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -65,7 +66,7 @@ async function seededTools() {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, {
       nodes: [
-        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'one' },
+        { id: 'n1', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'one\ntwo\nthree' },
         { id: 'n2', type: 'text', x: 400, y: 0, width: 200, height: 80, text: 'two' },
         { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
       ],
@@ -76,6 +77,7 @@ async function seededTools() {
   await seedDoc(store, MARKDOWN_ID, (doc) => {
     writeDocumentKind(doc, 'markdown')
     writeCoreFacets(doc, { type: 'note', tags: ['seed'] })
+    writeFacets(doc, { 'visual.symbol/v0': { kind: 'emoji', char: '📝' } })
     writeMarkdownBody(doc, `# Plan\n\nA paragraph with [[${SPATIAL_ID}]] in it.\n`)
   })
   store.documentIndex.seed({
@@ -247,8 +249,13 @@ function fitCanvasOp(op: Record<string, unknown>): Record<string, unknown> {
       return { ...targeted, id: 'n1', patch: Object.fromEntries(patch) }
     }
     case 'node.splice':
-      // n1's text is one line: the range is [0, 0] or [0, 1].
-      return { ...targeted, id: 'n1', startLine: 0, endLine: (op.endLine as number) % 2 }
+      // n1's text is three lines: a range inside them, in either shape.
+      return {
+        ...targeted,
+        id: 'n1',
+        startLine: (op.startLine as number) % 3,
+        endLine: ((op.startLine as number) % 3) + ((op.endLine as number) % 2),
+      }
     case 'comment.resolve':
       return { ...targeted, id: 'c1' }
     case 'edge.patch': {

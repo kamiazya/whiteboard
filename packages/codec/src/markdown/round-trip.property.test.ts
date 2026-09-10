@@ -143,12 +143,61 @@ function hasNoBackslashText(node: { type?: string; value?: unknown; children?: u
     : true
 }
 
+type AnyNode = { type?: string; depth?: number; value?: unknown; children?: unknown[] }
+
+const isText = (node: unknown): node is { type: 'text'; value: string } =>
+  typeof node === 'object' && node !== null && (node as AnyNode).type === 'text'
+
+/**
+ * A line ending at the very start or end of a block's inline content is
+ * the block boundary itself, not content: CommonMark has nowhere to put
+ * it, and `mdast-util-to-markdown` encodes a boundary SPACE as `&#x20;`
+ * but writes a boundary line ending raw, where the parser reads it as the
+ * paragraph ending. Measured: `text "*\n"` serializes to `\*` and comes
+ * back as `*`; the same `\n` one text node in from the edge, or inside an
+ * emphasis, survives as `&#xA;`. Only the block's first and last direct
+ * text child are affected, so that is all this excludes.
+ */
+function hasNoBlockEdgeNewline(node: AnyNode): boolean {
+  if (!Array.isArray(node.children)) return true
+  const first = node.children[0]
+  const last = node.children[node.children.length - 1]
+  if (isText(first) && first.value.startsWith('\n')) return false
+  if (isText(last) && last.value.endsWith('\n')) return false
+  return node.children.every((child) => hasNoBlockEdgeNewline(child as AnyNode))
+}
+
+/**
+ * A code span or inline math holding a line ending inside a heading that
+ * can only be ATX (depth 3 and up; depths 1 and 2 fall back to setext,
+ * which spans lines). Text there is encoded as `&#xA;`, but a code span
+ * cannot carry a character reference, so `mdast-util-to-markdown` writes
+ * the line ending raw and the heading splits in two on re-parse.
+ * `markdown-heading-newline-round-trip.test.ts` pins that exact
+ * behaviour, so this exclusion goes when upstream changes it.
+ */
+function hasNoNewlineSpanInAtxHeading(node: AnyNode): boolean {
+  if (node.type === 'heading' && (node.depth ?? 0) >= 3) {
+    const holdsNewlineSpan = (child: AnyNode): boolean =>
+      ((child.type === 'inlineCode' || child.type === 'inlineMath') &&
+        typeof child.value === 'string' &&
+        child.value.includes('\n')) ||
+      (Array.isArray(child.children) && child.children.some((c) => holdsNewlineSpan(c as AnyNode)))
+    if (holdsNewlineSpan(node)) return false
+  }
+  return Array.isArray(node.children)
+    ? node.children.every((child) => hasNoNewlineSpanInAtxHeading(child as AnyNode))
+    : true
+}
+
 function nonListFlowArbitrary(maxDepth: number) {
   return mdastFlowContentArbitrary(maxDepth)
     .filter((node) => !EXCLUDED_ROUND_TRIP_TYPES.has(node.type))
     .filter(hasNoEmptyContainer)
     .filter(hasNoExcludedDescendant)
     .filter(hasNoBackslashText)
+    .filter(hasNoBlockEdgeNewline)
+    .filter(hasNoNewlineSpanInAtxHeading)
 }
 
 const rootArbitrary = fc

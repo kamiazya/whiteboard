@@ -213,8 +213,63 @@ export const referenceFragmentArbitrary = fc.option(referenceFragmentTextArbitra
   nil: undefined,
 })
 
-const mdastOverrides: SchemaArbitraryOptions['override'] = (path) =>
-  path.endsWith('.fragment') ? referenceFragmentTextArbitrary : undefined
+/**
+ * Text as markdown meets it: words with spaces (so a layout wraps), the
+ * punctuation markdown gives meaning to, line breaks, and characters
+ * outside ASCII — at real weight, because a serializer's escaping is only
+ * exercised by text that needs escaping. Measured before this: no text
+ * value carried a newline, and a markdown delimiter appeared in 11%.
+ */
+const MARKDOWN_ATOMS = [
+  ' ',
+  '\n',
+  '*',
+  '_',
+  '`',
+  '#',
+  '-',
+  '+',
+  '>',
+  '[',
+  ']',
+  '(',
+  ')',
+  '!',
+  '|',
+  '~',
+  '$',
+  '<',
+  '&',
+  '\\',
+  '.',
+  '1',
+  'a',
+  'b',
+  '字',
+  '🔥',
+] as const
+const markdownTextArbitrary: fc.Arbitrary<string> = fc.oneof(
+  {
+    weight: 3,
+    arbitrary: fc
+      .array(fc.stringMatching(/^[a-z]{1,8}$/), { minLength: 1, maxLength: 6 })
+      .map((w) => w.join(' ')),
+  },
+  { weight: 2, arbitrary: fc.string({ maxLength: 12 }) },
+  {
+    weight: 3,
+    arbitrary: fc
+      .array(fc.constantFrom(...MARKDOWN_ATOMS), { maxLength: 12 })
+      .map((a) => a.join('')),
+  },
+)
+const MARKDOWN_TEXT_FIELDS = ['.value', '.alt', '.title', '.label', '.identifier', '.lang', '.meta']
+
+const mdastOverrides: SchemaArbitraryOptions['override'] = (path) => {
+  if (path.endsWith('.fragment')) return referenceFragmentTextArbitrary
+  if (MARKDOWN_TEXT_FIELDS.some((field) => path.endsWith(field))) return markdownTextArbitrary
+  return undefined
+}
 
 function mdastArbitrary<T>(schema: z.ZodType<T>) {
   const byDepth = new Map<number, fc.Arbitrary<T>>()
@@ -310,16 +365,26 @@ const canvasExtensionArbitrary = arbitraryForSchema(canvasExtensionSchema, {
  * rejects, asserted to round-trip.
  */
 export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
-  .uniqueArray(spatialNodeArbitrary, { maxLength: 4, selector: (node) => node.id })
+  .uniqueArray(spatialNodeArbitrary, { maxLength: 6, selector: (node) => node.id })
   .chain((nodes) => {
     const ids = nodes.map((node) => node.id)
     if (ids.length < 2) return fc.constant({ nodes, edges: [] as CanvasEdge[] })
+    // Endpoints drawn as a PAIR of distinct nodes most of the time: two
+    // independent draws over four ids made two edges in five a self-loop,
+    // which is legal and rare on a real board. One in eight stays a loop.
+    const endpoints = fc.oneof(
+      {
+        weight: 7,
+        arbitrary: fc.uniqueArray(fc.constantFrom(...ids), { minLength: 2, maxLength: 2 }),
+      },
+      { weight: 1, arbitrary: fc.constantFrom(...ids).map((id) => [id, id]) },
+    )
     return fc
       .uniqueArray(
         fc
-          .tuple(fc.constantFrom(...ids), fc.constantFrom(...ids), canvasEdgeArbitrary)
-          .map(([fromNode, toNode, edge]) => ({ ...edge, fromNode, toNode })),
-        { maxLength: 3, selector: (edge) => edge.id },
+          .tuple(endpoints, canvasEdgeArbitrary)
+          .map(([[fromNode, toNode], edge]) => ({ ...edge, fromNode, toNode })),
+        { maxLength: 5, selector: (edge) => edge.id },
       )
       .map((edges) => ({ nodes, edges }))
   })
