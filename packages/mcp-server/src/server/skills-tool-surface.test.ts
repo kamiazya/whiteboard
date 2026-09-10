@@ -1,8 +1,10 @@
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
-import { dirname, extname, join, relative, resolve } from 'node:path'
+import { basename, dirname, extname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 import { describe, expect, it } from 'vitest'
+import { parse as parseYaml } from 'yaml'
+import { z } from 'zod'
 import { ALL_REGISTERED_TOOLS } from './mcp/mcp-smoke-coverage.js'
 
 // Same repo-root resolution as the sibling plugin-support.test.ts
@@ -245,6 +247,72 @@ describe('skills tool-surface guard', () => {
       expect(frontmatter).toMatch(/^name:\s*\S/m)
       expect(frontmatter).toMatch(/^description:\s*\S/m)
     }
+  })
+
+  // The Agent Skills frontmatter contract, as a schema over a real YAML
+  // parse. The block above checks the same two fields with regexes, which is
+  // what a line-oriented match can reach; this reaches the shape — a `name`
+  // that disagrees with its directory, an `allowed-tools` written as a YAML
+  // list instead of the space-separated string the spec calls for, a
+  // `metadata` holding anything but strings.
+  //
+  // `.strict()` because the spec ENUMERATES its keys: an unlisted one is a
+  // typo or a convention this repo has not agreed to, and either is worth a
+  // deliberate edit here rather than silence.
+  it('every skill under skills/ has spec-conformant frontmatter', () => {
+    const schema = z
+      .object({
+        name: z.string().min(1),
+        description: z.string().min(1),
+        license: z.string().min(1).optional(),
+        compatibility: z.string().min(1).optional(),
+        'allowed-tools': z.string().min(1).optional(),
+        metadata: z.record(z.string(), z.string()).optional(),
+      })
+      .strict()
+
+    const skillDirs = readdirSync(SKILLS_ROOT, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+    // Non-vacuity, the same reason the file's first assertion exists: a
+    // schema that validates nothing passes.
+    expect(skillDirs.length).toBeGreaterThanOrEqual(3)
+
+    const problems: string[] = []
+    for (const dir of skillDirs) {
+      const skillMdPath = resolve(SKILLS_ROOT, dir, 'SKILL.md')
+      if (!existsSync(skillMdPath)) {
+        problems.push(`${dir}: no SKILL.md`)
+        continue
+      }
+      const frontmatter = readFileSync(skillMdPath, 'utf-8').match(/^---\n([\s\S]*?)\n---/)?.[1]
+      if (frontmatter === undefined) {
+        problems.push(`${displayPath(skillMdPath)}: no --- frontmatter ---`)
+        continue
+      }
+      let parsed: unknown
+      try {
+        parsed = parseYaml(frontmatter)
+      } catch (err) {
+        problems.push(`${displayPath(skillMdPath)}: frontmatter is not YAML (${String(err)})`)
+        continue
+      }
+      const result = schema.safeParse(parsed)
+      if (!result.success) {
+        for (const issue of result.error.issues) {
+          problems.push(`${displayPath(skillMdPath)}: ${issue.path.join('.')} ${issue.message}`)
+        }
+        continue
+      }
+      // A skill is addressed by its directory; a `name` saying otherwise
+      // makes the two disagree wherever one of them is quoted.
+      if (result.data.name !== basename(dirname(skillMdPath))) {
+        problems.push(
+          `${displayPath(skillMdPath)}: name '${result.data.name}' is not its directory '${dir}'`,
+        )
+      }
+    }
+    expect(problems).toEqual([])
   })
 
   // Sanity check that the walk itself has the shape the rest of this file
