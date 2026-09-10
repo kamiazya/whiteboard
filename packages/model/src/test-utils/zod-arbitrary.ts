@@ -74,6 +74,16 @@ const internalsOf = (schema: z.ZodTypeAny): ZodInternals =>
   (schema as unknown as { _zod: ZodInternals })._zod
 const defOf = (schema: z.ZodTypeAny): ZodDef => internalsOf(schema).def
 
+/**
+ * Whether two schema objects are the SAME schema. `.describe()` and
+ * `.meta()` clone the object and share its def, so a field declared as
+ * `documentIdSchema.describe('…')` is `documentIdSchema` for an override
+ * that matches by identity — comparing the objects alone would miss it.
+ */
+export function sameSchema(a: z.ZodTypeAny, b: z.ZodTypeAny): boolean {
+  return a === b || defOf(a) === defOf(b)
+}
+
 export interface SchemaArbitraryOptions {
   /**
    * Replace the generator at a path or for a schema — `$` is the root,

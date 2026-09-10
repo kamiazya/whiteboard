@@ -52,6 +52,26 @@ paths:
 
 - Vitest project: `server-core-node` (registered in root `vitest.config.ts`).
 - Smoke: `createServer` returns an app whose `fetch` is callable.
+- **Every tool is fuzzed from its own input schema**
+  (`tools/tool-inputs.fuzz.property.test.ts`): `arbitraryForSchema` over
+  `tool.inputSchema` for each entry of `createServer(deps).tools`, run
+  against a seeded in-memory workspace (a spatial document with two text
+  nodes, a group, an edge and a comment; a markdown document with
+  frontmatter and a body; one saved version). Each call must ANSWER or
+  REFUSE — a domain error naming what was wrong — never crash (a
+  `TypeError` / `RangeError` / `ReferenceError`, a non-Error thrown, or a
+  message in a crash's vocabulary), and what it answers must parse under
+  its own `outputSchema`, which is what the MCP SDK checks at runtime. Ids
+  are drawn from the seeded workspace at real weight (matched by schema
+  def, since `.describe()` clones the object), and three tools get a
+  per-tool fix-up over a share of draws for what one field cannot know
+  about its siblings (a facet payload for the target the write names, a
+  passage edit's `assumed` equal to what the passage says, one canvas op
+  at a time). The `afterAll` ledger fails when a tool never reached its
+  answering path, so a tool added to the record that the seeding cannot
+  reach is visible rather than green; `FUZZ_TALLY=1` prints each tool's
+  tally and refusal reasons. The refusing doubles this lane does not
+  replace (`unused*`) count as `environment`, never as a pass.
 
 ## Render style and canvas-target facets (ADR-0030)
 

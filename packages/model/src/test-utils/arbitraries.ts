@@ -48,7 +48,7 @@ import {
 } from '../spatial.js'
 import { okfActorSchema } from '../trust.js'
 import { fc } from './fast-check.js'
-import { arbitraryForSchema, type SchemaArbitraryOptions } from './zod-arbitrary.js'
+import { arbitraryForSchema, type SchemaArbitraryOptions, sameSchema } from './zod-arbitrary.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
 const ULID_FIRST_CHARS = '01234567'
@@ -177,8 +177,8 @@ const okfActorArbitrary: fc.Arbitrary<string> = fc.oneof(
  * bucket draws its grammar, an actor draws the `human:` prefix at weight.
  */
 const sharedOverrides: SchemaArbitraryOptions['override'] = (_path, schema) => {
-  if (schema === extensionFacetsSchema) return extensionFacetsArbitrary
-  if (schema === okfActorSchema) return okfActorArbitrary
+  if (sameSchema(schema, extensionFacetsSchema)) return extensionFacetsArbitrary
+  if (sameSchema(schema, okfActorSchema)) return okfActorArbitrary
   return undefined
 }
 
