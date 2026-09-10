@@ -749,6 +749,27 @@ the straight style's form of the retrace the orthogonal style already
 charges there. The orthogonal sweep is untouched by construction (no
 diagonals), and the drawing corpus moved on one price only.
 
+**The seventh reading (2026-09-10).** The whole lane on the tree with the
+intrusion fix: 24 of 24 pass, `debtFreePowK` 0.8, two trials owing. One
+was the instrument's again: a sentence box whose text-fitted height put
+its bottom edge 10px from a box in another column — a bottom is where the
+text ended, not an anchor anyone set, so the column now judges top and
+middle on the vertical axis and all three anchors on the horizontal one,
+where the width is named. The other was a model pinning `bottom/top` on
+every edge of the architecture board, same-row pairs included: the search
+honoured the pair into a stub down and a diagonal up through both its own
+boxes (`edgeThroughNode 2`, 140px), the very defect the sixth reading
+taught it to see. A named side asks where the line attaches, and a line
+through the box it attaches to satisfies nobody, so such a pair is now
+overruled and the edge re-sided; the board reads no debt with the sides
+the model named. Letting a lone edge reach the search along the way
+moved the orthogonal sweep down on every column (`foreign` 15 to 7,
+`own-endpoint` 12 to 10). Five tool errors this round, up from two: two
+height refusals working as designed, and three from one shape — a model
+adding boxes and then a group meant to hold them in one batch, writing
+`within: null` or the group's own id on the group, then finding
+`region.set` on a second call. That is the surface's next item.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

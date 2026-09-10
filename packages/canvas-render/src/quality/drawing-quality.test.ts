@@ -199,10 +199,10 @@ describe('drawing quality across the corpus', () => {
         textOverflow: 0,
         crampedMembers: 0,
         // Daemon's head 6px below the others; SQLite's 10px right of `m2`.
-        // The drafted message box overlapping two lifeline heads also ends
-        // within 20px of the three heads' bottom edges; judged on three
-        // anchors, that is three more misses than the top edges alone saw.
-        nearMisses: 5,
+        // Two: the heads 6px off each other's row. The message box
+        // overlapping two of them ends within 20px of their bottoms, and
+        // a bottom is not an anchor anyone set.
+        nearMisses: 2,
         tightGaps: 0,
         edgeThroughFrame: 0,
         edgeOverlaps: 0,
@@ -271,25 +271,27 @@ describe('drawing quality across the corpus', () => {
         // The same numbers the lane's `drawing` column printed for this
         // board, which is the point of scoring both with one measurer.
         ...DEBT_FREE,
-        // API gateway's two edges to the boxes beside it, pinned to leave
-        // from its bottom and arrive from their top, tunnel back through
-        // API gateway on the way round.
-        edgeThroughNode: 2,
-        throughInkPx: 174,
+        // API gateway's two edges to the boxes beside it are pinned to leave
+        // from its bottom and arrive from their top, which used to tunnel
+        // back through API gateway on the way round (2 boxes, 174px); a
+        // named pair that forces a route through its own box is overruled
+        // now, so the board is debt-free with the sides the model named.
+        edgeThroughNode: 0,
+        throughInkPx: 0,
         // One of them across the Web app edge.
         crossings: 1,
-        bends: 6,
-        edgeLengthPx: 3266,
+        bends: 4,
+        edgeLengthPx: 2957,
         // The layers sit 300 and 280 apart.
         unevenGaps: 2,
         envelopePx: { w: 820, h: 800 },
         // The two loops under API gateway: each dips and comes back up, and
         // one also doubles back along the row.
-        reversals: 4,
+        reversals: 2,
         flow: 'down',
         againstFlow: 0,
         crossingsPerEdge: 0.13,
-        bendsPerEdge: 0.75,
+        bendsPerEdge: 0.5,
         overlapsPerPair: 0,
         density: 0.27,
       },
@@ -341,7 +343,7 @@ describe('drawing quality across the corpus', () => {
     })
   })
 
-  it('the lane board owes its debt to the sides the model pinned, not to its boxes', () => {
+  it('the lane board is debt-free with the sides the model pinned, since a pair routed through its own box is overruled', () => {
     const lane = scores.get('lane/architecture') as DrawingScore
     const unpinned = DRAWING_CORPUS.find((c) => c.name === 'lane/architecture') as DrawingCase
     const withoutSides = {
@@ -352,7 +354,12 @@ describe('drawing quality across the corpus', () => {
       withoutSides,
       layoutSpatialCanvas(withoutSides, { measure, appearance }),
     )
-    expect([lane.edgeThroughNode, lane.crossings]).toEqual([2, 1])
+    // With the sides as the model named them the board used to owe two
+    // edges through API gateway; a named pair whose route runs through
+    // its own box is overruled now, and the two readings differ only in
+    // price.
+    expect(lane).toMatchObject(DEBT_FREE)
+    expect([lane.crossings, lane.bends]).toEqual([1, 4])
     // Debt-free without them; what the router then draws on its own for
     // eight edges converging on one box is price, and pinned as such.
     expect(free).toMatchObject(DEBT_FREE)
