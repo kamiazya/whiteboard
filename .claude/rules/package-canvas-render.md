@@ -1218,6 +1218,18 @@ the table alone.
   module few tests import as a weak signal, and treat its survivor list as a
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.
+  **A survivor `judged by` ZERO tests is a runner artefact, not a
+  hypothesis.** On `tidy.ts` with `coverageAnalysis: 'off'` — every mutant
+  is meant to face all 42 tests — 19 of 65 survivors came back with
+  `testsCompleted 0`, and the six of those checked by hand (the root
+  tie-break, the hop direction, both hop arithmetics, the floor's y
+  block) each failed one to three tests when the same edit was applied.
+  Read that column before the row: `0` says nothing ran, and the edit is
+  still yours to apply. The four `tidy.ts` entries the ledger does hold
+  were each judged by all 42 and reasoned: `<=` on a margin or a floor
+  admits exactly the coordinate the hop or the shift then lands on, so
+  the mutant costs a no-op iteration and nothing else; skipping a zero
+  delta is a guard around an addition of zero.
   It also pays the other way: a survivor whose LOCATION looks obviously
   killable is often a sub-expression, not the statement. `edge-crossing-
   sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,

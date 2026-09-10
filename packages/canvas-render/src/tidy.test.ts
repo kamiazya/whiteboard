@@ -317,6 +317,17 @@ describe('scope and totality', () => {
     }
   })
 
+  it('an immobile unit does not count toward the ceiling', () => {
+    // The ceiling bounds the units tidy MOVES; a locked box ahead of 300
+    // movable ones in document order takes none of their budget.
+    const nodes = [
+      box('pinned', 0, 0),
+      ...Array.from({ length: 300 }, (_, i) => box(`n${i}`, 0, 0)),
+    ]
+    const moves = tidyNodes(nodes, { locked: (id) => id === 'pinned' })
+    expect(moves.length).toBe(300)
+  })
+
   it('past the unit ceiling the rest stay put, and stand as obstacles', () => {
     // Best-effort bound (TIDY_MAX_UNITS = 300): the 301st movable unit is
     // left where it is, so with every box on one spot exactly one reports

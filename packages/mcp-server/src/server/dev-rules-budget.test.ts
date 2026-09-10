@@ -200,7 +200,9 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // 97 for tidy inside a frame — the three rules around it each came from a
 // measurement a reader would otherwise repeat — and for the traced search
 // that shows the same-row loop is the cost model's answer, not a miss.
-const CANVAS_RENDER_BUDGET = 97
+// 98 for the survivor judged by zero tests: six of six hand-checked were
+// killed, so the column is read before the row.
+const CANVAS_RENDER_BUDGET = 98
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
