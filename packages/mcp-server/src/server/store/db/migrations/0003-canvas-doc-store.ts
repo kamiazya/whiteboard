@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Backing store for ports' DocumentStore: a chunked full snapshot
 // (header + ordered chunk rows) plus an append-only delta log, both keyed by

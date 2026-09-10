@@ -1,4 +1,4 @@
-import { type MigrationProvider, Migrator } from 'kysely'
+import { type MigrationProvider, Migrator } from 'kysely/migration'
 import { IncompatibleDatabaseError } from './incompatible-database.js'
 import type { Database } from './index.js'
 import { migrations } from './migrations/index.js'

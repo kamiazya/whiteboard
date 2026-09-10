@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // ADR-0009 decision 1: a workspace contains Documents, and `Canvas` narrows
 // to the spatial surface. The schema was the last layer still using the old

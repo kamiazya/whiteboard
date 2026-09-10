@@ -1,4 +1,5 @@
-import { type Kysely, type Migration, sql } from 'kysely'
+import { type Kysely, sql } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // The documents table stops being the address book (dual-plane collapse S7):
 // after the wrapper retirement a document created through the workspace tree

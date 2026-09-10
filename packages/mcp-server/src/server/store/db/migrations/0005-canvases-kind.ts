@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Add canvases.kind so a canvas can carry which editor (spatial | markdown)
 // opens it. Nullable because existing rows predate the field; the

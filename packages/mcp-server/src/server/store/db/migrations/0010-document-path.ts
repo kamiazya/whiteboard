@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // `slug` is the document's PATH — `validateSlug` splits it on `/` and checks
 // each segment, and the value it holds is what `DocumentIndex` has always

@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // The version this point was produced by RESTORING, when it was.
 //
