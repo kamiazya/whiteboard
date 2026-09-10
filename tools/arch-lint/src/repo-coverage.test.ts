@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
@@ -223,5 +223,141 @@ describe('architecture-map.md doc sync', () => {
 
   it('names the circular-value-import enforcer', () => {
     expect(doc).toContain('cycle-check.ts')
+  })
+})
+
+/**
+ * `dev-flow.md`: "Every PR that adds a package ships its path-scoped rule in
+ * the same increment." That was prose with nothing behind it. 17 of 18
+ * workspaces held one when this was written, so the convention was holding by
+ * habit — and a convention held by habit reads exactly like one held by a
+ * guard, right up until the PR that forgets.
+ *
+ * The second `it` is the half worth having. A rule file that EXISTS but whose
+ * `paths:` never matches its own package is loaded by nobody: the file is
+ * there, the reviewer sees it, and the reader who needed it never got it.
+ * That is the same failure as a biome plugin whose include pattern matches
+ * nothing — registered, green, never run — one level up, in the layer that is
+ * supposed to be teaching people about layers.
+ */
+describe('every workspace ships the path-scoped rule that teaches it', () => {
+  /** How a rule file is named, per top-level directory. */
+  const RULE_PREFIX: Record<string, string> = {
+    packages: 'package',
+    apps: 'app',
+    tools: 'tool',
+  }
+
+  /**
+   * Workspaces with no rule file of their own, and why that is right rather
+   * than missing.
+   *
+   * Guarded from both sides below, and the reason is CHECKED rather than
+   * asserted: an entry names the always-on rule that carries this workspace's
+   * load-bearing part and a phrase that rule must still contain. An exemption
+   * whose justification has quietly gone away fails with the workspace it
+   * exempts.
+   */
+  const NO_RULE_OF_ITS_OWN: Record<
+    string,
+    { readonly reason: string; readonly documentedIn: string; readonly mentions: string }
+  > = {
+    'tools/checks': {
+      reason:
+        'its load-bearing part is the CI gate aggregation, which the INTEGRATOR reads before ' +
+        'touching this directory rather than while inside it — so it is always-on in dev-flow.md ' +
+        'instead. The rest is script orchestration a reader does not need taught.',
+      documentedIn: '.claude/rules/dev-flow.md',
+      mentions: 'ci-gate',
+    },
+  }
+
+  /** Every directory carrying a package.json under the three workspace roots. */
+  function workspaceDirs(): string[] {
+    return Object.keys(RULE_PREFIX).flatMap((root) =>
+      readdirSync(join(REPO_ROOT, root), { withFileTypes: true })
+        .filter((entry) => entry.isDirectory())
+        .map((entry) => `${root}/${entry.name}`)
+        .filter((dir) => existsSync(join(REPO_ROOT, dir, 'package.json'))),
+    )
+  }
+
+  /**
+   * Where a workspace's rule lives, by convention: the top-level directory
+   * picks the prefix and the workspace's own name follows it, so
+   * `packages/search` is `package-search.md`. The convention is what makes
+   * this checkable at all — a rule filed under a name nobody can derive is
+   * one this guard reads as absent, which is the right answer.
+   */
+  function ruleFileFor(dir: string): string {
+    const [root, name] = dir.split('/')
+    return join(REPO_ROOT, '.claude', 'rules', `${RULE_PREFIX[root as string]}-${name}.md`)
+  }
+
+  /** The globs a rule's frontmatter scopes it to. */
+  function declaredPaths(ruleFile: string): string[] {
+    const frontmatter = /^---\n([\s\S]*?)\n---/.exec(readFileSync(ruleFile, 'utf-8'))?.[1] ?? ''
+    return [...frontmatter.matchAll(/^\s*-\s*"?([^"\n#]+?)"?\s*(?:#.*)?$/gm)].map((m) => m[1] ?? '')
+  }
+
+  it('finds the workspaces it is meant to check', () => {
+    // A readdir that stopped matching would report every entry as exempt-only,
+    // which sends the reader to the wrong file entirely. 18 when written.
+    expect(workspaceDirs().length, 'the workspace scan found almost nothing').toBeGreaterThan(12)
+  })
+
+  it('gives every workspace a rule file, or an exemption that says why', () => {
+    const undocumented = workspaceDirs().filter(
+      (dir) => !existsSync(ruleFileFor(dir)) && NO_RULE_OF_ITS_OWN[dir] === undefined,
+    )
+    expect(
+      undocumented,
+      'a workspace has no path-scoped rule — write .claude/rules/<prefix>-<name>.md scoped to it, or add it to NO_RULE_OF_ITS_OWN with the always-on rule that carries it instead',
+    ).toEqual([])
+  })
+
+  it('scopes each rule at the whole package it teaches, so it actually loads there', () => {
+    // `<dir>/**` exactly, not a glob that merely starts with `<dir>/`: a rule
+    // scoped at `packages/history/src/**` does not load for that package's
+    // manifest, its config, or anything beside `src/`, and the reader who
+    // opened one of those is the reader this rule exists for. Every rule in
+    // the repo already uses this one form, so the check costs nothing today
+    // and the failure message names it.
+    const unscoped = workspaceDirs()
+      .filter((dir) => existsSync(ruleFileFor(dir)))
+      .filter((dir) => !declaredPaths(ruleFileFor(dir)).includes(`${dir}/**`))
+    expect(
+      unscoped,
+      'a rule file exists but its `paths:` frontmatter does not cover the whole package it is named for, so it loads for nobody who opens the rest of it — add exactly "<dir>/**"',
+    ).toEqual([])
+  })
+
+  it('keeps every exemption pointing at a workspace and a reason that still holds', () => {
+    const dirs = new Set(workspaceDirs())
+    const stale = Object.keys(NO_RULE_OF_ITS_OWN).filter(
+      (dir) => !dirs.has(dir) || existsSync(ruleFileFor(dir)),
+    )
+    expect(
+      stale,
+      'NO_RULE_OF_ITS_OWN names a workspace that is gone or now has its own rule — drop the entry',
+    ).toEqual([])
+
+    // The workspace and its subject have to appear in the SAME passage.
+    // `mentions` alone is satisfied by any passing use of the word, so an
+    // exemption could rest on prose that says nothing about the directory it
+    // exempts — the same shape as a check satisfied by an incidental import.
+    // Requiring both terms independently is only half a fix: a later edit can
+    // scatter them into unrelated paragraphs and still pass. These rules are
+    // written one paragraph per line, so a shared line IS a shared passage,
+    // and splitting the paragraph fails loudly rather than silently — which
+    // is the right way round for a reference somebody has to re-point.
+    const unbacked = Object.entries(NO_RULE_OF_ITS_OWN).filter(([dir, entry]) => {
+      const doc = readFileSync(join(REPO_ROOT, entry.documentedIn), 'utf-8')
+      return !doc.split('\n').some((line) => line.includes(dir) && line.includes(entry.mentions))
+    })
+    expect(
+      unbacked,
+      'an exemption says an always-on rule carries this workspace, and no single passage in that rule names both the workspace and its subject — write the path-scoped rule, or re-point the reason at the passage that does',
+    ).toEqual([])
   })
 })
