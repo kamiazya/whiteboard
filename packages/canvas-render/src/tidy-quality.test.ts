@@ -272,7 +272,7 @@ describe('tidy quality scoreboard', () => {
       // 72976 -> 139357 px — because members now settle inside a frame
       // rather than only with it, and a frame grows to hold them.
       stillOverlapping: 0,
-      movedNodes: 1957,
+      movedNodes: 1956,
       // 139357 -> 143650 with banding on centres and far edges (above).
       // 143650 -> 127141, and one fewer move, once a box more than half
       // inside a frame counts as its member: it is tidied AMONG the
@@ -281,7 +281,15 @@ describe('tidy quality scoreboard', () => {
       // 127141 -> 127187 with the frame's margin as an anchor: 46px over
       // the whole grouped corpus, which is what pulling a member within a
       // band onto its frame's margin costs.
-      displacement: 127187,
+      // 127187 -> 125615, and one fewer move, with the four fixes that made
+      // tidy IDEMPOTENT on a board with a frame (`tidy.ts`): a member's grid
+      // laid from its frame's corner instead of the board's zero, a band
+      // that may not push one back out past the margin, the frame pass
+      // moved inside the level's loop, and a re-tidy when the moves change
+      // which boxes a frame holds. Every debt column above is unchanged;
+      // this is a member settling where its own frame puts it rather than
+      // being nudged again by the next tidy.
+      displacement: 125615,
     })
   })
 })
