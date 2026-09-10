@@ -615,7 +615,11 @@ describe('reference semantics under command sequences', () => {
     // Budget, not numRuns: the seeded state + per-command full-content
     // assertions price a 40-run pass at 3.5-6s on an idle machine (worst
     // observed 7.3s under load), so the 5s default reads as a property
-    // failure that never happened.
-    30_000,
+    // failure that never happened. Re-measured 2026-09-10 on a cloud
+    // container: 22-23s alone and 34-39s with three vitest projects in
+    // flight, both over the previous 30s ceiling — a timeout that named
+    // this test while the property never failed. Sixty seconds is the
+    // ceiling those measurements size, not a delay.
+    60_000,
   )
 })

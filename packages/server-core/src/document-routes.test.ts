@@ -81,6 +81,19 @@ describe('canvas CRUD routes', () => {
     expect(res.status).toBe(409)
   })
 
+  it('POST a markdown document whose body is not OKF returns 400 with a reason', async () => {
+    const app = makeApp()
+    for (const markdown of ['', 'no frontmatter here']) {
+      const res = await app.request('/api/v1/workspaces/ws-1/documents', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ path: 'note', kind: 'markdown', markdown, createWorkspace: true }),
+      })
+      expect(res.status, markdown).toBe(400)
+      expect(await res.json()).toMatchObject({ error: expect.stringContaining('OKF') })
+    }
+  })
+
   it('GET list returns 200 with an array', async () => {
     const app = makeApp()
     await app.request('/api/v1/workspaces/ws-1/documents', {

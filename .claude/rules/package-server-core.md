@@ -81,6 +81,26 @@ paths:
   than green; `FUZZ_TALLY=1` prints each tool's tally, its refusal reasons
   and the shapes it answered with. The refusing doubles this lane does not
   replace (`unused*`) count as `environment`, never as a pass.
+- **Every `/api/v1` route is fuzzed the same way**
+  (`create-server.routes.fuzz.property.test.ts`), over the same seeded
+  workspace (`test-utils/seeded-workspace.ts`, shared with the tool lane;
+  both documents carry a display name and the note's prose mentions the
+  board, so linkify has a mention to find). A route may answer (2xx) or
+  refuse a request it understood (4xx with a JSON body naming why) and
+  nothing else: a 5xx is a stack trace where a reason should be. Bodies are
+  drawn from the route's own schema (ids and paths following the seed), as
+  arbitrary JSON, and as text that is not JSON, at real weight, because the
+  parse that answers the last two is a branch the schema-drawn body never
+  reaches. A schema-drawn body on the seeded workspace must never come back
+  `{ error: 'invalid input' }` — the route re-parses `{ params, ...body }`
+  with that schema, so that refusal is the route and the schema disagreeing
+  about what the schema says; a 400 with another reason is the route's
+  call. The `afterAll` fails when a route never answered, and a row count
+  pins one row per route schema so a route added without one is visible.
+  Its first catch: `POST .../documents` with `kind: 'markdown'` and a body
+  OKF cannot parse (an empty string, prose with no frontmatter) answered
+  500 — `OkfParseError` escaped `mapDocumentError`, which now maps it to
+  400 with the stage in the message.
 
 ## Render style and canvas-target facets (ADR-0030)
 
