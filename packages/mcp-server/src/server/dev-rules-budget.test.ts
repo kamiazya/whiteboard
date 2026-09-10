@@ -235,7 +235,17 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // component, `guides` alone is not a verdict, a tie counts as apart, and
 // tidy is not promised to buy proximity. Each was measured out of a wrong
 // first definition, which is the part a reader would otherwise redo.
-const CANVAS_RENDER_BUDGET = 112
+// 113 for the guide-line attempt the composition score rejected on its
+// first use as a decision instrument: the mechanism works on a constructed
+// case and buys nothing on a corpus whose `offGuide` is already 0 — which
+// is a statement about the CORPUS, and the next reader needs to know that
+// before either retrying it or inventing the fixture that justifies it.
+// 114 for the proximity owe measured and NOT chased: what the rule the
+// column implies would cost (+15% ink, +19% envelope, systemic), and why
+// the owe is mild — C1 scores only groups with a drawn border, and common
+// region is a stronger cue than proximity. Both are things a later session
+// would otherwise re-derive, one of them by shipping the change first.
+const CANVAS_RENDER_BUDGET = 114
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
