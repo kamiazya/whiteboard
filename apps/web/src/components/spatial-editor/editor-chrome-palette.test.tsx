@@ -12,7 +12,9 @@ import {
 import type { Proposal, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { createIdleState } from './gestures.js'
 import { EdgeLabelEditorOverlay } from './label-editor-overlays.js'
+import { MarkdownBodyEditorOverlay } from './markdown-body-editor-overlay.js'
 import { ProposalCard } from './ProposalCard.js'
 
 afterEach(cleanup)
@@ -102,5 +104,48 @@ describe('editor chrome palette', () => {
     expect(card.style.background).toBe(rgb(themed.proposal.bubbleFill))
     expect(card.style.border).toBe(`1px solid ${rgb(themed.proposal.edge)}`)
     expect(card.style.color).toBe(rgb(themed.labelFill))
+  })
+
+  function renderBodyDraftCover(
+    theme: 'light' | 'dark',
+    palette: ReturnType<typeof resolveCanvasPalette>,
+  ) {
+    const node = neon.nodes[0] as SpatialCanvas['nodes'][number] & {
+      readonly type: 'text'
+      readonly text: string
+    }
+    render(
+      <MarkdownBodyEditorOverlay
+        node={node}
+        selectionBox={{ x: 0, y: 0, width: 120, height: 60 }}
+        sceneNodes={[]}
+        // The scene has not yet stopped drawing the node's text, so the
+        // draft keeps its opaque cover over the committed render.
+        sceneCurrent={false}
+        threads={undefined}
+        onRequestComment={() => false}
+        zoom={1}
+        theme={theme}
+        palette={palette}
+        canvas={neon}
+        gestureState={createIdleState()}
+        applyResult={vi.fn()}
+        fontFamily="sans-serif"
+      />,
+    )
+    return screen.getByTestId('text-node-editor')
+  }
+
+  it("covers a body draft in the theme's own node fill while the scene catches up", () => {
+    const themed = resolveCanvasPalette(neon, 'dark', { style: 'document' })
+    // Non-vacuous: the bundled dark text node has no fill at all.
+    expect(themed.node.text.fill).not.toBe(SPATIAL_DARK_PALETTE.node.text.fill)
+    expect(renderBodyDraftCover('dark', themed).style.background).toBe(rgb(themed.node.text.fill))
+  })
+
+  it("covers a fill-less node in the palette's paper, not a colour the board never uses", () => {
+    const bundled = resolveCanvasPalette({ nodes: [], edges: [] }, 'dark')
+    expect(bundled.node.text.fill).toBe('none')
+    expect(renderBodyDraftCover('dark', bundled).style.background).toBe(rgb(bundled.surface))
   })
 })
