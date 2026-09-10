@@ -533,6 +533,8 @@ its evidence:
 - ~~C11: `WorkspaceNotFoundError`'s message~~ — landed.
 - ~~A tags-only query~~ — landed; the "count of process-tagged documents"
   task is the regression test.
+- ~~`edge.add`'s sides~~ — landed (§7): described on the stored schema;
+  the lane's architecture board owes no debt in three trials of three.
 - C3, in the order §4 gives.
 - The §4 retirements, each with a rung-3 before/after.
 
@@ -580,6 +582,19 @@ router unless the drawing needs one, or a router that treats a pinned
 side as a preference it may overrule. The board is in the corpus as
 `lane/architecture`, sides included, so either fix is measured against
 it.
+
+**Answered by the description (2026-09-10).** `fromSide`/`toSide` now say,
+on the stored edge schema every writer derives, that omitting them lets
+the router keep the line clear of other boxes while a named side is kept
+even through one. Rung 3 on the architecture task, three trials before
+and after: the model wrote sixteen sides a trial before and none after,
+and the board's debt went from 2, 3 and 2 edges through a box (145–163px)
+to **no debt in every trial**; crossings 1, 4, 1 before against 1, 2, 0
+after. Rung 1: +508 visible bytes, four fewer undescribed parameters
+(edge.add and edge.patch each carry both sides); pass^k 1 both times. The
+router half of the question was measured and REJECTED first — two side-choice
+changes each raised the sweep's debt while cutting the reference's
+reversals — and `package-canvas-render.md` carries that matrix.
 
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,

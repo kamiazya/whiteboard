@@ -14,6 +14,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
 import type { AgentActivity, ServerDeps, ViewportRequest } from '../server-deps.js'
 import {
   FakeDocumentStore,
@@ -558,6 +559,34 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         ops: [{ op: 'node.patch', id: 'a', patch: { width: 1 } }],
       }).success,
     ).toBe(true)
+  })
+
+  test('every edge side a writer can name says to leave it to the router', () => {
+    // A model drawing layers wrote bottom/top on every edge, including the
+    // two between boxes on one row, and the router honours a pinned side:
+    // those looped under both boxes and back through their own source. The
+    // schema is the one place every writer reads, so the sides say there
+    // what omitting them buys — on the add and on the patch alike.
+    const found: string[] = []
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item)
+        return
+      }
+      const props = (node as { properties?: Record<string, unknown> }).properties
+      if (props !== undefined) {
+        for (const side of ['fromSide', 'toSide']) {
+          const field = props[side] as { description?: string } | undefined
+          if (field !== undefined) found.push(`${side}: ${field.description ?? ''}`)
+        }
+      }
+      for (const value of Object.values(node)) walk(value)
+    }
+    walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
+    // edge.add and edge.patch each carry both sides.
+    expect(found).toHaveLength(4)
+    for (const line of found) expect(line, line).toMatch(/Omit/)
   })
 
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {

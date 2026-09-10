@@ -123,7 +123,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 15664,
+        wireBytes: 16172,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -137,7 +137,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 18794,
+        wireBytes: 19810,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -166,12 +166,18 @@ describe('what the tool table costs to read', () => {
       // two trials of three (the snapshot that only learned the ids was
       // skipped), and "colour every box inside the Clients group" from two
       // ops to one; six trials of six reached for the selector unprompted.
+      // +508 for `fromSide`/`toSide` described on the stored edge schema,
+      // which edge.add and edge.patch each derive, so four parameters
+      // gained a description at once. Described because the lane's
+      // architecture board owed every one of its debts to a model writing
+      // bottom/top on all eight edges, two of them between boxes on one
+      // row (ADR-0031 §7): the sides now say what leaving them out buys.
       wb_canvas_edit: {
-        visibleBytes: 10770,
-        wireBytes: 30798,
+        visibleBytes: 11278,
+        wireBytes: 32322,
         descriptionWords: 169,
         parameters: 147,
-        undescribed: 133,
+        undescribed: 129,
         strays: 'refused',
         names: [],
       },
@@ -361,10 +367,13 @@ describe('what the tool table costs to read', () => {
       // +940 when the render theme layer landed on main (ADR-0030): `style`
       // on canvas_view and wb_scene_render, `target` on wb_facet_set; the
       // two new undescribed parameters are that layer's, not this sweep's.
-      visibleBytes: 33429,
-      wireBytes: 98099,
+      // +508 for the two edge sides described where the stored schema
+      // declares them (see wb_canvas_edit); the wire moves on every tool
+      // whose output carries an edge.
+      visibleBytes: 33937,
+      wireBytes: 101147,
       parameters: 268,
-      undescribed: 201,
+      undescribed: 197,
     })
   })
 

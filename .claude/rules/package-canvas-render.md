@@ -1354,3 +1354,26 @@ The second reading was a router finding: the hand-drawn architecture
 reference owes three `reversals`, because the router draws a same-row
 edge inside a frame as a loop under both boxes with no side pinned. The
 column exists so that a change to the side choice is judged by it.
+
+**Two router changes for that finding were measured and rejected**, and
+the matrix is what stops them being tried again from argument. The cause
+is real: for an aligned offset `l-pair-crowding-tie-break` offers no
+L-pair, so an edge whose lane holds a box has only the facing pair and
+same-side U-hooks, and `optimizeSideChoices` adopts the FIRST candidate
+that lowers the whole cost, not the best. A `lane-l-pairs` candidate rule
+(four L-pairs when a box sits in the shared lane, first for every
+lane-sharing pair, then gated on a blocked lane) and a best-of-candidates
+adoption were each read on the reference, the 2000-layout sweep and the
+clustered board:
+
+| change | reference reversals | reference debt | sweep own-endpoint / interiorInk / borderInk | clustered violations / interiorInk / borderInk |
+|---|---|---|---|---|
+| none | 3 | 0 | 12 / 2083 / 824 | 100 / 11578 / 266 |
+| lane-l-pairs, gated | 1 | 1 edge through its own source, 23px | 13 / 2165 / 856 | 100 / 11596 / 457 |
+| best-of-candidates adoption | 1 | 0, at one new crossing | 14 / 2352 / 761 | 86 / 10327 / 516 |
+
+Neither L candidate was ever adopted — the reference's improvement came
+from `e5` reaching a top-to-top hook that a differently ordered search
+finds — and each change raised a debt column on the population. The
+drafted board also lost under the second (reversals 1 to 3). A third
+attempt starts from the sweep's debt, not from the reference's price.

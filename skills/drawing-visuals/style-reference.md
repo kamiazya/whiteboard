@@ -81,7 +81,9 @@ wb_canvas_edit({
 
 - both `fromNode` and `toNode` must be on the canvas by the time the op runs — a node added earlier
   in the SAME `wb_canvas_edit` call counts, anything else refuses the whole batch
-- `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) hint which face of the node the edge leaves from
+- `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) name which face of the node the edge leaves
+  from; leave them out unless the drawing needs that face — the router then picks the side that
+  keeps the line clear of other boxes, and a side you name is kept even through one
 - `fromEnd`/`toEnd` (`none`/`arrow`) control arrowheads independently on each end
 - there is no dash/line-style field on an edge — a distinction like "async vs sync" has to be carried
   by color or label, not by stroke style
