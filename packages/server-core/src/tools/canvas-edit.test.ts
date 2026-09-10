@@ -1,3 +1,4 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import {
   constantRatioMeasureText,
   createSpatialTheme,
@@ -98,7 +99,7 @@ describe('wb_canvas_edit tool', () => {
         ops: [
           {
             op: 'node.add',
-            node: { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
+            node: { id: 'b', type: 'text', x: 50, y: 0, width: 100, height: 48, text: 'B' },
           },
           // 'ghost' is not on the canvas — this op cannot apply.
           { op: 'node.patch', id: 'ghost', patch: { x: 5 } },
@@ -587,6 +588,35 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     // edge.add and edge.patch each carry both sides.
     expect(found).toHaveLength(4)
     for (const line of found) expect(line, line).toMatch(/Omit/)
+  })
+
+  test('every box size a writer can name says what leaving it out buys', () => {
+    // A model adding a long sentence named 220x100 and the sentence was
+    // cut: a named height is kept (the decision below), so the schema is
+    // where a writer learns that omitting it buys a box tall enough.
+    const found: string[] = []
+    const walk = (node: unknown): void => {
+      if (node === null || typeof node !== 'object') return
+      if (Array.isArray(node)) {
+        for (const item of node) walk(item)
+        return
+      }
+      const props = (node as { properties?: Record<string, unknown> }).properties
+      // A node draft or patch, told from a bare region box by carrying a colour.
+      if (props !== undefined && props.color !== undefined) {
+        for (const field of ['width', 'height']) {
+          const entry = props[field] as { description?: string } | undefined
+          if (entry !== undefined) found.push(`${field}: ${entry.description ?? ''}`)
+        }
+      }
+      for (const value of Object.values(node)) walk(value)
+    }
+    walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
+    // node.add's four node types and node.patch each carry both, and each
+    // says what the size does to the TEXT: the add's that omitting the
+    // height fits it, the patch's that a named height is kept regardless.
+    expect(found.length).toBeGreaterThanOrEqual(10)
+    for (const line of found) expect(line, line).toMatch(/text/)
   })
 
   test('rejects an invalid arrowhead end at the schema level (from wb_edge_patch)', async () => {
@@ -1808,12 +1838,84 @@ describe('wb_canvas_edit — a node created without a height', () => {
     expect(node.height).toBe(needs)
   })
 
-  test('respects a height that was named, however small', async () => {
-    // "no height" and "a small height" are different inputs. Someone who
-    // asked for 40 gets 40 — the fade is the honest answer there.
-    const { node } = await addAndMeasure(LONG_JA, 40)
+  test('refuses a named height its text cannot fit, naming the height it needs', async () => {
+    // This used to keep the 40 — "no height" and "a small height" are
+    // different inputs — until the lane read what a model does with that:
+    // it names its neighbours' size to match them, three trials of three,
+    // and the sentence is cut where nothing it can see says so. Growing
+    // silently would put the box into whatever sits below it, so the
+    // answer is a refusal that carries the number.
+    const { needs } = await addAndMeasure(LONG_JA)
+    await expect(addAndMeasure(LONG_JA, 40)).rejects.toThrow(
+      new RegExp(`needs ${needs}px of height at width 260`),
+    )
+  })
 
-    expect(node.height).toBe(40)
+  test('the ratio measurer is a floor: a narrow font cannot pass a box the score reads as cut', async () => {
+    // The daemon measures with its real font and the lane's score with the
+    // ratio measurer every machine has, which reads wider; the one board
+    // the score charged after the refusal landed was one the daemon's font
+    // had let through. The tool takes the taller of the two, so what it
+    // accepts is what the score, and a narrower client font, would accept.
+    const hairline: MeasureText = (text, font) => ({
+      advanceWidth: text.length,
+      ascent: font.sizePx * 0.8,
+      descent: font.sizePx * 0.2,
+      lineGap: 0,
+    })
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+    const tool = createCanvasEditTool({ ...makeDeps(store), measure: async () => hairline })
+    const add = (height?: number) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'n',
+              type: 'text',
+              text: LONG_JA,
+              ...(height === undefined ? {} : { height }),
+            },
+          },
+        ],
+      })
+    const { needs } = await addAndMeasure(LONG_JA)
+    await expect(add(40)).rejects.toThrow(new RegExp(`needs ${needs}px`))
+    await add()
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]?.height).toBe(needs)
+  })
+
+  test('keeps a named height that holds the text', async () => {
+    const { needs } = await addAndMeasure(LONG_JA)
+    const { node } = await addAndMeasure(LONG_JA, needs + 8)
+    expect(node.height).toBe(needs + 8)
+  })
+
+  test('a patch that makes the text outgrow the box, or the box too short for it, is refused', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [{ id: 'n', type: 'text', x: 0, y: 0, width: 260, height: 120, text: 'short' }],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+    const patch = (fields: Record<string, unknown>) =>
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        mode: 'apply',
+        ops: [{ op: 'node.patch', id: 'n', patch: fields }],
+      })
+    await expect(patch({ text: LONG_JA })).rejects.toThrow(/needs \d+px of height at width 260/)
+    await expect(patch({ height: 24 })).rejects.toThrow(/needs \d+px of height/)
+    // A patch that leaves the text fitting still applies.
+    await patch({ text: 'still short' })
+    const { canvas } = await loadDocument(makeDeps(store), WORKSPACE_ID, DOCUMENT_ID)
+    expect(canvas.nodes[0]).toMatchObject({ text: 'still short', height: 120 })
   })
 
   test('does not shrink a short node below the default', async () => {
@@ -1832,7 +1934,9 @@ describe('node.patch and a node type that does not have the key', () => {
     x: 0,
     y: 0,
     width: 100,
-    height: 50,
+    // Tall enough for the heading a test below patches in: a text patch is
+    // refused when the box cannot hold the new text.
+    height: 80,
     text: 'hello',
   }
 

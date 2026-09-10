@@ -66,8 +66,10 @@ export const nodePatchFieldsSchema = z
   .object({
     x: integerSchema.optional(),
     y: integerSchema.optional(),
-    width: nonnegativeIntegerSchema.optional(),
-    height: nonnegativeIntegerSchema.optional(),
+    width: nonnegativeIntegerSchema.optional().describe('Box width; text wraps at it.'),
+    height: nonnegativeIntegerSchema
+      .optional()
+      .describe('Box height; one too short for the text is refused with the height it needs.'),
     color: canvasColorSchema.optional(),
     // Per-type content. `id` and `type` are deliberately absent: a patch
     // changes what a node SAYS, never which node it is or what kind.

@@ -649,6 +649,36 @@ boards its tasks drew debt-free (`debtFreePowK 1`), 2.4 calls a task, 0
 tool errors, $0.87 — the instructions sentence changed nothing else the
 lane can see.
 
+**The fourth reading: a box too short for its text (2026-09-10).** With
+the whole lane debt-free, two more tasks: a box holding a long sentence
+added beside existing boxes, and a flowchart with a retry loop. The
+flowchart came out debt-free three of three. The sentence read
+`textOverflow` in one trial and `nearMisses` in another, and the size the
+model named explains both: 220×100, or 200×100 twenty pixels off the
+column it sat under — the neighbours' size, copied to match them.
+Describing `width` and `height` on the stored schema ("omit it and a text
+box is made tall enough for its text; a named one is kept even when the
+text does not fit") moved nothing: three trials of three named 200×100
+and the sentence was cut, which is the study's finding that a
+description fix regresses a sixth of cases, here with the whole sixth in
+one place. The recorded decision that a named height is kept however
+small — "someone who asked for 40 gets 40" — was made without a reading,
+and the reading is that the writer who names a height is a model copying
+its neighbours, so the tool now refuses a text box whose named height
+cannot hold its text at its width and says the height it needs, on
+`node.add` and on a `node.patch` that changes text or size; the
+description says so. After that: two trials omitted the height and were
+fitted, one named 200×100 and was NOT refused — the daemon measures with
+its real font and the text fits there, while the score measures with the
+ratio measurer every machine has and reads one line more, `textOverflow
+1`. That was an instrument gap rather than a drawing defect, and it is
+closed on the tool's side: the fit takes the taller of the two readings,
+its own font's and the ratio measurer's, so what the tool accepts is what
+the score and a client drawing with a wider font would accept, at the
+price of a box a line taller than the daemon's font strictly needs. Read
+again with the floor: no debt three trials of three, no tool error, and
+the task's `debtFreePowK` back at 1.
+
 What the column does not do is gate: a task passes or fails on its
 verifier as before, and the score is read beside it the way `calls` is,
 as a diagnostic that says where the surface let the model draw badly. A

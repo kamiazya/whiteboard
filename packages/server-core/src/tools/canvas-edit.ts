@@ -68,8 +68,38 @@ export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.
  * width, not a position.
  */
 function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
-  const natural = naturalNodeContentSize(node, { measure, appearance: MCP_SCENE_APPEARANCE })
-  return Math.max(fallback, natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+  // The taller of two readings: the composition root's own font, and the
+  // ratio measurer every machine has. The daemon's font is narrower than
+  // the ratio, so a box it fits can still read as cut to the drawing score
+  // and to a client drawing with a wider font; the floor is what makes
+  // "fits" mean the same thing to the tool and to what judges it.
+  const under = (m: MeasureText) =>
+    naturalNodeContentSize(node, { measure: m, appearance: MCP_SCENE_APPEARANCE }).h
+  const natural = Math.max(under(measure), under(constantRatioMeasureText))
+  return Math.max(fallback, natural + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+}
+
+/**
+ * Refuses a text node whose named height cannot hold its text at its width,
+ * naming the height it needs. A named height used to be kept however small
+ * — "no height" and "a small height" are different inputs — until the lane
+ * read what a model does with that: it names its neighbours' size to match
+ * them and the sentence is cut where nothing it can see says so. Growing
+ * the box silently would put it into whatever sits below, so the number
+ * goes back to the caller instead.
+ */
+function assertTextFits(index: number, opName: string, node: SpatialNode, measure: MeasureText) {
+  if (node.type !== 'text') return
+  // Whole pixels, as JSON Canvas sizes are; a box short by a fraction of one
+  // is a box the renderer draws without a fade.
+  const needs = Math.floor(fittedHeight(node, measure, 0))
+  if (node.height < needs) {
+    fail(
+      index,
+      opName,
+      `its text needs ${needs}px of height at width ${node.width}; name at least that, or omit height and the box is sized to fit`,
+    )
+  }
 }
 
 /**
@@ -211,14 +241,20 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
 
-      // Resolved once, and only when some op actually creates a text node
-      // without naming a height — the composition root's measurer parses a
-      // font on first use, and a batch of patches should not pay for that.
-      // `region.set` is deliberately NOT included: what it declares must fit
-      // inside its group, so growing a node there could refuse the very op
-      // that asked for it. A node created there keeps the flat default.
+      // Resolved once, and only when some op creates a text node or changes
+      // what decides whether one's text fits — the composition root's
+      // measurer parses a font on first use, and a batch of moves and locks
+      // should not pay for that. `region.set` is deliberately NOT included:
+      // what it declares must fit inside its group, so growing a node there
+      // could refuse the very op that asked for it. A node created there
+      // keeps the flat default.
       const wantsFit = input.ops.some(
-        (op) => op.op === 'node.add' && op.node.type === 'text' && op.node.height === undefined,
+        (op) =>
+          (op.op === 'node.add' && op.node.type === 'text') ||
+          (op.op === 'node.patch' &&
+            (op.patch.text !== undefined ||
+              op.patch.width !== undefined ||
+              op.patch.height !== undefined)),
       )
       const measure: MeasureText | undefined = wantsFit
         ? ((await deps.measure?.()) ?? constantRatioMeasureText)
@@ -407,6 +443,12 @@ export function createCanvasEditTool(deps: ServerDeps) {
               'accepted and silently dropped, so it is refused instead',
           )
         }
+        if (
+          measure !== undefined &&
+          (patch.text !== undefined || patch.width !== undefined || patch.height !== undefined)
+        ) {
+          assertTextFits(index, opName, updated, measure)
+        }
         nodes = nodes.map((existing) => (existing.id === id ? updated : existing))
         touchedNodes.add(id)
       }
@@ -448,6 +490,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
             const parsed = spatialNodeSchema.safeParse({ ...draft, id, ...at, width, height })
             if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            if (draft.height !== undefined && measure !== undefined) {
+              assertTextFits(index, op.op, parsed.data, measure)
+            }
             // A position the CALLER chose, in a group the caller named: both
             // are explicit, and the group grows so both hold — except before
             // its top-left, which growth keeps, so that one is refused.
