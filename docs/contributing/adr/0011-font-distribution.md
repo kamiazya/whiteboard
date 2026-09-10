@@ -94,6 +94,11 @@ reader sees. `ServerDeps.measure` is the existing seam and both sides go through
 it. A future provider registry supplies faces to that seam and to resvg from one
 place, never two.
 
+*2026-09-10 note: the seam is now `ServerDeps.textMeasurer`, and it carries the
+families the measurer holds a face for beside the measurer itself — so
+`wb_scene_render` declares a theme's family from the same set the export
+measures with, rather than declaring the bundled one unconditionally.*
+
 ### 5. The whole-font fallback is a declared exception, and stays one
 
 `headless-renderer.ts` uses `{ loadSystemFonts: true }` when the vendored

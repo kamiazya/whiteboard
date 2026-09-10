@@ -2,6 +2,11 @@
 // web preview already draws: a canvas behind `![[path]]` as a miniature, a
 // `#fragment` narrowing either kind to the heading or group it names, and a
 // `fragment` input that renders one part of a document on its own.
+
+import {
+  constantRatioMeasureText,
+  SPATIAL_THEME_FONT_FAMILY,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   writeDocumentKind,
   writeMarkdownBody,
@@ -242,5 +247,35 @@ describe('wb_scene_render style on a markdown document (ADR-0030 decisions 5-6)'
 
     expect(result.svg).toContain('LAUNCH-NODE')
     expect(result.svg).not.toContain('filterUnits="userSpaceOnUse"')
+  })
+
+  test("an embedded board's theme family is declared where the daemon can measure it", async () => {
+    // The same answer the board gets on its own: a note embedding a sketch
+    // board declares Yomogi exactly when the measurer holds that face, and
+    // the bundled family otherwise — never one for the board and the other
+    // for the note that embeds it.
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, EMBEDS_BOARD, 'visual.sketch')
+    const measuring = (families: readonly string[]): ServerDeps => ({
+      ...makeDeps(store),
+      textMeasurer: async () => ({
+        measure: constantRatioMeasureText,
+        measurableFamilies: new Set([SPATIAL_THEME_FONT_FAMILY, ...families]),
+      }),
+    })
+    const input = {
+      workspaceId: WORKSPACE_ID,
+      documentId: NOTE_ID,
+      embedReferences: true,
+      style: 'document' as const,
+    }
+
+    const held = await createCanvasRenderSvgTool(measuring(['Yomogi'])).execute(input)
+    expect(held.svg).toContain('LAUNCH-NODE')
+    expect(held.svg).toContain('font-family="Yomogi"')
+
+    const missing = await createCanvasRenderSvgTool(measuring([])).execute(input)
+    expect(missing.svg).toContain('LAUNCH-NODE')
+    expect(missing.svg).not.toContain('Yomogi')
   })
 })

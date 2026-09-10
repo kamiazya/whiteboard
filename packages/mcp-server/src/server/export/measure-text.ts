@@ -323,9 +323,10 @@ export async function createExportTextMeasurer(
 }
 
 /**
- * The measurement half alone, for callers with no family question to ask —
- * the DI container's `measure` seam, which lays scenes out for tools that
- * declare the bundled family unconditionally.
+ * The measurement half alone, for a caller with no family question to ask.
+ * Every production seam takes `createExportTextMeasurer` whole, so that a
+ * family is declared exactly where it is measured; this stays for the tests
+ * of the measurer itself.
  */
 export async function createOpentypeMeasureText(
   options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},

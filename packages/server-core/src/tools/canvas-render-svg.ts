@@ -1,5 +1,4 @@
 import {
-  constantRatioMeasureText,
   renderSceneToSvg,
   type Scene,
   selectCanvasFragment,
@@ -17,6 +16,7 @@ import { z } from 'zod'
 import { composeCanvasScene, sceneEnvelope } from '../render/compose-canvas-scene.js'
 import { composeMarkdownScene } from '../render/compose-markdown-scene.js'
 import { loadReferenceGraph } from '../render/reference-graph.js'
+import { fontAvailableOf, resolveTextMeasurer } from '../render/text-measurer.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -79,7 +79,9 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
       const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
-      const measure = (await deps.measure?.()) ?? constantRatioMeasureText
+      const measurer = await resolveTextMeasurer(deps)
+      const { measure } = measurer
+      const fontAvailable = fontAvailableOf(measurer)
       // The doc's own recorded kind wins; the index row is the fallback for
       // a document that predates kinds (wb_document_get's read path). Neither
       // known reads as spatial, the kind every pre-kind document was.
@@ -104,7 +106,11 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
         if (root === undefined) {
           throw new FragmentNotFoundError(input.documentId, input.fragment ?? '', 'markdown')
         }
-        scene = composeMarkdownScene(root, measure, { references, style: input.style })
+        scene = composeMarkdownScene(root, measure, {
+          references,
+          style: input.style,
+          fontAvailable,
+        })
       } else {
         const part =
           input.fragment === undefined ? canvas : selectCanvasFragment(canvas, input.fragment)
@@ -117,6 +123,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
         scene = composeCanvasScene(part, measure, {
           references,
           style: input.style,
+          fontAvailable,
           // The export draws what the editor draws: a thread about a passage
           // of a node's text is a highlight behind those words, a node set
           // an outline around them.

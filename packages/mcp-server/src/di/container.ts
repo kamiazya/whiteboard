@@ -11,7 +11,7 @@ import {
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { Container, type ContainerModule } from 'inversify'
-import { createOpentypeMeasureText } from '../server/export/measure-text.js'
+import { createExportTextMeasurer } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
@@ -71,7 +71,10 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // canvas — uses opentype.js, and the two disagree on where every wrapped
     // line lands. Memoized inside the measurer, so this reference costs
     // nothing until a render actually asks for it.
-    measure: createOpentypeMeasureText,
+    // The export's own measurer, families included, so wb_scene_render
+    // declares a theme's family exactly where the PNG export would: from the
+    // faces this daemon can measure, never from a second list.
+    textMeasurer: createExportTextMeasurer,
     // Where a family a theme names can be downloaded. The catalogue is the
     // daemon's — the same one the font installer takes an id from — and
     // server-core cannot import it (daemon-client depends on server-core, so

@@ -54,6 +54,12 @@ export interface ComposeCanvasSceneOptions {
    * the digest too, and a digest must never move because a theme did.
    */
   readonly style?: SpatialRenderStyle
+  /**
+   * Whether a family a theme names may be declared — the measurer's answer
+   * (`fontAvailableOf`). Absent means only the bundled family is, which is
+   * what the digest wants: it never draws a theme, so it never asks.
+   */
+  readonly fontAvailable?: (family: string) => boolean
 }
 
 /**
@@ -83,6 +89,7 @@ export function composeCanvasScene(
     appearance: MCP_SCENE_APPEARANCE,
     onDegrade,
     ...(options?.style === undefined ? {} : { style: options.style }),
+    ...(options?.fontAvailable === undefined ? {} : { fontAvailable: options.fontAvailable }),
     ...(options?.threads === undefined ? {} : { threads: options.threads }),
     // A render has no on-screen size to gate a miniature by, so every
     // resolved canvas reference expands — export's policy, in the editor's

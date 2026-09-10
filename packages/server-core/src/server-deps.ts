@@ -9,6 +9,18 @@ import type { ThemeFontSource } from './theme-font.js'
 import type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
 
 /**
+ * A text measurer and the families it holds a real face for, as ONE value:
+ * the layout declares a family exactly where `measurableFamilies` admits it
+ * (`fontAvailable`), so a list built anywhere else is how a declared family
+ * stops being the measured one — and every wrapped line moves with it.
+ */
+export interface SceneTextMeasurer {
+  readonly measure: MeasureText
+  /** Every family `measure` has a real face for — what may be declared. */
+  readonly measurableFamilies: ReadonlySet<string>
+}
+
+/**
  * What a batch of agent edits touched, as the browser needs to hear it.
  *
  * Deliberately carries no operator identity: server-core does not know who
@@ -106,18 +118,18 @@ export interface ServerDeps {
     }): Promise<{ documentId: string; path: string } | null>
   }
   /**
-   * How to measure text when laying a scene out. Optional because
-   * server-core is a shared layer forbidden from loading a font itself
-   * (architecture-map.md) — absent, the render/digest tools degrade to
-   * canvas-render's `constantRatioMeasureText`, which matches no real
-   * font.
+   * How to measure text when laying a scene out, and which families that
+   * measurer can answer for. Optional because server-core is a shared layer
+   * forbidden from loading a font itself (architecture-map.md) — absent, the
+   * render/digest tools degrade to canvas-render's `constantRatioMeasureText`,
+   * which matches no real font, and declare the bundled family alone.
    *
    * Asynchronous, and a factory rather than a value, because the real
    * implementation parses a font file: the composition root's own measurer
    * memoizes that parse, so calling this per request costs one resolved
    * promise and startup pays nothing for a server that never renders.
    */
-  measure?: () => Promise<MeasureText>
+  textMeasurer?: () => Promise<SceneTextMeasurer>
   /**
    * Turns document search from lexical-only into lexical fused with
    * semantic. Optional for the same reason `measure` is: server-core is a

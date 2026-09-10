@@ -29,6 +29,12 @@ export interface ComposeMarkdownSceneOptions {
    * (ADR-0030 decision 5) rather than a host theme; absent draws clean.
    */
   readonly style?: SpatialRenderStyle
+  /**
+   * Whether a family a theme names may be declared, for the canvases the
+   * body embeds — the measurer's answer (`fontAvailableOf`), the same one the
+   * board gets rendered on its own. Absent declares the bundled family alone.
+   */
+  readonly fontAvailable?: (family: string) => boolean
 }
 
 /**
@@ -50,5 +56,6 @@ export function composeMarkdownScene(
     canvasAppearance: MCP_SCENE_APPEARANCE,
     ...(options?.references !== undefined ? { references: options.references } : {}),
     ...(options?.style !== undefined ? { style: options.style } : {}),
+    ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
   })
 }
