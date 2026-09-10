@@ -75,6 +75,7 @@ export {
   naturalNodeContentSize,
   paintOrderOf,
   resolveCanvasPalette,
+  resolveCanvasThemeFontFamily,
   resolveShapeTable,
   resolveThemeTable,
   spatialRenderStyleSchema,

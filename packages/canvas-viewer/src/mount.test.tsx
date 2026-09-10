@@ -127,6 +127,22 @@ describe('mountCanvasViewer', () => {
     expect(messageHandler).not.toHaveBeenCalled()
   })
 
+  it('forwards background, so a host can paint the paper the theme names', () => {
+    // The widget is the caller that needs it: a scene drawn on a host's own
+    // transparent ground is a themed canvas without its paper, which is the
+    // one part of a theme no node carries.
+    const container = document.createElement('div')
+    document.body.appendChild(container)
+
+    const handle = mountCanvasViewer(container, {
+      scene: { nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }] },
+      background: '#f8fafc',
+    })
+
+    expect(container.querySelector('rect[fill="#f8fafc"]')).toBeTruthy()
+    handle.dispose()
+  })
+
   it("forwards style, so a host can ask for the document's theme (ADR-0030)", () => {
     const container = document.createElement('div')
     document.body.appendChild(container)

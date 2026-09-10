@@ -1647,6 +1647,32 @@ export function resolveCanvasPalette(
 }
 
 /**
+ * The family the theme this canvas draws in NAMES, or nothing — the style
+ * resolves to no theme, or the theme declares no family of its own.
+ *
+ * Separate from `resolveCanvasPalette` in ONE way that matters: an absent
+ * `style` is `'clean'` here, not `'document'`. A palette is asked for by a
+ * surface already drawing the document; this is asked by a tool ECHOING a
+ * caller's `style`, where absent means the bundled look and so nothing for
+ * the caller to go and fetch.
+ */
+export function resolveCanvasThemeFontFamily(
+  canvas: SpatialCanvas,
+  options: {
+    readonly style?: SpatialRenderStyle
+    readonly contributions?: readonly RenderContribution[]
+  } = {},
+): string | undefined {
+  const contributions = options.contributions ?? [visualRenderContribution]
+  const own = contributions
+    .map((contribution) => contribution.readTheme?.(canvas))
+    .find((id) => id !== undefined)
+  const themeId = pickThemeId(options.style, own, undefined)
+  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
+  return tokens?.fontFamily
+}
+
+/**
  * The theme id a canvas draws in, under the style the caller asked for:
  * `'clean'` never has one; a theme id IS one; `'document'` takes the
  * canvas's own, else the host's (an embed inherits), else none.

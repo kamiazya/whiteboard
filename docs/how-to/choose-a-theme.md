@@ -82,6 +82,11 @@ directory when it warms its renderer, so a face installed while it is running is
 next start. The web app takes the daemon's copy when it has one, and the catalogue source
 otherwise.
 
+The inline canvas view in an MCP client does the same: when it draws a board in a theme that
+names a family, it fetches that one family from the same catalogue source — nothing else, ever,
+and nothing at all for an unthemed board. Some hosts restrict what a widget may load; where that
+happens the view keeps the bundled family and the rest of the theme is unaffected.
+
 Offline, or where the source cannot be reached, the theme still draws its hand-drawn strokes and
 the lettering uses the bundled family. The SVG names the family that was actually measured,
 never one that was not, so the coordinates and the face always agree.

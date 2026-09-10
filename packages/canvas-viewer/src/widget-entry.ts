@@ -4,7 +4,7 @@
 // only by the widget's own <script type="module"> tag.
 
 import { WIDGET_FONTS } from 'virtual:widget-fonts'
-import { spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
+import { resolveCanvasPalette, spatialRenderStyleSchema } from '@kamiazya/whiteboard-canvas-render'
 import {
   type CommentThread,
   commentThreadSchema,
@@ -23,6 +23,7 @@ import { canvasPointFromClick } from './widget/canvas-point.js'
 import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
+import { loadThemeFont, type ThemeFont } from './widget/theme-font.js'
 
 declare global {
   interface Window {
@@ -32,6 +33,11 @@ declare global {
     __whiteboardWidgetFonts__?: readonly FontFace[]
     // Pre-set by the smoke harness (init script) to opt into the hook above.
     __WHITEBOARD_WIDGET_DEBUG__?: boolean
+    // Guarded debug hook, not a public API: feeds one canvas_view result
+    // through the same path a host's `ui/notifications/tool-result` takes,
+    // so the widget-smoke can exercise the built bundle without standing up
+    // an MCP Apps host. Only set when the flag above is.
+    __whiteboardWidgetToolResult__?: (payload: unknown) => void
   }
 }
 
@@ -159,10 +165,16 @@ const toolResultEnvelopeSchema = z.object({
       // Parsed below, like the references: a style the schema does not know
       // must cost the look, never the scene.
       style: z.unknown().optional(),
+      // The family the resolved theme names, and where the catalogue keeps
+      // it. Deliberately a URL and not bytes: 4 MB through the model's
+      // context, on every view, to say one word.
+      themeFont: z.unknown().optional(),
     })
     .catchall(z.unknown())
     .optional(),
 })
+
+const themeFontSchema = z.object({ family: z.string().min(1), url: z.string().min(1) }).strict()
 
 function extractCanvasIdAndScene(payload: unknown): {
   workspaceId?: string
@@ -171,11 +183,13 @@ function extractCanvasIdAndScene(payload: unknown): {
   references?: MountCanvasViewerOptions['references']
   threads?: MountCanvasViewerOptions['threads']
   style?: MountCanvasViewerOptions['style']
+  themeFont?: ThemeFont
 } {
   const parsed = toolResultEnvelopeSchema.safeParse(payload)
   if (!parsed.success) return {}
   const structuredContent = parsed.data.structuredContent
   const style = spatialRenderStyleSchema.safeParse(structuredContent?.style)
+  const themeFont = themeFontSchema.safeParse(structuredContent?.themeFont)
   return {
     workspaceId: structuredContent?.workspaceId,
     documentId: structuredContent?.documentId,
@@ -183,6 +197,7 @@ function extractCanvasIdAndScene(payload: unknown): {
     references: parseReferences(structuredContent?.references),
     threads: parseThreads(structuredContent?.threads),
     ...(style.success ? { style: style.data } : {}),
+    ...(themeFont.success ? { themeFont: themeFont.data } : {}),
   }
 }
 
@@ -205,6 +220,15 @@ function isErrorResult(payload: unknown): boolean {
   )
 }
 
+/**
+ * The mode the widget draws in — `CanvasViewer`'s own default, restated here
+ * because the paper has to be resolved from the same one the layout uses.
+ */
+const WIDGET_THEME_MODE = 'light'
+
+/** Counts applied results, so a late font load can tell whether it is stale. */
+let appliedGeneration = 0
+
 function applyToolResult(
   payload: unknown,
   container: HTMLElement,
@@ -219,7 +243,7 @@ function applyToolResult(
     console.error('[whiteboard-widget] ignoring tool-result carrying an error result:', payload)
     return
   }
-  const { workspaceId, documentId, scene, references, threads, style } =
+  const { workspaceId, documentId, scene, references, threads, style, themeFont } =
     extractCanvasIdAndScene(payload)
   const result = parseViewerScene(scene)
   if (!result.ok) {
@@ -232,15 +256,36 @@ function applyToolResult(
   // References ride along with the scene: a file node pointing at a
   // markdown document renders that document's prose only if the server put
   // it in the payload, since this widget has no store to read it from.
-  remount(() =>
+  const mount = () =>
     mountCanvasViewer(container, {
       scene,
+      // A theme's paper, which no node carries — the one part of a look that
+      // is the ground rather than the ink, and without it a themed canvas is
+      // drawn on whatever the host's chat surface happens to be. Resolved
+      // for the style THIS result was drawn under (absent is the bundled
+      // look, which has paper too) and for the mode the viewer draws in.
+      background: resolveCanvasPalette(result.value, WIDGET_THEME_MODE, {
+        style: style ?? 'clean',
+      }).surface,
       ...(references === undefined ? {} : { references }),
       ...(threads === undefined ? {} : { threads }),
       ...(style === undefined ? {} : { style }),
-    }),
-  )
+    })
+  // Identifies THIS result, so a font that arrives after a newer result has
+  // already drawn cannot redraw the older scene.
+  appliedGeneration += 1
+  const generation = appliedGeneration
+  remount(mount)
   onValidResult(workspaceId, documentId, result.value)
+  // The widget's one exception to its zero-network rule (ADR-0011's
+  // 2026-09-10 note): a theme's family, from the pinned catalogue origin,
+  // and only while actually drawing that theme. The scene is already on
+  // screen in the bundled family, so this is a redraw, never a gate.
+  if (themeFont !== undefined && style !== undefined && style !== 'clean') {
+    void loadThemeFont(themeFont).then((outcome) => {
+      if (outcome === 'loaded' && generation === appliedGeneration) remount(mount)
+    })
+  }
 }
 
 // `remount` is the single place a mount produced by this bridge happens.
@@ -496,6 +541,17 @@ async function bootstrap(): Promise<void> {
     container.replaceChildren()
     handle = mount()
   }
+  // Smoke-only instrumentation, on the same flag registerFonts() reads: the
+  // widget-smoke drives the BUILT bundle over file://, where no MCP Apps
+  // host answers the handshake, and a payload-shaped path is the only way to
+  // exercise what a tool-result does there. The production widget never
+  // exposes it.
+  if (window.__WHITEBOARD_WIDGET_DEBUG__ === true) {
+    window.__whiteboardWidgetToolResult__ = (payload: unknown) => {
+      applyToolResult(payload, container, remount, () => {})
+    }
+  }
+
   const connectedToHost = await mountFromHost(container, remount)
   if (!connectedToHost && handle === undefined) {
     // The embedded-scene fallback goes through the same remount path: a

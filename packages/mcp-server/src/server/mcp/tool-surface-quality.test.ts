@@ -123,7 +123,10 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 15664,
+        // +181 for `themeFont` (a family and a URL), which the widget needs
+        // and the model never reads: it is an OUTPUT field, so `visibleBytes`
+        // — what the model is charged on every turn — does not move.
+        wireBytes: 15845,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -368,7 +371,8 @@ describe('what the tool table costs to read', () => {
       // +32 for `style` answering on a markdown document too (see
       // wb_scene_render).
       visibleBytes: 33461,
-      wireBytes: 98131,
+      // +181, all of it canvas_view's themeFont (see its row).
+      wireBytes: 98312,
       parameters: 268,
       undescribed: 201,
     })

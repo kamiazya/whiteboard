@@ -1020,6 +1020,46 @@ async function main() {
   }
   console.log("[e2e] canvas_view(style: 'document') → style echoed for the widget")
 
+  // The widget draws in a bundled family unless it can measure the one the
+  // theme names, and it has no catalogue of its own — so the tool answers
+  // where that family lives. Only the ANSWER travels: a URL, never the 4 MB
+  // behind it. The SDK validates it against canvasViewOutputSchema, which is
+  // the point of doing it here.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
+  })
+  const sketched = await callTool('canvas_view', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (sketched.themeFont?.family !== 'Yomogi') {
+    throw new Error(`canvas_view named no theme font: ${JSON.stringify(sketched.themeFont)}`)
+  }
+  if (!sketched.themeFont.url.startsWith('https://raw.githubusercontent.com/')) {
+    throw new Error(
+      `canvas_view's theme font URL left the catalogue origin: ${sketched.themeFont.url}`,
+    )
+  }
+  // The bundled look draws in the bundled family, so there is nothing to
+  // fetch and nothing to say — and the widget's fetch is gated on this.
+  const sketchedClean = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  if (sketchedClean.themeFont !== undefined) {
+    throw new Error(
+      `canvas_view named a theme font under the bundled look: ${JSON.stringify(sketchedClean.themeFont)}`,
+    )
+  }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  console.log("[e2e] canvas_view(style: 'document') → themeFont for the widget; none under clean")
+
   // The widget's sticky-note append, in ITS EXACT argument shape (a text
   // node with no geometry, auto-placed server-side) — the runtime guard
   // against cross-package literal drift between widget-entry.ts and

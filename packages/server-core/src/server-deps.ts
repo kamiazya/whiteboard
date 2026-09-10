@@ -5,6 +5,7 @@ import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboa
 import type { LoroDoc } from 'loro-crdt'
 import type { RestoreProgressEvent } from './operations/restore-version.js'
 import type { Embedder } from './search/embedder.js'
+import type { ThemeFontSource } from './theme-font.js'
 import type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
 
 /**
@@ -125,6 +126,13 @@ export interface ServerDeps {
    * scoreboard passes unchanged either way.
    */
   embedder?: Embedder
+  /**
+   * Where the family a theme names can be downloaded from. Optional for the
+   * same reason `measure` is: the catalogue is a composition root's to hold,
+   * and absent simply means a themed canvas is drawn in the bundled family
+   * — which is the degradation ADR-0030 already declares.
+   */
+  themeFontSource?: ThemeFontSource
   /**
    * Optional on purpose: every existing composition — and every test — is a
    * valid server without one, and a tool that needed a browser to be present

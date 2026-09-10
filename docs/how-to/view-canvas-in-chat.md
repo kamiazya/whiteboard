@@ -18,6 +18,7 @@ no need to switch to a browser tab to see what the agent drew.
 - The document's **theme**, when asked for: with `style` omitted the widget draws `'clean'` (no theme), and
   `canvas_view({ …, style: 'document' })` draws the theme the canvas names (or a theme id previews
   one) — the same `style` `wb_scene_render` takes, see [choose-a-theme](choose-a-theme.md).
+  A theme's **paper** is drawn too, so the board does not sit on the chat's own background.
 - Its **file references resolved**: a node pointing at a markdown document in the
   same workspace shows that document's prose, and every reference is labelled with
   its readable name rather than its raw id. The widget has no store of its own, so
@@ -26,9 +27,13 @@ no need to switch to a browser tab to see what the agent drew.
   [self-contained HTML export](../explanation/) — no daemon credentials, tokens, or
   base URLs are ever passed into the widget. The widget only ever receives the scene
   snapshot plus the resolved references above — nothing else.
-- Zero external network access: the widget bundle is fully self-contained (fonts and
-  every other asset are inlined), so the client's CSP for the view can stay at its
-  strictest default.
+- No external network access, with **one exception**: the bundle is fully self-contained
+  (the default font and every other asset are inlined), and the only request the view can
+  ever make is for the one font family a theme names — from the Google Fonts catalogue's
+  own repository, only while drawing a board in that theme, and never for an unthemed one.
+  The view declares that single origin to your client so its CSP can allow exactly it and
+  nothing else. Hosts that restrict this further are fine: the board then draws in the
+  bundled family and nothing else changes.
 
 ## Refreshing the view
 

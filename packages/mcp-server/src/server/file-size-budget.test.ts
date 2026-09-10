@@ -312,10 +312,17 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // type back from here. The palette a chrome previews resolves through the
   // same `pickThemeId`, so it sits here too.
   // +17 more for `paintOrderOf`, groups behind what they hold whatever the
-  // stored order says.
+  // stored order says. +4 for `annotates`, the link from a label's run back
+  // to the edge or container it names, set where each label is placed.
   // +4 for the theme axis on the text-node body cache key: without it a
   // clean render and a themed one of the same node share an entry.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2406,
+  // +26 for `resolveCanvasThemeFontFamily`, the family a canvas's theme
+  // names under a given style. Here for the same reason the palette
+  // resolver is: it reads `pickThemeId` and the composed theme table, and a
+  // module holding it would import both back from this file. Asked by a
+  // surface that cannot MEASURE a family it does not hold — the MCP Apps
+  // widget, through `canvas_view`.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2432,
   'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2069,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card

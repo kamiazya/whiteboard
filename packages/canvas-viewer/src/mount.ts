@@ -2,6 +2,7 @@ import {
   type LoadedReference,
   referenceSeams,
   type SpatialRenderStyle,
+  type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { createElement } from 'react'
@@ -49,6 +50,16 @@ export interface MountCanvasViewerOptions {
    * Absent is the bundled look, whatever the scene's own theme facet says.
    */
   style?: SpatialRenderStyle
+  /**
+   * The paper to paint under the scene — canvas-render's background rect,
+   * not a CSS colour, so it survives an export of the same markup.
+   *
+   * Taken as a value rather than derived here: a theme's surface follows
+   * the HOST's mode (a themed canvas in a light UI draws the theme's light
+   * half), and this package has no way to know which mode its embedder is
+   * in. Absent leaves the scene on whatever the host's own ground is.
+   */
+  background?: SvgDocumentOptions['background']
 }
 
 export interface CanvasViewerHandle {
@@ -130,6 +141,7 @@ export function mountCanvasViewer(
         label: opts.label,
         ...(opts.threads === undefined ? {} : { threads: opts.threads }),
         ...(opts.style === undefined ? {} : { style: opts.style }),
+        ...(opts.background === undefined ? {} : { background: opts.background }),
         ...viewerReferences(opts.references),
       }),
     )
