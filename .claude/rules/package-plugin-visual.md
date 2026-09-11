@@ -134,11 +134,34 @@ An earlier comment in this file claimed the subgroup was `travel-air` and
 that "travel" therefore worked; it was written from memory and the data
 refutes it.
 
-Names are English only. CLDR carries a Japanese index — measured at full
-coverage of all 1914 and +123KB raw / +35KB gzipped with keywords, or
-+31KB / +11KB for the display names alone — and it is not shipped, because
-which locales a picker indexes is a product decision rather than a data
-one.
+**Japanese is a SEARCH index, not a label set** (`catalog-ja.ts`, CLDR
+`release-48`, both `annotations/` and `annotationsDerived/`). What the picker
+SHOWS is still the English short name, because the UI around it is English
+and translating one string while leaving the rest is a half-localised panel;
+what it MATCHES is a different question, and a person typing 星 is looking
+for something this build has. Full coverage of all 1914, +118KB raw / ~34KB
+gzipped, in the lazily-loaded chunk.
+
+Two mechanics it needed, both found by measuring:
+
+- **CLDR's base file strips U+FE0F from every `cp`** — it says so in its own
+  header — and the derived file carries the sequences the base one lacks.
+  So the generator unions both and falls back to a variation-selector-
+  stripped lookup. `catalog.test.ts` guards coverage from both sides,
+  because a half-covered index is a search that quietly finds less rather
+  than an error anybody sees.
+- **CLDR annotates emoji, not groups**, and its per-emoji keywords are
+  specific (果物, 野菜). So the BAND carries Japanese of its own in
+  `CATEGORIES` and its options inherit it: `食べ物` went from 7 of Food &
+  Drink's 131 rows to all 131, `旅行` from 3 of 219 to 219.
+
+The pinned CLDR tag is load-bearing: the annotation files carry `$Revision$`
+where a version should be, so nothing in them says which CLDR they are, and
+fetching `main` would make two regenerations differ with no record of why.
+
+Not indexed: unconverted kana. CLDR's terms are kanji and katakana, so `ほし`
+finds nothing while `星` finds 42 — acceptable because an IME user converts
+before the term is a term, and a kana reading index is a different data set.
 
 ## Vendored icons
 

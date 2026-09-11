@@ -204,8 +204,9 @@ export function FacetCatalogPicker({
     if (terms.length === 0) return undefined
     const hits: FacetPickerOption[] = []
     for (const section of sections) {
+      const band = `${section.label} ${(section.keywords ?? []).join(' ')}`
       for (const option of section.options) {
-        if (matches(option, terms, section.label)) hits.push(option)
+        if (matches(option, terms, band)) hits.push(option)
       }
     }
     return hits

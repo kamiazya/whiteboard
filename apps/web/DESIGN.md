@@ -1123,6 +1123,13 @@ Three things follow:
   are a view, the cells are the value, and one name for both lets the
   browser treat a category as an answer.
 
+  Search matches the option's name, the words its plugin gives it, the band
+  it lives in, and the character itself — the last because pasting an emoji
+  in is how somebody asks "is this one already here". `visual.symbol` indexes
+  Japanese as well as English: what is SHOWN stays the English short name
+  (the panel around it is English), and what is MATCHED is a different
+  question.
+
   Two words survive in it and both earn their place: the search box's
   placeholder, and `Recent` over the recently-used band. A band of loose
   symbols above a search box reads as more of the row above it, and

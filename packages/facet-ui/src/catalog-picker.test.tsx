@@ -41,7 +41,11 @@ const SECTIONS = [
     label: 'Smileys',
     options: [row('😀', 'grinning face', 'smiling'), row('🔥', 'fire', 'hot flame')],
   },
-  { label: 'Travel & Places', options: [row('🚀', 'rocket', 'transport air')] },
+  {
+    label: 'Travel & Places',
+    keywords: ['旅行 乗り物'],
+    options: [row('🚀', 'rocket', 'transport air')],
+  },
 ]
 
 const registry = createFacetRegistry([
@@ -179,6 +183,20 @@ describe('search finds a row by any of the words it carries', () => {
     mount()
     await loaded()
     fireEvent.change(search(), { target: { value: 'travel' } })
+    expect(screen.getByRole('radio', { name: 'rocket' })).toBeTruthy()
+    expect(screen.queryByRole('radio', { name: 'fire' })).toBeNull()
+  })
+
+  /**
+   * A band's LABEL is one string in one language, so a band carries
+   * keywords of its own and its options inherit them. `Food & Drink` is not
+   * what somebody reaches for when they want something to eat, and no
+   * per-option index supplies it — CLDR annotates emoji, not groups.
+   */
+  it('matches a word the band carries that neither its label nor its options say', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: '乗り物' } })
     expect(screen.getByRole('radio', { name: 'rocket' })).toBeTruthy()
     expect(screen.queryByRole('radio', { name: 'fire' })).toBeNull()
   })

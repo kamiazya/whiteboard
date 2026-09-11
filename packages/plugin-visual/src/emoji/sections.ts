@@ -11,50 +11,78 @@
  */
 import type { FacetPickerCatalogSection } from '@kamiazya/whiteboard-facet-engine'
 import { EMOJI_GROUPS } from './catalog-data.js'
+import { EMOJI_JA } from './catalog-ja.js'
 
 /**
- * Unicode's group name -> the registered glyph the category chooser wears.
+ * Unicode's group name -> what this build knows about that band: the
+ * registered glyph its chip wears, and what it is called in Japanese.
  *
- * Hand-mapped, and it has to be: the names are a published vocabulary that
- * changes only when Unicode says so, and nothing in the data says a rocket
- * category should be pictured by a paper plane. A group with no entry falls
- * back to its own first emoji, which is the picture this table exists to
- * stop being the default — so `catalog.test.ts` fails on one, from both
+ * Hand-mapped, and it has to be: the group names are a published vocabulary
+ * that changes only when Unicode says so, nothing in the data says a rocket
+ * category should be pictured by a paper plane, and CLDR annotates emoji
+ * rather than groups. A group with no entry falls back to its own first
+ * emoji and to no Japanese at all, which is exactly what this table exists
+ * to stop being the default — so `catalog.test.ts` fails on one, from both
  * sides.
+ *
+ * The Japanese here is band-level and earns its nine lines: per-emoji CLDR
+ * keywords are specific (果物, 野菜), so before this `食べ物` found 7 of the
+ * 131 rows in Food & Drink and `旅行` found 3 of 219.
  */
-const CATEGORY_GLYPH: Readonly<Record<string, string>> = {
-  'Smileys & Emotion': 'visual.category-smileys',
-  'People & Body': 'visual.category-people',
-  'Animals & Nature': 'visual.category-nature',
-  'Food & Drink': 'visual.category-food',
-  'Travel & Places': 'visual.category-travel',
-  Activities: 'visual.category-activities',
-  Objects: 'visual.category-objects',
-  Symbols: 'visual.category-symbols',
-  Flags: 'visual.category-flags',
+const CATEGORIES: Readonly<Record<string, { readonly glyph: string; readonly ja: string }>> = {
+  'Smileys & Emotion': { glyph: 'visual.category-smileys', ja: '顔 感情 スマイリー' },
+  'People & Body': { glyph: 'visual.category-people', ja: '人 体 手' },
+  'Animals & Nature': { glyph: 'visual.category-nature', ja: '動物 自然 植物' },
+  'Food & Drink': { glyph: 'visual.category-food', ja: '食べ物 飲み物 料理' },
+  'Travel & Places': { glyph: 'visual.category-travel', ja: '旅行 場所 乗り物' },
+  Activities: { glyph: 'visual.category-activities', ja: '活動 スポーツ イベント' },
+  Objects: { glyph: 'visual.category-objects', ja: '物 道具' },
+  Symbols: { glyph: 'visual.category-symbols', ja: '記号 マーク' },
+  Flags: { glyph: 'visual.category-flags', ja: '旗 国旗' },
 }
 
 /**
  * Built once and remembered: a picker mounts every time the inspector shows
  * a node, and rebuilding 1914 option objects each time is work whose answer
- * cannot have changed — the table is a frozen constant.
+ * cannot have changed — the tables are frozen constants.
  */
 let built: readonly FacetPickerCatalogSection[] | undefined
 
+/** `character -> CLDR Japanese terms`, from the generated index. */
+function japaneseIndex(): ReadonlyMap<string, string> {
+  const found = new Map<string, string>()
+  for (const row of EMOJI_JA.split('\n')) {
+    const tab = row.indexOf('\t')
+    if (tab !== -1) found.set(row.slice(0, tab), row.slice(tab + 1))
+  }
+  return found
+}
+
 export function emojiSections(): readonly FacetPickerCatalogSection[] {
-  built ??= EMOJI_GROUPS.map(([label, rows]) => {
-    const id = CATEGORY_GLYPH[label]
+  if (built !== undefined) return built
+  const japanese = japaneseIndex()
+  built = EMOJI_GROUPS.map(([label, rows]) => {
+    const category = CATEGORIES[label]
     return {
       label,
-      ...(id === undefined ? {} : { glyph: { kind: 'asset' as const, id } }),
+      ...(category === undefined
+        ? {}
+        : { glyph: { kind: 'asset' as const, id: category.glyph }, keywords: [category.ja] }),
       options: rows.split('\n').map((row) => {
         const [char, name, subgroup] = row.split('\t')
+        const ja = japanese.get(char as string)
         return {
           payload: { kind: 'emoji', char },
           // The CLDR short name, which is what a person reading a tooltip
           // wants and what the search matches first.
           label: name as string,
-          keywords: [subgroup as string],
+          // Unicode's own subgroup, then CLDR's Japanese name and keywords.
+          // The LABEL stays English because the UI around it is, and
+          // translating what is shown while leaving everything else would
+          // be a half-localised panel; what is searched is a different
+          // question, and a person typing 星 is looking for something this
+          // build has.
+          keywords: ja === undefined ? [subgroup as string] : [subgroup as string, ja],
           glyph: { kind: 'char', value: char as string },
         } as const
       }),

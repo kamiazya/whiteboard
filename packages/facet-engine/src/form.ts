@@ -108,6 +108,14 @@ export interface FacetPickerCatalogSection {
   readonly label: string
   readonly options: readonly FacetPickerOption[]
   readonly glyph?: FacetGlyph
+  /**
+   * Extra words the whole band is findable by — its options inherit them.
+   * The same job `FacetPickerOption.keywords` does one level down, and it
+   * needs doing at both: a band's LABEL is one string in one language, and
+   * `Food & Drink` is not what somebody types when they are looking for
+   * something to eat.
+   */
+  readonly keywords?: readonly string[]
 }
 
 /**

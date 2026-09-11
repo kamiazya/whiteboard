@@ -15,6 +15,7 @@
 import { describe, expect, it } from 'vitest'
 import { bundledFacetRegistry, visualPlugin, visualSymbolFacetSchema } from '../data.js'
 import { EMOJI_VERSION } from './catalog-data.js'
+import { EMOJI_JA, EMOJI_JA_TAG } from './catalog-ja.js'
 import { emojiSections } from './sections.js'
 
 const sections = emojiSections()
@@ -103,6 +104,58 @@ describe('the generated emoji catalog', () => {
       (id) => id.startsWith('visual.category-') && !ids.includes(id),
     )
     expect(spare).toEqual([])
+  })
+
+  /**
+   * And names each band in Japanese, which no per-emoji index can give:
+   * CLDR annotates emoji, and its keywords are specific. Measured before
+   * this, `食べ物` found 7 of Food & Drink's 131 rows and `旅行` 3 of 219.
+   */
+  it('names every category in Japanese too, since CLDR annotates emoji and not groups', () => {
+    const unnamed = sections
+      .filter((section) => (section.keywords ?? []).join('').trim() === '')
+      .map((section) => section.label)
+    expect(unnamed).toEqual([])
+  })
+
+  /**
+   * The Japanese index, from both sides.
+   *
+   * CLDR's base file strips U+FE0F from every `cp` and the derived file
+   * carries the sequences the base one lacks, so the generator does two
+   * lookups and a union — each of which can silently half-miss. A locale
+   * index covering half the catalog is a search that answers nothing for
+   * the other half, and the shortfall is invisible in the generated file
+   * and in the picker alike: a query just finds less than it should.
+   */
+  it('indexes every row in Japanese, and indexes nothing this build does not have', () => {
+    const unindexed = options
+      .filter((option) => (option.keywords ?? []).length < 2)
+      .map((option) => option.label)
+    expect(unindexed).toEqual([])
+    const chars = new Set(
+      options.map((option) => (option.glyph?.kind === 'char' ? option.glyph.value : '')),
+    )
+    const spare = EMOJI_JA.split('\n')
+      .map((row) => row.slice(0, row.indexOf('\t')))
+      .filter((char) => !chars.has(char))
+    expect(spare).toEqual([])
+    expect(EMOJI_JA_TAG).toMatch(/^release-\d+$/)
+  })
+
+  /**
+   * What the index is FOR, asserted on the terms rather than on a count: a
+   * full index of the wrong words would pass the case above. CLDR calls ⭐
+   * スター and files 星 among its keywords, and 👍 carries いいね — which is
+   * the whole reason keywords are indexed beside the display name.
+   */
+  it('carries the words a person actually types, not only the display name', () => {
+    const termsFor = (char: string) =>
+      options.find((option) => option.glyph?.kind === 'char' && option.glyph.value === char)
+        ?.keywords?.[1] ?? ''
+    expect(termsFor('⭐')).toContain('星')
+    expect(termsFor('👍')).toContain('いいね')
+    expect(termsFor('🚀')).toContain('ロケット')
   })
 
   it('reaches the picker through the loader the definition declares', async () => {
