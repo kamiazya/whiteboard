@@ -222,13 +222,21 @@ it('lets a person give the document its own mark, and take it back', async () =>
   // The entry point everything else this facet feeds depends on: the tab,
   // the file row and — where there is room — the overview all read what this
   // writes. The options come from the plugin's own DECLARATION, so the
-  // canvas offers exactly the set a node does.
+  // canvas offers exactly the set a node does — including the emoji arm,
+  // which is a search rather than a list because the facet accepts every
+  // grapheme and a definition cannot carry nineteen hundred of them.
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   await openPanel(container)
 
+  const search = await vi.waitFor(() => {
+    const el = menu()?.querySelector('[aria-label="Search symbols"]')
+    expect(el).not.toBeNull()
+    return el as HTMLInputElement
+  })
+  fireEvent.change(search, { target: { value: 'star' } })
   const pick = await vi.waitFor(() => {
-    const el = menu()?.querySelector('[aria-label="Emoji ⭐"]')
+    const el = menu()?.querySelector('[aria-label="star"]')
     expect(el).not.toBeNull()
     return el as HTMLElement
   })
@@ -281,18 +289,33 @@ it('draws every row through the one selection control', async () => {
   // Every row, facet-contributed or hand-written by this vessel. The SET,
   // not the order — which row comes first is the contribution point's
   // business and has its own test.
-  const groups = [...panel.querySelectorAll('[role="radiogroup"]')]
-  expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual([
-    'Edge routing',
-    'Line jumps',
-    'Symbol',
-    'Theme',
-  ])
+  //
+  // Symbol contributes THREE bands rather than one, and each is named for
+  // what it is: the listed options, the categories chooser, and the
+  // category on screen. Two bands both called "Symbol" would tell a
+  // screen-reader user nothing about which of them they had landed in. The
+  // last two arrive with the catalog's dynamic import, so the set is waited
+  // for rather than read once — read too early it is a SHORTER list, which
+  // reads exactly like a row that went missing.
+  const labels = () =>
+    [...panel.querySelectorAll('[role="radiogroup"]')]
+      .map((group) => group.getAttribute('aria-label'))
+      .sort()
+  await vi.waitFor(() =>
+    expect(labels()).toEqual([
+      'Edge routing',
+      'Line jumps',
+      'Symbol',
+      'Symbol categories',
+      'Symbol: Smileys & Emotion',
+      'Theme',
+    ]),
+  )
 
   // Every option in every group is the same thing: a real radio (so arrow
   // keys work, which the button rows never had), visually hidden, inside a
   // label that carries the accessible name.
-  for (const group of groups) {
+  for (const group of panel.querySelectorAll('[role="radiogroup"]')) {
     const options = [...group.querySelectorAll('label')]
     expect(options.length).toBeGreaterThan(1)
     for (const option of options) {

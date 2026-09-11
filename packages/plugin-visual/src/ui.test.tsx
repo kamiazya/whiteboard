@@ -38,19 +38,15 @@ describe('the visual plugin declares its own settings', () => {
 })
 
 describe("visual's symbol picker", () => {
-  // What the hand-written editor's own test asserted — that picking ⭐
-  // writes `{kind:'emoji',char:'⭐'}` — is now a property of the
-  // DECLARATION, so it is read rather than rendered. The rendering half
-  // (a click on that option reaching the canvas) is pinned in
-  // apps/web's `canvas-settings.browser.test.tsx`, against the real vessel.
+  // What the hand-written editor's own test asserted — that picking a
+  // symbol writes the payload of the arm it belongs to — is now a property
+  // of the DECLARATION, so it is read rather than rendered. The rendering
+  // half (a click reaching the canvas) is pinned in apps/web's
+  // `canvas-settings.browser.test.tsx`, against the real vessel.
   it('declares both arms of its union in one flat set of options', () => {
     const symbol = visualPlugin.facets.find((f) => f.name === 'symbol')
     const options = symbol?.editor?.picker?.options ?? []
 
-    expect(options.find((o) => o.label === 'Emoji ⭐')?.payload).toEqual({
-      kind: 'emoji',
-      char: '⭐',
-    })
     expect(options.find((o) => o.label === 'Icon database')?.payload).toEqual({
       kind: 'icon',
       name: 'database',
@@ -64,6 +60,28 @@ describe("visual's symbol picker", () => {
       kind: 'asset',
       id: 'visual.database',
     })
+  })
+
+  /**
+   * The emoji arm's choices are NOT listed here, and that is the fix rather
+   * than an omission: five were, out of the nineteen hundred the schema has
+   * always accepted, and a definition this package exports is loaded by the
+   * renderer, the layout worker and the MCP server — none of which draws a
+   * picker. So the arm arrives through a loader, and what this pins is that
+   * the listed half no longer pretends to cover it.
+   */
+  it('leaves its open arm to the catalog rather than listing five of it', () => {
+    const symbol = visualPlugin.facets.find((f) => f.name === 'symbol')
+    const picker = symbol?.editor?.picker
+    const emoji = (picker?.options ?? []).filter(
+      (o) => (o.payload as { kind?: string } | null)?.kind === 'emoji',
+    )
+    expect(emoji).toEqual([])
+    expect(picker?.catalog?.label).toBe('Search symbols')
+    // Free entry is what makes it open rather than merely large: the
+    // template says the typed text is a char, and the schema says what a
+    // char may be.
+    expect(picker?.catalog?.entry).toMatchObject({ payload: { kind: 'emoji' }, field: 'char' })
   })
 })
 

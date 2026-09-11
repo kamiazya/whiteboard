@@ -382,7 +382,13 @@ describe('a registered editor replaces the derived form', () => {
     )
     // The picker that used to live in the context menu now lives here, so
     // the facet has one face instead of two.
-    fireEvent.click(screen.getByLabelText('Emoji ⭐'))
+    fireEvent.click(screen.getByLabelText('Icon database'))
+    expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name: 'database' })
+    // And the emoji arm, which no listed option covers any more: the
+    // picker's free entry writes it through the same door, so a symbol
+    // nobody wrote into the definition is still one press away.
+    fireEvent.change(screen.getByLabelText('Any character or emoji'), { target: { value: '⭐' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
     // And the derived variants form is NOT what got rendered.
     expect(screen.queryByLabelText('Symbol Kind')).toBeNull()

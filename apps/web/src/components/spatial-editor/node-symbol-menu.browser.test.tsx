@@ -11,7 +11,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
-import { afterEach, expect, it } from 'vitest'
+import { afterEach, expect, it, vi } from 'vitest'
 import { SpatialEditor } from './SpatialEditor.js'
 
 afterEach(cleanup)
@@ -76,7 +76,15 @@ it('an icon pick stores the facet and draws nothing on the node', () => {
   expect(drawn).toBeNull()
 })
 
-it('an emoji pick is stored rather than drawn, and No symbol removes the facet', () => {
+/**
+ * The emoji arm is reached by SEARCHING, because no listed option covers
+ * it: the facet has accepted any single grapheme since it shipped, and the
+ * picker used to offer five. The catalog arrives through a dynamic import
+ * (a facet definition is loaded by the renderer and the MCP server too),
+ * so the flow only exists once that has resolved — which is the half a
+ * jsdom test of the declaration cannot see.
+ */
+it('an emoji found by search is stored rather than drawn, and No symbol removes the facet', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
@@ -86,7 +94,17 @@ it('an emoji pick is stored rather than drawn, and No symbol removes the facet',
       .filter((value) => value === '⭐')
 
   const panel = openInspector(container)
-  fireEvent.click(panel.querySelector('[aria-label="Emoji ⭐"]') as HTMLElement)
+  const search = panel.querySelector('[aria-label="Search symbols"]') as HTMLInputElement
+  fireEvent.change(search, { target: { value: 'star' } })
+  const star = await vi.waitFor(() => {
+    // Queried inside the assertion: the catalog mounts a band that was not
+    // there when the panel opened.
+    const el = panel.querySelector('[aria-label="star"]')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+
+  fireEvent.click(star)
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '⭐' })
   // Stored, and not painted on the node.
   expect(glyphText()).toHaveLength(0)
@@ -95,4 +113,38 @@ it('an emoji pick is stored rather than drawn, and No symbol removes the facet',
   expect(symbolOf(latest.canvas)).toBeUndefined()
   expect(latest.canvas.nodes[0]).not.toHaveProperty('x-whiteboard')
   expect(glyphText()).toHaveLength(0)
+})
+
+/**
+ * And the half a catalog of any size still cannot cover: a symbol nobody
+ * listed. The template says the typed text is a `char`; what a char may be
+ * stays the facet's own schema's answer, at the write boundary — so the
+ * control needs no rule of its own and cannot have a laxer one.
+ */
+it('a symbol nobody listed is typed in, and the facet refuses what it always refused', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+
+  const panel = openInspector(container)
+  const field = panel.querySelector('[aria-label="Any character or emoji"]') as HTMLInputElement
+  const use = () =>
+    [...panel.querySelectorAll('button')].find((button) => button.textContent === 'Use') as
+      | HTMLElement
+      | undefined
+
+  fireEvent.change(field, { target: { value: 'ab' } })
+  fireEvent.click(use() as HTMLElement)
+  expect(symbolOf(latest.canvas)).toBeUndefined()
+  expect(panel.querySelector('[role="alert"]')?.textContent).toContain('single character')
+
+  fireEvent.change(field, { target: { value: '🦖' } })
+  fireEvent.click(use() as HTMLElement)
+  expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '🦖' })
+
+  // And it comes back as a recent one, which is what makes free entry
+  // usable more than once.
+  await vi.waitFor(() => {
+    const recent = panel.querySelector('[aria-label="Symbol recently used"]')
+    expect(recent?.textContent).toContain('🦖')
+  })
 })

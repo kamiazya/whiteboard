@@ -15,6 +15,7 @@
 import type { FacetForm, FacetFormField, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useState } from 'react'
+import { FacetCatalogPicker } from './catalog-picker.js'
 import { glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
 
@@ -268,8 +269,14 @@ export function DerivedFacetForm({
     // both does not lay out two rows two ways: a CHIP row is name-left /
     // options-right, and a CARD row is a full-width grid under its name,
     // because cells that share a line with a label are no longer cells.
+    //
+    // A CATALOG stacks for the same reason a card grid does, whatever the
+    // listed options' own layout is: a search field and a scrolling grid
+    // are the width of the panel, and the listed chips are the top of that
+    // block rather than a row beside a name.
+    const stacked = form.layout === 'cards' || form.catalog !== undefined
     return (
-      <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
+      <div style={stacked ? STACKED_ROW : ROW}>
         <span style={{ color: MUTED }}>{title}</span>
         <FacetOptionGroup label={title} layout={form.layout}>
           {form.options.map((option) => {
@@ -293,6 +300,21 @@ export function DerivedFacetForm({
             )
           })}
         </FacetOptionGroup>
+        {form.catalog !== undefined && (
+          <FacetCatalogPicker
+            facetKey={facetKey}
+            title={title}
+            catalog={form.catalog}
+            registry={registry}
+            selectedKey={current}
+            // Straight through the same door the listed options take. The
+            // catalog's own rows were never parsed at definition time (a
+            // loader is not loaded then), so this write is the only net
+            // under them — and it is the same one every other write
+            // crosses.
+            onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
+          />
+        )}
       </div>
     )
   }

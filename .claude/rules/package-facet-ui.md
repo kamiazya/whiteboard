@@ -19,14 +19,37 @@ paths:
   hidden — the arrow-key behaviour comes free with the element, and the
   `aria-pressed` button rows never had it.
 
-  Two LAYOUTS, declared by the plugin per row and drawn here: `cards` is a
-  picture over its word in a bordered cell (a short vocabulary whose names
-  carry meaning), `chips` is the picture alone with the word as its
+  Two DECLARED LAYOUTS, chosen by the plugin per row and drawn here: `cards`
+  is a picture over its word in a bordered cell (a short vocabulary whose
+  names carry meaning), `chips` is the picture alone with the word as its
   accessible name and `title` (a palette where the count makes labels
-  impossible). Two ARIA SHELLS is a separate axis — `group` for a panel,
-  `menu` for a menu row, which ignores the layout because a grid of cells
-  inside a menu is not a menu. Neither axis is a style choice: one says what
-  question the row asks, the other says what container it stands in.
+  impossible). A third, `grid`, is NOT declarable — square glyph-only cells,
+  hundreds of them, which is what a catalog IS rather than a question about
+  one row's vocabulary. Two ARIA SHELLS is a separate axis — `group` for a
+  panel, `menu` for a menu row, which ignores the layout because a grid of
+  cells inside a menu is not a menu. Neither axis is a style choice: one
+  says what question the row asks, the other says what container it stands
+  in.
+- **`FacetCatalogPicker` — the OPEN half of a picker.** A facet whose schema
+  accepts more values than a definition can carry (`visual.symbol` takes any
+  single grapheme) declares a `catalog` and, optionally, free `entry`; this
+  draws the search box, the category band, the scrolling grid, the
+  recently-used band and the entry field. Every one of those is
+  `FacetOption`, the category band included — the sections and the cells
+  differ only in their radio NAME, because one is a view and the other is
+  the value.
+
+  Free entry writes through `registry.validateFacetWrite` and displays the
+  message it gets back. That is the point rather than a detail: the
+  component holds no rule about what a symbol may be, so it cannot hold a
+  laxer one than the facet does.
+
+  Recents are MODULE state, keyed by facet — the picker unmounts every time
+  the inspector closes, which is the one moment recents are for. That makes
+  them leak between TESTS too, so both apps/web setups call
+  `clearFacetCatalogRecents()` in `afterEach`; without it one test's pick
+  shows up as an extra radiogroup in the next test's panel, which is how it
+  was found.
 - **`createFacetWriter`** — the one path a facet editor's value takes to
   storage. It goes through `validateFacetWrite`, so a plugin's own component
   cannot store what `wb_facet_set` would refuse. This is the guarantee half
@@ -92,3 +115,8 @@ so the component is legible even where no theme is defined.
   (`facet-engine/src/picker.test.ts`), so a typo in one of twelve options
   stops the plugin instead of shipping as a choice that silently does
   nothing.
+- A CATALOG's rows get neither net at definition time, because a loader is
+  not loaded then. The write path still refuses a bad row, so nothing
+  invalid is stored; what is lost is the plugin failing to start. The rows
+  are the plugin's data, so the plugin owes the check —
+  `plugin-visual/src/emoji/catalog.test.ts` parses all 1914.

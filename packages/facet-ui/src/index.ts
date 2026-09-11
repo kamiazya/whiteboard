@@ -1,3 +1,8 @@
+export {
+  clearFacetCatalogRecents,
+  FacetCatalogPicker,
+  type FacetCatalogPickerProps,
+} from './catalog-picker.js'
 export { DerivedFacetForm, type DerivedFacetFormProps } from './derived-form.js'
 export { glyphIcon } from './glyph.js'
 export {

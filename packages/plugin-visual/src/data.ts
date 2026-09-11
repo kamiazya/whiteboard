@@ -1,4 +1,5 @@
 import type {
+  FacetPickerCatalogSpec,
   FacetPickerOption,
   FacetRegistry,
   FacetSegmentedOption,
@@ -24,6 +25,7 @@ import {
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { CATEGORY_GLYPHS } from './icons/category-glyphs.js'
 import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
 import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
@@ -227,8 +229,12 @@ const VISUAL_ICON_ASSETS: Readonly<Record<string, IconAsset>> = Object.fromEntri
     // Beside the vendored set, not inside it: `BUILT_IN_ICON_NAMES` is what
     // a NODE may wear as a badge, and the symbol picker derives its options
     // from that list. A picture of a routing style is not a badge, so it is
-    // registered geometry without being a symbol anyone can choose.
+    // registered geometry without being a symbol anyone can choose. Nor is
+    // a picture of an emoji CATEGORY — that one is chrome, drawn in the
+    // panel's own stroke language so the row that browses does not read as
+    // a spilled sample of what it browses.
     ...Object.entries(EDGE_GLYPHS),
+    ...Object.entries(CATEGORY_GLYPHS),
   ].map(([name, geometry]) => [name, { geometry: [...geometry] }]),
 )
 
@@ -243,16 +249,19 @@ const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
 }
 
 /**
- * A small starter set of character symbols beside the icons. Free entry is
- * a job for a form, not a picker; what a picker owes is a set somebody can
- * choose from in one press.
- */
-const SYMBOL_CHARS = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
-
-/**
- * Derived from the vendored set rather than listed, so an icon added to
- * `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
+ * What the picker lists INLINE: absence, and this build's vendored icons.
+ *
+ * Derived from the vendored set rather than written out, so an icon added
+ * to `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
  * put a name in one place and not the other cannot happen.
+ *
+ * Five hardcoded emoji used to sit here too, and they are the reason the
+ * catalog below exists. The schema has accepted ANY single grapheme since
+ * the day it shipped; the five were simply all anybody had written down, so
+ * the control said no to the other nineteen hundred while the facet said
+ * yes. Listing more would not have fixed it — a definition this file
+ * exports is loaded by the renderer, the layout worker and the MCP server,
+ * none of which draws a picker.
  */
 const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
   { payload: null, label: 'No symbol', glyph: { kind: 'shape', name: 'none' } },
@@ -261,12 +270,35 @@ const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
     label: `Icon ${name}`,
     glyph: { kind: 'asset' as const, id: `visual.${name}` },
   })),
-  ...SYMBOL_CHARS.map((char) => ({
-    payload: { kind: 'emoji' as const, char },
-    label: `Emoji ${char}`,
-    glyph: { kind: 'char' as const, value: char },
-  })),
 ]
+
+/**
+ * Every emoji Unicode publishes, searchable, plus the way to write one it
+ * does not.
+ *
+ * DERIVED from the standard rather than curated (`scripts/
+ * generate-emoji-catalog.mjs`): "which two hundred emoji does this product
+ * like" has no defensible answer and goes stale each Unicode release,
+ * while the published set carries its own names and categories and is
+ * already in the order a keyboard should show them.
+ *
+ * `entry` is what makes the picker honestly open. Its template says the
+ * typed text is the `char` of an emoji payload and nothing more — what a
+ * char may BE stays `visualSymbolFacetSchema`'s answer, at the write
+ * boundary, so a skin-toned hand or a flag sequence this build never
+ * listed is still one press away, and a two-character string is still
+ * refused with the schema's own words.
+ */
+const SYMBOL_CATALOG: FacetPickerCatalogSpec = {
+  label: 'Search symbols',
+  load: async () => (await import('./emoji/sections.js')).emojiSections(),
+  entry: {
+    label: 'Any character or emoji',
+    placeholder: 'Paste or type one',
+    payload: { kind: 'emoji' },
+    field: 'char',
+  },
+}
 
 /**
  * `visual.edges/v0`'s two rows, as data.
@@ -471,16 +503,21 @@ export const visualPlugin = definePlugin({
       // attach, never to the payload — so the version does not move.
       targets: ['node', 'canvas', 'document'],
       schema: visualSymbolFacetSchema,
-      // The facet that broke the ladder, now declared like the rest.
+      // The facet that broke the ladder, now declared like the rest — and
+      // the one that then broke it a second way.
       //
-      // Its twelve choices straddle both schema arms, which a field-level
-      // control cannot express — so this one had a hand-written React
-      // component, and a hand-written component has no styling contract.
-      // The picker writes whole payloads, so the arms stop mattering, and
-      // the icon options name REGISTERED GEOMETRY (below) rather than
-      // shipping a drawing. Both halves are what let this facet come back
-      // inside the vocabulary.
-      editor: { picker: { options: SYMBOL_PICKER_OPTIONS } },
+      // Its choices straddle both schema arms, which a field-level control
+      // cannot express, so this facet had a hand-written React component
+      // and a hand-written component has no styling contract. The picker
+      // writes whole payloads, so the arms stop mattering, and the icon
+      // options name REGISTERED GEOMETRY rather than shipping a drawing.
+      //
+      // What that still could not say was "and anything else": a listed
+      // option is a listed option, so the emoji arm — open by schema since
+      // day one — was five characters wide. The catalog and its free entry
+      // are the vocabulary widened again rather than the escape hatch
+      // reopened.
+      editor: { picker: { options: SYMBOL_PICKER_OPTIONS, catalog: SYMBOL_CATALOG } },
     }),
     defineFacet({
       name: 'stencil',

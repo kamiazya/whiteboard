@@ -92,6 +92,40 @@ Two projects, because the halves run in different environments:
 Assertions about what `visual` DECLARES belong here, not in `facet-ui`. The
 split is the test-level form of the dependency rule above.
 
+## The generated emoji catalog
+
+`src/emoji/catalog-data.ts` is GENERATED from Unicode's own `emoji-test.txt`
+(`scripts/generate-emoji-catalog.mjs`) and committed, the way the vendored
+lucide geometry is — a clone builds offline, and regenerating is a deliberate
+step at a Unicode release. 1914 fully-qualified sequences in CLDR order,
+skin-tone variants dropped (they are 2030 of 3944 and add no distinct meaning
+to a symbol on a box; free entry still takes one).
+
+Three things about it that a reader will otherwise re-decide:
+
+- **Derived, never curated.** "Which two hundred emoji does this product
+  like" has no defensible answer and goes stale each release. The published
+  file already carries the character, its CLDR short name and its
+  group/subgroup, which is exactly what a searchable palette needs, and it
+  is published in the order a keyboard should show them in.
+- **Reached by DYNAMIC import, from `data.ts`.** The facet definition is
+  loaded wherever a document is read — the SVG renderer, the layout worker,
+  `mcp-server` — and none of those draws a picker. A static import puts 69KB
+  of strings in every one of those graphs; a dynamic one is the only thing a
+  bundler treats as a separate chunk, which is why the engine's catalog
+  contract is a `load()` returning a promise rather than a list.
+- **This package owes the row check.** A listed picker option is parsed at
+  `defineFacet` time and a catalog's rows cannot be. `src/emoji/
+  catalog.test.ts` parses all of them against `visualSymbolFacetSchema`, and
+  also pins that no row repeats an option the definition lists inline — the
+  five hardcoded emoji this catalog replaced would otherwise have been drawn
+  twice.
+
+The subgroup travels as search KEYWORDS rather than a heading, because
+Unicode files a rocket under `travel-air` and "travel" is a word somebody
+types. Names are English only; a Japanese index would be CLDR annotations,
+a second file and roughly double the bytes, and is not shipped.
+
 ## Vendored icons
 
 `src/icons/` carries lucide geometry with its LICENSE and provenance README,

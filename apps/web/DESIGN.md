@@ -1086,7 +1086,8 @@ Three things follow:
   | layout | is | for |
   |---|---|---|
   | `cards` | the picture over its word, in a bordered cell | a short vocabulary whose NAMES carry meaning a picture cannot fully take on — Edge routing, Line jumps, Theme |
-  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's twelve, a colour swatch |
+  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's icons, a colour swatch |
+  | `grid` | square glyph-only cells, packed and scrolling | a CATALOG — hundreds of options scanned down rather than read across. Not declarable: it is not a question about the row's vocabulary, it is what a catalog is |
 
   `cards` is the shape Settings already gives theme and tab icon, so the
   two surfaces stopped being two languages. The one difference is the
@@ -1110,6 +1111,28 @@ Three things follow:
   way a registered theme inks it, which is how the theme row shows the
   signature mark three times — plain, hand-drawn, lit — rather than three
   identical strokes beside three words. See BRAND.md for the mark itself.
+
+- **A picker may be OPEN, and it is still one control.** A facet whose
+  schema accepts more values than a definition can carry — `visual.symbol`
+  takes any single grapheme — gets a `catalog` (sections loaded on demand,
+  searched) and a free-entry `entry` beside the options it lists. Every
+  band of it is still `FacetOption`, INCLUDING the row that picks which
+  category is showing: a category chooser is "pick one of N" like any
+  other, and a `tablist` for it would have been the seventh spelling. The
+  one thing the two bands do not share is the radio `name` — the sections
+  are a view, the cells are the value, and one name for both lets the
+  browser treat a category as an answer.
+
+  Two words survive in it and both earn their place: the search box's
+  placeholder, and `Recent` over the recently-used band. A band of loose
+  symbols above a search box reads as more of the row above it, and
+  "recently used" is the one thing a picture cannot say about a picture.
+
+  What free entry does NOT do is loosen anything. It builds the payload
+  from a declared template and hands it to `validateFacetWrite` like every
+  other control, so the message a person sees when they type two characters
+  is the facet's own. `node-symbol-menu.browser.test.tsx` locks both halves
+  — a symbol found by searching, and one typed in that the schema refuses.
 
 What this rule does NOT claim is that every choice in the app looks
 identical — only that the difference is a DECLARED layout rather than a
