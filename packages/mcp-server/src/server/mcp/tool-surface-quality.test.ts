@@ -188,7 +188,7 @@ describe('what the tool table costs to read', () => {
       // keeps two columns for.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 28368,
+        wireBytes: 21775,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -274,20 +274,31 @@ describe('what the tool table costs to read', () => {
       // -6 dropping `badge` from the stencil field's description: the
       // bundled set writes one, and a board draws none.
       //
-      // Then +3,799 visible and +32 parameters when an edge END
-      // became a discriminated union: `from` and `to` on both `edge.add` and
-      // `edge.patch`, each now two arms where the format's four flat keys
-      // were one shape. The BOUGHT thing is what no price buys back — an end
-      // can say it is a free point, which `fromNode`/`toNode` could not
-      // express at all. The extra undescribed are all the `kind`
-      // DISCRIMINATOR; see the totals below for why they are carried rather
-      // than paid down.
+      // Then the edge END became a discriminated union, and the endpoint is
+      // NAMED in zod's global registry (`packages/model/src/spatial.ts`), so
+      // it lands in `$defs` once and is referenced at each of its four sites
+      // instead of being inlined four times.
+      //
+      // That naming is why this row reads +1,006 against main rather than
+      // +3,799: inlined, the four sites are 4,579 bytes and the whole table
+      // read 40,315 — over ADR-0031 §5's ~40,000. Referenced they are 1,786,
+      // and every column below is better than the inline form on a strictly
+      // richer schema. `parameters` and `undescribed` fall BELOW main's
+      // (153/123) for the same reason: a subschema counted four times is now
+      // counted once, so the endpoint's `kind` discriminators stop being
+      // eight undescribed lines and become two.
+      //
+      // The saving is available only here, and that is worth knowing before
+      // reaching for it again: the SDK converts by calling
+      // `schema['~standard'].jsonSchema.input({ target })` and passes no
+      // `reused` option, so `z.toJSONSchema(..., { reused: 'ref' })` never
+      // reaches the published schema. A registry `id` does.
       wb_canvas_edit: {
-        visibleBytes: 17411,
-        wireBytes: 48497,
+        visibleBytes: 14618,
+        wireBytes: 37211,
         descriptionWords: 169,
-        parameters: 185,
-        undescribed: 133,
+        parameters: 149,
+        undescribed: 117,
         strays: 'refused',
         names: [],
       },
@@ -296,7 +307,7 @@ describe('what the tool table costs to read', () => {
       // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 5619,
+        wireBytes: 4726,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -512,54 +523,38 @@ describe('what the tool table costs to read', () => {
       // refused instead of silently dropped, less 6 for a `badge` the
       // stencil field's description no longer promises (see wb_canvas_edit).
       //
-      // Then +3,799 when an edge END became a discriminated union, and
-      // 40,315 is OVER the ~40,000 at which ADR-0031 §5 says to reconsider
-      // loading the table upfront. First reading that is. Pinned rather than
-      // worked around, because §5 asks for a decision.
+      // Then +1,006 when an edge END became a discriminated union NAMED in
+      // zod's global registry, so it is emitted into `$defs` once and
+      // referenced at each of its four sites (`from` and `to`, on `edge.add`
+      // and on `edge.patch`).
       //
-      // WHERE the 3,799 goes, measured against main rather than inferred:
-      // `wb_canvas_edit` is the ONLY row that moved — the other sixteen tools
-      // are byte-identical — and inside it the two edge op arms account for
-      // more than the whole delta (+3,815), so everything else in the tool
-      // got 16 bytes smaller. Per edge site:
+      // The naming is the whole reason this reads 37,522 rather than 40,315.
+      // Inlined — which is zod's default and what the SDK's conversion path
+      // gives you unless a schema is registered — the four sites are 4,579
+      // bytes; referenced they are 1,786. That 2,793 is the difference
+      // between this table sitting under ADR-0031 §5's ~40,000 and being the
+      // first reading ever to cross it.
       //
-      //   endpoint keys   510 -> 2,230   +1,720   (x2 sites = +3,440)
-      //   bends             0 ->   295     +295   (x2 = +590)
-      //   facets, flat      0 ->    77      +77   (x2 = +154)
-      //   x-whiteboard    148 ->     0     -148   (x2 = -296)
-      //
-      // So the endpoint union is 90% of it, and the reason is DUPLICATION
-      // rather than expressiveness: the union is emitted verbatim four times
-      // (`from` and `to`, on `edge.add` and on `edge.patch`), 1,115 bytes
-      // each, and the `side` description alone is 160 characters of that.
-      // Where the flat form had three scalar keys per end, the union has two
-      // whole object schemas with their own `required` and
-      // `additionalProperties`.
-      //
-      // That duplication is REMOVABLE, and the size of the prize is measured:
-      // rebuilt on one zod instance, the four sites are 4,579 bytes inline
-      // and 2,028 with `$defs` + `$ref` — a saving of 2,551, which would put
-      // this table near 37,800. Not taken here, because whether every MCP
-      // client resolves `$ref` inside `inputSchema` is a compatibility
-      // question that belongs to ADR-0031's criteria rather than to a
-      // refactor riding along inside a model change.
-      //
-      // An earlier version of this comment said the 467 bytes between the
-      // two branches' deltas were the changes INTERACTING. That was
-      // arithmetic on two different bases, not a measurement, and the
-      // per-tool diff above refutes it: nothing outside `wb_canvas_edit`
-      // moved at all.
-      visibleBytes: 40315,
-      // Two thirds of the growth is output schemas on tools that merely ECHO
-      // an edge (wb_body_edit, canvas_view, wb_canvas_snapshot). Paid by the
-      // client once on connect, not by the model on every turn — which is why
-      // this column has no threshold beside it and the one above does.
-      wireBytes: 130394,
-      // `from` and `to` are each two arms now, on `edge.add` and `edge.patch`.
-      parameters: 308,
-      // Every one of the new ones a `kind` discriminator beside a field whose
-      // own description spells both arms. Held deliberately, at the ceiling.
-      undescribed: 201,
+      // Measured against `origin/main` rather than inferred: `wb_canvas_edit`
+      // is the ONLY row whose visible bytes move, and inline it was +3,799 of
+      // which the endpoint union was +3,440 — the growth was DUPLICATION, not
+      // expressiveness, and duplication is the one kind of growth a schema
+      // can give back without giving anything up.
+      visibleBytes: 37522,
+      // The same naming pays here twice over, because the tools that merely
+      // ECHO an edge (wb_body_edit, canvas_view, wb_canvas_snapshot) carry it
+      // in their OUTPUT schemas: 130,394 inlined against 111,622 referenced.
+      // Paid by the client once on connect rather than by the model every
+      // turn, which is why this column has no threshold beside it.
+      wireBytes: 111622,
+      // BELOW main's 276, on a schema that says strictly more: a referenced
+      // subschema is walked once instead of once per site.
+      parameters: 272,
+      // Also below main's 191, and for the same reason. The `kind`
+      // discriminators are still undescribed — the endpoint FIELD's own
+      // description spells both arms literally beside a JSON Schema `const` —
+      // but there are two of them now rather than eight.
+      undescribed: 185,
     })
   })
 

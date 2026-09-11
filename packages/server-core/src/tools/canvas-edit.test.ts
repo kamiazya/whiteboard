@@ -629,8 +629,16 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       for (const value of Object.values(node)) walk(value)
     }
     walk(z.toJSONSchema(canvasEditInputSchema, { io: 'input' }))
-    // edge.add and edge.patch each carry both sides.
-    expect(found).toHaveLength(4)
+    // ONE, not four. The endpoint is named in zod's registry so it is emitted
+    // into `$defs` once and referenced at each of its four sites — which is
+    // what keeps the tool table under ADR-0031 §5's ceiling. The description
+    // still reaches every writer; it is stated once instead of four times,
+    // and this walk does not follow `$ref`.
+    //
+    // A count rather than a bare `>= 1`, for the reason it was 4 before: a
+    // walk that stopped matching would report zero, and zero is what a
+    // description nobody writes also looks like.
+    expect(found).toHaveLength(1)
     for (const line of found) expect(line, line).toMatch(/Omit/)
   })
 

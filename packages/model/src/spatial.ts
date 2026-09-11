@@ -185,6 +185,27 @@ export const edgeEndpointSchema = z.discriminatedUnion('kind', [
     .strict(),
 ])
 
+/**
+ * Named in zod's global registry so every JSON Schema emission puts it in
+ * `$defs` and references it, instead of inlining the whole union at each use.
+ *
+ * This is a SIZE decision on the MCP tool table, and it is the only place it
+ * can be made: the SDK converts a schema by calling
+ * `schema['~standard'].jsonSchema.input({ target })` and passes no `reused`
+ * option, so a caller cannot ask for `$ref` — but a registered `id` produces
+ * one on that same path.
+ *
+ * Measured on the four sites `wb_canvas_edit` has (`from` and `to`, on
+ * `edge.add` and on `edge.patch`): 4,579 bytes inlined against 1,786
+ * referenced. An endpoint is the most-repeated subschema this model has, and
+ * inlining it was 90% of the growth that took the tool table over ADR-0031
+ * §5's ceiling.
+ *
+ * `$defs`/`$ref` is ordinary draft-2020-12, which is the target MCP mandates
+ * and the SDK sets, so a client that cannot resolve one is not conformant.
+ */
+z.globalRegistry.add(edgeEndpointSchema, { id: 'EdgeEndpoint' })
+
 export type EdgeEndpoint = z.infer<typeof edgeEndpointSchema>
 
 /**

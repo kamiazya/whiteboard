@@ -67,6 +67,27 @@ paths:
   makes that a fact rather than a claim — it counts what a run produced and fails on a share out
   of band, on node ends that stopped being correlated, and on a corpus with no half-free edge in
   it. Mutation-checked in both directions.
+- **A schema this model repeats is NAMED in zod's global registry**, and that is a decision about
+  the MCP tool table taken here because it can be taken nowhere else. `edgeEndpointSchema` carries
+  `{ id: 'EdgeEndpoint' }`, which makes every JSON Schema emission put it in `$defs` once and
+  `$ref` it at each use instead of inlining the whole union.
+  Measured on the four sites `wb_canvas_edit` has (`from` and `to`, on `edge.add` and
+  `edge.patch`): **4,579 bytes inlined against 1,786 referenced**. Inlined, the table read 40,315 —
+  over ADR-0031 §5's ~40,000 — and the endpoint was 90% of the growth that put it there. The
+  growth was DUPLICATION rather than expressiveness, which is the one kind a schema can give back
+  without giving anything up: `parameters` and `undescribed` both fall BELOW main's on a strictly
+  richer schema, because a subschema walked four times is now walked once.
+  **The registry is the only lever.** The MCP SDK converts by calling
+  `schema['~standard'].jsonSchema.input({ target })` and passes no `reused` option, so
+  `z.toJSONSchema(..., { reused: 'ref' })` never reaches a published schema. The SDK's own escape
+  hatch, `fromJsonSchema`, swaps zod validation for ajv — which would cost the by-name refusals the
+  tool-surface scoreboard pins, and this package's whole reason for existing. Rejected on that,
+  not on effort.
+  What it buys has to stay READABLE on its own: a `$ref` whose `$defs` entry is missing breaks no
+  test here, because the server validates with zod and never reads its own JSON Schema.
+  `mcp-server`'s `schema-references.test.ts` is what looks — no dangling or non-local reference
+  anywhere in the table, and the endpoint resolving to the union it names rather than merely to
+  something.
 - **This package no longer spells `x-whiteboard` anywhere.** ADR-0035 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:

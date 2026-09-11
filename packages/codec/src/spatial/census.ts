@@ -4,18 +4,41 @@ import { z as zod } from 'zod'
 
 type JsonSchemaNode = Record<string, unknown>
 
-function walk(node: JsonSchemaNode, path: string, out: string[]): void {
+/**
+ * A local `#/$defs/Name` pointer, resolved against the root it came from.
+ *
+ * A census that did not resolve one would report a referenced subschema as a
+ * single leaf and call that the model's reach. That is not hypothetical: the
+ * edge endpoint is named in zod's registry so the MCP tool table can reference
+ * it instead of inlining it four times, and the moment it was, this walk
+ * stopped naming `edges[].from.node` and every other position inside it — the
+ * ledger, the loss table and the reach scoreboard all shrank in agreement,
+ * which is what a blinded instrument looks like from the inside.
+ */
+function deref(node: JsonSchemaNode, root: JsonSchemaNode): JsonSchemaNode {
+  const ref = node.$ref
+  if (typeof ref !== 'string' || !ref.startsWith('#/')) return node
+  let current: unknown = root
+  for (const segment of ref.slice(2).split('/')) {
+    if (current === null || typeof current !== 'object') return node
+    current = (current as Record<string, unknown>)[segment]
+  }
+  return typeof current === 'object' && current !== null ? (current as JsonSchemaNode) : node
+}
+
+function walk(input: JsonSchemaNode, path: string, out: string[], root: JsonSchemaNode): void {
+  const node = deref(input, root)
   const branches = (node.anyOf ?? node.oneOf ?? node.allOf) as JsonSchemaNode[] | undefined
   if (Array.isArray(branches)) {
     // A union holds whichever branch's fields, so the model's reach is their
     // union — de-duplicated by the caller, since branches share a discriminator.
-    for (const branch of branches) walk(branch, path, out)
+    for (const branch of branches) walk(branch, path, out, root)
     return
   }
   if (node.properties !== undefined) {
     const properties = node.properties as Record<string, JsonSchemaNode>
     for (const key of Object.keys(properties)) {
-      walk(properties[key], path === '' ? key : `${path}.${key}`, out)
+      walk(properties[key], path === '' ? key : `${path}.${key}`, out, root)
     }
     return
   }
@@ -27,7 +50,7 @@ function walk(node: JsonSchemaNode, path: string, out: string[]): void {
     return
   }
   if (node.type === 'array') {
-    walk((node.items ?? {}) as JsonSchemaNode, `${path}[]`, out)
+    walk((node.items ?? {}) as JsonSchemaNode, `${path}[]`, out, root)
     return
   }
   out.push(path)
@@ -40,11 +63,16 @@ function walk(node: JsonSchemaNode, path: string, out: string[]): void {
  */
 export function jsonSchemaLeafPaths(schema: z.ZodType): readonly string[] {
   const out: string[] = []
-  walk(
-    zod.toJSONSchema(schema, { target: 'draft-2020-12', io: 'output' }) as JsonSchemaNode,
-    '',
-    out,
-  )
+  // `root`, not `document`: arch-lint's boundary scan is TEXTUAL, so a local
+  // named `document` in a shared-layer package reads as a DOM global — this
+  // package has tripped that exact wire before.
+  const root = zod.toJSONSchema(schema, {
+    target: 'draft-2020-12',
+    io: 'output',
+  }) as JsonSchemaNode
+  // Threaded through the walk rather than resolved up front, because a `$ref`
+  // can appear at any depth and its target lives at the root.
+  walk(root, '', out, root)
   return [...new Set(out)].sort()
 }
 
