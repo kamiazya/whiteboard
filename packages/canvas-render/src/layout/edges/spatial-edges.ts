@@ -1,5 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
+import { bendRoute } from './bend-route.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
@@ -2016,6 +2017,31 @@ export function routeEdge(
 
   const fromRect = rectOf(fromNode)
   const toRect = rectOf(toNode)
+
+  // Bends come FIRST, before the self-edge shape and before any computed
+  // routing: the stored path is not one routing among the others, it is the
+  // answer to "where does this edge go" that the person drawing it already
+  // gave. A computed route that ignored it would drop authored geometry
+  // while leaving it in the record.
+  const namedFromSide = anchors?.fromSide ?? edge.fromSide
+  const namedToSide = anchors?.toSide ?? edge.toSide
+  const bent = bendRoute(edge, fromRect, toRect, {
+    ...(anchors?.from === undefined ? {} : { from: anchors.from }),
+    ...(anchors?.to === undefined ? {} : { to: anchors.to }),
+    ...(namedFromSide === undefined ? {} : { fromSide: namedFromSide }),
+    ...(namedToSide === undefined ? {} : { toSide: namedToSide }),
+  })
+  if (bent !== undefined) {
+    return {
+      kind: 'edge',
+      id: edge.id,
+      path: [...bent],
+      fromSide: namedFromSide ?? 'right',
+      toSide: namedToSide ?? 'left',
+      fromEnd,
+      toEnd,
+    }
+  }
 
   // Self-edge: no meaningful "other node" direction, so fix a stable loop
   // shape (right side out, right side back) rather than deriving from a

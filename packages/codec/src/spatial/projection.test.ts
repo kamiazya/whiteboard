@@ -173,7 +173,8 @@ function fullyPopulatedCanvas() {
         toEnd: 'arrow' as const,
         color: '2' as const,
         label: 'l',
-        facets: { 'visual.path/v0': { waypoints: [{ x: 1, y: 1 }] } },
+        bends: [{ x: 1, y: 1 }],
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
     ],
     comments: [

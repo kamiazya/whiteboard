@@ -131,9 +131,16 @@ describe('the mutation lane covers what it says it covers', () => {
     // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had
     // migrated — so leaving it out would have quietly reduced the lane's
     // reach while the report read the same.
+    // 69 since `layout/edges/bend-route.ts` (ADR-0033 slice 4), OUTSIDE the
+    // lane for the same reason the contributed router is: its branches are
+    // ways of declining or of picking one of four borders, each pinned by
+    // name in `bend-route.test.ts`, and nothing about it is a property that
+    // could be silently asserting nothing. If a stored path ever grows a
+    // COST model — a bend that yields to an obstacle, say — that answer
+    // changes.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 13,
-      production: 68,
+      production: 69,
     })
   })
 

@@ -121,6 +121,15 @@ export const spatialNodeSchema = z.discriminatedUnion('type', [
 
 export type SpatialNode = z.infer<typeof spatialNodeSchema>
 
+/**
+ * A hand-placed bend is a point somebody dragged, so the cap is about a
+ * payload nobody meant rather than about the geometry: an edge with 64 bends
+ * is a defect or an attack, not a drawing.
+ */
+const MAX_BENDS = 64
+
+const bendPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
+
 export const canvasEdgeSchema = z
   .object({
     id: nodeIdSchema,
@@ -144,6 +153,32 @@ export const canvasEdgeSchema = z
     toEnd: z.enum(['none', 'arrow']).optional(),
     color: canvasColorSchema.optional(),
     label: z.string().optional(),
+    /**
+     * Points the edge is drawn THROUGH, in canvas coordinates, in order.
+     *
+     * A native field rather than a plugin facet, by ADR-0033 decision 3's
+     * three answers: a person authors them by dragging a handle the core
+     * editor draws, the renderer and the editor both read them, and the
+     * ledger declares them `extension` — JSON Canvas 1.0 has no waypoint, so
+     * a strict reader gets the computed route instead.
+     *
+     * They lived in `visual.path/v0` until this slice, and that was the
+     * ADR's own worked example of the cost the old binding imposed: adding a
+     * field to an edge cost a facet definition, an `EdgeRouter` contract and
+     * the extraction of `packages/scene`. The seam stays — it was worth
+     * building — and the concept comes home.
+     *
+     * Sub-pixel, like every other coordinate since this slice: the drag no
+     * longer has to round before it writes.
+     */
+    bends: z
+      .array(bendPointSchema)
+      .min(1)
+      .max(MAX_BENDS)
+      .optional()
+      .describe(
+        'Points to draw the line through, in order. Omit it: the route is computed around what is in the way.',
+      ),
     /** Edge-target facets (ADR-0013 decision 5's edge slot). */
     facets: facetsFieldSchema,
   })

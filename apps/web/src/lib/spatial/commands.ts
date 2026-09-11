@@ -139,6 +139,20 @@ export type EditorLeafCommand =
       readonly payload: unknown
     }
   | {
+      /**
+       * The points this edge is drawn THROUGH, as a whole list — the bend
+       * drag's write.
+       *
+       * Not a facet write since ADR-0033 slice 4: bends are a field of the
+       * edge, so the value travels as a value rather than as an opaque
+       * plugin payload, and an empty list is spelled as the absence it means.
+       */
+      readonly kind: 'set-edge-bends'
+      readonly id: string
+      /** An empty list removes the field — the edge takes a computed route again. */
+      readonly bends: readonly { readonly x: number; readonly y: number }[]
+    }
+  | {
       // Edits the canvas ENVELOPE rather than its contents, so it names no
       // edge: this is the whole board's routing, and `set-edge-facet` is
       // how one edge overrides it.
@@ -578,6 +592,22 @@ function setEdgeFacet(
   }
 }
 
+function setEdgeBends(
+  canvas: SpatialCanvas,
+  id: string,
+  bends: readonly { readonly x: number; readonly y: number }[],
+): SpatialCanvas {
+  if (!canvas.edges.some((edge) => edge.id === id)) return canvas
+  return {
+    ...canvas,
+    edges: canvas.edges.map((edge) => {
+      if (edge.id !== id) return edge
+      const { bends: _previous, ...rest } = edge
+      return bends.length === 0 ? rest : { ...rest, bends: [...bends] }
+    }),
+  }
+}
+
 function setNodeColor(
   canvas: SpatialCanvas,
   id: string,
@@ -787,6 +817,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return withCanvasFacet(canvas, command.key, command.payload)
     case 'set-edge-facet':
       return setEdgeFacet(canvas, command.id, command.key, command.payload)
+    case 'set-edge-bends':
+      return setEdgeBends(canvas, command.id, command.bends)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
     case 'set-line-jumps':

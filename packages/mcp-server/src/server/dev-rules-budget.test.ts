@@ -274,7 +274,12 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // measured reason selection is a reader rather than a widened payload —
 // with the half of that measurement that the schema-drawn generator has
 // since retired, said plainly so the surviving half stays readable.
-const CANVAS_RENDER_BUDGET = 127
+// 129 since bends came home (ADR-0033 slice 4): what the renderer's own
+// stored-bend route is and when it declines, why it moved out of a plugin,
+// and — the part worth the bytes — that the router SEAM stays and now has no
+// bundled consumer, so nobody deletes it looking for dead code or invents a
+// router to justify it.
+const CANVAS_RENDER_BUDGET = 129
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

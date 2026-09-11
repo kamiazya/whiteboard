@@ -97,13 +97,19 @@ rather than in a string, so joining its runs yields `tightenthis`.
   published schema state the single shape it holds. OKF §5.2's bare-`verified`-mapping widening is
   the standing example (`normalizeOkfVerified` in model).
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
-  node. No per-kind special casing. Extended mode is lossless (round-trip property).
+  node. No per-kind special casing. Extended mode is lossless over what the extension key can
+  hold; GEOMETRY is the one thing it is not, because the format specifies integer pixels and the
+  model does not (ADR-0033 slice 4) — the ledger's only `degraded` entry, and the reason the
+  round-trip property is stated as IDEMPOTENCE (the expressible subset is the projection's image)
+  with the already-integral case pinned by example in `geometry-projection.test.ts`.
 - **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
   `parseSpatial` both go through `spatial/projection.ts`, so `JSON_CANVAS_PROJECTION` is the
   single account of what crossing costs. The projection RELOCATES rather than copies now: the
-  canvas's `comments` and `facets`, a node's `embed` and `facets` and an edge's `facets` become
-  the extension key on the way out, and the node's two independent fields fold back into the
-  format's single union arm. One canonicalisation goes with it — an extension object with
+  canvas's `comments` and `facets`, a node's `embed` and `facets`, and an edge's `facets` and
+  `bends` become the extension key on the way out, and the node's two independent fields fold
+  back into the format's single union arm. An edge's extension is therefore its OWN declaration
+  (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0033 slice 4 an edge
+  carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
   nothing in it is not emitted, because absence says the same thing — and it is pinned by
   example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
   `native` / `extension` / `degraded(to)` / `dropped(why)`, the last two owing a real reason.

@@ -84,6 +84,14 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   // The facet buckets (ADR-0013). Counted as buckets rather than descended:
   // the format can say one is present and nothing about what is in it, and a
   // plugin's payloads are not this table's to enumerate.
+  // Bends: the one piece of EDGE geometry the format has no vocabulary for,
+  // so a strict reader gets the same two endpoints and a computed route
+  // between them. Rounded as well as carried on the extension key — the
+  // coordinates beside them are whole pixels, and a wire mixing the two
+  // notations would be the format's own inconsistency rather than ours.
+  'edges[].bends[].x': EXTENSION,
+  'edges[].bends[].y': EXTENSION,
+
   'facets/*': EXTENSION,
   'nodes[].facets/*': EXTENSION,
   'edges[].facets/*': EXTENSION,
@@ -253,6 +261,7 @@ function liftEdge(edge: JsonCanvasEdge): CanvasEdge {
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
     ...(edge['x-whiteboard']?.facets !== undefined && { facets: edge['x-whiteboard'].facets }),
+    ...(edge['x-whiteboard']?.bends !== undefined && { bends: edge['x-whiteboard'].bends }),
   }
 }
 
@@ -300,9 +309,22 @@ function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
     ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
-    // An edge's extension is the facets-only arm and nothing else: an edge has
-    // no content JSON Canvas cannot express.
-    ...(edge.facets !== undefined && { 'x-whiteboard': { facets: edge.facets } }),
+    ...(edgeExtension(edge) !== undefined && { 'x-whiteboard': edgeExtension(edge) }),
+  }
+}
+
+/**
+ * An edge's `x-whiteboard`, or nothing when the edge has neither half.
+ * Decomposed field by field for the reason `nodeExtension` is: a spread of
+ * the model's own object would put whatever the model gains next onto the
+ * wire without anyone declaring what it costs.
+ */
+function edgeExtension(edge: CanvasEdge): JsonCanvasEdge['x-whiteboard'] {
+  const bends = edge.bends?.map((bend) => ({ x: roundPixel(bend.x), y: roundPixel(bend.y) }))
+  if (edge.facets === undefined && bends === undefined) return undefined
+  return {
+    ...(edge.facets !== undefined && { facets: edge.facets }),
+    ...(bends !== undefined && { bends }),
   }
 }
 

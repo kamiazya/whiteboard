@@ -1,6 +1,6 @@
-// The router contribution point, end to end through the BUNDLED plugin —
-// `contributed-router.test.ts` proves the seam against a fixture, and this
-// proves a real plugin reaches it with the layout's default options.
+// An edge's stored bends, end to end through the whole layout —
+// `bend-route.test.ts` holds the route itself, and this proves it reaches a
+// composed scene with no option passed and nothing contributed.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
@@ -19,7 +19,7 @@ const options: SpatialLayoutOptions = {
 
 const BEND = { x: 60, y: 400 }
 
-const board = (facets: Record<string, unknown> | undefined): SpatialCanvas => ({
+const board = (bends?: { x: number; y: number }[]): SpatialCanvas => ({
   nodes: [
     { id: 'a', type: 'text', x: 0, y: 0, width: 120, height: 60, text: 'a' },
     { id: 'b', type: 'text', x: 500, y: 0, width: 120, height: 60, text: 'b' },
@@ -29,7 +29,7 @@ const board = (facets: Record<string, unknown> | undefined): SpatialCanvas => ({
       id: 'e',
       fromNode: 'a',
       toNode: 'b',
-      ...(facets === undefined ? {} : { facets }),
+      ...(bends === undefined ? {} : { bends }),
     },
   ],
 })
@@ -43,16 +43,16 @@ const passesThrough = (canvas: SpatialCanvas): boolean =>
   (edgeOf(canvas)?.path ?? []).some((point) => point.x === BEND.x && point.y === BEND.y)
 
 describe('an edge that stores its own bends', () => {
-  it('is drawn through them by the bundled plugin, with no option passed', () => {
-    expect(passesThrough(board({ 'visual.path/v0': { waypoints: [BEND] } }))).toBe(true)
+  it('is drawn through them, with no option passed and nothing contributed', () => {
+    expect(passesThrough(board([BEND]))).toBe(true)
   })
 
   it('leaves an edge with no bends to the built-in routing', () => {
-    expect(passesThrough(board(undefined))).toBe(false)
+    expect(passesThrough(board())).toBe(false)
   })
 
-  it('draws the built-in route rather than half a path when the payload is refused', () => {
-    const edge = edgeOf(board({ 'visual.path/v0': { waypoints: [{ x: BEND.x }] } }))
+  it('draws a computed route rather than half a path when a bend is unserializable', () => {
+    const edge = edgeOf(board([{ x: BEND.x, y: Number.NaN }]))
     expect(edge?.path.length).toBeGreaterThanOrEqual(2)
     expect(edge?.path.some((point) => point.y === BEND.y)).toBe(false)
   })

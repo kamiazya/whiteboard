@@ -303,6 +303,8 @@ const COMMAND_COVERAGE = {
   'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',
   'set-node-color': 'not modelled: node inspector, single-field write',
   'set-node-facet': 'not modelled: facet panel, a plugin-owned payload with its own tests',
+  'set-edge-bends':
+    'not modelled: written by the bend drag, whose two gesture-event arms this property does not drive either (see the event ledger below) — covered by edge-bend-gesture.test.ts and edge-bend.browser.test.tsx, and its canvas meaning by commands.test.ts',
   'set-edge-facet':
     'not modelled: the edge twin of set-node-facet — a plugin-owned payload written to one edge, covered by commands.test.ts',
   'set-canvas-facet':

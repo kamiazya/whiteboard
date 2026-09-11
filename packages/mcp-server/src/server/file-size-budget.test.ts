@@ -102,9 +102,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // never touched it. `withEdgeStyle` now delegates to it rather than
   // repeating that rule, which is why the arm costs less than it reads.
   // +34 for the edge target: `set-edge-facet` writes a plugin-owned payload
-  // to ONE edge, the twin of `set-node-facet`, and the bends a connection
-  // stores ride it.
-  'apps/web/src/lib/spatial/commands.ts': 1029,
+  // to ONE edge, the twin of `set-node-facet`.
+  // +17: `set-edge-bends`, the bend drag's write. Not a facet write since
+  // ADR-0033 slice 4 — bends are a field of the edge, so the command carries
+  // a value rather than an opaque plugin payload.
+  'apps/web/src/lib/spatial/commands.ts': 1046,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -147,7 +149,9 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // same reason — the thread it becomes is one every reader would drop.
   // +1: an edge's `x-whiteboard` facets bucket crosses the bridge the way a
   // node's already did, so a per-edge facet survives a round trip.
-  'packages/loro-adapter/src/loro-bridge.ts': 1003,
+  // +3: an edge's `bends`, written as one value — the round-trip property
+  // reported it dropped before the line existed.
+  'packages/loro-adapter/src/loro-bridge.ts': 1006,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -333,7 +337,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +24 for the per-edge style resolver threaded through the anchor pass:
   // side choice reads the whole edge set, so one edge overriding the board's
   // routing has to be visible to it rather than applied afterwards.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2114,
+  // +26: the stored-bend branch, taken before the self-edge shape and before
+  // any computed routing (ADR-0033 slice 4). The route itself is
+  // `bend-route.ts`; what lives here is choosing it.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2140,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.

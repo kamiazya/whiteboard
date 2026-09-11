@@ -112,6 +112,18 @@ interface Row {
  * counts are unchanged, which is what says the surface a model READS is the
  * same set of fields saying the same things — only what they accept widened,
  * and it widened towards the model rather than away from it.
+ *
+ * The bends half of the same slice DOES move the surface, and deliberately.
+ * An edge's `bends` is a field of the edge now rather than `visual.path/v0`,
+ * so it reaches `wb_canvas_edit`'s edge add and patch the way every other
+ * edge field does: +6 parameters (the list and its two coordinates, at both
+ * sites), of which the list itself carries a description and the coordinates
+ * do not — `x` and `y` on a point need no prose, and writing some would be
+ * padding a table a model reads every turn.
+ *
+ * What it BUYS against those bytes is the reason a model could not place a
+ * bend at all before: a facet payload is opaque to `wb_canvas_edit`, so the
+ * only writer was `wb_facet_set` with a plugin's key and its own schema.
  */
 describe('what the tool table costs to read', () => {
   it('scores every registered tool', async () => {
@@ -158,7 +170,7 @@ describe('what the tool table costs to read', () => {
       // schema (the whole scene), which the model never reads.
       canvas_view: {
         visibleBytes: 733,
-        wireBytes: 18105,
+        wireBytes: 18675,
         descriptionWords: 39,
         parameters: 3,
         undescribed: 3,
@@ -172,7 +184,7 @@ describe('what the tool table costs to read', () => {
       // not because a column said so.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 20488,
+        wireBytes: 21704,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -226,11 +238,11 @@ describe('what the tool table costs to read', () => {
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
       wb_canvas_edit: {
-        visibleBytes: 12961,
-        wireBytes: 34283,
+        visibleBytes: 13569,
+        wireBytes: 36107,
         descriptionWords: 169,
-        parameters: 149,
-        undescribed: 121,
+        parameters: 155,
+        undescribed: 125,
         strays: 'refused',
         names: [],
       },
@@ -427,10 +439,10 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 35904,
-      wireBytes: 105810,
-      parameters: 271,
-      undescribed: 189,
+      visibleBytes: 36512,
+      wireBytes: 109420,
+      parameters: 277,
+      undescribed: 193,
     })
   })
 

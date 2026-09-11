@@ -56,18 +56,24 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     ])
   })
 
-  it('leaves 14 to the extension key — 11 named fields and 3 facet buckets', () => {
-    expect(withKind('extension')).toHaveLength(14)
+  it('leaves 16 to the extension key — 13 named fields and 3 facet buckets', () => {
+    expect(withKind('extension')).toHaveLength(16)
     expect(census.facetBuckets).toHaveLength(3)
   })
 
-  it('carries 15 further field positions inside those buckets, from one bundled plugin', () => {
+  it('carries 13 further field positions inside those buckets, from one bundled plugin', () => {
     // Positions, not facets: a facet targeting both a node and the canvas can
     // be written at either, and each is somewhere a reader has to look.
-    expect(census.facet).toHaveLength(15)
+    expect(census.facet).toHaveLength(13)
   })
 
   it('so 29 of the 52 positions a document can hold are outside the format', () => {
+    // Both totals are unchanged by ADR-0033 slice 4 and that is the reading,
+    // not a coincidence: an edge's two bend coordinates MOVED, out of a
+    // plugin's bucket (`visual.path/v0`, retired) and into the edge's own
+    // `bends` — 14 named extension fields became 16 and the 15 positions
+    // inside the buckets became 13. What the format cannot state is the
+    // same; what the PRODUCT has to call a plugin's is two fewer.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
     expect(outside).toBe(29)
     expect(outside + withKind('native').length + withKind('degraded').length).toBe(52)

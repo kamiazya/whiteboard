@@ -21,8 +21,9 @@ describe('x-whiteboard JSON Schema artifact', () => {
     const defs = schema.$defs as Record<string, Record<string, unknown>>
     expect(Object.keys(defs).sort()).toEqual(['canvasExtension', 'edgeExtension', 'nodeExtension'])
     expect(defs.canvasExtension.type).toBe('object')
-    // The edge site is facets and nothing else — no embed variant, so no
-    // union: an edge has no content JSON Canvas cannot express.
+    // The edge site is one object — facets and bends, no embed variant, so
+    // no union: what an edge holds that the format cannot state is geometry,
+    // not content.
     expect(defs.edgeExtension.type).toBe('object')
     expect('anyOf' in defs.edgeExtension).toBe(false)
     // The node site is a UNION since ADR-0013: an embed variant and a

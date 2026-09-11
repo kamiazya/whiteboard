@@ -28,12 +28,14 @@ import { z } from 'zod'
  */
 
 /**
- * A facets-only `x-whiteboard`: the payload bucket and nothing else. What an
- * EDGE carries (ADR-0013 decision 5's edge slot), and the node variant without
- * an embed. `.strict()`, so a broken embed on a node fails this arm too rather
- * than being silently stripped down to its facets.
+ * A facets-only `x-whiteboard`: the payload bucket and nothing else — the
+ * node variant without an embed. `.strict()`, so a broken embed on a node
+ * fails this arm too rather than being silently stripped down to its facets.
+ *
+ * The EDGE site used to share it and no longer does: since ADR-0033 slice 4
+ * an edge also carries its bends, so it has a declaration of its own.
  */
-export const facetsOnlyExtensionSchema = z
+const facetsOnlyExtensionSchema = z
   .object({
     facets: extensionFacetsSchema.optional().catch(undefined),
   })
@@ -121,6 +123,26 @@ export const jsonCanvasNodeSchema = z.discriminatedUnion('type', [
 
 export type JsonCanvasNode = z.infer<typeof jsonCanvasNodeSchema>
 
+/**
+ * `x-whiteboard` on an EDGE: the facet bucket, plus the bends the edge is
+ * drawn through.
+ *
+ * `bends` is the one piece of edge CONTENT JSON Canvas 1.0 cannot express —
+ * the format has no waypoint — so a strict reader gets the same two endpoints
+ * and the computed route between them. Integer here, like every other
+ * coordinate the format states, and rounded on the way out.
+ */
+export const edgeExtensionSchema = z
+  .object({
+    facets: extensionFacetsSchema.optional().catch(undefined),
+    bends: z
+      .array(z.object({ x: z.number().int(), y: z.number().int() }))
+      .min(1)
+      .optional()
+      .catch(undefined),
+  })
+  .strict()
+
 /** An edge, which JSON Canvas 1.0 requires to run between two NODES. */
 const jsonCanvasEdgeSchema = z.object({
   id: nodeIdSchema,
@@ -145,11 +167,11 @@ const jsonCanvasEdgeSchema = z.object({
   color: canvasColorSchema.optional(),
   label: z.string().optional(),
   /**
-   * Edge-target facets (ADR-0013 decision 5's edge slot): payload only — an
-   * edge has no content JSON Canvas cannot express, so unlike a node's key
-   * this one never carries an embed.
+   * Edge-target facets (ADR-0013 decision 5's edge slot) and the edge's
+   * bends. Unlike a node's key this one never carries an embed: what an edge
+   * holds that the format cannot state is geometry, not content.
    */
-  'x-whiteboard': facetsOnlyExtensionSchema.optional().catch(undefined),
+  'x-whiteboard': edgeExtensionSchema.optional().catch(undefined),
 })
 
 export type JsonCanvasEdge = z.infer<typeof jsonCanvasEdgeSchema>

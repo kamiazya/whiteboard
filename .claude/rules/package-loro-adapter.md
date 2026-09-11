@@ -202,6 +202,12 @@ implementations live in the composition roots.
   JSON is NOT evidence it persists, since this bridge is the path the app
   actually saves through.
 
+- **An edge's `bends` are ONE value, not a nested container.** Last-writer-wins per key is what a
+  dragged path wants: two people reshaping one edge concurrently should converge on a path one of
+  them drew, never on an interleaved third neither did. `loro-bridge.property.test.ts` is what
+  says it persists at all — it reported the field dropped before `edgeToFields` carried it, which
+  no other test in the suite could have seen.
+
 - **A record written before [ADR-0033](../../docs/contributing/adr/0033-model-and-format.md)
   stored all of this under the FORMAT's extension key**, because the model
   was the format. `liftLegacyExtension` converts a stored node or edge on

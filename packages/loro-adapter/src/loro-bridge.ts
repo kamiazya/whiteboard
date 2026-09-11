@@ -187,6 +187,11 @@ function edgeToFields(edge: CanvasEdge): Fields {
   if (edge.toEnd !== undefined) fields.toEnd = edge.toEnd
   if (edge.color !== undefined) fields.color = edge.color
   if (edge.label !== undefined) fields.label = edge.label
+  // Bends are a plain array of plain objects, so Loro stores them as ONE
+  // value: the whole path is last-writer-wins, which is what a dragged path
+  // wants — two people reshaping one edge concurrently should not end up
+  // with a interleaved third path neither drew.
+  if (edge.bends !== undefined) fields.bends = edge.bends
   if (edge.facets !== undefined) fields.facets = edge.facets
   return fields
 }

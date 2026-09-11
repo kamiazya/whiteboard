@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://raw.githubusercontent.com/kamiazya/whiteboard/main/docs/reference/x-whiteboard.schema.json",
   "title": "x-whiteboard JSON Canvas extension",
-  "description": "Definitions for the single extension key (\"x-whiteboard\") that extended JSON Canvas documents produced by whiteboard may carry, at three sites: the document root (canvas facets and comments; #/$defs/canvasExtension), a node (canvas embed and node facets; #/$defs/nodeExtension) and an edge (edge facets; #/$defs/edgeExtension). Documents contain no non-standard fields beyond these three sites. Consumers that drop the key still read a valid JSON Canvas 1.0 document.",
+  "description": "Definitions for the single extension key (\"x-whiteboard\") that extended JSON Canvas documents produced by whiteboard may carry, at three sites: the document root (canvas facets and comments; #/$defs/canvasExtension), a node (canvas embed and node facets; #/$defs/nodeExtension) and an edge (edge facets and bends; #/$defs/edgeExtension). Documents contain no non-standard fields beyond these three sites. Consumers that drop the key still read a valid JSON Canvas 1.0 document.",
   "$defs": {
     "canvasExtension": {
       "type": "object",
@@ -121,6 +121,30 @@
             "type": "string"
           },
           "additionalProperties": {}
+        },
+        "bends": {
+          "minItems": 1,
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "x": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              },
+              "y": {
+                "type": "integer",
+                "minimum": -9007199254740991,
+                "maximum": 9007199254740991
+              }
+            },
+            "required": [
+              "x",
+              "y"
+            ],
+            "additionalProperties": false
+          }
         }
       },
       "additionalProperties": false

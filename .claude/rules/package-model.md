@@ -27,9 +27,21 @@ paths:
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: document ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - Workspace identity (ADR-0019) is three layers, not one: canonical workspace ID = a bare ULID, the same canonical-ULID shape as document ID (no `ws_` prefix — symmetric with `documentIdSchema`, distinct Zod schemas are the confusion guard); segment = the URL-safe, per-keeper-unique, renameable handle, which must NOT itself be ULID-shaped (a 26-char Crockford base32 string with a leading `[0-7]`, checked case-insensitively) because workspace URLs resolve segment-first with canonical-id fallback in one position; displayName = free text, no uniqueness, no identity duties. `workspaceIdSchema` (the pre-ADR-0019 single-string shape) is untouched — it describes the legacy live data both keepers still hold, and re-keying onto the three-layer shape is a later migration-driven slice.
-- JSON Canvas geometry is integer here too, and the model carries no geometry the format cannot
-  state. That is a fact about the shipped model, not a constraint the model is under — widening
-  it is [ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 4.
+- **Geometry is a REAL number, and the format's integer pixels are the projection's**
+  ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 4).
+  `nodePositionSchema` / `nodeSizeSchema` are `z.number().finite()` (sizes non-negative), and
+  they are EXPORTED because every payload that echoes stored geometry has to accept what the
+  model stores — a read still declaring `int` does not reject an input, it makes a tool answer
+  with something its own `outputSchema` refuses. Finite rather than merely numeric:
+  `JSON.stringify(Infinity)` is `null` and a NaN corner is not a corner.
+- **An edge carries its own `bends`** — the points the line is drawn through, in order, capped at
+  64. Same slice, and the ADR's worked example of what the old binding cost: JSON Canvas has no
+  waypoint, so while the model WAS the format a bend could only exist as a plugin facet
+  (`visual.path/v0`, retired) drawn by a contributed router. It passes ADR-0033 decision 3's three
+  answers — a person authors one by dragging a handle the core editor draws, the renderer and the
+  editor both read it, and its projection is `extension`. `edgePatchFieldsSchema` derives from
+  `canvasEdgeSchema`, so it reached `wb_canvas_edit`'s edge patch for free, which is the whole
+  gain: a facet payload is opaque to that tool, so a model could not place a bend at all before.
 - **This package no longer spells `x-whiteboard` anywhere.** ADR-0033 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:

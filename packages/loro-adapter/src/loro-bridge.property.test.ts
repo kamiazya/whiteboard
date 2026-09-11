@@ -36,6 +36,15 @@ const zeroNormalised = <T extends { x?: number; y?: number }>(value: T): T => ({
   ...(value.y !== undefined && { y: value.y + 0 }),
 })
 
+/**
+ * The same normalisation for an EDGE, whose `bends` are points too
+ * (ADR-0033 slice 4). It is separate rather than folded into the helper above
+ * because an edge has no `x`/`y` of its own — what it has is a list of them,
+ * and the property found the gap the day bends arrived.
+ */
+const bendsNormalised = <T extends { bends?: readonly { x: number; y: number }[] }>(edge: T): T =>
+  edge.bends === undefined ? edge : { ...edge, bends: edge.bends.map(zeroNormalised) }
+
 describe('loro-bridge properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
     'readSpatialCanvas(writeSpatialCanvas(doc, canvas)) deep-equals canvas up to node/edge order',
@@ -48,7 +57,7 @@ describe('loro-bridge properties', () => {
       writeSpatialCanvas(doc, canvas)
       const result = readSpatialCanvas(doc)
       expect(byId(result.nodes)).toEqual(byId(canvas.nodes).map(zeroNormalised))
-      expect(byId(result.edges)).toEqual(byId(canvas.edges))
+      expect(byId(result.edges)).toEqual(byId(canvas.edges).map(bendsNormalised))
       // The envelope too — routing preferences and the canvas's facets —
       // because this bridge is the path the app saves through, and a JSON
       // round-trip is no evidence a field persists here. Comments are
@@ -68,6 +77,24 @@ describe('loro-bridge properties', () => {
     // The sub-pixel coordinate beside it DOES survive: what the record cannot
     // carry is the sign of a zero, not the fraction (ADR-0033 slice 4).
     expect(read.nodes[0]?.y).toBe(1.5)
+  })
+
+  it('normalises a negative zero in an edge BEND the same way', () => {
+    // Reachable rather than theoretical: the bend drag rounds before it
+    // writes, and `Math.round(-0.2)` is `-0`. The property found this the day
+    // bends became a field; the node case above had been pinned for longer,
+    // which is exactly why the edge case needed its own.
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [
+        { id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 },
+        { id: 'b', type: 'text', text: '', x: 9, y: 9, width: 1, height: 1 },
+      ],
+      edges: [{ id: 'e', fromNode: 'a', toNode: 'b', bends: [{ x: -0, y: 2.5 }] }],
+    })
+    const bend = readSpatialCanvas(doc).edges[0]?.bends?.[0]
+    expect(Object.is(bend?.x, 0)).toBe(true)
+    expect(bend?.y).toBe(2.5)
   })
 
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
