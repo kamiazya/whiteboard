@@ -132,9 +132,27 @@ export function defineFacet<S extends z.ZodTypeAny>(
   return editor === undefined ? definition : { ...definition, editor }
 }
 
+/**
+ * Plugin ids the engine keeps for itself.
+ *
+ * `workspace` names the synthetic plugin a document-backed stencil library
+ * composes into (ADR-0034's amendment), so its stencils read
+ * `workspace.<name>`. Refused HERE, at definition, rather than left to
+ * collide at registry build: `createFacetRegistry` throws on a duplicate
+ * plugin id, so a deployment that took this id would meet a startup crash
+ * the first time a workspace grew a library — a long way from the cause, and
+ * in front of a user rather than an author.
+ */
+const RESERVED_PLUGIN_IDS: ReadonlySet<string> = new Set(['workspace'])
+
 export function definePlugin(plugin: FacetPlugin): FacetPlugin {
   if (!SEGMENT_PATTERN.test(plugin.id)) {
     throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
+  }
+  if (RESERVED_PLUGIN_IDS.has(plugin.id)) {
+    throw new Error(
+      `plugin id "${plugin.id}" is reserved by the engine — a workspace's own stencil library registers under it`,
+    )
   }
   if (plugin.displayName.trim() === '') {
     throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)

@@ -220,6 +220,75 @@ reading is also the first population that could make this instrument wrong;
 a non-zero `excess` is to be read as a hypothesis about the drawing AND about
 the column, not as a verdict.
 
+## Amendment (2026-09-11): the two SCOPES, and what a workspace library is
+
+Decision 4 said a library is "a DOCUMENT in a workspace" and left a fork
+unstated that the implementation then walked straight into. Settled here
+before the code, because getting it wrong is expensive in a stored shape.
+
+**A plugin set is per SERVER. A library is per WORKSPACE. They are not the
+same axis and one cannot carry the other.**
+
+`deps.facetRegistry` — made real by the composition-root seam that landed
+after the stencil increment — is chosen once per root, which is right for
+facet SCHEMAS: ADR-0013 decision 3 fixes those at distribution time, and
+nothing a user writes may define one. A library is the opposite kind of
+thing: it is content, it belongs to the workspace that holds it, and it
+syncs, versions, forks and travels with that workspace. So a document-backed
+library does NOT ride `deps.facetRegistry`, and the increment that adds one
+must not try to make it.
+
+### What makes this safe, stated because it looks like the thing ADR-0013 forbids
+
+A workspace library defines no SCHEMA. Every stencil in it is payload under
+`stencilAssetSchema`, which is registered at distribution time like any
+other, and each of its facet payloads is validated against the schema its own
+plugin registered. So the blast radius is a colour string and some already-
+validated facet values — not code, not a new contract, and nothing the
+registry has not already agreed to accept.
+
+That is exactly the escape valve ADR-0013 decision 3 named when it forbade
+runtime facet definition: *"runtime-variable vocabulary is payload of a
+facet, not a runtime schema"*. A library is the largest instance of that
+valve so far, which is why the reasoning is restated here rather than cited.
+
+### The mechanism: a synthetic plugin, not a second resolution path
+
+A stencil is resolved through `FacetRegistry`, and a workspace library is not
+a registry. The resolution is therefore to COMPOSE one — the base plugins
+plus a synthetic plugin carrying the workspace's own stencils — rather than
+to add a second lookup beside the first. One producer, and every reader
+(`applyStencil`, the picker, `wb_facet_list`) keeps working unchanged.
+
+Two things that follow, and neither is free:
+
+- **A reserved namespace.** Facet ids are `{plugin}.{name}`, so the synthetic
+  plugin needs an id no real plugin may take. It is `workspace`, and
+  `definePlugin` must refuse it — today it is a perfectly legal id and a
+  deployment could take it, which would make a collision a startup crash
+  instead of a rule.
+- **Caching, keyed on the library document's version.** A registry is
+  immutable data built from a plugin list; composing one per tool call would
+  rebuild every compat chain and asset table on every write. The
+  composition-root seam already pins "built once per root" for the same
+  reason; per workspace it becomes "built once per library version".
+
+### What this costs the tool surface, named rather than discovered later
+
+`wb_facet_list` today answers for the DEPLOYMENT and deliberately takes no
+workspace id — its own doc says so. Once a library exists, "what vocabulary
+do I have" has a different answer per workspace, so that tool gains an
+optional `workspaceId` and the answer widens. That is a tool-surface change
+and goes through ADR-0031's scoreboards like any other; it is named here so
+the increment that does it expects the cost instead of discovering it.
+
+### Not decided here
+
+How a library is AUTHORED — a document kind, an OKF body with a facets
+block, or a JSON canvas convention — and how a community distributes one.
+Those need a reading of what people actually do with the first version, and
+deciding them now would be inventing the fixture that justifies the change.
+
 ## Consequences
 
 - The library being a document means a stencil is subject to the same
