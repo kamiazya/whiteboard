@@ -175,7 +175,7 @@
     "fast-check": "^4.7.0",
     "jsdom": "^30.0.1",
     "libsql": "^0.5.29",
-    "playwright": "^1.61.1",
+    "playwright": "1.61.1",
     "tsx": "^4.23.1",
     "typescript": "catalog:",
     "vite": "catalog:",
