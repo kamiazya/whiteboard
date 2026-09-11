@@ -250,16 +250,27 @@ describe('facet vocabulary: a stencil is a declared distinction', () => {
 })
 
 describe('facet vocabulary: what carries a distinction, and what does not', () => {
-  it('reads a badge as a channel of its own', () => {
+  it('does NOT read a badge as a distinction, because a board does not draw one', () => {
+    // Corrected after looking at a picture. `visual.symbol` was listed as one
+    // of three channels that can say "these differ in kind", and on a BOARD
+    // it says nothing: `plugin-visual` contributes no node decoration — the
+    // badge was deliberately removed once the small surfaces it was designed
+    // for existed, since at full size it repeated what the node already
+    // showed. The only thing that draws a node's symbol is the minimap.
+    //
+    // So counting it credited a distinction no reader of this canvas can
+    // see. Found by rendering a board a model actually drew and noticing two
+    // stencils' badges were simply absent, while the score read them as
+    // spent — invisible in the SVG text, obvious in the image.
     const s = score([
       ...plain.slice(0, 2),
-      box('a', 40, 60, badged('🔒')),
-      box('b', 260, 60, badged('🔒')),
+      box('a', 40, 60, badged('\u{1f512}')),
+      box('b', 260, 60, badged('\u{1f512}')),
       box('c', 640, 60),
       box('d', 860, 60),
     ])
-    expect(s.deficit).toBe(1)
-    expect(s.treatments).toBe(2)
+    expect(s.deficit).toBe(2)
+    expect(s.treatments).toBe(1)
   })
 
   it('does NOT read text alignment as a distinction', () => {

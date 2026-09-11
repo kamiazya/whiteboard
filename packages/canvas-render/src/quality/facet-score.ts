@@ -26,11 +26,7 @@
  * distinction is `excess`, and one appearance carrying two is `overload`.
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import {
-  resolveNodeShape,
-  resolveNodeStencil,
-  resolveNodeSymbol,
-} from '@kamiazya/whiteboard-plugin-visual'
+import { resolveNodeShape, resolveNodeStencil } from '@kamiazya/whiteboard-plugin-visual'
 
 export interface FacetScore {
   /**
@@ -83,7 +79,7 @@ export interface FacetScore {
   readonly excess: number
   /**
    * DISCRIMINABILITY (V4, Moody's visual distance): the FEWEST channels two
-   * treatments in use differ on, of the three there are. `0` means fewer
+   * treatments in use differ on, of the TWO a board draws. `0` means fewer
    * than two distinct treatments exist — the channel says nothing at all —
    * since two distinct treatments differ on at least one by construction.
    *
@@ -104,15 +100,32 @@ export interface FacetScore {
   readonly redundancy: number
 }
 
-/** The three channels that can say "these two differ in KIND". */
+/**
+ * The channels that can say "these two differ in KIND" **on a board**.
+ *
+ * TWO, not three. `visual.symbol/v0` was counted here and should not have
+ * been: `plugin-visual` contributes no node decoration, so a badge draws
+ * NOTHING on a canvas — it was deliberately removed once the small surfaces
+ * it was designed for existed (a node at full size repeated what its own
+ * label already said), and the only thing that draws a node's symbol today
+ * is the minimap.
+ *
+ * Counting it credited a distinction no reader of this canvas can see. Found
+ * by rendering a board a model actually drew and noticing two stencils'
+ * badges were simply absent — invisible in the SVG text, obvious in the
+ * image, and invisible to every test until someone looked.
+ *
+ * A badge is still a real channel SOMEWHERE. If the minimap is ever scored,
+ * it is scored by an instrument that knows what the minimap draws; borrowing
+ * this one would make the same mistake in the other direction.
+ */
 interface Treatment {
   readonly colour: string
   readonly shape: string
-  readonly badge: string
 }
 
-const DEFAULT_TREATMENT: Treatment = { colour: '', shape: '', badge: '' }
-const keyOf = (t: Treatment) => `${t.colour}|${t.shape}|${t.badge}`
+const DEFAULT_TREATMENT: Treatment = { colour: '', shape: '' }
+const keyOf = (t: Treatment) => `${t.colour}|${t.shape}`
 const DEFAULT_KEY = keyOf(DEFAULT_TREATMENT)
 
 /**
@@ -122,21 +135,11 @@ const DEFAULT_KEY = keyOf(DEFAULT_TREATMENT)
  * draw time — no badge, no silhouette.
  */
 function treatmentOf(node: SpatialNode): Treatment {
-  const symbol = resolveNodeSymbol(node)
-  return {
-    colour: node.color ?? '',
-    shape: resolveNodeShape(node) ?? '',
-    badge:
-      symbol === undefined
-        ? ''
-        : symbol.kind === 'icon'
-          ? `icon:${symbol.name}`
-          : `emoji:${symbol.char}`,
-  }
+  return { colour: node.color ?? '', shape: resolveNodeShape(node) ?? '' }
 }
 
 const channelsApart = (a: Treatment, b: Treatment): number =>
-  (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1) + (a.badge === b.badge ? 0 : 1)
+  (a.colour === b.colour ? 0 : 1) + (a.shape === b.shape ? 0 : 1)
 
 type Rect = { readonly x: number; readonly y: number; readonly w: number; readonly h: number }
 const rectOf = (n: SpatialNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
@@ -234,8 +237,8 @@ export function scoreFacets(canvas: SpatialCanvas): FacetScore {
   }
 
   const inUse = [...new Set(boxes.map((b) => key(b.id)))].map((k) => {
-    const [colour = '', shape = '', badge = ''] = k.split('|')
-    return { colour, shape, badge }
+    const [colour = '', shape = ''] = k.split('|')
+    return { colour, shape }
   })
   let distance = 0
   if (inUse.length >= 2) {
