@@ -334,6 +334,38 @@ stricter rule.
 - **The `distance 1` trial was taken BEFORE the strict draft landed**, so the
   reading does not show what that fix is worth. The next reading does.
 
+## Second reading (2026-09-11): what the strict draft was worth
+
+Same task, same three trials, the only change being the three fixes above.
+
+| | first reading | second |
+|---|---|---|
+| `deficit` / `constructs` | 0 / 6 | 0 / 6 |
+| `treatments` | 6 | 6 |
+| `distance` | 2, 2, **1** | **2, 2, 2** |
+| drawing debt | none / `textOverflow 2` / `nearMisses 1` | **none, all three** |
+| `debtFree pass^k` | 0 | **1** |
+| `pass^k` | 1 | 1 |
+| `meanCalls` | 9.67 (4, 4, **21**) | **4.67 (5, 5, 4)** |
+| tool errors | 0 | 0 |
+
+Every trial now dresses all seven boxes in ONE `wb_canvas_edit` batch with
+`stencil` beside `op`, and three of three also called `tidy` in the same
+batch. The hand-rolled-vocabulary path is gone, and so is the board it
+produced.
+
+**Stated at the strength three trials a side support.** This is not "the fix
+saves five calls per errand": the 21-call trial was a single observation, and
+n=3 each side cannot separate a mean from the variance around it. What it
+does say is that the recovery path the silent drop forced — notice from the
+render, rebuild by hand, land one channel apart — did not occur in any of
+three trials, and no trial exceeded five calls. That is the claim the fix was
+made on, and it holds.
+
+The debt columns moving with it is a bonus rather than the point, and the
+honest reading of `textOverflow 2` / `nearMisses 1` disappearing is that both
+came from trials that spent their turns recovering rather than drawing.
+
 ## Amendment (2026-09-11): the two SCOPES, and what a workspace library is
 
 Decision 4 said a library is "a DOCUMENT in a workspace" and left a fork
