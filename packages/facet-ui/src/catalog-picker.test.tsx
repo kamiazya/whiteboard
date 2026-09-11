@@ -9,11 +9,11 @@ import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteb
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { clearFacetCatalogRecents, DerivedFacetForm } from './index.js'
+import { clearCatalogRecents, DerivedFacetForm } from './index.js'
 
 afterEach(() => {
   cleanup()
-  clearFacetCatalogRecents()
+  clearCatalogRecents()
 })
 
 const SYMBOL_KEY = 'demo.symbol/v0'
@@ -90,8 +90,18 @@ function mount(stored?: unknown) {
   return onWrite
 }
 
-/** The catalog arrives through a promise, so every case waits for it once. */
-const loaded = () => screen.findByRole('radio', { name: 'grinning face' })
+/**
+ * A catalog opens in a popover now, so every case presses the trigger
+ * first — and then waits, because the rows arrive through a promise.
+ *
+ * Both steps are the flow a person takes, which is why the helper does them
+ * rather than the component being reached around: a test that mounted the
+ * picker directly would pass over a trigger that no longer opens it.
+ */
+async function loaded() {
+  fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
+  return screen.findByRole('radio', { name: 'grinning face' })
+}
 
 describe('a catalog picker offers more than the definition listed', () => {
   it('keeps the listed options and adds the loaded ones beside them', async () => {

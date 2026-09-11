@@ -1123,6 +1123,16 @@ Three things follow:
   are a view, the cells are the value, and one name for both lets the
   browser treat a category as an answer.
 
+  **A catalog opens over the row, not inside it.** Hundreds of cells in a
+  property row is not a row: inline, `visual.symbol` was taller than every
+  other facet in the panel put together and pushed the ones below it off
+  screen. So the row keeps one line and shows what is CHOSEN — the listed
+  option's glyph, or, for a value the catalog has not loaded yet, the field
+  free entry already declares as the one a person types into. The panel goes
+  in the browser's top layer, which is the only way out of the inspector's
+  own scroll clipping, and its content stays unmounted until it is opened —
+  which is what keeps a lazily-imported catalog actually lazy.
+
   Search matches the option's name, the words its plugin gives it, the band
   it lives in, and the character itself — the last because pasting an emoji
   in is how somebody asks "is this one already here". `visual.symbol` indexes

@@ -30,24 +30,48 @@ paths:
   cells inside a menu is not a menu. Neither axis is a style choice: one
   says what question the row asks, the other says what container it stands
   in.
-- **`FacetCatalogPicker` — the OPEN half of a picker.** A facet whose schema
-  accepts more values than a definition can carry (`visual.symbol` takes any
-  single grapheme) declares a `catalog` and, optionally, free `entry`; this
-  draws the search box, the category band, the scrolling grid, the
-  recently-used band and the entry field. Every one of those is
+- **`CatalogPicker` — a searchable catalog of choices, and it knows NOTHING
+  about facets.** A short list, a search box, a category band, a scrolling
+  grid, what was picked recently, free entry. It takes loaded sections, a
+  selected key and a callback, so the markdown editor's `:name:` popup is
+  the same control rather than a second one that drifts. Every band of it is
   `FacetOption`, the category band included — the sections and the cells
   differ only in their radio NAME, because one is a view and the other is
-  the value.
+  the value. The category band is a `grid` rather than a chip row for a
+  measured reason: nine glyph-only chips are 304px of a 302px panel, so the
+  last one wrapped onto a line of its own.
+- **`FacetCatalogPicker` — the facet adapter over it**, and deliberately
+  thin: it loads what the facet's `catalog` declares and routes free entry
+  through `registry.validateFacetWrite`. How little it does is the honest
+  measure of how generic the control below it actually became.
 
-  Free entry writes through `registry.validateFacetWrite` and displays the
-  message it gets back. That is the point rather than a detail: the
-  component holds no rule about what a symbol may be, so it cannot hold a
-  laxer one than the facet does.
+  That validation seam is the point rather than a detail: `CatalogPicker`
+  holds no rule about what a symbol may be, so it cannot hold a laxer one
+  than the facet does, and a surface with no schema behind it simply passes
+  no seam.
+- **`CatalogPopover` — the trigger and the panel it opens.** A catalog is
+  hundreds of cells and a property row is one line; inline, `visual.symbol`
+  was taller than every other facet in the panel put together. Two things it
+  must do, and both are why it is a component rather than a `<details>`: the
+  panel has to escape the inspector's scroll clipping (the native Popover
+  API's TOP LAYER, which brings light dismiss and Escape with it), and its
+  content must not mount until it is opened (or the catalog's dynamic-import
+  chunk is fetched for every row on screen).
 
-  Recents are MODULE state, keyed by facet — the picker unmounts every time
-  the inspector closes, which is the one moment recents are for. That makes
-  them leak between TESTS too, so both apps/web setups call
-  `clearFacetCatalogRecents()` in `afterEach`; without it one test's pick
+  **jsdom implements none of the Popover API** — measured, `showPopover` is
+  `undefined` and `popover` is not even a property — so the non-native path
+  is not a legacy fallback: it is the path `catalog-popover.test.tsx` runs,
+  while `node-symbol-menu.browser.test.tsx` runs the native one. Both are
+  covered, and the feature test is at MODULE scope because the answer
+  decides how the trigger is wired before the first render (with the API,
+  the browser owns open/close and the trigger is `popovertarget`, so light
+  dismiss knows the trigger belongs to the panel and a press on it does not
+  close-then-reopen).
+
+  Recents are MODULE state, keyed by the picker's `name` — the picker
+  unmounts every time its popover closes, which is the one moment recents
+  are for. That makes them leak between TESTS too, so both apps/web setups
+  call `clearCatalogRecents()` in `afterEach`; without it one test's pick
   shows up as an extra radiogroup in the next test's panel, which is how it
   was found.
 - **`createFacetWriter`** — the one path a facet editor's value takes to

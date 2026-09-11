@@ -229,14 +229,12 @@ it('lets a person give the document its own mark, and take it back', async () =>
   const { container } = render(<Host />)
   await openPanel(container)
 
-  const search = await vi.waitFor(() => {
-    const el = menu()?.querySelector('[aria-label="Search symbols"]')
-    expect(el).not.toBeNull()
-    return el as HTMLInputElement
+  const picker = await openSymbolPicker(menu() as HTMLElement)
+  fireEvent.change(picker.querySelector('[aria-label="Search symbols"]') as HTMLInputElement, {
+    target: { value: 'star' },
   })
-  fireEvent.change(search, { target: { value: 'star' } })
   const pick = await vi.waitFor(() => {
-    const el = menu()?.querySelector('[aria-label="star"]')
+    const el = picker.querySelector('[aria-label="star"]')
     expect(el).not.toBeNull()
     return el as HTMLElement
   })
@@ -248,7 +246,7 @@ it('lets a person give the document its own mark, and take it back', async () =>
     }),
   )
 
-  fireEvent.click(menu()?.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  fireEvent.click(picker.querySelector('[aria-label="No symbol"]') as HTMLElement)
   // Removed without a trace: a canvas that chose and reverted serializes
   // like one that never chose.
   await vi.waitFor(() =>
@@ -280,6 +278,23 @@ it('lets a person give the document its own mark, and take it back', async () =>
  * inspector, and holding every surface to one control is a scan's job, not
  * this file's.
  */
+/**
+ * Opens the Symbol picker's popover and answers the panel it drew.
+ *
+ * A catalog is hundreds of cells, so the row keeps one line and the picker
+ * opens over it. The popover stays where React put it in the DOM — the top
+ * layer is a rendering concept, not a move — so it is still inside the
+ * settings panel for a query, and only once it is open.
+ */
+async function openSymbolPicker(panel: HTMLElement): Promise<HTMLElement> {
+  fireEvent.click(panel.querySelector('[aria-label="Choose symbol"]') as HTMLElement)
+  return vi.waitFor(() => {
+    const popover = panel.querySelector('[role="dialog"][aria-label="Choose symbol"]')
+    expect(popover?.querySelector('[aria-label="Search symbols"]')).not.toBeNull()
+    return popover as HTMLElement
+  })
+}
+
 it('draws every row through the one selection control', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
@@ -301,6 +316,17 @@ it('draws every row through the one selection control', async () => {
     [...panel.querySelectorAll('[role="radiogroup"]')]
       .map((group) => group.getAttribute('aria-label'))
       .sort()
+  // Closed, Symbol contributes a TRIGGER rather than a row: a catalog is
+  // hundreds of cells and a property row is one line.
+  expect(labels()).toEqual(['Edge routing', 'Line jumps', 'Theme'])
+
+  // Opened, its bands appear — and each is named for what it is. Two bands
+  // both called "Symbol" would tell a screen-reader user nothing about
+  // which of the two they had landed in. The last two arrive with the
+  // catalog's dynamic import, so the set is waited for rather than read
+  // once: read too early it is a SHORTER list, which reads exactly like a
+  // row that went missing.
+  await openSymbolPicker(panel)
   await vi.waitFor(() =>
     expect(labels()).toEqual([
       'Edge routing',
@@ -353,6 +379,10 @@ it('draws every option as a picture, in the layout its row declares', async () =
   const { container } = render(<Host />)
   await openPanel(container)
   const panel = menu() as HTMLElement
+  // Symbol's chips are behind its trigger now, and they are half of what
+  // this case is about — so it opens them rather than quietly checking the
+  // three rows that stayed.
+  await openSymbolPicker(panel)
 
   const options = [...panel.querySelectorAll('[role="radiogroup"] label')]
   // A count, so a selector that stops matching cannot report itself as a
@@ -376,6 +406,8 @@ it('draws every option as a picture, in the layout its row declares', async () =
       `${label}: ${name} repeats its word in a tooltip`,
     ).toBeNull()
   }
+  // The LISTED band, which is the one labelled with the facet's own name;
+  // the catalog's grids beside it are named for the category they show.
   for (const option of [...rowOf('Symbol').querySelectorAll('label')]) {
     const name = option.querySelector('input')?.getAttribute('aria-label') ?? '?'
     // The clipped radio contributes no text, so what is left is what shows.

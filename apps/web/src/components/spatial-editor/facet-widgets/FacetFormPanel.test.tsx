@@ -381,7 +381,9 @@ describe('a registered editor replaces the derived form', () => {
       />,
     )
     // The picker that used to live in the context menu now lives here, so
-    // the facet has one face instead of two.
+    // the facet has one face instead of two — behind a trigger, because a
+    // catalog is hundreds of cells and a property row is one line.
+    fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
     fireEvent.click(screen.getByLabelText('Icon database'))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name: 'database' })
     // And the emoji arm, which no listed option covers any more: the

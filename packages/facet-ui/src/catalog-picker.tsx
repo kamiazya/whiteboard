@@ -1,12 +1,17 @@
 /**
- * The open half of a declared picker: a searchable catalog, and — where the
- * facet says so — any value its own schema accepts.
+ * A searchable catalog of choices: a short list, a search box, category
+ * bands, a scrolling grid, what was picked recently, and free entry.
+ *
+ * Deliberately knows NOTHING about facets. It takes loaded sections, a
+ * selected key and a callback, so the same control serves a facet's
+ * picker (through `FacetCatalogPicker`, which adds the loading and the
+ * write-path validation) and any other surface that has to offer more
+ * choices than fit — the markdown editor's `:` popup being the next one.
  *
  * `visual.symbol` accepted any single grapheme from the day it shipped and
- * offered five emoji, because every choice had to be written into a
+ * offered five emoji, because every choice had to be written into a facet
  * definition that the renderer, the layout worker and the MCP server all
- * load. The restriction was never the schema. So the rows arrive through
- * the catalog's loader instead, and this draws them.
+ * load. The restriction was never the schema.
  *
  * Everything a person can PICK here goes through `FacetOption`, including
  * the band that chooses which section is showing — a category chooser is
@@ -20,13 +25,14 @@
  * custom properties, never utility class names.
  */
 import type {
+  FacetOptionLayout,
   FacetPickerCatalogSection,
-  FacetPickerCatalogSpec,
+  FacetPickerEntrySpec,
   FacetPickerOption,
   FacetRegistry,
 } from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import { type CSSProperties, useEffect, useMemo, useState } from 'react'
+import { type CSSProperties, useMemo, useState } from 'react'
 import { glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
 
@@ -96,8 +102,8 @@ const MATCH_LIMIT = 96
  * What a person picked here, most recent first, for as long as the tab is
  * open.
  *
- * Keyed by facet so two facets with catalogs do not share a history, and
- * held in the module because the picker unmounts every time the inspector
+ * Keyed by the picker's `name` so two vocabularies do not share a history,
+ * and held in the MODULE because the picker unmounts every time its popover
  * closes — state inside it would remember nothing past the first close,
  * which is the one moment recents exist for.
  *
@@ -109,16 +115,16 @@ const MATCH_LIMIT = 96
 const RECENTS = new Map<string, readonly FacetPickerOption[]>()
 const RECENT_LIMIT = 12
 
-function remember(facetKey: string, option: FacetPickerOption): readonly FacetPickerOption[] {
+function remember(name: string, option: FacetPickerOption): readonly FacetPickerOption[] {
   const key = facetPayloadKey(option.payload)
-  const kept = (RECENTS.get(facetKey) ?? []).filter((seen) => facetPayloadKey(seen.payload) !== key)
+  const kept = (RECENTS.get(name) ?? []).filter((seen) => facetPayloadKey(seen.payload) !== key)
   const next = [option, ...kept].slice(0, RECENT_LIMIT)
-  RECENTS.set(facetKey, next)
+  RECENTS.set(name, next)
   return next
 }
 
 /** Test seam: recents outlive a component, so a test has to be able to end them. */
-export function clearFacetCatalogRecents(): void {
+export function clearCatalogRecents(): void {
   RECENTS.clear()
 }
 
@@ -150,53 +156,71 @@ function matches(option: FacetPickerOption, terms: readonly string[], band: stri
   return terms.every((term) => text.includes(term))
 }
 
-export interface FacetCatalogPickerProps {
-  readonly facetKey: string
-  /** The facet's own display name, so each band can say which facet it is in. */
+export interface CatalogPickerProps {
+  /**
+   * Groups every radio in this picker, and keys its recently-used history.
+   * One string for both because they are the same question: two pickers
+   * over the same vocabulary are one choice and one history.
+   */
+  readonly name: string
+  /** What the whole picker is for, so each band can say which one it is in. */
   readonly title: string
-  readonly catalog: FacetPickerCatalogSpec
-  readonly registry: FacetRegistry
-  /** `facetPayloadKey` of what is stored, so a cell knows if it is the current one. */
+  /** Names the search box, and is its placeholder. */
+  readonly searchLabel: string
+  /**
+   * Always visible above the search box: the short, fixed part of the
+   * vocabulary — `visual.symbol`'s absence option and this build's own
+   * icons. Absent for a surface whose whole vocabulary is the catalog.
+   */
+  readonly listed?: readonly FacetPickerOption[]
+  /** How `listed` is drawn; the catalog itself is always a grid. */
+  readonly listedLayout?: FacetOptionLayout
+  readonly sections: readonly FacetPickerCatalogSection[]
+  readonly entry?: FacetPickerEntrySpec
+  /**
+   * Resolves a registered `asset` or `theme` glyph. Optional on purpose: a
+   * catalog whose every picture is a character needs no registry, and
+   * demanding one would tie this control back to the facet system it was
+   * just separated from.
+   */
+  readonly registry?: FacetRegistry
+  /** `facetPayloadKey` of the current value, so a cell knows if it is it. */
   readonly selectedKey: string
-  readonly onPick: (payload: unknown) => void
+  readonly onPick: (option: FacetPickerOption) => void
+  /**
+   * Refuses a free-entry payload, with a message a person can act on.
+   * Absent, anything typed is taken — which is right for a surface with no
+   * schema behind it, and wrong for a facet, which is exactly why the
+   * facet adapter supplies one.
+   */
+  readonly validateEntry?: (
+    payload: unknown,
+  ) =>
+    | { readonly ok: true; readonly value: unknown }
+    | { readonly ok: false; readonly message: string }
+  /** Says the rows are still coming, or did not arrive. */
+  readonly status?: 'loading' | 'failed'
 }
 
-export function FacetCatalogPicker({
-  facetKey,
+export function CatalogPicker({
+  name,
   title,
-  catalog,
+  searchLabel,
+  listed,
+  listedLayout = 'chips',
+  sections,
+  entry,
   registry,
   selectedKey,
   onPick,
-}: FacetCatalogPickerProps) {
-  const [sections, setSections] = useState<readonly FacetPickerCatalogSection[]>([])
-  const [failed, setFailed] = useState(false)
+  validateEntry,
+  status,
+}: CatalogPickerProps) {
   const [active, setActive] = useState(0)
   const [query, setQuery] = useState('')
   const [typed, setTyped] = useState('')
   const [error, setError] = useState<string | undefined>(undefined)
-  const [recent, setRecent] = useState<readonly FacetPickerOption[]>(
-    () => RECENTS.get(facetKey) ?? [],
-  )
-
-  const load = catalog.load
-  useEffect(() => {
-    let live = true
-    load().then(
-      (loaded) => {
-        if (live) setSections(loaded)
-      },
-      () => {
-        // A catalog that will not load leaves the listed options and free
-        // entry working, so the row degrades to what it was rather than to
-        // nothing. Saying so beats an empty band a person waits at.
-        if (live) setFailed(true)
-      },
-    )
-    return () => {
-      live = false
-    }
-  }, [load])
+  const [recent, setRecent] = useState<readonly FacetPickerOption[]>(() => RECENTS.get(name) ?? [])
 
   const terms = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query])
 
@@ -214,21 +238,21 @@ export function FacetCatalogPicker({
 
   const pick = (option: FacetPickerOption) => {
     setError(undefined)
-    setRecent(remember(facetKey, option))
-    onPick(option.payload)
+    setRecent(remember(name, option))
+    onPick(option)
   }
 
-  const entry = catalog.entry
   const submitEntry = () => {
     if (entry === undefined) return
     const text = typed.trim()
     if (text === '') return
     const payload = { ...entry.payload, [entry.field]: text }
-    // The facet's own schema decides, at the same boundary every other
-    // write crosses. That is what makes free entry safe to offer at all:
-    // nothing here knows what `visual.symbol` will accept, and it does not
-    // need to.
-    const result = registry.validateFacetWrite(facetKey, payload)
+    // Whatever the caller says decides. That is what makes free entry safe
+    // to offer at all: nothing here knows what `visual.symbol` will accept,
+    // and it does not need to — so this control cannot hold a laxer rule
+    // than the thing it writes to.
+    const result =
+      validateEntry === undefined ? { ok: true as const, value: payload } : validateEntry(payload)
     if (!result.ok) {
       setError(result.message)
       return
@@ -242,10 +266,26 @@ export function FacetCatalogPicker({
 
   return (
     <div style={STACK}>
+      {listed !== undefined && listed.length > 0 && (
+        <FacetOptionGroup label={title} layout={listedLayout}>
+          {listed.map((option) => (
+            <FacetOption
+              key={option.label}
+              name={name}
+              layout={listedLayout}
+              label={option.label}
+              selected={facetPayloadKey(option.payload) === selectedKey}
+              onSelect={() => pick(option)}
+              {...glyphProp(option, registry)}
+            />
+          ))}
+        </FacetOptionGroup>
+      )}
+
       <input
         type="search"
-        aria-label={catalog.label}
-        placeholder={catalog.label}
+        aria-label={searchLabel}
+        placeholder={searchLabel}
         style={FIELD}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -256,7 +296,7 @@ export function FacetCatalogPicker({
           {/* The one WORD in a picker that is otherwise all pictures, and it
               earns its place: a band of loose symbols above a search box is
               read as more of the row above it. Every other band here is
-              named by what it draws — a category by its own first symbol, a
+              named by what it draws — a category by its own picture, a
               value by being the value — and "recently used" is the one thing
               a picture cannot say about a picture. */}
           <span style={CAPTION}>Recent</span>
@@ -264,7 +304,7 @@ export function FacetCatalogPicker({
             {recent.map((option) => (
               <FacetOption
                 key={facetPayloadKey(option.payload)}
-                name={`facet-catalog-${facetKey}`}
+                name={name}
                 layout="grid"
                 label={option.label}
                 selected={facetPayloadKey(option.payload) === selectedKey}
@@ -276,17 +316,24 @@ export function FacetCatalogPicker({
         </>
       )}
 
-      {failed && <span style={CAPTION}>Could not load {catalog.label.toLowerCase()}.</span>}
+      {status === 'failed' && (
+        <span style={CAPTION}>Could not load {searchLabel.toLowerCase()}.</span>
+      )}
 
       {found === undefined && sections.length > 1 && (
-        <FacetOptionGroup label={`${title} categories`} layout="chips">
+        // A GRID rather than a chip row, and the reason is a measurement:
+        // nine glyph-only chips are 304px of a 302px panel, so the last
+        // category wrapped onto a line of its own. A grid sizes its own
+        // columns, so the band fits whatever a catalog happens to have
+        // instead of fitting the count it had the day it was written.
+        <FacetOptionGroup label={`${title} categories`} layout="grid">
           {sections.map((section, index) => (
             <FacetOption
               key={section.label}
               // A DIFFERENT radio name from the cells below: these choose
-              // what is on screen, not what the facet holds.
-              name={`facet-catalog-section-${facetKey}`}
-              layout="chips"
+              // what is on screen, not what the picker answers with.
+              name={`${name}-section`}
+              layout="grid"
               label={section.label}
               selected={index === active}
               onSelect={() => setActive(index)}
@@ -301,7 +348,7 @@ export function FacetCatalogPicker({
       )}
 
       {/* Not drawn before the rows arrive: an empty band labelled with the
-          facet's own name is a second group called "Symbol" beside the
+          picker's own name is a second group called "Symbol" beside the
           listed one, which tells a screen-reader user nothing about which
           of the two they are in. */}
       {(found !== undefined || sections.length > 0) && (
@@ -317,7 +364,7 @@ export function FacetCatalogPicker({
             {capped.map((option) => (
               <FacetOption
                 key={`${option.label}-${facetPayloadKey(option.payload)}`}
-                name={`facet-catalog-${facetKey}`}
+                name={name}
                 layout="grid"
                 label={option.label}
                 selected={facetPayloadKey(option.payload) === selectedKey}
@@ -377,7 +424,7 @@ export function FacetCatalogPicker({
 /** Spread rather than passed: `glyph` is optional and `undefined` is not a value. */
 function glyphProp(
   source: { readonly glyph?: FacetPickerOption['glyph'] } | undefined,
-  registry: FacetRegistry,
+  registry?: FacetRegistry,
 ): { glyph?: ReturnType<typeof glyphIcon> } {
   const glyph = glyphIcon(source?.glyph, registry)
   return glyph === undefined ? {} : { glyph }

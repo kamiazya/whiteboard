@@ -50,6 +50,24 @@ function openNodeMenu(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="context-menu"]') as HTMLElement
 }
 
+/**
+ * Opens the Symbol picker's popover and answers the panel it drew.
+ *
+ * A catalog is hundreds of cells, so the row keeps one line and the picker
+ * opens over it — which means every case here presses the trigger. Driven
+ * rather than reached around on purpose: this is the path that exercises
+ * the NATIVE Popover API, and jsdom has none of it (`catalog-popover.test.tsx`
+ * runs the fallback).
+ */
+async function openSymbolPicker(panel: HTMLElement): Promise<HTMLElement> {
+  fireEvent.click(panel.querySelector('[aria-label="Choose symbol"]') as HTMLElement)
+  return vi.waitFor(() => {
+    const popover = document.querySelector('[role="dialog"][aria-label="Choose symbol"]')
+    expect(popover?.querySelector('[aria-label="Search symbols"]')).not.toBeNull()
+    return popover as HTMLElement
+  })
+}
+
 /** Opens the node menu, then the inspector behind its one facet entry. */
 function openInspector(container: HTMLElement): HTMLElement {
   const menu = openNodeMenu(container)
@@ -63,12 +81,12 @@ function openInspector(container: HTMLElement): HTMLElement {
   return opened
 }
 
-it('an icon pick stores the facet and draws nothing on the node', () => {
+it('an icon pick stores the facet and draws nothing on the node', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  const panel = openInspector(container)
-  fireEvent.click(panel.querySelector('[aria-label="Icon star"]') as HTMLElement)
+  const picker = await openSymbolPicker(openInspector(container))
+  fireEvent.click(picker.querySelector('[aria-label="Icon star"]') as HTMLElement)
 
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'icon', name: 'star' })
   // A vendored icon would be a <use> of its symbol; the node draws none.
@@ -93,13 +111,13 @@ it('an emoji found by search is stored rather than drawn, and No symbol removes 
       .map((t) => t.textContent)
       .filter((value) => value === '⭐')
 
-  const panel = openInspector(container)
-  const search = panel.querySelector('[aria-label="Search symbols"]') as HTMLInputElement
+  const picker = await openSymbolPicker(openInspector(container))
+  const search = picker.querySelector('[aria-label="Search symbols"]') as HTMLInputElement
   fireEvent.change(search, { target: { value: 'star' } })
   const star = await vi.waitFor(() => {
     // Queried inside the assertion: the catalog mounts a band that was not
-    // there when the panel opened.
-    const el = panel.querySelector('[aria-label="star"]')
+    // there when the popover opened.
+    const el = picker.querySelector('[aria-label="star"]')
     expect(el).not.toBeNull()
     return el as HTMLElement
   })
@@ -109,7 +127,7 @@ it('an emoji found by search is stored rather than drawn, and No symbol removes 
   // Stored, and not painted on the node.
   expect(glyphText()).toHaveLength(0)
 
-  fireEvent.click(panel.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  fireEvent.click(picker.querySelector('[aria-label="No symbol"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toBeUndefined()
   expect(latest.canvas.nodes[0]).not.toHaveProperty('x-whiteboard')
   expect(glyphText()).toHaveLength(0)
@@ -125,17 +143,17 @@ it('a symbol nobody listed is typed in, and the facet refuses what it always ref
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  const panel = openInspector(container)
-  const field = panel.querySelector('[aria-label="Any character or emoji"]') as HTMLInputElement
+  const picker = await openSymbolPicker(openInspector(container))
+  const field = picker.querySelector('[aria-label="Any character or emoji"]') as HTMLInputElement
   const use = () =>
-    [...panel.querySelectorAll('button')].find((button) => button.textContent === 'Use') as
+    [...picker.querySelectorAll('button')].find((button) => button.textContent === 'Use') as
       | HTMLElement
       | undefined
 
   fireEvent.change(field, { target: { value: 'ab' } })
   fireEvent.click(use() as HTMLElement)
   expect(symbolOf(latest.canvas)).toBeUndefined()
-  expect(panel.querySelector('[role="alert"]')?.textContent).toContain('single character')
+  expect(picker.querySelector('[role="alert"]')?.textContent).toContain('single character')
 
   fireEvent.change(field, { target: { value: '🦖' } })
   fireEvent.click(use() as HTMLElement)
@@ -144,7 +162,7 @@ it('a symbol nobody listed is typed in, and the facet refuses what it always ref
   // And it comes back as a recent one, which is what makes free entry
   // usable more than once.
   await vi.waitFor(() => {
-    const recent = panel.querySelector('[aria-label="Symbol recently used"]')
+    const recent = picker.querySelector('[aria-label="Symbol recently used"]')
     expect(recent?.textContent).toContain('🦖')
   })
 })

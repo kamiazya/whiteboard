@@ -163,6 +163,31 @@ Not indexed: unconverted kana. CLDR's terms are kanji and katakana, so `ほし`
 finds nothing while `星` finds 42 — acceptable because an IME user converts
 before the term is a term, and a kana reading index is a different data set.
 
+## `/emoji` — the catalog as a reusable subpath
+
+`@kamiazya/whiteboard-plugin-visual/emoji` exports `emojiSections()` (the
+picker's rows) and `emojiSlug()` (the shortcode vocabulary). It is a subpath
+rather than part of the barrel for the reason the dynamic import exists: the
+tables are 190KB and the default entry is loaded wherever a document is READ.
+
+`emojiSlug` turns a CLDR short name into what a person types between colons —
+`grinning face` -> `grinning_face` (user decision, 2026-09-11: CLDR-derived,
+not GitHub's `:+1:` set, which would be a second vendored table with its own
+coverage story). DERIVED rather than stored: a slug is a pure function of a
+name the table already carries, so a fourth column would be 28KB and a second
+place for the same fact to be written differently.
+
+Its symbol map (`#` -> `hash`, `*` -> `asterisk`) is what keeps slugs unique,
+and it came from measuring rather than reading: stripping punctuation
+outright collides `keycap: #` with `keycap: *`, both landing on `keycap`. A
+shortcode naming two emoji is the one defect this vocabulary must not have,
+so `catalog.test.ts` asserts every one of the 1914 is distinct — over the
+whole table, so a future Unicode release that introduces a collision fails
+the suite rather than shipping an ambiguous `:name:`.
+
+The slug is also a search KEYWORD, because the search splits on whitespace:
+`thumbs_up` finds nothing against a label reading `thumbs up`.
+
 ## Vendored icons
 
 `src/icons/` carries lucide geometry with its LICENSE and provenance README,

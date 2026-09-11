@@ -283,6 +283,16 @@ would otherwise do nothing visible: a template already filling its own
 field has two sources for one key, and a template the schema ALREADY
 accepts writes the moment it is drawn, before anybody has typed.
 
+The control that renders it is deliberately NOT a facet component.
+`facet-ui`'s `CatalogPicker` takes loaded sections, a selected key and a
+callback and knows nothing about facets; `FacetCatalogPicker` is the thin
+adapter that loads what a definition declares and routes free entry through
+`validateFacetWrite`. That split is the ladder's own principle applied one
+level up: the vocabulary a plugin DECLARES is the facet system's, and the
+control that draws it is a library any surface may use — the markdown
+editor's `:name:` popup being the next one, over the same catalog rather
+than a second copy of it.
+
 ## This increment
 
 This ADR lands together with decision 2's mechanical half only: the key

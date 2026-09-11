@@ -17,6 +17,7 @@ import { bundledFacetRegistry, visualPlugin, visualSymbolFacetSchema } from '../
 import { EMOJI_VERSION } from './catalog-data.js'
 import { EMOJI_JA, EMOJI_JA_TAG } from './catalog-ja.js'
 import { emojiSections } from './sections.js'
+import { emojiSlug } from './slug.js'
 
 const sections = emojiSections()
 const options = sections.flatMap((section) => section.options)
@@ -130,7 +131,7 @@ describe('the generated emoji catalog', () => {
    */
   it('indexes every row in Japanese, and indexes nothing this build does not have', () => {
     const unindexed = options
-      .filter((option) => (option.keywords ?? []).length < 2)
+      .filter((option) => (option.keywords ?? []).length < 3)
       .map((option) => option.label)
     expect(unindexed).toEqual([])
     const chars = new Set(
@@ -152,10 +153,48 @@ describe('the generated emoji catalog', () => {
   it('carries the words a person actually types, not only the display name', () => {
     const termsFor = (char: string) =>
       options.find((option) => option.glyph?.kind === 'char' && option.glyph.value === char)
-        ?.keywords?.[1] ?? ''
+        ?.keywords?.[2] ?? ''
     expect(termsFor('⭐')).toContain('星')
     expect(termsFor('👍')).toContain('いいね')
     expect(termsFor('🚀')).toContain('ロケット')
+  })
+
+  /**
+   * The shortcode vocabulary, which `:name:` will be written against.
+   *
+   * UNIQUENESS is the assertion that matters, over the whole table rather
+   * than a sample: a slug naming two emoji is the one defect this
+   * vocabulary must not have, and it is not hypothetical — stripping
+   * punctuation outright collides `keycap: #` with `keycap: *`. A future
+   * Unicode release that introduces a collision fails here instead of
+   * shipping an ambiguous shortcode.
+   */
+  it('derives one shortcode per row, and no shortcode for two rows', () => {
+    const slugs = options.map((option) => emojiSlug(option.label))
+    expect(slugs.filter((slug) => slug === '')).toEqual([])
+    const duplicated = slugs.filter((slug, at) => slugs.indexOf(slug) !== at)
+    expect(duplicated).toEqual([])
+    expect(slugs.length).toBe(new Set(slugs).size)
+  })
+
+  it('spells a shortcode the way a person would type it', () => {
+    expect(emojiSlug('grinning face')).toBe('grinning_face')
+    expect(emojiSlug('thumbs up')).toBe('thumbs_up')
+    expect(emojiSlug('flag: Japan')).toBe('flag_japan')
+    // An apostrophe JOINS rather than splits, and both spellings of one
+    // appear in the published data.
+    expect(emojiSlug('man\u2019s shoe')).toBe('mans_shoe')
+    // The two characters that carry meaning are spelled out, which is what
+    // keeps the two keycaps apart.
+    expect(emojiSlug('keycap: #')).toBe('keycap_hash')
+    expect(emojiSlug('keycap: *')).toBe('keycap_asterisk')
+  })
+
+  it('makes the shortcode findable, since a search splits on whitespace', () => {
+    const thumbsUp = options.find(
+      (option) => option.glyph?.kind === 'char' && option.glyph.value === '\u{1F44D}',
+    )
+    expect(thumbsUp?.keywords?.[0]).toBe('thumbs_up')
   })
 
   it('reaches the picker through the loader the definition declares', async () => {

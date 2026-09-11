@@ -60,12 +60,13 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // survives only for a facet with free entry — covered in the jsdom suite,
   // where a fixture facet can have one.
   expect(panel.querySelector('button[aria-label^="Save"]')).toBeNull()
-  // The picker that used to be a context-menu band is here instead — and
-  // it is OPEN: the listed icons, a search over every emoji Unicode
-  // publishes, and a field for one it does not.
-  expect(panel.querySelector('[aria-label="Icon database"]')).not.toBeNull()
-  expect(panel.querySelector('[aria-label="Search symbols"]')).not.toBeNull()
-  expect(panel.querySelector('[aria-label="Any character or emoji"]')).not.toBeNull()
+  // The picker that used to be a context-menu band is here instead, as a
+  // TRIGGER: a catalog is hundreds of cells and a property row is one line,
+  // so the row shows what is chosen and the choosing happens over the top.
+  expect(panel.querySelector('[aria-label="Choose symbol"]')).not.toBeNull()
+  // Nothing of it is mounted until then — which is what keeps the
+  // catalog's chunk unfetched for a panel nobody opened.
+  expect(panel.querySelector('[aria-label="Search symbols"]')).toBeNull()
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',

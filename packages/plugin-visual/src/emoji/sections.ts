@@ -12,6 +12,7 @@
 import type { FacetPickerCatalogSection } from '@kamiazya/whiteboard-facet-engine'
 import { EMOJI_GROUPS } from './catalog-data.js'
 import { EMOJI_JA } from './catalog-ja.js'
+import { emojiSlug } from './slug.js'
 
 /**
  * Unicode's group name -> what this build knows about that band: the
@@ -71,18 +72,24 @@ export function emojiSections(): readonly FacetPickerCatalogSection[] {
       options: rows.split('\n').map((row) => {
         const [char, name, subgroup] = row.split('\t')
         const ja = japanese.get(char as string)
+        const slug = emojiSlug(name as string)
         return {
           payload: { kind: 'emoji', char },
           // The CLDR short name, which is what a person reading a tooltip
           // wants and what the search matches first.
           label: name as string,
-          // Unicode's own subgroup, then CLDR's Japanese name and keywords.
+          // Its SHORTCODE, Unicode's own subgroup, then CLDR's Japanese
+          // name and keywords.
+          //
+          // The slug is in here because it is what a person will type once
+          // `:name:` exists, and because the search splits on whitespace —
+          // `thumbs_up` finds nothing against a label reading `thumbs up`.
           // The LABEL stays English because the UI around it is, and
           // translating what is shown while leaving everything else would
           // be a half-localised panel; what is searched is a different
           // question, and a person typing 星 is looking for something this
           // build has.
-          keywords: ja === undefined ? [subgroup as string] : [subgroup as string, ja],
+          keywords: ja === undefined ? [slug, subgroup as string] : [slug, subgroup as string, ja],
           glyph: { kind: 'char', value: char as string },
         } as const
       }),

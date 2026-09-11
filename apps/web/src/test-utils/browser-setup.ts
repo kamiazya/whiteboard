@@ -15,7 +15,7 @@
  * the per-file decision entirely.
  */
 
-import { clearFacetCatalogRecents } from '@kamiazya/whiteboard-facet-ui'
+import { clearCatalogRecents } from '@kamiazya/whiteboard-facet-ui'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { configure } from '@testing-library/react'
 import { afterEach } from 'vitest'
@@ -149,4 +149,4 @@ afterEach(() => {
 // where it shows up as an extra radiogroup nobody put there. Cleared here
 // for the reason storage and fake timers are: what a test changes globally,
 // the setup restores.
-afterEach(clearFacetCatalogRecents)
+afterEach(clearCatalogRecents)

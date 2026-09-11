@@ -12,10 +12,17 @@
  * properties, never utility class names — a class named inside a workspace
  * package is never generated and fails silently.
  */
-import type { FacetForm, FacetFormField, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type {
+  FacetForm,
+  FacetFormField,
+  FacetPickerCatalogSpec,
+  FacetPickerOption,
+  FacetRegistry,
+} from '@kamiazya/whiteboard-facet-engine'
 import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
-import { type CSSProperties, useState } from 'react'
-import { FacetCatalogPicker } from './catalog-picker.js'
+import { type CSSProperties, type ReactNode, useState } from 'react'
+import { CatalogPopover } from './catalog-popover.js'
+import { FacetCatalogPicker } from './facet-catalog-picker.js'
 import { glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
 
@@ -62,6 +69,15 @@ const BUTTON: CSSProperties = {
   cursor: 'pointer',
 }
 const GHOST: CSSProperties = { ...BUTTON, border: '1px solid transparent', color: MUTED }
+/** A trigger's picture has a chevron beside it, so it gets a box of its own. */
+const TRIGGER_GLYPH: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  width: '1rem',
+  height: '1rem',
+  flex: 'none',
+}
 
 type Draft = Record<string, unknown>
 
@@ -265,18 +281,49 @@ export function DerivedFacetForm({
     // has no reason to match this declaration's. Compared raw, such a value
     // matches no option and the picker draws with nothing selected.
     const current = facetPayloadKey(stored)
+
+    /**
+     * A CATALOG opens in a popover, and the row keeps one line.
+     *
+     * Inline, `visual.symbol`'s grid was taller than every other facet in
+     * the panel put together and pushed the rows under it off screen. So
+     * the row shows what is CHOSEN and the choosing happens over the top —
+     * which is also what lets the catalog's chunk stay unfetched until
+     * somebody opens it.
+     */
+    if (form.catalog !== undefined) {
+      const catalog = form.catalog
+      return (
+        <div style={ROW}>
+          <span style={{ color: MUTED }}>{title}</span>
+          <CatalogPopover
+            label={`Choose ${title.toLowerCase()}`}
+            current={triggerFace(form.options, catalog, stored, current, registry)}
+          >
+            <FacetCatalogPicker
+              facetKey={facetKey}
+              title={title}
+              catalog={catalog}
+              registry={registry}
+              listed={form.options}
+              listedLayout={form.layout}
+              selectedKey={current}
+              // Straight through the same door every other control here
+              // takes: `null` clears, anything else is validated before it
+              // is stored.
+              onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
+            />
+          </CatalogPopover>
+        </div>
+      )
+    }
+
     // The same shape a field of the same layout takes, so a panel holding
     // both does not lay out two rows two ways: a CHIP row is name-left /
     // options-right, and a CARD row is a full-width grid under its name,
     // because cells that share a line with a label are no longer cells.
-    //
-    // A CATALOG stacks for the same reason a card grid does, whatever the
-    // listed options' own layout is: a search field and a scrolling grid
-    // are the width of the panel, and the listed chips are the top of that
-    // block rather than a row beside a name.
-    const stacked = form.layout === 'cards' || form.catalog !== undefined
     return (
-      <div style={stacked ? STACKED_ROW : ROW}>
+      <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
         <span style={{ color: MUTED }}>{title}</span>
         <FacetOptionGroup label={title} layout={form.layout}>
           {form.options.map((option) => {
@@ -300,21 +347,6 @@ export function DerivedFacetForm({
             )
           })}
         </FacetOptionGroup>
-        {form.catalog !== undefined && (
-          <FacetCatalogPicker
-            facetKey={facetKey}
-            title={title}
-            catalog={form.catalog}
-            registry={registry}
-            selectedKey={current}
-            // Straight through the same door the listed options take. The
-            // catalog's own rows were never parsed at definition time (a
-            // loader is not loaded then), so this write is the only net
-            // under them — and it is the same one every other write
-            // crosses.
-            onPick={(payload) => onWrite(facetKey, payload === null ? undefined : payload)}
-          />
-        )}
       </div>
     )
   }
@@ -445,4 +477,37 @@ export function DerivedFacetForm({
       </span>
     </div>
   )
+}
+
+/**
+ * What the popover's trigger draws for the value that is stored.
+ *
+ * Three answers, in order, and the middle one is the interesting one: a
+ * catalog's rows are not loaded until the popover opens, so a stored emoji
+ * cannot be looked up to find its picture. It does not need to be. Free
+ * entry already DECLARES which field holds the value a person typed, so
+ * that field of the stored payload is the value itself — `⭐` for
+ * `{kind:'emoji', char:'⭐'}` — and drawing it needs no catalog at all.
+ */
+function triggerFace(
+  listed: readonly FacetPickerOption[],
+  catalog: FacetPickerCatalogSpec,
+  stored: unknown,
+  currentKey: string,
+  registry: FacetRegistry,
+): ReactNode {
+  const match = listed.find((option) => facetPayloadKey(option.payload) === currentKey)
+  if (match !== undefined) {
+    const glyph = glyphIcon(match.glyph, registry)
+    return glyph === undefined ? match.label : <span style={TRIGGER_GLYPH}>{glyph}</span>
+  }
+  const field = catalog.entry?.field
+  if (field !== undefined && typeof stored === 'object' && stored !== null) {
+    const value = (stored as Record<string, unknown>)[field]
+    if (typeof value === 'string' && value !== '') return value
+  }
+  // Nothing stored, or a payload no option and no template accounts for.
+  // A word rather than a guessed picture: a wrong picture reads as a value
+  // this facet holds, and it does not hold one.
+  return <span style={{ color: MUTED, fontSize: '0.75rem' }}>Choose</span>
 }
