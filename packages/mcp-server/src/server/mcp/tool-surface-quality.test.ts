@@ -211,9 +211,20 @@ describe('what the tool table costs to read', () => {
       // conversations never touch. A library is meant to grow; a cost that
       // grows with it is the wrong shape, so discovery moved to a runtime
       // answer that costs nothing until asked.
+      //
+      // 13502 -> 13618 making a node DRAFT strict, which is the same 29
+      // bytes per object the stray-key row above charges, times the four
+      // node types the draft union carries. Bought a refusal where there
+      // was SILENCE: `stencil` written inside `node` — the likelier guess,
+      // since every other property of the box goes there — was stripped and
+      // the box drawn undressed with nothing said, while the identical
+      // mistake inside `patch` was already refused by name. Measured in a
+      // lane trial that then spent seventeen calls recovering by hand.
+      // -6 dropping `badge` from the stencil field's description: the
+      // bundled set writes one, and a board draws none.
       wb_canvas_edit: {
-        visibleBytes: 13502,
-        wireBytes: 37292,
+        visibleBytes: 13612,
+        wireBytes: 37402,
         descriptionWords: 169,
         parameters: 153,
         undescribed: 123,
@@ -426,8 +437,12 @@ describe('what the tool table costs to read', () => {
       // +516 for `stencil` on node.add and node.patch plus the registered
       // assets on wb_facet_list — the two halves of one decision, since the
       // field is a plain string precisely because the list lives there.
-      visibleBytes: 36669,
-      wireBytes: 111600,
+      // +116 for a strict node draft on node.add (see wb_canvas_edit): four
+      // node types x the 29 bytes a strict object costs, for a stray key
+      // refused instead of silently dropped, less 6 for a `badge` the
+      // stencil field's description no longer promises (see wb_canvas_edit).
+      visibleBytes: 36779,
+      wireBytes: 111710,
       parameters: 276,
       undescribed: 191,
     })

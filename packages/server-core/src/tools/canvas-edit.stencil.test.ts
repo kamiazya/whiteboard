@@ -135,6 +135,35 @@ describe('dressing a box with a stencil', () => {
     ).rejects.toThrow(/`stencil` goes beside `op`/)
   })
 
+  test('tells a caller who put stencil inside node.add\u2019s node where it belongs', async () => {
+    // The sibling of the case above, and the one that was SILENT. `patch` is
+    // `.strict()` so a stray key is refused there; a node DRAFT strips, so
+    // `stencil` inside `node` was accepted, dropped, and the box drawn
+    // undressed with nothing said. Measured in the lane that took this
+    // increment's reading: a trial put it there, got no error, noticed from
+    // the render that nothing was dressed, and spent seventeen further calls
+    // rebuilding the vocabulary by hand — ending one channel apart instead
+    // of two. Inside `node` is also the likelier guess, because every other
+    // property of the box goes there.
+    await expect(
+      run([
+        {
+          op: 'node.add',
+          node: {
+            id: 'a',
+            type: 'text',
+            x: 0,
+            y: 0,
+            width: 200,
+            height: 80,
+            text: 'A',
+            stencil: 'visual.service',
+          },
+        },
+      ]),
+    ).rejects.toThrow(/`stencil` goes beside `op`/)
+  })
+
   test('node.add applies the appearance and records the kind in one field', async () => {
     const { result, canvas } = await run([
       {
