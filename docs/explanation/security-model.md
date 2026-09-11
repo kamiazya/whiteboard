@@ -82,9 +82,11 @@ What the UI does about it:
 - Approving a grant is always an explicit click on the responding daemon's
   own consent page, which shows the requesting origin.
 - The trusted-direction bootstraps — the `wb_pairing_link_create` MCP tool, or
-  opening the hosted app from the daemon itself — carry the base URL and
-  credential from the real daemon, so they avoid this exposure entirely.
-  Prefer them when available.
+  opening the hosted app from the daemon itself — carry the base URL from the
+  real daemon rather than from a port sweep, so the browser is pointed at the
+  right responder instead of guessing. They carry no credential: the link
+  still resolves through a pairing grant, and the identity pin above is what
+  proves the responder. Prefer them when available.
 
 Scope: this is about a local process that can bind a port but is not the
 daemon. A full-privilege local attacker is outside this threat model (the

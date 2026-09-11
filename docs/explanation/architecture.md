@@ -32,7 +32,8 @@ This project is split into three main runtime layers:
     existing nodes), deployable standalone or served same-origin by the
     daemon
   - Connects to a daemon over WebSocket (same-origin when daemon-served, or
-    paired via a `#wb=` bootstrap link when hosted separately)
+    paired via a credential-free `#wb=` link plus a pairing grant when hosted
+    separately)
   - Applies remote updates and emits local edits
 - **storage**
   - Lives under `~/.whiteboard/{workspaceId}/`

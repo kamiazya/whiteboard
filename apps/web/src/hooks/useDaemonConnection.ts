@@ -11,7 +11,6 @@ export type DaemonConnectionResult =
 
 type WindowLike = {
   location: { hash: string }
-  __WHITEBOARD_DAEMON_TOKEN__?: unknown
 }
 
 function getWindow(): WindowLike | undefined {
@@ -65,12 +64,10 @@ function computeDaemonConnection(): DaemonConnectionResult {
 
   // result.status === 'ok'
   const { payload } = result
-  // Seed the token BEFORE this function returns 'paired' and before the
-  // fragment is stripped from history, so no code path can observe a
-  // 'paired' result while readDaemonTokenOnce() would still return null.
-  if (payload.authMode === 'bootstrap' && win !== undefined) {
-    win.__WHITEBOARD_DAEMON_TOKEN__ = payload.bootstrapToken
-  }
+  // No token to seed: a pairing link names a daemon and what to open, and
+  // nothing else. 'paired' here means "a link asked for this daemon", not
+  // "this page can talk to it" — App turns it into a real connection via
+  // the pairing-grant flow (silent renewal, else the /pair consent page).
   consumeDaemonConnectionFragment()
   return { status: 'paired', payload }
 }

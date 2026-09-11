@@ -102,7 +102,6 @@ export function createApp(options: AppOptions) {
     options.authMode === 'local-daemon' && options.daemonBaseUrl !== undefined
       ? {
           daemonBaseUrl: options.daemonBaseUrl,
-          bootstrapToken: options.token,
           // The raw provider (not a resolved snapshot) so the tool's
           // allowlist check re-reads the SAME live set CORS/mcp-origin/WS
           // consult on every call — options.allowedWebOrigins is itself a
