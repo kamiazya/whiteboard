@@ -44,8 +44,16 @@ describe('the projection ledger covers the model, and only the model', () => {
 })
 
 describe('the ledger agrees with what strict JSON Canvas actually drops', () => {
-  it('loses exactly the positions the ledger calls extension', () => {
-    const canvas = fullyPopulatedCanvas()
+  const canvas = fullyPopulatedCanvas()
+
+  it('has a fixture that occupies every position the model can hold', () => {
+    // The comparison below is only as strong as this. A fixture that stopped
+    // covering a position would leave that position out of BOTH sides and the
+    // equality would still hold — a guard quietly weakened rather than broken.
+    expect(valueLeafPaths(canvas)).toEqual(modelPaths)
+  })
+
+  it('loses exactly the positions the ledger does not call native — no more, no less', () => {
     const before = valueLeafPaths(canvas)
     const strict = parseSpatial(serializeSpatial(canvas, 'strict'))
     expect(strict.ok).toBe(true)
@@ -54,13 +62,15 @@ describe('the ledger agrees with what strict JSON Canvas actually drops', () => 
 
     const lost = before.filter((path) => !after.includes(path)).sort()
     const declared = jsonCanvasLoss()
-      .filter((entry) => lost.some((path) => path === entry.path))
       .map((entry) => entry.path)
       .sort()
 
-    // Every position the strict projection really lost is one the ledger
-    // declares lost. A `native` entry that vanishes is the failure this
-    // catches — the declaration would be a claim nothing checked.
+    // Equality, in both directions, and the second one is the one that was
+    // missing: filtering the ledger down to what was already lost made the
+    // declared set a subset by construction, so UNDER-declaring failed and
+    // OVER-declaring — telling a user a field disappears in strict mode when
+    // it never does — passed all three guards. Measured: marking
+    // `nodes[].color` as extension left every test green.
     expect(lost).toEqual(declared)
     expect(lost.length).toBeGreaterThan(0)
   })

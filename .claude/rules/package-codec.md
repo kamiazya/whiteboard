@@ -107,8 +107,28 @@ rather than in a string, so joining its runs yields `tightenthis`.
   (a missing entry, a stale one); a comparison against what `strictDegrade` REALLY drops, so a
   declaration is never merely a claim; and `toJsonCanvas` building its result field by field
   rather than by spread, so a field nobody projected fails the round-trip property instead of
-  riding along. Mutation-checked: dropping `subpath` from the projection fails 3 tests, and
-  calling one `extension` entry `native` fails the behaviour comparison.
+  riding along.
+- **Two things about those guards were learned by being wrong about them**, and both are the
+  same mistake in different clothes — a guard that runs in one direction reads exactly like one
+  that runs in both.
+  - The behaviour comparison first filtered the ledger down to what was ALREADY lost, making
+    the declared set a subset by construction. Under-declaring failed; **over-declaring passed
+    all three guards** — marking `nodes[].color` (which strict mode never touches) as
+    `extension` left every test green, which is a loss table that lies to a user about what an
+    export costs. It asserts equality in both directions now, and the fixture's own coverage of
+    every model position is asserted separately, since a fixture that stopped covering one
+    would weaken the equality silently.
+  - "Field by field" was true of the canvas's top-level fields and false of a node's or an
+    edge's extension object, which was spread through whole — so the stated mechanism covered
+    almost none of the fields it was written for. The decomposition reaches into every site
+    now. It stops at a facet PAYLOAD deliberately: its contents belong to a plugin.
+  Mutation-checked, all four: dropping `subpath` or `versionRef` from the projection fails the
+  round-trip property; calling an `extension` entry `native`, or a `native` entry `extension`,
+  fails the behaviour comparison.
+- `serializeSpatial`'s `extended` mode now emits the projection's canonical key order rather
+  than whatever order the caller's object carried. Nothing pins key order, and the artifact it
+  changes is the JSON embedded in an exported PNG's `iTXt` chunk — stated here because it is a
+  real change to a persisted artifact that no test would have reported.
 - **`jsonCanvasDocumentSchema` is an ALIAS of the model's schema today, and that is the debt,
   not a claim.** ADR-0033 slices the model away from the format one dimension at a time; a
   second hand-written copy of a schema meant to be identical would drift in comments and buy

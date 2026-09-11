@@ -1,4 +1,9 @@
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasEdge,
+  SpatialCanvas,
+  SpatialNode,
+  XWhiteboard,
+} from '@kamiazya/whiteboard-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 
 /**
@@ -121,6 +126,14 @@ export function jsonCanvasLoss(): readonly LossEntry[] {
  * a declaration can be compared against what a projection really did. A
  * facets bucket collapses to one `/*` entry for the reason the schema census
  * does not descend it.
+ *
+ * The collapse is by NAME here and structural in the census (an object schema
+ * with no properties). They agree today because `facets` names an open record
+ * at all three sites and nowhere else, and the collapse fires at the FIRST
+ * `facets` key, so a plugin payload that happens to hold one of its own is
+ * never reached. A field later named `facets` that is not an open record would
+ * make the two notations disagree — which fails the comparison above loudly
+ * rather than hiding a loss, so this is a maintenance cost and not a hole.
  */
 export function valueLeafPaths(value: unknown): readonly string[] {
   const out: string[] = []
@@ -156,6 +169,16 @@ function walkValue(value: unknown, path: string, out: string[]): void {
  * instead of riding along unnoticed. That is the same guard the ledger gives,
  * arrived at from the other side — one checks the declaration, the other
  * checks the code.
+ *
+ * The decomposition reaches INTO the extension object at every site, not only
+ * the top level. It did not at first, and the comment above was then true of
+ * top-level fields and false of the embed and facet buckets — which is most of
+ * what the extension side actually holds, so the stated mechanism covered
+ * almost none of the fields it was written for.
+ *
+ * Where it stops is a facet PAYLOAD, deliberately: its contents belong to a
+ * plugin, the format can only say the bucket is there, and the ledger says
+ * exactly that.
  */
 export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
   const extension = canvas['x-whiteboard']
@@ -190,7 +213,9 @@ function projectNode(node: SpatialNode): SpatialNode {
     width: node.width,
     height: node.height,
     ...(node.color !== undefined && { color: node.color }),
-    ...(node['x-whiteboard'] !== undefined && { 'x-whiteboard': node['x-whiteboard'] }),
+    ...(node['x-whiteboard'] !== undefined && {
+      'x-whiteboard': projectNodeExtension(node['x-whiteboard']),
+    }),
   }
   switch (node.type) {
     case 'text':
@@ -226,6 +251,27 @@ function projectEdge(edge: CanvasEdge): CanvasEdge {
     ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
-    ...(edge['x-whiteboard'] !== undefined && { 'x-whiteboard': edge['x-whiteboard'] }),
+    ...(edge['x-whiteboard'] !== undefined && {
+      // An edge's extension is the facets-only arm and nothing else: an edge
+      // has no content JSON Canvas cannot express.
+      'x-whiteboard': {
+        ...(edge['x-whiteboard'].facets !== undefined && {
+          facets: edge['x-whiteboard'].facets,
+        }),
+      },
+    }),
   }
+}
+
+/** The two arms of a node's extension: an embedded document, or facets alone. */
+function projectNodeExtension(extension: XWhiteboard): XWhiteboard {
+  if ('kind' in extension) {
+    return {
+      kind: extension.kind,
+      documentId: extension.documentId,
+      ...(extension.versionRef !== undefined && { versionRef: extension.versionRef }),
+      ...(extension.facets !== undefined && { facets: extension.facets }),
+    }
+  }
+  return { ...(extension.facets !== undefined && { facets: extension.facets }) }
 }
