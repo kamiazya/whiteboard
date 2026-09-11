@@ -24,7 +24,13 @@ it('a carried edge re-sides mid-drag to match the drop result', async () => {
       { id: 't', type: 'text', x: 60, y: 20, width: 160, height: 60, text: 'T' },
       { id: 'd', type: 'text', x: 80, y: 480, width: 160, height: 90, text: 'D' },
     ],
-    edges: [{ id: 'e1', fromNode: 't', toNode: 'd' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 't' },
+        to: { kind: 'node' as const, node: 'd' },
+      },
+    ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   const latest = { canvas: initial }
@@ -82,7 +88,13 @@ it('bystander edges stay frozen while an unrelated node is dragged', async () =>
       { id: 'b', type: 'text', x: 260, y: 520, width: 120, height: 60, text: 'B' },
       { id: 'd', type: 'text', x: 620, y: 240, width: 160, height: 120, text: 'D' },
     ],
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
   function Host() {
@@ -134,8 +146,16 @@ it('a bystander edge holds its exact anchor when the carried edge joins its side
       { id: 'm', type: 'text', x: 340, y: 380, width: 100, height: 100, text: 'M' },
     ],
     edges: [
-      { id: 'f', fromNode: 'n', toNode: 't' },
-      { id: 'c', fromNode: 'm', toNode: 't' },
+      {
+        id: 'f',
+        from: { kind: 'node' as const, node: 'n' },
+        to: { kind: 'node' as const, node: 't' },
+      },
+      {
+        id: 'c',
+        from: { kind: 'node' as const, node: 'm' },
+        to: { kind: 'node' as const, node: 't' },
+      },
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }

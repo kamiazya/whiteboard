@@ -1,4 +1,5 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { sceneBounds } from '../scene-bounds.js'
 import {
@@ -191,11 +192,11 @@ const centre = (r: Rect): Point => ({ x: r.x + r.w / 2, y: r.y + r.h / 2 })
 function headings(canvas: SpatialCanvas, byId: ReadonlyMap<string, SpatialNode>): Point[] {
   const out: Point[] = []
   for (const edge of canvas.edges) {
-    const from = byId.get(edge.fromNode)
-    const to = byId.get(edge.toNode)
+    const from = nodeAtEnd(edge.from, byId)
+    const to = nodeAtEnd(edge.to, byId)
     if (from === undefined || to === undefined) continue
-    const headArrow = edge.toEnd !== 'none'
-    const tailArrow = edge.fromEnd === 'arrow'
+    const headArrow = edge.to.end !== 'none'
+    const tailArrow = edge.from.end === 'arrow'
     if (headArrow === tailArrow) continue
     const tail = centre(rectOf(headArrow ? from : to))
     const head = centre(rectOf(headArrow ? to : from))
@@ -357,8 +358,8 @@ export function scoreDrawing(canvas: SpatialCanvas, scene: Scene): DrawingScore 
   // endpoint is charged as a straddle and not again here.
   let edgeThroughFrame = 0
   for (const { edge, path } of edges) {
-    const from = byId.get(edge.fromNode)
-    const to = byId.get(edge.toNode)
+    const from = nodeAtEnd(edge.from, byId)
+    const to = nodeAtEnd(edge.to, byId)
     for (const g of groups) {
       const frame = rectOf(g)
       const touches = (n: SpatialNode | undefined) =>

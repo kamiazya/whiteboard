@@ -21,8 +21,16 @@ const initial: SpatialCanvas = {
     { id: 'c', type: 'text', x: 60, y: 420, width: 120, height: 60, text: 'C' },
   ],
   edges: [
-    { id: 'ab', fromNode: 'a', toNode: 'b' },
-    { id: 'cb', fromNode: 'c', toNode: 'b' },
+    {
+      id: 'ab',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+    {
+      id: 'cb',
+      from: { kind: 'node' as const, node: 'c' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
   ],
 }
 

@@ -8,6 +8,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
 import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endpointIn } from '@kamiazya/whiteboard-model'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,
@@ -318,7 +319,9 @@ export function nodeMenuItems({
         nodeTargets.length > 1
           ? canvas.edges.filter(
               (edge) =>
-                !isEdgeLocked(edge.id) && members.has(edge.fromNode) && members.has(edge.toNode),
+                !isEdgeLocked(edge.id) &&
+                endpointIn(edge.from, members) &&
+                endpointIn(edge.to, members),
             )
           : []
       applyResult({

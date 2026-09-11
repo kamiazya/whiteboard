@@ -1121,6 +1121,15 @@ that ignored a field of the edge would drop authored geometry the record
 still holds, so the renderer owns it; `package-plugin-visual.md` carries the
 reasoning and the reachability gap it leaves.
 
+**An edge with a FREE end is not routed, and that is deliberate for now.**
+`nodeAtEnd` (model's) answers `undefined` for a point end exactly as it does
+for a dangling reference, so every caller in the edge cluster treats the two
+alike and the edge degrades to a zero-length path rather than drawing a line
+to the origin. Drawing one — the router taking a box-less end — is
+[ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 3b's
+job. Until then the model can STORE an end this renderer will not draw, which
+is the honest state and is pinned by example rather than left to be found.
+
 **An edge's ALGORITHM is still contributable, not only the geometry it draws
 with**, and the seam kept its shape when its first customer left. A
 contribution registers `routers` by bare name and answers `readRouting` for

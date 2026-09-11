@@ -36,8 +36,16 @@ describe('assignEdgeAnchors', () => {
   it('spreads two ends sharing a side at 1/3 and 2/3, ordered by the far endpoint', () => {
     const nodes = [node('c', 0, 0), node('a', 300, -100), node('b', 300, 100)]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'c', toSide: 'right' },
-      { id: 'e2', fromNode: 'b', toNode: 'c', toSide: 'right' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'c', side: 'right' as const },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'b' },
+        to: { kind: 'node' as const, node: 'c', side: 'right' as const },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     // Both edges arrive at c's right side (authored); a sits above b, so e1
@@ -53,7 +61,13 @@ describe('assignEdgeAnchors', () => {
 
   it('a single end on a side stays at the side midpoint', () => {
     const nodes = [node('a', 0, 0), node('b', 300, 0)]
-    const anchors = assignEdgeAnchors(nodes, [{ id: 'e1', fromNode: 'a', toNode: 'b' }])
+    const anchors = assignEdgeAnchors(nodes, [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
     expect(anchors.get('e1')?.from).toEqual({ x: 100, y: 50 })
     expect(anchors.get('e1')?.to).toEqual({ x: 300, y: 50 })
   })
@@ -61,8 +75,16 @@ describe('assignEdgeAnchors', () => {
   it('separates a bidirectional pair into parallel non-overlapping routes', () => {
     const nodes = [node('a', 0, 0), node('b', 300, 0)]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'b', toNode: 'a' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'b' },
+        to: { kind: 'node' as const, node: 'a' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const p1 = routeEdge(nodes, edges[0]!, 'straight', anchors.get('e1')).path
@@ -77,8 +99,16 @@ describe('assignEdgeAnchors', () => {
   it('honours an explicit authored side and fans along it', () => {
     const nodes = [node('c', 0, 0), node('a', 300, -100), node('b', 300, 100)]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'c', toSide: 'top' },
-      { id: 'e2', fromNode: 'b', toNode: 'c', toSide: 'top' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'c', side: 'top' as const },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'b' },
+        to: { kind: 'node' as const, node: 'c', side: 'top' as const },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     // Both on c's top edge (y = 0), spread along x; both far ends share
@@ -92,8 +122,16 @@ describe('assignEdgeAnchors', () => {
   it('skips edges with a missing endpoint without disturbing the rest', () => {
     const nodes = [node('a', 0, 0), node('b', 300, 0)]
     const edges: CanvasEdge[] = [
-      { id: 'ghost', fromNode: 'a', toNode: 'nope' },
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
+      {
+        id: 'ghost',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'nope' },
+      },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     expect(anchors.get('ghost')).toBeUndefined()
@@ -106,8 +144,16 @@ describe('anchor fan-out through layoutSpatialCanvas', () => {
     const canvas: SpatialCanvas = {
       nodes: [node('a', 0, 0), node('b', 300, 0)],
       edges: [
-        { id: 'e1', fromNode: 'a', toNode: 'b' },
-        { id: 'e2', fromNode: 'b', toNode: 'a' },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'b' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
       ],
     }
     const scene = layoutSpatialCanvas(canvas, layoutOptions)

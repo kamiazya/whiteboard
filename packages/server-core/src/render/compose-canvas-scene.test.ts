@@ -28,8 +28,16 @@ describe('composeCanvasScene', () => {
         { id: 'c', type: 'group', x: 300, y: 300, width: 100, height: 60 },
       ],
       edges: [
-        { id: 'e1', fromNode: 'a', toNode: 'b' },
-        { id: 'e2', fromNode: 'a', toNode: 'c' },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'c' },
+        },
       ],
     }
 
@@ -90,8 +98,17 @@ describe('composeCanvasScene', () => {
         },
       ],
       edges: [
-        { id: 'e1', fromNode: 'text', toNode: 'file', label: 'goes to' },
-        { id: 'e2', fromNode: 'file', toNode: 'group' },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'text' },
+          to: { kind: 'node' as const, node: 'file' },
+          label: 'goes to',
+        },
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'file' },
+          to: { kind: 'node' as const, node: 'group' },
+        },
       ],
     }
 

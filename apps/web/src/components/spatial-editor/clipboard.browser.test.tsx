@@ -2,6 +2,7 @@
 // the module-level clipboard store — cross-canvas within the tab, every
 // mutation ONE batch command (one undo step), reminted ids on every paste.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { endpointIn, endpointNode } from '@kamiazya/whiteboard-model'
 import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -17,7 +18,14 @@ const initial: SpatialCanvas = {
     { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
     { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
   ],
-  edges: [{ id: 'ab', fromNode: 'a', toNode: 'b', label: 'kept' }],
+  edges: [
+    {
+      id: 'ab',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+      label: 'kept',
+    },
+  ],
 }
 
 function makeHost(start: SpatialCanvas = initial) {
@@ -154,7 +162,9 @@ it('undoing a paste restores the cut surface — the next paste reconnects again
   const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
-  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+  expect([endpointNode(restored.from), endpointNode(restored.to)].sort()).toEqual(
+    [pasted?.id, 'b'].sort(),
+  )
 })
 
 it('copy then paste never wires the duplicate to the original peer', () => {
@@ -168,7 +178,10 @@ it('copy then paste never wires the duplicate to the original peer', () => {
   // The original edge a–b survives untouched; the duplicate arrives bare.
   expect(latest.canvas.nodes).toHaveLength(3)
   expect(latest.canvas.edges).toHaveLength(1)
-  expect(latest.canvas.edges[0]).toMatchObject({ fromNode: 'a', toNode: 'b' })
+  expect(latest.canvas.edges[0]).toMatchObject({
+    from: { kind: 'node' as const, node: 'a' },
+    to: { kind: 'node' as const, node: 'b' },
+  })
 })
 
 it('a multi-selection copy carries the internal edge with properties; paste remaps endpoints', () => {
@@ -186,8 +199,8 @@ it('a multi-selection copy carries the internal edge with properties; paste rema
   const pastedIds = new Set(latest.canvas.nodes.slice(2).map((n) => n.id))
   const pastedEdge = latest.canvas.edges[1]
   expect(pastedEdge.label).toBe('kept')
-  expect(pastedIds.has(pastedEdge.fromNode)).toBe(true)
-  expect(pastedIds.has(pastedEdge.toNode)).toBe(true)
+  expect(endpointIn(pastedEdge.from, pastedIds)).toBe(true)
+  expect(endpointIn(pastedEdge.to, pastedIds)).toBe(true)
 })
 
 it('the clipboard is shared across editor mounts — cross-canvas paste within the tab', () => {
@@ -296,7 +309,11 @@ it('Escape lifts the ghost; the envelope keeps working as a plain copy', () => {
   clip(root, 'paste')
   expect(latest.canvas.nodes).toHaveLength(3)
   expect(latest.canvas.edges).toHaveLength(1)
-  expect(latest.canvas.edges[0]).toMatchObject({ id: 'ab', fromNode: 'a', toNode: 'b' })
+  expect(latest.canvas.edges[0]).toMatchObject({
+    id: 'ab',
+    from: { kind: 'node' as const, node: 'a' },
+    to: { kind: 'node' as const, node: 'b' },
+  })
 })
 
 it('deleting a ghosted selection is a real delete; the next paste reconnects like a cut', () => {
@@ -317,7 +334,9 @@ it('deleting a ghosted selection is a real delete; the next paste reconnects lik
   const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
-  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+  expect([endpointNode(restored.from), endpointNode(restored.to)].sort()).toEqual(
+    [pasted?.id, 'b'].sort(),
+  )
 })
 
 it('grabbing a ghosted node cancels the hold and the drag proceeds normally', () => {

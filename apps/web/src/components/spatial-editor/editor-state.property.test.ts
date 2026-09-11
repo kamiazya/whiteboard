@@ -48,6 +48,8 @@
 import {
   type CanvasColor,
   type CanvasEdge,
+  endpointIn,
+  endpointNode,
   type SpatialCanvas,
   type SpatialNode,
   spatialCanvasSchema,
@@ -204,11 +206,17 @@ function edgesArb(nodeIds: readonly string[]): fc.Arbitrary<readonly CanvasEdge[
       .map((raws) =>
         raws.map(([[a, b], fromSide, toSide, toEnd, color, label], i) => ({
           id: `e${i}`,
-          fromNode: nodeIds[a],
-          toNode: nodeIds[b],
-          ...(fromSide === undefined ? {} : { fromSide }),
-          ...(toSide === undefined ? {} : { toSide }),
-          ...(toEnd === undefined ? {} : { toEnd }),
+          from: {
+            kind: 'node' as const,
+            node: nodeIds[a] as string,
+            ...(fromSide === undefined ? {} : { side: fromSide }),
+          },
+          to: {
+            kind: 'node' as const,
+            node: nodeIds[b] as string,
+            ...(toSide === undefined ? {} : { side: toSide }),
+            ...(toEnd === undefined ? {} : { end: toEnd }),
+          },
           ...(color === undefined ? {} : { color }),
           ...(label === undefined ? {} : { label }),
         })),
@@ -249,7 +257,13 @@ function initialCanvas(): SpatialCanvas {
         url: 'https://example.com/',
       },
     ],
-    edges: [{ id: 'e0', fromNode: 'n0', toNode: 'n1' }],
+    edges: [
+      {
+        id: 'e0',
+        from: { kind: 'node' as const, node: 'n0' },
+        to: { kind: 'node' as const, node: 'n1' },
+      },
+    ],
   }
 }
 
@@ -550,8 +564,10 @@ function checkInvariants(real: Real): void {
   )
   for (const edge of canvas.edges) {
     expect(
-      live.has(edge.fromNode) && live.has(edge.toNode) && edge.fromNode !== edge.toNode,
-      `C1 edge ${edge.id} (${edge.fromNode}→${edge.toNode}) ${at}`,
+      endpointIn(edge.from, live) &&
+        endpointIn(edge.to, live) &&
+        endpointNode(edge.from) !== endpointNode(edge.to),
+      `C1 edge ${edge.id} (${endpointNode(edge.from)}→${endpointNode(edge.to)}) ${at}`,
     ).toBe(true)
   }
 
@@ -853,7 +869,9 @@ function pick(real: Real, index: number): SpatialNode | undefined {
 
 /** A selectable node with at least one edge, or any selectable node. */
 function pickConnected(real: Real, index: number): SpatialNode | undefined {
-  const touched = new Set(real.canvas.edges.flatMap((edge) => [edge.fromNode, edge.toNode]))
+  const touched = new Set(
+    real.canvas.edges.flatMap((edge) => [endpointNode(edge.from), endpointNode(edge.to)]),
+  )
   const connected = real.canvas.nodes.filter(
     (node) => touched.has(node.id) && !real.lockedNodeIds.has(node.id),
   )
@@ -1285,7 +1303,9 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
     const kept = new Set(nodes.map((node) => node.id))
     const replacement: SpatialCanvas = {
       nodes,
-      edges: real.canvas.edges.filter((edge) => kept.has(edge.fromNode) && kept.has(edge.toNode)),
+      edges: real.canvas.edges.filter(
+        (edge) => endpointIn(edge.from, kept) && endpointIn(edge.to, kept),
+      ),
     }
     const missingIds = new Set(
       real.canvas.nodes.map((node) => node.id).filter((id) => !kept.has(id)),
@@ -1918,7 +1938,7 @@ class Paste implements fc.Command<Model, Real> {
       )
       const boundary = command.commands.flatMap((c) =>
         c.kind === 'create-edge' &&
-        (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
+        (!endpointIn(c.edge.from, createdNodeIds) || !endpointIn(c.edge.to, createdNodeIds))
           ? [c.edge.id]
           : [],
       )

@@ -182,9 +182,13 @@ describe('what the tool table costs to read', () => {
       // anchor is emitted here and in wb_thread_edit's anchor union. The
       // C3 case ADR-0031 §3b pays for: described because a model guessed,
       // not because a column said so.
+      // Wire only, +6,664: the INPUT is untouched, and the output schema
+      // carries a canvas. The endpoint union is paid by the client on
+      // connect and by the model not at all — the split this scoreboard
+      // keeps two columns for.
       wb_body_edit: {
         visibleBytes: 2663,
-        wireBytes: 21704,
+        wireBytes: 28368,
         descriptionWords: 112,
         parameters: 18,
         undescribed: 7,
@@ -237,18 +241,36 @@ describe('what the tool table costs to read', () => {
       // +107 for `within` accepting null (models write it to say "no group",
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
+      // +3,332 visible, +11,880 wire, +28 parameters when an edge END became
+      // a discriminated union (ADR-0033 slice 3): `from` and `to` on both
+      // `edge.add` and `edge.patch`, each now two arms where the format's
+      // four flat keys were one shape. The BOUGHT thing is what no price
+      // buys back — an end can say it is a free point, which
+      // `fromNode`/`toNode` could not express at all.
+      // +8 undescribed, and all eight are the `kind` DISCRIMINATOR. Described
+      // and then un-described, on a measurement: describing `kind` on both
+      // arms reads `undescribed` 201 -> 193 (back to where the slice found
+      // it) for 40,532 visible — over the ~40,000 at which ADR-0031 §5 says
+      // to reconsider loading the table upfront. The endpoint FIELD's own
+      // description spells both arms literally (`{kind:"node",node}` /
+      // `{kind:"point",point}`), so the eight repeat it beside a JSON Schema
+      // `const` that already states the value. Debt that is a restatement is
+      // the debt to carry when the alternative is crossing a price ceiling.
       wb_canvas_edit: {
-        visibleBytes: 13569,
-        wireBytes: 36107,
+        visibleBytes: 16901,
+        wireBytes: 47987,
         descriptionWords: 169,
-        parameters: 155,
-        undescribed: 125,
+        parameters: 183,
+        undescribed: 133,
         strays: 'refused',
         names: [],
       },
+      // Wire only, +1,884: this tool's INPUT is three fields and its OUTPUT
+      // carries edges, so the endpoint union costs the client on connect and
+      // the model nothing on every turn. Same for `canvas_view` above.
       wb_canvas_snapshot: {
         visibleBytes: 705,
-        wireBytes: 3735,
+        wireBytes: 5619,
         descriptionWords: 53,
         parameters: 3,
         undescribed: 3,
@@ -439,10 +461,27 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      visibleBytes: 36512,
-      wireBytes: 109420,
-      parameters: 277,
-      undescribed: 193,
+      // +3,332 when an edge END became a discriminated union (ADR-0033
+      // slice 3) — all of it wb_canvas_edit's, since it is the only tool
+      // that takes an edge as INPUT. 39,844 is under the ~40,000 by 156
+      // bytes, and that margin was BOUGHT: see wb_canvas_edit's row for the
+      // eight `kind` descriptions that were written, measured at 40,532, and
+      // taken back out. The next thing added to this table has 156 bytes of
+      // room, which is a sentence — so the slice after this one is where
+      // ADR-0031 §5's question gets answered rather than deferred again.
+      visibleBytes: 39844,
+      // +20,428, two thirds of it output schemas on tools that merely ECHO an
+      // edge (wb_body_edit, canvas_view, wb_canvas_snapshot). Paid by the
+      // client once on connect, not by the model on every turn — which is
+      // why this column has no threshold beside it and the one above does.
+      wireBytes: 129848,
+      // +28: `from` and `to` are each two arms now, on `edge.add` and on
+      // `edge.patch`.
+      parameters: 305,
+      // +8, and every one of them a `kind` discriminator beside a field whose
+      // own description spells both arms. Held deliberately rather than paid
+      // down, at the visible-bytes ceiling above.
+      undescribed: 201,
     })
   })
 

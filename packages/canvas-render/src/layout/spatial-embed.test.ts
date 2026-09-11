@@ -148,8 +148,16 @@ describe('file-node inline embeds', () => {
         { id: 'd', type: 'text', x: 200, y: 300, width: 100, height: 50, text: '' },
       ],
       edges: [
-        { id: 'h', fromNode: 'a', toNode: 'b' },
-        { id: 'v', fromNode: 'c', toNode: 'd' },
+        {
+          id: 'h',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+        {
+          id: 'v',
+          from: { kind: 'node' as const, node: 'c' },
+          to: { kind: 'node' as const, node: 'd' },
+        },
       ],
       facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
     }

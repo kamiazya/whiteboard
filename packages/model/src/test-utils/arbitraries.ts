@@ -359,11 +359,43 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
       },
       { weight: 1, arbitrary: fc.constantFrom(...ids).map((id) => [id, id]) },
     )
+    // An end is a NODE or a free POINT (ADR-0033 slice 3). The schema draws
+    // both arms evenly, which is not what a board looks like — almost every
+    // edge joins two boxes — so a roll keeps the drawn arm only when it is
+    // already a point, leaving roughly one end in ten free.
+    //
+    // Measured, and by something that RUNS: `arbitraries.test.ts` counts
+    // 681 of 6770 ends free (10.1%) over 2000 canvases and fails if the share
+    // leaves a band, if node ends stop being correlated, or if no edge is
+    // drawn with one end of each. A number with a source named beside it is
+    // still unbacked when nothing reads the source; this one is read.
+    //
+    // Only the NODE arm is correlated. A point names nothing, so there is no
+    // referential integrity to maintain for it, which is exactly the property
+    // this slice added.
+    const onNode = (
+      drawn: CanvasEdge['from'],
+      id: string,
+      keepFree: boolean,
+    ): CanvasEdge['from'] =>
+      keepFree && drawn.kind === 'point'
+        ? drawn
+        : {
+            kind: 'node',
+            node: id,
+            ...(drawn.kind === 'node' && drawn.side !== undefined ? { side: drawn.side } : {}),
+            ...(drawn.end !== undefined ? { end: drawn.end } : {}),
+          }
+    const freeRoll = fc.nat({ max: 9 }).map((roll) => roll >= 8)
     return fc
       .uniqueArray(
         fc
-          .tuple(endpoints, canvasEdgeArbitrary)
-          .map(([[fromNode, toNode], edge]) => ({ ...edge, fromNode, toNode })),
+          .tuple(endpoints, canvasEdgeArbitrary, freeRoll, freeRoll)
+          .map(([[fromNode, toNode], edge, fromFree, toFree]) => ({
+            ...edge,
+            from: onNode(edge.from, fromNode, fromFree),
+            to: onNode(edge.to, toNode, toFree),
+          })),
         { maxLength: 5, selector: (edge) => edge.id },
       )
       .map((edges) => ({ nodes, edges }))

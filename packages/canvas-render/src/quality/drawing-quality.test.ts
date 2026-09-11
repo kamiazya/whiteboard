@@ -401,7 +401,11 @@ describe('drawing quality across the corpus', () => {
     const unpinned = DRAWING_CORPUS.find((c) => c.name === 'lane/architecture') as DrawingCase
     const withoutSides = {
       ...unpinned.canvas,
-      edges: unpinned.canvas.edges.map(({ fromSide: _from, toSide: _to, ...edge }) => edge),
+      edges: unpinned.canvas.edges.map((edge) => ({
+        ...edge,
+        from: edge.from.kind === 'node' ? { ...edge.from, side: undefined } : edge.from,
+        to: edge.to.kind === 'node' ? { ...edge.to, side: undefined } : edge.to,
+      })),
     }
     const free = scoreDrawing(
       withoutSides,

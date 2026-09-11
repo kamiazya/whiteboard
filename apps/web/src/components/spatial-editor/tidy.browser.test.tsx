@@ -143,8 +143,16 @@ it('orders a row by its edges: a hub at the end swaps with the nearest box it fa
       { id: 'far', type: 'text', x: 488, y: 40, width: 160, height: 60, text: 'Far' },
     ],
     edges: [
-      { id: 'e1', fromNode: 'hub', toNode: 'near' },
-      { id: 'e2', fromNode: 'hub', toNode: 'far' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'hub' },
+        to: { kind: 'node' as const, node: 'near' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'hub' },
+        to: { kind: 'node' as const, node: 'far' },
+      },
     ],
   }
   const { Host, latest } = makeHost(board)

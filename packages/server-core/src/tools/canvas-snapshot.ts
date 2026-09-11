@@ -5,6 +5,7 @@ import {
   canvasColorSchema,
   canvasCommentSchema,
   documentIdSchema,
+  edgeEndpointSchema,
   nodeIdSchema,
   nodePositionSchema,
   nodeSizeSchema,
@@ -74,8 +75,13 @@ const canvasSnapshotNodeSchema = z
 const canvasSnapshotEdgeSchema = z
   .object({
     id: nodeIdSchema,
-    fromNode: nodeIdSchema,
-    toNode: nodeIdSchema,
+    // The MODEL's endpoint, not the format's two flat keys: this is a read of
+    // the board, and a board can hold an edge with a free end (ADR-0033
+    // slice 3). Reusing the model's schema rather than restating it is what
+    // keeps a reader of this payload and a writer of `wb_canvas_edit` talking
+    // about the same thing.
+    from: edgeEndpointSchema,
+    to: edgeEndpointSchema,
     label: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
@@ -175,8 +181,8 @@ function projectNode(
 function projectEdge(edge: CanvasEdge, locked: boolean): z.infer<typeof canvasSnapshotEdgeSchema> {
   return {
     id: edge.id,
-    fromNode: edge.fromNode,
-    toNode: edge.toNode,
+    from: edge.from,
+    to: edge.to,
     ...(edge.label === undefined ? {} : { label: edge.label }),
     ...(edge.color === undefined ? {} : { color: edge.color }),
     ...(locked ? { locked: true as const } : {}),

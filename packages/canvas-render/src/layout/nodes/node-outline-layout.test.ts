@@ -21,8 +21,16 @@ const canvas: SpatialCanvas = {
   // terminal sits OFF the side's midpoint — i.e. off the ellipse tangent —
   // which is what the pull-in has to move.
   edges: [
-    { id: 'e', fromNode: 'b', toNode: 'a', toSide: 'bottom' as const },
-    { id: 'e2', fromNode: 'c', toNode: 'a', toSide: 'bottom' as const },
+    {
+      id: 'e',
+      from: { kind: 'node' as const, node: 'b' },
+      to: { kind: 'node' as const, node: 'a', side: 'bottom' as const } as const,
+    },
+    {
+      id: 'e2',
+      from: { kind: 'node' as const, node: 'c' },
+      to: { kind: 'node' as const, node: 'a', side: 'bottom' as const } as const,
+    },
   ],
 }
 

@@ -22,6 +22,20 @@ const EXTENSION = { kind: 'extension' } as const
 const ROUNDED = { kind: 'degraded', to: 'the nearest integer pixel' } as const
 
 /**
+ * A free end takes the whole EDGE with it, which is why this reads as a
+ * sentence about the edge rather than about the coordinate.
+ *
+ * JSON Canvas requires `fromNode` and `toNode`: an edge runs between two
+ * nodes or it is not an edge. So unlike every other entry here, what a reader
+ * loses is not a field on something that still arrives — the element itself
+ * is absent, in BOTH modes, and no extension key can carry it back.
+ */
+const FREE_END = {
+  kind: 'dropped',
+  why: 'JSON Canvas requires an edge to run between two nodes, so an edge with a free end is omitted from both export modes — the whole edge, not just this field',
+} as const
+
+/**
  * Every field position the model can hold, and what projecting it onto JSON
  * Canvas costs. The model no longer spells the format's key anywhere, so this
  * table is the ONLY place that says which side of the line a field is on.
@@ -55,12 +69,20 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'nodes[].background': NATIVE,
   'nodes[].backgroundStyle': NATIVE,
   'edges[].id': NATIVE,
-  'edges[].fromNode': NATIVE,
-  'edges[].toNode': NATIVE,
-  'edges[].fromSide': NATIVE,
-  'edges[].toSide': NATIVE,
-  'edges[].fromEnd': NATIVE,
-  'edges[].toEnd': NATIVE,
+  // An endpoint is one object in the model and three flat keys in the format
+  // (ADR-0033 slice 3); the projection folds one into the other.
+  'edges[].from.kind': NATIVE,
+  'edges[].from.node': NATIVE,
+  'edges[].from.side': NATIVE,
+  'edges[].from.end': NATIVE,
+  'edges[].to.kind': NATIVE,
+  'edges[].to.node': NATIVE,
+  'edges[].to.side': NATIVE,
+  'edges[].to.end': NATIVE,
+  'edges[].from.point.x': FREE_END,
+  'edges[].from.point.y': FREE_END,
+  'edges[].to.point.x': FREE_END,
+  'edges[].to.point.y': FREE_END,
   'edges[].color': NATIVE,
   'edges[].label': NATIVE,
 
@@ -180,7 +202,7 @@ export function toJsonCanvas(canvas: SpatialCanvas): JsonCanvasDocument {
   }
   return {
     nodes: canvas.nodes.map(projectNode),
-    edges: canvas.edges.map(projectEdge),
+    edges: canvas.edges.map(projectEdge).filter((edge) => edge !== undefined),
     // An extension object with nothing in it is not emitted. That is a
     // canonicalisation, not a loss — `x-whiteboard: {}` says exactly what its
     // absence says — and it is the one place the wire round-trip normalises
@@ -252,12 +274,11 @@ function liftNode(node: JsonCanvasNode): SpatialNode {
 function liftEdge(edge: JsonCanvasEdge): CanvasEdge {
   return {
     id: edge.id,
-    fromNode: edge.fromNode,
-    toNode: edge.toNode,
-    ...(edge.fromSide !== undefined && { fromSide: edge.fromSide }),
-    ...(edge.toSide !== undefined && { toSide: edge.toSide }),
-    ...(edge.fromEnd !== undefined && { fromEnd: edge.fromEnd }),
-    ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
+    // The format's six flat keys per edge fold back into two endpoints. Every
+    // JSON Canvas edge runs between two NODES, so the lift only ever builds
+    // the node arm — a point end is something only this product can author.
+    from: liftEndpoint(edge.fromNode, edge.fromSide, edge.fromEnd),
+    to: liftEndpoint(edge.toNode, edge.toSide, edge.toEnd),
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
     ...(edge['x-whiteboard']?.facets !== undefined && { facets: edge['x-whiteboard'].facets }),
@@ -298,18 +319,44 @@ function projectNode(node: SpatialNode): JsonCanvasNode {
   }
 }
 
-function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
+/**
+ * An edge as JSON Canvas states one, or `undefined` when the format has no
+ * way to say it.
+ *
+ * The format requires `fromNode` and `toNode` — an edge runs between two
+ * NODES or it is not an edge — so an edge with a free end cannot cross at
+ * all, in either mode. It is omitted rather than anchored to something
+ * invented: a zero-size node at the point would make the export a document
+ * with a node the author never drew, which is a worse lie than an absence
+ * the loss table names.
+ */
+function projectEdge(edge: CanvasEdge): JsonCanvasEdge | undefined {
+  if (edge.from.kind !== 'node' || edge.to.kind !== 'node') return undefined
   return {
     id: edge.id,
-    fromNode: edge.fromNode,
-    toNode: edge.toNode,
-    ...(edge.fromSide !== undefined && { fromSide: edge.fromSide }),
-    ...(edge.toSide !== undefined && { toSide: edge.toSide }),
-    ...(edge.fromEnd !== undefined && { fromEnd: edge.fromEnd }),
-    ...(edge.toEnd !== undefined && { toEnd: edge.toEnd }),
+    fromNode: edge.from.node,
+    toNode: edge.to.node,
+    ...(edge.from.side !== undefined && { fromSide: edge.from.side }),
+    ...(edge.to.side !== undefined && { toSide: edge.to.side }),
+    ...(edge.from.end !== undefined && { fromEnd: edge.from.end }),
+    ...(edge.to.end !== undefined && { toEnd: edge.to.end }),
     ...(edge.color !== undefined && { color: edge.color }),
     ...(edge.label !== undefined && { label: edge.label }),
     ...(edgeExtension(edge) !== undefined && { 'x-whiteboard': edgeExtension(edge) }),
+  }
+}
+
+/** One end, from the format's three flat keys. */
+function liftEndpoint(
+  node: string,
+  side: JsonCanvasEdge['fromSide'],
+  end: JsonCanvasEdge['fromEnd'],
+): CanvasEdge['from'] {
+  return {
+    kind: 'node',
+    node,
+    ...(side !== undefined && { side }),
+    ...(end !== undefined && { end }),
   }
 }
 

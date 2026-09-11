@@ -45,8 +45,16 @@ describe('lane depth by sweep rank', () => {
     // arrangement that used to cross); the bend-aware derivation would
     // otherwise legitimately route these ends via different sides.
     const edges: CanvasEdge[] = [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red', toSide: 'right' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan', fromSide: 'right' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red', side: 'right' as const },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red', side: 'right' as const },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
@@ -56,7 +64,11 @@ describe('lane depth by sweep rank', () => {
 
   it('a lone end still keeps the exact base stub', () => {
     const pair = [node('a', 0, 0, 100, 100), node('b', 300, 300, 100, 100)]
-    const e: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const e: CanvasEdge = {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    }
     const anchors = assignEdgeAnchors(pair, [e])
     const routed = routeEdge(pair, e, 'orthogonal', anchors.get('e1'))
     expect(routed.path[1]).toEqual({ x: 120, y: 50 })

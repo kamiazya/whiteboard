@@ -9,7 +9,11 @@ import { describe, expect, it, vi } from 'vitest'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import { edgeMenuItems } from './edge-menu-items.js'
 
-const baseEdge: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+const baseEdge: CanvasEdge = {
+  id: 'e1',
+  from: { kind: 'node' as const, node: 'a' },
+  to: { kind: 'node' as const, node: 'b' },
+}
 
 function labelsOf(items: readonly ContextMenuItem[]): string[] {
   return items.map((item) => ('label' in item ? item.label : `<${item.kind}>`))

@@ -17,7 +17,13 @@ const start: SpatialCanvas = {
     { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'Alpha' },
     { id: 'b', type: 'text', x: 500, y: 100, width: 120, height: 60, text: 'Beta' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 function makeHost(initial: SpatialCanvas) {
@@ -121,7 +127,13 @@ it('re-routes a bystander edge live when the dragged node lands on its path', as
       { id: 'c', type: 'text', x: 100, y: 300, width: 120, height: 60, text: 'From' },
       { id: 'd', type: 'text', x: 700, y: 300, width: 120, height: 60, text: 'To' },
     ],
-    edges: [{ id: 'e-cd', fromNode: 'c', toNode: 'd' }],
+    edges: [
+      {
+        id: 'e-cd',
+        from: { kind: 'node' as const, node: 'c' },
+        to: { kind: 'node' as const, node: 'd' },
+      },
+    ],
   }
   const { Host } = makeHost(blocked)
   const { container } = render(<Host />)
@@ -156,8 +168,16 @@ it('recomputes line jumps live while the drag is in flight', async () => {
       { id: 'd', type: 'text', x: 350, y: 600, width: 120, height: 60, text: 'D' },
     ],
     edges: [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'c', toNode: 'd' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'c' },
+        to: { kind: 'node' as const, node: 'd' },
+      },
     ],
     facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
   }
@@ -179,7 +199,14 @@ it('recomputes line jumps live while the drag is in flight', async () => {
 it('keeps a touched edge label visible and centered during the drag', async () => {
   const labelled: SpatialCanvas = {
     ...start,
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flow' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+        label: 'flow',
+      },
+    ],
   }
   const { Host } = makeHost(labelled)
   const { container } = render(<Host />)
@@ -256,8 +283,16 @@ it('re-sides a carried edge mid-drag while freezing bystanders', async () => {
       { id: 'cyan', type: 'text', x: 700, y: 520, width: 160, height: 90, text: 'Cyan' },
     ],
     edges: [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red' },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }
@@ -329,7 +364,13 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
           text: `f${i}`,
         })),
       ],
-      edges: [{ id: 'bystander', fromNode: 'p', toNode: 'q' }],
+      edges: [
+        {
+          id: 'bystander',
+          from: { kind: 'node' as const, node: 'p' },
+          to: { kind: 'node' as const, node: 'q' },
+        },
+      ],
     })
     function Host() {
       const [canvas, setCanvas] = useState<SpatialCanvas>(() => big(0))
@@ -408,8 +449,16 @@ it('pulls a live edge onto a shaped node silhouette, not its bounding box', asyn
       },
     ],
     edges: [
-      { id: 'e-a', fromNode: 'a', toNode: 'hub' },
-      { id: 'e-c', fromNode: 'c', toNode: 'hub' },
+      {
+        id: 'e-a',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'hub' },
+      },
+      {
+        id: 'e-c',
+        from: { kind: 'node' as const, node: 'c' },
+        to: { kind: 'node' as const, node: 'hub' },
+      },
     ],
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   }

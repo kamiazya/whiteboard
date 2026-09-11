@@ -290,7 +290,13 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
     expect(command).toEqual({ kind: 'connect-nodes', edgeId: 'edge-1', fromNode: 'a', toNode: 'b' })
-    expect(next.edges).toEqual([{ id: 'edge-1', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'edge-1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
   })
 
   it('arrow-key nudging a focused resize handle resizes the node (keyboard equivalent of drag)', async () => {
@@ -384,7 +390,13 @@ describe('SpatialEditor (browser)', () => {
     expect(onChange).toHaveBeenCalledTimes(1)
     const [next, command] = onChange.mock.calls[0] as [SpatialCanvas, unknown]
     expect(command).toEqual({ kind: 'connect-nodes', edgeId: 'edge-2', fromNode: 'a', toNode: 'b' })
-    expect(next.edges).toEqual([{ id: 'edge-2', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'edge-2',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
   })
 
   it('pressing Escape cancels an in-flight connecting gesture started via keyboard', async () => {
@@ -956,7 +968,13 @@ describe('SpatialEditor (browser)', () => {
       fromNode: 'a',
       toNode: 'b',
     })
-    expect(next.edges).toEqual([{ id: 'edge-preview', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'edge-preview',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
   })
 
   it('perf invariant: pointer moves re-invoke neither measure nor the committed layout', async () => {
@@ -1604,7 +1622,11 @@ describe('SpatialEditor (browser)', () => {
     canvas = onChange.mock.calls.at(-1)![0] as SpatialCanvas
     expect(canvas.edges).toHaveLength(1)
     const edgeId = canvas.edges[0]!.id
-    expect(canvas.edges[0]).toEqual({ id: edgeId, fromNode: node1Box.id, toNode: node2Box.id })
+    expect(canvas.edges[0]).toEqual({
+      id: edgeId,
+      from: { kind: 'node' as const, node: node1Box.id },
+      to: { kind: 'node' as const, node: node2Box.id },
+    })
 
     // Give the double-press window time to lapse: the press that started
     // the connect gesture was also on node 1's chrome, and a same-node press
@@ -1787,7 +1809,14 @@ function fourDefectCanvas(): SpatialCanvas {
         text: 'This is a long line of text that should wrap inside its node instead of overflowing the right edge',
       },
     ],
-    edges: [{ id: 'e1', fromNode: 'heading-node', toNode: 'list-node', label: 'edge label' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'heading-node' },
+        to: { kind: 'node' as const, node: 'list-node' },
+        label: 'edge label',
+      },
+    ],
   }
 }
 

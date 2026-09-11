@@ -7,6 +7,7 @@
 // separates edges sharing a side into distinct corridors, so a one-corner
 // route still carries a collinear stub point.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
 
@@ -20,8 +21,17 @@ const node = (id: string, x: number, y: number, width: number, height: number): 
   text: '',
 })
 
-const edge = (id: string, fromNode: string, toNode: string, rest: Partial<CanvasEdge> = {}) =>
-  ({ id, fromNode, toNode, ...rest }) as CanvasEdge
+const edge = (
+  id: string,
+  fromNode: string,
+  toNode: string,
+  rest: Partial<CanvasEdge> = {},
+): CanvasEdge => ({
+  id,
+  from: nodeEndpoint(fromNode),
+  to: nodeEndpoint(toNode),
+  ...rest,
+})
 
 /** Direction changes between horizontal and vertical travel. */
 function bendCount(path: readonly { x: number; y: number }[]): number {

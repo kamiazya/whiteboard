@@ -237,10 +237,22 @@ const LOOK_CANVAS: SpatialCanvas = {
     },
   ],
   edges: [
-    { id: 'across', fromNode: 'preset', toNode: 'plain', toEnd: 'arrow' },
+    {
+      id: 'across',
+      from: { kind: 'node' as const, node: 'preset' },
+      to: { kind: 'node' as const, node: 'plain', end: 'arrow' as const },
+    },
     // The two diagonals of the four content nodes, so one hops the other.
-    { id: 'falling', fromNode: 'preset', toNode: 'oval', fromSide: 'bottom', toSide: 'top' },
-    { id: 'rising', fromNode: 'sink', toNode: 'plain', fromSide: 'top', toSide: 'bottom' },
+    {
+      id: 'falling',
+      from: { kind: 'node' as const, node: 'preset', side: 'bottom' as const },
+      to: { kind: 'node' as const, node: 'oval', side: 'top' as const },
+    },
+    {
+      id: 'rising',
+      from: { kind: 'node' as const, node: 'sink', side: 'top' as const },
+      to: { kind: 'node' as const, node: 'plain', side: 'bottom' as const },
+    },
   ],
   // Jump arcs are off unless a canvas asks for them, and a hop is one of the
   // shapes the crisp lane already pins — so the look goldens see it too.

@@ -42,6 +42,31 @@ paths:
   editor both read it, and its projection is `extension`. `edgePatchFieldsSchema` derives from
   `canvasEdgeSchema`, so it reached `wb_canvas_edit`'s edge patch for free, which is the whole
   gain: a facet payload is opaque to that tool, so a model could not place a bend at all before.
+- **An edge END is a node or a POINT**
+  ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 3). `edgeEndpointSchema`
+  is a discriminated union on `kind` — `{ kind: 'node', node, side?, end? }` or
+  `{ kind: 'point', point, end? }` — in place of the format's four flat keys
+  (`fromNode`/`fromSide`/`toNode`/`toSide`), which could not say "this end is a point" at all.
+  A union rather than optional fields plus a refinement, and not merely for taste:
+  `edgePatchFieldsSchema` IS `canvasEdgeSchema.omit({id}).partial()`, Zod v4 refuses `.partial()`
+  over a refined object, so a refinement here would be paid for with a second hand-written schema
+  beside this one — the exact drift this package exists to prevent.
+  Read an end through the exported helpers — `endpointNode`, `endpointNodes`, `endpointIn`,
+  `endpointSide`, `nodeAtEnd`, `isSelfLoop`, `nodeEndpoint` — never by hand. Every one of the ~50
+  sites that used to read `edge.fromNode` wants "the node, if there is one", and a `.kind` check
+  written fifty times is fifty chances for one of them to treat a free end as a dangling
+  reference. Two of the helpers exist because the obvious inline form is WRONG rather than merely
+  verbose: `byId.get(endpointNode(end) ?? '')` is one character from a lookup on a key that can be
+  real, and `endpointNode(from) === endpointNode(to)` answers TRUE for two free ends, which is the
+  opposite of a self-loop. Both were written during this slice and both were caught by reading the
+  diff, not by a test.
+  Its projection is `dropped`, and the WHOLE EDGE with it: JSON Canvas requires an edge to run
+  between two nodes, so a point-ended edge is omitted from both export modes. It is the one row in
+  the loss table whose unit is the element rather than the field.
+  The generator draws roughly one end in ten free, and `test-utils/arbitraries.test.ts` is what
+  makes that a fact rather than a claim — it counts what a run produced and fails on a share out
+  of band, on node ends that stopped being correlated, and on a corpus with no half-free edge in
+  it. Mutation-checked in both directions.
 - **This package no longer spells `x-whiteboard` anywhere.** ADR-0033 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:

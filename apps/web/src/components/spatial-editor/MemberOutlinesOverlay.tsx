@@ -1,3 +1,5 @@
+import type { CanvasEdge } from '@kamiazya/whiteboard-model'
+import { endpointIn } from '@kamiazya/whiteboard-model'
 /**
  * Which nodes are in the selection. The selection overlay outlines the
  * region the handles act on, which says nothing about membership —
@@ -9,11 +11,7 @@ import type { Point } from '../../lib/spatial/viewport.js'
 
 export interface MemberOutlinesOverlayProps {
   readonly selectionMembers: readonly NodeBox[]
-  readonly edges: readonly {
-    readonly id: string
-    readonly fromNode: string
-    readonly toNode: string
-  }[]
+  readonly edges: readonly Pick<CanvasEdge, 'id' | 'from' | 'to'>[]
   readonly edgePaths: readonly { readonly id: string; readonly path: readonly Point[] }[]
   readonly zoom: number
   /**
@@ -53,7 +51,7 @@ export function MemberOutlinesOverlay({
       {(() => {
         const memberIds = new Set(selectionMembers.map((member) => member.id))
         return edges
-          .filter((edge) => memberIds.has(edge.fromNode) && memberIds.has(edge.toNode))
+          .filter((edge) => endpointIn(edge.from, memberIds) && endpointIn(edge.to, memberIds))
           .flatMap((edge) => {
             const routed = edgePaths.find((entry) => entry.id === edge.id)
             return routed === undefined ? [] : [{ id: edge.id, path: routed.path }]

@@ -131,7 +131,13 @@ describe('stroke width tokens', () => {
     expect(text.appearance?.strokeWidth).toBe(1.4)
     const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
     expect(group.appearance?.strokeWidth).toBe(2)
-    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.strokeWidth).toBe(1.4)
+    expect(
+      themed.resolveEdge({
+        id: 'e',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      })?.strokeWidth,
+    ).toBe(1.4)
     expect(themed.resolveLabel().strokeWidth).toBeUndefined()
     const bare = createThemedAppearance({
       tokens: SAMPLE_THEME_TOKENS,
@@ -170,7 +176,13 @@ describe('glow tokens', () => {
       text: '',
     })
     expect(node.appearance?.glow).toEqual({ radiusPx: 6 })
-    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toEqual({
+    expect(
+      themed.resolveEdge({
+        id: 'e',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      })?.glow,
+    ).toEqual({
       radiusPx: 6,
     })
     // A 12px glyph blurred at three deviations thickens into a smudge, and
@@ -191,6 +203,12 @@ describe('glow tokens', () => {
       themed.resolveNode({ id: 'n', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
         .appearance?.glow,
     ).toBeUndefined()
-    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toBeUndefined()
+    expect(
+      themed.resolveEdge({
+        id: 'e',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      })?.glow,
+    ).toBeUndefined()
   })
 })

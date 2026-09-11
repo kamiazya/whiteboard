@@ -28,9 +28,22 @@ const userCanvasNodes = [
   box('T', 80, 360, 200, 110),
 ]
 const userCanvasEdges: CanvasEdge[] = [
-  { id: 'ab', fromNode: 'A', toNode: 'B' },
-  { id: 'ta', fromNode: 'T', toNode: 'A', label: 'hoge' },
-  { id: 'tb', fromNode: 'T', toNode: 'B' },
+  {
+    id: 'ab',
+    from: { kind: 'node' as const, node: 'A' },
+    to: { kind: 'node' as const, node: 'B' },
+  },
+  {
+    id: 'ta',
+    from: { kind: 'node' as const, node: 'T' },
+    to: { kind: 'node' as const, node: 'A' },
+    label: 'hoge',
+  },
+  {
+    id: 'tb',
+    from: { kind: 'node' as const, node: 'T' },
+    to: { kind: 'node' as const, node: 'B' },
+  },
 ]
 
 it('never settles A->B on a route that reverses on both axes, on the exact user canvas', () => {
@@ -59,7 +72,13 @@ it('keeps a deliberate U-hook reachable for an interpenetrating pair with no val
   // Same-axis interpenetrating boxes: no zero-bend facing pair, no L-pair,
   // no gap-valid opposing pair — u-hook-when-degenerate's exact geometry.
   const nodes = [box('A2', 0, 0, 100, 100), box('B2', 50, 0, 100, 100)]
-  const edges: CanvasEdge[] = [{ id: 'ab2', fromNode: 'A2', toNode: 'B2' }]
+  const edges: CanvasEdge[] = [
+    {
+      id: 'ab2',
+      from: { kind: 'node' as const, node: 'A2' },
+      to: { kind: 'node' as const, node: 'B2' },
+    },
+  ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
   const ab2 = edges[0] as CanvasEdge
   const { path } = routeEdge(nodes, ab2, 'orthogonal', anchors.get('ab2'))

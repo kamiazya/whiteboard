@@ -10,6 +10,7 @@
 // Numbers are machine-specific — compare a before/after on the SAME machine
 // in one sitting, never a committed figure against a fresh run.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endpointNode } from '@kamiazya/whiteboard-model'
 import { test } from 'vitest'
 import { clusteredLayout } from '../../test-utils/routing-corpus.js'
 import { assignEdgeAnchors, routeEdge } from './spatial-edges.js'
@@ -31,9 +32,9 @@ function gridCanvas(nodeCount: number, edgeCount: number) {
   }))
   const edges: CanvasEdge[] = Array.from({ length: edgeCount }, (_, i) => ({
     id: `e${i}`,
-    fromNode: `n${i % nodeCount}`,
-    toNode: `n${(i * 7 + 3) % nodeCount}`,
-  })).filter((e) => e.fromNode !== e.toNode)
+    from: { kind: 'node' as const, node: `n${i % nodeCount}` },
+    to: { kind: 'node' as const, node: `n${(i * 7 + 3) % nodeCount}` },
+  })).filter((e) => endpointNode(e.from) !== endpointNode(e.to))
   return { nodes, edges }
 }
 

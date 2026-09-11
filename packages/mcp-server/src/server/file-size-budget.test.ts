@@ -106,7 +106,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +17: `set-edge-bends`, the bend drag's write. Not a facet write since
   // ADR-0033 slice 4 — bends are a field of the edge, so the command carries
   // a value rather than an opaque plugin payload.
-  'apps/web/src/lib/spatial/commands.ts': 1046,
+  // +18 when an edge END became a discriminated union (ADR-0033 slice 3):
+  // `set-edge-ends` and `set-edge-side` write INSIDE the endpoint now, and
+  // `set-edge-side` grew a real branch — only a node end has a side to pin,
+  // so the write is a no-op on a free one. The width is the branch, not
+  // ceremony: the flat version could not have had it.
+  'apps/web/src/lib/spatial/commands.ts': 1064,
   // The annotation entry's scope resolver lives in `annotation-scope.ts`
   // rather than here, so what this file spends on it is the hook call — now
   // five lines because the entry also has to know the document's threads,
@@ -151,7 +156,11 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // node's already did, so a per-edge facet survives a round trip.
   // +3: an edge's `bends`, written as one value — the round-trip property
   // reported it dropped before the line existed.
-  'packages/loro-adapter/src/loro-bridge.ts': 1006,
+  // +6 for the comment on `edgeToFields` saying WHY an endpoint is stored as
+  // one value: it is one thing with one meaning, so last-writer-wins per key
+  // is the whole merge story, and two peers re-attaching the same end
+  // converge on an end one of them chose rather than on a half of each.
+  'packages/loro-adapter/src/loro-bridge.ts': 1012,
   'packages/canvas-render/src/layout/edges/edge-rules.ts': 948,
   // +49: propose mode (ADR-0029 decision 7) — two input fields, one output
   // field, and the branch that stores a proposal instead of the board. Most
@@ -329,7 +338,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +26 for the per-edge routing fold and the contributed router's call
   // site. The router's own resolution is `layout/contributed-router.ts`;
   // what stays here is the composer asking for it and falling back.
-  'packages/canvas-render/src/layout/spatial-canvas.ts': 2432,
+  // +8: `pullEdgeOntoOutlines` and `proposedEdgePath` each ask for a node
+  // that may not be there, which is two lines apiece plus the sentence
+  // saying a free end has no silhouette to be pulled onto.
+  'packages/canvas-render/src/layout/spatial-canvas.ts': 2440,
   // +21: a named side pair whose route runs through the edge's own box is
   // overruled — the search takes the edge as free (`selfThrough`, the
   // candidate list without its named sides), the render follows the anchor
@@ -340,7 +352,12 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // +26: the stored-bend branch, taken before the self-edge shape and before
   // any computed routing (ADR-0033 slice 4). The route itself is
   // `bend-route.ts`; what lives here is choosing it.
-  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2140,
+  // +11 net, and the shape is worth reading: the reshape HOISTED three
+  // `endpointNode` reads out of O(nodes) filters on the routing path (760k
+  // calls per clustered layout, per the profile this rule records) and moved
+  // the map lookup to model's own `nodeAtEnd`, deleting the local copy. What
+  // is left is those hoists and the comments on them.
+  'packages/canvas-render/src/layout/edges/spatial-edges.ts': 2151,
   // +131 for the proposal card's press discipline and its render: the
   // bubble hit-test, the press remembered for the release, and the card
   // itself — which is its own file, so what lands here is the wiring.

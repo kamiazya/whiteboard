@@ -5,7 +5,7 @@ import type {
   ProposedChange,
   SpatialCanvas,
 } from '@kamiazya/whiteboard-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
+import { endpointNode, spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 
@@ -67,7 +67,13 @@ describe('applyCommand', () => {
       toNode: 'b',
     })
     expect(next.nodes).toBe(canvas.nodes)
-    expect(next.edges).toEqual([{ id: 'e1', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
   })
 
   it('connect-nodes rejects a missing endpoint as a no-op', () => {
@@ -106,7 +112,13 @@ describe('applyCommand', () => {
       toNode: 'a',
     })
     expect(next).toBe(canvas)
-    expect(next.edges).toEqual([{ id: 'e1', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
     expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
   })
 
@@ -208,9 +220,14 @@ describe('applyCommand', () => {
       fromEnd: 'arrow',
       toEnd: 'arrow',
     })
-    expect(both.edges[0]).toMatchObject({ fromEnd: 'arrow' })
-    // toEnd 'arrow' IS the spec default — canonical form omits it.
-    expect(both.edges[0]).not.toHaveProperty('toEnd')
+    // An arrowhead lives ON the end it is drawn at (ADR-0033 slice 3), so
+    // "canonical form omits the default" is now a missing `end` INSIDE the
+    // endpoint rather than a missing sibling key. Asserted on the endpoint
+    // object for that reason: `not.toHaveProperty('toEnd')` still passes over
+    // this shape and would pass over any shape at all.
+    expect(both.edges[0]?.from).toMatchObject({ end: 'arrow' })
+    // 'arrow' IS the spec default for the TO end — canonical form omits it.
+    expect(both.edges[0]?.to).not.toHaveProperty('end')
     expect(spatialCanvasSchema.safeParse(both).success).toBe(true)
 
     const none = applyCommand(both, {
@@ -219,8 +236,8 @@ describe('applyCommand', () => {
       fromEnd: 'none',
       toEnd: 'none',
     })
-    expect(none.edges[0]).not.toHaveProperty('fromEnd')
-    expect(none.edges[0]).toMatchObject({ toEnd: 'none' })
+    expect(none.edges[0]?.from).not.toHaveProperty('end')
+    expect(none.edges[0]?.to).toMatchObject({ end: 'none' })
 
     const defaults = applyCommand(none, {
       kind: 'set-edge-ends',
@@ -228,8 +245,8 @@ describe('applyCommand', () => {
       fromEnd: 'none',
       toEnd: 'arrow',
     })
-    expect(defaults.edges[0]).not.toHaveProperty('fromEnd')
-    expect(defaults.edges[0]).not.toHaveProperty('toEnd')
+    expect(defaults.edges[0]?.from).not.toHaveProperty('end')
+    expect(defaults.edges[0]?.to).not.toHaveProperty('end')
   })
 
   it('set-edge-side pins one endpoint and undefined returns it to auto', () => {
@@ -246,8 +263,8 @@ describe('applyCommand', () => {
       endpoint: 'from',
       side: 'top',
     })
-    expect(pinned.edges[0]).toMatchObject({ fromSide: 'top' })
-    expect(pinned.edges[0]).not.toHaveProperty('toSide')
+    expect(pinned.edges[0]?.from).toMatchObject({ side: 'top' })
+    expect(pinned.edges[0]?.to).not.toHaveProperty('side')
     expect(spatialCanvasSchema.safeParse(pinned).success).toBe(true)
 
     const auto = applyCommand(pinned, {
@@ -256,7 +273,7 @@ describe('applyCommand', () => {
       endpoint: 'from',
       side: undefined,
     })
-    expect(auto.edges[0]).not.toHaveProperty('fromSide')
+    expect(auto.edges[0]?.from).not.toHaveProperty('side')
     expect(spatialCanvasSchema.safeParse(auto).success).toBe(true)
   })
 
@@ -586,7 +603,13 @@ describe('batch', () => {
       ],
     })
     expect(next.nodes[0]).toMatchObject({ x: 10, y: 20, text: 'batched' })
-    expect(next.edges).toEqual([{ id: 'e9', fromNode: 'a', toNode: 'b' }])
+    expect(next.edges).toEqual([
+      {
+        id: 'e9',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ])
     expect(spatialCanvasSchema.safeParse(next).success).toBe(true)
   })
 
@@ -611,11 +634,8 @@ describe('batch', () => {
 describe('create-edge', () => {
   const fullEdge = {
     id: 'e-dup',
-    fromNode: 'a',
-    toNode: 'b',
-    fromSide: 'right',
-    toSide: 'left',
-    fromEnd: 'arrow',
+    from: { kind: 'node' as const, node: 'a', side: 'right', end: 'arrow' as const },
+    to: { kind: 'node' as const, node: 'b', side: 'left' as const },
     label: 'kept',
     color: '3',
   } as const
@@ -634,13 +654,18 @@ describe('create-edge', () => {
     expect(
       applyCommand(canvas, {
         kind: 'create-edge',
-        edge: { ...fullEdge, id: 'x', toNode: 'ghost' },
+        edge: { ...fullEdge, id: 'x', to: { kind: 'node' as const, node: 'ghost' } },
       }),
     ).toBe(canvas)
     expect(
       applyCommand(canvas, {
         kind: 'create-edge',
-        edge: { ...fullEdge, id: 'y', fromNode: 'a', toNode: 'a' },
+        edge: {
+          ...fullEdge,
+          id: 'y',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
       }),
     ).toBe(canvas)
   })
@@ -746,7 +771,13 @@ describe('set-edge-routing', () => {
   it('leaves nodes and edges untouched', () => {
     const canvas = {
       nodes: [{ id: 'a', type: 'text' as const, x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'a' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
+      ],
     }
     const next = applyCommand(canvas, { kind: 'set-edge-routing', style: 'orthogonal' })
 
@@ -845,7 +876,14 @@ describe('buildFragmentInsertCommand', () => {
       { id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' },
       { id: 'src-b', type: 'text', x: 150, y: 20, width: 60, height: 40, text: 'b' },
     ],
-    edges: [{ id: 'src-e', fromNode: 'src-a', toNode: 'src-b', label: 'link' }],
+    edges: [
+      {
+        id: 'src-e',
+        from: { kind: 'node' as const, node: 'src-a' },
+        to: { kind: 'node' as const, node: 'src-b' },
+        label: 'link',
+      },
+    ],
   })
   const sequentialIds = () => {
     let n = 0
@@ -863,9 +901,18 @@ describe('buildFragmentInsertCommand', () => {
       cut: {
         id: 'cut-1',
         boundaryEdges: [
-          { id: 'src-boundary', fromNode: 'src-b', toNode: 'peer', label: 'kept' },
+          {
+            id: 'src-boundary',
+            from: { kind: 'node' as const, node: 'src-b' },
+            to: { kind: 'node' as const, node: 'peer' },
+            label: 'kept',
+          },
           // This peer is gone (cross-canvas, or deleted since): silently dropped.
-          { id: 'src-gone', fromNode: 'src-a', toNode: 'vanished' },
+          {
+            id: 'src-gone',
+            from: { kind: 'node' as const, node: 'src-a' },
+            to: { kind: 'node' as const, node: 'vanished' },
+          },
         ],
       },
     }
@@ -877,9 +924,12 @@ describe('buildFragmentInsertCommand', () => {
       .id
     expect(remintedB).toBeDefined()
     const boundary = edgeCommands.find((c) => c.edge.label === 'kept')?.edge
-    expect(boundary).toMatchObject({ fromNode: remintedB, toNode: 'peer' })
+    expect(boundary).toMatchObject({
+      from: { kind: 'node' as const, node: remintedB },
+      to: { kind: 'node' as const, node: 'peer' },
+    })
     expect(boundary?.id).not.toBe('src-boundary')
-    expect(edgeCommands.some((c) => c.edge.toNode === 'vanished')).toBe(false)
+    expect(edgeCommands.some((c) => endpointNode(c.edge.to) === 'vanished')).toBe(false)
   })
 
   it('never reconnects a boundary edge whose original still exists — a lifted cut was not severed', () => {
@@ -890,19 +940,31 @@ describe('buildFragmentInsertCommand', () => {
       ],
       // The severed edge is still on the canvas: the hold was lifted (or
       // resolved as a move), so this paste is a plain duplicate.
-      edges: [{ id: 'src-boundary', fromNode: 'src-b', toNode: 'peer' }],
+      edges: [
+        {
+          id: 'src-boundary',
+          from: { kind: 'node' as const, node: 'src-b' },
+          to: { kind: 'node' as const, node: 'peer' },
+        },
+      ],
     }
     const cutFragment = {
       ...fragment(),
       cut: {
         id: 'cut-1',
-        boundaryEdges: [{ id: 'src-boundary', fromNode: 'src-b', toNode: 'peer' }],
+        boundaryEdges: [
+          {
+            id: 'src-boundary',
+            from: { kind: 'node' as const, node: 'src-b' },
+            to: { kind: 'node' as const, node: 'peer' },
+          },
+        ],
       },
     }
     const command = buildFragmentInsertCommand(canvas, cutFragment, sequentialIds())
     if (command?.kind !== 'batch') throw new Error('expected a batch command')
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
-    expect(edgeCommands.some((c) => c.edge.toNode === 'peer')).toBe(false)
+    expect(edgeCommands.some((c) => endpointNode(c.edge.to) === 'peer')).toBe(false)
   })
 
   it('returns undefined for an empty-node fragment', () => {
@@ -949,8 +1011,8 @@ describe('buildFragmentInsertCommand', () => {
     const edgeCommands = command.commands.filter((c) => c.kind === 'create-edge')
     expect(edgeCommands).toHaveLength(1)
     expect(edgeCommands[0].edge.label).toBe('link')
-    expect(nodeIds).toContain(edgeCommands[0].edge.fromNode)
-    expect(nodeIds).toContain(edgeCommands[0].edge.toNode)
+    expect(nodeIds).toContain(endpointNode(edgeCommands[0].edge.from))
+    expect(nodeIds).toContain(endpointNode(edgeCommands[0].edge.to))
   })
 
   it('reminted ids are disjoint from existing canvas node+edge ids', () => {
@@ -979,7 +1041,13 @@ describe('buildFragmentInsertCommand', () => {
     const canvas: SpatialCanvas = { nodes: [], edges: [] }
     const partial: Pick<ClipboardFragment, 'nodes' | 'edges'> = {
       nodes: [{ id: 'src-a', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'a' }],
-      edges: [{ id: 'src-e', fromNode: 'src-a', toNode: 'not-included' }],
+      edges: [
+        {
+          id: 'src-e',
+          from: { kind: 'node' as const, node: 'src-a' },
+          to: { kind: 'node' as const, node: 'not-included' },
+        },
+      ],
     }
     const command = buildFragmentInsertCommand(canvas, partial, sequentialIds())
     if (command?.kind !== 'batch') throw new Error('expected a batch command')
@@ -1196,8 +1264,16 @@ describe('set-edge-facet', () => {
       { id: 'b', type: 'text', text: 'b', x: 50, y: 50, width: 10, height: 10 },
     ],
     edges: [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'b', toNode: 'a' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'b' },
+        to: { kind: 'node' as const, node: 'a' },
+      },
     ],
   })
   const facetOf = (canvas: SpatialCanvas, id: string) =>

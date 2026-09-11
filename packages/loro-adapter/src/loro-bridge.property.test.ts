@@ -1,3 +1,4 @@
+import type { CanvasEdge, EdgeEndpoint } from '@kamiazya/whiteboard-model'
 import {
   canvasCommentArbitrary,
   extensionFacetsArbitrary,
@@ -45,6 +46,22 @@ const zeroNormalised = <T extends { x?: number; y?: number }>(value: T): T => ({
 const bendsNormalised = <T extends { bends?: readonly { x: number; y: number }[] }>(edge: T): T =>
   edge.bends === undefined ? edge : { ...edge, bends: edge.bends.map(zeroNormalised) }
 
+/**
+ * And a third home for the same fact: a FREE endpoint carries its coordinates
+ * under `point`, which neither helper above reaches — an endpoint has no
+ * `x`/`y` of its own and is not a bend. Each of the three was found by this
+ * property on the day its field arrived, which is the argument for keeping
+ * the property rather than only the three examples beside it.
+ */
+const endpointNormalised = (end: EdgeEndpoint): EdgeEndpoint =>
+  end.kind === 'point' ? { ...end, point: zeroNormalised(end.point) } : end
+
+const edgePointsNormalised = (edge: CanvasEdge): CanvasEdge => ({
+  ...edge,
+  from: endpointNormalised(edge.from),
+  to: endpointNormalised(edge.to),
+})
+
 describe('loro-bridge properties', () => {
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(
     'readSpatialCanvas(writeSpatialCanvas(doc, canvas)) deep-equals canvas up to node/edge order',
@@ -57,7 +74,9 @@ describe('loro-bridge properties', () => {
       writeSpatialCanvas(doc, canvas)
       const result = readSpatialCanvas(doc)
       expect(byId(result.nodes)).toEqual(byId(canvas.nodes).map(zeroNormalised))
-      expect(byId(result.edges)).toEqual(byId(canvas.edges).map(bendsNormalised))
+      expect(byId(result.edges)).toEqual(
+        byId(canvas.edges).map(bendsNormalised).map(edgePointsNormalised),
+      )
       // The envelope too — routing preferences and the canvas's facets —
       // because this bridge is the path the app saves through, and a JSON
       // round-trip is no evidence a field persists here. Comments are
@@ -90,11 +109,39 @@ describe('loro-bridge properties', () => {
         { id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 },
         { id: 'b', type: 'text', text: '', x: 9, y: 9, width: 1, height: 1 },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b', bends: [{ x: -0, y: 2.5 }] }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+          bends: [{ x: -0, y: 2.5 }],
+        },
+      ],
     })
     const bend = readSpatialCanvas(doc).edges[0]?.bends?.[0]
     expect(Object.is(bend?.x, 0)).toBe(true)
     expect(bend?.y).toBe(2.5)
+  })
+
+  it('normalises a negative zero in a free ENDPOINT the same way', () => {
+    // The third of the three, and the one with the shortest path from a
+    // gesture: releasing a connect drag in empty space writes the pointer's
+    // rounded position straight into the endpoint (ADR-0033 slice 3).
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'point' as const, point: { x: -0, y: 2.5 } },
+        },
+      ],
+    })
+    const to = readSpatialCanvas(doc).edges[0]?.to
+    expect(to?.kind).toBe('point')
+    expect(Object.is(to?.kind === 'point' ? to.point.x : undefined, 0)).toBe(true)
+    expect(to?.kind === 'point' ? to.point.y : undefined).toBe(2.5)
   })
 
   fcTest.prop([spatialCanvasArbitrary], withDefaults())(

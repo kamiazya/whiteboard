@@ -71,7 +71,15 @@ describe('wb_canvas_edit tool', () => {
           op: 'node.add',
           node: { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
         },
-        { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'b', label: 'to' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'e',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+            label: 'to',
+          },
+        },
       ],
     })
 
@@ -187,7 +195,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -219,7 +233,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -321,7 +341,13 @@ describe('wb_canvas_edit tool', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -446,7 +472,14 @@ describe('wb_canvas_edit tool', () => {
         mode: 'apply',
         ops: [
           { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
-          { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'missing' } },
+          {
+            op: 'edge.add',
+            edge: {
+              id: 'e',
+              from: { kind: 'node' as const, node: 'a' },
+              to: { kind: 'node' as const, node: 'missing' },
+            },
+          },
         ],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 1 })
@@ -464,7 +497,14 @@ describe('wb_canvas_edit tool', () => {
       ops: [
         { op: 'node.add', node: { id: 'a', type: 'text', text: 'A' } },
         { op: 'node.add', node: { id: 'b', type: 'text', text: 'B' } },
-        { op: 'edge.add', edge: { id: 'e', fromNode: 'a', toNode: 'b' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'e',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+          },
+        },
       ],
     })
 
@@ -578,10 +618,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       }
       const props = (node as { properties?: Record<string, unknown> }).properties
       if (props !== undefined) {
-        for (const side of ['fromSide', 'toSide']) {
-          const field = props[side] as { description?: string } | undefined
-          if (field !== undefined) found.push(`${side}: ${field.description ?? ''}`)
-        }
+        // `side` INSIDE an endpoint since ADR-0033 slice 3, not a
+        // `fromSide`/`toSide` sibling — so the names this walk looks for
+        // moved, and a walk still looking for the old ones finds nothing
+        // and reports "no side is described" as loudly as it would report a
+        // real regression.
+        const field = props.side as { description?: string } | undefined
+        if (field !== undefined) found.push(`side: ${field.description ?? ''}`)
       }
       for (const value of Object.values(node)) walk(value)
     }
@@ -648,7 +691,17 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
     const parsed = canvasEditInputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      ops: [{ op: 'edge.add', fromNode: 'a', toNode: 'b', edge: { fromNode: 'a', toNode: 'b' } }],
+      ops: [
+        {
+          op: 'edge.add',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+          edge: {
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+          },
+        },
+      ],
     })
     expect(parsed.success).toBe(false)
     const message = parsed.error?.issues.find((i) => i.code === 'unrecognized_keys')?.message ?? ''
@@ -681,7 +734,9 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'triangle' } }],
+      ops: [
+        { op: 'edge.patch', id: 'e', patch: { to: { kind: 'node', node: 'b', end: 'triangle' } } },
+      ],
     })
     expect(parsed.success).toBe(false)
 
@@ -689,7 +744,16 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       mode: 'apply',
-      ops: [{ op: 'edge.patch', id: 'e', patch: { toEnd: 'arrow', fromEnd: 'none' } }],
+      ops: [
+        {
+          op: 'edge.patch',
+          id: 'e',
+          patch: {
+            to: { kind: 'node', node: 'b', end: 'arrow' },
+            from: { kind: 'node', node: 'a', end: 'none' },
+          },
+        },
+      ],
     })
     expect(valid.success).toBe(true)
   })
@@ -701,7 +765,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -730,7 +800,13 @@ describe('wb_canvas_edit — behaviour inherited from the retired tools', () => 
         { id: 'x', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'node x' },
         { id: 'y', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'node y' },
       ],
-      edges: [{ id: 'x', fromNode: 'x', toNode: 'y' }],
+      edges: [
+        {
+          id: 'x',
+          from: { kind: 'node' as const, node: 'x' },
+          to: { kind: 'node' as const, node: 'y' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -937,7 +1013,13 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
         { id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'A' },
         { id: 'b', type: 'text', x: 50, y: 0, width: 10, height: 10, text: 'B' },
       ],
-      edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     })
     const { activities, viewports, notifier } = makeNotifier()
     const tool = createCanvasEditTool({ ...makeDeps(store), clientNotifier: notifier })
@@ -1137,8 +1219,16 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
       ],
       edges: [
-        { id: 'internal', fromNode: 'a', toNode: 'b' },
-        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+        {
+          id: 'internal',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+        {
+          id: 'leaving',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'far' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1166,9 +1256,21 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'far', type: 'text', x: 900, y: 900, width: 80, height: 40, text: 'far' },
       ],
       edges: [
-        { id: 'keep', fromNode: 'a', toNode: 'b' },
-        { id: 'drop', fromNode: 'b', toNode: 'a' },
-        { id: 'leaving', fromNode: 'a', toNode: 'far' },
+        {
+          id: 'keep',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+        {
+          id: 'drop',
+          from: { kind: 'node' as const, node: 'b' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
+        {
+          id: 'leaving',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'far' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -1349,7 +1451,14 @@ describe('wb_canvas_edit — region.set', () => {
       mode: 'apply',
       ops: [
         // Touches `outside` — and this edge is nowhere near `g`.
-        { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'outside',
+            from: { kind: 'node' as const, node: 'far1' },
+            to: { kind: 'node' as const, node: 'far2' },
+          },
+        },
         { op: 'region.set', within: 'g', nodes: [] },
       ],
     })
@@ -1366,7 +1475,13 @@ describe('wb_canvas_edit — region.set', () => {
         { id: 'in', type: 'text', x: 20, y: 20, width: 10, height: 10, text: 'in' },
         { id: 'far', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
       ],
-      edges: [{ id: 'smuggled', fromNode: 'in', toNode: 'far' }],
+      edges: [
+        {
+          id: 'smuggled',
+          from: { kind: 'node' as const, node: 'in' },
+          to: { kind: 'node' as const, node: 'far' },
+        },
+      ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
@@ -1711,8 +1826,16 @@ describe('wb_canvas_edit — tidy orders a row by its edges', () => {
         { id: 'search', type: 'text', x: 488, y: 400, width: 160, height: 60, text: 'search' },
       ],
       edges: [
-        { id: 'e1', fromNode: 'apigw', toNode: 'auth' },
-        { id: 'e2', fromNode: 'apigw', toNode: 'search' },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'apigw' },
+          to: { kind: 'node' as const, node: 'auth' },
+        },
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'apigw' },
+          to: { kind: 'node' as const, node: 'search' },
+        },
       ],
     })
     const tool = createCanvasEditTool(makeDeps(store))
@@ -2059,8 +2182,16 @@ describe('wb_canvas_edit — a selector where an id goes', () => {
       { id: 'far', type: 'text' as const, x: 900, y: 900, width: 80, height: 40, text: 'far' },
     ],
     edges: [
-      { id: 'ab', fromNode: 'a', toNode: 'b' },
-      { id: 'bfar', fromNode: 'b', toNode: 'far' },
+      {
+        id: 'ab',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'bfar',
+        from: { kind: 'node' as const, node: 'b' },
+        to: { kind: 'node' as const, node: 'far' },
+      },
     ],
   }
 

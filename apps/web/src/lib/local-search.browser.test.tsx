@@ -66,7 +66,14 @@ describe('local body search', () => {
       nodes: [
         { id: 'n1', type: 'text', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n1', label: 'retries' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n1' },
+          label: 'retries',
+        },
+      ],
     })
     const source = createLocalFilesSource()
 

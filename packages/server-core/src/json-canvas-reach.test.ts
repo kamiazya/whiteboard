@@ -39,8 +39,27 @@ const withKind = (kind: FieldProjection['kind']) =>
   positions.filter((path) => kindOf(path) === kind)
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
-  it("states 19 of the model's field positions exactly", () => {
-    expect(withKind('native')).toHaveLength(19)
+  it("states 21 of the model's field positions exactly", () => {
+    // 19 -> 21 with ADR-0033 slice 3: an END is one object rather than three
+    // flat keys, and the object's `kind` is a position of its own on each
+    // side. The format states it in the only sense that matters — every JSON
+    // Canvas edge runs between two nodes, so `kind` crossing means the lift
+    // builds the node arm and nothing is lost.
+    expect(withKind('native')).toHaveLength(21)
+  })
+
+  it('cannot state 4 at all — a free end, which takes its whole edge with it', () => {
+    // The ledger's first `dropped` entries, and the first loss whose UNIT is
+    // the element rather than the field: JSON Canvas requires `fromNode` and
+    // `toNode`, so an edge with a free end is omitted from BOTH modes. It is
+    // named here rather than left to the loss table because a `dropped` kind
+    // appearing at all is the thing to read in a diff.
+    expect([...withKind('dropped')].sort()).toEqual([
+      'edges[].from.point.x',
+      'edges[].from.point.y',
+      'edges[].to.point.x',
+      'edges[].to.point.y',
+    ])
   })
 
   it('states 4 more only to the nearest whole pixel — a node box', () => {
@@ -67,15 +86,20 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facet).toHaveLength(13)
   })
 
-  it('so 29 of the 52 positions a document can hold are outside the format', () => {
-    // Both totals are unchanged by ADR-0033 slice 4 and that is the reading,
-    // not a coincidence: an edge's two bend coordinates MOVED, out of a
-    // plugin's bucket (`visual.path/v0`, retired) and into the edge's own
-    // `bends` — 14 named extension fields became 16 and the 15 positions
-    // inside the buckets became 13. What the format cannot state is the
-    // same; what the PRODUCT has to call a plugin's is two fewer.
+  it('so 33 of the 58 positions a document can hold are outside the format', () => {
+    // 29/52 -> 33/58 with ADR-0033 slice 3, and the two numbers move for
+    // DIFFERENT reasons, which is the reading. The denominator grew by six
+    // because an endpoint object has positions three flat keys did not (a
+    // `kind` and a `point`'s two coordinates, per end). The numerator grew by
+    // four because all four point coordinates are `dropped`.
+    //
+    // So the share outside went 55.8% -> 56.9%, and what actually changed is
+    // not that the format reaches less far — it is that the model now holds
+    // something the format has no vocabulary for at all, where before it held
+    // only things the format could state or the extension key could carry.
+    // That is the first position of its kind since ADR-0033 was accepted.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(29)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(52)
+    expect(outside).toBe(33)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(58)
   })
 })

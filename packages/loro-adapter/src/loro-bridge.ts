@@ -6,6 +6,7 @@ import {
   type DocumentKind,
   documentKindSchema,
   type ExtensionFacets,
+  endpointNode,
   extensionFacetsSchema,
   type SpatialCanvas,
   type SpatialNode,
@@ -178,13 +179,13 @@ function nodeToFields(node: SpatialNode): Fields {
 function edgeToFields(edge: CanvasEdge): Fields {
   const fields: Fields = {
     id: edge.id,
-    fromNode: edge.fromNode,
-    toNode: edge.toNode,
+    // An ENDPOINT is one value, for the reason `bends` is: it is one thing
+    // with one meaning, so last-writer-wins per key is the whole merge story.
+    // Two peers re-attaching the same end concurrently should converge on an
+    // end one of them chose, never on a half of each.
+    from: edge.from,
+    to: edge.to,
   }
-  if (edge.fromSide !== undefined) fields.fromSide = edge.fromSide
-  if (edge.toSide !== undefined) fields.toSide = edge.toSide
-  if (edge.fromEnd !== undefined) fields.fromEnd = edge.fromEnd
-  if (edge.toEnd !== undefined) fields.toEnd = edge.toEnd
   if (edge.color !== undefined) fields.color = edge.color
   if (edge.label !== undefined) fields.label = edge.label
   // Bends are a plain array of plain objects, so Loro stores them as ONE
@@ -318,7 +319,12 @@ function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean
   for (const edgeId of edgesMap.keys()) {
     const raw = liftLegacyExtension(edgesMap.get(edgeId))
     const parsed = canvasEdgeSchema.safeParse(raw)
-    if (parsed.success && (parsed.data.fromNode === nodeId || parsed.data.toNode === nodeId)) {
+    // A cascade follows NODE ends only: an edge with a free end names nothing
+    // that can be deleted, so deleting a node never takes it with it.
+    const touches =
+      parsed.success &&
+      (endpointNode(parsed.data.from) === nodeId || endpointNode(parsed.data.to) === nodeId)
+    if (touches) {
       edgesMap.delete(edgeId)
       // The cascaded edges are removals too, so their own locks go with them.
       dropLockInto(doc, EDGE_LOCKS_KEY, edgeId)

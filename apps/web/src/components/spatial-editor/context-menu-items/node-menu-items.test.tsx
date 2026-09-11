@@ -196,7 +196,13 @@ describe('nodeMenuItems', () => {
     }
     const canvas: SpatialCanvas = {
       nodes: [nodeA, nodeB],
-      edges: [{ id: 'ab', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'ab',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
     }
     const applyResult = vi.fn()
     const items = nodeMenuItems(

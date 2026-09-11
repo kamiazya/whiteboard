@@ -79,11 +79,8 @@ const GROUP_NODE: SpatialNode = {
 
 const EDGE: CanvasEdge = {
   id: 'edge-1',
-  fromNode: 'node-1',
-  toNode: 'node-2',
-  fromSide: 'right',
-  toSide: 'left',
-  toEnd: 'arrow',
+  from: { kind: 'node' as const, node: 'node-1', side: 'right' as const },
+  to: { kind: 'node' as const, node: 'node-2', side: 'left', end: 'arrow' as const },
   label: 'connects',
 }
 
@@ -232,8 +229,8 @@ describe('loro-bridge', () => {
     const doc = makeDoc()
     const minimalEdge: CanvasEdge = {
       id: 'edge-min',
-      fromNode: 'node-1',
-      toNode: 'node-2',
+      from: { kind: 'node' as const, node: 'node-1' },
+      to: { kind: 'node' as const, node: 'node-2' },
     }
     const canvas: SpatialCanvas = { nodes: [TEXT_NODE, FILE_NODE], edges: [minimalEdge] }
 
@@ -262,7 +259,11 @@ describe('loro-bridge', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
 
-    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    const otherEdge: CanvasEdge = {
+      id: 'edge-2',
+      from: { kind: 'node' as const, node: 'node-2' },
+      to: { kind: 'node' as const, node: 'node-1' },
+    }
     writeSpatialEdge(doc, otherEdge)
 
     const result = readSpatialCanvas(doc)
@@ -287,7 +288,11 @@ describe('loro-bridge', () => {
 
   test('deleteSpatialNode removes the node and cascades to its incident edges', () => {
     const doc = makeDoc()
-    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    const otherEdge: CanvasEdge = {
+      id: 'edge-2',
+      from: { kind: 'node' as const, node: 'node-2' },
+      to: { kind: 'node' as const, node: 'node-1' },
+    }
     writeSpatialCanvas(doc, {
       nodes: [TEXT_NODE, FILE_NODE, LINK_NODE],
       edges: [EDGE, otherEdge],
@@ -321,7 +326,11 @@ describe('loro-bridge', () => {
     // the incident edges" from "drop them all".
     const doc = makeDoc()
     const thirdNode = { ...TEXT_NODE, id: 'node-3', x: 500 }
-    const survivingEdge: CanvasEdge = { id: 'edge-keep', fromNode: 'node-1', toNode: 'node-3' }
+    const survivingEdge: CanvasEdge = {
+      id: 'edge-keep',
+      from: { kind: 'node' as const, node: 'node-1' },
+      to: { kind: 'node' as const, node: 'node-3' },
+    }
     writeSpatialCanvas(doc, {
       nodes: [TEXT_NODE, FILE_NODE, thirdNode],
       edges: [EDGE, survivingEdge],
@@ -361,7 +370,11 @@ describe('loro-bridge', () => {
 
   test('deleteSpatialEdge removes exactly one edge, leaving nodes and other edges untouched', () => {
     const doc = makeDoc()
-    const otherEdge: CanvasEdge = { id: 'edge-2', fromNode: 'node-2', toNode: 'node-1' }
+    const otherEdge: CanvasEdge = {
+      id: 'edge-2',
+      from: { kind: 'node' as const, node: 'node-2' },
+      to: { kind: 'node' as const, node: 'node-1' },
+    }
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE, otherEdge] })
 
     deleteSpatialEdge(doc, EDGE.id)
@@ -1220,13 +1233,25 @@ describe('reconcileSpatialCanvas', () => {
     const doc = makeDoc()
     writeSpatialCanvas(doc, {
       nodes: [A, B],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
       comments: [{ id: 'c1', x: 1, y: 1, text: 'keep' }],
     })
     const prev = readSpatialCanvas(doc)
     reconcileSpatialCanvas(doc, prev, {
       nodes: [A, B],
-      edges: [{ id: 'e2', fromNode: 'b', toNode: 'a' }],
+      edges: [
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'b' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
+      ],
       comments: [
         { id: 'c1', x: 1, y: 1, text: 'keep' },
         { id: 'c2', x: 2, y: 2, text: 'new' },
@@ -1265,11 +1290,15 @@ describe("an edge's facets bucket", () => {
       edges: [
         {
           id: 'e1',
-          fromNode: 'a',
-          toNode: 'b',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
           facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
         },
-        { id: 'e2', fromNode: 'b', toNode: 'a' },
+        {
+          id: 'e2',
+          from: { kind: 'node' as const, node: 'b' },
+          to: { kind: 'node' as const, node: 'a' },
+        },
       ],
     })
 

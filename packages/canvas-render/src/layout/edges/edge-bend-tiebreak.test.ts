@@ -39,7 +39,11 @@ describe('orthogonal elbow tie-break', () => {
     // same length and both are clear — only the bend count separates them.
     const nodes = [box('b', 0, 0, 200, 300), box('a', 150, 500, 200, 100)]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'b', fromSide: 'top', toSide: 'right' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a', side: 'top' as const },
+        to: { kind: 'node' as const, node: 'b', side: 'right' as const },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const { path } = routeEdge(nodes, edges[0] as CanvasEdge, 'orthogonal', anchors.get('e1'))
@@ -58,7 +62,11 @@ describe('orthogonal elbow tie-break', () => {
       box('wall', 230, 330, 60, 120),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'b', fromSide: 'top', toSide: 'right' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a', side: 'top' as const },
+        to: { kind: 'node' as const, node: 'b', side: 'right' as const },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const { path } = routeEdge(nodes, edges[0] as CanvasEdge, 'orthogonal', anchors.get('e1'))

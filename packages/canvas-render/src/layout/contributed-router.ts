@@ -6,6 +6,7 @@
  * resolved, which the edge cluster deliberately knows nothing about.
  */
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endpointNode } from '@kamiazya/whiteboard-model'
 import type {
   BoundingBox,
   EdgeRouteRequest,
@@ -65,15 +66,15 @@ export function contributedRoute(
 ): ResolvedEdgeNode | undefined {
   const router = routerFor(canvas, edge, resolution)
   if (router === undefined) return undefined
-  const from = canvas.nodes.find((node) => node.id === edge.fromNode)
-  const to = canvas.nodes.find((node) => node.id === edge.toNode)
+  const from = canvas.nodes.find((node) => node.id === endpointNode(edge.from))
+  const to = canvas.nodes.find((node) => node.id === endpointNode(edge.to))
   if (from === undefined || to === undefined) return undefined
   const request: EdgeRouteRequest = {
     edge,
     from: boxOf(from),
     to: boxOf(to),
     obstacles: canvas.nodes
-      .filter((node) => node.id !== edge.fromNode && node.id !== edge.toNode)
+      .filter((node) => node.id !== endpointNode(edge.from) && node.id !== endpointNode(edge.to))
       .map(boxOf),
     // Passed only when BOTH sides resolved, so the contract can promise a
     // router that anchors means sides. A half-answer would make every router
@@ -96,8 +97,8 @@ export function contributedRoute(
     path: route.path,
     fromSide: anchors?.fromSide ?? 'right',
     toSide: anchors?.toSide ?? 'left',
-    fromEnd: edge.fromEnd ?? 'none',
-    toEnd: edge.toEnd ?? 'arrow',
+    fromEnd: edge.from.end ?? 'none',
+    toEnd: edge.to.end ?? 'arrow',
     ...(route.rounded === true ? { rounded: true as const } : {}),
   }
 }

@@ -128,29 +128,173 @@ export type SpatialNode = z.infer<typeof spatialNodeSchema>
  */
 const MAX_BENDS = 64
 
-const bendPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
+const canvasPointSchema = z.object({ x: nodePositionSchema, y: nodePositionSchema }).strict()
+
+export const edgeSideSchema = z.enum(['top', 'right', 'bottom', 'left'])
+
+export type EdgeSide = z.infer<typeof edgeSideSchema>
+
+/**
+ * One end of an edge: what it attaches to, where on it, and how it is drawn.
+ *
+ * A CLOSED discriminated union, the shape `annotationAnchorSchema` already
+ * uses, so every switch over an endpoint stays exhaustive and a third kind
+ * (an edge ending on another edge, say) arrives as an arm rather than as a
+ * fourth exclusive field nobody enforces.
+ *
+ * **Why a union and not two optional fields.** An end is a node or a point,
+ * never both and never neither, and `side` means nothing on a point — so the
+ * flat shape would need a refinement to say what the type can say itself.
+ * That is not only taste: `edgePatchFieldsSchema` is `canvasEdgeSchema
+ * .partial()`, and zod refuses `.partial()` over a refined object (the same
+ * wall `canvasCommentDraftSchema` hit), so a refinement here would have to be
+ * paid for with a second hand-written schema beside this one — the exact
+ * drift this package exists to prevent.
+ *
+ * **Why the three flat fields became one object.** JSON Canvas 1.0 spells an
+ * end as `fromNode` + `fromSide` + `fromEnd`, three parallel keys per end,
+ * because a flat file format has no other way. The model said the same thing
+ * only because it WAS the format
+ * ([ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md)); the
+ * projection folds these back into the six flat keys on the way out, which is
+ * what a projection is for.
+ */
+export const edgeEndpointSchema = z.discriminatedUnion('kind', [
+  z
+    .object({
+      kind: z.literal('node'),
+      node: nodeIdSchema.describe('The node this end attaches to.'),
+      // Described on the stored shape because every writer's schema is
+      // derived from it: the description says what leaving a side out buys,
+      // since a router that honours a pinned side draws whatever the pin
+      // makes it draw.
+      side: edgeSideSchema
+        .optional()
+        .describe(
+          'The side of the node to attach to. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
+        ),
+      end: z.enum(['none', 'arrow']).optional().describe('The arrowhead drawn at this end.'),
+    })
+    .strict(),
+  z
+    .object({
+      kind: z.literal('point'),
+      point: canvasPointSchema.describe('Where this end sits, in canvas coordinates.'),
+      end: z.enum(['none', 'arrow']).optional().describe('The arrowhead drawn at this end.'),
+    })
+    .strict(),
+])
+
+export type EdgeEndpoint = z.infer<typeof edgeEndpointSchema>
+
+/**
+ * The node an end attaches to, or `undefined` when it is a free point.
+ *
+ * Most readers of an endpoint want exactly this — "is this edge on node X",
+ * "look the box up" — and writing the narrowing at each of them is how one of
+ * them comes to forget the point arm. A free end answering `undefined` is the
+ * same shape those readers already handle for a dangling reference.
+ */
+export function endpointNode(end: EdgeEndpoint): string | undefined {
+  return end.kind === 'node' ? end.node : undefined
+}
+
+/**
+ * The nodes an edge names — one, two, or none, since a free end names nothing.
+ *
+ * The shape every existence check wants: "which of this edge's ends refer to
+ * something that has to be there". Written as a list rather than a pair so a
+ * caller loops rather than branching, which is what kept the free arm from
+ * having to be special-cased at each of them.
+ */
+export function endpointNodes(edge: {
+  readonly from: EdgeEndpoint
+  readonly to: EdgeEndpoint
+}): readonly string[] {
+  return [endpointNode(edge.from), endpointNode(edge.to)].filter(
+    (node): node is string => node !== undefined,
+  )
+}
+
+/**
+ * Whether an end sits on one of these nodes. A FREE end sits on none of them,
+ * which is what every caller means: the sets here are "the nodes in this
+ * fragment", "the nodes being deleted", "the members of this group", and a
+ * point belongs to no such collection.
+ *
+ * A helper rather than `ids.has(endpointNode(end) ?? '')` at twenty call
+ * sites: the sentinel reads as a trick, and one reader eventually writes
+ * `?? ''` somewhere an empty id IS meaningful.
+ */
+export function endpointIn(end: EdgeEndpoint, ids: ReadonlySet<string>): boolean {
+  const node = endpointNode(end)
+  return node !== undefined && ids.has(node)
+}
+
+/**
+ * The node an end sits on, looked up in a map keyed by node id.
+ *
+ * The companion `endpointIn` is to a Set: both exist so a caller never writes
+ * `byId.get(endpointNode(end) ?? '')`. The sentinel reads as a trick, and one
+ * reader eventually writes it where an empty id IS a key — and it is one
+ * character away from `byId.get('')` answering something.
+ */
+export function nodeAtEnd<T>(end: EdgeEndpoint, byId: ReadonlyMap<string, T>): T | undefined {
+  const node = endpointNode(end)
+  return node === undefined ? undefined : byId.get(node)
+}
+
+/**
+ * Whether both ends of an edge sit on the SAME node — a self-loop.
+ *
+ * Not `endpointNode(from) === endpointNode(to)`, which is what a reader
+ * reaches for and which answers TRUE for two free ends: they are both
+ * `undefined`, and an edge drawn between two bare points is the opposite of a
+ * self-loop. The comparison is written once here so that trap is sprung once.
+ */
+export function isSelfLoop(edge: {
+  readonly from: EdgeEndpoint
+  readonly to: EdgeEndpoint
+}): boolean {
+  const from = endpointNode(edge.from)
+  return from !== undefined && from === endpointNode(edge.to)
+}
+
+/**
+ * The side an end is pinned to, or `undefined` — which a free end always is,
+ * since a point has no sides to choose between.
+ *
+ * The companion to `endpointNode`, and here for the same reason: a router
+ * asking "was a side named" wants one answer, and writing the narrowing at
+ * every such site is how one of them comes to treat a point end as a node
+ * whose side nobody set.
+ */
+export function endpointSide(end: EdgeEndpoint): EdgeSide | undefined {
+  return end.kind === 'node' ? end.side : undefined
+}
+
+/** An end on a node, spelled once so a fixture is not three keys of ceremony. */
+export function nodeEndpoint(
+  node: string,
+  rest: { readonly side?: EdgeSide; readonly end?: 'none' | 'arrow' } = {},
+): EdgeEndpoint {
+  return {
+    kind: 'node',
+    node,
+    ...(rest.side === undefined ? {} : { side: rest.side }),
+    ...(rest.end === undefined ? {} : { end: rest.end }),
+  }
+}
 
 export const canvasEdgeSchema = z
   .object({
     id: nodeIdSchema,
-    fromNode: nodeIdSchema,
-    toNode: nodeIdSchema,
-    // Described here, on the stored shape, because every writer's schema is
-    // derived from it: the description says what leaving a side out buys,
-    // since a router that honours a pinned side draws whatever the pin makes
-    // it draw.
-    fromSide: z
-      .enum(['top', 'right', 'bottom', 'left'])
-      .optional()
-      .describe(
-        'The side the edge leaves from. Omit it: the router picks the side that keeps the line clear of other boxes, and a named side is kept even through one.',
-      ),
-    toSide: z
-      .enum(['top', 'right', 'bottom', 'left'])
-      .optional()
-      .describe('The side the edge arrives at. Omit it for the same reason as fromSide.'),
-    fromEnd: z.enum(['none', 'arrow']).optional(),
-    toEnd: z.enum(['none', 'arrow']).optional(),
+    from: edgeEndpointSchema.describe(
+      'Where the line starts: on a node (`{kind:"node",node}`) or at a free point on the canvas (`{kind:"point",point}`).',
+    ),
+    to: edgeEndpointSchema.describe(
+      'Where the line ends: on a node (`{kind:"node",node}`) or at a free point on the canvas (`{kind:"point",point}`).',
+    ),
     color: canvasColorSchema.optional(),
     label: z.string().optional(),
     /**
@@ -172,7 +316,7 @@ export const canvasEdgeSchema = z
      * longer has to round before it writes.
      */
     bends: z
-      .array(bendPointSchema)
+      .array(canvasPointSchema)
       .min(1)
       .max(MAX_BENDS)
       .optional()
@@ -341,18 +485,15 @@ export const spatialCanvasSchema = z
 
     const nodeIds = new Set(value.nodes.map((node) => node.id))
     value.edges.forEach((edge, index) => {
-      if (!nodeIds.has(edge.fromNode)) {
+      // Only a NODE end can dangle. A point end names nothing to be missing,
+      // which is the whole of what slice 3 added.
+      for (const side of ['from', 'to'] as const) {
+        const node = endpointNode(edge[side])
+        if (node === undefined || nodeIds.has(node)) continue
         ctx.addIssue({
           code: 'custom',
-          message: `edge "${edge.id}" references nonexistent fromNode "${edge.fromNode}"`,
-          path: ['edges', index, 'fromNode'],
-        })
-      }
-      if (!nodeIds.has(edge.toNode)) {
-        ctx.addIssue({
-          code: 'custom',
-          message: `edge "${edge.id}" references nonexistent toNode "${edge.toNode}"`,
-          path: ['edges', index, 'toNode'],
+          message: `edge "${edge.id}" references nonexistent ${side} node "${node}"`,
+          path: ['edges', index, side, 'node'],
         })
       }
     })

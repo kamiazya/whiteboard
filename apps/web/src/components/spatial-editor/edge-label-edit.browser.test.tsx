@@ -21,8 +21,17 @@ function makeStart(label?: string): SpatialCanvas {
     ],
     edges: [
       label === undefined
-        ? { id: 'e1', fromNode: 'a', toNode: 'b' }
-        : { id: 'e1', fromNode: 'a', toNode: 'b', label },
+        ? {
+            id: 'e1',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+          }
+        : {
+            id: 'e1',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+            label,
+          },
     ],
   }
 }

@@ -9,6 +9,7 @@
 // ADR-0032 fixes what these columns may be read to mean: the composition a
 // drawing hands its reader, never that it was understood.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { nodeEndpoint } from '@kamiazya/whiteboard-model'
 import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
@@ -42,8 +43,8 @@ const group = (id: string, x: number, y: number, width: number, height: number):
 })
 const edge = (id: string, fromNode: string, toNode: string): CanvasEdge => ({
   id,
-  fromNode,
-  toNode,
+  from: nodeEndpoint(fromNode),
+  to: nodeEndpoint(toNode),
 })
 const canvasOf = (
   nodes: readonly SpatialNode[],

@@ -26,7 +26,13 @@ it('re-pairs the arrival onto the axis the moved departure did not take', () => 
     node('n1', 273, 344, 104, 121),
     node('n2', 7, 216, 64, 133),
   ]
-  const edges: CanvasEdge[] = [{ id: 'e', fromNode: 'n0', toNode: 'n2' }]
+  const edges: CanvasEdge[] = [
+    {
+      id: 'e',
+      from: { kind: 'node' as const, node: 'n0' },
+      to: { kind: 'node' as const, node: 'n2' },
+    },
+  ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
   const routed = routeEdge(nodes, edges[0] as CanvasEdge, 'orthogonal', anchors.get('e'))
   expect({ from: routed.fromSide, to: routed.toSide }).toEqual({ from: 'top', to: 'right' })

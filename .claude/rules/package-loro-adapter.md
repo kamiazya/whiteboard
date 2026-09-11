@@ -202,6 +202,15 @@ implementations live in the composition roots.
   JSON is NOT evidence it persists, since this bridge is the path the app
   actually saves through.
 
+- **An edge's ENDPOINT is one value too**, for the reason `bends` is and one more: the two arms of
+  the union share only `end`, so an end that is a node in one replica and a point in another has
+  no field-wise merge that means anything. Writing the whole endpoint under one key makes the
+  merge the "whoever wrote last placed this end" a reader expects.
+  `-0` does not survive the record here either, and a free end's `point` is its THIRD home — the
+  node's `x`/`y` and an edge's `bends` are the other two. Each was found by
+  `loro-bridge.property.test.ts` on the day its field arrived, which is the argument for keeping
+  the property rather than only the three examples beside it.
+
 - **An edge's `bends` are ONE value, not a nested container.** Last-writer-wins per key is what a
   dragged path wants: two people reshaping one edge concurrently should converge on a path one of
   them drew, never on an interleaved third neither did. `loro-bridge.property.test.ts` is what

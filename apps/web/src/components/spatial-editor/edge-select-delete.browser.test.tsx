@@ -17,7 +17,13 @@ function makeStart(): SpatialCanvas {
       { id: 'a', type: 'text', x: 100, y: 100, width: 120, height: 60, text: 'A' },
       { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
     ],
-    edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+    edges: [
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ],
   }
 }
 

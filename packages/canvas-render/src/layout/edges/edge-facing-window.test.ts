@@ -16,9 +16,21 @@ const NODES: SpatialNode[] = [
   { id: 'C', type: 'text', x: 280, y: 460, width: 200, height: 100, text: '' },
 ]
 const EDGES: CanvasEdge[] = [
-  { id: 'A-B', fromNode: 'A', toNode: 'B' },
-  { id: 'B-C', fromNode: 'B', toNode: 'C' },
-  { id: 'A-C', fromNode: 'A', toNode: 'C' },
+  {
+    id: 'A-B',
+    from: { kind: 'node' as const, node: 'A' },
+    to: { kind: 'node' as const, node: 'B' },
+  },
+  {
+    id: 'B-C',
+    from: { kind: 'node' as const, node: 'B' },
+    to: { kind: 'node' as const, node: 'C' },
+  },
+  {
+    id: 'A-C',
+    from: { kind: 'node' as const, node: 'A' },
+    to: { kind: 'node' as const, node: 'C' },
+  },
 ]
 
 function isAxisAligned(path: readonly { x: number; y: number }[]): boolean {

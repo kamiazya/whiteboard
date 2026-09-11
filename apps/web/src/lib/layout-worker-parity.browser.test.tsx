@@ -66,9 +66,22 @@ const canvas: SpatialCanvas = {
     { id: 'g', type: 'group', x: -20, y: -20, width: 580, height: 440, label: 'group' },
   ],
   edges: [
-    { id: 'e1', fromNode: 'a', toNode: 'b', label: 'edge label' },
-    { id: 'e2', fromNode: 'b', toNode: 'c' },
-    { id: 'e3', fromNode: 'a', toNode: 'c' },
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+      label: 'edge label',
+    },
+    {
+      id: 'e2',
+      from: { kind: 'node' as const, node: 'b' },
+      to: { kind: 'node' as const, node: 'c' },
+    },
+    {
+      id: 'e3',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'c' },
+    },
   ],
   facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
 } as SpatialCanvas

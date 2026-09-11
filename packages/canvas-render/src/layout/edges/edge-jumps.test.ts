@@ -32,8 +32,16 @@ const cross = (lineJumps?: 'none' | 'arc'): SpatialCanvas => ({
     { id: 'd', type: 'text', x: 200, y: 300, width: 50, height: 50, text: 'd' },
   ],
   edges: [
-    { id: 'e1', fromNode: 'a', toNode: 'b' },
-    { id: 'e2', fromNode: 'c', toNode: 'd' },
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+    {
+      id: 'e2',
+      from: { kind: 'node' as const, node: 'c' },
+      to: { kind: 'node' as const, node: 'd' },
+    },
   ],
   ...(lineJumps !== undefined ? { facets: { 'visual.edges/v0': { lineJumps } } } : {}),
 })
@@ -79,9 +87,21 @@ describe('line jumps', () => {
         { id: 'd2', type: 'text', x: 178, y: 300, width: 50, height: 50, text: 'd2' },
       ],
       edges: [
-        { id: 'v1', fromNode: 'c1', toNode: 'd1' },
-        { id: 'v2', fromNode: 'c2', toNode: 'd2' },
-        { id: 'h', fromNode: 'a', toNode: 'b' },
+        {
+          id: 'v1',
+          from: { kind: 'node' as const, node: 'c1' },
+          to: { kind: 'node' as const, node: 'd1' },
+        },
+        {
+          id: 'v2',
+          from: { kind: 'node' as const, node: 'c2' },
+          to: { kind: 'node' as const, node: 'd2' },
+        },
+        {
+          id: 'h',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }
@@ -101,8 +121,16 @@ describe('line jumps', () => {
         { id: 'q', type: 'text', x: 300, y: 200, width: 50, height: 50, text: 'q' },
       ],
       edges: [
-        { id: 'f1', fromNode: 'hub', toNode: 'p' },
-        { id: 'f2', fromNode: 'hub', toNode: 'q' },
+        {
+          id: 'f1',
+          from: { kind: 'node' as const, node: 'hub' },
+          to: { kind: 'node' as const, node: 'p' },
+        },
+        {
+          id: 'f2',
+          from: { kind: 'node' as const, node: 'hub' },
+          to: { kind: 'node' as const, node: 'q' },
+        },
       ],
       facets: { 'visual.edges/v0': { lineJumps: 'arc' } },
     }

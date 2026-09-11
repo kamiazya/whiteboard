@@ -41,7 +41,13 @@ export async function seededServer(): Promise<ReturnType<typeof createServer>> {
         { id: 'n2', type: 'text', x: 400, y: 0, width: 200, height: 80, text: 'two' },
         { id: 'g1', type: 'group', x: -20, y: 200, width: 640, height: 200, label: 'later' },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+      ],
       comments: [{ id: 'c1', x: 10, y: 10, text: 'why?', targetNodeId: 'n1' }],
     })
   })

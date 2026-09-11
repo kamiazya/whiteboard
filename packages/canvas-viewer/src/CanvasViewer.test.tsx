@@ -168,7 +168,13 @@ describe('CanvasViewer style (ADR-0030 decision 6)', () => {
       { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'a' },
       { id: 'b', type: 'text', x: 300, y: 200, width: 100, height: 40, text: 'b' },
     ],
-    edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+    edges: [
+      {
+        id: 'e',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+    ],
     facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
   }
 

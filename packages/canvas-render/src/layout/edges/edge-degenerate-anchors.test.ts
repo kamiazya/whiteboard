@@ -56,7 +56,11 @@ describe('coincident anchors', () => {
     // The boxes are flush on ONE axis; the other has space. An edge someone
     // drew must not disappear because the pair the ranking preferred happens
     // to be degenerate.
-    const routed = routeWith({ id: 'e', fromNode: 'n0', toNode: 'n1' })
+    const routed = routeWith({
+      id: 'e',
+      from: { kind: 'node' as const, node: 'n0' },
+      to: { kind: 'node' as const, node: 'n1' },
+    })
     expect({ from: routed.fromSide, to: routed.toSide }).toEqual({ from: 'right', to: 'right' })
     expect(routed.path.map((p) => `${p.x},${p.y}`)).toEqual(['77,20', '97,20', '97,60', '60,60'])
     // The arrowhead is 10px and is drawn ON the final segment; the left-side
@@ -66,7 +70,11 @@ describe('coincident anchors', () => {
   })
 
   it('leaves no ink inside either box', () => {
-    const { path } = routeWith({ id: 'e', fromNode: 'n0', toNode: 'n1' })
+    const { path } = routeWith({
+      id: 'e',
+      from: { kind: 'node' as const, node: 'n0' },
+      to: { kind: 'node' as const, node: 'n1' },
+    })
     for (const n of nodes) {
       expect({ node: n.id, ink: interiorInk(path, n) }).toEqual({ node: n.id, ink: 0 })
     }
@@ -80,10 +88,8 @@ describe('coincident anchors', () => {
     // other — so the edge is drawn, around the pair, with no ink in either.
     const { path, fromSide, toSide } = routeWith({
       id: 'e',
-      fromNode: 'n0',
-      toNode: 'n1',
-      fromSide: 'bottom',
-      toSide: 'top',
+      from: { kind: 'node' as const, node: 'n0', side: 'bottom' as const },
+      to: { kind: 'node' as const, node: 'n1', side: 'top' as const },
     })
     expect({ fromSide, toSide }).not.toEqual({ fromSide: 'bottom', toSide: 'top' })
     const length = path.slice(1).reduce((sum, p, i) => {

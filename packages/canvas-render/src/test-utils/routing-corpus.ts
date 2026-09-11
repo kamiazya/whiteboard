@@ -30,9 +30,22 @@ const overlappingPair = (name: string, bx: number, by: number): RoutingCase => (
   name,
   nodes: [node('A', 100, 570, 200, 100), node('B', bx, by, 200, 100), node('T', 80, 360, 200, 110)],
   edges: [
-    { id: 'e_AB', fromNode: 'A', toNode: 'B' },
-    { id: 'e_TA', fromNode: 'T', toNode: 'A', label: 'hoge' },
-    { id: 'e_TB', fromNode: 'T', toNode: 'B' },
+    {
+      id: 'e_AB',
+      from: { kind: 'node' as const, node: 'A' },
+      to: { kind: 'node' as const, node: 'B' },
+    },
+    {
+      id: 'e_TA',
+      from: { kind: 'node' as const, node: 'T' },
+      to: { kind: 'node' as const, node: 'A' },
+      label: 'hoge',
+    },
+    {
+      id: 'e_TB',
+      from: { kind: 'node' as const, node: 'T' },
+      to: { kind: 'node' as const, node: 'B' },
+    },
   ],
 })
 
@@ -50,12 +63,24 @@ export const ROUTING_CORPUS: readonly RoutingCase[] = [
       node('inner1', 40, 40, 100, 60),
       node('inner2', 240, 180, 100, 60),
     ],
-    edges: [{ id: 'e_inner', fromNode: 'inner1', toNode: 'inner2' }],
+    edges: [
+      {
+        id: 'e_inner',
+        from: { kind: 'node' as const, node: 'inner1' },
+        to: { kind: 'node' as const, node: 'inner2' },
+      },
+    ],
   },
   {
     name: 'corridor: a third node sits between the endpoints',
     nodes: [node('L', 0, 100, 120, 80), node('M', 200, 60, 100, 160), node('R', 380, 100, 120, 80)],
-    edges: [{ id: 'e_LR', fromNode: 'L', toNode: 'R' }],
+    edges: [
+      {
+        id: 'e_LR',
+        from: { kind: 'node' as const, node: 'L' },
+        to: { kind: 'node' as const, node: 'R' },
+      },
+    ],
   },
 ]
 
@@ -92,7 +117,12 @@ export function syntheticLayouts(count: number): readonly RoutingCase[] {
     const edges: CanvasEdge[] = []
     for (let a = 0; a < size; a++) {
       for (let b = a + 1; b < size; b++) {
-        if (int(2) === 1) edges.push({ id: `e${a}_${b}`, fromNode: `n${a}`, toNode: `n${b}` })
+        if (int(2) === 1)
+          edges.push({
+            id: `e${a}_${b}`,
+            from: { kind: 'node' as const, node: `n${a}` },
+            to: { kind: 'node' as const, node: `n${b}` },
+          })
       }
     }
     if (edges.length > 0) cases.push({ name: `synthetic ${i}`, nodes, edges })
@@ -151,7 +181,11 @@ export function clusteredLayout(options: {
     const key = `${from}->${to}`
     if (seen.has(key)) return
     seen.add(key)
-    edges.push({ id: `e${edges.length}`, fromNode: from, toNode: to })
+    edges.push({
+      id: `e${edges.length}`,
+      from: { kind: 'node' as const, node: from },
+      to: { kind: 'node' as const, node: to },
+    })
   }
   for (let c = 0; c < clusters; c++) {
     for (let e = 0; e < edgesPerCluster; e++) {

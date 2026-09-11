@@ -25,7 +25,13 @@ const initial: SpatialCanvas = {
     { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 240, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 function makeHost() {

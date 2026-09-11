@@ -27,7 +27,13 @@ const BOARD: SpatialCanvas = {
     { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' },
     { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' },
   ],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 function makeDeps(store: FakeDocumentStore, over: Partial<ServerDeps> = {}): ServerDeps {
@@ -130,7 +136,11 @@ describe('wb_canvas_edit in propose mode', () => {
         status: 'open',
         op: 'edge.remove',
         edgeId: 'e',
-        assumed: { id: 'e', fromNode: 'a', toNode: 'b' },
+        assumed: {
+          id: 'e',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
       },
     ])
   })
@@ -390,8 +400,8 @@ describe('elements whose fields hold objects', () => {
     edges: [
       {
         id: 'e',
-        fromNode: 'a',
-        toNode: 'b',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
         facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
       },
     ],

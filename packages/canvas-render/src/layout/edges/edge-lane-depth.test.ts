@@ -44,8 +44,16 @@ const nodes = [
   node('cyan', 630, 1270, 280, 200),
 ]
 const edges: CanvasEdge[] = [
-  { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-  { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+  {
+    id: 'e-orange',
+    from: { kind: 'node' as const, node: 'yellow' },
+    to: { kind: 'node' as const, node: 'red' },
+  },
+  {
+    id: 'e-red',
+    from: { kind: 'node' as const, node: 'red' },
+    to: { kind: 'node' as const, node: 'cyan' },
+  },
 ]
 
 describe('stub lane depth for shared sides', () => {
@@ -58,7 +66,11 @@ describe('stub lane depth for shared sides', () => {
 
   it('a lone end keeps the exact 20px stub — unshared documents are unchanged', () => {
     const pair = [node('a', 0, 0, 100, 100), node('b', 300, 300, 100, 100)]
-    const e: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const e: CanvasEdge = {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    }
     const anchors = assignEdgeAnchors(pair, [e])
     const routed = routeEdge(pair, e, 'orthogonal', anchors.get('e1'))
     // fromSide right (dx tie rule): stub at x = 100 + 20.

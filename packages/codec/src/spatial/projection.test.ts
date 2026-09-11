@@ -66,8 +66,17 @@ describe('the ledger agrees with what strict JSON Canvas actually drops', () => 
     // that changed, not the field — and conflating the two was a modelling
     // mistake this comparison made until geometry became the first degraded
     // entry and the sets stopped matching.
+    // `extension` AND `dropped`, not "everything the ledger does not call
+    // native". A `degraded` position is still THERE after the trip — it is
+    // the value that changed, not the field — and conflating the two was a
+    // modelling mistake this comparison made until geometry became the first
+    // degraded entry and the sets stopped matching. `dropped` joined the
+    // moment an edge could have a free end (slice 3): those positions really
+    // are gone, and so, uniquely, is the element carrying them.
     const declared = jsonCanvasLoss()
-      .filter((entry) => entry.projection.kind === 'extension')
+      .filter(
+        (entry) => entry.projection.kind === 'extension' || entry.projection.kind === 'dropped',
+      )
       .map((entry) => entry.path)
       .sort()
 
@@ -165,16 +174,22 @@ function fullyPopulatedCanvas() {
     edges: [
       {
         id: 'e1',
-        fromNode: 'n1',
-        toNode: 'n2',
-        fromSide: 'right' as const,
-        toSide: 'left' as const,
-        fromEnd: 'none' as const,
-        toEnd: 'arrow' as const,
+        from: { kind: 'node' as const, node: 'n1', side: 'right' as const, end: 'none' as const },
+        to: { kind: 'node' as const, node: 'n2', side: 'left' as const, end: 'arrow' as const },
         color: '2' as const,
         label: 'l',
         bends: [{ x: 1, y: 1 }],
         facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      },
+      {
+        // The free-ended edge, and the only way to occupy the four `point`
+        // positions. It is a SECOND edge rather than a change to the first
+        // because the comparison below needs both: an edge the format can
+        // state (so the native positions survive the trip) and one it
+        // cannot (so the dropped positions are really lost).
+        id: 'e2',
+        from: { kind: 'point' as const, point: { x: 42, y: -7 } },
+        to: { kind: 'point' as const, point: { x: 43, y: -8 } },
       },
     ],
     comments: [

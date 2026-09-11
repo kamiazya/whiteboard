@@ -158,7 +158,14 @@ describe('headless-renderer', () => {
         { id: 'a', type: 'text' as const, x: 0, y: 0, width: 120, height: 60, text: 'from' },
         { id: 'b', type: 'text' as const, x: 300, y: 0, width: 120, height: 60, text: 'to' },
       ],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b', label: 'flows' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+          label: 'flows',
+        },
+      ],
     }
     const { renderSpatialCanvasToSvg } = await importRenderer()
     const darkSvg = (await renderSpatialCanvasToSvg(canvas, { theme: 'dark' })).svg

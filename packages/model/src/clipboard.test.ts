@@ -14,7 +14,13 @@ describe('clipboardFragmentSchema', () => {
         NODE2,
         { id: 'n3', type: 'file', x: 400, y: 0, width: 100, height: 50, file: 'asset:img' },
       ],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+      ],
       files: {
         'asset:img': { mimeType: 'image/png', dataBase64: 'iVBORw0KGgo=' },
       },
@@ -68,7 +74,13 @@ describe('clipboardFragmentSchema', () => {
         type: 'whiteboard/clipboard',
         version: 1,
         nodes: [NODE],
-        edges: [{ id: 'e1', fromNode: 'n1', toNode: 'ghost' }],
+        edges: [
+          {
+            id: 'e1',
+            from: { kind: 'node' as const, node: 'n1' },
+            to: { kind: 'node' as const, node: 'ghost' },
+          },
+        ],
       }).success,
     ).toBe(false)
   })
@@ -82,7 +94,13 @@ describe('clipboardFragmentSchema', () => {
       cut: {
         id: 'cut-1',
         // n1 is in the fragment; 'outside' is the peer left on the canvas.
-        boundaryEdges: [{ id: 'e-b', fromNode: 'n1', toNode: 'outside' }],
+        boundaryEdges: [
+          {
+            id: 'e-b',
+            from: { kind: 'node' as const, node: 'n1' },
+            to: { kind: 'node' as const, node: 'outside' },
+          },
+        ],
       },
     }
     expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
@@ -93,13 +111,31 @@ describe('clipboardFragmentSchema', () => {
     expect(
       clipboardFragmentSchema.safeParse({
         ...base,
-        cut: { id: 'cut-1', boundaryEdges: [{ id: 'e-b', fromNode: 'n1', toNode: 'n2' }] },
+        cut: {
+          id: 'cut-1',
+          boundaryEdges: [
+            {
+              id: 'e-b',
+              from: { kind: 'node' as const, node: 'n1' },
+              to: { kind: 'node' as const, node: 'n2' },
+            },
+          ],
+        },
       }).success,
     ).toBe(false)
     expect(
       clipboardFragmentSchema.safeParse({
         ...base,
-        cut: { id: 'cut-1', boundaryEdges: [{ id: 'e-b', fromNode: 'x', toNode: 'y' }] },
+        cut: {
+          id: 'cut-1',
+          boundaryEdges: [
+            {
+              id: 'e-b',
+              from: { kind: 'node' as const, node: 'x' },
+              to: { kind: 'node' as const, node: 'y' },
+            },
+          ],
+        },
       }).success,
     ).toBe(false)
   })

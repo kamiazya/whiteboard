@@ -8,8 +8,8 @@ const TO = { x: 400, y: 300, w: 100, h: 50 }
 const edgeWith = (bends: unknown): CanvasEdge =>
   ({
     id: 'e',
-    fromNode: 'a',
-    toNode: 'b',
+    from: { kind: 'node' as const, node: 'a' },
+    to: { kind: 'node' as const, node: 'b' },
     ...(bends === undefined ? {} : { bends }),
   }) as CanvasEdge
 

@@ -36,13 +36,14 @@ import type {
   CanvasComment,
   CanvasEdge,
   CommentThread,
+  EdgeEndpoint,
   EdgeRoutingStyle,
   Proposal,
   SpatialCanvas,
   SpatialNode,
   SpatialProposedChange,
 } from '@kamiazya/whiteboard-model'
-import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-model'
+import { canvasChangeConflicts, endpointNode, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
@@ -1371,8 +1372,11 @@ function pullEdgeOntoOutlines(
     a: { readonly x: number; readonly y: number },
     b: { readonly x: number; readonly y: number },
   ): boolean => a.x !== b.x || a.y !== b.y
-  const toKind = nodeOutlines[edge.toNode]
-  const toBox = toKind === undefined ? undefined : boxOf(edge.toNode)
+  // A free end has no node, so no silhouette to be pulled onto — it already
+  // sits exactly where the document put it.
+  const toId = endpointNode(edge.to)
+  const toKind = toId === undefined ? undefined : nodeOutlines[toId]
+  const toBox = toKind === undefined || toId === undefined ? undefined : boxOf(toId)
   if (toKind !== undefined && toBox !== undefined) {
     const last = path[path.length - 1]
     const inward = path[path.length - 2]
@@ -1381,8 +1385,9 @@ function pullEdgeOntoOutlines(
       if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
     }
   }
-  const fromKind = nodeOutlines[edge.fromNode]
-  const fromBox = fromKind === undefined ? undefined : boxOf(edge.fromNode)
+  const fromId = endpointNode(edge.from)
+  const fromKind = fromId === undefined ? undefined : nodeOutlines[fromId]
+  const fromBox = fromKind === undefined || fromId === undefined ? undefined : boxOf(fromId)
   if (fromKind !== undefined && fromBox !== undefined) {
     const first = path[0]
     const inward = path[1]
@@ -2269,14 +2274,17 @@ function proposedEdgePath(
     return edgePathOf(change.edgeId)
   }
   if (change.op !== 'edge.add') return undefined
-  const centre = (id: string) => {
-    const node = canvas.nodes.find((candidate) => candidate.id === id)
+  // A FREE end has no box to take a centre from, so a proposed edge carrying
+  // one draws no preview line — the same answer a dangling reference gets.
+  const centre = (end: EdgeEndpoint) => {
+    const id = endpointNode(end)
+    const node = id === undefined ? undefined : canvas.nodes.find((c) => c.id === id)
     return node === undefined
       ? undefined
       : { x: node.x + node.width / 2, y: node.y + node.height / 2 }
   }
-  const from = centre(change.edge.fromNode)
-  const to = centre(change.edge.toNode)
+  const from = centre(change.edge.from)
+  const to = centre(change.edge.to)
   return from === undefined || to === undefined ? undefined : [from, to]
 }
 

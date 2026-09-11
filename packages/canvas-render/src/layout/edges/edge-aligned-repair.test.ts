@@ -18,9 +18,21 @@ const nodes: SpatialNode[] = [
   { id: 'T', type: 'text', x: 80, y: 360, width: 200, height: 110, text: 'T' },
 ]
 const edges: CanvasEdge[] = [
-  { id: 'A->B', fromNode: 'A', toNode: 'B' },
-  { id: 'T->A', fromNode: 'T', toNode: 'A' },
-  { id: 'T->B', fromNode: 'T', toNode: 'B' },
+  {
+    id: 'A->B',
+    from: { kind: 'node' as const, node: 'A' },
+    to: { kind: 'node' as const, node: 'B' },
+  },
+  {
+    id: 'T->A',
+    from: { kind: 'node' as const, node: 'T' },
+    to: { kind: 'node' as const, node: 'A' },
+  },
+  {
+    id: 'T->B',
+    from: { kind: 'node' as const, node: 'T' },
+    to: { kind: 'node' as const, node: 'B' },
+  },
 ]
 
 describe('a settled configuration is re-scored against the anchors it will be drawn with', () => {

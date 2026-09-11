@@ -349,7 +349,13 @@ describe('node-target writes (nodeId)', () => {
           { id: 'n1', type: 'text', text: 'a', x: 0, y: 0, width: 100, height: 50 },
           { id: 'n2', type: 'text', text: 'b', x: 300, y: 200, width: 100, height: 50 },
         ],
-        edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+        edges: [
+          {
+            id: 'e1',
+            from: { kind: 'node' as const, node: 'n1' },
+            to: { kind: 'node' as const, node: 'n2' },
+          },
+        ],
       })
     })
     return { documentStore, tool: createFacetSetTool(makeDeps(documentStore)) }

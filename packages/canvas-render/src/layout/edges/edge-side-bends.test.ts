@@ -38,8 +38,16 @@ describe('bend-aware default sides', () => {
       node('cyan', 630, 610, 280, 160),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red' },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges)
     const red = routeEdge(nodes, edges[1]!, 'orthogonal', anchors.get('e-red'))
@@ -50,7 +58,11 @@ describe('bend-aware default sides', () => {
 
   it('an aligned facing pair still takes the zero-bend opposing lane, never an L', () => {
     const nodes = [node('a', 0, 0, 100, 100), node('b', 400, 20, 100, 100)]
-    const e: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const e: CanvasEdge = {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    }
     const anchors = assignEdgeAnchors(nodes, [e])
     const routed = routeEdge(nodes, e, 'orthogonal', anchors.get('e1'))
     expect(routed.fromSide).toBe('right')
@@ -60,7 +72,11 @@ describe('bend-aware default sides', () => {
 
   it('authored sides always win over the bend estimate', () => {
     const nodes = [node('a', 0, 100, 300, 120), node('b', 630, 610, 280, 160)]
-    const e: CanvasEdge = { id: 'e1', fromNode: 'a', toNode: 'b', fromSide: 'right' }
+    const e: CanvasEdge = {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a', side: 'right' as const },
+      to: { kind: 'node' as const, node: 'b' },
+    }
     const anchors = assignEdgeAnchors(nodes, [e])
     const routed = routeEdge(nodes, e, 'orthogonal', anchors.get('e1'))
     expect(routed.fromSide).toBe('right')

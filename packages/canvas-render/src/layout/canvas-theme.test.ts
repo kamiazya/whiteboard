@@ -97,7 +97,13 @@ const themed = (
   nodes: SpatialCanvas['nodes'] = TWO_NODES,
 ): SpatialCanvas => ({
   nodes,
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
   ...(theme === undefined ? {} : { facets: { [THEME_KEY]: { theme } } }),
 })
 

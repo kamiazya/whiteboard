@@ -75,8 +75,16 @@ function canvasOf(nodeCount: number, styled: boolean): SpatialCanvas {
   // Two edges only: present so the edge pass is not skipped outright, few
   // enough that its cost stays negligible against the node pass.
   const edges: CanvasEdge[] = [
-    { id: 'e0', fromNode: 'n0', toNode: `n${Math.min(1, nodeCount - 1)}` },
-    { id: 'e1', fromNode: `n${nodeCount - 1}`, toNode: 'n0' },
+    {
+      id: 'e0',
+      from: { kind: 'node' as const, node: 'n0' },
+      to: { kind: 'node' as const, node: `n${Math.min(1, nodeCount - 1)}` },
+    },
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: `n${nodeCount - 1}` },
+      to: { kind: 'node' as const, node: 'n0' },
+    },
   ]
   return { nodes, edges }
 }
@@ -106,7 +114,11 @@ function labelledCanvasOf(nodeCount: number, label = OVERFLOWING_LABEL): Spatial
     label: `${label} ${i}`,
   }))
   const edges: CanvasEdge[] = [
-    { id: 'e0', fromNode: 'g0', toNode: `g${Math.min(1, nodeCount - 1)}` },
+    {
+      id: 'e0',
+      from: { kind: 'node' as const, node: 'g0' },
+      to: { kind: 'node' as const, node: `g${Math.min(1, nodeCount - 1)}` },
+    },
   ]
   return { nodes, edges }
 }

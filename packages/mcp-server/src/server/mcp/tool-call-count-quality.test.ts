@@ -146,10 +146,19 @@ describe('what an errand costs in tool calls', () => {
       // the whole cost — a second document, which used to cost a whole
       // extra call, now costs one more op. The tool table an agent reads
       // first goes 21 -> 18.
+      //
+      // +228 request and +528 response when an edge END became an OBJECT
+      // (ADR-0033 slice 3): 38 bytes per edge written and 88 per edge read
+      // back, across six edges. The format spells an end as three flat keys
+      // because a flat file has no other way; the model spells it as one
+      // thing, and this is what that costs on the wire. Bought with it: an
+      // end can now say it is a POINT, which four flat keys could not say at
+      // any price. Calls unchanged, which is the axis this scoreboard is
+      // actually about.
       'author a canvas of 8 nodes and 6 edges': {
         calls: 2,
-        requestBytes: 1532,
-        responseBytes: 3172,
+        requestBytes: 1760,
+        responseBytes: 3700,
       },
       // Axis B on a read, now consolidated. `wb_document_list` answers with
       // METADATA only — id, path, name, kind, updatedAt, shadowed — so the

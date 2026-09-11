@@ -1183,7 +1183,13 @@ describe('createDocumentSyncSession', () => {
     const session = createDocumentSyncSession(backend, makeDeps())
     const initial: SpatialCanvas = {
       nodes: [TEXT_NODE_A, TEXT_NODE_B],
-      edges: [{ id: 'e-existing', fromNode: 'n-a', toNode: 'n-b' }],
+      edges: [
+        {
+          id: 'e-existing',
+          from: { kind: 'node' as const, node: 'n-a' },
+          to: { kind: 'node' as const, node: 'n-b' },
+        },
+      ],
     }
     session.connect()
     const snapshotBytes = makeSnapshot(initial)
@@ -1249,7 +1255,13 @@ describe('createDocumentSyncSession', () => {
     const session = createDocumentSyncSession(backend, makeDeps())
     const initial: SpatialCanvas = {
       nodes: [TEXT_NODE_A, TEXT_NODE_B],
-      edges: [{ id: 'e-1', fromNode: 'n-a', toNode: 'n-b' }],
+      edges: [
+        {
+          id: 'e-1',
+          from: { kind: 'node' as const, node: 'n-a' },
+          to: { kind: 'node' as const, node: 'n-b' },
+        },
+      ],
     }
     session.connect()
     const snapshotBytes = makeSnapshot(initial)

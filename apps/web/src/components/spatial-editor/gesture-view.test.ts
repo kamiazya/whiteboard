@@ -24,7 +24,13 @@ const canvas: SpatialCanvas = {
     { id: 'b', type: 'text', x: 400, y: 100, width: 120, height: 60, text: 'B' },
     { id: 'g', type: 'group', x: 80, y: 80, width: 200, height: 120 },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 const notLocked = () => false

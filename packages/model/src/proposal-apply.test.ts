@@ -10,7 +10,11 @@ import type { SpatialCanvas } from './spatial.js'
 
 const NODE_A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text: 'A' } as const
 const NODE_B = { id: 'b', type: 'text', x: 200, y: 0, width: 100, height: 40, text: 'B' } as const
-const EDGE = { id: 'e', fromNode: 'a', toNode: 'b' } as const
+const EDGE = {
+  id: 'e',
+  from: { kind: 'node' as const, node: 'a' },
+  to: { kind: 'node' as const, node: 'b' },
+} as const
 const BOARD: SpatialCanvas = { nodes: [NODE_A, NODE_B], edges: [EDGE] }
 
 const PATCH_A: SpatialProposedChange = {

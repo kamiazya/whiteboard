@@ -21,9 +21,21 @@ const canvas: SpatialCanvas = {
     { id: 'left', type: 'text', x: 20, y: 250, width: 140, height: 90, text: 'left' },
   ],
   edges: [
-    { id: 'e-acc', fromNode: 'acc', toNode: 'sore' },
-    { id: 'e-left', fromNode: 'left', toNode: 'sore' },
-    { id: 'e-members', fromNode: 'sore', toNode: 'are' },
+    {
+      id: 'e-acc',
+      from: { kind: 'node' as const, node: 'acc' },
+      to: { kind: 'node' as const, node: 'sore' },
+    },
+    {
+      id: 'e-left',
+      from: { kind: 'node' as const, node: 'left' },
+      to: { kind: 'node' as const, node: 'sore' },
+    },
+    {
+      id: 'e-members',
+      from: { kind: 'node' as const, node: 'sore' },
+      to: { kind: 'node' as const, node: 'are' },
+    },
   ],
 }
 

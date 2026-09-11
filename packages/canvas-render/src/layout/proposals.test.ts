@@ -32,7 +32,13 @@ const NODE_A = { id: 'a', type: 'text', x: 0, y: 0, width: 100, height: 40, text
 const NODE_B = { id: 'b', type: 'text', x: 300, y: 0, width: 100, height: 40, text: 'B' } as const
 const BOARD: SpatialCanvas = {
   nodes: [NODE_A, NODE_B],
-  edges: [{ id: 'e', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 function layout(canvas: SpatialCanvas, proposals: readonly Proposal[]): readonly SceneNode[] {
@@ -134,7 +140,11 @@ describe('drawing a proposal in place', () => {
           status: 'open',
           op: 'edge.remove',
           edgeId: 'e',
-          assumed: { id: 'e', fromNode: 'a', toNode: 'b' },
+          assumed: {
+            id: 'e',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+          },
         },
       ]),
     ])
@@ -149,7 +159,11 @@ describe('drawing a proposal in place', () => {
           id: 'edge:new',
           status: 'open',
           op: 'edge.add',
-          edge: { id: 'new', fromNode: 'a', toNode: 'b' },
+          edge: {
+            id: 'new',
+            from: { kind: 'node' as const, node: 'a' },
+            to: { kind: 'node' as const, node: 'b' },
+          },
         },
       ]),
     ])

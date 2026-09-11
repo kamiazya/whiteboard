@@ -21,6 +21,7 @@
  * once.
  */
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { endpointNode } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'
@@ -45,9 +46,9 @@ const heavy = (): SpatialCanvas => ({
   })),
   edges: Array.from({ length: EDGES }, (_, i) => ({
     id: `e${i}`,
-    fromNode: `n${i % NODES}`,
-    toNode: `n${(i * 7 + 3) % NODES}`,
-  })).filter((e) => e.fromNode !== e.toNode),
+    from: { kind: 'node' as const, node: `n${i % NODES}` },
+    to: { kind: 'node' as const, node: `n${(i * 7 + 3) % NODES}` },
+  })).filter((e) => endpointNode(e.from) !== endpointNode(e.to)),
 })
 
 const frame = () => new Promise((r) => requestAnimationFrame(r))

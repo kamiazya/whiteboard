@@ -49,8 +49,16 @@ describe('crossing minimization', () => {
       node('cyan', 630, 610, 280, 160),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red' },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
     const orange = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e-orange'))
@@ -67,8 +75,16 @@ describe('crossing minimization', () => {
       node('d', 400, 320, 100, 100),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'c', toNode: 'd' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'c' },
+        to: { kind: 'node' as const, node: 'd' },
+      },
     ]
     const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
     const r1 = routeEdge(nodes, edges[0]!, 'orthogonal', anchors.get('e1'))
@@ -88,8 +104,16 @@ describe('frozen side overrides', () => {
       node('cyan', 630, 610, 280, 160),
     ]
     const edges: CanvasEdge[] = [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red' },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ]
     // Freeze the pre-optimization arrangement (both via Red's bottom): the
     // optimizer would re-side orange, so surviving sides prove the skip.
@@ -114,8 +138,16 @@ describe('edgeSideOverrides through layoutSpatialEdges', () => {
         node('cyan', 630, 610, 280, 160),
       ],
       edges: [
-        { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-        { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+        {
+          id: 'e-orange',
+          from: { kind: 'node' as const, node: 'yellow' },
+          to: { kind: 'node' as const, node: 'red' },
+        },
+        {
+          id: 'e-red',
+          from: { kind: 'node' as const, node: 'red' },
+          to: { kind: 'node' as const, node: 'cyan' },
+        },
       ],
       facets: { 'visual.edges/v0': { routing: 'orthogonal' as const } },
     }
@@ -145,8 +177,16 @@ describe('optimization gate', () => {
       node('cyan', 630, 610, 280, 160),
     ],
     edges: [
-      { id: 'e-orange', fromNode: 'yellow', toNode: 'red' },
-      { id: 'e-red', fromNode: 'red', toNode: 'cyan' },
+      {
+        id: 'e-orange',
+        from: { kind: 'node' as const, node: 'yellow' },
+        to: { kind: 'node' as const, node: 'red' },
+      },
+      {
+        id: 'e-red',
+        from: { kind: 'node' as const, node: 'red' },
+        to: { kind: 'node' as const, node: 'cyan' },
+      },
     ] as CanvasEdge[],
   })
 
@@ -159,7 +199,11 @@ describe('optimization gate', () => {
         node(`pa${i}`, 5000 + i * 400, 0, 100, 60),
         node(`pb${i}`, 5000 + i * 400, 300, 100, 60),
       )
-      edges.push({ id: `pad${i}`, fromNode: `pa${i}`, toNode: `pb${i}` })
+      edges.push({
+        id: `pad${i}`,
+        from: { kind: 'node' as const, node: `pa${i}` },
+        to: { kind: 'node' as const, node: `pb${i}` },
+      })
     }
     return { nodes, edges }
   }

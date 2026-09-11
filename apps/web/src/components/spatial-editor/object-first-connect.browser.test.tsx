@@ -63,7 +63,10 @@ it('Connect tool: click A then click B creates the edge', async () => {
   await userEvent.click(root, { position: { x: 460, y: 330 } }) // node B
 
   await vi.waitFor(() => expect(latest.canvas.edges).toHaveLength(1))
-  expect(latest.canvas.edges[0]).toMatchObject({ fromNode: 'a', toNode: 'b' })
+  expect(latest.canvas.edges[0]).toMatchObject({
+    from: { kind: 'node' as const, node: 'a' },
+    to: { kind: 'node' as const, node: 'b' },
+  })
   expect(latest.commands).toContain('connect-nodes')
 })
 

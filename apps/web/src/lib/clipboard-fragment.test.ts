@@ -3,7 +3,7 @@
 // self-contained fragment from a selection, and remint ids on paste so a
 // fragment can land any number of times in any canvas without colliding.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { clipboardFragmentSchema } from '@kamiazya/whiteboard-model'
+import { clipboardFragmentSchema, endpointIn, endpointNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { extractClipboardFragment, remintClipboardFragment } from './clipboard-fragment.js'
@@ -15,8 +15,16 @@ const canvas: SpatialCanvas = {
     { id: 'c', type: 'text', x: 400, y: 0, width: 100, height: 50, text: 'c' },
   ],
   edges: [
-    { id: 'ab', fromNode: 'a', toNode: 'b' },
-    { id: 'bc', fromNode: 'b', toNode: 'c' },
+    {
+      id: 'ab',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+    {
+      id: 'bc',
+      from: { kind: 'node' as const, node: 'b' },
+      to: { kind: 'node' as const, node: 'c' },
+    },
   ],
 }
 
@@ -37,7 +45,13 @@ describe('extractClipboardFragment', () => {
     // same-canvas paste can reconnect it; a copy never records it.
     expect(fragment.cut).toEqual({
       id: 'cut-1',
-      boundaryEdges: [{ id: 'bc', fromNode: 'b', toNode: 'c' }],
+      boundaryEdges: [
+        {
+          id: 'bc',
+          from: { kind: 'node' as const, node: 'b' },
+          to: { kind: 'node' as const, node: 'c' },
+        },
+      ],
     })
     expect(clipboardFragmentSchema.safeParse(fragment).success).toBe(true)
     expect(extractClipboardFragment(canvas, new Set(['a', 'b'])).cut).toBeUndefined()
@@ -62,8 +76,8 @@ describe('remintClipboardFragment', () => {
     const { nodes, edges } = remintClipboardFragment(fragment, seq(), new Set(['a', 'b', 'c']))
     expect(nodes.map((node) => node.id)).toEqual(['minted-1', 'minted-2'])
     expect(edges).toHaveLength(1)
-    expect(edges[0].fromNode).toBe('minted-1')
-    expect(edges[0].toNode).toBe('minted-2')
+    expect(endpointNode(edges[0].from)).toBe('minted-1')
+    expect(endpointNode(edges[0].to)).toBe('minted-2')
     expect(edges[0].id).not.toBe('ab')
     // Non-id fields survive untouched.
     expect(nodes[0]).toMatchObject({ type: 'text', text: 'a', x: 0, y: 0 })
@@ -83,7 +97,13 @@ describe('remintClipboardFragment', () => {
   it('drops edges whose endpoints are not both present in the fragment (defensive on foreign input)', () => {
     const foreign = {
       ...extractClipboardFragment(canvas, new Set(['a'])),
-      edges: [{ id: 'x', fromNode: 'a', toNode: 'ghost' }],
+      edges: [
+        {
+          id: 'x',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'ghost' },
+        },
+      ],
     }
     const { edges } = remintClipboardFragment(foreign, seq(), new Set())
     expect(edges).toEqual([])
@@ -107,8 +127,8 @@ describe('remintClipboardFragment', () => {
       expect(minted.size).toBe(nodes.length)
       for (const id of minted) expect(['a', 'b', 'c']).not.toContain(id)
       for (const edge of edges) {
-        expect(minted.has(edge.fromNode)).toBe(true)
-        expect(minted.has(edge.toNode)).toBe(true)
+        expect(endpointIn(edge.from, minted)).toBe(true)
+        expect(endpointIn(edge.to, minted)).toBe(true)
       }
     },
   )

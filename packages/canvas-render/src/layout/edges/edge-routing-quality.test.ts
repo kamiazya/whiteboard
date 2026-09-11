@@ -13,6 +13,7 @@
 // route through its own target's body is invisible to the search that picks
 // it, and only the side-choice penalties upstream ever priced it.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endpointNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   clusteredLayout,
@@ -62,7 +63,7 @@ function avoidableInk(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[
       if (strictlyInside(rect, start) || strictlyInside(rect, end)) continue
       const ink = interiorInk(path, rect)
       if (ink <= 0) continue
-      const own = n.id === edge.fromNode || n.id === edge.toNode
+      const own = n.id === endpointNode(edge.from) || n.id === endpointNode(edge.to)
       found.push({
         edge: edge.id,
         node: n.id,

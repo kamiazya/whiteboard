@@ -1,3 +1,4 @@
+import { type CanvasEdge, nodeEndpoint } from '@kamiazya/whiteboard-model'
 /**
  * Pure derivation of the in-flight gesture preview from the gesture's own
  * start snapshot plus the live pointer position — never from `canvas`, so it
@@ -147,10 +148,10 @@ export function computeDragPreview(
               },
             ]
           : canvas.nodes
-      const tentative = {
+      const tentative: CanvasEdge = {
         id: '__connect-preview__',
-        fromNode: gestureState.fromNodeId,
-        toNode: targetId,
+        from: nodeEndpoint(gestureState.fromNodeId),
+        to: nodeEndpoint(targetId),
       }
       const routingStyle = resolveCanvasEdgeStyle(canvas).style
       const anchors = assignEdgeAnchors(

@@ -19,7 +19,12 @@ function textNode(overrides: Partial<Extract<SpatialNode, { type: 'text' }>> = {
 }
 
 function edge(overrides: Partial<CanvasEdge> = {}): CanvasEdge {
-  return { id: 'e1', fromNode: 'a', toNode: 'b', ...overrides }
+  return {
+    id: 'e1',
+    from: { kind: 'node' as const, node: 'a' },
+    to: { kind: 'node' as const, node: 'b' },
+    ...overrides,
+  }
 }
 
 function contrastRatio(a: string, b: string): number {

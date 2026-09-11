@@ -158,20 +158,20 @@ describe('spatialNodeSchema (group)', () => {
 
 describe('canvasEdgeSchema', () => {
   it('accepts a minimal edge', () => {
-    expect(canvasEdgeSchema.safeParse({ id: 'e1', fromNode: 'n1', toNode: 'n2' }).success).toBe(
-      true,
-    )
+    expect(
+      canvasEdgeSchema.safeParse({
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'n1' },
+        to: { kind: 'node' as const, node: 'n2' },
+      }).success,
+    ).toBe(true)
   })
 
   it('accepts a full edge', () => {
     const result = canvasEdgeSchema.safeParse({
       id: 'e1',
-      fromNode: 'n1',
-      toNode: 'n2',
-      fromSide: 'top',
-      toSide: 'bottom',
-      fromEnd: 'none',
-      toEnd: 'arrow',
+      from: { kind: 'node' as const, node: 'n1', side: 'top', end: 'none' as const },
+      to: { kind: 'node' as const, node: 'n2', side: 'bottom', end: 'arrow' as const },
       color: '1',
       label: 'connects',
     })
@@ -180,18 +180,28 @@ describe('canvasEdgeSchema', () => {
 
   it('rejects an invalid side and end', () => {
     expect(
-      canvasEdgeSchema.safeParse({ id: 'e1', fromNode: 'n1', toNode: 'n2', fromSide: 'north' })
-        .success,
+      canvasEdgeSchema.safeParse({
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'n1', side: 'north' },
+        to: { kind: 'node' as const, node: 'n2' },
+      }).success,
     ).toBe(false)
     expect(
-      canvasEdgeSchema.safeParse({ id: 'e1', fromNode: 'n1', toNode: 'n2', toEnd: 'diamond' })
-        .success,
+      canvasEdgeSchema.safeParse({
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'n1' },
+        to: { kind: 'node' as const, node: 'n2', end: 'diamond' },
+      }).success,
     ).toBe(false)
   })
 
   it('rejects a missing fromNode or toNode', () => {
-    expect(canvasEdgeSchema.safeParse({ id: 'e1', toNode: 'n2' }).success).toBe(false)
-    expect(canvasEdgeSchema.safeParse({ id: 'e1', fromNode: 'n1' }).success).toBe(false)
+    expect(
+      canvasEdgeSchema.safeParse({ id: 'e1', to: { kind: 'node' as const, node: 'n2' } }).success,
+    ).toBe(false)
+    expect(
+      canvasEdgeSchema.safeParse({ id: 'e1', from: { kind: 'node' as const, node: 'n1' } }).success,
+    ).toBe(false)
   })
 })
 
@@ -202,7 +212,13 @@ describe('spatialCanvasSchema', () => {
   it('accepts distinct node and edge ids', () => {
     const result = spatialCanvasSchema.safeParse({
       nodes: [node1, node2],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+      ],
     })
     expect(result.success).toBe(true)
   })
@@ -219,8 +235,16 @@ describe('spatialCanvasSchema', () => {
     const result = spatialCanvasSchema.safeParse({
       nodes: [node1, node2],
       edges: [
-        { id: 'e1', fromNode: 'n1', toNode: 'n2' },
-        { id: 'e1', fromNode: 'n2', toNode: 'n1' },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n2' },
+          to: { kind: 'node' as const, node: 'n1' },
+        },
       ],
     })
     expect(result.success).toBe(false)
@@ -253,13 +277,25 @@ describe('spatialCanvasSchema', () => {
   it('rejects an edge whose fromNode or toNode references a nonexistent node id', () => {
     const missingFrom = spatialCanvasSchema.safeParse({
       nodes: [node2],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+      ],
     })
     expect(missingFrom.success).toBe(false)
 
     const missingTo = spatialCanvasSchema.safeParse({
       nodes: [node1],
-      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n2' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'n1' },
+          to: { kind: 'node' as const, node: 'n2' },
+        },
+      ],
     })
     expect(missingTo.success).toBe(false)
   })

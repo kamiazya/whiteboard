@@ -17,8 +17,16 @@ const doc: SpatialCanvas = {
     { id: 'd', type: 'text', x: 300, y: 400, width: 120, height: 60, text: 'd' },
   ],
   edges: [
-    { id: 'h', fromNode: 'a', toNode: 'b' },
-    { id: 'v', fromNode: 'c', toNode: 'd' },
+    {
+      id: 'h',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+    {
+      id: 'v',
+      from: { kind: 'node' as const, node: 'c' },
+      to: { kind: 'node' as const, node: 'd' },
+    },
   ],
   facets: { 'visual.edges/v0': { routing: 'orthogonal', lineJumps: 'arc' } },
 }

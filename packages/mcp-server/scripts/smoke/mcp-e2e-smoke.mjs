@@ -612,12 +612,70 @@ async function main() {
         op: 'node.add',
         node: { id: 'target', type: 'text', x: 10, y: 10, width: 200, height: 100, text: 'target' },
       },
-      { op: 'edge.add', edge: { id: 'link', fromNode: 'lockable', toNode: 'target' } },
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'link',
+          from: { kind: 'node', node: 'lockable' },
+          to: { kind: 'node', node: 'target' },
+        },
+      },
     ],
   })
   if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
+
+  // A FREE END (ADR-0033 slice 3): an edge from a node to a bare point on
+  // the canvas. Here rather than only at the unit layer because the endpoint
+  // is a discriminated union crossing a process boundary in BOTH directions
+  // — accepted by `wb_canvas_edit`'s input schema, stored through the Loro
+  // field mapping, and echoed by `wb_canvas_snapshot`, whose `outputSchema`
+  // the SDK validates at runtime. A union that round-trips in-process and
+  // fails one of those three looks exactly like a working tool from here.
+  const freeEnd = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'loose',
+          from: { kind: 'node', node: 'lockable' },
+          to: { kind: 'point', point: { x: 420.5, y: -17.25 } },
+        },
+      },
+    ],
+  })
+  const loose = freeEnd.snapshot.edges.find((edge) => edge.id === 'loose')
+  if (loose?.to?.kind !== 'point' || loose.to.point.x !== 420.5 || loose.to.point.y !== -17.25) {
+    throw new Error(`a free end did not survive wb_canvas_edit: ${JSON.stringify(loose)}`)
+  }
+  if (loose.from?.kind !== 'node' || loose.from.node !== 'lockable') {
+    throw new Error(`the node end of a half-free edge did not survive: ${JSON.stringify(loose)}`)
+  }
+  // JSON Canvas cannot state such an edge, so the export drops the WHOLE edge
+  // rather than half of it — the one entry in the loss table whose unit is
+  // the element. Read back through the published tool, because that claim is
+  // the projection's and this is where a reader of the format meets it.
+  const withLooseEdge = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+  })
+  const looseExport = JSON.parse(withLooseEdge.documents[0].content)
+  if (looseExport.edges.some((edge) => edge.id === 'loose')) {
+    throw new Error('a point-ended edge reached a JSON Canvas export, which cannot state one')
+  }
+  if (!looseExport.edges.some((edge) => edge.id === 'link')) {
+    throw new Error('dropping the point-ended edge took an ordinary edge with it')
+  }
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [{ op: 'edge.remove', id: 'loose' }],
+  })
 
   // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
   // validates the result against `facetSetOutputSchema` at runtime. Written
@@ -881,7 +939,16 @@ async function main() {
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      ops: [{ op: 'edge.add', edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' } }],
+      ops: [
+        {
+          op: 'edge.add',
+          edge: {
+            id: 'dangling',
+            from: { kind: 'node', node: 'lockable' },
+            to: { kind: 'node', node: 'ghost' },
+          },
+        },
+      ],
     },
     'with an endpoint the canvas does not have',
     'add that node first',
@@ -1431,7 +1498,14 @@ async function main() {
     ops: [
       { op: 'node.add', node: { id: 'batch-a', type: 'text', text: 'batched A' } },
       { op: 'node.add', node: { id: 'batch-b', type: 'text', text: 'batched B' } },
-      { op: 'edge.add', edge: { id: 'batch-e', fromNode: 'batch-a', toNode: 'batch-b' } },
+      {
+        op: 'edge.add',
+        edge: {
+          id: 'batch-e',
+          from: { kind: 'node', node: 'batch-a' },
+          to: { kind: 'node', node: 'batch-b' },
+        },
+      },
     ],
   })
   if (applied.applied !== 3 || !applied.touched.nodes.includes('batch-a')) {

@@ -1,4 +1,5 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
+import { endpointNode, endpointSide, isSelfLoop, nodeAtEnd } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { bendRoute } from './bend-route.js'
 import { diagonalInkThrough } from './diagonal-ink.js'
@@ -105,7 +106,11 @@ function deriveDefaultSides(
   const dx = toCenter.x - fromCenter.x
   const dy = toCenter.y - fromCenter.y
   const pairs = rankedSidePairs(dx, dy, fromRect, toRect, crowd)
-  const foreign = nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  // Hoisted: this filter runs once per node per routing call, and reading
+  // the end twice per node is a call the loop does not need.
+  const fromId = endpointNode(edge.from)
+  const toId = endpointNode(edge.to)
+  const foreign = nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
   const exposed = (rect: Rect, side: Side): boolean => {
     const occluders = foreign.filter((r) => !fullyContains(r, rect))
     return !occluders.some((r) => strictlyInside(r, sidePoint(rect, side)))
@@ -250,48 +255,47 @@ function initialSideChoices(
   const crowdCounts = new Map<string, number>()
   const prospective = new Map<string, SidePair>()
   for (const edge of edges) {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
+    const fromNode = nodeAtEnd(edge.from, byId)
+    const toNode = nodeAtEnd(edge.to, byId)
     if (fromNode === undefined || toNode === undefined) continue
-    if (edge.fromNode === edge.toNode) continue
+    if (isSelfLoop(edge)) continue
     const fromCenter = centerOf(rectOf(fromNode))
     const toCenter = centerOf(rectOf(toNode))
     const primary = facingSides(toCenter.x - fromCenter.x, toCenter.y - fromCenter.y)[0]
     const sides = {
-      fromSide: edge.fromSide ?? primary,
-      toSide: edge.toSide ?? oppositeSide(primary),
+      fromSide: endpointSide(edge.from) ?? primary,
+      toSide: endpointSide(edge.to) ?? oppositeSide(primary),
     }
     prospective.set(edge.id, sides)
     crowdCounts.set(
-      `${edge.fromNode} ${sides.fromSide}`,
-      (crowdCounts.get(`${edge.fromNode} ${sides.fromSide}`) ?? 0) + 1,
+      `${endpointNode(edge.from)} ${sides.fromSide}`,
+      (crowdCounts.get(`${endpointNode(edge.from)} ${sides.fromSide}`) ?? 0) + 1,
     )
     crowdCounts.set(
-      `${edge.toNode} ${sides.toSide}`,
-      (crowdCounts.get(`${edge.toNode} ${sides.toSide}`) ?? 0) + 1,
+      `${endpointNode(edge.to)} ${sides.toSide}`,
+      (crowdCounts.get(`${endpointNode(edge.to)} ${sides.toSide}`) ?? 0) + 1,
     )
   }
   const choices = new Map<string, SidePair>()
   for (const edge of edges) {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
+    const fromNode = nodeAtEnd(edge.from, byId)
+    const toNode = nodeAtEnd(edge.to, byId)
     if (fromNode === undefined || toNode === undefined) continue
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
     const own = prospective.get(edge.id)
     const crowd = (end: 'from' | 'to', side: Side): number => {
-      const nodeId = end === 'from' ? edge.fromNode : edge.toNode
+      const nodeId = end === 'from' ? endpointNode(edge.from) : endpointNode(edge.to)
       const ownSide = end === 'from' ? own?.fromSide : own?.toSide
       const count = crowdCounts.get(`${nodeId} ${side}`) ?? 0
       return ownSide === side ? count - 1 : count
     }
-    const derived =
-      edge.fromNode === edge.toNode
-        ? { fromSide: 'right' as Side, toSide: 'right' as Side }
-        : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
+    const derived = isSelfLoop(edge)
+      ? { fromSide: 'right' as Side, toSide: 'right' as Side }
+      : deriveDefaultSides(nodes, edge, fromRect, toRect, crowd)
     choices.set(edge.id, {
-      fromSide: edge.fromSide ?? derived.fromSide,
-      toSide: edge.toSide ?? derived.toSide,
+      fromSide: endpointSide(edge.from) ?? derived.fromSide,
+      toSide: endpointSide(edge.to) ?? derived.toSide,
     })
   }
   return choices
@@ -328,8 +332,8 @@ export function anchorContext(
 ): AnchorContext {
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const ends = edges.map((edge) => {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
+    const fromNode = nodeAtEnd(edge.from, byId)
+    const toNode = nodeAtEnd(edge.to, byId)
     if (fromNode === undefined || toNode === undefined) return undefined
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
@@ -384,7 +388,7 @@ export interface AnchorGroups {
 }
 
 const groupKeyFor = (edge: CanvasEdge, role: 'from' | 'to', side: Side): string =>
-  `${role === 'from' ? edge.fromNode : edge.toNode} ${side}`
+  `${role === 'from' ? endpointNode(edge.from) : endpointNode(edge.to)} ${side}`
 
 function endsOfEdge(
   ctx: AnchorContext,
@@ -602,8 +606,8 @@ function computeAnchorsFor(
     if (chosen.toSide !== oppositeSide(chosen.fromSide)) continue
     const geom = edgeEnds[edgeIndex]
     if (geom === undefined) continue
-    if ((groups.get(`${edge.fromNode} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
-    if ((groups.get(`${edge.toNode} ${chosen.toSide}`)?.length ?? 0) > 1) continue
+    if ((groups.get(`${endpointNode(edge.from)} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
+    if ((groups.get(`${endpointNode(edge.to)} ${chosen.toSide}`)?.length ?? 0) > 1) continue
     const { fromRect, toRect } = geom
     const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
     // Interpenetrating boxes (authored sides can force them) have no
@@ -779,12 +783,12 @@ function sideCandidatesFor(
   // through the edge's own box, which no named side asked for.
   overruleAuthored = false,
 ): SidePair[] {
-  if (edge.fromNode === edge.toNode) return []
-  const authored = edge.fromSide !== undefined && edge.toSide !== undefined
+  if (isSelfLoop(edge)) return []
+  const authored = endpointSide(edge.from) !== undefined && endpointSide(edge.to) !== undefined
   if (authored && !overruleAuthored) return []
   const keepAuthored = !overruleAuthored
-  const fromNode = byId.get(edge.fromNode)
-  const toNode = byId.get(edge.toNode)
+  const fromNode = nodeAtEnd(edge.from, byId)
+  const toNode = nodeAtEnd(edge.to, byId)
   if (fromNode === undefined || toNode === undefined) return []
   const fromRect = rectOf(fromNode)
   const toRect = rectOf(toNode)
@@ -800,8 +804,8 @@ function sideCandidatesFor(
   const seen = new Set<string>()
   return pairs
     .map((pair) => ({
-      fromSide: keepAuthored ? (edge.fromSide ?? pair.fromSide) : pair.fromSide,
-      toSide: keepAuthored ? (edge.toSide ?? pair.toSide) : pair.toSide,
+      fromSide: keepAuthored ? (endpointSide(edge.from) ?? pair.fromSide) : pair.fromSide,
+      toSide: keepAuthored ? (endpointSide(edge.to) ?? pair.toSide) : pair.toSide,
     }))
     .filter((pair) => {
       const key = `${pair.fromSide} ${pair.toSide}`
@@ -839,9 +843,11 @@ function createConfigScore(
   routeCache: Map<string, readonly Point[]> | undefined,
   byId: ReadonlyMap<string, SpatialNode>,
 ) {
-  const othersFor = edges.map((e) =>
-    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
-  )
+  const othersFor = edges.map((e) => {
+    const from = endpointNode(e.from)
+    const to = endpointNode(e.to)
+    return nodes.filter((n) => n.id !== from && n.id !== to).map(rectOf)
+  })
   const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
     a?.from?.x === b?.from?.x &&
     a?.from?.y === b?.from?.y &&
@@ -925,7 +931,7 @@ function createConfigScore(
   // could not avoid and could be talked into a detour to "save" it — the
   // same predicate `deriveDefaultSides`'s occlusion filter already uses.
   const foreignBodiesFor = edges.map((e, i) => {
-    const endpoints = [byId.get(e.fromNode), byId.get(e.toNode)]
+    const endpoints = [nodeAtEnd(e.from, byId), nodeAtEnd(e.to, byId)]
       .filter((n): n is SpatialNode => n !== undefined)
       .map(rectOf)
     return othersFor[i]!.filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
@@ -938,7 +944,7 @@ function createConfigScore(
   // interior check, unlike border-tracing's outline check above, needs to
   // know which two of nodeBorders belong to THIS edge.
   const endpointRectsFor = edges.map((e) =>
-    [byId.get(e.fromNode), byId.get(e.toNode)]
+    [nodeAtEnd(e.from, byId), nodeAtEnd(e.to, byId)]
       .filter((n): n is SpatialNode => n !== undefined)
       .map(rectOf),
   )
@@ -1150,8 +1156,8 @@ function optimizeSideChoices(
       const chosen = score.sideOf(edge.id)
       if (chosen === undefined) continue
       const forced =
-        edge.fromSide !== undefined &&
-        edge.toSide !== undefined &&
+        endpointSide(edge.from) !== undefined &&
+        endpointSide(edge.to) !== undefined &&
         score.selfThrough(edgeIndexById.get(edge.id) ?? -1)
       for (const candidate of sideCandidatesFor(edge, byId, forced)) {
         if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
@@ -1206,8 +1212,8 @@ function anchorsWithoutCoincidentEnds(
   const anchors = computeAnchorsFor(ctx, sides, align, pins)
   const collided = edges.filter(
     (edge) =>
-      edge.fromNode !== edge.toNode &&
-      (edge.fromSide === undefined || edge.toSide === undefined) &&
+      !isSelfLoop(edge) &&
+      (endpointSide(edge.from) === undefined || endpointSide(edge.to) === undefined) &&
       coincides(anchors, edge.id),
   )
   if (collided.length === 0) return anchors
@@ -1215,8 +1221,8 @@ function anchorsWithoutCoincidentEnds(
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const repaired = new Map(sides)
   for (const edge of collided) {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
+    const fromNode = nodeAtEnd(edge.from, byId)
+    const toNode = nodeAtEnd(edge.to, byId)
     if (fromNode === undefined || toNode === undefined) continue
     const fromRect = rectOf(fromNode)
     const toRect = rectOf(toNode)
@@ -1243,8 +1249,8 @@ function anchorsWithoutCoincidentEnds(
     let best: { pair: SidePair; tier: number; bends: number; length: number } | undefined
     for (const pair of candidates) {
       const sided: SidePair = {
-        fromSide: edge.fromSide ?? pair.fromSide,
-        toSide: edge.toSide ?? pair.toSide,
+        fromSide: endpointSide(edge.from) ?? pair.fromSide,
+        toSide: endpointSide(edge.to) ?? pair.toSide,
       }
       const trial = new Map(repaired)
       trial.set(edge.id, sided)
@@ -1358,8 +1364,8 @@ function optimizeAcrossRegions(
 
   const byId = new Map(nodes.map((n) => [n.id, n]))
   const midpoints = edges.map((edge) => {
-    const from = byId.get(edge.fromNode)
-    const to = byId.get(edge.toNode)
+    const from = nodeAtEnd(edge.from, byId)
+    const to = nodeAtEnd(edge.to, byId)
     if (from === undefined || to === undefined) return { x: 0, y: 0 }
     const a = centerOf(rectOf(from))
     const b = centerOf(rectOf(to))
@@ -1447,8 +1453,8 @@ export function assignEdgeAnchors(
       const edge = edges.find((e) => e.id === id)
       if (edge === undefined || merged.get(id) === undefined) continue
       merged.set(id, {
-        fromSide: edge.fromSide ?? pair.fromSide,
-        toSide: edge.toSide ?? pair.toSide,
+        fromSide: endpointSide(edge.from) ?? pair.fromSide,
+        toSide: endpointSide(edge.to) ?? pair.toSide,
       })
       locked.add(id)
     }
@@ -1995,12 +2001,12 @@ export function routeEdge(
   // layout and this is the one O(nodes) list it can hand over intact.
   others?: readonly Rect[],
 ): ResolvedEdgeNode {
-  const fromNode = nodes.find((n) => n.id === edge.fromNode)
-  const toNode = nodes.find((n) => n.id === edge.toNode)
+  const fromNode = nodes.find((n) => n.id === endpointNode(edge.from))
+  const toNode = nodes.find((n) => n.id === endpointNode(edge.to))
 
   // JSON Canvas 1.0 defaults: no source arrowhead, a destination arrowhead.
-  const fromEnd = edge.fromEnd ?? 'none'
-  const toEnd = edge.toEnd ?? 'arrow'
+  const fromEnd = edge.from.end ?? 'none'
+  const toEnd = edge.to.end ?? 'arrow'
 
   if (!fromNode || !toNode) {
     const origin = { x: 0, y: 0 }
@@ -2008,8 +2014,8 @@ export function routeEdge(
       kind: 'edge',
       id: edge.id,
       path: [origin, origin],
-      fromSide: edge.fromSide ?? 'right',
-      toSide: edge.toSide ?? 'left',
+      fromSide: endpointSide(edge.from) ?? 'right',
+      toSide: endpointSide(edge.to) ?? 'left',
       fromEnd,
       toEnd,
     }
@@ -2023,8 +2029,8 @@ export function routeEdge(
   // answer to "where does this edge go" that the person drawing it already
   // gave. A computed route that ignored it would drop authored geometry
   // while leaving it in the record.
-  const namedFromSide = anchors?.fromSide ?? edge.fromSide
-  const namedToSide = anchors?.toSide ?? edge.toSide
+  const namedFromSide = anchors?.fromSide ?? endpointSide(edge.from)
+  const namedToSide = anchors?.toSide ?? endpointSide(edge.to)
   const bent = bendRoute(edge, fromRect, toRect, {
     ...(anchors?.from === undefined ? {} : { from: anchors.from }),
     ...(anchors?.to === undefined ? {} : { to: anchors.to }),
@@ -2046,9 +2052,9 @@ export function routeEdge(
   // Self-edge: no meaningful "other node" direction, so fix a stable loop
   // shape (right side out, right side back) rather than deriving from a
   // zero center-offset.
-  if (edge.fromNode === edge.toNode) {
-    const fromSide: Side = edge.fromSide ?? 'right'
-    const toSide: Side = edge.toSide ?? 'right'
+  if (isSelfLoop(edge)) {
+    const fromSide: Side = endpointSide(edge.from) ?? 'right'
+    const toSide: Side = endpointSide(edge.to) ?? 'right'
     const start = anchors?.from ?? sidePoint(fromRect, fromSide)
     const [loopOut, loopBack] = selfEdgeLoopControlPoints(start, fromSide)
     const end = anchors?.to ?? sidePoint(toRect, toSide)
@@ -2071,8 +2077,8 @@ export function routeEdge(
   // only runs when a side is actually missing.
   let derived: SidePair | undefined
   const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
-  const fromSide = anchors?.fromSide ?? edge.fromSide ?? derive().fromSide
-  const toSide = anchors?.toSide ?? edge.toSide ?? derive().toSide
+  const fromSide = anchors?.fromSide ?? endpointSide(edge.from) ?? derive().fromSide
+  const toSide = anchors?.toSide ?? endpointSide(edge.to) ?? derive().toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
@@ -2087,8 +2093,13 @@ export function routeEdge(
   // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
   // second tier accepts a band crossing to escape rather than tunnelling
   // through the node itself.
+  // Hoisted for the same reason as `deriveDefaultSides`: this filter is the
+  // O(nodes) pass `routeEdge` runs on every call, and the ends do not change
+  // inside it.
+  const fromId = endpointNode(edge.from)
+  const toId = endpointNode(edge.to)
   const rawObstacles = (
-    others ?? nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+    others ?? nodes.filter((n) => n.id !== fromId && n.id !== toId).map(rectOf)
   ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
   const obstacles = rawObstacles.map((rect) => ({
     x: rect.x - ROUTE_MARGIN_PX,

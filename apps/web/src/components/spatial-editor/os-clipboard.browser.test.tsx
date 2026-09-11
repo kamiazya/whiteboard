@@ -4,6 +4,7 @@
 // `clipboardData` — and that data is what lets a fragment cross tabs and
 // what lets foreign text degrade into a note.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { endpointNode } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, beforeEach, expect, it } from 'vitest'
@@ -166,7 +167,14 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
       { id: 'a', type: 'text', x: 40, y: 40, width: 160, height: 80, text: 'A' },
       { id: 'b', type: 'text', x: 320, y: 40, width: 160, height: 80, text: 'B' },
     ],
-    edges: [{ id: 'ab', fromNode: 'a', toNode: 'b', label: 'kept' }],
+    edges: [
+      {
+        id: 'ab',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+        label: 'kept',
+      },
+    ],
   }
   const { Host, latest } = makeHost(wired)
   const { container } = render(<Host />)
@@ -188,7 +196,9 @@ it('an OS-clipboard cut→paste reconnects the boundary edge once — the JSON c
   const pasted = latest.canvas.nodes.find((n) => n.type === 'text' && n.text === 'A')
   expect(latest.canvas.edges).toHaveLength(1)
   const restored = latest.canvas.edges[0]
-  expect([restored.fromNode, restored.toNode].sort()).toEqual([pasted?.id, 'b'].sort())
+  expect([endpointNode(restored.from), endpointNode(restored.to)].sort()).toEqual(
+    [pasted?.id, 'b'].sort(),
+  )
 
   dispatchClipboard(root, 'paste', clipboardWith(written))
   expect(latest.canvas.nodes).toHaveLength(3)

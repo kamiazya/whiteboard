@@ -77,7 +77,13 @@ describe('parseViewerScene', () => {
   it('rejects an edge referencing a nonexistent node', () => {
     const canvas = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 1, height: 1, text: '' }],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'missing' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'missing' },
+        },
+      ],
     }
     const result = parseViewerScene(canvas)
     expect(result.ok).toBe(false)

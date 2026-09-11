@@ -30,7 +30,11 @@ import {
   type CommentThreadStatus,
   canvasCommentFromThread,
   type EdgeRoutingStyle,
+  endpointIn,
+  endpointNode,
+  isSelfLoop,
   type LineJumps,
+  nodeEndpoint,
   type ProposedChange,
   type ProposedChangeStatus,
   type SpatialCanvas,
@@ -409,7 +413,7 @@ function connectNodes(
   // fail validation downstream.
   const edgeIdExists = canvas.edges.some((edge) => edge.id === edgeId)
   if (edgeIdExists) return canvas
-  const edge: CanvasEdge = { id: edgeId, fromNode, toNode }
+  const edge: CanvasEdge = { id: edgeId, from: nodeEndpoint(fromNode), to: nodeEndpoint(toNode) }
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -436,7 +440,9 @@ function deleteNode(canvas: SpatialCanvas, id: string): SpatialCanvas {
   return {
     ...canvas,
     nodes: canvas.nodes.filter((node) => node.id !== id),
-    edges: canvas.edges.filter((edge) => edge.fromNode !== id && edge.toNode !== id),
+    edges: canvas.edges.filter(
+      (edge) => endpointNode(edge.from) !== id && endpointNode(edge.to) !== id,
+    ),
   }
 }
 
@@ -455,11 +461,14 @@ function setEdgeEnds(
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { fromEnd: _from, toEnd: _to, ...rest } = edge
+      // An arrowhead lives ON the end it is drawn at (ADR-0033 slice 3), so
+      // the default is spelled by ABSENCE there rather than by a sibling key.
+      const { end: _fromEnd, ...from } = edge.from
+      const { end: _toEnd, ...to } = edge.to
       return {
-        ...rest,
-        ...(fromEnd === 'none' ? {} : { fromEnd }),
-        ...(toEnd === 'arrow' ? {} : { toEnd }),
+        ...edge,
+        from: { ...from, ...(fromEnd === 'none' ? {} : { end: fromEnd }) },
+        to: { ...to, ...(toEnd === 'arrow' ? {} : { end: toEnd }) },
       }
     }),
   }
@@ -712,13 +721,16 @@ function setEdgeSide(
   side: 'top' | 'right' | 'bottom' | 'left' | undefined,
 ): SpatialCanvas {
   if (!canvas.edges.some((edge) => edge.id === id)) return canvas
-  const key = endpoint === 'from' ? 'fromSide' : 'toSide'
   return {
     ...canvas,
     edges: canvas.edges.map((edge) => {
       if (edge.id !== id) return edge
-      const { [key]: _removed, ...rest } = edge
-      return side === undefined ? rest : { ...rest, [key]: side }
+      // Only a NODE end has a side to pin; a free end has no sides to
+      // choose between, so the write is a no-op on one.
+      const end = edge[endpoint]
+      if (end.kind !== 'node') return edge
+      const { side: _removed, ...rest } = end
+      return { ...edge, [endpoint]: side === undefined ? rest : { ...rest, side } }
     }),
   }
 }
@@ -886,9 +898,9 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
 
 function createEdge(canvas: SpatialCanvas, edge: CanvasEdge): SpatialCanvas {
   if (canvas.edges.some((existing) => existing.id === edge.id)) return canvas
-  if (edge.fromNode === edge.toNode) return canvas
+  if (isSelfLoop(edge)) return canvas
   const nodeIds = new Set(canvas.nodes.map((node) => node.id))
-  if (!nodeIds.has(edge.fromNode) || !nodeIds.has(edge.toNode)) return canvas
+  if (!endpointIn(edge.from, nodeIds) || !endpointIn(edge.to, nodeIds)) return canvas
   return { ...canvas, edges: [...canvas.edges, edge] }
 }
 
@@ -1017,17 +1029,23 @@ export function buildFragmentInsertCommand(
     // cut was lifted, or resolved as a move): nothing to reconnect, and a
     // second wire onto the peer would be the new defect.
     if (canvasEdgeIds.has(edge.id)) return []
-    const from = reminted.idMap.get(edge.fromNode)
-    const to = reminted.idMap.get(edge.toNode)
+    // A boundary edge crosses the cut, so exactly one end is being re-minted
+    // and the other must already be on the canvas. A FREE end is neither, so
+    // an edge carrying one is never a boundary edge.
+    const fromId = endpointNode(edge.from)
+    const toId = endpointNode(edge.to)
+    if (fromId === undefined || toId === undefined) return []
+    const from = reminted.idMap.get(fromId)
+    const to = reminted.idMap.get(toId)
     if ((from === undefined) === (to === undefined)) return []
-    const peer = from === undefined ? edge.fromNode : edge.toNode
+    const peer = from === undefined ? fromId : toId
     if (!canvasNodeIds.has(peer)) return []
     return [
       {
         ...edge,
         id: reminted.mintId(),
-        fromNode: from ?? edge.fromNode,
-        toNode: to ?? edge.toNode,
+        from: { ...edge.from, kind: 'node' as const, node: from ?? fromId },
+        to: { ...edge.to, kind: 'node' as const, node: to ?? toId },
       },
     ]
   })

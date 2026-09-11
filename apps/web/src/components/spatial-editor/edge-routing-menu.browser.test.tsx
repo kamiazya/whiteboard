@@ -25,7 +25,13 @@ const initial: SpatialCanvas = {
     { id: 'a', type: 'text', x: 40, y: 40, width: 120, height: 60, text: 'A' },
     { id: 'b', type: 'text', x: 400, y: 240, width: 120, height: 60, text: 'B' },
   ],
-  edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+  edges: [
+    {
+      id: 'e1',
+      from: { kind: 'node' as const, node: 'a' },
+      to: { kind: 'node' as const, node: 'b' },
+    },
+  ],
 }
 
 function makeHost() {
@@ -164,8 +170,16 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
       { id: 'd', type: 'text', x: 250, y: 400, width: 50, height: 50, text: 'd' },
     ],
     edges: [
-      { id: 'e1', fromNode: 'a', toNode: 'b' },
-      { id: 'e2', fromNode: 'c', toNode: 'd' },
+      {
+        id: 'e1',
+        from: { kind: 'node' as const, node: 'a' },
+        to: { kind: 'node' as const, node: 'b' },
+      },
+      {
+        id: 'e2',
+        from: { kind: 'node' as const, node: 'c' },
+        to: { kind: 'node' as const, node: 'd' },
+      },
     ],
   }
   const latest = { canvas: crossed }

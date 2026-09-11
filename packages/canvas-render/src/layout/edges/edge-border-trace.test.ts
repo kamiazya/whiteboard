@@ -49,9 +49,22 @@ it('never routes a segment of A->B on top of a node border, on the exact user ca
     box('T', 80, 360, 200, 110),
   ]
   const edges: CanvasEdge[] = [
-    { id: 'ab', fromNode: 'A', toNode: 'B' },
-    { id: 'ta', fromNode: 'T', toNode: 'A', label: 'hoge' },
-    { id: 'tb', fromNode: 'T', toNode: 'B' },
+    {
+      id: 'ab',
+      from: { kind: 'node' as const, node: 'A' },
+      to: { kind: 'node' as const, node: 'B' },
+    },
+    {
+      id: 'ta',
+      from: { kind: 'node' as const, node: 'T' },
+      to: { kind: 'node' as const, node: 'A' },
+      label: 'hoge',
+    },
+    {
+      id: 'tb',
+      from: { kind: 'node' as const, node: 'T' },
+      to: { kind: 'node' as const, node: 'B' },
+    },
   ]
   const anchors = assignEdgeAnchors(nodes, edges, 'orthogonal')
   const ab = edges[0] as CanvasEdge

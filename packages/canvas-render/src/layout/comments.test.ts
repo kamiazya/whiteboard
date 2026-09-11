@@ -290,7 +290,13 @@ describe('comment layer', () => {
     }
     const canvas: SpatialCanvas = {
       nodes: [left, right],
-      edges: [{ id: 'e1', fromNode: 'a', toNode: 'b' }],
+      edges: [
+        {
+          id: 'e1',
+          from: { kind: 'node' as const, node: 'a' },
+          to: { kind: 'node' as const, node: 'b' },
+        },
+      ],
       comments: [{ id: 'c1', x: 250, y: 130, text: 'this link', targetEdgeId: 'e1' }],
     }
     const scene = layoutSpatialCanvas(canvas, baseOptions())
