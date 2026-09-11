@@ -79,12 +79,24 @@ anywhere on any board.
 
 ### Choosing colours and silhouettes
 
-Two stencils a reader cannot tell apart are worth less than one. Give each member its own
-colour **and** its own silhouette — the available silhouettes are `ellipse`, `diamond`,
-`hexagon`, `parallelogram`, `cylinder`, and the default rectangle when the stencil sets no
-shape. With six JSON Canvas colours and six silhouettes, a set where every pair differs on
-both tops out at six members; past that, a seventh needs a silhouette that does not exist yet
-rather than a seventh entry.
+Two stencils a reader cannot tell apart are worth less than one. A board draws exactly two
+channels — the node's **colour** and its **silhouette** — so give each member its own of each.
+The silhouettes are `ellipse`, `diamond`, `hexagon`, `parallelogram`, `cylinder`, and the
+default rectangle when the stencil sets no shape.
+
+**Know the ceiling before you design against it.** JSON Canvas has six colours and there are
+six silhouettes, so a set where every pair differs on *both* tops out at six members — and the
+bundled six already spend all of both. Anything your library adds therefore repeats a colour
+or a silhouette with one of them. That is a real limit of what a board draws, not an oversight,
+and nothing refuses it: a library may collide deliberately.
+
+Two ways to live with it:
+
+- **Replace rather than extend.** If your domain has its own six nouns, define all of them in
+  the library and use only those on a board. A board that never mixes the two vocabularies
+  never shows the collision.
+- **Keep the collision far apart.** A `lakehouse` that looks like the bundled `gateway` costs
+  nothing on a board that has no gateway on it.
 
 ## Limits today
 
