@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // ADR-0019: a workspace's user-facing handle. Nullable — legacy workspaces
 // minted before this migration have none until Wave-2 backfill/minting, and

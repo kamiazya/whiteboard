@@ -20,7 +20,7 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * It is an ordinary field of the model at each of the three sites. It used to
  * ride inside the JSON Canvas extension key, which is where it still travels
  * on the WIRE — packing it back there is `codec`'s projection, and
- * [ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md) is why
+ * [ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md) is why
  * the model no longer spells the format's key itself.
  */
 const facetsFieldSchema = extensionFacetsSchema.optional().catch(undefined)
@@ -38,7 +38,7 @@ export type NodeEmbed = z.infer<typeof nodeEmbedSchema>
 
 /**
  * Geometry is a REAL number here, where JSON Canvas 1.0 specifies integer
- * pixels ([ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md)).
+ * pixels ([ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md)).
  *
  * Ink is sub-pixel by nature — a pen reports fractions of a pixel, and a model
  * that rounds before it draws has thrown away what the pen measured. The
@@ -155,7 +155,7 @@ export type EdgeSide = z.infer<typeof edgeSideSchema>
  * end as `fromNode` + `fromSide` + `fromEnd`, three parallel keys per end,
  * because a flat file format has no other way. The model said the same thing
  * only because it WAS the format
- * ([ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md)); the
+ * ([ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md)); the
  * projection folds these back into the six flat keys on the way out, which is
  * what a projection is for.
  */
@@ -300,7 +300,7 @@ export const canvasEdgeSchema = z
     /**
      * Points the edge is drawn THROUGH, in canvas coordinates, in order.
      *
-     * A native field rather than a plugin facet, by ADR-0033 decision 3's
+     * A native field rather than a plugin facet, by ADR-0035 decision 3's
      * three answers: a person authors them by dragging a handle the core
      * editor draws, the renderer and the editor both read them, and the
      * ledger declares them `extension` — JSON Canvas 1.0 has no waypoint, so
@@ -459,7 +459,7 @@ export const spatialCanvasSchema = z
    * not be — a JSON Canvas document another tool wrote may carry vendor keys,
    * and refusing it would be wrong. This is the INTERNAL model: a key it does
    * not name is a defect, and a plain `z.object` strips one in silence. That
-   * silence is what ADR-0033's migration had to survive, since every reader
+   * silence is what ADR-0035's migration had to survive, since every reader
    * that still spelled the format's extension key would otherwise have parsed
    * cleanly and lost what it was reading.
    */

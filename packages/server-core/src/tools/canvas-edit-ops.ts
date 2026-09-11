@@ -2,6 +2,8 @@
  * What `wb_canvas_edit` accepts and answers: the op union and the input and
  * output schemas, in one place a model reads and the tool executes.
  */
+
+import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
 import {
   annotationIdSchema,
   canvasCommentDraftSchema,
@@ -39,7 +41,7 @@ const [textNode, fileNode, linkNode, groupNode] = spatialNodeSchema.options
  * here for free — which is the point, and wrong for exactly these two: the
  * tool already publishes a way to write them, and a second one is two
  * spellings of one thing on a table a model reads every turn. Measured when
- * ADR-0033 moved them onto the node: 14 new parameters across the four node
+ * ADR-0035 moved them onto the node: 14 new parameters across the four node
  * types, every one of them undescribed.
  */
 const STORED_EXTENSION_FIELDS = { embed: true, facets: true } as const
@@ -76,7 +78,7 @@ const nodeExtensionWriteSchema = z
    *
    * The tool's INPUT key stays `x-whiteboard` — it is published in
    * `tools/list`, a model reads it every turn, and moving it is a tool-surface
-   * change with its own gate (ADR-0031). What ADR-0033 changed is the far
+   * change with its own gate (ADR-0031). What ADR-0035 changed is the far
    * side: a node carries `embed` and `facets` independently now, and the
    * transform is where the union arm becomes them.
    */
@@ -92,11 +94,39 @@ const nodeExtensionWriteSchema = z
   }))
 const WRITE_EXTENSION = { 'x-whiteboard': nodeExtensionWriteSchema.optional() } as const
 
+/**
+ * A key inside the node that the node has no room for is REFUSED, and
+ * `stencil` is told where it belongs — the same redirect `nodePatchSchema`
+ * carries, for the same key one op over.
+ *
+ * Strict at all, because the two ops disagreed and the disagreement was
+ * silent: `node.patch`'s fields are `.strict()`, so a stray key there is
+ * refused by name, while a node DRAFT strips — so the identical mistake on
+ * `node.add` was accepted, dropped, and the box drawn undressed with nothing
+ * said. Measured, not reasoned: a lane trial wrote `stencil` inside `node`
+ * on all seven boxes, received no error, worked out from the render that
+ * nothing had been dressed, and spent seventeen further calls rebuilding the
+ * vocabulary by hand — landing a board one distinction channel apart where
+ * the stencil set is two. Inside `node` is also the likelier guess, since
+ * every other property of the box goes there.
+ *
+ * A silently dropped key is the worst of the three outcomes: the caller
+ * cannot see it, and neither can a test that asserts on what was stored.
+ */
+const draftStrayKeys = {
+  error: (issue: { code: string; keys?: readonly string[] }) =>
+    issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+      ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `node`.'
+      : undefined,
+}
+const draftOption = <S extends z.ZodRawShape>(option: { shape: S }) =>
+  z.object(option.shape, draftStrayKeys).strict()
+
 const nodeDraftSchema = z.discriminatedUnion('type', [
-  textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
-  groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION),
+  draftOption(textOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(fileOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(linkOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
+  draftOption(groupOption.partial(DRAFT_OPTIONAL).extend(WRITE_EXTENSION)),
 ])
 
 const edgeDraftSchema = canvasEdgeSchema.partial({ id: true })
@@ -157,12 +187,81 @@ const exactlyOneTarget = {
   message: 'name exactly one of id, within and all',
 }
 
+/**
+ * A registered STENCIL naming what a box is
+ * ([ADR-0034](../../../../docs/contributing/adr/0034-stencil-and-recipe.md)).
+ *
+ * It sits beside `op` rather than inside `node`, like `within`: a key inside
+ * `node` is part of the node's STORED shape, and this is an instruction to
+ * expand a vocabulary into that shape.
+ *
+ * The description names COLOUR and SILHOUETTE and not the badge, though a
+ * stencil may write one. `plugin-visual` contributes no node decoration, so
+ * a badge draws nothing on a board — it reaches the minimap, the favicon and
+ * a file row, where a node is too small to read. Naming it here promised a
+ * board distinction that is not there, and cost bytes to promise it.
+ *
+ * **A validated STRING, not a `z.enum` of the registered ids**, and that is a
+ * measurement rather than a preference. An enum's cost grows with the
+ * vocabulary, and this field exists so a vocabulary can GROW — a deployment
+ * or a community pack registers its own. Measured on the rung-1 scoreboard,
+ * against the 12986-byte baseline before stencils existed:
+ *
+ * | stencils | `wb_canvas_edit` visible bytes | over baseline |
+ * |---|---|---|
+ * | 6 | 13492 | +506 |
+ * | 30 | 14404 | +1418 |
+ * | 60 | 15544 | +2558 |
+ * | 120 | 17824 | +4838 |
+ *
+ * ~38 bytes per stencil per op, paid on EVERY turn of every conversation
+ * with this server attached, for a vocabulary most conversations never
+ * touch. A hundred-icon cloud pack would add 13% to the whole tool table.
+ * The string form is constant at roughly +356 whatever the library holds.
+ *
+ * So discovery moves off the static schema onto two runtime answers that
+ * cost nothing until somebody wants them: `wb_facet_list` reports the
+ * registered assets, and a refusal here names what IS registered. That is
+ * the question `wb_facet_list` already exists to answer — "what did this
+ * deployment register" — so the ecosystem reuses a seam rather than growing
+ * the table.
+ */
+const STENCIL_FIELD = namespacedIdSchema
+  .optional()
+  .describe(
+    'What this box IS, as a registered stencil id — sets its colour and silhouette together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
+  )
+
+/**
+ * `node.patch`'s fields, with ONE redirect on top of the stored schema:
+ * `stencil` is a real field of the op, one level up.
+ *
+ * It lives here rather than in the handler because the handler never sees
+ * it — `nodePatchFieldsSchema` is `.strict()`, so a stray key is refused at
+ * parse with a bare `Unrecognized key: "stencil"` and the batch is over. A
+ * redirect written past that point reads as working and is unreachable;
+ * this one was, until a probe through the real input schema said so.
+ *
+ * Same measured reason as `draftKeysBelongInside`: a model generalises from
+ * the ops it just used, and a refusal naming the key without naming the
+ * repair costs the whole batch twice.
+ */
+const nodePatchSchema = z
+  .object(nodePatchFieldsSchema.shape, {
+    error: (issue: { code: string; keys?: readonly string[] }) =>
+      issue.code === 'unrecognized_keys' && (issue.keys ?? []).includes('stencil')
+        ? 'Unrecognized key: "stencil" — a stencil is not a field of the node; `stencil` goes beside `op`, next to `patch`.'
+        : undefined,
+  })
+  .strict()
+
 const canvasOpSchema = z.discriminatedUnion('op', [
   z
     .object(
       {
         op: z.literal('node.add'),
         node: nodeDraftSchema,
+        stencil: STENCIL_FIELD,
         within: nodeIdSchema
           .nullable()
           .optional()
@@ -174,7 +273,12 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     )
     .strict(),
   z
-    .object({ op: z.literal('node.patch'), ...NODE_TARGET, patch: nodePatchFieldsSchema })
+    .object({
+      op: z.literal('node.patch'),
+      ...NODE_TARGET,
+      patch: nodePatchSchema,
+      stencil: STENCIL_FIELD,
+    })
     .strict()
     .refine(exactlyOneTarget.check, { message: exactlyOneTarget.message }),
   /**

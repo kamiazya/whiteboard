@@ -82,9 +82,18 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
       baseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'w1',
       path: 'main',
-      authMode: 'bootstrap',
-      bootstrapToken: 'tok-123456',
     },
+  }),
+}))
+// A `#wb=` fragment carries no credential, so the daemon view this test is
+// about only renders once the pairing grant resolves. Stubbed to the silent
+// renewal outcome — the redirect path would navigate away from the subject.
+vi.mock('./lib/pairing-grant.js', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('./lib/pairing-grant.js')>()),
+  renewPairingToken: async () => ({
+    status: 'paired' as const,
+    daemonBaseUrl: 'http://127.0.0.1:3099',
+    token: 'tok',
   }),
 }))
 

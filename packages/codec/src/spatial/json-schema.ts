@@ -36,7 +36,7 @@ function canvasExtensionDef(): Record<string, unknown> {
  * output by a sync test.
  *
  * It lives in the codec because the thing it describes is the WIRE shape
- * ([ADR-0033](../../../../docs/contributing/adr/0033-model-and-format.md)).
+ * ([ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md)).
  * It was generated from the model until the model stopped being the format.
  */
 export function xWhiteboardJsonSchema(): Record<string, unknown> {

@@ -11,7 +11,7 @@ describe('extended JSON Canvas round-trip property', () => {
     (canvas) => {
       // Extended mode is lossless over what the FORMAT can express, which
       // stopped being everything the model can hold when geometry went
-      // sub-pixel (ADR-0033 slice 4): JSON Canvas 1.0 specifies integer
+      // sub-pixel (ADR-0035 slice 4): JSON Canvas 1.0 specifies integer
       // pixels, so the projection rounds. Putting the canvas through the
       // projection first is what names that subset, and the equality below
       // is exact inside it.

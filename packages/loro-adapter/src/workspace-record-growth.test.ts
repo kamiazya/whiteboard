@@ -98,7 +98,7 @@ describe('workspace-record growth scoreboard', () => {
     const n = build(10, 100)
     // The delta LOG price of an edit — what accumulates between compactions.
     //
-    // 178660 -> 156960 (-12%) when ADR-0033 moved the canvas's facets to a key
+    // 178660 -> 156960 (-12%) when ADR-0035 moved the canvas's facets to a key
     // of their own. The saving is not the move: it is that the write path used
     // to emit a DELETE for the canvas envelope on every save, including the
     // overwhelming majority of saves on boards that never had one. ~22B per
@@ -116,7 +116,7 @@ describe('workspace-record growth scoreboard', () => {
     // container that has never been written encodes leaner in a shallow
     // snapshot than at create time (measured 3317 vs 3481, and the gap grows
     // with each such container — 9B when comments was the only one, 27B once
-    // threads joined, 164B once ADR-0033 stopped writing a canvas envelope
+    // threads joined, 164B once ADR-0035 stopped writing a canvas envelope
     // key on a board that has no facets), so the cut is pinned exactly AND bounded by the
     // create-time size — the reclaim story ("compaction takes back everything
     // the edits added") is the invariant, byte identity was only its

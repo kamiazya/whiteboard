@@ -509,10 +509,9 @@ describe('App daemon-pairing routing', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -570,10 +569,9 @@ describe('App reconnect-target persistence', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -594,10 +592,9 @@ describe('App reconnect-target persistence', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'super-secret-token',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -1055,10 +1052,9 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
         path: undefined,
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -1079,10 +1075,9 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'design',
         path: undefined,
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     vi.stubGlobal(
       'fetch',
       vi.fn(() =>
@@ -1117,10 +1112,9 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'workspace-b',
         path: undefined,
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -1249,10 +1243,9 @@ describe('App URL routing', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     const router = renderAppWithRouter(BROWSER_STATE, '/')
     await screen.findByTestId('daemon-document-page')
     expect(router.state.location.pathname).toBe('/w/w1/d/main')
@@ -1305,10 +1298,9 @@ describe('App shell (single instance above the routed pages)', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_STATE} />
@@ -1439,10 +1431,9 @@ describe('App /settings routing', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
         path: undefined,
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     renderAppWithRouter(BROWSER_STATE, '/settings')
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toEqual({
@@ -1451,22 +1442,49 @@ describe('App /settings routing', () => {
     })
   })
 
-  it('passes token: null for a paired fragment connection with authMode "none" (no bootstrap token)', async () => {
+  // A `#wb=` fragment names a daemon and carries no credential, so the token
+  // /settings receives can only have come from the grant. Pinned here
+  // because the fragment used to supply one directly, and a regression that
+  // reinstated that path would otherwise look identical from this route.
+  it('takes the daemon token from the grant, never from the #wb= fragment', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: undefined,
         path: undefined,
-        authMode: 'none',
       },
+    }
+    mockRenewResult = {
+      status: 'paired',
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+      token: 'from-the-grant',
     }
     renderAppWithRouter(BROWSER_STATE, '/settings')
     await screen.findByTestId('settings-page')
     expect(receivedSettingsPageProps?.daemon).toEqual({
       baseUrl: 'http://127.0.0.1:3099',
-      token: null,
+      token: 'from-the-grant',
     })
+  })
+
+  // The failure this ordering caused when it was written the other way: an
+  // identity-mismatch is a RESOLUTION, and gating the "Connecting…" view on
+  // `grantPaired === null` alone left the page stuck on it forever, hiding
+  // the one warning that says the daemon's key changed.
+  it('does not hide an identity-mismatch behind the connecting view', async () => {
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: undefined,
+        path: undefined,
+      },
+    }
+    mockRenewResult = { status: 'identity-mismatch', daemonBaseUrl: 'http://127.0.0.1:3099' }
+    renderAppWithRouter(BROWSER_STATE, '/settings')
+    await screen.findByTestId('settings-page')
+    expect(screen.queryByText(/Connecting to the daemon/i)).toBeNull()
   })
 
   it('passes the daemon from a session grant established via the silent-renewal seam', async () => {
@@ -1534,10 +1552,9 @@ describe('App error boundary', () => {
         baseUrl: 'http://127.0.0.1:3099',
         workspaceId: 'w1',
         path: 'main',
-        authMode: 'bootstrap',
-        bootstrapToken: 'tok',
       },
     }
+    mockRenewResult = { status: 'paired', daemonBaseUrl: 'http://127.0.0.1:3099', token: 'tok' }
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     try {
       render(

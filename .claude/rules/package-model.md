@@ -28,7 +28,7 @@ paths:
 - IDs: document ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - Workspace identity (ADR-0019) is three layers, not one: canonical workspace ID = a bare ULID, the same canonical-ULID shape as document ID (no `ws_` prefix — symmetric with `documentIdSchema`, distinct Zod schemas are the confusion guard); segment = the URL-safe, per-keeper-unique, renameable handle, which must NOT itself be ULID-shaped (a 26-char Crockford base32 string with a leading `[0-7]`, checked case-insensitively) because workspace URLs resolve segment-first with canonical-id fallback in one position; displayName = free text, no uniqueness, no identity duties. `workspaceIdSchema` (the pre-ADR-0019 single-string shape) is untouched — it describes the legacy live data both keepers still hold, and re-keying onto the three-layer shape is a later migration-driven slice.
 - **Geometry is a REAL number, and the format's integer pixels are the projection's**
-  ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 4).
+  ([ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 4).
   `nodePositionSchema` / `nodeSizeSchema` are `z.number().finite()` (sizes non-negative), and
   they are EXPORTED because every payload that echoes stored geometry has to accept what the
   model stores — a read still declaring `int` does not reject an input, it makes a tool answer
@@ -37,13 +37,13 @@ paths:
 - **An edge carries its own `bends`** — the points the line is drawn through, in order, capped at
   64. Same slice, and the ADR's worked example of what the old binding cost: JSON Canvas has no
   waypoint, so while the model WAS the format a bend could only exist as a plugin facet
-  (`visual.path/v0`, retired) drawn by a contributed router. It passes ADR-0033 decision 3's three
+  (`visual.path/v0`, retired) drawn by a contributed router. It passes ADR-0035 decision 3's three
   answers — a person authors one by dragging a handle the core editor draws, the renderer and the
   editor both read it, and its projection is `extension`. `edgePatchFieldsSchema` derives from
   `canvasEdgeSchema`, so it reached `wb_canvas_edit`'s edge patch for free, which is the whole
   gain: a facet payload is opaque to that tool, so a model could not place a bend at all before.
 - **An edge END is a node or a POINT**
-  ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 3). `edgeEndpointSchema`
+  ([ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 3). `edgeEndpointSchema`
   is a discriminated union on `kind` — `{ kind: 'node', node, side?, end? }` or
   `{ kind: 'point', point, end? }` — in place of the format's four flat keys
   (`fromNode`/`fromSide`/`toNode`/`toSide`), which could not say "this end is a point" at all.
@@ -67,7 +67,7 @@ paths:
   makes that a fact rather than a claim — it counts what a run produced and fails on a share out
   of band, on node ends that stopped being correlated, and on a corpus with no half-free edge in
   it. Mutation-checked in both directions.
-- **This package no longer spells `x-whiteboard` anywhere.** ADR-0033 moved the interchange
+- **This package no longer spells `x-whiteboard` anywhere.** ADR-0035 moved the interchange
   format into `packages/codec` (`spatial/json-canvas.ts`), and what used to ride inside the
   format's extension key is three ordinary fields:
   - `comments` and `facets` on the canvas,
@@ -82,7 +82,7 @@ paths:
   The asymmetry is the whole point. A JSON Canvas document another tool wrote may legitimately
   carry vendor keys, so refusing it would be wrong; this is the INTERNAL model, where a key it
   does not name is a defect. A plain `z.object` STRIPS an unknown key and returns success, which
-  during ADR-0033's migration would have meant every reader still spelling the old key parsing
+  during ADR-0035's migration would have meant every reader still spelling the old key parsing
   cleanly and losing what it read. Measured: without the storage lift that goes with it, a node
   written under the old key does not lose a field — it VANISHES, because `readSpatialCanvas`
   drops what fails to parse (`loro-adapter`'s `legacy-extension.test.ts`).

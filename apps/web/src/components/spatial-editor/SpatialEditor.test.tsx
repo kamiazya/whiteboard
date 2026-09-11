@@ -275,19 +275,6 @@ describe('paper (ADR-0030)', () => {
     expect(getByTestId('spatial-editor').style.backgroundColor).toBe('rgb(3, 7, 17)')
   })
 
-  it("the paper follows the session's look: a neon board drawn clean gets the bundled paper", () => {
-    const { getByTestId } = render(
-      <SpatialEditor
-        canvas={neon()}
-        onChange={vi.fn()}
-        measure={fakeMeasure}
-        theme="dark"
-        style="clean"
-      />,
-    )
-    expect(getByTestId('spatial-editor').style.backgroundColor).not.toBe('rgb(3, 7, 17)')
-  })
-
   it('a canvas naming no theme keeps the bundled paper, which is the page background', () => {
     const { getByTestId } = render(
       <SpatialEditor canvas={twoNodeCanvas()} onChange={vi.fn()} measure={fakeMeasure} />,

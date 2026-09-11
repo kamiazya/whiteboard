@@ -148,7 +148,7 @@ describe('what an errand costs in tool calls', () => {
       // first goes 21 -> 18.
       //
       // +228 request and +528 response when an edge END became an OBJECT
-      // (ADR-0033 slice 3): 38 bytes per edge written and 88 per edge read
+      // (ADR-0035 slice 3): 38 bytes per edge written and 88 per edge read
       // back, across six edges. The format spells an end as three flat keys
       // because a flat file has no other way; the model spells it as one
       // thing, and this is what that costs on the wire. Bought with it: an
@@ -221,6 +221,17 @@ describe('what an errand costs in tool calls', () => {
       // (see tool-surface-quality). Response 2,060 is unchanged — the
       // placed boxes and the grown group, reported under `geometry`;
       // before growth, this same call at width 700 was refused whole.
+      // ADR-0034's stencil field. One call either way — `wb_canvas_edit`
+      // batches, so this was never several — and 916 request bytes against
+      // 1253 for the same six boxes dressed by hand. The corpus entry
+      // carries both numbers and the reason that saving is NOT the case for
+      // the field: 480 visible bytes on rung 1 are paid every turn, and 337
+      // is saved per errand.
+      'dress six boxes as six kinds': {
+        calls: 1,
+        requestBytes: 916,
+        responseBytes: 2086,
+      },
       'make a group hold exactly three boxes': {
         calls: 1,
         requestBytes: 549,

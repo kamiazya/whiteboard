@@ -143,7 +143,14 @@ const menuRow = (label: string) =>
     (item) => item.textContent?.trim() === label,
   )
 
-const displayRow = () => menuRow('Display…')
+/**
+ * The Display opener, which is an inspector-segment member now rather than
+ * a row in the ⋯ menu — so it is a header button, found by name.
+ */
+const displayOpener = () =>
+  [...document.querySelectorAll('button')].find(
+    (button) => button.getAttribute('aria-label') === 'Display',
+  )
 
 describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   beforeEach(async () => {
@@ -259,12 +266,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     const spatialStore = new IdbDocumentIndex()
     const spatial = render(<BrowserDocumentPage store={spatialStore} />)
 
-    // A spatial canvas is where the row is offered. It lives in the
-    // document's ⋯ now, so reaching it means opening that.
+    // A spatial canvas is where it is offered — as the leading member of
+    // the inspect segment, in the place a markdown document's Properties
+    // takes.
     await screen.findByTestId('mock-spatial-editor')
-    await openDocumentMenu()
     await waitFor(() => {
-      expect(displayRow()).toBeDefined()
+      expect(displayOpener()).toBeDefined()
     })
     spatial.unmount()
 
@@ -276,12 +283,12 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     })
 
     // Edge routing has no meaning for a document with no spatial scene —
-    // the row must not carry over; the rest of the canvas row does.
+    // the member must not carry over; the rest of the canvas row does.
+    expect(displayOpener()).toBeUndefined()
     await openDocumentMenu()
     await waitFor(() => {
       expect(document.querySelector('[role="menu"]')).not.toBeNull()
     })
-    expect(displayRow()).toBeUndefined()
     // The rest of the row does carry over: the hidden persistence fact rides
     // the same slot the spatial row uses.
     expect(document.querySelector('[data-testid="persistence-state"]')).toBeTruthy()

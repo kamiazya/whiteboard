@@ -131,7 +131,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a
   // coarse instrument charges the whole step to whoever crosses it.
-  '.claude/rules/vocabulary.md': 16,
+  //
+  // 17 for the **Stencil** and **Recipe** rows (ADR-0034). Two words a design
+  // is about to be built in, fixed here BEFORE the code so the naming is not
+  // settled by whichever file happens to be written first — which is the one
+  // thing this table is for, and what it costs is a bucket.
+  '.claude/rules/vocabulary.md': 17,
 }
 
 /**
@@ -149,12 +154,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * has to say, to sit under a bucket, is the trade this test exists to make
  * visible rather than to force.
  *
+ * 24 since `vocabulary.md` gained the **Stencil** and **Recipe** rows
+ * (ADR-0034), at 96017. The same shape as the crossing before it: two rows of
+ * about 700 characters carried the corpus over a grain the 3500 characters
+ * accumulated since 91762 had already brought it to.
+ *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 23
+const ALWAYS_ON_TOTAL_BUDGET = 24
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -268,18 +278,32 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // all, and the fact that a guessed ceiling of 4 shipped and CI's stress
 // lane found the board needing 5. A ceiling with no measurement beside it
 // is the next session's guess as well.
-// 123 since a contribution may supply the edge ALGORITHM: what crosses the
+// 127 since a contribution may supply the edge ALGORITHM: what crosses the
 // seam (a route, never a scene node) and why, that the side pass runs first
 // so sides are a router's input, the four ways it falls back, and the
 // measured reason selection is a reader rather than a widened payload —
 // with the half of that measurement that the schema-drawn generator has
 // since retired, said plainly so the surviving half stays readable.
-// 129 since bends came home (ADR-0033 slice 4): what the renderer's own
-// stored-bend route is and when it declines, why it moved out of a plugin,
-// and — the part worth the bytes — that the router SEAM stays and now has no
-// bundled consumer, so nobody deletes it looking for dead code or invents a
-// router to justify it.
-const CANVAS_RENDER_BUDGET = 129
+//
+// 131 for the THIRD axis (the facet-vocabulary ADR, `quality/facet-score.ts`):
+// what a board says with appearance rather than with position, and the first
+// reading of it — every board in the corpus, the hand-drawn references
+// included, spends one treatment and owes all 22 constructs. A reader who
+// does not know that will read the scoreboard's zeroes as health.
+//
+// 132 for the STENCIL partition (ADR-0034), and specifically for the one
+// measured case it buys that frames and kinds cannot reach. Without that
+// paragraph a later reader sees a third partition with no stated reason and
+// either trusts it or deletes it; the measurement is what makes it either
+// defensible or removable.
+//
+// 133 since bends came home: what the renderer's own stored-bend route is and
+// when it declines, why it moved out of a plugin, and — the part worth the
+// bytes — that the router SEAM stays and now has no bundled consumer, so
+// nobody deletes it looking for dead code or invents a router to justify it.
+// Plus the note that an edge with a FREE end is not routed yet, which is a
+// decision rather than an omission.
+const CANVAS_RENDER_BUDGET = 133
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

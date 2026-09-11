@@ -16,7 +16,7 @@ import { describe, expect, it } from 'vitest'
  * state, and what share only survives the one extension key? A corpus cannot
  * answer that — it answers what somebody happened to draw.
  *
- * Since ADR-0033 the model no longer spells the format's key, so the split is
+ * Since ADR-0035 the model no longer spells the format's key, so the split is
  * the projection LEDGER's answer rather than a prefix test. That is the point
  * of the ledger: one authority on what a position costs an export.
  *
@@ -40,7 +40,7 @@ const withKind = (kind: FieldProjection['kind']) =>
 
 describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () => {
   it("states 21 of the model's field positions exactly", () => {
-    // 19 -> 21 with ADR-0033 slice 3: an END is one object rather than three
+    // 19 -> 21 with ADR-0035 slice 3: an END is one object rather than three
     // flat keys, and the object's `kind` is a position of its own on each
     // side. The format states it in the only sense that matters — every JSON
     // Canvas edge runs between two nodes, so `kind` crossing means the lift
@@ -64,7 +64,7 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
 
   it('states 4 more only to the nearest whole pixel — a node box', () => {
     // The format HAS these fields, so they are not outside it; what it cannot
-    // say is a fraction. Since ADR-0033 slice 4 the model's geometry is real,
+    // say is a fraction. Since ADR-0035 slice 4 the model's geometry is real,
     // so the box is the ledger's first `degraded` entry, and this pin is what
     // makes a second one a decision rather than a merge.
     expect([...withKind('degraded')].sort()).toEqual([
@@ -80,14 +80,18 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     expect(census.facetBuckets).toHaveLength(3)
   })
 
-  it('carries 13 further field positions inside those buckets, from one bundled plugin', () => {
+  it('carries 14 further field positions inside those buckets, from one bundled plugin', () => {
     // Positions, not facets: a facet targeting both a node and the canvas can
     // be written at either, and each is somewhere a reader has to look.
-    expect(census.facet).toHaveLength(13)
+    // 13 -> 14 when the bundled plugin gained `visual.stencil/v0` (ADR-0034).
+    // The column that grows when a deployment adds plugins is exactly the one
+    // this scoreboard exists to watch, so the move is the reading rather than
+    // a regression.
+    expect(census.facet).toHaveLength(14)
   })
 
-  it('so 33 of the 58 positions a document can hold are outside the format', () => {
-    // 29/52 -> 33/58 with ADR-0033 slice 3, and the two numbers move for
+  it('so 34 of the 59 positions a document can hold are outside the format', () => {
+    // 29/52 -> 33/58 with ADR-0035 slice 3, and the two numbers move for
     // DIFFERENT reasons, which is the reading. The denominator grew by six
     // because an endpoint object has positions three flat keys did not (a
     // `kind` and a `point`'s two coordinates, per end). The numerator grew by
@@ -97,9 +101,13 @@ describe('how far JSON Canvas 1.0 reaches into the shipped spatial model', () =>
     // not that the format reaches less far — it is that the model now holds
     // something the format has no vocabulary for at all, where before it held
     // only things the format could state or the extension key could carry.
-    // That is the first position of its kind since ADR-0033 was accepted.
+    // That is the first position of its kind since ADR-0035 was accepted.
     const outside = withKind('extension').length + withKind('dropped').length + census.facet.length
-    expect(outside).toBe(33)
-    expect(outside + withKind('native').length + withKind('degraded').length).toBe(58)
+    // 33/58 -> 34/59 with ADR-0034's stencil facet, which lands INSIDE a
+    // bucket: the format could already say nothing about what a bucket holds,
+    // so the share outside moves 56.9% -> 57.6% on a position the format was
+    // never going to reach.
+    expect(outside).toBe(34)
+    expect(outside + withKind('native').length + withKind('degraded').length).toBe(59)
   })
 })

@@ -39,7 +39,7 @@ const zeroNormalised = <T extends { x?: number; y?: number }>(value: T): T => ({
 
 /**
  * The same normalisation for an EDGE, whose `bends` are points too
- * (ADR-0033 slice 4). It is separate rather than folded into the helper above
+ * (ADR-0035 slice 4). It is separate rather than folded into the helper above
  * because an edge has no `x`/`y` of its own — what it has is a list of them,
  * and the property found the gap the day bends arrived.
  */
@@ -94,7 +94,7 @@ describe('loro-bridge properties', () => {
     const read = readSpatialCanvas(doc)
     expect(Object.is(read.nodes[0]?.x, 0)).toBe(true)
     // The sub-pixel coordinate beside it DOES survive: what the record cannot
-    // carry is the sign of a zero, not the fraction (ADR-0033 slice 4).
+    // carry is the sign of a zero, not the fraction (ADR-0035 slice 4).
     expect(read.nodes[0]?.y).toBe(1.5)
   })
 
@@ -126,7 +126,7 @@ describe('loro-bridge properties', () => {
   it('normalises a negative zero in a free ENDPOINT the same way', () => {
     // The third of the three, and the one with the shortest path from a
     // gesture: releasing a connect drag in empty space writes the pointer's
-    // rounded position straight into the endpoint (ADR-0033 slice 3).
+    // rounded position straight into the endpoint (ADR-0035 slice 3).
     const doc = new LoroDoc()
     writeSpatialCanvas(doc, {
       nodes: [{ id: 'a', type: 'text', text: '', x: 0, y: 0, width: 1, height: 1 }],

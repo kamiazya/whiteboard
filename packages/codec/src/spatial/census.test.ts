@@ -43,7 +43,7 @@ describe('censusSpatialModel', () => {
     // BOTH arms of the endpoint union: the census's whole job on a union is
     // to report the positions a document can hold across every branch, and a
     // walk that stopped at the first arm would under-report the model by
-    // exactly the arm ADR-0033 slice 3 added.
+    // exactly the arm ADR-0035 slice 3 added.
     expect(census.paths).toContain('edges[].from.node')
     expect(census.paths).toContain('edges[].from.point.x')
     expect(census.paths).toContain('comments[].text')

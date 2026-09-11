@@ -28,7 +28,7 @@ export function facetsArb(
   registry: FacetRegistry,
   target: FacetTarget,
 ): fc.Arbitrary<SpatialCanvas['facets']> {
-  // The bare record, not a `{ facets }` wrapper: since ADR-0033 `facets` is a
+  // The bare record, not a `{ facets }` wrapper: since ADR-0035 `facets` is a
   // field of a node, an edge and the canvas alike, so a wrapper would only be
   // unwrapped again at every call site — and a wrapper spread into the field
   // it wraps produces a bucket whose keys fail the facet key grammar, which

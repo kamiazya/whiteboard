@@ -1115,7 +1115,7 @@ serialize, since `layoutSpatialCanvas` accepts an unparsed canvas and
 `formatCoord` throws on a non-finite number.
 
 It lived in `plugin-visual` as a contributed router until
-[ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 4,
+[ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 4,
 because JSON Canvas has no waypoint and the model was the format. A renderer
 that ignored a field of the edge would drop authored geometry the record
 still holds, so the renderer owns it; `package-plugin-visual.md` carries the
@@ -1126,7 +1126,7 @@ reasoning and the reachability gap it leaves.
 for a dangling reference, so every caller in the edge cluster treats the two
 alike and the edge degrades to a zero-length path rather than drawing a line
 to the origin. Drawing one — the router taking a box-less end — is
-[ADR-0033](../../docs/contributing/adr/0033-model-and-format.md) slice 3b's
+[ADR-0035](../../docs/contributing/adr/0035-model-and-format.md) slice 3b's
 job. Until then the model can STORE an end this renderer will not draw, which
 is the honest state and is pinned by example rather than left to be found.
 
@@ -1244,7 +1244,7 @@ editor half is the one that stands.)
   while a themed board's edges dragged crisp and straight; then, when
   ADR-0013's edge target opened, edges with none — per-edge routing and the
   bends a contributed router drew never reached a compared canvas (bends are
-  a field of the edge since ADR-0033 slice 4, so the schema-derived generator
+  a field of the edge since ADR-0035 slice 4, so the schema-derived generator
   draws them without anyone asking it to). The
   second is why the scenario also draws `style`: a theme is drawn under
   `'document'` and never under the library's clean default. Four guards
@@ -1925,3 +1925,72 @@ path makes is a route through its own boxes, so it is overruled into a
 visible route around the pair. The lane board with the sides the model
 named is debt-free (`edgeThroughNode` 2 to 0, bends 6 to 4, reversals 4
 to 2).
+
+## The facet score judges what the board SAYS, not where it puts things
+
+`quality/facet-score.ts` (`scoreFacets(canvas)`) is
+[ADR-0033](../../docs/contributing/adr/0033-facet-vocabulary-axis.md)'s third
+axis. The drawing score and the composition axis both read GEOMETRY; a
+drawing also distinguishes things by APPEARANCE, which says two things differ
+in KIND rather than in position, and nothing else here could see it.
+
+It reads a document's DECLARED partitions — a frame's membership, and a
+node's kind — against the TREATMENT each box wears: `node.color`,
+`visual.shape/v0` and `visual.symbol/v0`, read through `plugin-visual`'s own
+resolvers so an unresolvable payload means here exactly what it means at draw
+time. `visual.text/v0` is placement rather than kind, and `visual.theme/v0`
+and `visual.edges/v0` are canvas-wide, so none of the three is a distinction
+channel. The columns are Moody's semiotic clarity (*The Physics of
+Notations*, IEEE TSE 2009): `deficit` (a construct nothing visible carries),
+`overload` (one treatment worn by two whole constructs), `excess` (a
+treatment whose wearers cut a construct rather than covering it), plus
+`distance` (visual distance, the fewest channels two treatments differ on)
+and the reported-only `treatments` and `redundancy`.
+
+**More facets is not better, and the columns are shaped so it cannot be.**
+A coverage count would reward exactly the board this axis exists to catch.
+
+**The first reading is the finding, and it is stark**: every board in the
+corpus — the hand-drawn REFERENCES included — spends one treatment, reads
+`distance 0`, and owes every one of the 22 constructs the corpus declares.
+The channel is not under-used, it is unopened, and by everyone rather than
+only by the model: the lane boards and the references read identically. So
+`facet-quality.test.ts` is a BASELINE, not a set of owes to burn down, and it
+deliberately carries none of the reference-beats-draft / tidy-never-adds-debt
+validity tests the other two scoreboards do — with every board identical on
+every column those pass vacuously, which is the failure ADR-0031 §7 names.
+What it pins instead is the uniformity, so the first board to spend anything
+is loud, plus one recoloured board proving the columns are not dead.
+
+Three things the calibration decided that a reader would otherwise re-derive:
+
+- **Overload and excess are EXCLUSIVE**, and the first implementation charged
+  both on the same board because it tested them independently: spanning two
+  classes also fails the "inside one class" test. Worn inside one class
+  carries that construct; worn by whole classes carries several (overload);
+  worn across a class boundary carries none (excess).
+- **`distance 0` means "fewer than two treatments exist"**, never "two
+  symbols collide" — two DISTINCT treatments differ on at least one channel
+  by construction, so the value cannot mean both.
+- **A board with no frame and one node kind declares nothing**, so every
+  column is silent on it. That is the blind spot, and the corpus has three of
+  them: the sequence diagrams. Pinned in the scoreboard rather than only in a
+  unit test.
+
+**A STENCIL is the third declared partition** (ADR-0034): `visual.stencil/v0`
+records which registered vocabulary entry a box wears, and `scoreFacets` reads
+it beside frame membership and node kind. Measured when it landed, it buys
+EXACTLY ONE case that the other two cannot reach — an appearance that CUTS the
+frames, one datastore inside each of two frames, which by geometry alone is
+`excess`. A board whose frames each hold one kind is already carried by frame
+membership, and a board with no frame declares nothing either way. Without the
+record, dressing a board by kind would score a real improvement as a defect,
+which is why ADR-0034 makes the record load-bearing rather than bookkeeping.
+The corpus baseline does not move: no corpus board wears a stencil, so the
+partition has one class and is dropped.
+
+The score is OUTSIDE the mutation lane, for the reason the other two
+instruments are. Hand-checked instead, and that check earned its place: it
+found a treatment map keyed by the node where an id was wanted — which made
+every board read as spending nothing, the very answer the corpus was expected
+to give.

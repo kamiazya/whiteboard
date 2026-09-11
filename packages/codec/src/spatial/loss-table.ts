@@ -1,5 +1,5 @@
 /**
- * The published loss table — [ADR-0033](../../../../docs/contributing/adr/0033-model-and-format.md)
+ * The published loss table — [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md)
  * decision 2's other half.
  *
  * Decision 2 replaces "the model IS JSON Canvas" with two checkable claims: a
@@ -82,7 +82,7 @@ export function jsonCanvasLossTable(): string {
     '# What a JSON Canvas export keeps, and what it costs',
     '',
     'A whiteboard document is not a JSON Canvas file. JSON Canvas 1.0 is a **projection** of it',
-    '([ADR-0033](../contributing/adr/0033-model-and-format.md)), and first-party support means a',
+    '([ADR-0035](../contributing/adr/0035-model-and-format.md)), and first-party support means a',
     'tested projection rather than an identity: a round-trip property over the expressible subset,',
     'and this table for everything else.',
     '',

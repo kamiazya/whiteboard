@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Backing store for ports' WorkspaceIndex: five workspace-scoped
 // tables (canvas list, facets, aliases, backlinks, alias history), each

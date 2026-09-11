@@ -1,5 +1,12 @@
 import type { LucideIcon } from 'lucide-react'
-import { GitPullRequestArrow, History, Info, MessageSquare, Waypoints } from 'lucide-react'
+import {
+  GitPullRequestArrow,
+  History,
+  Info,
+  MessageSquare,
+  SlidersHorizontal,
+  Waypoints,
+} from 'lucide-react'
 import type { JSX } from 'react'
 import { INSPECTOR_CHROME, INSPECTOR_ORDER, type InspectorKind } from '../../lib/inspector.js'
 import { cn } from '../../lib/utils.js'
@@ -29,11 +36,11 @@ export interface InspectorSegmentProps {
 }
 
 /**
- * The four ways to look at the open document, as ONE control.
+ * The ways to look at the open document, as ONE control.
  *
  * They are already exclusive — `lib/inspector.ts` gives them one state — but
- * exclusive state drawn as four buttons in three different files reads as
- * four unrelated switches, which is what the retune's own screenshots kept
+ * exclusive state drawn as separate buttons in separate files reads as that
+ * many unrelated switches, which is what the retune's own screenshots kept
  * showing. Measured at 1280px before this: a canvas row ran
  * `comments, more-actions, history` (the act menu BETWEEN two inspect
  * toggles) and a note ran `properties, comments, more-actions` — the two
@@ -44,6 +51,9 @@ export interface InspectorSegmentProps {
  */
 const GLYPHS = {
   properties: Info,
+  // The same glyph the ⋯ menu's `Display…` row carried, so the control
+  // moving into the segment is still the one a reader already knows.
+  display: SlidersHorizontal,
   comments: MessageSquare,
   proposals: GitPullRequestArrow,
   connections: Waypoints,

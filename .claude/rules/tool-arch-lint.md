@@ -134,6 +134,62 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `brand-signature.test.ts`
+
+BRAND.md says "Every brand surface renders this exact path" and, until this
+scan, nothing checked it. The mark is copied into thirteen places across both
+composition roots, two packages and `docs/` — a React component, five
+standalone SVGs, two PNG generators, the widget's inline splash, a plugin's
+registered geometry, and one prose comment quoting it — and none was pinned
+against any other. A copy edited or truncated in one surface would have left
+the product with two signatures, silently.
+
+Three decisions worth not re-litigating:
+
+- **The canonical path is READ FROM BRAND.md**, not written in the test. That
+  file governs the mark; a guard with its own copy would be a fourteenth to
+  keep in step, and the first to drift, since nothing would check it. What the
+  test asserts about the doc instead is that what it quotes is a WHOLE path —
+  the way the single source could itself go wrong.
+- **It matches a PREFIX and then captures.** Matching the full path would find
+  only the copies that are already correct and report a clean sweep. The
+  capture's charset is SVG path COMMANDS and nothing else, which is what stops
+  it running off the end of a sentence: `favicon.ts` quotes the mark mid-prose
+  (`… 68 25 in`), and a general `[a-z]` swallows the `in` and reports that copy
+  as divergent.
+- **The scan skips its own file**, because it holds the prefix it searches for.
+  Its first run reported itself — the same shape `selection-surface.test.ts`
+  hit, where a file that NAMES a marker is not one that draws it. Every other
+  test stays in scope on purpose: a fixture asserting a stale path is exactly
+  the load-bearing copy a sweep leaves behind (`.claude/rules/vocabulary.md`
+  records that trap).
+
+`DIVERGENT` holds the one copy that deliberately differs — `error-mark.svg`,
+where the signature carries on into a scribble — and is guarded from both
+sides plus a reason check, mutation-verified in five directions: a truncated
+copy, a nudged coordinate, a dropped entry, a fabricated entry, and a bare
+one-word reason each fail, naming the file.
+
+It pins the VIEW BOX too, from the same BRAND.md line. That box read
+`88x66` in the doc while every surface drawing the bare mark used `88x56`, so
+the DOC was the odd one out (user decision, 2026-09-11) — and the fix for a
+disagreement nobody could see is to make one side derive from the other:
+change the number in BRAND.md and every mark surface is reported until it
+follows.
+
+That needs one distinction the guard cannot infer, so `SURFACES` classifies
+every file the scan finds as either `mark` (draws the bare signature, must
+use the stated box) or `composes: <what it adds>` (needs a box of its own).
+Both sides are guarded, which is the point: a new brand surface cannot be
+added without answering which kind it is, and that is precisely the question
+that went unasked while the doc and the surfaces disagreed.
+
+"Unify on 88x56" therefore does NOT reach the composing surfaces, and the
+framed ones show why: the board frame is a `84x62` rect at `(2,2)`, so its
+bottom edge plus stroke reaches y≈65.3 and a 56-tall box clips it. The OG
+card and the not-found mark are 66 tall because the FRAME requires it, not
+because a copy of the mark's box drifted.
+
 ## `vocabulary-check.test.ts`
 
 The one part of `.claude/rules/vocabulary.md` that can be mechanical rather

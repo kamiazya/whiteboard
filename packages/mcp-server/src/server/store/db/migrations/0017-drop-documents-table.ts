@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 import { getLogger } from '../../../log.js'
 
 const log = getLogger('migration-0017')

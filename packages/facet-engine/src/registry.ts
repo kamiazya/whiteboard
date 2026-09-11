@@ -1,5 +1,6 @@
 import type { z } from 'zod'
-import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
+import { deriveFacetForm, type FacetEditorSpec, type FacetForm, resolveEditorSpec } from './form.js'
+import { type StencilAsset, type StencilAssetInput, stencilAssetSchema } from './stencil.js'
 import {
   type IconAsset,
   iconAssetSchema,
@@ -69,7 +70,7 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
   readonly assetRefs?: Readonly<Record<string, AssetKind>>
 }
 
-export type AssetKind = 'themes' | 'icons'
+export type AssetKind = 'themes' | 'icons' | 'stencils'
 
 /**
  * What a plugin registers beside its facets (ADR-0013 decision 3's assets
@@ -80,6 +81,7 @@ export type AssetKind = 'themes' | 'icons'
 export interface FacetPluginAssets {
   readonly themes?: Readonly<Record<string, ThemeTokensInput>>
   readonly icons?: Readonly<Record<string, IconAsset>>
+  readonly stencils?: Readonly<Record<string, StencilAssetInput>>
 }
 
 export interface FacetPlugin {
@@ -110,9 +112,13 @@ export function defineFacet<S extends z.ZodTypeAny>(
   if (definition.targets.length === 0) {
     throw new Error(`facet "${definition.name}" declares no targets`)
   }
-  if (definition.editor !== undefined) {
-    assertEditorSpecFits(definition.name, definition.schema, definition.editor)
-  }
+  // Checked AND normalised: a picker's options come back carrying the value
+  // the schema parses them to, so a declaration and a stored payload cannot
+  // disagree over a default the schema fills in. See `resolveEditorSpec`.
+  const editor =
+    definition.editor === undefined
+      ? undefined
+      : resolveEditorSpec(definition.name, definition.schema, definition.editor)
   if (definition.assetRefs !== undefined) {
     assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
   }
@@ -123,12 +129,30 @@ export function defineFacet<S extends z.ZodTypeAny>(
       )
     }
   }
-  return definition
+  return editor === undefined ? definition : { ...definition, editor }
 }
+
+/**
+ * Plugin ids the engine keeps for itself.
+ *
+ * `workspace` names the synthetic plugin a document-backed stencil library
+ * composes into (ADR-0034's amendment), so its stencils read
+ * `workspace.<name>`. Refused HERE, at definition, rather than left to
+ * collide at registry build: `createFacetRegistry` throws on a duplicate
+ * plugin id, so a deployment that took this id would meet a startup crash
+ * the first time a workspace grew a library — a long way from the cause, and
+ * in front of a user rather than an author.
+ */
+const RESERVED_PLUGIN_IDS: ReadonlySet<string> = new Set(['workspace'])
 
 export function definePlugin(plugin: FacetPlugin): FacetPlugin {
   if (!SEGMENT_PATTERN.test(plugin.id)) {
     throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
+  }
+  if (RESERVED_PLUGIN_IDS.has(plugin.id)) {
+    throw new Error(
+      `plugin id "${plugin.id}" is reserved by the engine — a workspace's own stencil library registers under it`,
+    )
   }
   if (plugin.displayName.trim() === '') {
     throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)
@@ -155,6 +179,19 @@ export function definePlugin(plugin: FacetPlugin): FacetPlugin {
     if (!result.success) {
       throw new Error(
         `plugin "${plugin.id}" icon asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
+      )
+    }
+  }
+  // Only the stencil's own SHAPE is checked here. What each of its facet
+  // payloads means belongs to the plugin that registered that facet, which
+  // may not be this one and is not knowable until every plugin is present —
+  // so that half runs in `createFacetRegistry`.
+  for (const [name, stencil] of Object.entries(plugin.assets?.stencils ?? {})) {
+    assertAssetName(plugin.id, name)
+    const result = stencilAssetSchema.safeParse(stencil)
+    if (!result.success) {
+      throw new Error(
+        `plugin "${plugin.id}" stencil asset "${name}" is invalid: ${summarizeIssues(result.error)}`,
       )
     }
   }
@@ -214,6 +251,18 @@ export interface FacetRegistry {
   readonly assetIds: (kind: AssetKind) => readonly string[]
   readonly themeAsset: (id: string) => ThemeTokens | undefined
   readonly iconAsset: (id: string) => IconAsset | undefined
+  readonly stencilAsset: (id: string) => StencilAsset | undefined
+  /**
+   * The editor form for a facet — its `editor` spec refined by what its
+   * schema derives — or `unsupported` for a key nothing registers.
+   *
+   * Here rather than at each vessel because a vessel that derives the form
+   * itself is a vessel that can derive it DIFFERENTLY, which is the drift
+   * a declared editor exists to close: one surface would draw the picker
+   * the plugin declared and the next would draw the schema's own fields,
+   * from the same registration.
+   */
+  readonly facetForm: (key: string) => FacetForm
 }
 
 /**
@@ -249,6 +298,20 @@ function parseKey(key: string): { namespace: string; name: string; version: stri
   return { namespace, name, version }
 }
 
+const UNSUPPORTED_FORM: FacetForm = { kind: 'unsupported' }
+
+/**
+ * A registered thing's own name, humanized from its bare segment when the
+ * asset declares none. A stencil carries a `displayName`; a theme and an
+ * icon do not, and `pack.public-subnet` reads worse in a picker than
+ * "Public subnet" does.
+ */
+function assetLabel(id: string, declared: string | undefined): string {
+  if (declared !== undefined && declared.trim() !== '') return declared
+  const bare = id.slice(id.indexOf('.') + 1).replace(/-/g, ' ')
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
+}
+
 export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
   const byId = new Map<string, FacetPlugin>()
   for (const plugin of plugins) {
@@ -268,6 +331,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   // every render asks the same question of the same tables.
   const themes = new Map<string, ThemeTokens>()
   const icons = new Map<string, IconAsset>()
+  const stencils = new Map<string, StencilAsset>()
   for (const plugin of plugins) {
     for (const [name, tokens] of Object.entries(plugin.assets?.themes ?? {})) {
       // The PARSED tokens, never the plugin's own object: the schema fills
@@ -277,9 +341,72 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     for (const [name, icon] of Object.entries(plugin.assets?.icons ?? {})) {
       icons.set(`${plugin.id}.${name}`, icon)
     }
+    for (const [name, stencil] of Object.entries(plugin.assets?.stencils ?? {})) {
+      stencils.set(`${plugin.id}.${name}`, stencilAssetSchema.parse(stencil))
+    }
+  }
+  // The half `definePlugin` could not do: a stencil's facet payloads judged
+  // by the plugins that own those facets, now that every plugin is present.
+  // A stencil is a vocabulary shipped once and applied to many nodes, so an
+  // invalid payload here is not one bad write — it is every write that names
+  // this stencil, in a deployment, refused one at a time with the author
+  // nowhere near. Loud at build is the only place it is cheap.
+  for (const [id, stencil] of stencils) {
+    for (const [key, payload] of Object.entries(stencil.facets)) {
+      const parsed = parseKey(key)
+      const definition = parsed === null ? undefined : definitionOf(parsed.namespace, parsed.name)
+      if (parsed === null || definition === undefined) {
+        throw new Error(`stencil asset "${id}" names facet "${key}", which no plugin registered`)
+      }
+      if (parsed.version !== definition.version) {
+        throw new Error(
+          `stencil asset "${id}" names facet "${key}", which is not the current version — use "${currentKey(parsed.namespace, definition)}"`,
+        )
+      }
+      const result = definition.schema.safeParse(payload)
+      if (!result.success) {
+        throw new Error(
+          `stencil asset "${id}" payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+        )
+      }
+    }
   }
   const tableOf = (kind: AssetKind): ReadonlyMap<string, unknown> =>
-    kind === 'themes' ? themes : icons
+    kind === 'themes' ? themes : kind === 'icons' ? icons : stencils
+
+  /**
+   * An asset-ref field's OPTIONS come from THIS registry, replacing whatever
+   * the definition declared (ADR-0034 decision 4's UI half).
+   *
+   * The definition declares the WIDGET; the registry owns the VALUES,
+   * because it is the only thing that knows what this deployment has. Before
+   * this, `visual.theme` and `visual.stencil` each listed their ids by hand,
+   * so a pack could register a stencil that the tool applied and the picker
+   * did not offer — registered but unselectable, which is the one state an
+   * ecosystem cannot ship.
+   *
+   * A `null` leads, because an asset ref is optional and "no stencil" is a
+   * real answer — without it a picker can dress a box and never undress it.
+   * Only fields named in `assetRefs` are touched: a plain enum is the
+   * plugin's own vocabulary and none of the registry's business.
+   */
+  const withAssetOptions = (form: FacetForm, definition: FacetDefinition): FacetForm => {
+    const refs = definition.assetRefs
+    if (refs === undefined || form.kind !== 'fields') return form
+    const fields = form.fields.map((field) => {
+      const kind = refs[field.name]
+      if (kind === undefined || field.control.kind !== 'segmented') return field
+      const options = [
+        { value: null, label: 'None' },
+        ...[...tableOf(kind).keys()].map((id) => ({
+          value: id,
+          label: assetLabel(id, kind === 'stencils' ? stencils.get(id)?.displayName : undefined),
+        })),
+      ]
+      return { ...field, control: { ...field.control, options } }
+    })
+    return { ...form, fields }
+  }
 
   /**
    * After the schema has accepted the payload: every ref field that carries
@@ -304,8 +431,23 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   return {
     plugins,
     assetIds: (kind) => [...tableOf(kind).keys()],
+    facetForm(key) {
+      const parsed = parseKey(key)
+      if (parsed === null) return UNSUPPORTED_FORM
+      const definition = definitionOf(parsed.namespace, parsed.name)
+      if (definition === undefined) return UNSUPPORTED_FORM
+      // The SAME version rule `validateFacetWrite` applies, for the same
+      // reason. Writes always target the current version (ADR-0013
+      // decision 7); an older key exists only as read-side compat. Deriving
+      // the current schema's form for one would draw a working-looking
+      // control whose every write is refused — the "a choice that silently
+      // does nothing" shape a declared picker exists to make impossible.
+      if (parsed.version !== definition.version) return UNSUPPORTED_FORM
+      return withAssetOptions(deriveFacetForm(definition.schema, definition.editor), definition)
+    },
     themeAsset: (id) => themes.get(id),
     iconAsset: (id) => icons.get(id),
+    stencilAsset: (id) => stencils.get(id),
     targetsOf(key) {
       const parsed = parseKey(key)
       if (parsed === null) return undefined

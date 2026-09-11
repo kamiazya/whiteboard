@@ -23,6 +23,18 @@ skill (`resources/*.md`, one per situation).
 
 Notes:
 - Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace` turns it on, and traces every test including passing ones, so point it at the one failing file.
+- **A PACKAGE is not one project, and nothing warns you.** `plugin-visual` and `canvas-viewer`
+  split `*.test.ts` (node) from `*.test.tsx` (jsdom) into two projects, so
+  `--project plugin-visual-node` runs, reports a plausible count, and never loads a `.tsx` file.
+  Measured: a change retiring a plugin's last hand-written editor passed every project a session
+  named and failed CI on the sibling project holding that editor's own test. **`pnpm --filter
+  <pkg> test` is the command that means "this package"** — the same lesson `dev-flow.md` records
+  for `--project web-jsdom` against `pnpm --filter @kamiazya/whiteboard-web test`, one level down.
+- **A budget or size guard is a property of the MERGE, not of your branch.** `dev-rules-budget`
+  reads the always-on rule files, and CI reads them from the PR's merge ref: an edit that fits
+  locally fails there when `main` grew the same file meanwhile. Measured at 119 chars of someone
+  else's addition plus 161 of ours. Merge `origin/main` in *before* measuring anything counted in
+  characters or bytes.
 - After the targeted test passes, run the broader suite covering the touched area, then `pnpm test`.
 - Runtime is the source of truth: if behavior disagrees with a test, fix the test or implementation to match real behavior.
 - Passing tests alone are not sufficient — manually verify the real behavior (Playwright/Chrome MCP) before locking the scenario into regression coverage.

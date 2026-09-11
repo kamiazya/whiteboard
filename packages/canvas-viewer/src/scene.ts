@@ -12,7 +12,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
  * What this widget ACCEPTS is a JSON Canvas document — a file another tool may
  * have written — so the published input contract is codec's wire schema,
  * re-exported and never redeclared. It deliberately does not follow the
- * product's own model: ADR-0033 moves that away from the format, and an input
+ * product's own model: ADR-0035 moves that away from the format, and an input
  * contract that tracked it would break every third-party document the moment
  * it did.
  */

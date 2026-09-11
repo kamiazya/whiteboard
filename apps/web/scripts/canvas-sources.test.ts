@@ -31,7 +31,7 @@ describe('docs/assets diagram sources', () => {
     //
     // `endpointNodes` rather than two field reads: a JSON Canvas file can
     // only author NODE ends, so every edge here names two — but the check is
-    // "does what this names exist", and since ADR-0033 slice 3 an end may
+    // "does what this names exist", and since ADR-0035 slice 3 an end may
     // name nothing. Reading `edge.fromNode` off the parsed MODEL answered
     // `undefined` and this assertion failed without saying why.
     const nodeIds = new Set(result.value.nodes.map((node) => node.id))

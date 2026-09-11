@@ -76,7 +76,7 @@ const canvasSnapshotEdgeSchema = z
   .object({
     id: nodeIdSchema,
     // The MODEL's endpoint, not the format's two flat keys: this is a read of
-    // the board, and a board can hold an edge with a free end (ADR-0033
+    // the board, and a board can hold an edge with a free end (ADR-0035
     // slice 3). Reusing the model's schema rather than restating it is what
     // keeps a reader of this payload and a writer of `wb_canvas_edit` talking
     // about the same thing.

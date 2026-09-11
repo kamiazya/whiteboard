@@ -20,7 +20,7 @@ paths:
   `resolveReferencesForExport` (export) (`references/`).
 - `CodecParseResult<T>`/`CodecParseError` — the total-parser error contract every parser here
   returns instead of throwing (`errors.ts`).
-- The JSON Canvas PROJECTION ([ADR-0033](../../docs/contributing/adr/0033-model-and-format.md)):
+- The JSON Canvas PROJECTION ([ADR-0035](../../docs/contributing/adr/0035-model-and-format.md)):
   the wire shape (`jsonCanvasDocumentSchema`), `toJsonCanvas`/`fromJsonCanvas`, the
   `JSON_CANVAS_PROJECTION` ledger and the `jsonCanvasLoss()` table it derives
   (`spatial/projection.ts`), plus `censusSpatialModel` — how far the format reaches into the
@@ -99,7 +99,7 @@ rather than in a string, so joining its runs yields `tightenthis`.
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
   node. No per-kind special casing. Extended mode is lossless over what the extension key can
   hold; GEOMETRY is the one thing it is not, because the format specifies integer pixels and the
-  model does not (ADR-0033 slice 4) — the ledger's only `degraded` entry, and the reason the
+  model does not (ADR-0035 slice 4) — the ledger's only `degraded` entry, and the reason the
   round-trip property is stated as IDEMPOTENCE (the expressible subset is the projection's image)
   with the already-integral case pinned by example in `geometry-projection.test.ts`.
 - **A document becomes a JSON Canvas document in ONE place.** `serializeSpatial` and
@@ -108,7 +108,7 @@ rather than in a string, so joining its runs yields `tightenthis`.
   canvas's `comments` and `facets`, a node's `embed` and `facets`, and an edge's `facets` and
   `bends` become the extension key on the way out, and the node's two independent fields fold
   back into the format's single union arm. An edge's extension is therefore its OWN declaration
-  (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0033 slice 4 an edge
+  (`edgeExtensionSchema`) rather than the node's facets-only arm: since ADR-0035 slice 4 an edge
   carries something the format cannot state, and it is geometry rather than content. One canonicalisation goes with it — an extension object with
   nothing in it is not emitted, because absence says the same thing — and it is pinned by
   example rather than left to the round-trip property. Adding a model field means adding its ledger entry —
@@ -146,7 +146,7 @@ rather than in a string, so joining its runs yields `tightenthis`.
   real change to a persisted artifact that no test would have reported.
 - **The loss table is PUBLISHED, and generated** (`spatial/loss-table.ts` ->
   `docs/reference/json-canvas-loss.md`, a vitest file snapshot; regenerate with
-  `pnpm vitest run --project codec-node loss-table -u`). ADR-0033 decision 2 replaces "the model
+  `pnpm vitest run --project codec-node loss-table -u`). ADR-0035 decision 2 replaces "the model
   IS the format" with two checkable claims — the round-trip property over the expressible subset,
   and a published table for everything else — and this is the second one. Generated for the same
   reason the JSON Schema is: a hand-kept table describing a format promise goes stale in silence.

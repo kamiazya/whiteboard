@@ -77,6 +77,51 @@ function run(args) {
   }
 }
 
+/**
+ * The one test here that needs no ImageMagick, and the only one that can
+ * cover its ABSENCE. Every other case skips without the tool — which left
+ * the absent path itself uncovered, and it was the path that behaved worst:
+ * the first `identify` call threw a bare `spawnSync identify ENOENT` stack,
+ * naming neither the tool nor how to get it. Measured on a container without
+ * the package, the reasonable conclusion was that the script was broken and
+ * wanted rewriting, when one `apt-get install` was the whole answer.
+ *
+ * The absence is PRODUCED rather than waited for: an empty PATH, so the
+ * probe cannot find the binaries however the machine is set up. `node` is
+ * then invoked by its own absolute path, since PATH is how a bare `node`
+ * would have been found.
+ */
+test('says what to install when ImageMagick is absent, rather than throwing a stack', () => {
+  const dir = scratch()
+  const out = join(dir, 'figure.png')
+  // Real files with differing bytes, so that WITHOUT the preflight the script
+  // gets all the way to the `identify` that measures a panel — the call that
+  // threw the bare stack. Two missing files would stop at "cannot read" and
+  // this would pass over a script that still crashes.
+  const before = join(dir, 'a.png')
+  const after = join(dir, 'b.png')
+  writeFileSync(before, 'not really a png, but bytes')
+  writeFileSync(after, 'different bytes entirely')
+  const result = (() => {
+    try {
+      const stdout = execFileSync(
+        process.execPath,
+        [scriptPath, '--before', before, '--after', after, '--out', out],
+        { encoding: 'utf-8', stdio: ['pipe', 'pipe', 'pipe'], env: { ...process.env, PATH: '' } },
+      )
+      return { status: 0, stdout, stderr: '' }
+    } catch (err) {
+      return { status: err.status, stdout: String(err.stdout ?? ''), stderr: String(err.stderr ?? '') }
+    }
+  })()
+  assert.equal(result.status, 1)
+  assert.match(result.stderr, /ImageMagick/)
+  assert.match(result.stderr, /apt-get install/)
+  // The failure is the script's own, not node's: a stack trace here means the
+  // preflight was bypassed and something downstream threw instead.
+  assert.equal(/^\s+at /m.test(result.stderr), false, `expected no stack, got:\n${result.stderr}`)
+})
+
 test('refuses two panels that are byte-identical', needsImageMagick, () => {
   const dir = scratch()
   const before = join(dir, 'before.png')

@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Initial schema. The canvas id is a stable nanoid so the slug remains a
 // renameable display path. branches and versions FK on canvasId so renaming

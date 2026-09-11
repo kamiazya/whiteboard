@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // ADR-0020's leader election, RENTED rather than written: a lease row in the
 // database every instance already shares.

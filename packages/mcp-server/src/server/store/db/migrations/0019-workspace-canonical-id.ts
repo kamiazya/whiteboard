@@ -1,7 +1,8 @@
 import { rename } from 'node:fs/promises'
 import { join } from 'node:path'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { type Kysely, type Migration, sql } from 'kysely'
+import { type Kysely, sql } from 'kysely'
+import type { Migration } from 'kysely/migration'
 import { getDataDir } from '../../../config.js'
 import { getLogger } from '../../../log.js'
 

@@ -15,7 +15,7 @@ import { z } from 'zod'
  * key at three sites.
  *
  * It lives in the codec because it is a WIRE shape —
- * [ADR-0033](../../../../docs/contributing/adr/0033-model-and-format.md). Until
+ * [ADR-0035](../../../../docs/contributing/adr/0035-model-and-format.md). Until
  * now it was the product's model, and this declaration is that model's schema
  * LIFTED here rather than a second one written beside it: `json-canvas.test.ts`
  * holds the two structurally identical while they are meant to be, and both of
@@ -32,7 +32,7 @@ import { z } from 'zod'
  * node variant without an embed. `.strict()`, so a broken embed on a node
  * fails this arm too rather than being silently stripped down to its facets.
  *
- * The EDGE site used to share it and no longer does: since ADR-0033 slice 4
+ * The EDGE site used to share it and no longer does: since ADR-0035 slice 4
  * an edge also carries its bends, so it has a declaration of its own.
  */
 const facetsOnlyExtensionSchema = z

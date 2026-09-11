@@ -11,11 +11,27 @@ brand-surface change.
 The signature is a single pen squiggle:
 
 ```text
-M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x66 box)
+M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x56 box)
 ```
 
-Every brand surface renders this exact path. Two optional companions exist,
-and each appears only where it earns its keep:
+Every brand surface renders this exact path, and
+`tools/arch-lint/src/brand-signature.test.ts` holds it there — the sentence was
+prose alone while the mark sat copied into thirteen files, none pinned against
+any other. The guard reads the canonical path AND the box from the block
+ABOVE, so this file stays the one place either is written; a copy that is
+edited or truncated anywhere fails, naming the file. The one deliberate
+divergence, the error mark's scribble, is listed there with its reason.
+
+**The box said `88x66` here until 2026-09-11 and the mark's own surfaces all
+drew `88x56`** — the doc was the odd one out, not them (user decision). A
+surface that draws the bare signature uses the box above; one that COMPOSES
+it needs its own, and the two are told apart in the guard rather than left to
+a reader. The framed variants are the clearest case: the board frame is a
+`84x62` rect at `(2,2)`, so its bottom edge plus stroke reaches y≈65.3 and a
+56-tall box would clip it. That is why the OG card and the not-found mark are
+66 tall, and why "unify on 88x56" does not reach them.
+
+Two optional companions exist, and each appears only where it earns its keep:
 
 - **The board frame** (rounded rect, the whiteboard the squiggle sits on) —
   a *container*. It appears only where the mark needs containment, and it
@@ -34,6 +50,7 @@ and each appears only where it earns its keep:
 | README hero | yes | yes | A document context: the image needs containment to read as an object | `docs/assets/readme-mark.svg` (repo root `docs/`) |
 | OG / social card | yes | yes | Same document logic, plus the card must carry the name on foreign surfaces | `public/og-image.png` |
 | App header | no | no | The one brand surface that is also a CONTROL: it names the workspace you are in and reports whether your work is safe, so it carries state (see below) and opens the connection popover. No frame — a 40px row is containment enough; no wordmark — the name is already in the tab title | `src/components/shell/ShellMark.tsx` |
+| Theme swatch (Display panel) | no | no | The one place the mark is a SPECIMEN rather than a signature: each theme option draws it in that theme's own ink, so a person sees the look rather than reading its name. No frame or wordmark at 16px, and the theme's `ink`/`glow` are all that vary — a swatch cannot honestly pick a palette half, since the canvas surface follows the UI mode and not the theme | `packages/plugin-visual/src/icons/signature.ts`, registered as the `visual.signature` icon asset and drawn by `facet-ui`'s `theme` glyph arm |
 | Onboarding chooser (empty workspace) | no | yes | The first page arrivals meet; the viewport is the board (no frame), and the name is not in the surrounding chrome, so the lockup introduces the product. The full splash story plays here (draw, sketch, the spark tidies, the signature returns and breathes) — reused via `<img>` so the asset stays the story's single source | `public/boot-splash.svg` |
 
 The rule in one line: **the squiggle is the signature everywhere; the frame
@@ -163,6 +180,7 @@ All commands run from `apps/web/`.
 | --- | --- | --- |
 | in-app marks (error / not-found / welcome-static / loader) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
 | app-header mark | `src/components/shell/ShellMark.tsx` — the signature drawn in code, because it carries state | code |
+| theme swatch | `packages/plugin-visual/src/icons/signature.ts` — the path as registered icon geometry, so every realm holding the facet registry can draw it | code |
 | ALPHA chip (AppShell) | `src/components/AppShell.tsx` — amber chip + honesty popover; the durable home of "data durability is not guaranteed" | code |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |

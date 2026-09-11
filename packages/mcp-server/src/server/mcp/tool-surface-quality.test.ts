@@ -83,7 +83,7 @@ interface Row {
 }
 
 /**
- * One row moved with ADR-0033 and it is worth naming, because a pinned number
+ * One row moved with ADR-0035 and it is worth naming, because a pinned number
  * that shifts silently is the thing this board exists to prevent.
  *
  * `wb_canvas_edit` lost two parameters: an edge's facets are written as
@@ -96,7 +96,7 @@ interface Row {
  *
  * The NODE side still spells `x-whiteboard`, because its input is deliberately
  * NOT the stored shape — a flat write schema that refuses a `kind: "embed"`
- * naming no document, by name. Converging the two is the follow-up ADR-0033
+ * naming no document, by name. Converging the two is the follow-up ADR-0035
  * names, and it goes through ADR-0031's criteria as a tool-surface change of
  * its own rather than riding along inside a refactor.
  *
@@ -241,26 +241,52 @@ describe('what the tool table costs to read', () => {
       // +107 for `within` accepting null (models write it to say "no group",
       // and the refusal cost the whole call) and saying a group added in
       // the batch with no position is placed around what goes in it.
-      // +3,332 visible, +11,880 wire, +28 parameters when an edge END became
-      // a discriminated union (ADR-0033 slice 3): `from` and `to` on both
-      // `edge.add` and `edge.patch`, each now two arms where the format's
-      // four flat keys were one shape. The BOUGHT thing is what no price
-      // buys back — an end can say it is a free point, which
-      // `fromNode`/`toNode` could not express at all.
-      // +8 undescribed, and all eight are the `kind` DISCRIMINATOR. Described
-      // and then un-described, on a measurement: describing `kind` on both
-      // arms reads `undescribed` 201 -> 193 (back to where the slice found
-      // it) for 40,532 visible — over the ~40,000 at which ADR-0031 §5 says
-      // to reconsider loading the table upfront. The endpoint FIELD's own
-      // description spells both arms literally (`{kind:"node",node}` /
-      // `{kind:"point",point}`), so the eight repeat it beside a JSON Schema
-      // `const` that already states the value. Debt that is a restatement is
-      // the debt to carry when the alternative is crossing a price ceiling.
+      // +480 visible bytes and +2 parameters for ADR-0034's `stencil`, one
+      // on `node.add` and one on `node.patch`. C1 going UP is the cost this
+      // row exists to make visible, so the trade is stated rather than
+      // implied: the ids are a `z.enum` and the prose is one line, which
+      // measured 480 against 776 for the same ids listed in prose and 356
+      // for a description that lists none — and the third is cheapest
+      // precisely because it leaves no way to learn the vocabulary.
+      //
+      // C13 does NOT pay for it. The errand scoreboard says dressing six
+      // boxes is one call either way and 337 request bytes cheaper, which
+      // is a saving per errand against a cost per turn. What the field buys
+      // is on the facet-vocabulary axis, not this one: a board that declares
+      // what its kinds are instead of spending a scheme invented per drawing.
+      // 13466 -> 13502 swapping the stencil ENUM for a validated string that
+      // points at `wb_facet_list`. Within 36 bytes of each other at the
+      // bundled six — and only one of them scales. Measured: the enum costs
+      // ~38 bytes per stencil per op, so 120 stencils reads +4838 here,
+      // 13% of the whole table, on every turn, for a vocabulary most
+      // conversations never touch. A library is meant to grow; a cost that
+      // grows with it is the wrong shape, so discovery moved to a runtime
+      // answer that costs nothing until asked.
+      //
+      // 13502 -> 13618 making a node DRAFT strict, which is the same 29
+      // bytes per object the stray-key row above charges, times the four
+      // node types the draft union carries. Bought a refusal where there
+      // was SILENCE: `stencil` written inside `node` — the likelier guess,
+      // since every other property of the box goes there — was stripped and
+      // the box drawn undressed with nothing said, while the identical
+      // mistake inside `patch` was already refused by name. Measured in a
+      // lane trial that then spent seventeen calls recovering by hand.
+      // -6 dropping `badge` from the stencil field's description: the
+      // bundled set writes one, and a board draws none.
+      //
+      // Then +3,799 visible and +32 parameters when an edge END
+      // became a discriminated union: `from` and `to` on both `edge.add` and
+      // `edge.patch`, each now two arms where the format's four flat keys
+      // were one shape. The BOUGHT thing is what no price buys back — an end
+      // can say it is a free point, which `fromNode`/`toNode` could not
+      // express at all. The extra undescribed are all the `kind`
+      // DISCRIMINATOR; see the totals below for why they are carried rather
+      // than paid down.
       wb_canvas_edit: {
-        visibleBytes: 16901,
-        wireBytes: 47987,
+        visibleBytes: 17411,
+        wireBytes: 48497,
         descriptionWords: 169,
-        parameters: 183,
+        parameters: 185,
         undescribed: 133,
         strays: 'refused',
         names: [],
@@ -310,11 +336,21 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
+      // +224 for the registered ASSETS (ADR-0034 decision 4): the stencil,
+      // theme and icon ids a deployment registered, with an `assetKind`
+      // filter. This tool already existed to answer "what did this
+      // deployment register", so the ecosystem's discovery reuses a seam
+      // instead of adding a tool or growing `wb_canvas_edit`'s schema —
+      // where the same information would have cost 13% of the table at a
+      // hundred-icon pack.
+      //
+      // `undescribed` stays 1: the new parameter carries its own
+      // `.describe()`, because C3 counts down and never up.
       wb_facet_list: {
-        visibleBytes: 429,
-        wireBytes: 1110,
-        descriptionWords: 30,
-        parameters: 1,
+        visibleBytes: 653,
+        wireBytes: 1623,
+        descriptionWords: 46,
+        parameters: 2,
         undescribed: 1,
         strays: 'refused',
         names: [],
@@ -334,10 +370,17 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: ['wb_facet_list'],
       },
+      // Moved down when the link stopped carrying a credential: the
+      // description's SECURITY warning ("this URL embeds the daemon
+      // bootstrap token — treat it like a credential") described something
+      // that no longer exists, and the output schema's `authMode` and
+      // `expiresHint` described the same vanished token. 1257 -> 994
+      // visible bytes (-263, -21%) and 70 -> 35 description words, for a
+      // tool whose input schema did not change at all.
       wb_pairing_link_create: {
-        visibleBytes: 1257,
-        wireBytes: 1919,
-        descriptionWords: 70,
+        visibleBytes: 994,
+        wireBytes: 1442,
+        descriptionWords: 35,
         parameters: 4,
         undescribed: 0,
         strays: 'refused',
@@ -461,26 +504,47 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      // +3,332 when an edge END became a discriminated union (ADR-0033
-      // slice 3) — all of it wb_canvas_edit's, since it is the only tool
-      // that takes an edge as INPUT. 39,844 is under the ~40,000 by 156
-      // bytes, and that margin was BOUGHT: see wb_canvas_edit's row for the
-      // eight `kind` descriptions that were written, measured at 40,532, and
-      // taken back out. The next thing added to this table has 156 bytes of
-      // room, which is a sentence — so the slice after this one is where
-      // ADR-0031 §5's question gets answered rather than deferred again.
-      visibleBytes: 39844,
-      // +20,428, two thirds of it output schemas on tools that merely ECHO an
-      // edge (wb_body_edit, canvas_view, wb_canvas_snapshot). Paid by the
-      // client once on connect, not by the model on every turn — which is
-      // why this column has no threshold beside it and the one above does.
-      wireBytes: 129848,
-      // +28: `from` and `to` are each two arms now, on `edge.add` and on
-      // `edge.patch`.
-      parameters: 305,
-      // +8, and every one of them a `kind` discriminator beside a field whose
-      // own description spells both arms. Held deliberately rather than paid
-      // down, at the visible-bytes ceiling above.
+      // +516 for `stencil` on node.add and node.patch plus the registered
+      // assets on wb_facet_list — the two halves of one decision, since the
+      // field is a plain string precisely because the list lives there.
+      // +116 for a strict node draft on node.add (see wb_canvas_edit): four
+      // node types x the 29 bytes a strict object costs, for a stray key
+      // refused instead of silently dropped, less 6 for a `badge` the
+      // stencil field's description no longer promises (see wb_canvas_edit).
+      //
+      // Then +3,799 when an edge END became a discriminated union — all of it
+      // wb_canvas_edit's, since it is the only tool that takes an edge as
+      // INPUT.
+      //
+      // **40,315 is OVER the ~40,000 at which ADR-0031 §5 says to reconsider
+      // loading the table upfront**, and it is the first reading that is. The
+      // number is pinned rather than worked around, because §5 asks for a
+      // decision and a decision is not something a re-pin can make.
+      //
+      // What it crossed on is worth reading, because NEITHER change crossed
+      // it alone. The stencil work measured 36,516 and the endpoint union
+      // measured 39,844 against its own base; the sum of the two deltas is
+      // 39,848, and the merged table is 40,315. The extra 467 is the two
+      // changes INTERACTING — a strict node draft charges its 29 bytes per
+      // object against a union that now has more objects in it — so a
+      // threshold checked on each branch separately was checked on a number
+      // neither branch would ship.
+      //
+      // The margin had already been bought once: eight `kind` descriptions
+      // were written, measured at +688, and taken back out because the
+      // endpoint FIELD's own description spells both arms literally beside a
+      // JSON Schema `const`. Putting them back reads 41,003. There is no
+      // cheap byte left in this slice; what is left is §5's question.
+      visibleBytes: 40315,
+      // Two thirds of the growth is output schemas on tools that merely ECHO
+      // an edge (wb_body_edit, canvas_view, wb_canvas_snapshot). Paid by the
+      // client once on connect, not by the model on every turn — which is why
+      // this column has no threshold beside it and the one above does.
+      wireBytes: 130394,
+      // `from` and `to` are each two arms now, on `edge.add` and `edge.patch`.
+      parameters: 308,
+      // Every one of the new ones a `kind` discriminator beside a field whose
+      // own description spells both arms. Held deliberately, at the ceiling.
       undescribed: 201,
     })
   })

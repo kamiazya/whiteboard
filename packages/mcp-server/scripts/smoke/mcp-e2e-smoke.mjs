@@ -612,6 +612,14 @@ async function main() {
         op: 'node.add',
         node: { id: 'target', type: 'text', x: 10, y: 10, width: 200, height: 100, text: 'target' },
       },
+      // A STENCIL through a real client (ADR-0034): the field expands into
+      // facets the SDK then has to validate on the way back out, which is
+      // the drift a unit test on the op cannot see.
+      {
+        op: 'node.add',
+        node: { id: 'dressed', type: 'text', x: 400, y: 0, width: 200, height: 100, text: 'store' },
+        stencil: 'visual.datastore',
+      },
       {
         op: 'edge.add',
         edge: {
@@ -622,11 +630,11 @@ async function main() {
       },
     ],
   })
-  if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
+  if (seedBatch.applied !== 4 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 
-  // A FREE END (ADR-0033 slice 3): an edge from a node to a bare point on
+  // A FREE END (ADR-0035 slice 3): an edge from a node to a bare point on
   // the canvas. Here rather than only at the unit layer because the endpoint
   // is a discriminated union crossing a process boundary in BOTH directions
   // — accepted by `wb_canvas_edit`'s input schema, stored through the Loro
@@ -725,7 +733,7 @@ async function main() {
   // the field a tool writes to the polyline the daemon emits, so this is the
   // step that would catch a bend being lost between the Loro edge bucket and
   // the layout. It used to write `visual.path/v0` through `wb_facet_set`;
-  // since ADR-0033 slice 4 bends are a field of the edge, so the write is an
+  // since ADR-0035 slice 4 bends are a field of the edge, so the write is an
   // ordinary `edge.patch` — which is the whole gain, since a facet payload
   // is opaque to `wb_canvas_edit` and this was not writable there at all.
   const BEND = { x: 4242, y: -1337 }

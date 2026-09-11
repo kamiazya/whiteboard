@@ -4,10 +4,10 @@
 // selection's own boxes, the minimap overview, and the palette the scene was
 // drawn in, which every chrome the editor floats over it is painted from.
 // Called immediately after useWorkerScene, since every input here is that
-// hook's output (plus boxes, canvas, theme, style, selectedId, extraIds, all
+// hook's output (plus boxes, canvas, theme, selectedId, extraIds, all
 // already available by then).
 
-import type { BoundingBox, Scene, SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, Scene } from '@kamiazya/whiteboard-canvas-render'
 import { flattenDrawnEdgePath, resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
@@ -22,8 +22,6 @@ export interface SceneProjectionInputs {
   readonly boxes: readonly NodeBox[]
   readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
-  /** The look this session draws in (ADR-0030 decision 6); absent is `'document'`. */
-  readonly style?: SpatialRenderStyle
   readonly selectedId: string | null
   readonly extraIds: ReadonlySet<string>
 }
@@ -46,7 +44,6 @@ export function useSceneProjection({
   boxes,
   canvas,
   theme,
-  style,
   selectedId,
   extraIds,
 }: SceneProjectionInputs) {
@@ -165,10 +162,7 @@ export function useSceneProjection({
    * through, so a chrome the editor paints from it can never disagree with
    * the ink underneath it (ADR-0030).
    */
-  const palette = useMemo(
-    () => resolveCanvasPalette(canvas, theme, { style }),
-    [canvas, theme, style],
-  )
+  const palette = useMemo(() => resolveCanvasPalette(canvas, theme), [canvas, theme])
   /**
    * Node boxes for the overview, with each authored colour resolved to the
    * accent the scene already uses for it. A preset key resolves through that

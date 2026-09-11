@@ -3,6 +3,12 @@ import {
   fontDownloadUrl,
 } from '@kamiazya/whiteboard-daemon-client/api-contracts/fonts'
 import {
+  createFacetRegistry,
+  type FacetPlugin,
+  type FacetRegistry,
+} from '@kamiazya/whiteboard-facet-engine'
+import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
+import {
   type BlobStore,
   type DocumentIndex,
   type DocumentStore,
@@ -27,12 +33,52 @@ export function createContainer(storeModule: ContainerModule = storeMemoryModule
 }
 
 /**
+ * What a composition root may choose ABOUT THE DEPLOYMENT, as opposed to
+ * about its storage — which is what the container carries.
+ */
+export interface ServerDepsOptions {
+  /**
+   * The plugin set this deployment registers (ADR-0013 decision 3), default
+   * the bundled one. The bundled plugin is ordinary and disable-able, so a
+   * root composing only its own gets exactly those.
+   */
+  readonly plugins?: readonly FacetPlugin[]
+  /**
+   * An already-built registry, for a root that needs one for something else
+   * too — a renderer, a picker. Wins over `plugins`, because a root holding
+   * a registry must not be forced to build a second that disagrees with it.
+   */
+  readonly facetRegistry?: FacetRegistry
+}
+
+/**
  * Assembles ServerDeps by resolving the store/sync port tokens from a
  * DI container. Inversify already throws a descriptive "not bound" error
  * when a token has no binding, so this simply surfaces that failure instead
  * of letting a missing binding silently produce undefined deps.
+ *
+ * It also composes the FACET REGISTRY, which is not a port: a plugin set is
+ * a distribution-time choice rather than an I/O seam, so it arrives as an
+ * argument instead of a binding.
+ *
+ * That seam existed on `ServerDeps` and NOTHING supplied it. Every root fell
+ * through to each tool's own `?? bundledFacetRegistry`, and every test that
+ * exercised the seam built `deps` by hand — so a deployment had no way to
+ * register a plugin, and neither side could see it. Built-but-unwired, which
+ * is the class this repo's `reachability` review dimension exists for, found
+ * only by asking who actually CALLS the seam.
+ *
+ * Deliberately NOT a config file naming modules to import. ADR-0013 decision
+ * 3 forbids runtime facet definition because the governance and security
+ * blast radius is wider than it looks, and a config file naming module
+ * specifiers is runtime code loading wearing a config file's clothes.
+ * Distribution time means whoever builds or embeds this server chooses, in
+ * code — which is what an argument is.
  */
-export function resolveServerDeps(container: Container): ServerDeps {
+export function resolveServerDeps(
+  container: Container,
+  options: ServerDepsOptions = {},
+): ServerDeps {
   // Order matters to container.test.ts, which asserts the not-bound error
   // names DocumentStore — the first token resolved.
   const documentStore: DocumentStore = container.get(TOKENS.DocumentStore)
@@ -46,6 +92,10 @@ export function resolveServerDeps(container: Container): ServerDeps {
     documentStore,
     blobStore,
     documentIndex,
+    // Built ONCE per root. The registry is immutable data, and a fresh one
+    // per tool call would rebuild every compat chain and asset table on
+    // every write.
+    facetRegistry: options.facetRegistry ?? createFacetRegistry(options.plugins ?? bundledPlugins),
     // The trash seam, present exactly when the bound index is the tree-backed
     // one (listTrash/restoreDocument are its capability, not the port's).
     // Structural rather than instanceof: the binding is this composition

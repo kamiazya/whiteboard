@@ -1,4 +1,5 @@
-import { type Kysely, type Migration, sql } from 'kysely'
+import { type Kysely, sql } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Re-key versions and branches on workspaceId (dual-plane collapse S3): every
 // workspace-scoped query used to reach the workspaceId through an

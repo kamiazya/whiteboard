@@ -138,7 +138,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
         documentId: input.documentId,
         // Projected, because the tool's published output schema is the WIRE
         // shape and a client reading it may be another tool entirely. Before
-        // ADR-0033 this was the same object; now the model carries `comments`,
+        // ADR-0035 this was the same object; now the model carries `comments`,
         // `facets` and `embed` as its own fields and the format carries them
         // under its extension key.
         scene: toJsonCanvas(canvas),

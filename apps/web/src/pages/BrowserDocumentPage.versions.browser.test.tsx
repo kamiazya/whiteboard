@@ -231,6 +231,16 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // Read-only: the editor is not on screen while a past state is.
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
 
+    // Nor is anything that WRITES the live canvas, and the DISPLAY panel is
+    // the sharpest case: its settings go to the live document, so drawn
+    // over a past state it would write a canvas nobody is looking at. It
+    // carries no guard of its own, so this is what says it needs none —
+    // the row is replaced while previewing, so no opener renders at all.
+    // A change that kept the segment on screen here would fail this rather
+    // than shipping that write.
+    expect(screen.queryByRole('button', { name: 'Display' })).toBeNull()
+    expect(screen.queryByTestId('display-panel')).toBeNull()
+
     // The rail cannot be reached from here: the column that offered the
     // preview holds the inspector slot, and the preview bar hides the rail's
     // opener. (Its read-only stance under a preview is pinned on the daemon

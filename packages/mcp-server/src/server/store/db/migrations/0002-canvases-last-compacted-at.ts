@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // Add canvases.lastCompactedAt so the auto-Optimize loop has a per-canvas
 // "do not run again until something has changed" signal, and so the UI can

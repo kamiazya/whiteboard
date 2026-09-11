@@ -123,6 +123,8 @@ export {
   NEAR_MISS_PX,
   scoreDrawing,
 } from './quality/drawing-score.js'
+export type { FacetScore } from './quality/facet-score.js'
+export { scoreFacets } from './quality/facet-score.js'
 export type { LoadedReference, ReferenceGraph } from './references/loaded-reference.js'
 export {
   overlayReferences,

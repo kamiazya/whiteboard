@@ -115,6 +115,60 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
     },
   },
   {
+    // Neither axis: a VOCABULARY errand, and the one the stencil field
+    // (ADR-0034) is judged by. Six boxes given a kind each.
+    //
+    // Read the calls column first and do not expect it to move: dressing
+    // boxes was never more than one call, because `wb_canvas_edit` batches.
+    // What a stencil lifts is the PAYLOAD and the deciding — by hand each
+    // box carries a colour, a silhouette facet and a badge facet under
+    // their stored keys, and the author has to pick a scheme that tells six
+    // kinds apart.
+    //
+    // Measured both ways when this was written: the same six boxes dressed
+    // by hand cost 1253 request bytes, and 916 with the vocabulary named —
+    // 337 fewer, at one call either way.
+    //
+    // **That does not pay for itself in bytes, and the comparison belongs
+    // here rather than in a PR nobody re-reads.** The `stencil` field costs
+    // `wb_canvas_edit` 480 visible bytes on the rung-1 scoreboard, and a
+    // model pays those on EVERY turn of every conversation with this server
+    // attached, while the 337 is saved once per errand that dresses
+    // anything. The case for the field is not the byte count: it is that a
+    // board says what its kinds ARE (ADR-0033's facet axis) instead of
+    // spending a private scheme invented per drawing. Judge it there.
+    name: 'dress six boxes as six kinds',
+    seedDocuments: 1,
+    run: async (context) => {
+      const kinds = [
+        'visual.datastore',
+        'visual.service',
+        'visual.gateway',
+        'visual.queue',
+        'visual.actor',
+        'visual.external',
+      ]
+      await call(context, 'wb_canvas_edit', {
+        workspaceId: context.workspaceId,
+        documentId: context.documentIds[0],
+        mode: 'apply',
+        ops: kinds.map((stencil, i) => ({
+          op: 'node.add',
+          node: {
+            id: `s${i}`,
+            type: 'text',
+            x: (i % 3) * 240,
+            y: Math.floor(i / 3) * 140,
+            width: 200,
+            height: 80,
+            text: `box ${i}`,
+          },
+          stencil,
+        })),
+      })
+    },
+  },
+  {
     // Axis A on the one DECLARATIVE op: a group's contents made to match a
     // list. One call, because the group, its members (node.add with
     // `within`) and the reconciliation ride the same batch; the price

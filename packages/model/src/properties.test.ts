@@ -219,7 +219,7 @@ describe('JSON Canvas 1.0 conformance invariants', () => {
     ],
     withDefaults(),
   )('geometry JSON cannot carry always rejects', (value) => {
-    // A SUB-PIXEL coordinate is accepted now (ADR-0033 slice 4): ink is
+    // A SUB-PIXEL coordinate is accepted now (ADR-0035 slice 4): ink is
     // sub-pixel, and the format's integer rounding is the projection's job.
     // What stays refused is what JSON has no value for — `JSON.stringify`
     // turns an infinity into `null`, and a NaN corner is not a corner.

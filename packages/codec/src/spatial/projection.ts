@@ -42,7 +42,7 @@ const FREE_END = {
  *
  * This is the rung that replaces the one the format used to supply. While the
  * model IS the format, a field cannot be added without the format accepting
- * it, so nobody has to think about the export. ADR-0033 removes that refusal
+ * it, so nobody has to think about the export. ADR-0035 removes that refusal
  * deliberately — and a model free to grow, with nothing forcing anyone to say
  * what growing costs a reader who only speaks JSON Canvas, is the failure mode
  * that change would otherwise create.
@@ -70,7 +70,7 @@ export const JSON_CANVAS_PROJECTION: Readonly<Record<string, FieldProjection>> =
   'nodes[].backgroundStyle': NATIVE,
   'edges[].id': NATIVE,
   // An endpoint is one object in the model and three flat keys in the format
-  // (ADR-0033 slice 3); the projection folds one into the other.
+  // (ADR-0035 slice 3); the projection folds one into the other.
   'edges[].from.kind': NATIVE,
   'edges[].from.node': NATIVE,
   'edges[].from.side': NATIVE,

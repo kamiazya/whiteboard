@@ -359,7 +359,7 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
       },
       { weight: 1, arbitrary: fc.constantFrom(...ids).map((id) => [id, id]) },
     )
-    // An end is a NODE or a free POINT (ADR-0033 slice 3). The schema draws
+    // An end is a NODE or a free POINT (ADR-0035 slice 3). The schema draws
     // both arms evenly, which is not what a board looks like — almost every
     // edge joins two boxes — so a roll keeps the drawn arm only when it is
     // already a point, leaving roughly one end in ten free.

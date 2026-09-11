@@ -10,7 +10,7 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), '../../../../.
  * spatial document. Each must name codec's wire schema
  * (`jsonCanvasDocumentSchema`), never the product's own model.
  *
- * The distinction is invisible today — [ADR-0033](../../../../../docs/contributing/adr/0033-model-and-format.md)
+ * The distinction is invisible today — [ADR-0035](../../../../../docs/contributing/adr/0035-model-and-format.md)
  * slice 1 left the wire schema an alias of the model's — and that is exactly
  * why it is pinned now rather than later. The moment the model gains a field
  * the format cannot hold, a surface still pointing at the model starts

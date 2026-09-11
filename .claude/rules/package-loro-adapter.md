@@ -217,7 +217,7 @@ implementations live in the composition roots.
   says it persists at all — it reported the field dropped before `edgeToFields` carried it, which
   no other test in the suite could have seen.
 
-- **A record written before [ADR-0033](../../docs/contributing/adr/0033-model-and-format.md)
+- **A record written before [ADR-0035](../../docs/contributing/adr/0035-model-and-format.md)
   stored all of this under the FORMAT's extension key**, because the model
   was the format. `liftLegacyExtension` converts a stored node or edge on
   the way out and `readCanvasFacets` falls back to the old envelope, both

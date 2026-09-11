@@ -50,6 +50,30 @@ if (!beforePath || !afterPath || !outPath) {
   fail('usage: --before <png> --after <png> --out <png> [--before-label …] [--after-label …] [--ring x1,y1,x2,y2]')
 }
 
+/**
+ * ImageMagick is a real dependency of this script, not an optional one: CI
+ * installs it for exactly this reason (see ci.yml's "Install ImageMagick"
+ * step, and `compose-figure.test.mjs`, which probes for it and refuses to
+ * skip on CI). What was missing was SAYING so when it is absent.
+ *
+ * Without this, the first call — the `identify` that measures a panel's width
+ * — threw a bare `spawnSync identify ENOENT` stack, which names neither the
+ * tool nor how to get it. Measured on a container without the package: the
+ * reader's reasonable conclusion was that the script was broken and wanted
+ * rewriting, when one `apt-get install` was the whole answer.
+ */
+for (const binary of ['convert', 'identify']) {
+  try {
+    execFileSync(binary, ['-version'], { stdio: 'ignore' })
+  } catch {
+    fail(
+      `\`${binary}\` not found. This script composes the figure with ImageMagick.\n` +
+        `  Install it:  apt: \`sudo apt-get install -y imagemagick\`  ·  brew: \`brew install imagemagick\`\n` +
+        `  CI installs it already; a sandbox that cannot, cannot run this script.`,
+    )
+  }
+}
+
 const read = (path) => {
   try {
     return readFileSync(path)

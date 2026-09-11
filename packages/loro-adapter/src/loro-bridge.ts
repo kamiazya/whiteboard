@@ -44,7 +44,7 @@ const CANVAS_KEY = 'canvas'
 const FACETS_FIELD = 'facets'
 /**
  * The key a canvas's facets, and a node's or edge's facets and embed, were
- * stored under before [ADR-0033](../../../docs/contributing/adr/0033-model-and-format.md):
+ * stored under before [ADR-0035](../../../docs/contributing/adr/0035-model-and-format.md):
  * the FORMAT's extension key, because the model was the format.
  *
  * Spelled as it stood, the way a migration's own text always is. It is only
