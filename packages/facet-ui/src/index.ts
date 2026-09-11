@@ -5,7 +5,7 @@ export {
   FacetCatalogPicker,
   type FacetCatalogPickerProps,
 } from './facet-catalog-picker.js'
-export { glyphIcon } from './glyph.js'
+export { EMOJI_FONT_STACK, EmojiText, glyphIcon } from './glyph.js'
 export {
   FacetOption,
   FacetOptionGroup,

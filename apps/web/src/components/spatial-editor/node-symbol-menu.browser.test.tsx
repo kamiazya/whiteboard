@@ -63,7 +63,9 @@ async function openSymbolPicker(panel: HTMLElement): Promise<HTMLElement> {
   fireEvent.click(panel.querySelector('[aria-label="Choose symbol"]') as HTMLElement)
   return vi.waitFor(() => {
     const popover = document.querySelector('[role="dialog"][aria-label="Choose symbol"]')
-    expect(popover?.querySelector('[aria-label="Search symbols"]')).not.toBeNull()
+    // The CATALOG, not just the search box: this build's own icons are its
+    // first band now, so nothing but absence is on screen before it loads.
+    expect(popover?.querySelector('[aria-label="Symbol categories"]')).not.toBeNull()
     return popover as HTMLElement
   })
 }
@@ -134,35 +136,81 @@ it('an emoji found by search is stored rather than drawn, and No symbol removes 
 })
 
 /**
+ * The cause of a defect that looked like a data problem and was a font one:
+ * an emoji left to the inherited stack is drawn by whichever installed font
+ * claims its codepoint first, and several ordinary text faces claim the
+ * common ones as MONOCHROME OUTLINES. Measured in this very browser —
+ * `fc-match sans-serif` answers DejaVu Sans, which covers U+1F600 — so
+ * 😀 😃 🙂 ☺️ ♠️ 🏁 drew as grey line art beside 🤣 🥰 ⭐ 🔥 in colour.
+ *
+ * Asserted on the COMPUTED family rather than on pixels because no API
+ * reports which face actually won; what a browser can prove that jsdom
+ * cannot is that the declaration survives the real cascade, which is where
+ * a panel-wide font rule would have overridden it.
+ */
+it('draws its emoji in a font named for colour, not whichever one claims the codepoint', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const picker = await openSymbolPicker(openInspector(container))
+
+  // Reached by SEARCH rather than by which band happens to be showing: the
+  // catalog opens on this build's own icons, and which category leads is a
+  // product decision this case has no business pinning.
+  fireEvent.change(picker.querySelector('[aria-label="Search symbols"]') as HTMLInputElement, {
+    target: { value: 'grinning_face' },
+  })
+  const cell = await vi.waitFor(() => {
+    const el = picker.querySelector('[aria-label="grinning face"]')?.closest('label')
+    expect(el).not.toBeNull()
+    return el as HTMLElement
+  })
+  const drawn = cell.querySelector('[aria-hidden="true"] span') as HTMLElement
+  expect(drawn.textContent).toBe('😀')
+  expect(getComputedStyle(drawn).fontFamily).toContain('Color Emoji')
+})
+
+/**
  * And the half a catalog of any size still cannot cover: a symbol nobody
  * listed. The template says the typed text is a `char`; what a char may be
  * stays the facet's own schema's answer, at the write boundary — so the
  * control needs no rule of its own and cannot have a laxer one.
  */
-it('a symbol nobody listed is typed in, and the facet refuses what it always refused', async () => {
+it('a symbol nobody listed is pasted into the one box, and a refused one is never offered', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
   const picker = await openSymbolPicker(openInspector(container))
-  const field = picker.querySelector('[aria-label="Any character or emoji"]') as HTMLInputElement
-  const use = () =>
-    [...picker.querySelectorAll('button')].find((button) => button.textContent === 'Use') as
-      | HTMLElement
-      | undefined
+  // ONE box: the search already matched a pasted character, so a free-entry
+  // field beside it was the same gesture twice with only one of the two
+  // writing anything. Free entry is a RESULT now.
+  const search = picker.querySelector('[aria-label="Search symbols"]') as HTMLInputElement
+  expect(picker.querySelector('[aria-label="Any character or emoji"]')).toBeNull()
 
-  fireEvent.change(field, { target: { value: 'ab' } })
-  fireEvent.click(use() as HTMLElement)
+  // Text the facet refuses is simply not offered — which beats a control
+  // that takes it and then reports an error.
+  fireEvent.change(search, { target: { value: 'ab' } })
   expect(symbolOf(latest.canvas)).toBeUndefined()
-  expect(picker.querySelector('[role="alert"]')?.textContent).toContain('single character')
+  expect(picker.querySelector('[aria-label="ab"]')).toBeNull()
 
-  fireEvent.change(field, { target: { value: '🦖' } })
-  fireEvent.click(use() as HTMLElement)
-  expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '🦖' })
+  // A SKIN-TONED hand: one grapheme, accepted by the facet, and deliberately
+  // not in the catalog — the generator drops 2030 tone variants because five
+  // more copies of a waving hand make a grid worse to search. This is the
+  // case free entry exists for, and 🦖 would not have shown it: the catalog
+  // HAS a T-Rex, so what the box offers there is the row.
+  fireEvent.change(search, { target: { value: '👍🏽' } })
+  fireEvent.click(
+    await vi.waitFor(() => {
+      const el = picker.querySelector('[aria-label="👍🏽"]')
+      expect(el).not.toBeNull()
+      return el as HTMLElement
+    }),
+  )
+  expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '👍🏽' })
 
   // And it comes back as a recent one, which is what makes free entry
   // usable more than once.
   await vi.waitFor(() => {
     const recent = picker.querySelector('[aria-label="Symbol recently used"]')
-    expect(recent?.textContent).toContain('🦖')
+    expect(recent?.textContent).toContain('👍🏽')
   })
 })

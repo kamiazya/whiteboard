@@ -23,7 +23,7 @@ import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, type ReactNode, useState } from 'react'
 import { CatalogPopover } from './catalog-popover.js'
 import { FacetCatalogPicker } from './facet-catalog-picker.js'
-import { glyphIcon } from './glyph.js'
+import { EmojiText, glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
 
 /** The host supplies these; the literal is what a bare page falls back to. */
@@ -504,7 +504,7 @@ function triggerFace(
   const field = catalog.entry?.field
   if (field !== undefined && typeof stored === 'object' && stored !== null) {
     const value = (stored as Record<string, unknown>)[field]
-    if (typeof value === 'string' && value !== '') return value
+    if (typeof value === 'string' && value !== '') return <EmojiText value={value} />
   }
   // Nothing stored, or a payload no option and no template accounts for.
   // A word rather than a guessed picture: a wrong picture reads as a value

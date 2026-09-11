@@ -43,23 +43,24 @@ describe("visual's symbol picker", () => {
   // of the DECLARATION, so it is read rather than rendered. The rendering
   // half (a click reaching the canvas) is pinned in apps/web's
   // `canvas-settings.browser.test.tsx`, against the real vessel.
-  it('declares both arms of its union in one flat set of options', () => {
+  it('declares both arms of its union through one catalog, and absence beside it', async () => {
     const symbol = visualPlugin.facets.find((f) => f.name === 'symbol')
-    const options = symbol?.editor?.picker?.options ?? []
+    const picker = symbol?.editor?.picker
 
-    expect(options.find((o) => o.label === 'Icon database')?.payload).toEqual({
-      kind: 'icon',
-      name: 'database',
-    })
-    // The absence option, which is what retired the Clear button beside it.
-    expect(options.find((o) => o.payload === null)?.label).toBe('No symbol')
+    // The absence option, which is what retired the Clear button beside it,
+    // and the only thing left inline: it belongs to no category.
+    expect((picker?.options ?? []).map((o) => o.label)).toEqual(['No symbol'])
+
+    const bands = (await picker?.catalog?.load()) ?? []
+    const icon = bands[0]?.options.find((o) => o.label === 'Icon database')
+    expect(icon?.payload).toEqual({ kind: 'icon', name: 'database' })
     // An icon option names REGISTERED geometry rather than shipping a
     // drawing — the half that let this facet come back inside the
     // vocabulary at all.
-    expect(options.find((o) => o.label === 'Icon database')?.glyph).toEqual({
-      kind: 'asset',
-      id: 'visual.database',
-    })
+    expect(icon?.glyph).toEqual({ kind: 'asset', id: 'visual.database' })
+    // And the other arm is in the bands after it.
+    const emoji = bands[1]?.options[0]?.payload as { kind?: string } | undefined
+    expect(emoji?.kind).toBe('emoji')
   })
 
   /**

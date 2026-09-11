@@ -9,7 +9,7 @@ import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteb
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
-import { clearCatalogRecents, DerivedFacetForm } from './index.js'
+import { clearCatalogRecents, DerivedFacetForm, EMOJI_FONT_STACK } from './index.js'
 
 afterEach(() => {
   cleanup()
@@ -67,7 +67,12 @@ const registry = createFacetRegistry([
             catalog: {
               label: 'Search symbols',
               load: async () => SECTIONS,
-              entry: { label: 'Any character', payload: { kind: 'emoji' }, field: 'char' },
+              entry: {
+                label: 'Any character',
+                placeholder: 'Paste any character',
+                payload: { kind: 'emoji' },
+                field: 'char',
+              },
             },
           },
         },
@@ -219,36 +224,107 @@ describe('search finds a row by any of the words it carries', () => {
   })
 })
 
-describe('free entry writes a value nobody listed', () => {
-  const field = () => screen.getByRole('textbox', { name: 'Any character' })
+describe('free entry is a RESULT, not a second input', () => {
+  const search = () => screen.getByRole('searchbox', { name: 'Search symbols' })
 
-  it('accepts a character the catalog does not carry', async () => {
+  /**
+   * One box, because two were the same gesture twice: the search already
+   * matched a pasted CHARACTER, so "I have this symbol, use it" had two
+   * controls and only one of them wrote anything. Nobody could tell which.
+   */
+  it('offers no input of its own, and says in the search box that it takes one', async () => {
+    mount()
+    await loaded()
+    expect(screen.queryByRole('textbox', { name: 'Any character' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Use' })).toBeNull()
+    expect(search().getAttribute('placeholder')).toBe('Paste any character')
+  })
+
+  it('leads the results with a character the catalog does not have', async () => {
     const onWrite = mount()
     await loaded()
-    fireEvent.change(field(), { target: { value: '🦖' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    fireEvent.change(search(), { target: { value: '🦖' } })
+    fireEvent.click(screen.getByRole('radio', { name: '🦖' }))
     expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, { kind: 'emoji', char: '🦖' })
   })
 
-  it('applies on Enter, so a picker needs no second press', async () => {
+  it('applies on Enter, so a paste needs no press at all', async () => {
     const onWrite = mount()
     await loaded()
-    fireEvent.change(field(), { target: { value: '🦖' } })
-    fireEvent.keyDown(field(), { key: 'Enter' })
+    fireEvent.change(search(), { target: { value: '🦖' } })
+    fireEvent.keyDown(search(), { key: 'Enter' })
     expect(onWrite).toHaveBeenCalledWith(SYMBOL_KEY, { kind: 'emoji', char: '🦖' })
   })
 
   /**
-   * The facet's own schema is what refuses it, at the write boundary every
-   * other control crosses — this component knows no rule about symbols.
+   * The catalog HAS 🔥, so offering it again would draw one symbol twice in
+   * one grid — once as itself and once as its row — and a person could not
+   * tell which of the two they had picked.
    */
-  it('refuses what the facet refuses, and says why instead of writing', async () => {
+  it('offers nothing extra for a character the catalog already lists', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: '🔥' } })
+    expect(screen.getAllByRole('radio', { name: 'fire' })).toHaveLength(1)
+    expect(screen.queryByRole('radio', { name: '🔥' })).toBeNull()
+  })
+
+  /**
+   * The facet's own schema decides whether the text is a value at all, and
+   * an invalid one is simply NOT OFFERED — which beats a control that takes
+   * it and then reports an error. This component knows no rule about
+   * symbols and so cannot hold a laxer one.
+   */
+  it('offers nothing for text the facet would refuse, and writes nothing', async () => {
     const onWrite = mount()
     await loaded()
-    fireEvent.change(field(), { target: { value: 'not one character' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    fireEvent.change(search(), { target: { value: 'not one character' } })
     expect(onWrite).not.toHaveBeenCalled()
-    expect(screen.getByRole('alert').textContent).toContain('single character')
+    expect(screen.queryByRole('radio', { name: 'not one character' })).toBeNull()
+    expect(screen.getByRole('status').textContent).toContain('No match')
+  })
+
+  /** And says which of the two empty-handed answers this is. */
+  it('distinguishes nothing found from something not in the list', async () => {
+    mount()
+    await loaded()
+    fireEvent.change(search(), { target: { value: '🦖' } })
+    expect(screen.getByRole('status').textContent).toContain('Not in the list')
+  })
+})
+
+describe('an emoji is drawn by a font that has it in colour', () => {
+  /**
+   * Left to the inherited stack, an emoji is drawn by whichever installed
+   * font claims its codepoint first — and several ordinary text faces claim
+   * the common ones as MONOCHROME OUTLINES. Measured in this repo's own
+   * headless Chromium: 😀 😃 🙂 😉 ☺️ ♠️ 🏁 came out as grey line drawings
+   * beside 🤣 🥰 ⭐ 🔥 in full colour, one grid with two kinds of picture
+   * and nothing in the data to explain it.
+   *
+   * jsdom computes no fonts, so what is pinned HERE is that the declaration
+   * reaches the cell at all. The pixels are the browser suite's job.
+   */
+  it('names the colour faces on every cell, rather than inheriting the panel stack', async () => {
+    mount()
+    await loaded()
+    const cell = screen
+      .getByRole('radio', { name: 'grinning face' })
+      .closest('label') as HTMLElement
+    const drawn = cell.querySelector('[aria-hidden="true"] span') as HTMLElement
+    expect(drawn.textContent).toBe('😀')
+    expect(drawn.style.fontFamily).toContain('Color Emoji')
+  })
+
+  /**
+   * The one face that must NOT be in the stack: `Segoe UI Symbol` is
+   * Windows's monochrome emoji font, and listing it is how a stack meant to
+   * force colour quietly reintroduces the outlines it was written to stop.
+   */
+  it('names no monochrome face among them', () => {
+    expect(EMOJI_FONT_STACK).not.toContain('Segoe UI Symbol')
+    expect(EMOJI_FONT_STACK).toContain('Apple Color Emoji')
+    expect(EMOJI_FONT_STACK).toContain('Noto Color Emoji')
   })
 })
 
@@ -256,10 +332,10 @@ describe('what was picked here comes back on top', () => {
   it('offers a freshly typed symbol as a recent one, drawn like any other', async () => {
     mount()
     await loaded()
-    fireEvent.change(screen.getByRole('textbox', { name: 'Any character' }), {
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
       target: { value: '🦖' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    fireEvent.click(screen.getByRole('radio', { name: '🦖' }))
     await waitFor(() => {
       expect(screen.getByRole('radiogroup', { name: 'Symbol recently used' })).toBeTruthy()
     })

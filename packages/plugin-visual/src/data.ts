@@ -1,4 +1,5 @@
 import type {
+  FacetPickerCatalogSection,
   FacetPickerCatalogSpec,
   FacetPickerOption,
   FacetRegistry,
@@ -249,28 +250,50 @@ const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
 }
 
 /**
- * What the picker lists INLINE: absence, and this build's vendored icons.
+ * What the picker lists INLINE: absence, and nothing else.
  *
- * Derived from the vendored set rather than written out, so an icon added
- * to `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
- * put a name in one place and not the other cannot happen.
+ * Two things used to sit here beside it, and each left for a different
+ * reason. Five hardcoded EMOJI went because they were five of the nineteen
+ * hundred the schema has always accepted — listing more would not have
+ * fixed it, since a definition this file exports is loaded by the renderer,
+ * the layout worker and the MCP server, none of which draws a picker.
  *
- * Five hardcoded emoji used to sit here too, and they are the reason the
- * catalog below exists. The schema has accepted ANY single grapheme since
- * the day it shipped; the five were simply all anybody had written down, so
- * the control said no to the other nineteen hundred while the facet said
- * yes. Listing more would not have fixed it — a definition this file
- * exports is loaded by the renderer, the layout worker and the MCP server,
- * none of which draws a picker.
+ * The vendored ICONS went because of how they looked next to what replaced
+ * them (user decision, 2026-09-11): a row of monochrome line drawings
+ * directly above a grid of full-colour emoji reads as two unrelated
+ * palettes, and the row was also indistinguishable from the CATEGORY row
+ * below it, which picks a view rather than a value. As the catalog's first
+ * band they are a category like any other, so a grid is now all monochrome
+ * or all colour and never half of each.
+ *
+ * Absence stays inline because it is the one choice that belongs to no
+ * category and has to be reachable without browsing to one.
  */
 const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
   { payload: null, label: 'No symbol', glyph: { kind: 'shape', name: 'none' } },
-  ...BUILT_IN_ICON_NAMES.map((name) => ({
+]
+
+/**
+ * The vendored icons as the catalog's first band.
+ *
+ * Derived from the vendored set rather than written out, so an icon added
+ * to `LUCIDE_ICONS` reaches the picker with no second edit — the drift that
+ * put a name in one place and not the other cannot happen. It is built HERE
+ * rather than in `emoji/sections.ts` because it is this build's own
+ * geometry rather than Unicode's data, and it costs no bytes worth
+ * deferring.
+ */
+const ICON_SECTION: FacetPickerCatalogSection = {
+  label: 'Icons',
+  glyph: { kind: 'asset', id: 'visual.category-icons' },
+  keywords: ['アイコン 記号 図形'],
+  options: BUILT_IN_ICON_NAMES.map((name) => ({
     payload: { kind: 'icon' as const, name },
     label: `Icon ${name}`,
+    keywords: [name],
     glyph: { kind: 'asset' as const, id: `visual.${name}` },
   })),
-]
+}
 
 /**
  * Every emoji Unicode publishes, searchable, plus the way to write one it
@@ -291,10 +314,14 @@ const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
  */
 const SYMBOL_CATALOG: FacetPickerCatalogSpec = {
   label: 'Search symbols',
-  load: async () => (await import('./emoji/sections.js')).emojiSections(),
+  load: async () => [ICON_SECTION, ...(await import('./emoji/sections.js')).emojiSections()],
   entry: {
     label: 'Any character or emoji',
-    placeholder: 'Paste or type one',
+    // The placeholder names the SEARCH box, because free entry is not a
+    // second control any more: typing a character the catalog lacks offers
+    // it as the leading result. Two inputs for one gesture — the search
+    // already matched a pasted character — was one input too many.
+    placeholder: 'Search, or paste a symbol',
     payload: { kind: 'emoji' },
     field: 'char',
   },

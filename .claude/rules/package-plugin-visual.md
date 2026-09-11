@@ -121,6 +121,22 @@ Three things about it that a reader will otherwise re-decide:
   five hardcoded emoji this catalog replaced would otherwise have been drawn
   twice.
 
+**The vendored icons are the catalog's FIRST BAND, not an inline row** (user
+decision, 2026-09-11). A row of monochrome line drawings directly above a
+grid of full-colour emoji reads as two unrelated palettes, and it was also
+indistinguishable from the category row below it — which picks a view rather
+than a value. As a band they are a category like any other, so a grid is all
+monochrome or all colour and never half of each, and the search reaches them
+the same way it reaches everything else. `visual.symbol`'s inline options are
+now ABSENCE alone: it is the one choice that belongs to no category and has
+to be reachable without browsing to one. Guarded from both sides, because
+putting the icons back in either place is a one-line change nothing else
+would notice.
+
+`ICON_SECTION` is built in `data.ts` rather than in `emoji/sections.ts`
+because it is this build's own geometry rather than Unicode's data, and it
+costs no bytes worth deferring.
+
 The subgroup travels as search KEYWORDS rather than a heading, and the
 measurement says it earns the bytes: `transport` goes from 0 matches to 85,
 `animal` 0 to 131, `sport` 3 to 156, `weather` 0 to 47.

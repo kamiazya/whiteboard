@@ -271,7 +271,10 @@ Two declarations close it, both data:
   a plugin shipping a catalog owes its own test that every row parses.
   `plugin-visual` has one over all 1914.
 - **Free `entry`** — a payload TEMPLATE plus the field the typed text
-  fills. `{ payload: { kind: 'emoji' }, field: 'char' }` says what the text
+  fills. What DRAWS it is the vessel's business and it is not a second
+  control: `facet-ui` offers the typed text as the leading search result
+  when the catalog does not already hold it, so the declaration says what a
+  typed value BECOMES and nothing about where it is typed. `{ payload: { kind: 'emoji' }, field: 'char' }` says what the text
   becomes without the plugin shipping a parser and without the engine
   learning what an emoji is. What a value may BE stays the schema's answer
   at the write boundary — which is the whole reason free entry can be

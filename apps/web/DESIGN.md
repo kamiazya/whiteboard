@@ -1145,6 +1145,31 @@ Three things follow:
   symbols above a search box reads as more of the row above it, and
   "recently used" is the one thing a picture cannot say about a picture.
 
+  **One band, one kind of picture.** A grid holding this build's monochrome
+  line icons beside full-colour emoji reads as two unrelated palettes, so the
+  icons are a CATEGORY of the catalog rather than a row above it — and the
+  category chooser is drawn in the panel's own stroke language, so what
+  browses is monochrome and what is browsed is whatever it is. The one thing
+  that has to be forced is the emoji themselves: left to the inherited font
+  stack a browser draws whichever face claims each codepoint first, and
+  several ordinary text faces claim the common emoji as monochrome outlines
+  (measured: 😀 😃 🙂 ☺️ grey beside 🤣 🥰 in colour, in this repo's own
+  headless Chromium). `facet-ui`'s `EmojiText` names the colour faces.
+
+  **Free entry is a RESULT, not a second input.** It was a field with an
+  apply button beside the search box, and the two were the same gesture
+  twice: the search already matches a pasted CHARACTER, so "I have this
+  symbol, use it" had two controls and only one of them wrote anything.
+  Nobody could tell which. Now there is one box — type words to filter, and
+  a character the catalog does not have is offered as the leading cell,
+  which is also what makes it discoverable without a field to notice.
+
+  Two things fall out of that, both better than what they replace. Text the
+  facet would refuse is simply NOT OFFERED rather than taken and then
+  reported as an error. And a character the catalog already has is not
+  offered either, so one symbol is never drawn twice in one view — the
+  recently-used band counts as "already there" for the same reason.
+
   What free entry does NOT do is loosen anything. It builds the payload
   from a declared template and hands it to `validateFacetWrite` like every
   other control, so the message a person sees when they type two characters

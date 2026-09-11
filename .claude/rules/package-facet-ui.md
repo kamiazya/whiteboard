@@ -31,8 +31,8 @@ paths:
   says what question the row asks, the other says what container it stands
   in.
 - **`CatalogPicker` — a searchable catalog of choices, and it knows NOTHING
-  about facets.** A short list, a search box, a category band, a scrolling
-  grid, what was picked recently, free entry. It takes loaded sections, a
+  about facets.** A short list, ONE search box, a category band, a scrolling
+  grid, and what was picked recently. It takes loaded sections, a
   selected key and a callback, so the markdown editor's `:name:` popup is
   the same control rather than a second one that drifts. Every band of it is
   `FacetOption`, the category band included — the sections and the cells
@@ -49,6 +49,17 @@ paths:
   holds no rule about what a symbol may be, so it cannot hold a laxer one
   than the facet does, and a surface with no schema behind it simply passes
   no seam.
+
+  **Free entry has no input of its own.** It was a field plus an apply
+  button beside the search box, and the two were one gesture twice — the
+  search already matches a pasted CHARACTER, so only one of the two wrote
+  anything and nothing said which. The typed text is now offered as the
+  LEADING CELL when it is a value the catalog does not already have, which
+  is where `validateEntry` is consulted: a refusal means the cell is not
+  drawn, so an invalid value cannot be taken and then reported. `known`
+  covers the recently-used band as well as the rows, because after typing a
+  new symbol it is in recents and offering it again is the duplicate the
+  rule exists to avoid.
 - **`CatalogPopover` — the trigger and the panel it opens.** A catalog is
   hundreds of cells and a property row is one line; inline, `visual.symbol`
   was taller than every other facet in the panel put together. Two things it
@@ -74,6 +85,28 @@ paths:
   call `clearCatalogRecents()` in `afterEach`; without it one test's pick
   shows up as an extra radiogroup in the next test's panel, which is how it
   was found.
+- **`EMOJI_FONT_STACK` / `EmojiText` — an emoji drawn by a font that has it
+  in COLOUR.** Left to the inherited UI stack, an emoji is drawn by whichever
+  installed font claims its codepoint first, and several ordinary text faces
+  claim the common ones as monochrome outlines. Measured in this repo's own
+  headless Chromium: `fc-match sans-serif` answers DejaVu Sans, which covers
+  U+1F600, so 😀 😃 🙂 ☺️ ♠️ 🏁 drew as grey line art beside 🤣 🥰 ⭐ 🔥 in
+  full colour — one grid, two kinds of picture, and nothing in the data to
+  explain it. It is not container-only: the same split happens on any machine
+  whose UI font covers part of the emoji block, and WHICH part depends on the
+  machine.
+
+  `glyphIcon`'s `char` arm goes through it, so every surface drawing a char
+  glyph is fixed in one place, and `plugin-visual`'s `SymbolMark` imports the
+  same component for the minimap. `Segoe UI Symbol` is deliberately absent
+  from the stack: it is Windows's MONOCHROME emoji face, and listing it is
+  how a stack meant to force colour quietly reintroduces the outlines.
+
+  Pinned at both layers, because neither alone is enough: the jsdom case
+  asserts the declaration reaches the cell (jsdom computes no fonts), and
+  `node-symbol-menu.browser.test.tsx` asserts the COMPUTED family survives
+  the real cascade — which is where a panel-wide font rule would override
+  it. Neither can prove which face actually won; no API reports that.
 - **`createFacetWriter`** — the one path a facet editor's value takes to
   storage. It goes through `validateFacetWrite`, so a plugin's own component
   cannot store what `wb_facet_set` would refuse. This is the guarantee half

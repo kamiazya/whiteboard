@@ -25,6 +25,14 @@ const options = sections.flatMap((section) => section.options)
 const symbolFacet = visualPlugin.facets.find((facet) => facet.name === 'symbol')
 const listed = symbolFacet?.editor?.picker?.options ?? []
 
+/**
+ * The WHOLE catalog, which is this build's own icons plus Unicode's bands.
+ * The two are checked differently: everything above is about the generated
+ * Unicode data, and the category pictures are about the catalog a person
+ * actually opens.
+ */
+const catalogSections = (await symbolFacet?.editor?.picker?.catalog?.load()) ?? []
+
 describe('the generated emoji catalog', () => {
   /**
    * A floor on both dimensions, so a generator that silently produced an
@@ -92,11 +100,13 @@ describe('the generated emoji catalog', () => {
    * somebody would write the next one into.
    */
   it('pictures every category in the panel own stroke language, and none it does not have', () => {
-    const unpictured = sections
+    const unpictured = catalogSections
       .filter((section) => section.glyph?.kind !== 'asset')
       .map((section) => section.label)
     expect(unpictured).toEqual([])
-    const ids = sections.map((section) => (section.glyph?.kind === 'asset' ? section.glyph.id : ''))
+    const ids = catalogSections.map((section) =>
+      section.glyph?.kind === 'asset' ? section.glyph.id : '',
+    )
     const registered = new Set(bundledFacetRegistry.assetIds('icons'))
     expect(ids.filter((id) => !registered.has(id))).toEqual([])
     // And the geometry is registered for the categories that exist, not for
@@ -113,10 +123,33 @@ describe('the generated emoji catalog', () => {
    * this, `食べ物` found 7 of Food & Drink's 131 rows and `旅行` 3 of 219.
    */
   it('names every category in Japanese too, since CLDR annotates emoji and not groups', () => {
-    const unnamed = sections
+    const unnamed = catalogSections
       .filter((section) => (section.keywords ?? []).join('').trim() === '')
       .map((section) => section.label)
     expect(unnamed).toEqual([])
+  })
+
+  /**
+   * The vendored icons are a BAND rather than an always-visible row (user
+   * decision, 2026-09-11): a row of monochrome line drawings directly above
+   * a grid of full-colour emoji reads as two unrelated palettes, and it was
+   * also indistinguishable from the category row below it, which picks a
+   * view rather than a value. As a band, a grid is all monochrome or all
+   * colour and never half of each.
+   *
+   * Guarded from both sides — the icons must be IN the catalog, and OUT of
+   * the listed options — because putting them back in either place is a
+   * one-line change that nothing else would notice.
+   */
+  it('offers this build own icons as the first band, and lists none of them inline', () => {
+    expect(catalogSections[0]?.label).toBe('Icons')
+    expect(catalogSections[0]?.options.length).toBeGreaterThanOrEqual(6)
+    const inlineIcons = listed.filter(
+      (option) => (option.payload as { kind?: string } | null)?.kind === 'icon',
+    )
+    expect(inlineIcons).toEqual([])
+    // Absence is the one choice that belongs to no category, so it stays.
+    expect(listed.map((option) => option.label)).toEqual(['No symbol'])
   })
 
   /**
@@ -197,9 +230,10 @@ describe('the generated emoji catalog', () => {
     expect(thumbsUp?.keywords?.[0]).toBe('thumbs_up')
   })
 
-  it('reaches the picker through the loader the definition declares', async () => {
-    const loaded = await symbolFacet?.editor?.picker?.catalog?.load()
-    expect(loaded?.length).toBe(sections.length)
+  it('reaches the picker through the loader the definition declares', () => {
+    // Unicode's bands, plus this build's own icons in front of them.
+    expect(catalogSections.length).toBe(sections.length + 1)
+    expect(catalogSections.slice(1)).toEqual(sections)
   })
 
   /** Built once: a picker mounts on every node selection. */

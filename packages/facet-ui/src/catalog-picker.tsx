@@ -40,7 +40,6 @@ const INK = 'var(--foreground, #171717)'
 const MUTED = 'var(--muted-foreground, #737373)'
 const LINE = 'var(--border, #e5e5e5)'
 const SURFACE = 'var(--background, #ffffff)'
-const DANGER = 'var(--destructive, #b3261e)'
 
 const STACK: CSSProperties = {
   display: 'flex',
@@ -75,19 +74,6 @@ const SCROLLER: CSSProperties = {
 }
 
 const CAPTION: CSSProperties = { color: MUTED, fontSize: '0.7rem' }
-
-const ENTRY_ROW: CSSProperties = { display: 'flex', gap: '0.25rem', alignItems: 'center' }
-
-const ENTRY_BUTTON: CSSProperties = {
-  border: `1px solid ${LINE}`,
-  background: 'transparent',
-  color: INK,
-  borderRadius: '0.25rem',
-  padding: '0.25rem 0.5rem',
-  fontSize: '0.75rem',
-  cursor: 'pointer',
-  flex: 'none',
-}
 
 /**
  * How many matches a search draws. A two-letter query matches hundreds, and
@@ -218,8 +204,6 @@ export function CatalogPicker({
 }: CatalogPickerProps) {
   const [active, setActive] = useState(0)
   const [query, setQuery] = useState('')
-  const [typed, setTyped] = useState('')
-  const [error, setError] = useState<string | undefined>(undefined)
   const [recent, setRecent] = useState<readonly FacetPickerOption[]>(() => RECENTS.get(name) ?? [])
 
   const terms = useMemo(() => query.trim().toLowerCase().split(/\s+/).filter(Boolean), [query])
@@ -237,32 +221,63 @@ export function CatalogPicker({
   }, [sections, terms])
 
   const pick = (option: FacetPickerOption) => {
-    setError(undefined)
     setRecent(remember(name, option))
     onPick(option)
   }
 
-  const submitEntry = () => {
-    if (entry === undefined) return
-    const text = typed.trim()
-    if (text === '') return
+  /**
+   * Every character already ON SCREEN somewhere, so `typedValue` can skip
+   * it. The catalog's rows and the recently-used band both count: one
+   * symbol drawn twice in one view is a person unable to tell which of the
+   * two they picked, and after typing a new symbol it is in RECENTS — so
+   * leaving it in the results too would reintroduce the duplicate a moment
+   * after avoiding it.
+   */
+  const known = useMemo(
+    () =>
+      new Set(
+        [...sections.flatMap((section) => section.options), ...recent].map((option) =>
+          option.glyph?.kind === 'char' ? option.glyph.value : '',
+        ),
+      ),
+    [sections, recent],
+  )
+
+  /**
+   * What was typed, AS A VALUE — offered as the leading cell when the
+   * catalog does not already have it.
+   *
+   * This is what merged two inputs into one. A search box and a free-entry
+   * field beside it are the same gesture twice: the search already matches
+   * a pasted CHARACTER, so "I have this symbol, use it" had two controls and
+   * only one of them wrote anything. Now there is one box, and free entry is
+   * a RESULT rather than a second control — which is also how it becomes
+   * discoverable, since a character the catalog lacks simply appears at the
+   * front of the results instead of needing a field somebody has to notice.
+   *
+   * Skipped when the catalog HAS the character, or the same symbol would be
+   * drawn twice in one grid — once as itself and once as a row.
+   *
+   * Whatever the caller says decides whether it is a value at all. That is
+   * what makes free entry safe to offer: nothing here knows what
+   * `visual.symbol` accepts, so this control cannot hold a laxer rule than
+   * the thing it writes to — and an invalid one is simply not offered,
+   * which beats a control that takes it and then reports an error.
+   */
+  const typedValue = useMemo((): FacetPickerOption | undefined => {
+    if (entry === undefined) return undefined
+    const text = query.trim()
+    if (text === '' || known.has(text)) return undefined
     const payload = { ...entry.payload, [entry.field]: text }
-    // Whatever the caller says decides. That is what makes free entry safe
-    // to offer at all: nothing here knows what `visual.symbol` will accept,
-    // and it does not need to — so this control cannot hold a laxer rule
-    // than the thing it writes to.
     const result =
       validateEntry === undefined ? { ok: true as const, value: payload } : validateEntry(payload)
-    if (!result.ok) {
-      setError(result.message)
-      return
-    }
-    setTyped('')
-    pick({ payload: result.value, label: text, glyph: { kind: 'char', value: text } })
-  }
+    if (!result.ok) return undefined
+    return { payload: result.value, label: text, glyph: { kind: 'char', value: text } }
+  }, [entry, query, known, validateEntry])
 
   const shown = found ?? sections[active]?.options ?? []
   const capped = shown.slice(0, MATCH_LIMIT)
+  const cells = typedValue === undefined ? capped : [typedValue, ...capped]
 
   return (
     <div style={STACK}>
@@ -285,10 +300,19 @@ export function CatalogPicker({
       <input
         type="search"
         aria-label={searchLabel}
-        placeholder={searchLabel}
+        // The entry spec's own placeholder when there is one: it is the
+        // half of this box a name like "Search symbols" does not describe.
+        placeholder={entry?.placeholder ?? searchLabel}
         style={FIELD}
         value={query}
         onChange={(event) => setQuery(event.target.value)}
+        onKeyDown={(event) => {
+          if (event.key !== 'Enter' || typedValue === undefined) return
+          // The row sits inside the inspector's own form chrome on some
+          // vessels; Enter must take the value, not submit that.
+          event.preventDefault()
+          pick(typedValue)
+        }}
       />
 
       {recent.length > 0 && (
@@ -351,7 +375,7 @@ export function CatalogPicker({
           picker's own name is a second group called "Symbol" beside the
           listed one, which tells a screen-reader user nothing about which
           of the two they are in. */}
-      {(found !== undefined || sections.length > 0) && (
+      {(found !== undefined || sections.length > 0 || typedValue !== undefined) && (
         <div style={SCROLLER}>
           <FacetOptionGroup
             label={
@@ -361,7 +385,7 @@ export function CatalogPicker({
             }
             layout="grid"
           >
-            {capped.map((option) => (
+            {cells.map((option) => (
               <FacetOption
                 key={`${option.label}-${facetPayloadKey(option.payload)}`}
                 name={name}
@@ -379,42 +403,14 @@ export function CatalogPicker({
       {found !== undefined && (
         <span role="status" style={CAPTION}>
           {found.length === 0
-            ? `No match for “${query.trim()}”`
+            ? typedValue === undefined
+              ? `No match for “${query.trim()}”`
+              : // Not "1 match": what is on screen is the thing typed, and
+                // calling it a match claims the catalog holds it.
+                `Not in the list — use “${query.trim()}”`
             : found.length > capped.length
               ? `${capped.length} of ${found.length} matches`
               : `${found.length} ${found.length === 1 ? 'match' : 'matches'}`}
-        </span>
-      )}
-
-      {entry !== undefined && (
-        <div style={ENTRY_ROW}>
-          <input
-            type="text"
-            aria-label={entry.label}
-            {...(entry.placeholder === undefined ? {} : { placeholder: entry.placeholder })}
-            style={FIELD}
-            value={typed}
-            onChange={(event) => {
-              setTyped(event.target.value)
-              setError(undefined)
-            }}
-            onKeyDown={(event) => {
-              if (event.key !== 'Enter') return
-              // The row sits inside the inspector's own form chrome on some
-              // vessels; Enter must apply the value, not submit that.
-              event.preventDefault()
-              submitEntry()
-            }}
-          />
-          <button type="button" style={ENTRY_BUTTON} onClick={submitEntry}>
-            Use
-          </button>
-        </div>
-      )}
-
-      {error !== undefined && (
-        <span role="alert" style={{ ...CAPTION, color: DANGER }}>
-          {error}
         </span>
       )}
     </div>

@@ -67,6 +67,9 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // Nothing of it is mounted until then — which is what keeps the
   // catalog's chunk unfetched for a panel nobody opened.
   expect(panel.querySelector('[aria-label="Search symbols"]')).toBeNull()
+  // And there is only ever ONE box inside it: free entry is a result of the
+  // search, not a field beside it.
+  expect(panel.querySelector('[aria-label="Any character or emoji"]')).toBeNull()
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',

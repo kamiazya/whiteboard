@@ -371,7 +371,7 @@ it('does not print a field label that repeats the facet name', () => {
 })
 
 describe('a registered editor replaces the derived form', () => {
-  it('renders the badge picker for visual.symbol, and writes through the registry', () => {
+  it('renders the badge picker for visual.symbol, and writes through the registry', async () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
@@ -384,13 +384,16 @@ describe('a registered editor replaces the derived form', () => {
     // the facet has one face instead of two — behind a trigger, because a
     // catalog is hundreds of cells and a property row is one line.
     fireEvent.click(screen.getByRole('button', { name: 'Choose symbol' }))
-    fireEvent.click(screen.getByLabelText('Icon database'))
+    // The icons are the catalog's first band, so they arrive with it.
+    fireEvent.click(await screen.findByLabelText('Icon database'))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'icon', name: 'database' })
-    // And the emoji arm, which no listed option covers any more: the
-    // picker's free entry writes it through the same door, so a symbol
-    // nobody wrote into the definition is still one press away.
-    fireEvent.change(screen.getByLabelText('Any character or emoji'), { target: { value: '⭐' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Use' }))
+    // And the emoji arm, which no listed option covers any more. ⭐ IS in
+    // the catalog, so what the one box offers is the row rather than the
+    // typed character — the picker never draws one symbol twice.
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search symbols' }), {
+      target: { value: '⭐' },
+    })
+    fireEvent.click(await screen.findByLabelText('star'))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
     // And the derived variants form is NOT what got rendered.
     expect(screen.queryByLabelText('Symbol Kind')).toBeNull()

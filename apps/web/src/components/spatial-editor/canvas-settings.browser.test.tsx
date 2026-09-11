@@ -290,7 +290,9 @@ async function openSymbolPicker(panel: HTMLElement): Promise<HTMLElement> {
   fireEvent.click(panel.querySelector('[aria-label="Choose symbol"]') as HTMLElement)
   return vi.waitFor(() => {
     const popover = panel.querySelector('[role="dialog"][aria-label="Choose symbol"]')
-    expect(popover?.querySelector('[aria-label="Search symbols"]')).not.toBeNull()
+    // The CATALOG, not just the search box: this build's own icons are its
+    // first band now, so nothing but absence is on screen before it loads.
+    expect(popover?.querySelector('[aria-label="Symbol categories"]')).not.toBeNull()
     return popover as HTMLElement
   })
 }
@@ -333,7 +335,7 @@ it('draws every row through the one selection control', async () => {
       'Line jumps',
       'Symbol',
       'Symbol categories',
-      'Symbol: Smileys & Emotion',
+      'Symbol: Icons',
       'Theme',
     ]),
   )
@@ -343,7 +345,16 @@ it('draws every row through the one selection control', async () => {
   // label that carries the accessible name.
   for (const group of panel.querySelectorAll('[role="radiogroup"]')) {
     const options = [...group.querySelectorAll('label')]
-    expect(options.length).toBeGreaterThan(1)
+    // More than one, because a control offering one thing is not a choice —
+    // except the band that holds ABSENCE alone. Everything else `Symbol`
+    // once listed moved into the catalog when the icons became its first
+    // category, and "no symbol" belongs to no category, so it is the one
+    // band that is legitimately a single cell.
+    const floor = group.getAttribute('aria-label') === 'Symbol' ? 1 : 2
+    expect(
+      options.length,
+      `${group.getAttribute('aria-label')} offers too few`,
+    ).toBeGreaterThanOrEqual(floor)
     for (const option of options) {
       const input = option.querySelector('input[type="radio"]')
       expect(input, `${option.getAttribute('title') ?? '?'} is not a radio`).not.toBeNull()
