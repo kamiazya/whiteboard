@@ -158,9 +158,11 @@
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
     "@kamiazya/whiteboard-daemon-client": "workspace:*",
+    "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-history": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
+    "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
     "@kamiazya/whiteboard-workspace-index": "workspace:*",
@@ -176,10 +178,10 @@
     "jsdom": "^30.0.1",
     "libsql": "^0.5.29",
     "playwright": "1.61.1",
+    "tsdown": "^0.23.0",
     "tsx": "^4.23.1",
     "typescript": "catalog:",
     "vite": "catalog:",
-    "vitest": "catalog:",
-    "tsdown": "^0.23.0"
+    "vitest": "catalog:"
   }
 }

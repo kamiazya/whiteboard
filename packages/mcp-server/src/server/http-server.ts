@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { serve } from '@hono/node-server'
 import type { RuntimeStatusResponse } from '@kamiazya/whiteboard-daemon-client/api-contracts/runtime'
 import { WHITEBOARD_WS_PROTOCOL } from '@kamiazya/whiteboard-daemon-client/ws-protocol'
+import type { FacetPlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
@@ -63,6 +64,13 @@ export interface StartHttpServerOptions {
    *  (WHITEBOARD_OAUTH_CLIENT_REGISTRY). Empty by default, which leaves the
    *  hosted-origin authorization-server surface entirely unmounted. */
   oauthClientRegistry?: OAuthClientRegistry
+  /**
+   * The plugin set this deployment registers (ADR-0013 decision 3), default
+   * the bundled one. A distribution that embeds this daemon composes its own
+   * set here — in code, which is what distribution time means; there is
+   * deliberately no config file naming modules to import.
+   */
+  facetPlugins?: readonly FacetPlugin[]
   /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
    *  can observe start/stop without waiting on a real 24h interval. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
@@ -298,6 +306,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   await ensureWorkspaceId(dataDir)
   const resolvedDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
+    { ...(options.facetPlugins === undefined ? {} : { plugins: options.facetPlugins }) },
   )
   // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
   // graph must not import the routes layer (value cycle), and this root is

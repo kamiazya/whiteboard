@@ -28,7 +28,7 @@ export default defineConfig({
   // Deliberately NOT tsconfig.server.json. rolldown-plugin-dts passes
   // `--rootDir path.dirname(tsconfig)` to tsgo, so the tsconfig has to sit
   // above every source the types are rolled up from — and `noExternal` below
-  // pulls nine sibling workspace packages into this dist. From mcp-server's own
+  // pulls eleven sibling workspace packages into this dist. From mcp-server's own
   // directory their files are outside rootDir and tsgo refuses to emit for them.
   tsconfig: '../tsconfig.mcp-dts.json',
   format: 'esm',
@@ -51,6 +51,11 @@ export default defineConfig({
     '@kamiazya/whiteboard-ports',
     '@kamiazya/whiteboard-loro-adapter',
     '@kamiazya/whiteboard-server-core',
+    // Composing a plugin set is this root's job (ADR-0013 decision 3), so
+    // the engine and the bundled plugin are its own imports now rather than
+    // only server-core's transitive ones.
+    '@kamiazya/whiteboard-facet-engine',
+    '@kamiazya/whiteboard-plugin-visual',
     '@kamiazya/whiteboard-workspace-index',
   ],
 })
