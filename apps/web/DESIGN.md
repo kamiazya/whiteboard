@@ -1076,36 +1076,50 @@ Three things follow:
 - **"None" is an option, never a second control.** The theme row offered a
   `Default` segment AND a `Clear` button whose visible text named nothing it
   would clear. A picker carries absence as an ordinary option.
-- **An option is a PICTURE; the word is its accessible name.** One control
-  shape landed first and the display panel still read as a list of
-  sentences — five rows, four of them entirely words, twelve of twenty-four
-  options spelled out. A person scanning it read instead of recognising,
-  and the widest row (`Preview sketch` / `Preview neon`) set the panel's
-  width. So every option carries a glyph, and the word survives as its
-  `aria-label` and its `title`. `canvas-settings.browser.test.tsx` holds
-  the display panel to it, on what a person SEES: a glyph present, and the
-  visible text never equal to the option's name. Not "no text at all" — an
-  emoji option's picture IS text, and demanding an empty node would ban the
-  one glyph arm that needs no drawing.
+- **Every option is a PICTURE, in one of two layouts.** One control shape
+  landed first and the display panel still read as a list of sentences —
+  five rows, four of them entirely words, twelve of twenty-four options
+  spelled out. A person scanning it read instead of recognising, and the
+  widest row set the panel's width. So no option is a bare word, and the
+  row declares how its picture is presented:
 
-  A row that stays words because it "only has two" is how a panel gets
-  mixed: `Line jumps` is on/off and is drawn as a crossing with and without
-  a hop, like everything else.
+  | layout | is | for |
+  |---|---|---|
+  | `cards` | the picture over its word, in a bordered cell | a short vocabulary whose NAMES carry meaning a picture cannot fully take on — Edge routing, Line jumps, Theme |
+  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's twelve, a colour swatch |
 
-  Where the picture comes from is the plugin's, as DATA. Three arms draw a
-  value (a core silhouette, a character, registered geometry) and a fourth
-  draws a LOOK: `{ kind: 'theme' }` renders registered geometry the way a
-  registered theme inks it, which is how the theme row shows the signature
-  mark three times — plain, hand-drawn, lit — rather than three identical
-  strokes beside three words. See BRAND.md for the mark itself.
+  `cards` is the shape Settings already gives theme and tab icon, so the
+  two surfaces stopped being two languages. The one difference is the
+  element: Settings puts `role="radio"` on a `<button>` with a lint
+  exemption, and this wraps a real hidden radio, which gets arrow keys from
+  the element rather than from nothing.
+
+  **A count cannot decide which**, which is why the plugin declares it.
+  `visual.shape`'s six silhouettes would fit as cards and are still better
+  as chips, because "Hexagon" tells a reader nothing the hexagon has not
+  said. And a row does not stay words because it "only has two": `Line
+  jumps` is on/off and is drawn as a crossing with and without a hop.
+
+  `canvas-settings.browser.test.tsx` holds the panel to it: every option
+  carries a glyph, each card row prints its word (and then carries no
+  tooltip repeating it), and each chip row prints none.
+
+  Where the picture comes from is the plugin's, as DATA. Three glyph arms
+  draw a VALUE (a core silhouette, a character, registered geometry) and a
+  fourth draws a LOOK: `{ kind: 'theme' }` renders registered geometry the
+  way a registered theme inks it, which is how the theme row shows the
+  signature mark three times — plain, hand-drawn, lit — rather than three
+  identical strokes beside three words. See BRAND.md for the mark itself.
 
 What this rule does NOT claim is that every choice in the app looks
-identical. A CARD GRID — an icon over a label, in full-width cells, as
-Settings draws theme and tab-icon — is a different control from a property
-row's inline chip, and squeezing one into the other would be worse UI, not
-more consistent. Those are exemptions in the guard, each saying what shape
-it is and why the chip is the wrong instrument, and an exemption naming a
-file that no longer holds a control fails.
+identical — only that the difference is a DECLARED layout rather than a
+file that could not see the last one. The card grid used to be the standing
+example of a legitimate difference, and `layout: 'cards'` is that same
+shape brought inside the vocabulary; Settings' own two grids are the
+remaining exemptions in the guard, written against the DOM directly rather
+than through the primitive. Each says what shape it is and why the chip is
+the wrong instrument, and an exemption naming a file that no longer holds a
+control fails.
 
 ## A toggle looks toggled, and says so once
 

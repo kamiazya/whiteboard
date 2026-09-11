@@ -307,27 +307,25 @@ it('draws every row through the one selection control', async () => {
 })
 
 /**
- * Every option in the panel is a PICTURE, not a word.
+ * Every option in the panel is a PICTURE. Whether its word is drawn beside
+ * the picture is the row's LAYOUT, and both layouts are here on purpose.
  *
  * The one control shape landed first and the panel still read as a list of
  * sentences: five rows, four of them entirely words, twelve of twenty-four
- * options spelled out — `Straight` / `Orthogonal` / `Curved`, `Off` / `On`,
- * `Default` / `Sketch` / `Neon`. A person scanning it reads rather than
- * recognises, and the widest row set the panel's width.
+ * options spelled out. A person scanning it read rather than recognised.
  *
- * So the assertion is on what a person SEES: a glyph, and never the option's
- * WORD. The word survives as the accessible name and the `title`, which is
- * where it belongs — losing it would trade one exclusion for another.
+ * - **cards** — a picture over its word, in a bordered cell, the shape
+ *   Settings already gives theme and tab icon. For a short vocabulary whose
+ *   names carry meaning a picture cannot fully take on: Edge routing, Line
+ *   jumps, Theme.
+ * - **chips** — a picture alone, its word the accessible name and the
+ *   `title`. For a palette where the count makes labels impossible and the
+ *   glyph is the whole affordance: Symbol's twelve.
  *
- * Not "no text at all": an emoji option's picture IS text (`Emoji ✅` draws
- * `✅`), and demanding an empty node would have banned the one glyph arm
- * that needs no drawing.
- *
- * `Line jumps` is the one row whose two options are on/off rather than a
- * vocabulary, and it is included deliberately: a row that stays words
- * because it "only has two" is how the panel got mixed in the first place.
+ * A count cannot decide which — that is why the plugin declares it. What is
+ * pinned here is that no option is a bare word either way.
  */
-it('draws every option as a glyph, with the word only as its accessible name', async () => {
+it('draws every option as a picture, in the layout its row declares', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   await openPanel(container)
@@ -340,10 +338,26 @@ it('draws every option as a glyph, with the word only as its accessible name', a
   for (const option of options) {
     const name = option.querySelector('input')?.getAttribute('aria-label') ?? '?'
     expect(option.querySelector('[aria-hidden="true"]'), `${name} draws no glyph`).not.toBeNull()
+  }
+
+  // The three card rows print their word; the chip row does not, and hands
+  // it to `title` instead so it is still reachable by hover and by a reader.
+  const rowOf = (label: string) =>
+    panel.querySelector(`[role="radiogroup"][aria-label="${label}"]`) as HTMLElement
+  for (const label of ['Edge routing', 'Line jumps', 'Theme']) {
+    const first = rowOf(label).querySelector('label') as HTMLElement
+    const name = first.querySelector('input')?.getAttribute('aria-label') ?? '?'
+    expect(first.textContent?.trim(), `${label}: ${name} prints no word`).toBe(name)
+    expect(
+      first.getAttribute('title'),
+      `${label}: ${name} repeats its word in a tooltip`,
+    ).toBeNull()
+  }
+  for (const option of [...rowOf('Symbol').querySelectorAll('label')]) {
+    const name = option.querySelector('input')?.getAttribute('aria-label') ?? '?'
     // The clipped radio contributes no text, so what is left is what shows.
-    expect(option.textContent?.trim(), `${name} still shows its word`).not.toBe(name)
-    // Not silent to a reader, and hoverable for anyone who wants the word.
-    expect(option.getAttribute('title'), `${name} has no title`).toBe(name)
+    expect(option.textContent?.trim(), `Symbol: ${name} shows its word`).not.toBe(name)
+    expect(option.getAttribute('title'), `Symbol: ${name} has no title`).toBe(name)
   }
 })
 

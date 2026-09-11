@@ -38,6 +38,8 @@ const INK = 'var(--foreground, #171717)'
 const MUTED = 'var(--muted-foreground, #737373)'
 const ACCENT = 'var(--accent, #f2f2f2)'
 const RING = 'var(--ring, #3b82f6)'
+const LINE = 'var(--border, #e5e5e5)'
+const PRIMARY = 'var(--primary, #171717)'
 
 /**
  * Wraps for the reason every options row in the app wraps: a row that
@@ -82,6 +84,58 @@ const OPTION_SELECTED: CSSProperties = {
   fontWeight: 500,
 }
 
+const GLYPH_BOX: CSSProperties = {
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  flex: 'none',
+}
+
+const GLYPH: CSSProperties = { ...GLYPH_BOX, width: '1rem', height: '1rem' }
+
+/**
+ * The CARD grid: cells that size themselves, so two options give two columns
+ * and three give three without any caller counting them. `auto-fit` with a
+ * floor is what keeps a phone honest — past the floor the row wraps rather
+ * than shrinking cells below a thumb.
+ */
+const CARD_GROUP: CSSProperties = {
+  display: 'grid',
+  gridTemplateColumns: 'repeat(auto-fit, minmax(4.5rem, 1fr))',
+  gap: '0.5rem',
+  width: '100%',
+}
+
+const CARD: CSSProperties = {
+  position: 'relative',
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'center',
+  gap: '0.375rem',
+  padding: '0.5rem 0.5rem 0.4375rem',
+  borderRadius: '0.375rem',
+  border: `1px solid ${LINE}`,
+  background: 'transparent',
+  color: MUTED,
+  fontSize: '0.75rem',
+  lineHeight: 1.1,
+  textAlign: 'center',
+  cursor: 'pointer',
+}
+
+const CARD_SELECTED: CSSProperties = {
+  ...CARD,
+  border: `1px solid ${PRIMARY}`,
+  // The same faint wash Settings paints (`bg-primary/5`), reached without a
+  // utility class. A fallback to the accent fill for a host whose primary
+  // token is missing, so the selected cell is never merely a border.
+  background: `color-mix(in srgb, ${PRIMARY} 6%, transparent)`,
+  color: PRIMARY,
+}
+
+/** A card's picture has room to be a picture. */
+const CARD_GLYPH: CSSProperties = { ...GLYPH_BOX, width: '1.25rem', height: '1.25rem' }
+
 /** Visually hidden, still focusable — the focus ring is drawn by the label. */
 const INPUT: CSSProperties = {
   position: 'absolute',
@@ -92,15 +146,6 @@ const INPUT: CSSProperties = {
   overflow: 'hidden',
   clip: 'rect(0 0 0 0)',
   whiteSpace: 'nowrap',
-}
-
-const GLYPH: CSSProperties = {
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  width: '1rem',
-  height: '1rem',
-  flex: 'none',
 }
 
 export interface FacetOptionProps {
@@ -123,6 +168,24 @@ export interface FacetOptionProps {
    * caller saying where it is, not a type anyone builds against.
    */
   readonly shell?: 'group' | 'menu'
+  /**
+   * How the option is DRAWN, which the plugin declares per row.
+   *
+   * `chips` is a picture alone in an inline pill — for a palette where the
+   * count makes labels impossible and the glyph is the whole affordance (a
+   * silhouette, an emoji, a colour). `cards` is the picture over its word in
+   * a bordered cell, the shape Settings already uses for theme and tab icon
+   * — for a short vocabulary whose NAMES carry meaning a picture cannot
+   * fully take on ("Orthogonal", "Neon").
+   *
+   * A count cannot decide this. `visual.shape`'s six silhouettes would fit
+   * as cards and are still better as chips, because "Hexagon" tells a reader
+   * nothing the hexagon has not already said.
+   *
+   * Ignored in a menu: a menu row is a row, and a grid of cells inside one
+   * is not a menu any more.
+   */
+  readonly layout?: 'chips' | 'cards'
 }
 
 export function FacetOption({
@@ -132,13 +195,15 @@ export function FacetOption({
   onSelect,
   glyph,
   shell = 'group',
+  layout = 'chips',
 }: FacetOptionProps) {
   const id = useId()
+  const card = layout === 'cards' && shell !== 'menu'
   const body =
     glyph === undefined ? (
       label
     ) : (
-      <span aria-hidden="true" style={GLYPH}>
+      <span aria-hidden="true" style={card ? CARD_GLYPH : GLYPH}>
         {glyph}
       </span>
     )
@@ -163,8 +228,9 @@ export function FacetOption({
       // The label carries the focus ring because the input it labels is
       // clipped to a pixel — without this a keyboard user arrowing through
       // the group sees nothing move.
-      style={selected ? OPTION_SELECTED : OPTION}
-      title={glyph === undefined ? undefined : label}
+      style={card ? (selected ? CARD_SELECTED : CARD) : selected ? OPTION_SELECTED : OPTION}
+      // A card prints its word, so a tooltip repeating it is noise.
+      title={glyph === undefined || card ? undefined : label}
       onFocus={(event) => {
         event.currentTarget.style.outline = `2px solid ${RING}`
         event.currentTarget.style.outlineOffset = '1px'
@@ -183,6 +249,7 @@ export function FacetOption({
         style={INPUT}
       />
       {body}
+      {card && <span>{label}</span>}
     </label>
   )
 }
@@ -197,14 +264,21 @@ export interface FacetOptionGroupProps {
    * radiogroup inside a menu would announce a group the menu does not have.
    */
   readonly shell?: 'group' | 'menu'
+  /** Must match what its options are given; see `FacetOptionProps.layout`. */
+  readonly layout?: 'chips' | 'cards'
 }
 
-export function FacetOptionGroup({ label, children, shell = 'group' }: FacetOptionGroupProps) {
+export function FacetOptionGroup({
+  label,
+  children,
+  shell = 'group',
+  layout = 'chips',
+}: FacetOptionGroupProps) {
   if (shell === 'menu') {
     return <span style={GROUP}>{children}</span>
   }
   return (
-    <span role="radiogroup" aria-label={label} style={GROUP}>
+    <span role="radiogroup" aria-label={label} style={layout === 'cards' ? CARD_GROUP : GROUP}>
       {children}
     </span>
   )

@@ -35,6 +35,14 @@ const ROW: CSSProperties = {
   rowGap: '0.25rem',
   fontSize: '0.75rem',
 }
+/** A card grid takes the whole width, so its name sits above rather than beside. */
+const STACKED_ROW: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: '0.375rem',
+  fontSize: '0.75rem',
+}
 const CONTROL: CSSProperties = {
   border: `1px solid ${LINE}`,
   background: SURFACE,
@@ -106,6 +114,9 @@ function FieldInput({
     )
   }
   if (field.control.kind === 'segmented') {
+    // Bound before the map: TypeScript re-widens `field.control` inside a
+    // callback, and the layout is read there.
+    const control = field.control
     // NOT wrapped in anything labelable, and the caller does not wrap this
     // arm in a `<label>` either (see the field list below). A `<label>`
     // inside a `<label>` is invalid, and the browser resolves a click on
@@ -113,12 +124,15 @@ function FieldInput({
     // person pressed is not the one that takes the press. The group's own
     // `aria-label` is what names it.
     return (
-      <span id={id}>
-        <FacetOptionGroup label={name}>
-          {field.control.options.map((option) => (
+      // A card grid must fill the row it stands in, and an inline span does
+      // not — so the wrapper becomes a block when it holds one.
+      <span id={id} {...(control.layout === 'cards' ? { style: { display: 'block' } } : {})}>
+        <FacetOptionGroup label={name} layout={control.layout}>
+          {control.options.map((option) => (
             <FacetOption
               key={option.label}
               name={id}
+              layout={control.layout}
               label={option.label}
               selected={option.value === null ? value === undefined : value === option.value}
               onSelect={() => (option.value === null ? onClear() : onChange(option.value))}
@@ -250,16 +264,21 @@ export function DerivedFacetForm({
     // has no reason to match this declaration's. Compared raw, such a value
     // matches no option and the picker draws with nothing selected.
     const current = facetPayloadKey(stored)
+    // The same shape a field of the same layout takes, so a panel holding
+    // both does not lay out two rows two ways: a CHIP row is name-left /
+    // options-right, and a CARD row is a full-width grid under its name,
+    // because cells that share a line with a label are no longer cells.
     return (
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.375rem' }}>
-        <span style={{ fontSize: '0.75rem', fontWeight: 500 }}>{title}</span>
-        <FacetOptionGroup label={title}>
+      <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
+        <span style={{ color: MUTED }}>{title}</span>
+        <FacetOptionGroup label={title} layout={form.layout}>
           {form.options.map((option) => {
             const glyph = glyphIcon(option.glyph, registry)
             return (
               <FacetOption
                 key={option.label}
                 name={`facet-picker-${facetKey}`}
+                layout={form.layout}
                 label={option.label}
                 selected={facetPayloadKey(option.payload) === current}
                 // Straight through the write path, the same as every other
@@ -343,14 +362,16 @@ export function DerivedFacetForm({
         // control here is a single labelable element, which is what a
         // `<label htmlFor>` is for.
         const Row = field.control.kind === 'segmented' ? 'div' : 'label'
+        const cards = field.control.kind === 'segmented' && field.control.layout === 'cards'
         return (
           <Row
             key={field.name}
             {...(Row === 'label' ? { htmlFor: `facet-field-${facetKey}-${field.name}` } : {})}
             // Wraps for the same reason the menu's option rows do: a segmented
             // control with six options does not fit a phone beside its label,
-            // and the options past the edge are the ones nobody can tap.
-            style={ROW}
+            // and the options past the edge are the ones nobody can tap. A
+            // CARD grid takes the whole width instead, so its name sits above.
+            style={cards ? STACKED_ROW : ROW}
           >
             {/* A single-field facet usually labels its field the way the facet
                 itself is named ("Shape" under "Shape"). Printing it twice adds

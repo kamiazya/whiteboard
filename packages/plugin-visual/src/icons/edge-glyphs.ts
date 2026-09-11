@@ -17,16 +17,22 @@
  */
 import type { LucideIconElement } from './icons.js'
 
-/** Both jump specimens: the crossed line the hop is or is not taken over. */
-const CROSSED = { tag: 'path', d: 'M12 4 V20' } as const
+/**
+ * Both jump specimens: the crossed line the hop is or is not taken over.
+ * Short of the box's edges, so the hop's shoulders read as a hop rather
+ * than as an arrowhead on a long shaft — measured, that is exactly what a
+ * full-height vertical under a tall arc looked like.
+ */
+const CROSSED = { tag: 'path', d: 'M12 6 V18' } as const
 
 export const EDGE_GLYPHS: Readonly<Record<string, ReadonlyArray<LucideIconElement>>> = {
   'edge-straight': [{ tag: 'path', d: 'M4 20 L20 4' }],
   'edge-orthogonal': [{ tag: 'path', d: 'M4 20 H12 V4 H20' }],
   'edge-curved': [{ tag: 'path', d: 'M4 20 C 10 20, 14 4, 20 4' }],
   // Flat through the crossing: the two lines simply meet.
-  'line-jumps-off': [CROSSED, { tag: 'path', d: 'M4 12 H20' }],
-  // The same pair with the horizontal hopping over — the arc is the whole
-  // difference, so it is the only thing that moves between the two.
-  'line-jumps-on': [CROSSED, { tag: 'path', d: 'M4 12 H9 A3 3 0 0 1 15 12 H20' }],
+  'line-jumps-off': [CROSSED, { tag: 'path', d: 'M2 13 H22' }],
+  // The same pair with the horizontal hopping over. Wide flats on either
+  // side so the arc is plainly an interruption in a line that continues,
+  // which is the whole notation.
+  'line-jumps-on': [CROSSED, { tag: 'path', d: 'M2 13 H9 A3 3 0 0 1 15 13 H22' }],
 }

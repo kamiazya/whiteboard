@@ -8,7 +8,7 @@
  * A facet with no widget registered simply contributes nothing yet — the
  * later editor-spec tier derives a default form instead of failing here.
  */
-import type { FacetSegmentedOption } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetOptionLayout, FacetSegmentedOption } from '@kamiazya/whiteboard-facet-engine'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import {
   DerivedFacetForm,
@@ -88,12 +88,14 @@ const EDGES_KEY = 'visual.edges/v0'
 function edgeSegments(
   registry: FacetRegistry,
   field: string,
-): { label: string; options: readonly FacetSegmentedOption[] } | undefined {
+):
+  | { label: string; options: readonly FacetSegmentedOption[]; layout: FacetOptionLayout }
+  | undefined {
   const form = registry.facetForm(EDGES_KEY)
   if (form.kind !== 'fields') return undefined
   const found = form.fields.find((candidate) => candidate.name === field)
   if (found === undefined || found.control.kind !== 'segmented') return undefined
-  return { label: found.label, options: found.control.options }
+  return { label: found.label, options: found.control.options, layout: found.control.layout }
 }
 
 function EdgeSegmentRow({
@@ -110,10 +112,17 @@ function EdgeSegmentRow({
 }) {
   const row = edgeSegments(registry, field)
   if (row === undefined) return null
+  // A card grid takes the whole width, so its name sits above rather than
+  // beside — the same arrangement `DerivedFacetForm` makes for the rows it
+  // draws, so the panel reads as one panel.
   return (
-    <div className="flex items-center justify-between gap-3">
+    <div
+      className={
+        row.layout === 'cards' ? 'flex flex-col gap-1.5' : 'flex items-center justify-between gap-3'
+      }
+    >
       <span className="text-xs text-muted-foreground">{row.label}</span>
-      <FacetOptionGroup label={row.label}>
+      <FacetOptionGroup label={row.label} layout={row.layout}>
         {row.options.map((option) => {
           // `value: null` would mean "clear the facet" — neither edges field
           // declares one, because absence here is reached by picking the
@@ -126,6 +135,7 @@ function EdgeSegmentRow({
               key={value}
               name={`canvas-edges-${field}`}
               label={option.label}
+              layout={row.layout}
               selected={current === value}
               onSelect={() => onPick(value)}
               {...(glyph === undefined ? {} : { glyph })}

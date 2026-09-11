@@ -53,7 +53,11 @@ paths:
   facet-level `picker` writing whole payloads. Options carry a `FacetGlyph`
   — closed in FORM (a plugin cannot add an arm), open in CONTENT: a core
   silhouette, a character, registered icon geometry, or registered geometry
-  inked the way a registered THEME inks it. `deriveFacetForm(schema, editor)`
+  inked the way a registered THEME inks it. A row also declares its
+  `layout` — `cards` (picture over word, for a short vocabulary whose names
+  carry meaning) or `chips` (picture alone, for a palette) — declared
+  rather than derived from the option COUNT, since the count does not know
+  whether the name is worth screen space. `deriveFacetForm(schema, editor)`
   merges it over the derived form; `assertEditorSpecFits` rejects at definition time a spec
   naming a field the schema does not declare, or one on a schema with no
   derivable form. A segmented option's `value: null` means the facet's

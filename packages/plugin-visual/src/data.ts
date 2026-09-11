@@ -230,15 +230,21 @@ export const visualPlugin = definePlugin({
       // row names neither; it reads the declaration like any other.
       editor: {
         fields: {
+          // CARDS: three named routings and an on/off, whose words carry
+          // meaning the line alone does not — a curve is a curve, but which
+          // of them the board is FOLLOWING is a word. Same shape Settings
+          // gives theme and tab icon.
           routing: {
             widget: 'segmented',
             label: 'Edge routing',
             options: EDGE_ROUTING_OPTIONS,
+            layout: 'cards',
           },
           lineJumps: {
             widget: 'segmented',
             label: 'Line jumps',
             options: LINE_JUMP_OPTIONS,
+            layout: 'cards',
           },
         },
       },
@@ -315,6 +321,10 @@ export const visualPlugin = definePlugin({
       assetRefs: { theme: 'themes' },
       editor: {
         picker: {
+          // CARDS: a look has a NAME a person says out loud, and three cells
+          // give the specimen room to be seen. A chip-sized swatch of the
+          // same mark reads as a smudge.
+          layout: 'cards',
           // The SAME mark three times, drawn three ways: plain for the
           // bundled look, and once per theme through that theme's own
           // `ink` and `glow`. So registering a theme still changes nothing

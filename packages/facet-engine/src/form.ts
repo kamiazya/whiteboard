@@ -81,8 +81,24 @@ export interface FacetPickerOption {
   readonly glyph?: FacetGlyph
 }
 
+/**
+ * How a row is DRAWN. `chips` is a picture alone in an inline pill, for a
+ * palette where the count makes labels impossible and the glyph is the whole
+ * affordance; `cards` is the picture over its word in a bordered cell, for a
+ * short vocabulary whose names carry meaning a picture cannot fully take on.
+ *
+ * Declared rather than derived from the option COUNT, because the count does
+ * not know it: six silhouettes would fit as cards and are still better as
+ * chips, since "Hexagon" tells a reader nothing the hexagon has not said.
+ * The vessel owns what each layout LOOKS like; the plugin says which
+ * question it is asking. Same bargain as everything else here.
+ */
+export type FacetOptionLayout = 'chips' | 'cards'
+
 export interface FacetPickerSpec {
   readonly options: readonly FacetPickerOption[]
+  /** Defaults to `chips`. */
+  readonly layout?: FacetOptionLayout
 }
 
 /**
@@ -131,7 +147,11 @@ export type FacetFormControl =
   | { readonly kind: 'number' }
   | { readonly kind: 'toggle' }
   | { readonly kind: 'choice'; readonly options: readonly string[] }
-  | { readonly kind: 'segmented'; readonly options: readonly FacetSegmentedOption[] }
+  | {
+      readonly kind: 'segmented'
+      readonly options: readonly FacetSegmentedOption[]
+      readonly layout: FacetOptionLayout
+    }
 
 export interface FacetFormField {
   readonly name: string
@@ -155,6 +175,8 @@ export interface FacetFieldSpec {
   readonly quick?: boolean
   /** Required by `segmented`; ignored by the other widgets. */
   readonly options?: readonly FacetSegmentedOption[]
+  /** `segmented` only. Defaults to `chips`. */
+  readonly layout?: FacetOptionLayout
 }
 
 /**
@@ -175,7 +197,11 @@ export interface FacetFormVariant {
 }
 
 export type FacetForm =
-  | { readonly kind: 'picker'; readonly options: readonly FacetPickerOption[] }
+  | {
+      readonly kind: 'picker'
+      readonly options: readonly FacetPickerOption[]
+      readonly layout: FacetOptionLayout
+    }
   | { readonly kind: 'fields'; readonly fields: readonly FacetFormField[] }
   | {
       readonly kind: 'variants'
@@ -217,7 +243,7 @@ function controlOf(schema: z.ZodTypeAny): FacetFormControl | undefined {
 function specControl(spec: FacetFieldSpec | undefined): FacetFormControl | undefined {
   if (spec === undefined) return undefined
   if (spec.widget === 'segmented') {
-    return { kind: 'segmented', options: spec.options ?? [] }
+    return { kind: 'segmented', options: spec.options ?? [], layout: spec.layout ?? 'chips' }
   }
   if (spec.widget === 'choice') return undefined
   return { kind: spec.widget }
@@ -275,7 +301,11 @@ export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec):
   // plugin means: the derivation describes the STORAGE, and the picker
   // describes the choice a person is actually making.
   if (editor?.picker !== undefined) {
-    return { kind: 'picker', options: editor.picker.options }
+    return {
+      kind: 'picker',
+      options: editor.picker.options,
+      layout: editor.picker.layout ?? 'chips',
+    }
   }
   if (schema instanceof z.ZodObject) {
     const fields = fieldsOf(schema.shape as Record<string, z.ZodTypeAny>, undefined, editor)

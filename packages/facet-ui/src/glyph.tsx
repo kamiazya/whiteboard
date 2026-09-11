@@ -128,19 +128,19 @@ function themeGlyph(
       viewBox={asset.viewBox ?? '0 0 24 24'}
       fill="none"
       stroke="currentColor"
-      strokeWidth="7"
+      strokeWidth="9"
       strokeLinecap="round"
       strokeLinejoin="round"
       aria-hidden="true"
     >
       {theme.glow !== undefined && (
-        <g strokeWidth="16" strokeOpacity={0.3}>
+        <g strokeWidth="22" strokeOpacity={0.3}>
           {geometryOf(asset, 'glow')}
         </g>
       )}
       {geometryOf(asset, 'ink')}
       {theme.ink === 'sketch' && (
-        <g transform="translate(1.5 -1.5)" strokeOpacity={0.55}>
+        <g transform="translate(6 -5)" strokeOpacity={0.55}>
           {geometryOf(asset, 'second-pass')}
         </g>
       )}

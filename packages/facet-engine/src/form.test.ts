@@ -184,6 +184,9 @@ describe('an editor spec refines the derived form', () => {
       quick: true,
       control: {
         kind: 'segmented',
+        // Resolved, not optional: a vessel reading a control has to know
+        // which layout to draw without re-deciding the default itself.
+        layout: 'chips',
         options: [
           { value: 'ellipse', label: 'Ellipse', glyph: { kind: 'shape', name: 'circle' } },
           { value: 'diamond', label: 'Diamond', glyph: { kind: 'shape', name: 'diamond' } },
@@ -194,6 +197,46 @@ describe('an editor spec refines the derived form', () => {
     // A field the spec says nothing about keeps its derived control.
     expect(second?.control).toEqual({ kind: 'text' })
     expect(second?.quick).toBe(false)
+  })
+
+  /**
+   * `layout` is RESOLVED into the form, never left optional on it. A vessel
+   * reading a control would otherwise have to re-decide the default, and two
+   * vessels deciding it separately is how one surface came to draw a row
+   * differently from the next — the drift this whole layer exists to close.
+   */
+  it('resolves a row layout onto the control, defaulting to chips where none is declared', () => {
+    const layoutOf = (declared?: 'chips' | 'cards') => {
+      const form = deriveFacetForm(schema, {
+        fields: {
+          kind: {
+            widget: 'segmented',
+            options: [{ value: 'ellipse', label: 'Ellipse' }],
+            ...(declared === undefined ? {} : { layout: declared }),
+          },
+        },
+      })
+      if (form.kind !== 'fields') throw new Error('unreachable')
+      const control = form.fields[0]?.control
+      return control?.kind === 'segmented' ? control.layout : undefined
+    }
+    expect(layoutOf()).toBe('chips')
+    expect(layoutOf('cards')).toBe('cards')
+    expect(layoutOf('chips')).toBe('chips')
+  })
+
+  it('a picker resolves its own layout the same way', () => {
+    const pickerLayout = (declared?: 'chips' | 'cards') => {
+      const form = deriveFacetForm(schema, {
+        picker: {
+          options: [{ payload: null, label: 'None' }],
+          ...(declared === undefined ? {} : { layout: declared }),
+        },
+      })
+      return form.kind === 'picker' ? form.layout : undefined
+    }
+    expect(pickerLayout()).toBe('chips')
+    expect(pickerLayout('cards')).toBe('cards')
   })
 
   it('a spec may add an ABSENCE option, since some defaults are unrepresentable', () => {

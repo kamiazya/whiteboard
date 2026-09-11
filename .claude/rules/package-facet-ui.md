@@ -18,6 +18,15 @@ paths:
   drew it again in a file that could not see the last. Real radios, visually
   hidden — the arrow-key behaviour comes free with the element, and the
   `aria-pressed` button rows never had it.
+
+  Two LAYOUTS, declared by the plugin per row and drawn here: `cards` is a
+  picture over its word in a bordered cell (a short vocabulary whose names
+  carry meaning), `chips` is the picture alone with the word as its
+  accessible name and `title` (a palette where the count makes labels
+  impossible). Two ARIA SHELLS is a separate axis — `group` for a panel,
+  `menu` for a menu row, which ignores the layout because a grid of cells
+  inside a menu is not a menu. Neither axis is a style choice: one says what
+  question the row asks, the other says what container it stands in.
 - **`createFacetWriter`** — the one path a facet editor's value takes to
   storage. It goes through `validateFacetWrite`, so a plugin's own component
   cannot store what `wb_facet_set` would refuse. This is the guarantee half
