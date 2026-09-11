@@ -47,23 +47,34 @@ export function applyStencil(
 
   const previous = node['x-whiteboard']?.facets ?? {}
   const previousId = readStencilId(previous, registry)
-  const wornBefore =
-    previousId === undefined
-      ? new Set<string>()
-      : new Set(Object.keys(registry.stencilAsset(previousId)?.facets ?? {}))
+  const worn = previousId === undefined ? undefined : registry.stencilAsset(previousId)
+  const wornKeys = new Set(Object.keys(worn?.facets ?? {}))
 
   const kept = Object.fromEntries(
-    Object.entries(previous).filter(([key]) => key !== VISUAL_STENCIL_KEY && !wornBefore.has(key)),
+    Object.entries(previous).filter(([key]) => key !== VISUAL_STENCIL_KEY && !wornKeys.has(key)),
   )
 
-  return {
+  const next: Record<string, unknown> = {
     ...node,
-    ...(stencil.color === undefined ? {} : { color: stencil.color }),
     'x-whiteboard': {
       ...node['x-whiteboard'],
       facets: { ...kept, ...stencil.facets, [VISUAL_STENCIL_KEY]: { stencil: id } },
     },
-  } as Node
+  }
+
+  // Colour follows the same rule as the facets: the new stencil's if it has
+  // one, and otherwise the previous stencil's is CLEARED rather than left
+  // behind. Without the clearing the two halves disagree — re-dressing drops
+  // the old silhouette and badge while keeping the old colour, so the box
+  // wears a mixture belonging to neither construct, which is the `excess`
+  // shape ADR-0033 names. It cannot arise on the bundled set, where every
+  // stencil sets a colour, and would arise the first time anybody authors
+  // one that does not. A colour the node had before ANY stencil is left
+  // alone: nothing here knows it came from a vocabulary.
+  if (stencil.color !== undefined) next.color = stencil.color
+  else if (worn?.color !== undefined) delete next.color
+
+  return next as Node
 }
 
 function readStencilId(

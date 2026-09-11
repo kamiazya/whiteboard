@@ -571,7 +571,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 growToHold(index, op.op, group, [parsed.data])
               }
             }
-            nodes = [...nodes, dressWithStencil(index, op.op, parsed.data, op.stencil)]
+            nodes = [...nodes, dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color)]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
             if (!positioned && group === undefined && draft.type === 'group') {
@@ -595,7 +595,9 @@ export function createCanvasEditTool(deps: ServerDeps) {
             if (op.stencil !== undefined) {
               const stencil = op.stencil
               nodes = nodes.map((node) =>
-                ids.includes(node.id) ? dressWithStencil(index, op.op, node, stencil) : node,
+                ids.includes(node.id)
+                  ? dressWithStencil(index, op.op, node, stencil, op.patch.color)
+                  : node,
               )
             }
             return

@@ -329,6 +329,36 @@ export const visualPlugin = definePlugin({
       targets: ['node'],
       schema: visualStencilFacetSchema,
       assetRefs: { stencil: 'stencils' },
+      // A PICKER, declared, rather than the text box the derived form would
+      // give a regex-validated string. Caught by `facet-panel.browser.test`
+      // the first time this facet shipped without it: the panel offered a
+      // free-entry field and a Save button for a value that must name a
+      // registered asset, so the one id a user could type by hand was a
+      // wrong one. `visual.theme` had the same shape and the same answer.
+      //
+      // The OPTIONS are written out rather than read from the registry,
+      // which is the same ponytail the tool-surface enum carries: a
+      // deployment registering its own stencils gets a picker that does not
+      // list them, though the schema still accepts them and `applyStencil`
+      // still applies them. A registry-fed picker is the upgrade, and it is
+      // the same change ADR-0034's document-backed libraries need.
+      editor: {
+        fields: {
+          stencil: {
+            widget: 'segmented',
+            label: 'Stencil',
+            options: [
+              { value: null, label: 'None' },
+              { value: 'visual.datastore', label: 'Datastore' },
+              { value: 'visual.service', label: 'Service' },
+              { value: 'visual.gateway', label: 'Gateway' },
+              { value: 'visual.queue', label: 'Queue' },
+              { value: 'visual.actor', label: 'Actor' },
+              { value: 'visual.external', label: 'External' },
+            ],
+          },
+        },
+      },
     }),
   ],
   assets: { themes: VISUAL_THEMES, stencils: VISUAL_STENCILS },

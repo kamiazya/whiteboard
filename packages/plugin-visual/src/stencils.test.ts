@@ -6,11 +6,13 @@
 // channel ships a vocabulary that reads as one thing. And applying a stencil
 // has to leave a RECORD, because that record is what makes the drawing's
 // distinctions legible to the facet axis rather than merely visible.
+import { createFacetRegistry, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import {
   applyStencil,
   bundledFacetRegistry,
+  bundledPlugins,
   resolveNodeShape,
   resolveNodeStencil,
   resolveNodeSymbol,
@@ -136,6 +138,55 @@ describe('applying a stencil', () => {
     expect(resolveNodeSymbol(twice)).toEqual(
       bundledFacetRegistry.stencilAsset('visual.queue')?.facets['visual.symbol/v0'],
     )
+  })
+
+  it('clears a previous stencil’s colour when the new one sets none', () => {
+    // Found by re-reading the diff, not by a failing test: the facets of a
+    // previous stencil were dropped and its COLOUR was not, so a re-dressed
+    // box wore a mixture belonging to neither construct — ADR-0033's
+    // `excess` shape. Unreachable on the bundled set (every member sets a
+    // colour), so it is exercised through an extra plugin shipping stencils
+    // BESIDE the bundled ones.
+    //
+    // Note what that registry has to include. The record always goes under
+    // `visual.stencil/v0` whoever authored the stencil, so a registry
+    // without the `visual` plugin cannot read one back at all — the first
+    // version of this test built a registry from its own plugin alone, and
+    // the clearing looked broken when the test was.
+    const registry = createFacetRegistry([
+      ...bundledPlugins,
+      definePlugin({
+        id: 'extra',
+        displayName: 'Extra',
+        facets: [],
+        assets: {
+          stencils: {
+            loud: { displayName: 'Loud', color: '1' },
+            quiet: { displayName: 'Quiet' },
+          },
+        },
+      }),
+    ])
+    const loud = applyStencil(box(), 'extra.loud', registry) as Node
+    expect(loud.color).toBe('1')
+    const quiet = applyStencil(loud, 'extra.quiet', registry) as Node
+    expect(quiet.color).toBeUndefined()
+    expect(resolveNodeStencil(quiet, registry)).toBe('extra.quiet')
+  })
+
+  it('leaves a colour the box had before any stencil alone', () => {
+    // The other side of that rule: nothing here can tell a hand-picked
+    // colour from a vocabulary's, so an undressed box keeps what it had.
+    const registry = createFacetRegistry([
+      ...bundledPlugins,
+      definePlugin({
+        id: 'extra2',
+        displayName: 'Extra2',
+        facets: [],
+        assets: { stencils: { quiet: { displayName: 'Quiet' } } },
+      }),
+    ])
+    expect((applyStencil(box({ color: '3' }), 'extra2.quiet', registry) as Node).color).toBe('3')
   })
 
   it('refuses to write a stencil the registry would refuse, so the record cannot go stale at birth', () => {

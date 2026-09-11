@@ -24,6 +24,18 @@ export function dressWithStencil(
   opName: string,
   node: SpatialNode,
   stencil: string | undefined,
+  /**
+   * The colour the caller named in THIS op, if any — `node.color` on a
+   * `node.add` draft, `patch.color` on a `node.patch`.
+   *
+   * Taken as a parameter rather than read off `node`, which is the bug this
+   * signature exists to prevent: on a patch the node already HAS a colour,
+   * from an earlier stencil or from an earlier edit, and reading it there
+   * made every re-dress keep the old colour while taking the new
+   * silhouette. The rule is "what the caller said in this op wins", not
+   * "whatever the box happens to be".
+   */
+  requestedColor: string | undefined,
 ): SpatialNode {
   if (stencil === undefined) return node
   const applied = applyStencil(node, stencil)
@@ -36,7 +48,5 @@ export function dressWithStencil(
         .join(', ')}`,
     )
   }
-  // The node's own colour is the more specific statement, so it survives the
-  // stencil that would otherwise have set it.
-  return node.color === undefined ? applied : { ...applied, color: node.color }
+  return requestedColor === undefined ? applied : { ...applied, color: requestedColor }
 }

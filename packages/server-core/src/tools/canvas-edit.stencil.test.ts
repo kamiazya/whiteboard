@@ -117,6 +117,27 @@ describe('dressing a box with a stencil', () => {
     ).rejects.toThrow(/visual\.datastore/)
   })
 
+  test('re-dressing a box takes the NEW stencil\u2019s colour, not the one it already had', async () => {
+    // Found by re-reading the diff. `dressWithStencil` decided "the caller
+    // was explicit" by looking at `node.color` — which on a patch is always
+    // set, from an earlier stencil or an earlier edit. So every re-dress
+    // took the new silhouette and badge and kept the OLD colour: a box
+    // belonging to neither construct, which is ADR-0033's `excess` shape.
+    // The four tests written before this one all dressed colourless boxes.
+    const { canvas } = await run([
+      {
+        op: 'node.add',
+        node: { id: 'a', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'A' },
+      },
+      { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.datastore' },
+      { op: 'node.patch', id: 'a', patch: {}, stencil: 'visual.queue' },
+    ])
+    const node = canvas.nodes.find((n) => n.id === 'a')
+    expect(node?.color).toBe('6')
+    expect(resolveNodeShape(node as never)).toBe('parallelogram')
+    expect(resolveNodeStencil(node as never)).toBe('visual.queue')
+  })
+
   test('an explicit colour beside a stencil wins, so a caller can still say something else', async () => {
     const { canvas } = await run([
       {
