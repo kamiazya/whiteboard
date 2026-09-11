@@ -2,10 +2,18 @@
 // facet write visible to a human, and this makes the human's registered
 // facets discoverable to an agent — which until now had to guess a key.
 import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
-import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
+import { writeDocumentKind, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
+import { bundledPlugins, VISUAL_STENCILS_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
+import {
+  FakeDocumentStore,
+  registerDocumentInWorkspace,
+  seedDoc,
+} from '../test-utils/fake-document-store.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createFacetListTool, facetListOutputSchema } from './facet-list.js'
+import { STENCIL_LIBRARY_PATH } from './stencil-library.js'
 
 const planning = definePlugin({
   id: 'planning',
@@ -203,5 +211,144 @@ describe('wb_facet_list: the registered ASSETS', () => {
     // The output schema has to accept it, or the tool violates its own
     // contract exactly when a deployment ships no vocabulary.
     expect(facetListOutputSchema.safeParse(result).success).toBe(true)
+  })
+})
+
+describe('wb_facet_list: a WORKSPACE’s own vocabulary', () => {
+  // The half `wb_facet_list` could not answer until now (足場4b). A stencil
+  // library is CONTENT — a document in the workspace — so the deployment's
+  // registry cannot see it, and a model had no way to learn `workspace.*`
+  // ids except by reading the library document itself. The how-to said so
+  // as a known limit; this closes it.
+  const LIBRARY_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
+  const WORKSPACE_ID = 'ws-1'
+  const OTHER_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+
+  const withLibrary = async (stencils: Record<string, unknown> | undefined) => {
+    const store = new FakeDocumentStore()
+    // A workspace exists because it HOLDS something: the index throws
+    // `WorkspaceNotFoundError` for one it has never seen, which is what the
+    // refusal below rests on.
+    await seedDoc(store, OTHER_ID, (doc) => writeDocumentKind(doc, 'markdown'))
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, OTHER_ID)
+    if (stencils !== undefined) {
+      await seedDoc(store, LIBRARY_ID, (doc) => {
+        writeDocumentKind(doc, 'markdown')
+        writeFacets(doc, { [VISUAL_STENCILS_KEY]: { stencils } } as never)
+      })
+      store.documentIndex.seed({
+        workspaceId: WORKSPACE_ID,
+        documentId: LIBRARY_ID,
+        path: STENCIL_LIBRARY_PATH,
+        kind: 'markdown',
+      })
+    }
+    return makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  }
+
+  const lakehouse = {
+    lakehouse: { displayName: 'Lakehouse', color: '3' },
+    ledger: { displayName: 'Ledger', color: '6' },
+  }
+
+  test('answers the library’s stencils beside the deployment’s, under the id a write must use', async () => {
+    const deps = await withLibrary(lakehouse)
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    const stencils = result.assets.filter((asset) => asset.kind === 'stencils')
+    // The deployment's six are still there — a library EXTENDS a vocabulary,
+    // it does not replace one.
+    expect(stencils.map((asset) => asset.id)).toEqual([
+      'visual.datastore',
+      'visual.service',
+      'visual.gateway',
+      'visual.queue',
+      'visual.actor',
+      'visual.external',
+      'workspace.lakehouse',
+      'workspace.ledger',
+    ])
+    const found = stencils.find((asset) => asset.id === 'workspace.lakehouse')
+    expect(found?.displayName).toBe('Lakehouse')
+    // `namespace` is what separates the two scopes, and it needs no field of
+    // its own: the id's first segment already says which registry answered.
+    expect(found?.namespace).toBe('workspace')
+  })
+
+  test('a library adds ASSETS and no facets, so the two halves stay separable', async () => {
+    // The synthetic plugin carries stencils only. A library that could add a
+    // FACET would be the runtime schema definition ADR-0013 decision 3
+    // forbids, and this is where that would first become visible.
+    const deps = await withLibrary(lakehouse)
+    const withWorkspace = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    const without = await createFacetListTool(deps).execute({})
+    expect(withWorkspace.facets).toEqual(without.facets)
+  })
+
+  test('reads no library at all when no workspaceId is named', async () => {
+    // The same cost decision `wb_canvas_edit` pins: finding a library is a
+    // listing plus a read, and a caller asking what the DEPLOYMENT has must
+    // not pay for a workspace it never mentioned.
+    const deps = await withLibrary(lakehouse)
+    let listings = 0
+    const listDocuments = deps.documentIndex.listDocuments.bind(deps.documentIndex)
+    deps.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    await createFacetListTool(deps).execute({})
+    expect(listings).toBe(0)
+    await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(listings).toBe(1)
+  })
+
+  test('refuses a workspace that does not exist, rather than answering the deployment’s list', async () => {
+    // C11, and the same rule this file already applies to a typo'd key: an
+    // answer to a workspace nobody has is worse than a refusal, because
+    // "the deployment's six" reads as "this workspace defines none".
+    //
+    // The write tools deliberately degrade here instead — they are about to
+    // refuse the same id more specifically — but `workspaceId` is the only
+    // thing this caller named, so there is no better refusal to make room
+    // for.
+    const deps = await withLibrary(lakehouse)
+    await expect(
+      createFacetListTool(deps).execute({ workspaceId: 'ws-nobody-made' }),
+    ).rejects.toThrow(/ws-nobody-made/)
+  })
+
+  test('a workspace with no library answers the deployment’s vocabulary, not an error', async () => {
+    const deps = await withLibrary(undefined)
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    const stencils = result.assets.filter((asset) => asset.kind === 'stencils')
+    expect(stencils.map((asset) => asset.id)).toEqual([
+      'visual.datastore',
+      'visual.service',
+      'visual.gateway',
+      'visual.queue',
+      'visual.actor',
+      'visual.external',
+    ])
+  })
+
+  test('a malformed library reads as no library, so one bad document does not break discovery', async () => {
+    // The read path degrades everywhere else for this reason, and discovery
+    // is the surface where it matters most: a library nobody can parse must
+    // not make the deployment's own vocabulary unlistable.
+    const deps = await withLibrary({ 'Not A Name': { displayName: 'x' } })
+    const result = await createFacetListTool(deps).execute({ workspaceId: WORKSPACE_ID })
+    expect(result.assets.some((asset) => asset.namespace === 'workspace')).toBe(false)
+    expect(result.assets.length).toBeGreaterThan(0)
+  })
+
+  test('the filters still narrow what a workspace added, and the output still validates', async () => {
+    const deps = await withLibrary(lakehouse)
+    const result = await createFacetListTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      assetKind: 'stencils',
+    })
+    expect(result.assets.every((asset) => asset.kind === 'stencils')).toBe(true)
+    expect(result.assets.some((asset) => asset.id === 'workspace.lakehouse')).toBe(true)
+    const overTheWire = JSON.parse(JSON.stringify(result))
+    expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
   })
 })

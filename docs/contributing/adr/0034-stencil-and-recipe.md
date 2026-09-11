@@ -428,6 +428,33 @@ optional `workspaceId` and the answer widens. That is a tool-surface change
 and goes through ADR-0031's scoreboards like any other; it is named here so
 the increment that does it expects the cost instead of discovering it.
 
+**Landed 2026-09-11, and the cost was what this paragraph expected: +274
+model-visible bytes on `wb_facet_list` (653 -> 927), +274 on the whole table
+(36,516 -> 36,790, +0.75%).** C1 goes UP, which is the only direction it can
+go for an addition; what it buys is C5 — an errand step with no tool behind
+it. The rung-2 errand *wear a stencil this workspace defines* measures the
+new route at **2 calls**; the route it replaces cost 3 and, more to the
+point, was reachable only by an agent that already knew a library lives at
+the path `stencils` under the key `visual.stencils/v0`, neither of which is
+written anywhere a model reads. The 274 bytes are paid ONCE in the table and
+never per stencil — the ids stay out of every schema, which is the whole
+reason the assets half of that tool exists.
+
+Two things the increment decided that this paragraph had not:
+
+- **An unknown workspace is REFUSED here, where the write tools degrade.**
+  `wb_canvas_edit` and `wb_facet_set` answer as though the workspace had no
+  library, because each is about to refuse the same id more specifically;
+  `wb_facet_list` has no better refusal to make room for, and answering the
+  deployment's six would read as "this workspace defines none". The choice
+  is now a parameter every caller states rather than a default (`'deployment'`
+  / `'refuse'`), because it was got wrong once already.
+- **A library's stencils are answered BY NAME.** A deployment's assets keep
+  registration order and that order means something; a library has none that
+  survives, since the record round-trips through the document's CRDT map and
+  came back `ledger` before `lakehouse` for a document authored the other way
+  round. A name sort is the only order a caller can predict.
+
 ### Decided (user, 2026-09-11): a document facet, `visual.stencils/v0`
 
 This section said the authoring format was not decided, and it stayed

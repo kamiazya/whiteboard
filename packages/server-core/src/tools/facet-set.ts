@@ -290,7 +290,7 @@ export function createFacetSetTool(deps: ServerDeps) {
           Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
       )
       const registry = writesAStencilRef
-        ? await workspaceFacetRegistry(deps, input.workspaceId)
+        ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
         : deploymentRegistry
       const requiredTarget: FacetTarget =
         input.nodeId !== undefined

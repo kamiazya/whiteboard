@@ -82,6 +82,25 @@ describe('reading a library off a document', () => {
     expect(readStencilLibrary({ [VISUAL_STENCILS_KEY]: { stencils: 'nope' } })).toEqual({})
   })
 
+  it('answers by name, because a library has no order that survives storage', () => {
+    // A deployment's assets keep REGISTRATION order and that order means
+    // something. A library's does not survive the round trip through the
+    // document's CRDT map — measured, `ledger` came back before `lakehouse`
+    // for a document authored the other way round — so a name sort is the
+    // only order a caller can predict, and it is what makes two calls of
+    // `wb_facet_list` agree.
+    const library = readStencilLibrary({
+      [VISUAL_STENCILS_KEY]: {
+        stencils: {
+          ledger: { displayName: 'Ledger' },
+          bucket: { displayName: 'Bucket' },
+          lakehouse: { displayName: 'Lakehouse' },
+        },
+      },
+    })
+    expect(Object.keys(library)).toEqual(['bucket', 'lakehouse', 'ledger'])
+  })
+
   it('composes into a registry whose ids a drawing can wear', () => {
     const library = readStencilLibrary({
       [VISUAL_STENCILS_KEY]: {

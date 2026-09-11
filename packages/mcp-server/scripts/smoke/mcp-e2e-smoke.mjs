@@ -650,6 +650,32 @@ async function main() {
       },
     },
   })
+  // DISCOVERY, before the write that uses it (足場4b). The id below is
+  // hard-coded on purpose — the smoke's job is that the round trip works —
+  // but a model has no such luxury, so this asserts the one call that tells
+  // it what a workspace defines. It is also the only place the library is
+  // read back out through a REGISTRY rather than through the facet bucket.
+  const vocabulary = await callTool('wb_facet_list', {
+    workspaceId: WORKSPACE_ID,
+    assetKind: 'stencils',
+  })
+  const discovered = vocabulary.assets.find((asset) => asset.id === 'workspace.lakehouse')
+  if (discovered?.displayName !== 'Lakehouse') {
+    throw new Error(
+      `wb_facet_list did not report the workspace's own stencil: ${JSON.stringify(vocabulary.assets)}`,
+    )
+  }
+  // ...and the deployment's own are still beside it: a library EXTENDS a
+  // vocabulary rather than replacing one.
+  if (!vocabulary.assets.some((asset) => asset.id === 'visual.datastore')) {
+    throw new Error(
+      `a library displaced the deployment's stencils: ${JSON.stringify(vocabulary.assets)}`,
+    )
+  }
+  console.log(
+    '[e2e] wb_facet_list(workspaceId) → the WORKSPACE\u2019s own stencils are discoverable',
+  )
+
   const dressedFromLibrary = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
