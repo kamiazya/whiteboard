@@ -146,13 +146,28 @@ export function defineFacet<S extends z.ZodTypeAny>(
 const RESERVED_PLUGIN_IDS: ReadonlySet<string> = new Set(['workspace'])
 
 export function definePlugin(plugin: FacetPlugin): FacetPlugin {
-  if (!SEGMENT_PATTERN.test(plugin.id)) {
-    throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
-  }
   if (RESERVED_PLUGIN_IDS.has(plugin.id)) {
     throw new Error(
       `plugin id "${plugin.id}" is reserved by the engine — a workspace's own stencil library registers under it`,
     )
+  }
+  return validatePluginForEngine(plugin)
+}
+
+/**
+ * Everything `definePlugin` checks EXCEPT the reserved-id rule, so the one
+ * definition the engine makes for itself — a workspace's stencil library,
+ * see `workspace-stencils.ts` — is held to the same bar as a plugin an
+ * author wrote.
+ *
+ * Split out rather than given a bypass flag: a flag would let a caller turn
+ * off whichever check it found inconvenient, and the reservation is the only
+ * rule that is about WHO is defining rather than about what. Exported for
+ * that one caller inside this package; a plugin author wants `definePlugin`.
+ */
+export function validatePluginForEngine(plugin: FacetPlugin): FacetPlugin {
+  if (!SEGMENT_PATTERN.test(plugin.id)) {
+    throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
   }
   if (plugin.displayName.trim() === '') {
     throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)
