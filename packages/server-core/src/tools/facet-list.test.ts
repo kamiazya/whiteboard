@@ -160,12 +160,23 @@ describe('wb_facet_list: the registered ASSETS', () => {
     expect(stencils.find((asset) => asset.id === 'infra.bucket')?.displayName).toBe('Bucket')
   })
 
-  test('reports every asset KIND, since a theme is as undiscoverable as a stencil', async () => {
-    const result = await tool(createFacetRegistry([...bundledPlugins, packed])).execute({})
-    expect([...new Set(result.assets.map((asset) => asset.kind))].sort()).toEqual([
-      'stencils',
-      'themes',
-    ])
+  test('drops no KIND the registry holds, since a theme is as undiscoverable as a stencil', async () => {
+    // Asserted as a PROPERTY over the registry, not against a literal list
+    // of kinds. The first version pinned `['stencils', 'themes']` and went
+    // red the moment main registered an icon set — an exact-set assertion
+    // over a surface whose whole point is that deployments extend it is
+    // brittle by construction, and it failed on the merge ref rather than
+    // on this branch, which is the expensive way to find out.
+    const registry = createFacetRegistry([...bundledPlugins, packed])
+    const result = await tool(registry).execute({})
+    const reported = new Set(result.assets.map((asset) => asset.kind))
+    const held = (['themes', 'icons', 'stencils'] as const).filter(
+      (kind) => registry.assetIds(kind).length > 0,
+    )
+    expect(held.filter((kind) => !reported.has(kind))).toEqual([])
+    // ...and the probe has to find something, or "drops nothing" is a pass
+    // over an empty question.
+    expect(held.length).toBeGreaterThan(1)
   })
 
   test('filters to one kind, so asking for stencils does not pay for icons', async () => {
