@@ -96,3 +96,28 @@ it('answers nothing for an unregistered theme or specimen, rather than throwing'
   ).toBeUndefined()
   expect(glyphIcon({ kind: 'theme', id: 'demo.plain', icon: 'demo.mark' })).toBeUndefined()
 })
+
+/**
+ * An SVG with no `width`/`height` has an intrinsic size of 300x150. These
+ * only stayed inside their 16px box because the box is a flex container and
+ * the default `flex-shrink` pulled them back — a load-bearing accident that
+ * a caller placing a glyph anywhere else would not get. The lucide
+ * components this module also returns carry their own dimensions, so
+ * declaring these makes the two kinds behave alike.
+ *
+ * Percentages, not a fixed size: the ONE place that decides how big a glyph
+ * is stays `option-group.tsx`'s box.
+ */
+it('sizes a registered SVG to its container rather than to the 300x150 default', () => {
+  const sized = (glyph: Parameters<typeof glyphIcon>[0]) => {
+    const { container } = render(<span>{glyphIcon(glyph, registry)}</span>)
+    const svg = container.querySelector('svg')
+    expect(svg).not.toBeNull()
+    return [svg?.getAttribute('width'), svg?.getAttribute('height')]
+  }
+  expect(sized({ kind: 'asset', id: 'demo.mark' })).toEqual(['100%', '100%'])
+  expect(sized({ kind: 'theme', id: 'demo.lit', icon: 'demo.mark' })).toEqual(['100%', '100%'])
+  // The core silhouette this module draws by hand, for the same reason —
+  // lucide's own components already carry dimensions.
+  expect(sized({ kind: 'shape', name: 'parallelogram' })).toEqual(['100%', '100%'])
+})

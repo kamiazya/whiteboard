@@ -17,6 +17,19 @@ import { createElement, type ReactNode } from 'react'
  * shapes in one and words in the other is two vocabularies pretending to be
  * one.
  */
+/**
+ * An SVG with no `width`/`height` has an intrinsic size of 300x150, and it
+ * only sits inside its 16px box here because the box is a flex container and
+ * the default `flex-shrink` pulls it back. That is a load-bearing accident:
+ * a caller that drops the glyph anywhere but a shrinking flex line gets a
+ * 300px drawing. The lucide components this module also returns carry their
+ * own dimensions, so declaring these makes the two kinds behave alike.
+ *
+ * Percentages rather than a fixed size, so the ONE place that decides how
+ * big a glyph is stays `option-group.tsx`'s box.
+ */
+const GLYPH_SVG_SIZE = { width: '100%', height: '100%' } as const
+
 function shapeGlyph(name: FacetGlyphShape): ReactNode {
   switch (name) {
     // 'none' is a real member of the vocabulary — the "no value" option —
@@ -36,6 +49,7 @@ function shapeGlyph(name: FacetGlyphShape): ReactNode {
       // stroke style so a row of these reads as one set.
       return (
         <svg
+          {...GLYPH_SVG_SIZE}
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -80,6 +94,7 @@ function assetGlyph(id: string, registry: FacetRegistry | undefined): ReactNode 
   if (asset === undefined) return undefined
   return (
     <svg
+      {...GLYPH_SVG_SIZE}
       viewBox={asset.viewBox ?? '0 0 24 24'}
       fill="none"
       stroke="currentColor"
@@ -125,6 +140,7 @@ function themeGlyph(
   if (asset === undefined || theme === undefined) return undefined
   return (
     <svg
+      {...GLYPH_SVG_SIZE}
       viewBox={asset.viewBox ?? '0 0 24 24'}
       fill="none"
       stroke="currentColor"

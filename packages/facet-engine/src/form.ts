@@ -352,19 +352,18 @@ export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec):
  * Lives in this module rather than the registry so the dependency stays
  * one-way — the registry may read the form layer, never the reverse.
  */
-export function assertEditorSpecFits(
+export function resolveEditorSpec(
   facetName: string,
   schema: z.ZodTypeAny,
   editor: FacetEditorSpec,
-): void {
+): FacetEditorSpec {
   if (editor.picker !== undefined && editor.fields !== undefined) {
     throw new Error(`facet "${facetName}" declares both a picker and fields; it may declare one`)
   }
   if (editor.picker !== undefined) {
-    assertPickerFits(facetName, schema, editor.picker)
-    return
+    return { ...editor, picker: normalizePicker(facetName, schema, editor.picker) }
   }
-  if (editor.fields === undefined) return
+  if (editor.fields === undefined) return editor
   const form = deriveFacetForm(schema)
   if (form.kind !== 'fields') {
     throw new Error(
@@ -379,40 +378,65 @@ export function assertEditorSpecFits(
       )
     }
   }
+  return editor
 }
 
 /**
  * Every option's payload is parsed by the facet's OWN schema, here, at
- * definition time.
+ * definition time — and the PARSED value is what the option carries from
+ * then on.
  *
- * This is what the declared picker buys over a hand-written component, and
- * it is not a nicety: a component's payload is only ever checked at the
+ * The parse is what a declared picker buys over a hand-written component,
+ * and it is not a nicety: a component's payload is only ever checked at the
  * write boundary, so a typo in one of twelve options ships, validates as a
  * refused write, and reads to the person as a choice that silently does
  * nothing. Declaring it means the plugin cannot start.
+ *
+ * KEEPING the parsed value closes the same gap from the other side. A
+ * schema may fill a default, drop an unknown key, or transform — so the
+ * value a write STORES can differ from the literal a plugin declared. The
+ * UI writes the declared literal, but `wb_facet_set` and an imported
+ * document go through `validateFacetWrite`, which stores the parsed value;
+ * compared against an unparsed declaration, such a payload matches no
+ * option and the picker draws with nothing selected. Normalising here means
+ * declaration and storage cannot disagree, whichever path did the writing.
+ *
+ * The duplicate check then runs on the normalised value too, which is
+ * strictly stronger: two options that differ only in a field the schema
+ * fills in are one option twice, and the second could never read as
+ * selected.
  */
-function assertPickerFits(facetName: string, schema: z.ZodTypeAny, picker: FacetPickerSpec): void {
+function normalizePicker(
+  facetName: string,
+  schema: z.ZodTypeAny,
+  picker: FacetPickerSpec,
+): FacetPickerSpec {
   if (picker.options.length === 0) {
     throw new Error(`facet "${facetName}" declares a picker with no options`)
   }
   const seen = new Set<string>()
-  for (const option of picker.options) {
+  const options = picker.options.map((option) => {
+    let payload = option.payload
+    if (payload !== null) {
+      const result = schema.safeParse(payload)
+      if (!result.success) {
+        throw new Error(
+          `facet "${facetName}" picker option "${option.label}" writes a payload its own schema refuses`,
+        )
+      }
+      payload = result.data
+    }
     // Two options writing the same thing are two controls a person cannot
     // tell apart, and whichever is drawn second can never read as selected.
     // Keyed by `facetPayloadKey` so key ORDER cannot hide a duplicate.
-    const fingerprint = facetPayloadKey(option.payload)
+    const fingerprint = facetPayloadKey(payload)
     if (seen.has(fingerprint)) {
       throw new Error(
         `facet "${facetName}" picker option "${option.label}" writes the same payload as an earlier one`,
       )
     }
     seen.add(fingerprint)
-    if (option.payload === null) continue
-    const result = schema.safeParse(option.payload)
-    if (!result.success) {
-      throw new Error(
-        `facet "${facetName}" picker option "${option.label}" writes a payload its own schema refuses`,
-      )
-    }
-  }
+    return { ...option, payload }
+  })
+  return { ...picker, options }
 }
