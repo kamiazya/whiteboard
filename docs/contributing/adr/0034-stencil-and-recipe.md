@@ -220,6 +220,51 @@ reading is also the first population that could make this instrument wrong;
 a non-zero `excess` is to be read as a hypothesis about the drawing AND about
 the column, not as a verdict.
 
+## First reading (2026-09-11): the premise held
+
+The table above says what adoption MUST do. This is what it did, on the
+lane task written for exactly this question — *"draw how a checkout request
+flows … someone glancing at this board should be able to tell those apart
+without reading every label"*, naming no stencil id, no `stencil` field and
+no tool.
+
+Three trials, one model, one task:
+
+| | baseline (ADR-0033) | this reading |
+|---|---|---|
+| `deficit` / `constructs` | 22 / 22 owed | **0 / 6** |
+| `treatments` | 1 | **6** |
+| `distance` | 0 | **2** |
+| drawing debt | — | none, all three trials |
+| `pass^k` | — | 1 (3/3) |
+| `meanCalls` | — | 4.67 |
+
+**What the model actually did, read off the recorded calls rather than
+inferred.** All three trials opened with `wb_facet_list` — twice with
+`assetKind: 'stencils'` — then dressed all seven boxes with stencils and set
+**no colour by hand at all**. The mapping was the obvious one every time
+(shopper→actor, gateway→gateway, the two services→service, Postgres→
+datastore, Events→queue, Stripe→external).
+
+So the discovery path the enum was traded away for is the path a model takes
+unprompted, and the vocabulary is reached for rather than reinvented.
+
+**The board has no frame and one node kind**, so the frame and kind
+partitions are both single-class and dropped: every one of those 6 constructs
+comes from the stencil RECORD. The half of decision 5 that measured as
+"exactly one case the other partitions cannot reach" is carrying this whole
+reading.
+
+### What this does NOT show
+
+- **One task, one model, three trials.** It says the surface CAN be reached,
+  not that it always is.
+- **The prompt asked for at-a-glance distinguishability.** Whether a model
+  reaches for the vocabulary on a drawing task that does NOT ask is a
+  separate question, and this reading cannot answer it.
+- It says nothing about whether the stencil chosen was the RIGHT one — the
+  limit ADR-0033 fixed for its own columns, inherited here.
+
 ## Amendment (2026-09-11): the two SCOPES, and what a workspace library is
 
 Decision 4 said a library is "a DOCUMENT in a workspace" and left a fork

@@ -653,4 +653,73 @@ export const TASKS = [
       }
     },
   },
+  {
+    // The question ADR-0034 exists to answer, and the only thing that can
+    // REFUTE its premise: asked for a drawing whose boxes are of obviously
+    // different kinds, does a model reach for a reusable vocabulary at all?
+    //
+    // Graded on STRUCTURE alone — the boxes and the arrows — deliberately.
+    // Whether it reached for a stencil, hand-set colours, or drew everything
+    // plain is the DIAGNOSTIC, read off the `facets` columns this board
+    // already reports (ADR-0033 made this lane its scoreboard). Grading the
+    // reach would be grading the path, which this file's header forbids and
+    // which would also make the answer unfalsifiable: a model that
+    // distinguishes kinds some other way has not failed.
+    //
+    // The prompt names no stencil id, no `stencil` field and no tool. It
+    // does use the category words a person would use — database, queue,
+    // service, outside system — and that was weighed rather than assumed: a
+    // prompt that avoided them could not state the ask at all, and both the
+    // vocabulary path and the invent-it-per-board path satisfy them equally,
+    // so they bias toward DOING something rather than toward stencils.
+    name: 'draw a flow whose kinds are told apart at a glance',
+    boards: ['boards/checkout'],
+    prompt:
+      'Create a board at boards/checkout and draw how a checkout request flows: a Shopper hits an API gateway; the gateway calls an Orders service and a Payments service; Orders writes to a Postgres database and publishes to an Events queue; Payments calls Stripe, which is outside our system. Someone glancing at this board should be able to tell those apart without reading every label. Apply it directly; I am looking at the board.',
+    verify: async (wb) => {
+      const board = await boardAt(wb, 'boards/checkout')
+      if (board === undefined) return { ok: false, detail: 'no board at boards/checkout' }
+      const wanted = [
+        'Shopper',
+        'API gateway',
+        'Orders',
+        'Payments',
+        'Postgres',
+        'Events',
+        'Stripe',
+      ]
+      // Matched on a distinctive WORD rather than the whole label: a model
+      // that writes "Orders service" or "Postgres database" has drawn the
+      // right box, and failing it for that would measure transcription.
+      const found = wanted.map((word) =>
+        board.nodes.find(
+          (n) => n.type !== 'group' && text(n).toLowerCase().includes(word.toLowerCase()),
+        ),
+      )
+      const missing = wanted.filter((_, i) => found[i] === undefined)
+      if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+      const idOf = (word) => found[wanted.indexOf(word)].id
+      const linked = (a, b) =>
+        board.edges.some(
+          (e) =>
+            (e.fromNode === idOf(a) && e.toNode === idOf(b)) ||
+            (e.fromNode === idOf(b) && e.toNode === idOf(a)),
+        )
+      const flows = [
+        ['Shopper', 'API gateway'],
+        ['API gateway', 'Orders'],
+        ['API gateway', 'Payments'],
+        ['Orders', 'Postgres'],
+        ['Orders', 'Events'],
+        ['Payments', 'Stripe'],
+      ]
+      const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
+      if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
+      const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
+      if (collision !== undefined) {
+        return { ok: false, detail: `${text(collision[0])} overlaps ${text(collision[1])}` }
+      }
+      return { ok: true, detail: `${wanted.length} boxes, ${flows.length} flows, no overlap` }
+    },
+  },
 ]
