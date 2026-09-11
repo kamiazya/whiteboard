@@ -131,7 +131,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a
   // coarse instrument charges the whole step to whoever crosses it.
-  '.claude/rules/vocabulary.md': 16,
+  //
+  // 17 for the **Stencil** and **Recipe** rows (ADR-0034). Two words a design
+  // is about to be built in, fixed here BEFORE the code so the naming is not
+  // settled by whichever file happens to be written first — which is the one
+  // thing this table is for, and what it costs is a bucket.
+  '.claude/rules/vocabulary.md': 17,
 }
 
 /**
@@ -149,12 +154,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * has to say, to sit under a bucket, is the trade this test exists to make
  * visible rather than to force.
  *
+ * 24 since `vocabulary.md` gained the **Stencil** and **Recipe** rows
+ * (ADR-0034), at 96017. The same shape as the crossing before it: two rows of
+ * about 700 characters carried the corpus over a grain the 3500 characters
+ * accumulated since 91762 had already brought it to.
+ *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 23
+const ALWAYS_ON_TOTAL_BUDGET = 24
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by

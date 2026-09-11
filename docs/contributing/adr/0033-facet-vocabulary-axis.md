@@ -1,11 +1,11 @@
 # ADR-0033: A facet-vocabulary axis — whether what a reader can SEE matches what the document DECLARES
 
-**Status:** Proposed — the criteria, the column definitions and the validity
-claim. Sits beside [ADR-0031](0031-tool-surface-criteria.md) §7's drawing
-score and [ADR-0032](0032-composition-axis.md)'s composition axis rather than
-extending either. The score and its scoreboard land next, and any column
-definition the calibration changes is rewritten here, the way ADR-0032's
-three were.
+**Status:** Accepted — the criteria, the column definitions, the validity
+claim, and the score and pinned baseline that land with them. Sits beside
+[ADR-0031](0031-tool-surface-criteria.md) §7's drawing score and
+[ADR-0032](0032-composition-axis.md)'s composition axis rather than extending
+either. The calibration changed one definition and it is rewritten below —
+overload and excess are EXCLUSIVE — the way ADR-0032's three were.
 
 ## Context
 
