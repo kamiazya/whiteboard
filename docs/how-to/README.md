@@ -22,6 +22,8 @@ Guides:
   trace from Settings when a touch or drag misbehaved.
 - **[choose-a-theme](choose-a-theme.md)** — draw a canvas hand-drawn or neon, from the Display
   panel or through `wb_facet_set`, and ask `wb_scene_render` or an export for that look.
+- **[define-your-own-stencils](define-your-own-stencils.md)** — dress a box by what it IS, and
+  grow the vocabulary with a stencil library the workspace owns.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
   view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
   notice).
