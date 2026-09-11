@@ -679,18 +679,18 @@ export const TASKS = [
     verify: async (wb) => {
       const board = await boardAt(wb, 'boards/checkout')
       if (board === undefined) return { ok: false, detail: 'no board at boards/checkout' }
-      const wanted = [
-        'Shopper',
-        'API gateway',
-        'Orders',
-        'Payments',
-        'Postgres',
-        'Events',
-        'Stripe',
-      ]
+      const wanted = ['Shopper', 'gateway', 'Orders', 'Payments', 'Postgres', 'Events', 'Stripe']
       // Matched on a distinctive WORD rather than the whole label: a model
       // that writes "Orders service" or "Postgres database" has drawn the
       // right box, and failing it for that would measure transcription.
+      //
+      // One WORD, and the list said `API gateway` until a run proved why
+      // that matters: a model wrapped the label as "API\nGateway" and the
+      // phrase stopped matching, so the lane reported `missing: API gateway`
+      // for a box that was there. The verifier judges WHICH BOXES EXIST; how
+      // well the label fits its box is the drawing score's column
+      // (`textOverflow`), and a gate that conflates the two reports the
+      // wrong finding for the right board.
       const found = wanted.map((word) =>
         board.nodes.find(
           (n) => n.type !== 'group' && text(n).toLowerCase().includes(word.toLowerCase()),
@@ -698,6 +698,23 @@ export const TASKS = [
       )
       const missing = wanted.filter((_, i) => found[i] === undefined)
       if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+      const flows = [
+        ['Shopper', 'gateway'],
+        ['gateway', 'Orders'],
+        ['gateway', 'Payments'],
+        ['Orders', 'Postgres'],
+        ['Orders', 'Events'],
+        ['Payments', 'Stripe'],
+      ]
+      // A flow naming a box `wanted` does not is the verifier's own defect,
+      // and it reported itself as a crash that killed the whole RUN — every
+      // remaining trial with it — when `API gateway` above became `gateway`
+      // and these did not. Answered as a failed task instead, so the lane
+      // survives to report it.
+      const unnamed = [...new Set(flows.flat())].filter((w) => !wanted.includes(w))
+      if (unnamed.length > 0) {
+        return { ok: false, detail: `verifier names boxes it does not want: ${unnamed.join(', ')}` }
+      }
       const idOf = (word) => found[wanted.indexOf(word)].id
       const linked = (a, b) =>
         board.edges.some(
@@ -705,14 +722,6 @@ export const TASKS = [
             (e.fromNode === idOf(a) && e.toNode === idOf(b)) ||
             (e.fromNode === idOf(b) && e.toNode === idOf(a)),
         )
-      const flows = [
-        ['Shopper', 'API gateway'],
-        ['API gateway', 'Orders'],
-        ['API gateway', 'Payments'],
-        ['Orders', 'Postgres'],
-        ['Orders', 'Events'],
-        ['Payments', 'Stripe'],
-      ]
       const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
       if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
       const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))
