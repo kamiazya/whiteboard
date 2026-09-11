@@ -120,3 +120,70 @@ describe('wb_facet_list', () => {
     expect(result.facets).toEqual([])
   })
 })
+
+describe('wb_facet_list: the registered ASSETS', () => {
+  // The ecosystem half of the same visibility gap (ADR-0034 decision 4). A
+  // stencil, a theme and an icon set are all vocabulary a DEPLOYMENT
+  // registered, and an agent had no way to learn any of them except by
+  // failing a write.
+  //
+  // Reported here rather than enumerated in `wb_canvas_edit`'s schema, and
+  // that is a measurement: an enum of stencil ids costs that tool ~38 bytes
+  // per stencil per op on every turn — +4838 at 120 stencils, 13% of the
+  // whole tool table — for a vocabulary most conversations never touch.
+  // This answer costs nothing until somebody asks for it.
+  const packed = definePlugin({
+    id: 'infra',
+    displayName: 'Infra',
+    facets: [],
+    assets: {
+      stencils: {
+        bucket: { displayName: 'Bucket', color: '2' },
+        lambda: { displayName: 'Lambda', color: '3' },
+      },
+    },
+  })
+
+  test('answers the ids a write must use, namespaced, with what to call them', async () => {
+    const result = await tool(createFacetRegistry([...bundledPlugins, packed])).execute({})
+    const stencils = result.assets.filter((asset) => asset.kind === 'stencils')
+    expect(stencils.map((asset) => asset.id)).toEqual([
+      'visual.datastore',
+      'visual.service',
+      'visual.gateway',
+      'visual.queue',
+      'visual.actor',
+      'visual.external',
+      'infra.bucket',
+      'infra.lambda',
+    ])
+    expect(stencils.find((asset) => asset.id === 'infra.bucket')?.displayName).toBe('Bucket')
+  })
+
+  test('reports every asset KIND, since a theme is as undiscoverable as a stencil', async () => {
+    const result = await tool(createFacetRegistry([...bundledPlugins, packed])).execute({})
+    expect([...new Set(result.assets.map((asset) => asset.kind))].sort()).toEqual([
+      'stencils',
+      'themes',
+    ])
+  })
+
+  test('filters to one kind, so asking for stencils does not pay for icons', async () => {
+    const result = await tool(createFacetRegistry([...bundledPlugins, packed])).execute({
+      assetKind: 'stencils',
+    })
+    expect(result.assets.every((asset) => asset.kind === 'stencils')).toBe(true)
+    // ...and the facets are still there: the filter names what to ADD, not
+    // a mode that replaces the answer.
+    expect(result.facets.length).toBeGreaterThan(0)
+  })
+
+  test('answers a registry with no assets as an empty list, not a missing key', async () => {
+    const bare = definePlugin({ id: 'bare', displayName: 'Bare', facets: [] })
+    const result = await tool(createFacetRegistry([bare])).execute({})
+    expect(result.assets).toEqual([])
+    // The output schema has to accept it, or the tool violates its own
+    // contract exactly when a deployment ships no vocabulary.
+    expect(facetListOutputSchema.safeParse(result).success).toBe(true)
+  })
+})

@@ -2,8 +2,18 @@
 // of the stencil increment. A caller names a KIND and the tool dresses the
 // box — one field where the alternative is a colour, a silhouette and a
 // badge written by hand, per box, in a vocabulary invented per board.
+
+import {
+  createFacetRegistry,
+  definePlugin,
+  type FacetRegistry,
+} from '@kamiazya/whiteboard-facet-engine'
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { resolveNodeShape, resolveNodeStencil } from '@kamiazya/whiteboard-plugin-visual'
+import {
+  resolveNodeShape,
+  resolveNodeStencil,
+  visualPlugin,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import {
   FakeDocumentStore,
@@ -22,14 +32,18 @@ const WORKSPACE_ID = 'ws-1'
  * the facets a stencil writes have to survive the save, and the snapshot in
  * the reply is a summary that would not show it either way.
  */
-const run = async (ops: unknown[]) => {
+const run = async (ops: unknown[], facetRegistry?: FacetRegistry) => {
   const store = new FakeDocumentStore()
   await seedDoc(store, DOCUMENT_ID, (doc) => {
     writeDocumentKind(doc, 'spatial')
     writeSpatialCanvas(doc, { nodes: [], edges: [] })
   })
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-  const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+  const deps = makeTestDeps({
+    documentStore: store,
+    documentIndex: store.documentIndex,
+    ...(facetRegistry === undefined ? {} : { facetRegistry }),
+  })
   // PARSED first, deliberately: `execute` does not validate its own input —
   // the MCP layer does — so a test calling it directly exercises a path no
   // caller has. A redirect written for a key zod refuses at parse reads as
@@ -45,6 +59,63 @@ const run = async (ops: unknown[]) => {
   const { canvas } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
   return { result, canvas }
 }
+
+describe('a deployment\u2019s own stencils', () => {
+  // ADR-0034 decision 4's whole point: a vocabulary this repo did not ship.
+  // `deps.facetRegistry` is the seam a composition root overrides, and
+  // `facet-set`/`facet-list` already read it — the stencil path did not, so
+  // a deployment could register a stencil that `wb_facet_list` reported and
+  // `wb_canvas_edit` refused.
+  const infra = definePlugin({
+    id: 'infra',
+    displayName: 'Infra',
+    facets: [],
+    assets: {
+      stencils: {
+        bucket: {
+          displayName: 'Bucket',
+          color: '2',
+          facets: { 'visual.shape/v0': { kind: 'cylinder' } },
+        },
+      },
+    },
+  })
+
+  test('applies a stencil only the deployment registered', async () => {
+    const registry = createFacetRegistry([visualPlugin, infra])
+    const { canvas } = await run(
+      [
+        {
+          op: 'node.add',
+          node: { id: 'b', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'assets' },
+          stencil: 'infra.bucket',
+        },
+      ],
+      registry,
+    )
+    const node = canvas.nodes.find((n) => n.id === 'b')
+    expect(resolveNodeStencil(node as never, registry)).toBe('infra.bucket')
+    expect(node?.color).toBe('2')
+  })
+
+  test('lists the deployment\u2019s stencils when refusing an unknown one', async () => {
+    // The refusal names what IS registered, so a caller learns the
+    // vocabulary from the error. Reading the bundled list here would teach
+    // a deployment's caller the wrong set.
+    await expect(
+      run(
+        [
+          {
+            op: 'node.add',
+            node: { id: 'x', type: 'text', x: 0, y: 0, width: 200, height: 80, text: 'X' },
+            stencil: 'infra.nope',
+          },
+        ],
+        createFacetRegistry([visualPlugin, infra]),
+      ),
+    ).rejects.toThrow(/infra\.bucket/)
+  })
+})
 
 describe('dressing a box with a stencil', () => {
   test('tells a caller who put stencil inside patch where it belongs', async () => {
