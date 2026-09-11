@@ -1,5 +1,10 @@
 import type { z } from 'zod'
-import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
+import {
+  assertEditorSpecFits,
+  deriveFacetForm,
+  type FacetEditorSpec,
+  type FacetForm,
+} from './form.js'
 import {
   type IconAsset,
   iconAssetSchema,
@@ -214,6 +219,17 @@ export interface FacetRegistry {
   readonly assetIds: (kind: AssetKind) => readonly string[]
   readonly themeAsset: (id: string) => ThemeTokens | undefined
   readonly iconAsset: (id: string) => IconAsset | undefined
+  /**
+   * The editor form for a facet — its `editor` spec refined by what its
+   * schema derives — or `unsupported` for a key nothing registers.
+   *
+   * Here rather than at each vessel because a vessel that derives the form
+   * itself is a vessel that can derive it DIFFERENTLY, which is the drift
+   * a declared editor exists to close: one surface would draw the picker
+   * the plugin declared and the next would draw the schema's own fields,
+   * from the same registration.
+   */
+  readonly facetForm: (key: string) => FacetForm
 }
 
 /**
@@ -248,6 +264,8 @@ function parseKey(key: string): { namespace: string; name: string; version: stri
   if (namespace === undefined || name === undefined || version === undefined) return null
   return { namespace, name, version }
 }
+
+const UNSUPPORTED_FORM: FacetForm = { kind: 'unsupported' }
 
 export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
   const byId = new Map<string, FacetPlugin>()
@@ -304,6 +322,13 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   return {
     plugins,
     assetIds: (kind) => [...tableOf(kind).keys()],
+    facetForm(key) {
+      const parsed = parseKey(key)
+      if (parsed === null) return UNSUPPORTED_FORM
+      const definition = definitionOf(parsed.namespace, parsed.name)
+      if (definition === undefined) return UNSUPPORTED_FORM
+      return deriveFacetForm(definition.schema, definition.editor)
+    },
     themeAsset: (id) => themes.get(id),
     iconAsset: (id) => icons.get(id),
     targetsOf(key) {

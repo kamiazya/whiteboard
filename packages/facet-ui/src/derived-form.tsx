@@ -12,13 +12,8 @@
  * properties, never utility class names — a class named inside a workspace
  * package is never generated and fails silently.
  */
-import {
-  deriveFacetForm,
-  type FacetForm,
-  type FacetFormField,
-  type FacetRegistry,
-  facetPayloadKey,
-} from '@kamiazya/whiteboard-facet-engine'
+import type { FacetForm, FacetFormField, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useState } from 'react'
 import { glyphIcon } from './glyph.js'
 import { FacetOption, FacetOptionGroup } from './option-group.js'
@@ -199,18 +194,11 @@ export function DerivedFacetForm({
   registry,
   onWrite,
 }: DerivedFacetFormProps) {
-  // Derived HERE rather than passed in: a caller computing the form itself
-  // is a caller that can compute it differently, which is the drift this
-  // move exists to close.
-  const definition = registry.plugins
-    .flatMap((plugin) =>
-      plugin.facets.map((facet) => [`${plugin.id}.${facet.name}/${facet.version}`, facet] as const),
-    )
-    .find(([key]) => key === facetKey)?.[1]
-  const form: FacetForm =
-    definition === undefined
-      ? { kind: 'unsupported' }
-      : deriveFacetForm(definition.schema, definition.editor)
+  // Asked of the REGISTRY rather than derived here: a caller computing the
+  // form itself is a caller that can compute it differently, and this is
+  // no longer the only caller — the vessel that draws a facet whose
+  // effective value only it can resolve asks the same question.
+  const form: FacetForm = registry.facetForm(facetKey)
   // The draft follows the STORED payload: a Clear (or any write from
   // elsewhere) must empty the form, or the next Save would restore what
   // the human just removed. `useState`'s initializer runs once, so the

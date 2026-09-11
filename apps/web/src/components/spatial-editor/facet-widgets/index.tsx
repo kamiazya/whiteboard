@@ -8,15 +8,17 @@
  * A facet with no widget registered simply contributes nothing yet — the
  * later editor-spec tier derives a default form instead of failing here.
  */
+import type { FacetSegmentedOption } from '@kamiazya/whiteboard-facet-engine'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import {
   DerivedFacetForm,
   type FacetEditor,
   FacetOption,
   FacetOptionGroup,
+  glyphIcon,
   type PluginUi,
 } from '@kamiazya/whiteboard-facet-ui'
-import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle, LineJumps, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { resolveEffectiveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
@@ -61,60 +63,96 @@ const PLUGIN_UIS: readonly PluginUi[] = [visualUi]
 
 // --- visual.edges/v0 -------------------------------------------------------
 
-const EDGE_ROUTING_CHOICES: readonly { style: EdgeRoutingStyle; label: string }[] = [
-  { style: 'straight', label: 'Straight' },
-  { style: 'orthogonal', label: 'Orthogonal' },
-  { style: 'curved', label: 'Curved' },
-]
+/**
+ * The one canvas row this vessel still draws itself, and the reason it does:
+ * what the row must show is the EFFECTIVE value — the facet, else the
+ * theme's default, else the built-in — which is a resolution only a surface
+ * holding the canvas AND the registry can make. Under neon, nothing stored
+ * means Orthogonal is pressed, not Straight.
+ *
+ * `DerivedFacetForm` cannot answer that. Its `stored` IS the payload, so
+ * seeding it with a resolved value would make every control claim something
+ * is written that is not, and its whole-draft write would then record both
+ * axes on a pick that touched one. The commands here canonicalise instead:
+ * picking the value the theme already has stores nothing, which is what
+ * lets the row go back to following the theme.
+ *
+ * What it does NOT draw itself is the row's VOCABULARY. Labels, order and
+ * glyphs come from the facet's own declared editor spec, read through the
+ * registry — the same derivation every other row is drawn from, so this
+ * surface names no routing style and cannot drift from the plugin.
+ */
+const EDGES_KEY = 'visual.edges/v0'
 
-const LINE_JUMP_CHOICES = [
-  { lineJumps: 'none', label: 'Off' },
-  { lineJumps: 'arc', label: 'On' },
-] as const
+/** The declared segments for one field of the edges facet, or none. */
+function edgeSegments(
+  registry: FacetRegistry,
+  field: string,
+): { label: string; options: readonly FacetSegmentedOption[] } | undefined {
+  const form = registry.facetForm(EDGES_KEY)
+  if (form.kind !== 'fields') return undefined
+  const found = form.fields.find((candidate) => candidate.name === field)
+  if (found === undefined || found.control.kind !== 'segmented') return undefined
+  return { label: found.label, options: found.control.options }
+}
+
+function EdgeSegmentRow({
+  registry,
+  field,
+  current,
+  onPick,
+}: {
+  readonly registry: FacetRegistry
+  readonly field: string
+  /** The EFFECTIVE value, so the pressed segment matches what is drawn. */
+  readonly current: string | undefined
+  readonly onPick: (value: string) => void
+}) {
+  const row = edgeSegments(registry, field)
+  if (row === undefined) return null
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{row.label}</span>
+      <FacetOptionGroup label={row.label}>
+        {row.options.map((option) => {
+          // `value: null` would mean "clear the facet" — neither edges field
+          // declares one, because absence here is reached by picking the
+          // theme's own value and letting the command canonicalise.
+          if (option.value === null) return null
+          const glyph = glyphIcon(option.glyph, registry)
+          const value = option.value
+          return (
+            <FacetOption
+              key={value}
+              name={`canvas-edges-${field}`}
+              label={option.label}
+              selected={current === value}
+              onSelect={() => onPick(value)}
+              {...(glyph === undefined ? {} : { glyph })}
+            />
+          )
+        })}
+      </FacetOptionGroup>
+    </div>
+  )
+}
 
 const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run, facetRegistry }) => {
-  // The EFFECTIVE style — the facet, else the theme's default, else the
-  // built-in — the same resolution the renderer applies, so the pressed
-  // segment always matches what the canvas draws. Under neon, nothing stored
-  // means Orthogonal is pressed, not Straight.
   const current = resolveEffectiveCanvasEdgeStyle(canvas, facetRegistry)
-  const currentRouting = current.style
-  const currentJumps = current.lineJumps
-  // Both rows are pick-one-of-N, so both go through `facet-ui`'s option
-  // group like every other selection in the app. They were hand-written
-  // `aria-pressed` buttons — which a screen reader announces as "pressed"
-  // rather than "1 of 3", and which offer no arrow-key movement between
-  // the alternatives, because a button never promised any.
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">Edge routing</span>
-        <FacetOptionGroup label="Edge routing">
-          {EDGE_ROUTING_CHOICES.map(({ style, label }) => (
-            <FacetOption
-              key={style}
-              name="canvas-edge-routing"
-              label={label}
-              selected={currentRouting === style}
-              onSelect={() => run({ kind: 'set-edge-routing', style })}
-            />
-          ))}
-        </FacetOptionGroup>
-      </div>
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">Line jumps</span>
-        <FacetOptionGroup label="Line jumps">
-          {LINE_JUMP_CHOICES.map(({ lineJumps, label }) => (
-            <FacetOption
-              key={lineJumps}
-              name="canvas-line-jumps"
-              label={label}
-              selected={currentJumps === lineJumps}
-              onSelect={() => run({ kind: 'set-line-jumps', lineJumps })}
-            />
-          ))}
-        </FacetOptionGroup>
-      </div>
+      <EdgeSegmentRow
+        registry={facetRegistry}
+        field="routing"
+        current={current.style}
+        onPick={(value) => run({ kind: 'set-edge-routing', style: value as EdgeRoutingStyle })}
+      />
+      <EdgeSegmentRow
+        registry={facetRegistry}
+        field="lineJumps"
+        current={current.lineJumps}
+        onPick={(value) => run({ kind: 'set-line-jumps', lineJumps: value as LineJumps })}
+      />
     </div>
   )
 }

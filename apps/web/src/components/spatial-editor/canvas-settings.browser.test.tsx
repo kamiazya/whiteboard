@@ -256,8 +256,8 @@ it('lets a person give the document its own mark, and take it back', async () =>
  * derived a segmented control with no glyphs — so its radios were VISIBLE
  * beside a word, the only round radios in the panel — `visual.shape`
  * derived the same control WITH glyphs, which drew a bordered pill, and
- * Edge routing / Line jumps / Draw as were `aria-pressed` buttons written
- * by hand in two apps/web files. One job, four looks, all in one panel.
+ * Edge routing / Line jumps were `aria-pressed` buttons written by hand in
+ * this vessel. One job, four looks, all in one panel.
  *
  * The measurement is structural rather than a class-name check: what went
  * wrong was three different ELEMENT shapes, and a class assertion would
@@ -280,9 +280,7 @@ it('draws every row through the one selection control', async () => {
 
   // Every row, facet-contributed or hand-written by this vessel. The SET,
   // not the order — which row comes first is the contribution point's
-  // business and has its own test. (`Draw as` needs a host that holds the
-  // session override; this fixture passes none, so it is absent here and
-  // covered by the page-level test.)
+  // business and has its own test.
   const groups = [...panel.querySelectorAll('[role="radiogroup"]')]
   expect(groups.map((g) => g.getAttribute('aria-label')).sort()).toEqual([
     'Edge routing',
@@ -305,6 +303,47 @@ it('draws every row through the one selection control', async () => {
       // that made Theme look unlike its neighbours.
       expect(Math.round((input as HTMLElement).getBoundingClientRect().width)).toBeLessThan(2)
     }
+  }
+})
+
+/**
+ * Every option in the panel is a PICTURE, not a word.
+ *
+ * The one control shape landed first and the panel still read as a list of
+ * sentences: five rows, four of them entirely words, twelve of twenty-four
+ * options spelled out — `Straight` / `Orthogonal` / `Curved`, `Off` / `On`,
+ * `Default` / `Sketch` / `Neon`. A person scanning it reads rather than
+ * recognises, and the widest row set the panel's width.
+ *
+ * So the assertion is on what a person SEES: a glyph, and never the option's
+ * WORD. The word survives as the accessible name and the `title`, which is
+ * where it belongs — losing it would trade one exclusion for another.
+ *
+ * Not "no text at all": an emoji option's picture IS text (`Emoji ✅` draws
+ * `✅`), and demanding an empty node would have banned the one glyph arm
+ * that needs no drawing.
+ *
+ * `Line jumps` is the one row whose two options are on/off rather than a
+ * vocabulary, and it is included deliberately: a row that stays words
+ * because it "only has two" is how the panel got mixed in the first place.
+ */
+it('draws every option as a glyph, with the word only as its accessible name', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  await openPanel(container)
+  const panel = menu() as HTMLElement
+
+  const options = [...panel.querySelectorAll('[role="radiogroup"] label')]
+  // A count, so a selector that stops matching cannot report itself as a
+  // panel with nothing left to check.
+  expect(options.length).toBeGreaterThanOrEqual(10)
+  for (const option of options) {
+    const name = option.querySelector('input')?.getAttribute('aria-label') ?? '?'
+    expect(option.querySelector('[aria-hidden="true"]'), `${name} draws no glyph`).not.toBeNull()
+    // The clipped radio contributes no text, so what is left is what shows.
+    expect(option.textContent?.trim(), `${name} still shows its word`).not.toBe(name)
+    // Not silent to a reader, and hoverable for anyone who wants the word.
+    expect(option.getAttribute('title'), `${name} has no title`).toBe(name)
   }
 })
 
@@ -351,9 +390,8 @@ it('offers no Clear beside a picker that already has a none option', async () =>
 /**
  * EVERY row in the panel, not only the facet ones.
  *
- * Edge routing, Line jumps and Draw as were hand-written `aria-pressed`
- * button rows in two apps/web files — the third and fourth spellings in
- * this one panel. A button wearing `aria-pressed` is a TOGGLE: a screen
+ * Edge routing and Line jumps were hand-written `aria-pressed` button rows
+ * in this vessel — the third spelling in this one panel. A button wearing `aria-pressed` is a TOGGLE: a screen
  * reader hears "pressed", not "1 of 3 selected", and there is no arrow-key
  * movement between the options because the element never promised any.
  *

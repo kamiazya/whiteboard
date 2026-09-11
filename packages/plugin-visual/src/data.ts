@@ -1,4 +1,9 @@
-import type { FacetPickerOption, FacetRegistry, IconAsset } from '@kamiazya/whiteboard-facet-engine'
+import type {
+  FacetPickerOption,
+  FacetRegistry,
+  FacetSegmentedOption,
+  IconAsset,
+} from '@kamiazya/whiteboard-facet-engine'
 import {
   createFacetRegistry,
   defineFacet,
@@ -17,7 +22,9 @@ import {
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { EDGE_GLYPHS } from './icons/edge-glyphs.js'
 import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS } from './icons/icons.js'
+import { SIGNATURE_GEOMETRY, SIGNATURE_VIEWBOX } from './icons/signature.js'
 import { VISUAL_THEMES } from './themes.js'
 
 /**
@@ -130,8 +137,25 @@ export const VISUAL_THEME_KEY = 'visual.theme/v0'
  * readonly.
  */
 const VISUAL_ICON_ASSETS: Readonly<Record<string, IconAsset>> = Object.fromEntries(
-  BUILT_IN_ICON_NAMES.map((name) => [name, { geometry: [...(LUCIDE_ICONS[name] ?? [])] }]),
+  [
+    ...BUILT_IN_ICON_NAMES.map((name) => [name, LUCIDE_ICONS[name] ?? []] as const),
+    // Beside the vendored set, not inside it: `BUILT_IN_ICON_NAMES` is what
+    // a NODE may wear as a badge, and the symbol picker derives its options
+    // from that list. A picture of a routing style is not a badge, so it is
+    // registered geometry without being a symbol anyone can choose.
+    ...Object.entries(EDGE_GLYPHS),
+  ].map(([name, geometry]) => [name, { geometry: [...geometry] }]),
 )
+
+/**
+ * Everything above shares the lucide 24-grid; the signature does not, so it
+ * is registered separately with its own box rather than squeezed into one
+ * the path was never drawn for.
+ */
+const VISUAL_ASSET_ICONS: Readonly<Record<string, IconAsset>> = {
+  ...VISUAL_ICON_ASSETS,
+  signature: { viewBox: SIGNATURE_VIEWBOX, geometry: [...SIGNATURE_GEOMETRY] },
+}
 
 /**
  * A small starter set of character symbols beside the icons. Free entry is
@@ -160,6 +184,31 @@ const SYMBOL_PICKER_OPTIONS: readonly FacetPickerOption[] = [
 ]
 
 /**
+ * `visual.edges/v0`'s two rows, as data.
+ *
+ * Every value here is a stored one — neither row offers `value: null`,
+ * because neither axis has an "absent" a person picks. Absence means "let
+ * the theme decide", and the way back to it is picking the value the theme
+ * already has: the write path canonicalises a pick equal to the effective
+ * default down to no stored facet, so the row returns to following the
+ * theme without a separate control saying so.
+ */
+const EDGE_ROUTING_OPTIONS: readonly FacetSegmentedOption[] = [
+  { value: 'straight', label: 'Straight', glyph: { kind: 'asset', id: 'visual.edge-straight' } },
+  {
+    value: 'orthogonal',
+    label: 'Orthogonal',
+    glyph: { kind: 'asset', id: 'visual.edge-orthogonal' },
+  },
+  { value: 'curved', label: 'Curved', glyph: { kind: 'asset', id: 'visual.edge-curved' } },
+]
+
+const LINE_JUMP_OPTIONS: readonly FacetSegmentedOption[] = [
+  { value: 'none', label: 'Off', glyph: { kind: 'asset', id: 'visual.line-jumps-off' } },
+  { value: 'arc', label: 'On', glyph: { kind: 'asset', id: 'visual.line-jumps-on' } },
+]
+
+/**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
  * through the same registry, validation and ordering as any deployment's
  * added plugins, and a deployment may disable it.
@@ -174,6 +223,25 @@ export const visualPlugin = definePlugin({
       version: 'v0',
       targets: ['canvas'],
       schema: visualEdgesFacetSchema,
+      // FIELDS, not a picker: the two axes are independent — a person
+      // changing the routing is not restating the jumps — so a control
+      // writing whole payloads would make every pick a statement about
+      // both. The labels and glyphs live here so the vessel drawing this
+      // row names neither; it reads the declaration like any other.
+      editor: {
+        fields: {
+          routing: {
+            widget: 'segmented',
+            label: 'Edge routing',
+            options: EDGE_ROUTING_OPTIONS,
+          },
+          lineJumps: {
+            widget: 'segmented',
+            label: 'Line jumps',
+            options: LINE_JUMP_OPTIONS,
+          },
+        },
+      },
     }),
     defineFacet({
       name: 'shape',
@@ -247,10 +315,27 @@ export const visualPlugin = definePlugin({
       assetRefs: { theme: 'themes' },
       editor: {
         picker: {
+          // The SAME mark three times, drawn three ways: plain for the
+          // bundled look, and once per theme through that theme's own
+          // `ink` and `glow`. So registering a theme still changes nothing
+          // on any UI side — the swatch follows from the tokens the asset
+          // already carries, which is what ADR-0030 decision 2 promises.
           options: [
-            { payload: null, label: 'Default' },
-            { payload: { theme: 'visual.sketch' }, label: 'Sketch' },
-            { payload: { theme: 'visual.neon' }, label: 'Neon' },
+            {
+              payload: null,
+              label: 'Default',
+              glyph: { kind: 'asset', id: 'visual.signature' },
+            },
+            {
+              payload: { theme: 'visual.sketch' },
+              label: 'Sketch',
+              glyph: { kind: 'theme', id: 'visual.sketch', icon: 'visual.signature' },
+            },
+            {
+              payload: { theme: 'visual.neon' },
+              label: 'Neon',
+              glyph: { kind: 'theme', id: 'visual.neon', icon: 'visual.signature' },
+            },
           ],
         },
       },
@@ -282,7 +367,7 @@ export const visualPlugin = definePlugin({
   // it from data. The kind existed and no plugin used it; the symbol
   // picker is its first customer, and the reason the escape hatch is no
   // longer needed.
-  assets: { themes: VISUAL_THEMES, icons: VISUAL_ICON_ASSETS },
+  assets: { themes: VISUAL_THEMES, icons: VISUAL_ASSET_ICONS },
 })
 
 export const bundledPlugins = [visualPlugin]

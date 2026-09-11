@@ -28,8 +28,8 @@ export const FACET_GLYPH_SHAPES = [
 export type FacetGlyphShape = (typeof FACET_GLYPH_SHAPES)[number]
 
 /**
- * What an option may be DRAWN as. Closed in FORM — three arms, and a
- * plugin cannot add a fourth — while open in CONTENT, which is the
+ * What an option may be DRAWN as. Closed in FORM — a plugin cannot add an
+ * arm — while open in CONTENT, which is the
  * distinction that matters: a plugin still cannot ship an image or a
  * component (the catalog-as-sandbox principle of ADR-0013), but it is no
  * longer limited to seven silhouettes the core happened to enumerate.
@@ -45,11 +45,25 @@ export type FacetGlyphShape = (typeof FACET_GLYPH_SHAPES)[number]
  * so the geometry travels as DATA through the registry both realms already
  * share — the same road a theme takes. `char` is one character or emoji,
  * which needs no registration because there is nothing to resolve.
+ *
+ * `theme` is the pair: registered geometry DRAWN THE WAY a registered theme
+ * draws — its `ink` and its `glow`, nothing else. An option choosing a look
+ * has to show the look, and neither of the other arms can: `asset` draws
+ * one flat stroke in `currentColor`, so two themes would be one picture
+ * twice. A picker that names a theme this way gains its swatch from the
+ * asset's own tokens, so registering a theme still needs no UI edit
+ * anywhere.
+ *
+ * Why the two ids rather than a theme id alone: the SPECIMEN is a choice
+ * (this product draws its own signature mark), and a core arm that picked
+ * one would put a drawing in the engine. The theme says how to ink; the
+ * plugin says what to ink.
  */
 export type FacetGlyph =
   | { readonly kind: 'shape'; readonly name: FacetGlyphShape }
   | { readonly kind: 'char'; readonly value: string }
   | { readonly kind: 'asset'; readonly id: string }
+  | { readonly kind: 'theme'; readonly id: string; readonly icon: string }
 
 /**
  * One choice in a facet-level picker: the WHOLE payload it writes, and how

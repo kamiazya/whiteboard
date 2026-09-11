@@ -13,7 +13,13 @@ paths:
 - `createFacetRegistry`: per-plugin-id collision check, `targetsOf`,
   write-side validation (`validateFacetWrite`, ADR-0013 decision 6) and
   read-side compat resolution (`resolveFacetPayload`, decision 7 — stepwise
-  chain, drop-not-fail, newer-than-registered preserved).
+  chain, drop-not-fail, newer-than-registered preserved). `facetForm(key)`
+  answers the derived editor form, and lives here rather than at each
+  vessel for the reason every resolution does: a vessel that derives it
+  itself can derive it DIFFERENTLY, so one surface would draw the picker a
+  plugin declared and the next its schema's own fields, from one
+  registration. Two vessels ask now — `DerivedFacetForm`, and the settings
+  row for a facet whose EFFECTIVE value only the app can resolve.
 - The bundled `visual` plugin and its facet schemas, plus resolvers
   (`resolveCanvasEdgeStyle`, `resolveNodeShape`: facet first, legacy
   fallback where one exists). Both are adopted by canvas-render's layout
@@ -43,9 +49,12 @@ paths:
 
 - TIER 2, in the same module: an optional `editor` spec on a facet
   definition, declaring per-field widget/label/quick-band from a CLOSED
-  vocabulary (`text`/`number`/`toggle`/`choice`/`segmented`, glyphs from
-  `FACET_GLYPHS`). `deriveFacetForm(schema, editor)` merges it over the
-  derived form; `assertEditorSpecFits` rejects at definition time a spec
+  vocabulary (`text`/`number`/`toggle`/`choice`/`segmented`), or a
+  facet-level `picker` writing whole payloads. Options carry a `FacetGlyph`
+  — closed in FORM (a plugin cannot add an arm), open in CONTENT: a core
+  silhouette, a character, registered icon geometry, or registered geometry
+  inked the way a registered THEME inks it. `deriveFacetForm(schema, editor)`
+  merges it over the derived form; `assertEditorSpecFits` rejects at definition time a spec
   naming a field the schema does not declare, or one on a schema with no
   derivable form. A segmented option's `value: null` means the facet's
   ABSENCE — some defaults are unrepresentable as a stored value (a rect

@@ -1039,7 +1039,7 @@ row is spent on the one affordance that had no button anywhere.
 ## Pick one of N is one control
 
 A control that chooses AMONG ALTERNATIVES — edge routing, a theme, a
-symbol, a colour, which look to draw as — is
+symbol, a colour — is
 `facet-ui`'s `FacetOptionGroup` / `FacetOption`, and nothing else.
 `selection-surface.test.ts` (in `tools/arch-lint`, so it reaches the
 packages too) holds it.
@@ -1076,6 +1076,28 @@ Three things follow:
 - **"None" is an option, never a second control.** The theme row offered a
   `Default` segment AND a `Clear` button whose visible text named nothing it
   would clear. A picker carries absence as an ordinary option.
+- **An option is a PICTURE; the word is its accessible name.** One control
+  shape landed first and the display panel still read as a list of
+  sentences — five rows, four of them entirely words, twelve of twenty-four
+  options spelled out. A person scanning it read instead of recognising,
+  and the widest row (`Preview sketch` / `Preview neon`) set the panel's
+  width. So every option carries a glyph, and the word survives as its
+  `aria-label` and its `title`. `canvas-settings.browser.test.tsx` holds
+  the display panel to it, on what a person SEES: a glyph present, and the
+  visible text never equal to the option's name. Not "no text at all" — an
+  emoji option's picture IS text, and demanding an empty node would ban the
+  one glyph arm that needs no drawing.
+
+  A row that stays words because it "only has two" is how a panel gets
+  mixed: `Line jumps` is on/off and is drawn as a crossing with and without
+  a hop, like everything else.
+
+  Where the picture comes from is the plugin's, as DATA. Three arms draw a
+  value (a core silhouette, a character, registered geometry) and a fourth
+  draws a LOOK: `{ kind: 'theme' }` renders registered geometry the way a
+  registered theme inks it, which is how the theme row shows the signature
+  mark three times — plain, hand-drawn, lit — rather than three identical
+  strokes beside three words. See BRAND.md for the mark itself.
 
 What this rule does NOT claim is that every choice in the app looks
 identical. A CARD GRID — an icon over a label, in full-width cells, as

@@ -16,18 +16,27 @@ picks the one matching your settings.
 
 1. Press **Display** in the document's toolbar — the sliders icon, beside the comments and
    history buttons. The settings open next to the canvas, or as a sheet over it on a phone.
-2. Under **Theme**, pick **Sketch** or **Neon**. The canvas redraws at once; the panel stays
-   open so you can compare.
+2. Under **Theme**, pick **Sketch** or **Neon**. Each option draws the whiteboard's own
+   signature mark the way that theme draws it — plain, hand-drawn, or lit — so you can see
+   the look before you take it. The canvas redraws at once; the panel stays open so you can
+   compare.
 3. **Default** removes the theme again.
 4. Press **Display** again, or the **×** on the sheet, to close it.
+
+Every option in this panel is a small picture rather than a word. Hover one, or read it with
+a screen reader, to hear its name.
 
 The colour swatches in a node's or edge's menu preview the theme's own palette, so the chip you
 pick is the stroke you get.
 
 A theme can carry its own **Edge routing** default (neon routes orthogonally; sketch keeps
-straight lines). The routing row shows whichever is in force, and a routing you choose there
-beats the theme's — including choosing **Straight** on a board whose theme routes otherwise.
+straight lines). The routing row draws each option as the line it makes — a diagonal, a
+right-angle step, a curve — and shows whichever is in force. A routing you choose there beats
+the theme's, including choosing the straight line on a board whose theme routes otherwise.
 Picking the theme's own default leaves nothing stored, so the row follows the theme again.
+
+**Line jumps** is the row below it, drawn as two crossing lines with and without a hop over
+the crossing.
 
 ## From an agent
 

@@ -61,6 +61,13 @@ so the component is legible even where no theme is defined.
   (`glyphIcon`'s `asset` arm over `registry.iconAsset`), so this package
   needs no dependency on whoever vendored it — and the same bytes reach the
   canvas renderer and a DOM-free export, which a component never could.
+  The `theme` arm is the same road for a LOOK: registered geometry inked
+  the way a registered theme inks it (`ink`, `glow`), so a theme option
+  shows the look rather than one flat stroke beside a word. It reads no
+  palette on purpose — a theme carries both mode halves and the canvas
+  surface follows the UI, so a swatch would have to know which mode the
+  panel is in to pick honestly. `currentColor` leaves exactly the
+  difference the option is choosing.
 - Forbidden: `node:*`, `inversify`, `loro-crdt`, `react-dom`. DOM globals are
   exempted like `canvas-viewer`'s — a React UI package's normal job.
 
