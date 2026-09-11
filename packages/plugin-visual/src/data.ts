@@ -428,9 +428,19 @@ export const visualPlugin = definePlugin({
           layout: 'cards',
           // The SAME mark three times, drawn three ways: plain for the
           // bundled look, and once per theme through that theme's own
-          // `ink` and `glow`. So registering a theme still changes nothing
-          // on any UI side — the swatch follows from the tokens the asset
-          // already carries, which is what ADR-0030 decision 2 promises.
+          // `ink` and `glow`. So registering a theme needs no new SWATCH —
+          // the picture follows from the tokens the asset already carries,
+          // which is what ADR-0030 decision 2 promises.
+          //
+          // The OPTION LIST is still written out here, and that is a real
+          // gap rather than the promise: a deployment registering a third
+          // theme gets a picker that does not offer it, exactly as stencils
+          // did before `assetRefs` drove their options. This picker takes a
+          // different road — cards carrying a per-option GLYPH spec, not the
+          // plain `fields`/`segmented` shape the registry now fills — so
+          // closing it means deciding what glyph a theme nobody wrote a
+          // spec for should draw. Named so the next reader finds it rather
+          // than trusting the sentence above.
           options: [
             {
               payload: null,
@@ -488,31 +498,15 @@ export const visualPlugin = definePlugin({
       // the first time this facet shipped without it: the panel offered a
       // free-entry field and a Save button for a value that must name a
       // registered asset, so the one id a user could type by hand was a
-      // wrong one. `visual.theme` had the same shape and the same answer.
+      // wrong one.
       //
-      // The OPTIONS are written out rather than read from the registry,
-      // which is the same ponytail the tool-surface enum carries: a
-      // deployment registering its own stencils gets a picker that does not
-      // list them, though the schema still accepts them and `applyStencil`
-      // still applies them. A registry-fed picker is the upgrade, and it is
-      // the same change ADR-0034's document-backed libraries need.
-      editor: {
-        fields: {
-          stencil: {
-            widget: 'segmented',
-            label: 'Stencil',
-            options: [
-              { value: null, label: 'None' },
-              { value: 'visual.datastore', label: 'Datastore' },
-              { value: 'visual.service', label: 'Service' },
-              { value: 'visual.gateway', label: 'Gateway' },
-              { value: 'visual.queue', label: 'Queue' },
-              { value: 'visual.actor', label: 'Actor' },
-              { value: 'visual.external', label: 'External' },
-            ],
-          },
-        },
-      },
+      // The WIDGET is declared and the OPTIONS are not: `assetRefs` above
+      // says this field names a stencil, and the registry fills the choices
+      // from what it actually holds. That is what makes a pack this repo did
+      // not ship SELECTABLE and not merely applicable — the state it shipped
+      // in first, where `wb_facet_list` reported a stencil, `wb_canvas_edit`
+      // applied it, and the panel did not offer it.
+      editor: { fields: { stencil: { widget: 'segmented', label: 'Stencil' } } },
     }),
   ],
   // The vendored set, registered as ADR-0013 decision 3 assets so a
