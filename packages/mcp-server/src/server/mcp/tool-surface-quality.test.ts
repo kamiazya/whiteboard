@@ -512,29 +512,43 @@ describe('what the tool table costs to read', () => {
       // refused instead of silently dropped, less 6 for a `badge` the
       // stencil field's description no longer promises (see wb_canvas_edit).
       //
-      // Then +3,799 when an edge END became a discriminated union — all of it
-      // wb_canvas_edit's, since it is the only tool that takes an edge as
-      // INPUT.
+      // Then +3,799 when an edge END became a discriminated union, and
+      // 40,315 is OVER the ~40,000 at which ADR-0031 §5 says to reconsider
+      // loading the table upfront. First reading that is. Pinned rather than
+      // worked around, because §5 asks for a decision.
       //
-      // **40,315 is OVER the ~40,000 at which ADR-0031 §5 says to reconsider
-      // loading the table upfront**, and it is the first reading that is. The
-      // number is pinned rather than worked around, because §5 asks for a
-      // decision and a decision is not something a re-pin can make.
+      // WHERE the 3,799 goes, measured against main rather than inferred:
+      // `wb_canvas_edit` is the ONLY row that moved — the other sixteen tools
+      // are byte-identical — and inside it the two edge op arms account for
+      // more than the whole delta (+3,815), so everything else in the tool
+      // got 16 bytes smaller. Per edge site:
       //
-      // What it crossed on is worth reading, because NEITHER change crossed
-      // it alone. The stencil work measured 36,516 and the endpoint union
-      // measured 39,844 against its own base; the sum of the two deltas is
-      // 39,848, and the merged table is 40,315. The extra 467 is the two
-      // changes INTERACTING — a strict node draft charges its 29 bytes per
-      // object against a union that now has more objects in it — so a
-      // threshold checked on each branch separately was checked on a number
-      // neither branch would ship.
+      //   endpoint keys   510 -> 2,230   +1,720   (x2 sites = +3,440)
+      //   bends             0 ->   295     +295   (x2 = +590)
+      //   facets, flat      0 ->    77      +77   (x2 = +154)
+      //   x-whiteboard    148 ->     0     -148   (x2 = -296)
       //
-      // The margin had already been bought once: eight `kind` descriptions
-      // were written, measured at +688, and taken back out because the
-      // endpoint FIELD's own description spells both arms literally beside a
-      // JSON Schema `const`. Putting them back reads 41,003. There is no
-      // cheap byte left in this slice; what is left is §5's question.
+      // So the endpoint union is 90% of it, and the reason is DUPLICATION
+      // rather than expressiveness: the union is emitted verbatim four times
+      // (`from` and `to`, on `edge.add` and on `edge.patch`), 1,115 bytes
+      // each, and the `side` description alone is 160 characters of that.
+      // Where the flat form had three scalar keys per end, the union has two
+      // whole object schemas with their own `required` and
+      // `additionalProperties`.
+      //
+      // That duplication is REMOVABLE, and the size of the prize is measured:
+      // rebuilt on one zod instance, the four sites are 4,579 bytes inline
+      // and 2,028 with `$defs` + `$ref` — a saving of 2,551, which would put
+      // this table near 37,800. Not taken here, because whether every MCP
+      // client resolves `$ref` inside `inputSchema` is a compatibility
+      // question that belongs to ADR-0031's criteria rather than to a
+      // refactor riding along inside a model change.
+      //
+      // An earlier version of this comment said the 467 bytes between the
+      // two branches' deltas were the changes INTERACTING. That was
+      // arithmetic on two different bases, not a measurement, and the
+      // per-tool diff above refutes it: nothing outside `wb_canvas_edit`
+      // moved at all.
       visibleBytes: 40315,
       // Two thirds of the growth is output schemas on tools that merely ECHO
       // an edge (wb_body_edit, canvas_view, wb_canvas_snapshot). Paid by the
