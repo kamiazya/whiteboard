@@ -2,9 +2,10 @@ import { SAMPLE_THEME_TOKENS, themeTokensSchema } from '@kamiazya/whiteboard-fac
 import { edgeRoutingStyleSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { SPATIAL_THEME_FONT_FAMILY } from './font-family.js'
+import { MARKDOWN_THEME_NODE } from './markdown-theme.js'
 import { SPATIAL_LIGHT_PALETTE } from './spatial-palette.js'
 import { createSpatialTheme } from './spatial-theme.js'
-import { createThemedAppearance, paletteFromTokens } from './theme-asset.js'
+import { createThemedAppearance, markdownTheme, paletteFromTokens } from './theme-asset.js'
 
 describe('paletteFromTokens', () => {
   it('maps every field the renderer palette has — a token bundle can say everything the bundled palette says', () => {
@@ -19,6 +20,22 @@ describe('paletteFromTokens', () => {
     // renderer's palette and not the contract (or the reverse), this fails.
     const tokens = themeTokensSchema.shape.palette.shape.light.parse(SPATIAL_LIGHT_PALETTE)
     expect(paletteFromTokens(tokens)).toEqual(SPATIAL_LIGHT_PALETTE)
+  })
+
+  it("carries a theme's markdown chrome, and leaves the bundled body neutral alone without one", () => {
+    const tokens = themeTokensSchema.shape.palette.shape.light.parse({
+      ...SPATIAL_LIGHT_PALETTE,
+      markdownChrome: '#8a8378',
+    })
+    expect(paletteFromTokens(tokens).markdownChrome).toBe('#8a8378')
+    expect(
+      markdownTheme({ ...SAMPLE_THEME_TOKENS, palette: { light: tokens, dark: tokens } }, 'light')
+        .chromeColor,
+    ).toBe('#8a8378')
+    // Absent everywhere the bundled palettes are: same key set, same theme.
+    expect(paletteFromTokens(SAMPLE_THEME_TOKENS.palette.light).markdownChrome).toBeUndefined()
+    expect(markdownTheme(SAMPLE_THEME_TOKENS, 'light')).toBe(MARKDOWN_THEME_NODE)
+    expect(markdownTheme(undefined, undefined)).toBe(MARKDOWN_THEME_NODE)
   })
 
   it('the token contract spells edge routing exactly as the model does', () => {
@@ -91,6 +108,43 @@ describe('createThemedAppearance', () => {
   })
 })
 
+describe('stroke width tokens', () => {
+  it('a theme line weight reaches node chrome and edges, never labels; a group frame keeps its own', () => {
+    const themed = createThemedAppearance({
+      tokens: {
+        ...SAMPLE_THEME_TOKENS,
+        strokeWidthPx: 1.4,
+        defaults: { groupFrame: { strokeWidth: 2 } },
+      },
+      mode: 'light',
+      fontFamily: 'Roboto',
+    })
+    const text = themed.resolveNode({
+      id: 't',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      text: '',
+    })
+    expect(text.appearance?.strokeWidth).toBe(1.4)
+    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    expect(group.appearance?.strokeWidth).toBe(2)
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.strokeWidth).toBe(1.4)
+    expect(themed.resolveLabel().strokeWidth).toBeUndefined()
+    const bare = createThemedAppearance({
+      tokens: SAMPLE_THEME_TOKENS,
+      mode: 'light',
+      fontFamily: 'Roboto',
+    })
+    expect(
+      bare.resolveNode({ id: 't', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+        .appearance?.strokeWidth,
+    ).toBeUndefined()
+  })
+})
+
 describe('createSpatialTheme', () => {
   it('stamps its mode on the resolver so a layout can pick the matching theme palette', () => {
     expect(createSpatialTheme({ mode: 'light' }).mode).toBe('light')
@@ -100,7 +154,7 @@ describe('createSpatialTheme', () => {
 })
 
 describe('glow tokens', () => {
-  it('a theme with glow puts a halo on nodes, edges and labels', () => {
+  it('a theme with glow puts a halo on node chrome and edges, never on a label or a group frame', () => {
     const themed = createThemedAppearance({
       tokens: { ...SAMPLE_THEME_TOKENS, glow: { radiusPx: 6 }, defaults: {} },
       mode: 'dark',
@@ -116,18 +170,27 @@ describe('glow tokens', () => {
       text: '',
     })
     expect(node.appearance?.glow).toEqual({ radiusPx: 6 })
-    const edge = themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })
-    expect(edge?.glow).toEqual({ radiusPx: 6 })
-    const label = themed.resolveLabel()
-    expect(label.glow).toEqual({ radiusPx: 6 })
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toEqual({
+      radiusPx: 6,
+    })
+    // A 12px glyph blurred at three deviations thickens into a smudge, and
+    // the label already sits on its halo pill; a container's frame is the
+    // largest and least informative thing on the board to bloom.
+    expect(themed.resolveLabel().glow).toBeUndefined()
+    const group = themed.resolveNode({ id: 'g', type: 'group', x: 0, y: 0, width: 10, height: 10 })
+    expect(group.appearance?.glow).toBeUndefined()
   })
 
-  it('a theme without glow assigns none', () => {
+  it('a theme without glow leaves every appearance halo-free', () => {
     const themed = createThemedAppearance({
-      tokens: { ...SAMPLE_THEME_TOKENS, defaults: {} },
+      tokens: SAMPLE_THEME_TOKENS,
       mode: 'dark',
       fontFamily: 'Roboto',
     })
-    expect(themed.resolveLabel().glow).toBeUndefined()
+    expect(
+      themed.resolveNode({ id: 'n', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' })
+        .appearance?.glow,
+    ).toBeUndefined()
+    expect(themed.resolveEdge({ id: 'e', fromNode: 'a', toNode: 'b' })?.glow).toBeUndefined()
   })
 })

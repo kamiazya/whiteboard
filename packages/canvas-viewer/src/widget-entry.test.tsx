@@ -445,6 +445,135 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(last).not.toHaveProperty('style')
   })
 
+  it('paints the paper the style resolves to, so a themed canvas is not drawn on the host ground', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.neon' } } },
+    }
+    const { mountCanvasViewer } = await import('./mount.js')
+
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene, style: 'document' },
+    })
+    // The widget draws in the LIGHT mode (CanvasViewer's default), so a neon
+    // document here is neon's light half — not the deep ground.
+    expect(mountCanvasViewer).toHaveBeenLastCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ background: '#f8fafc' }),
+    )
+
+    // No style is the bundled look, and the bundled look has paper too.
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    expect(mountCanvasViewer).toHaveBeenLastCalledWith(
+      expect.any(HTMLElement),
+      expect.objectContaining({ background: '#ffffff' }),
+    )
+  })
+
+  describe("canvas_view's themeFont", () => {
+    const YOMOGI_URL =
+      'https://raw.githubusercontent.com/google/fonts/main/ofl/yomogi/Yomogi-Regular.ttf'
+    const sketchScene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+      'x-whiteboard': { facets: { 'visual.theme/v0': { theme: 'visual.sketch' } } },
+    }
+
+    function stubFetch() {
+      const fetchMock = vi.fn(async () => ({
+        ok: true,
+        arrayBuffer: async () => new ArrayBuffer(8),
+      }))
+      vi.stubGlobal('fetch', fetchMock)
+      return fetchMock
+    }
+
+    afterEach(() => {
+      vi.unstubAllGlobals()
+    })
+
+    async function bootWithHost() {
+      stubEmbeddedIframeParent()
+      connectMock.mockImplementation(async () => undefined)
+      await importFreshWidgetEntry()
+      await Promise.resolve()
+      await Promise.resolve()
+    }
+
+    it('fetches the family from the pinned catalogue origin and redraws once the face lands', async () => {
+      const fetchMock = stubFetch()
+      await bootWithHost()
+      const { mountCanvasViewer } = await import('./mount.js')
+
+      fakeAppInstances[0].ontoolresult?.({
+        structuredContent: {
+          workspaceId: 'ws-1',
+          documentId: 'ws/path',
+          scene: sketchScene,
+          style: 'document',
+          themeFont: { family: 'Yomogi', url: YOMOGI_URL },
+        },
+      })
+      expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+      expect(fetchMock).toHaveBeenCalledWith(YOMOGI_URL)
+
+      // The face only reaches the layout on the next pass: canvas-render
+      // declares a theme's family where the realm can MEASURE it, and until
+      // the bytes are registered this realm cannot.
+      await vi.waitFor(() => {
+        expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
+      })
+    })
+
+    it('refuses a URL on any other origin and never fetches it', async () => {
+      const fetchMock = stubFetch()
+      await bootWithHost()
+      const { mountCanvasViewer } = await import('./mount.js')
+
+      fakeAppInstances[0].ontoolresult?.({
+        structuredContent: {
+          workspaceId: 'ws-1',
+          documentId: 'ws/path',
+          scene: sketchScene,
+          style: 'document',
+          themeFont: { family: 'Yomogi', url: 'https://fonts.example.com/Yomogi-Regular.ttf' },
+        },
+      })
+
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(fetchMock).not.toHaveBeenCalled()
+      // The scene still drew, in the bundled family: a refused fetch is the
+      // already-declared degradation, never a blank widget.
+      expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
+    })
+
+    it('fetches nothing when the style is the bundled look', async () => {
+      const fetchMock = stubFetch()
+      await bootWithHost()
+
+      fakeAppInstances[0].ontoolresult?.({
+        structuredContent: {
+          workspaceId: 'ws-1',
+          documentId: 'ws/path',
+          scene: sketchScene,
+          themeFont: { family: 'Yomogi', url: YOMOGI_URL },
+        },
+      })
+
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(fetchMock).not.toHaveBeenCalled()
+    })
+  })
+
   it("forwards canvas_view's threads to the viewer, dropping the ones that do not parse", async () => {
     // The threads plane crosses the same two boundaries the references do,
     // and gets the same treatment: per-entry validation, so one malformed

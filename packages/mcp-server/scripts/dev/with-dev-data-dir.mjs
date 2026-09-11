@@ -56,7 +56,7 @@ const argvWithPort = injectDerivedPortArg(process.argv.slice(2), derivedPort)
 // server actually binds to.
 const effectivePort = resolveEffectivePort(argvWithPort, derivedPort)
 
-const entryPath = resolve(packageRoot, 'src/server/index.ts')
+const entryPath = resolve(packageRoot, 'src/server/daemon-entry.ts')
 const { command, args } = resolveTsxWatchSpawn(packageRoot, entryPath, argvWithPort)
 
 writeDevDaemonMarker(env.WHITEBOARD_DATA_DIR, {

@@ -1,5 +1,5 @@
+import type { ListBlockNode, Scene, ShapeSceneNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ListBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { scaleScene } from './scale-scene.js'
 
 const run = (over?: Partial<TextRunNode>): TextRunNode => ({

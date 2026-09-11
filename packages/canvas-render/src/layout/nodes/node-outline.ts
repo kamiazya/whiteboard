@@ -12,43 +12,14 @@
  * `null`/`false` instead of throwing, per the package's never-throw rule.
  */
 
-import type { BoundingBox } from '../../scene-graph.js'
+import type {
+  BoundingBox,
+  NodeOutline,
+  ShapeContribution,
+  ShapeTable,
+} from '@kamiazya/whiteboard-scene'
 
-/**
- * A silhouette a plugin registers, under a NAMESPACED id.
- *
- * `outline` is the whole contract for painting, hit-testing and edge
- * anchoring, because `outlineContains` switches on the returned VALUE's kind
- * and `outlineEntryPoint` bisects against that — one implementation serves
- * every shape, and nothing a contributor supplies can make the drawn and the
- * hit geometry disagree.
- *
- * `contentBox` is the exception, and is optional for a reason: it is a
- * per-shape judgement (how much of the box may text use) that no formula
- * derives from a polygon. A shape that omits it gets the bbox — content may
- * then cross the silhouette, exactly the degradation an unknown id gets.
- *
- * ponytail: a returned polygon must be CONVEX. `outlineContains` answers
- * through `convexPolygonContains` and `outlineEntryPoint` bisects assuming
- * the outline is convex along the probed ray — true of every built-in, and
- * now a contract a contributor can break. A concave shape still DRAWS
- * correctly; what degrades is hit-testing and where an edge terminates,
- * both falling back to the convex hull. Lifting it means a general
- * point-in-polygon test plus a ray intersection that does not assume a
- * single crossing, and is worth doing when a contributed concave shape is
- * real rather than a demo.
- */
-export interface ShapeContribution {
-  readonly outline: (box: BoundingBox) => NodeOutline | null
-  readonly contentBox?: (box: BoundingBox) => BoundingBox
-}
-
-/**
- * Shapes by namespaced id (`visual.diamond`). The namespace is COMPOSED by
- * the caller from the declaring facet's key, never read out of a payload —
- * so a document cannot name another plugin's geometry.
- */
-export type ShapeTable = Readonly<Record<string, ShapeContribution>>
+export type { NodeOutline, ShapeContribution, ShapeTable }
 
 /**
  * A caller's table is MERGED OVER the built-ins, never a replacement — an id
@@ -59,29 +30,6 @@ export type ShapeTable = Readonly<Record<string, ShapeContribution>>
  */
 const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
   shapes[shapeId] ?? BUILT_IN_SHAPES[shapeId]
-
-export type NodeOutline =
-  | {
-      readonly kind: 'ellipse'
-      readonly cx: number
-      readonly cy: number
-      readonly rx: number
-      readonly ry: number
-    }
-  | {
-      readonly kind: 'polygon'
-      readonly points: ReadonlyArray<{ readonly x: number; readonly y: number }>
-    }
-  | {
-      readonly kind: 'cylinder'
-      readonly x: number
-      readonly y: number
-      readonly w: number
-      readonly h: number
-      /** Lid ellipse's vertical radius: a tenth of the width, capped at a
-       * quarter of the height so short nodes keep a visible body. */
-      readonly ry: number
-    }
 
 const isFiniteBox = (box: BoundingBox): boolean =>
   Number.isFinite(box.x) &&

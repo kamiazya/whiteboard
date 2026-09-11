@@ -14,6 +14,7 @@
 import { FileText, LayoutGrid } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
+import { useThemeFontsGeneration } from '../../hooks/useThemeFonts.js'
 import type { WorkspaceDocumentEntry } from '../../lib/document-entry.js'
 import { cn } from '../../lib/utils.js'
 import { fitSvgToBox } from './fit-svg.js'
@@ -33,6 +34,11 @@ export interface DocumentThumbnailProps {
 export function DocumentThumbnail({ document, loadRender, className }: DocumentThumbnailProps) {
   const [ref, onScreen] = useOnScreen<HTMLSpanElement>()
   const [drawn, setDrawn] = useState<DocumentRender | null>(null)
+  // Read for its CHANGE, not its value: a board that names a theme is drawn
+  // in the bundled family until this tab holds that theme's face, and the
+  // ask for the face is made by the render below — so the row that triggered
+  // the fetch is the row that has to be drawn again once it lands.
+  const fontsGeneration = useThemeFontsGeneration()
 
   useEffect(() => {
     if (!onScreen) return
@@ -47,7 +53,7 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
     return () => {
       live = false
     }
-  }, [onScreen, document, loadRender])
+  }, [onScreen, document, loadRender, fontsGeneration])
 
   const KindIcon = document.kind === 'spatial' ? LayoutGrid : FileText
 

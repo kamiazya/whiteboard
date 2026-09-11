@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { EXTENSION_FACET_KEY_PATTERN } from './facets.js'
-import { canvasExtensionSchema, xWhiteboardSchema } from './spatial.js'
+import { canvasExtensionSchema, facetsOnlyExtensionSchema, xWhiteboardSchema } from './spatial.js'
 
 function toDef(schema: z.ZodType): Record<string, unknown> {
   const { $schema: _root, ...def } = z.toJSONSchema(schema, { target: 'draft-2020-12' })
@@ -42,14 +42,16 @@ export function xWhiteboardJsonSchema(): Record<string, unknown> {
     title: 'x-whiteboard JSON Canvas extension',
     description:
       'Definitions for the single extension key ("x-whiteboard") that extended ' +
-      'JSON Canvas documents produced by whiteboard may carry, at two sites: ' +
-      'the document root (rendering preferences; #/$defs/canvasExtension) and ' +
-      'a node (canvas embed; #/$defs/nodeExtension). Documents contain no ' +
-      'non-standard fields beyond these two sites. Consumers that drop the ' +
-      'key still read a valid JSON Canvas 1.0 document.',
+      'JSON Canvas documents produced by whiteboard may carry, at three sites: ' +
+      'the document root (canvas facets and comments; #/$defs/canvasExtension), ' +
+      'a node (canvas embed and node facets; #/$defs/nodeExtension) and an edge ' +
+      '(edge facets; #/$defs/edgeExtension). Documents contain no non-standard ' +
+      'fields beyond these three sites. Consumers that drop the key still read ' +
+      'a valid JSON Canvas 1.0 document.',
     $defs: {
       canvasExtension: canvasExtensionDef(),
       nodeExtension: toDef(xWhiteboardSchema),
+      edgeExtension: toDef(facetsOnlyExtensionSchema),
     },
   }
 }

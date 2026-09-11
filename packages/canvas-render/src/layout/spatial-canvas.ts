@@ -44,23 +44,27 @@ import type {
 } from '@kamiazya/whiteboard-model'
 import { canvasChangeConflicts, spatialAnchorRect } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
+import { resolveCanvasEdgeStyle, resolveEdgeOwnStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
-import { z } from 'zod'
-import { highlightCode } from '../highlight/lowlight.js'
-import type { MeasureText } from '../measure.js'
-import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
-import { sceneBounds } from '../scene-bounds.js'
 import type {
-  Appearance,
   BoundingBox,
+  DecorationContext,
+  EdgeRouter,
+  NodeDecoration,
+  RenderContribution,
   ResolvedEdgeNode,
   Scene,
   SceneInk,
   SceneNode,
   ShapeSceneNode,
   TextRunNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { z } from 'zod'
+import { highlightCode } from '../highlight/lowlight.js'
+import type { MeasureText } from '../measure.js'
+import { type ReferenceSeams, withReferenceSeams } from '../references/seams.js'
+import { sceneBounds } from '../scene-bounds.js'
 import { SPATIAL_THEME_FONT_FAMILY } from '../theme/font-family.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
 import {
@@ -69,7 +73,7 @@ import {
   type SpatialPalette,
 } from '../theme/spatial-palette.js'
 import type { SpatialThemeMode } from '../theme/spatial-theme.js'
-import { createThemedAppearance, paletteFromTokens } from '../theme/theme-asset.js'
+import { createThemedAppearance, markdownTheme, paletteFromTokens } from '../theme/theme-asset.js'
 import {
   COMMENT_TEXT_MAX_WIDTH_PX,
   layoutCommentBody,
@@ -80,6 +84,7 @@ import {
   nearestPointOnPolyline,
   placeCommentBubble,
 } from './comment-placement.js'
+import { contributedRoute, resolveRouterTable } from './contributed-router.js'
 import { flattenDrawnEdgePath } from './edges/edge-flatten.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelPlacement, labelObstacles } from './edges/edge-label-anchor.js'
@@ -497,6 +502,8 @@ interface ResolvedLayoutOptions extends SpatialLayoutOptions {
   readonly contributions: readonly RenderContribution[]
   /** Their shapes, composed to namespaced ids. */
   readonly shapeTable: ShapeTable
+  /** Their edge routers, composed to namespaced ids. */
+  readonly routerTable: Readonly<Record<string, EdgeRouter>>
   /** Their theme assets, by namespaced id. */
   readonly themeTable: Readonly<Record<string, ThemeTokens>>
   /** The caller's resolver — what a canvas without a theme is painted with. */
@@ -562,21 +569,21 @@ function resolveGeometry(geometry: SpatialGeometry | undefined): SpatialGeometry
  * the fragment seams came to be wired on one surface only.
  */
 function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): MdastLayoutOptions {
+  const label = options.appearance.resolveLabel()
+  const syntax = options.appearance.resolveSyntax?.()
   return {
     measure: options.measure,
     maxWidth,
+    // A body's FURNITURE takes the canvas's theme too, not only its prose.
+    theme: markdownTheme(options.activeTheme?.tokens, options.appearance.mode),
     // Body content is measured and declared with the SAME family the label
     // path resolves, so one theme drives every glyph in a node — and painted
     // with the SAME fill, for the same reason. `resolveLabel` is already the
     // seam for "a degraded body fallback run"; a body that renders owes its
     // colour to the same producer as one that does not.
-    fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
-    ...(options.appearance.resolveLabel().fill !== undefined
-      ? { textFill: options.appearance.resolveLabel().fill }
-      : {}),
-    ...(options.appearance.resolveSyntax !== undefined
-      ? { syntax: options.appearance.resolveSyntax() }
-      : {}),
+    fontFamily: label.fontFamily ?? 'sans-serif',
+    ...(label.fill === undefined ? {} : { textFill: label.fill }),
+    ...(syntax === undefined ? {} : { syntax }),
     ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
@@ -637,9 +644,9 @@ function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
   const shape = options.nodeOutlines?.[node.id]
-  // A coloured node is hatched rather than tinted under a pencil; an
-  // uncoloured one keeps its flat surface fill beneath the strokes.
-  const ink = sketchInkFor(node.id, options, node.color !== undefined)
+  // A coloured node is hatched over its tint under a pencil; a group is a
+  // frame around its members, never a filled box, so its colour stays on the line.
+  const ink = sketchInkFor(node.id, options, node.color !== undefined && node.type !== 'group')
   return {
     kind: 'shape',
     id: node.id,
@@ -837,6 +844,10 @@ function composeTextNode(
           // A theme's family fits differently; two themes on one cache must
           // not hand each other the other's wrapped lines.
           options.appearance.resolveLabel().fontFamily ?? null,
+          // The theme itself, which the family alone does not identify: one
+          // naming no font of its own measures where a clean render does and
+          // paints in its own ink, so the two looks would share an entry.
+          options.activeTheme?.id ?? null,
         ])
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
@@ -1309,8 +1320,13 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
+  //
+  // A contribution may claim this edge; a decline or a name it did not
+  // register falls back to the built-in, never an error, so a document
+  // written against another deployment's plugins still draws.
   const routed = pullEdgeOntoOutlines(
-    routeEdge(canvas.nodes, edge, routingStyle, anchors),
+    contributedRoute(canvas, edge, options, anchors) ??
+      routeEdge(canvas.nodes, edge, routingStyle, anchors),
     canvas,
     edge,
     options.nodeOutlines,
@@ -1535,39 +1551,7 @@ function layoutSpatialCanvasInternalScene(
  * silhouette insets a decoration exactly as it insets text; `label` is the
  * resolved label appearance, so ink that should match the node's text can.
  */
-export interface DecorationContext {
-  readonly bounds: BoundingBox
-  readonly label: Appearance
-}
-
-/**
- * Everything one plugin contributes to rendering.
- *
- * `shapes` are keyed by BARE name and `readShape` answers a bare kind: this
- * package composes `${namespace}.${kind}` at both ends, so a payload never
- * carries a namespace and a document cannot name another plugin's geometry
- * however it is written.
- *
- * A reader rather than a facet KEY, because reading a facet is the plugin's
- * job: the bundled one resolves through the engine's compat chain and schema,
- * which a raw `stored.kind` read of a declared key never did.
- */
-export interface RenderContribution {
-  readonly namespace: string
-  readonly shapes?: Readonly<Record<string, ShapeContribution>>
-  readonly readShape?: (node: SpatialNode) => string | undefined
-  readonly readTextPlacement?: (node: SpatialNode) => 'start' | 'center' | undefined
-  readonly decorations?: readonly NodeDecoration[]
-  /**
-   * Theme assets by BARE name, namespaced to `${namespace}.${name}` the way
-   * `shapes` are. Unlike a shape, a theme id in a document MAY name another
-   * contribution's asset (ADR-0030 decision 2): reuse across plugins is what
-   * an asset is for, so the table is looked up by full id.
-   */
-  readonly themes?: Readonly<Record<string, ThemeTokens>>
-  /** The theme id the CANVAS names (its own facet), or undefined for none. */
-  readonly readTheme?: (canvas: SpatialCanvas) => string | undefined
-}
+export type { DecorationContext, NodeDecoration, RenderContribution }
 
 /**
  * Everything a contribution set decides ABOUT ONE CANVAS — the set, its shape
@@ -1586,6 +1570,7 @@ function resolveContributions(
 ): {
   contributions: readonly RenderContribution[]
   shapeTable: ShapeTable
+  routerTable: Readonly<Record<string, EdgeRouter>>
   themeTable: Readonly<Record<string, ThemeTokens>>
   nodeOutlines: Readonly<Record<string, string>> | undefined
   explicitNodeOutlines: Readonly<Record<string, string>> | undefined
@@ -1595,6 +1580,7 @@ function resolveContributions(
   return {
     contributions,
     shapeTable: resolveShapeTable(contributions),
+    routerTable: resolveRouterTable(contributions),
     themeTable: resolveThemeTable(contributions),
     nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, contributions),
     explicitNodeOutlines: options.nodeOutlines,
@@ -1643,6 +1629,32 @@ export function resolveCanvasPalette(
   const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
   if (tokens === undefined) return mode === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE
   return paletteFromTokens(tokens.palette[mode])
+}
+
+/**
+ * The family the theme this canvas draws in NAMES, or nothing — the style
+ * resolves to no theme, or the theme declares no family of its own.
+ *
+ * Separate from `resolveCanvasPalette` in ONE way that matters: an absent
+ * `style` is `'clean'` here, not `'document'`. A palette is asked for by a
+ * surface already drawing the document; this is asked by a tool ECHOING a
+ * caller's `style`, where absent means the bundled look and so nothing for
+ * the caller to go and fetch.
+ */
+export function resolveCanvasThemeFontFamily(
+  canvas: SpatialCanvas,
+  options: {
+    readonly style?: SpatialRenderStyle
+    readonly contributions?: readonly RenderContribution[]
+  } = {},
+): string | undefined {
+  const contributions = options.contributions ?? [visualRenderContribution]
+  const own = contributions
+    .map((contribution) => contribution.readTheme?.(canvas))
+    .find((id) => id !== undefined)
+  const themeId = pickThemeId(options.style, own, undefined)
+  const tokens = themeId === undefined ? undefined : resolveThemeTable(contributions)[themeId]
+  return tokens?.fontFamily
 }
 
 /**
@@ -1726,10 +1738,6 @@ export function resolveShapeTable(contributions: readonly RenderContribution[]):
   }
   return table
 }
-
-/** A plugin's mark on a node. Returns scene nodes in this package's own
- *  vocabulary — the union stays closed, contributions build from it. */
-export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
 
 function composeDecorations(
   node: SpatialNode,
@@ -2287,8 +2295,8 @@ function composeEdgesAndLabels(
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
-  // Facet-aware by DEFAULT (visual.edges/v0 first, legacy edgeRouting
-  // fallback): resolution lives here rather than at the call sites for the
+  // Facet-aware by DEFAULT (visual.edges/v0): resolution lives here rather
+  // than at the call sites for the
   // same reason the tokeniser default does — every surface that lays a
   // canvas out wants it, and the one that forgets draws different routes.
   // The theme's routing is a DEFAULT under the canvas's own facet (ADR-0030
@@ -2301,25 +2309,43 @@ function composeEdgesAndLabels(
       ? { style: themeRouting }
       : {}),
   }
-  const anchors = assignEdgeAnchors(
-    canvas.nodes,
-    canvas.edges,
-    edgeStyle.style,
-    resolved.edgeSideOverrides,
-  )
+  // The SAME facet asked of one edge narrows the board's answer, field by
+  // field (ADR-0013's edge slot). Memoised per id because the side-choice
+  // search asks for an edge's style many times per layout, and each ask
+  // would otherwise re-resolve and re-parse a stored payload.
+  const ownStyles = new Map<string, VisualEdgesFacet>()
+  const ownStyleOf = (edge: CanvasEdge): VisualEdgesFacet => {
+    const hit = ownStyles.get(edge.id)
+    if (hit !== undefined) return hit
+    const own = resolveEdgeOwnStyle(edge)
+    ownStyles.set(edge.id, own)
+    return own
+  }
+  // The side pass runs BEFORE any router does, over the whole edge set, so
+  // it works in the built-in vocabulary; a contributed router receives the
+  // sides it chose rather than being bound by them.
+  const styleOf = (edge: CanvasEdge): EdgeRoutingStyle =>
+    ownStyleOf(edge).routing ?? edgeStyle.style ?? 'straight'
+  const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, styleOf, resolved.edgeSideOverrides)
   const routedEdges = canvas.edges.map((edge) =>
-    composeEdge(canvas, edge, resolved, edgeStyle.style, anchors.get(edge.id)),
+    composeEdge(canvas, edge, resolved, styleOf(edge), anchors.get(edge.id)),
   )
-  // Canvas-wide today; the same resolution is where a per-edge
-  // x-whiteboard override slots in later without touching the pipeline.
-  const lineJumps = edgeStyle.lineJumps ?? 'none'
-  const jumpsByEdge = lineJumps === 'arc' ? computeEdgeJumps(routedEdges) : undefined
+  // A jump is drawn on the LATER edge of a crossing pair, so "does this edge
+  // hop" is asked of the edge that would draw the arc. Crossings are still
+  // computed over EVERY edge — who crosses whom is geometry, and an edge
+  // that wants no arcs of its own is still something its neighbours cross.
+  const hopsOf = (edge: CanvasEdge): boolean =>
+    (ownStyleOf(edge).lineJumps ?? edgeStyle.lineJumps ?? 'none') === 'arc'
+  const anyHops = canvas.edges.some(hopsOf)
+  const jumpsByEdge = anyHops ? computeEdgeJumps(routedEdges) : undefined
   const edgeContent =
     jumpsByEdge === undefined
       ? routedEdges
-      : routedEdges.map((edge) => {
+      : routedEdges.map((edge, index) => {
           const jumps = jumpsByEdge.get(edge.id)
-          return jumps === undefined ? edge : { ...edge, jumps }
+          const source = canvas.edges[index]
+          if (jumps === undefined || source === undefined || !hopsOf(source)) return edge
+          return { ...edge, jumps }
         })
   const obstacles = labelObstacles(canvas.nodes)
   const labelContent = canvas.edges

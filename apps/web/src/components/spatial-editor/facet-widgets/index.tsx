@@ -9,7 +9,11 @@
  * later editor-spec tier derives a default form instead of failing here.
  */
 import type { FacetOptionLayout, FacetSegmentedOption } from '@kamiazya/whiteboard-facet-engine'
-import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
+import {
+  type ContributionPoint,
+  type FacetRegistry,
+  resolveFacetContributions,
+} from '@kamiazya/whiteboard-facet-engine'
 import {
   DerivedFacetForm,
   type FacetEditor,
@@ -196,7 +200,20 @@ export function nodePropertyItems(
   registry: FacetRegistry,
   ctx: NodePropertiesContext,
 ): readonly ContextMenuItem[] {
-  if (resolveFacetContributions(registry, 'inspector.node').length === 0) return []
+  return facetPropertyItems(registry, 'inspector.node', ctx)
+}
+
+/**
+ * The same doorway at any inspector point — the point decides whether there
+ * is anything behind the door, so a surface with no facets registered for it
+ * offers nothing rather than an empty panel.
+ */
+export function facetPropertyItems(
+  registry: FacetRegistry,
+  point: ContributionPoint,
+  ctx: NodePropertiesContext,
+): readonly ContextMenuItem[] {
+  if (resolveFacetContributions(registry, point).length === 0) return []
   return [
     { kind: 'separator' as const },
     { label: 'Facets…', icon: <SlidersHorizontal />, onSelect: ctx.openPanel },

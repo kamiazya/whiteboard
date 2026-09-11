@@ -1,5 +1,5 @@
+import type { Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from './backend.js'
 
 /**

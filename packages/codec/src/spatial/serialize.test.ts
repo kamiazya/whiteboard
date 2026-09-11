@@ -54,24 +54,11 @@ describe('serializeSpatial', () => {
   })
 })
 
-it('extended mode keeps the canvas-level x-whiteboard through a round trip', () => {
-  const canvas: SpatialCanvas = {
-    nodes: [],
-    edges: [],
-    'x-whiteboard': { edgeRouting: { style: 'curved' } },
-  }
-  const result = parseSpatial(serializeSpatial(canvas, 'extended'))
-
-  expect(result.ok).toBe(true)
-  expect(result.ok && result.value['x-whiteboard']).toEqual({ edgeRouting: { style: 'curved' } })
-})
-
 it('extended mode keeps the canvas-level facets bucket through a round trip', () => {
   const canvas: SpatialCanvas = {
     nodes: [],
     edges: [],
     'x-whiteboard': {
-      edgeRouting: { style: 'curved' },
       facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
     },
   }
@@ -79,9 +66,31 @@ it('extended mode keeps the canvas-level facets bucket through a round trip', ()
 
   expect(result.ok).toBe(true)
   expect(result.ok && result.value['x-whiteboard']).toEqual({
-    edgeRouting: { style: 'curved' },
     facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
   })
+})
+
+// The pre-facet `edgeRouting` preference is retired with NO compatibility
+// read (0.0.x, no users): a file still carrying it parses, keeps its facets,
+// and loses that one key — never re-emitted, never folded into the facet.
+it('drops the retired canvas-level edgeRouting key on parse and never re-emits it', () => {
+  const result = parseSpatial(
+    JSON.stringify({
+      nodes: [],
+      edges: [],
+      'x-whiteboard': {
+        edgeRouting: { style: 'curved' },
+        facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+      },
+    }),
+  )
+
+  expect(result.ok).toBe(true)
+  if (!result.ok) return
+  expect(result.value['x-whiteboard']).toEqual({
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+  })
+  expect(serializeSpatial(result.value, 'extended')).not.toContain('edgeRouting')
 })
 
 it('strict mode drops the facets bucket with the rest of x-whiteboard (one uniform rule)', () => {

@@ -44,18 +44,24 @@ prevent, and nothing mechanical catches it (the package legitimately lists
 
 ```
 facet-engine ← facet-ui ← plugin-visual ← canvas-render
-                              └───(types only)───┘
+        scene ←───────────────┘   └──────────┘
 ```
 
-**The edge back into `canvas-render` must stay type-only.** `/render` names
-`canvas-render`'s own vocabulary — `RenderContribution`, `ShapeContribution`,
-and the scene-node union any decoration would return — while `canvas-render`
-imports this contribution as its default, so a value import back closes a
-runtime cycle. `canvas-render` therefore sits in this package's
-**devDependencies**, and `canvas-render-type-only.test.ts` enforces it:
-nothing else does, verified by mutation (a value import left all 102 arch-lint
-tests green — the cycle check is intra-package and the direction check reads
-`dependencies` only).
+**There is no edge back into `canvas-render` at all.** `/render` names the
+contract — `RenderContribution`, `ShapeContribution`, the scene-node union a
+decoration returns, the edge-router types — and that contract is
+`@kamiazya/whiteboard-scene`, a package below both this one and the renderer.
+
+It used to come from the renderer itself, which made this a package CYCLE
+held open by every import back being type-only: a property no manifest can
+see, so it cost an entry in arch-lint's `KNOWN_PACKAGE_CYCLES` and a hand
+guard, verified by mutation (a value import left all 102 arch-lint tests
+green — the cycle check is intra-package and the direction check reads
+`dependencies` only). With the contract extracted there is no cycle to hold
+open, and `renderer-independence.test.ts` got STRICTER rather than
+retiring: it pins that this package imports the renderer nowhere, type-only
+or otherwise, which is what stops the cycle being reintroduced by a reader
+who only knows the old rule.
 
 Two edges are easy to get backwards:
 
@@ -103,6 +109,59 @@ nothing at all.
 Geometry rather than the `lucide-react` package because the renderer has no
 React: lucide-react ships components, and only the symbol picker can use them.
 Follow the README's recipe when adding one, and keep the table alphabetical.
+
+## The contributed edge ROUTER (`visual.path/v0`)
+
+`edge-router.ts` is this plugin's `EdgeRouter`, registered as `routers` on
+the render contribution and claimed by `readRouting` — the first real
+customer of canvas-render's router seam, and the reason it exists.
+
+**What it is FOR is the part to keep.** The renderer's three routings all
+COMPUTE a path from two boxes and the obstacles between them, so none of
+them can honour a bend somebody placed by hand, and JSON Canvas has no
+waypoint to put one in. So the bends live in this plugin's own facet, and
+this plugin draws them. A reader that does not know the plugin draws the
+same edge with the built-in routing — which is exactly what makes a bend a
+rendering preference rather than content.
+
+Three decisions worth not re-litigating:
+
+- **A separate facet from `visual.edges/v0`, not a field on it.** `edges`
+  picks between routings; this one supplies the path. An edge carrying
+  bends is not choosing a routing at all. It is also why the routing
+  vocabulary was NOT widened — canvas-render's rule records what widening
+  it cost.
+- **The chosen SIDES are honoured, not re-derived from the first bend.**
+  The anchor pass sees the whole edge set (crowding, fan-out lanes,
+  crossings) and one edge's router cannot improve on it; an edge that
+  wants a particular side says so through JSON Canvas's own
+  `fromSide`/`toSide`, which that pass already reads. The router only
+  computes an endpoint itself when NO side was resolved, and then it faces
+  the neighbouring bend rather than a compiled-in default.
+- **A payload the facet's own schema refuses draws the BUILT-IN route**,
+  never half a path. Same degradation as an unknown shape id.
+
+The derived editor answers `unsupported` for it — a list of points is
+outside `deriveFacetForm`'s vocabulary — so the inspector shows the bends
+read-only. That is the form layer's honest signal rather than a gap, and
+the affordance a person uses is a DRAG on the canvas
+(`apps/web`'s `EdgeBendHandles`), not a form.
+
+One thing that surface measured belongs here, because it is a property of
+where a bend LIVES rather than of the editor: the midpoint of a run is
+already spoken for. `edgeLabelAnchor` draws an edge's label there and
+double-pressing there opens its editor, so the add-a-bend ghosts sit at a
+third and two thirds of each run instead. Placed at the midpoint they
+swallowed the second press and failed every case in
+`edge-label-edit.browser.test.tsx` while the bend tests stayed green — two
+affordances aiming at the same pixel.
+
+
+The end-to-end guard is `pnpm smoke:e2e`. Nothing in the type system
+connects the facet `wb_facet_set` writes to the polyline the daemon emits,
+so that step is what would catch the contribution being dropped from the
+bundled plugin, or the bends being lost between the Loro edge bucket and
+the layout.
 
 ## The theme facet and the bundled theme assets (ADR-0030)
 

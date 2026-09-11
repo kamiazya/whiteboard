@@ -1,4 +1,4 @@
-import type { Migration } from 'kysely'
+import type { Migration } from 'kysely/migration'
 import { migration as init } from './0001-init.js'
 import { migration as canvasesLastCompactedAt } from './0002-canvases-last-compacted-at.js'
 import { migration as documentStore } from './0003-canvas-doc-store.js'

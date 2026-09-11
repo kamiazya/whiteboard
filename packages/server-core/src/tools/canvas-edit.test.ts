@@ -2320,7 +2320,10 @@ describe('wb_canvas_edit — a node created without a height', () => {
     })
     const store = new FakeDocumentStore()
     await seedCanvas(store, { nodes: [], edges: [] })
-    const tool = createCanvasEditTool({ ...makeDeps(store), measure: async () => hairline })
+    const tool = createCanvasEditTool({
+      ...makeDeps(store),
+      textMeasurer: async () => ({ measure: hairline, measurableFamilies: new Set<string>() }),
+    })
     const add = (height?: number) =>
       tool.execute({
         workspaceId: WORKSPACE_ID,

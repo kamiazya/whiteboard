@@ -138,6 +138,7 @@ function edgeToFields(edge: CanvasEdge): Fields {
   if (edge.toEnd !== undefined) fields.toEnd = edge.toEnd
   if (edge.color !== undefined) fields.color = edge.color
   if (edge.label !== undefined) fields.label = edge.label
+  if (edge['x-whiteboard'] !== undefined) fields['x-whiteboard'] = edge['x-whiteboard']
   return fields
 }
 

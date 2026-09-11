@@ -4,7 +4,6 @@ import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { getDataDir } from './config.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
-import { isDirectEntryPoint } from './entrypoint.js'
 import { startHttpServer } from './http-server.js'
 import { getLogger } from './log.js'
 import {
@@ -289,12 +288,4 @@ export async function main() {
   process.on('SIGINT', shutdown)
   process.on('SIGTERM', shutdown)
   process.stdout.write('READY\n')
-}
-
-const isEntryPoint = isDirectEntryPoint(import.meta.url)
-if (isEntryPoint) {
-  main().catch((err) => {
-    process.stderr.write(`HTTP server error: ${err}\n`)
-    process.exit(1)
-  })
 }

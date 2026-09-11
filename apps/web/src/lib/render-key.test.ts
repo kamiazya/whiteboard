@@ -9,6 +9,9 @@ import {
   renderKeySchema,
 } from './render-key.js'
 
+/** A realm holding no theme face — what every case below is keyed in unless it says otherwise. */
+const NO_FACES = ''
+
 const spatial = { documentId: 'doc-1', kind: 'spatial' as const, state: '2026-09-03T00:00:00Z' }
 const markdown = {
   documentId: 'doc-2',
@@ -22,7 +25,7 @@ const markdown = {
 // this cache's map key and the address the OPFS store will use.
 describe('renderKeyPath — every component unambiguous', () => {
   const md = (documentId: string, state: string) =>
-    renderKeyOf({ documentId, kind: 'markdown' as const, state }, 'light')
+    renderKeyOf({ documentId, kind: 'markdown' as const, state }, 'light', NO_FACES)
 
   it('keeps two documents apart when a separator moves between id and version', () => {
     // Unencoded, both of these join to `<build>/markdown/a/b/c.svg` — two
@@ -66,7 +69,7 @@ describe('renderKeyPath — the pipeline is part of the identity', () => {
 
   it('keeps an outline of a document apart from its SVG', () => {
     expect(renderKeyPath(outlineKeyOf(subject))).not.toBe(
-      renderKeyPath(renderKeyOf(subject, 'light')),
+      renderKeyPath(renderKeyOf(subject, 'light', NO_FACES)),
     )
   })
 
@@ -75,14 +78,14 @@ describe('renderKeyPath — the pipeline is part of the identity', () => {
   // SVG plus the bounds it is scaled to, or an outline's rectangles — so an
   // entry named `.svg` would be describing one field of the file it holds.
   it('names each family in the path, so a stored entry says what it holds', () => {
-    expect(renderKeyPath(renderKeyOf(subject, 'light'))).toContain('/svg/')
+    expect(renderKeyPath(renderKeyOf(subject, 'light', NO_FACES))).toContain('/svg/')
     expect(renderKeyPath(outlineKeyOf(subject))).toContain('/outline/')
-    expect(renderKeyPath(renderKeyOf(subject, 'light')).endsWith('.json')).toBe(true)
+    expect(renderKeyPath(renderKeyOf(subject, 'light', NO_FACES)).endsWith('.json')).toBe(true)
     expect(renderKeyPath(outlineKeyOf(subject)).endsWith('.json')).toBe(true)
   })
 
   it('defaults to the svg family, which every existing caller is', () => {
-    expect(renderKeyOf(subject, 'light').pipeline).toBe('svg')
+    expect(renderKeyOf(subject, 'light', NO_FACES).pipeline).toBe('svg')
   })
 
   // An outline's colours are resolved from the LIGHT palette for both kinds,
@@ -95,46 +98,80 @@ describe('renderKeyPath — the pipeline is part of the identity', () => {
   })
 
   it('keeps the theme axis for a spatial SVG, whose palette is baked in', () => {
-    expect(renderKeyOf(subject, 'dark').theme).toBe('dark')
+    expect(renderKeyOf(subject, 'dark', NO_FACES).theme).toBe('dark')
+  })
+
+  // A theme's family is measurable only once this tab holds a face for it,
+  // and a list surface asks for that face only after it has drawn the board
+  // once. So the picture and the face set are one identity: without this
+  // axis the second ask is answered by the first picture, in the bundled
+  // family, for as long as the entry lives — which on disk is past the tab.
+  it('keeps the faces this realm could measure as an axis of a spatial SVG', () => {
+    expect(renderKeyOf(subject, 'light', 'Yomogi').fonts).toBe('Yomogi')
+    expect(renderKeyPath(renderKeyOf(subject, 'light', 'Yomogi'))).not.toBe(
+      renderKeyPath(renderKeyOf(subject, 'light', NO_FACES)),
+    )
+  })
+
+  // Markdown is measured in the bundled family whatever a theme names, so
+  // its entry survives a face landing — the same asymmetry the theme axis
+  // has, for the same reason.
+  it('drops the font axis for markdown, and for an outline of either kind', () => {
+    expect(renderKeyOf(markdown, 'light', 'Yomogi').fonts).toBeNull()
+    expect(renderKeyPath(renderKeyOf(markdown, 'light', 'Yomogi'))).toBe(
+      renderKeyPath(renderKeyOf(markdown, 'light', NO_FACES)),
+    )
+    expect(outlineKeyOf(subject).fonts).toBeNull()
+  })
+
+  // A family name may hold the separator this path is cut on, so it is
+  // encoded like every other opaque value — two realms must not join to one
+  // entry because one holds `a,b` and the other `a` and `b`.
+  it('keeps two face sets apart however their names are punctuated', () => {
+    expect(renderKeyPath(renderKeyOf(subject, 'light', 'a/b'))).not.toBe(
+      renderKeyPath(renderKeyOf(subject, 'light', 'a')),
+    )
   })
 })
 
 describe('isMemoisableKey', () => {
   it('refuses a key with no version', () => {
-    expect(isMemoisableKey(renderKeyOf({ documentId: 'd', kind: 'spatial' }, 'light'))).toBe(false)
+    expect(
+      isMemoisableKey(renderKeyOf({ documentId: 'd', kind: 'spatial' }, 'light', NO_FACES)),
+    ).toBe(false)
   })
 
   it('accepts a key that carries one', () => {
-    expect(isMemoisableKey(renderKeyOf(spatial, 'light'))).toBe(true)
+    expect(isMemoisableKey(renderKeyOf(spatial, 'light', NO_FACES))).toBe(true)
   })
 })
 
 describe('renderKeyOf', () => {
   it('carries the theme for a spatial document, whose palette is baked into the SVG', () => {
-    expect(renderKeyOf(spatial, 'light').theme).toBe('light')
-    expect(renderKeyOf(spatial, 'dark').theme).toBe('dark')
+    expect(renderKeyOf(spatial, 'light', NO_FACES).theme).toBe('light')
+    expect(renderKeyOf(spatial, 'dark', NO_FACES).theme).toBe('dark')
   })
 
   // The whole reason a markdown row survives a theme toggle: its ink comes
   // from CSS, so the same bytes serve both themes and the axis is absent
   // rather than set to something.
   it('omits the theme for a markdown document, whose ink comes from CSS', () => {
-    expect(renderKeyOf(markdown, 'light').theme).toBeNull()
-    expect(renderKeyPath(renderKeyOf(markdown, 'light'))).toBe(
-      renderKeyPath(renderKeyOf(markdown, 'dark')),
+    expect(renderKeyOf(markdown, 'light', NO_FACES).theme).toBeNull()
+    expect(renderKeyPath(renderKeyOf(markdown, 'light', NO_FACES))).toBe(
+      renderKeyPath(renderKeyOf(markdown, 'dark', NO_FACES)),
     )
   })
 
   it('separates two themes of the SAME spatial document', () => {
-    expect(renderKeyPath(renderKeyOf(spatial, 'light'))).not.toBe(
-      renderKeyPath(renderKeyOf(spatial, 'dark')),
+    expect(renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES))).not.toBe(
+      renderKeyPath(renderKeyOf(spatial, 'dark', NO_FACES)),
     )
   })
 
   it('changes when the document does', () => {
     const later = { ...spatial, state: '2026-09-03T01:00:00Z' }
-    expect(renderKeyPath(renderKeyOf(later, 'light'))).not.toBe(
-      renderKeyPath(renderKeyOf(spatial, 'light')),
+    expect(renderKeyPath(renderKeyOf(later, 'light', NO_FACES))).not.toBe(
+      renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES)),
     )
   })
 
@@ -142,7 +179,7 @@ describe('renderKeyOf', () => {
   // the ability to notice a change, which is a persistence concern and not a
   // reason to render the same document twice inside one sitting.
   it('accepts a document with no version stamp', () => {
-    const key = renderKeyOf({ documentId: 'doc-3', kind: 'spatial' }, 'light')
+    const key = renderKeyOf({ documentId: 'doc-3', kind: 'spatial' }, 'light', NO_FACES)
     expect(key.version).toBeNull()
     expect(renderKeySchema.safeParse(key).success).toBe(true)
   })
@@ -150,11 +187,11 @@ describe('renderKeyOf', () => {
   it('leads the path with the build id, so retiring a build is one directory', () => {
     // The first segment, decoded — the encoding is reversible on purpose, so
     // a sweep can still recognise which build a directory belongs to.
-    const [first] = renderKeyPath(renderKeyOf(spatial, 'light')).split('/')
+    const [first] = renderKeyPath(renderKeyOf(spatial, 'light', NO_FACES)).split('/')
     expect(decodeURIComponent((first ?? '').replace(/^~/, ''))).toBe(RENDERER_BUILD_ID)
   })
 
   it('is a valid key by its own schema', () => {
-    expect(renderKeySchema.safeParse(renderKeyOf(spatial, 'dark')).success).toBe(true)
+    expect(renderKeySchema.safeParse(renderKeyOf(spatial, 'dark', NO_FACES)).success).toBe(true)
   })
 })

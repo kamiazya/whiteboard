@@ -598,7 +598,7 @@ describe('pages-release tier wiring drift', () => {
 
 // The three vitest.distribution.config.ts specs (tarball / packaged / codex-config
 // distribution tests) exercised a packed-tarball install and the packaged
-// dist/server/mcp/index.js entry — the exact code path that broke a real npm
+// dist/server/mcp/stdio.js entry — the exact code path that broke a real npm
 // publish (v0.0.9+) — yet ran only via manual `pnpm --filter
 // @kamiazya/whiteboard-mcp test:distribution`, invisible to `pnpm test`,
 // lefthook, and every release gate. This block guards that they stay wired.

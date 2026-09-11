@@ -28,6 +28,7 @@ const EDGE_KEYS = new Set([
   'fromEnd',
   'toEnd',
   'color',
+  'x-whiteboard',
   'label',
 ])
 

@@ -10,7 +10,12 @@ import type * as opentype from 'opentype.js'
 
 import { opentypeApi } from '../../shared/opentype.js'
 import { getLogger } from '../log.js'
-import { EXPORT_FONT_FAMILY, type ExportFontFace, resolveExportFontFaces } from './export-font.js'
+import {
+  EXPORT_FONT_FAMILY,
+  type ExportFontFace,
+  readFontFamilyName,
+  resolveExportFontFaces,
+} from './export-font.js'
 import { installedFontFiles } from './installed-fonts.js'
 
 const log = getLogger('export-measure-text')
@@ -114,16 +119,40 @@ function measureWithFont(
 function buildOpentypeMeasurer(
   regular: opentype.Font,
   faces: Partial<Record<ExportFontFace, opentype.Font>>,
+  installed: ReadonlyMap<string, opentype.Font>,
 ): MeasureText {
   return (text: string, descriptor: FontDescriptor): TextMetrics => {
+    // The family the descriptor NAMES wins, because that name is what the SVG
+    // declares and therefore what resvg paints with: measuring an installed
+    // family's run with the vendored face computes every wrap position, fade
+    // and fitted height for a face nothing draws.
+    //
+    // A CSS chain (`ui-monospace, ..., monospace`) matches no entry and falls
+    // through, which is correct — no loaded face provides it either, so the
+    // fallback measures what the fallback paints.
+    const named = installed.get(descriptor.family)
     // A missing sibling face degrades to Regular metrics — the same glyphs
     // resvg would fall back to painting, so measure and paint stay agreed.
-    const font = faces[faceForDescriptor(descriptor)] ?? regular
+    const font = named ?? faces[faceForDescriptor(descriptor)] ?? regular
     return measureWithFont(font, text, descriptor)
   }
 }
 
-let cachedMeasurerPromise: Promise<MeasureText> | null = null
+/**
+ * The export's text measurement, and the families it can answer for.
+ *
+ * One value rather than two, because they are one decision: the layout
+ * DECLARES a family exactly where `measurableFamilies` admits it
+ * (`fontAvailable`), so a second list built somewhere else is how a declared
+ * family stops being the measured one.
+ */
+export interface ExportTextMeasurer {
+  readonly measure: MeasureText
+  /** Every family `measure` has a real face for — what may be declared. */
+  readonly measurableFamilies: ReadonlySet<string>
+}
+
+let cachedMeasurerPromise: Promise<ExportTextMeasurer> | null = null
 let hasLoggedFallback = false
 
 /**
@@ -204,15 +233,50 @@ export async function loadExportFonts(
   return fonts
 }
 
+/**
+ * The installed faces (ADR-0012) by the family name a theme would name, so a
+ * family the user provided can be both declared and measured.
+ *
+ * The vendored family is skipped: it is served by four faces the weight/style
+ * dispatch already selects among, and a single installed file of the same name
+ * would replace all four with one. First file wins among same-named faces,
+ * which is the sorted directory order `installedFontFiles` fixes — the same
+ * order resvg resolves them in.
+ *
+ * A face that fails to parse is skipped rather than fatal, for the reason
+ * `loadExportFonts` skips one: it cannot draw anything, so it measures
+ * nothing, and a corrupt file in the directory must not take the export down.
+ */
+async function loadInstalledFamilies(): Promise<ReadonlyMap<string, opentype.Font>> {
+  const families = new Map<string, opentype.Font>()
+  for (const path of await installedFontFiles()) {
+    try {
+      const font = await parseFace(path)
+      if (font === null) continue
+      const family = readFontFamilyName(font)
+      if (family === undefined || family === EXPORT_FONT_FAMILY || families.has(family)) continue
+      families.set(family, font)
+    } catch {
+      // Skipped on purpose — see above.
+    }
+  }
+  return families
+}
+
+// The bundled family is always answerable: it is what the layout falls back to
+// DECLARING when a theme's family is not available, including on the degraded
+// path below where nothing is measured with a real face at all.
+const BUNDLED_ONLY: ReadonlySet<string> = new Set([EXPORT_FONT_FAMILY])
+
 async function loadRealMeasurer(
   resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>>,
-): Promise<MeasureText> {
+): Promise<ExportTextMeasurer> {
   try {
     const paths = await resolveFontFiles()
     const regular = await parseFace(paths.regular)
     if (regular === null) {
       logFallbackOnce('asset-not-found')
-      return constantRatioMeasureText
+      return { measure: constantRatioMeasureText, measurableFamilies: BUNDLED_ONLY }
     }
     const faces: Partial<Record<ExportFontFace, opentype.Font>> = { regular }
     for (const face of ['bold', 'italic', 'boldItalic'] as const) {
@@ -225,26 +289,49 @@ async function loadRealMeasurer(
         logFallbackOnce(describeLoadFailure(err))
       }
     }
-    return buildOpentypeMeasurer(regular, faces)
+    const installed = await loadInstalledFamilies()
+    return {
+      measure: buildOpentypeMeasurer(regular, faces, installed),
+      measurableFamilies: new Set([EXPORT_FONT_FAMILY, ...installed.keys()]),
+    }
   } catch (err) {
     logFallbackOnce(describeLoadFailure(err))
-    return constantRatioMeasureText
+    return { measure: constantRatioMeasureText, measurableFamilies: BUNDLED_ONLY }
   }
 }
 
 /**
- * Returns the canonical export `MeasureText`, backed by the vendored
- * opentype.js font. Parses the font asset at most once per process — the
- * parsed result (or, on failure, the fallback measurer) is cached and
- * reused by every caller.
+ * The canonical export measurer: the vendored opentype.js faces plus every
+ * installed family, and the one answer to which families may be declared.
+ *
+ * Parses the font assets at most once per process — the parsed result (or, on
+ * failure, the fallback measurer) is cached and reused by every caller. A font
+ * installed later reaches resvg on the next export (the renderer resolves
+ * `fontFiles` per render) but is not measured until this cache is rebuilt, so
+ * it is drawn in the bundled family it was also measured in — degraded, never
+ * mismatched.
+ * ponytail: key the cache on the installed directory if a font installed
+ * mid-session must change the very next export's declarations.
  */
-export async function createOpentypeMeasureText(
+export async function createExportTextMeasurer(
   options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},
-): Promise<MeasureText> {
+): Promise<ExportTextMeasurer> {
   if (!cachedMeasurerPromise) {
     cachedMeasurerPromise = loadRealMeasurer(options.resolveFontFiles ?? resolveExportFontFaces)
   }
   return cachedMeasurerPromise
+}
+
+/**
+ * The measurement half alone, for a caller with no family question to ask.
+ * Every production seam takes `createExportTextMeasurer` whole, so that a
+ * family is declared exactly where it is measured; this stays for the tests
+ * of the measurer itself.
+ */
+export async function createOpentypeMeasureText(
+  options: { resolveFontFiles?: () => Promise<Record<ExportFontFace, string | null>> } = {},
+): Promise<MeasureText> {
+  return (await createExportTextMeasurer(options)).measure
 }
 
 /** Test-only: clears the module-level measurer cache and log-once flag. */

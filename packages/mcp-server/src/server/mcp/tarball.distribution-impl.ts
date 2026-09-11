@@ -268,7 +268,7 @@ export async function runPackedTarballSmoke({
     )
 
     const installedPackageRoot = resolve(installDir, 'node_modules/@kamiazya/whiteboard-mcp')
-    const installedEntry = resolve(installedPackageRoot, 'dist/server/mcp/index.js')
+    const installedEntry = resolve(installedPackageRoot, 'dist/server/mcp/stdio.js')
     const installedBin = resolve(
       installDir,
       process.platform === 'win32'

@@ -3,6 +3,7 @@ import type { SpatialPalette } from '@kamiazya/whiteboard-canvas-render'
  * The edge branch: the locked-edge [Unlock] short-circuit, then arrows/
  * side/color rows, label/lock/delete.
  */
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { CanvasEdge } from '@kamiazya/whiteboard-model'
 import {
   Lock as LockIcon,
@@ -19,6 +20,7 @@ import type { EditorCommand } from '../../../lib/spatial/commands.js'
 import type { Point } from '../../../lib/spatial/viewport.js'
 import type { CanvasCommands } from '../CanvasContextMenu.js'
 import type { ContextMenuItem } from '../ContextMenu.js'
+import { facetPropertyItems } from '../facet-widgets/index.js'
 import { commentOnEdgeItem } from './annotation-verbs.js'
 import { colorRow } from './color-row.js'
 
@@ -35,6 +37,9 @@ export interface EdgeMenuItemsInput {
   readonly setEdgeLabelEditId: CanvasCommands['setEdgeLabelEditId']
   readonly setSelectedEdgeId: CanvasCommands['setSelectedEdgeId']
   readonly onToggleEdgeLock: CanvasCommands['onToggleEdgeLock']
+  /** The registry the doorway asks whether this surface carries any facets. */
+  readonly facetRegistry: FacetRegistry
+  readonly setFacetPanelOpen: CanvasCommands['setFacetPanelOpen']
 }
 
 export function edgeMenuItems({
@@ -48,6 +53,8 @@ export function edgeMenuItems({
   setEdgeLabelEditId,
   setSelectedEdgeId,
   onToggleEdgeLock,
+  facetRegistry,
+  setFacetPanelOpen,
 }: EdgeMenuItemsInput): ContextMenuItem[] {
   // A locked edge offers exactly one action. Everything else in
   // this branch — delete, label, arrowheads, sides, colour —
@@ -128,6 +135,21 @@ export function edgeMenuItems({
     colorRow(palette, edge.color, (color) =>
       applyEdgeCommand({ kind: 'set-edge-color', id: edge.id, color }),
     ),
+    // Facets reach this surface the same ONE way they reach the node menu:
+    // a doorway to the inspector, never rows of values — an action menu runs
+    // an entry and closes, and a facet is state you adjust repeatedly. It
+    // sits after the property rows and before the actions, so the menu reads
+    // properties, then facets, then verbs. This menu names no plugin and no
+    // facet key (facet-wiring-guard.test.ts keeps it so).
+    ...facetPropertyItems(facetRegistry, 'inspector.edge', {
+      // Selecting is part of opening: the inspector is ABOUT the selection,
+      // and a right-click opens this menu without selecting, so a doorway
+      // that only raised the flag would show a panel about nothing.
+      openPanel: () => {
+        setSelectedEdgeId(edge.id)
+        setFacetPanelOpen(true)
+      },
+    }),
     { kind: 'separator' as const },
     {
       label: 'Edit label',

@@ -88,6 +88,13 @@ export interface SpatialPalette {
    * a proposal is a suggestion awaiting a person, not an error.
    */
   readonly proposal: { readonly edge: string; readonly bubbleFill: string }
+  /**
+   * The neutral a markdown BODY's furniture is drawn in (`MarkdownTheme`'s
+   * `chromeColor`): the code panel, the blockquote rail, a table's rules, a
+   * task checkbox. Absent on the bundled palettes, which keep the markdown
+   * theme's own neutral — so a body under no theme draws exactly as it did.
+   */
+  readonly markdownChrome?: string
 }
 
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at

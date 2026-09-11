@@ -1,6 +1,6 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { ParagraphBlockNode, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ParagraphBlockNode, TextRunNode } from '../../scene-graph.js'
 import { createCorpusMeasure } from '../../test-utils/text-wrapping-corpus.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 

@@ -41,6 +41,13 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       'yaml',
     ],
   },
+  '@kamiazya/whiteboard-scene': {
+    // The scene vocabulary and the renderer/plugin contract. Types only, and
+    // positioned rather than populated: it sits below the renderer and below
+    // every plugin so neither imports the other to agree what a scene is.
+    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-facet-engine'],
+    allowedThirdParty: [],
+  },
   '@kamiazya/whiteboard-canvas-render': {
     // codec: the mdast body parser this package DEFAULTS to. Every consumer
     // already bundles codec to pass it in, so the dependency adds nothing to
@@ -67,6 +74,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-codec',
       '@kamiazya/whiteboard-plugin-visual',
       '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-scene',
     ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
@@ -199,6 +207,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-facet-ui',
       '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-scene',
     ],
     allowedThirdParty: ['react', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global'],
@@ -312,20 +321,20 @@ export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
  * only says the loop could be closed, and whatever keeps the closing import
  * type-only needs its own guard, named in the reason.
  */
+/**
+ * Package loops this repo accepts, with the reason each is not a defect.
+ *
+ * EMPTY, and that is the news: the one entry here was
+ * canvas-render <-> plugin-visual, a loop closed only by every import back
+ * being type-only — a property no manifest can see. The contract they shared
+ * moved into `@kamiazya/whiteboard-scene`, below both, so the loop is gone
+ * rather than tolerated. `renderer-independence.test.ts` in plugin-visual
+ * now pins that there is no edge at all.
+ */
 export const KNOWN_PACKAGE_CYCLES: readonly {
   readonly packages: readonly string[]
   readonly reason: string
-}[] = [
-  {
-    packages: ['@kamiazya/whiteboard-canvas-render', '@kamiazya/whiteboard-plugin-visual'],
-    reason:
-      'plugin-visual imports canvas-render scene-node vocabulary TYPE-ONLY (devDependency) while ' +
-      'canvas-render consumes plugin-visual decorations at runtime. The type-only property is ' +
-      "guarded by plugin-visual's canvas-render-type-only.test.ts; the honest dissolution is a " +
-      'package below both holding the scene vocabulary, worth extracting when a second plugin ' +
-      'needs it (see architecture-map.md).',
-  },
-]
+}[] = []
 
 /**
  * Mechanics an ADAPTER still reaches directly, pending ADR-0018's migration.

@@ -7,9 +7,9 @@
 // `minContentWidthPx`/`labelFontSizePx`.
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
-import type { Scene, SceneNode } from '../scene-graph.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 

@@ -5,17 +5,18 @@
  * place the backend draws a shape from, so a silhouette kind added to
  * `node-outline.ts` is drawn here and nowhere else.
  */
-import { edgeArrowPolygons } from '../edge-arrows.js'
-import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
-import { sketchEdge, sketchShape } from '../layout/ink/sketch.js'
-import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
+
 import type {
   Appearance,
   BoundingBox,
   ResolvedEdgeNode,
   SceneInk,
   ShapeSceneNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { edgeArrowPolygons } from '../edge-arrows.js'
+import { GLOW_STD_DEVIATION_RATIO } from '../layout/ink/glow.js'
+import { SKETCH_PASSES, sketchEdge, sketchShape } from '../layout/ink/sketch.js'
+import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import type { IconTable } from './backend.js'
 import { formatCoord } from './format.js'
 import {
@@ -127,9 +128,30 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
     'stroke-opacity': paint['stroke-opacity'],
     'stroke-dasharray': paint['stroke-dasharray'],
   }
-  const underlay: SvgChild =
-    strokes.hatch !== undefined
-      ? el(
+  // The crisp silhouette with its stroke removed: a hand draws no 6px
+  // fillet, so the rect underlay drops its radius too. A hatched node keeps
+  // this tint UNDER its lines — a label sits on a coloured surface, not on
+  // bare accent strokes.
+  const tint: SvgChild =
+    paint.fill === undefined || paint.fill === 'none'
+      ? []
+      : renderCrispShape(
+          {
+            ...node,
+            radius: undefined,
+            appearance: {
+              fill: paint.fill,
+              ...(paint['fill-opacity'] === undefined
+                ? {}
+                : { fillOpacity: paint['fill-opacity'] }),
+            },
+          },
+          tables,
+        )
+  const hatch: SvgChild =
+    strokes.hatch === undefined
+      ? []
+      : el(
           'g',
           { 'stroke-linecap': 'round' },
           strokes.hatch.map((d) =>
@@ -142,33 +164,35 @@ function renderSketchShape(node: ShapeSceneNode, ink: SceneInk, tables?: Resolve
             }),
           ),
         )
-      : paint.fill === undefined || paint.fill === 'none'
-        ? []
-        : // The crisp silhouette with its stroke removed: a hand draws no
-          // 6px fillet, so the rect underlay drops its radius too.
-          renderCrispShape(
-            {
-              ...node,
-              radius: undefined,
-              appearance: {
-                fill: paint.fill,
-                ...(paint['fill-opacity'] === undefined
-                  ? {}
-                  : { fillOpacity: paint['fill-opacity'] }),
-              },
-            },
-            tables,
-          )
+  const underlay: SvgChild = [tint, hatch]
   const outlineStrokes = el(
     'g',
     { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-    strokes.strokes.map((d) => el('path', { d, ...strokeAttrs })),
+    strokes.strokes.map((d, pass) =>
+      el('path', { d, ...strokeAttrs, 'stroke-opacity': passOpacity(pass, strokeAttrs) }),
+    ),
   )
   return [underlay, withGlow(outlineStrokes, glowOf(node.appearance, tables))]
 }
 
 const HATCH_STROKE_WIDTH = 0.9
 const HATCH_OPACITY = 0.75
+/**
+ * The second pass of an outline is the pencil going over its own line: a
+ * lighter stroke on the same paper. At full strength two passes read as a
+ * doubled hairline rather than one hand-drawn line.
+ */
+const SECOND_PASS_OPACITY = 0.55
+
+/** The opacity a pass is painted at; a stroke past the passes (an arrowhead wing) keeps its own. */
+function passOpacity(
+  index: number,
+  attrs: { readonly 'stroke-opacity'?: number | undefined },
+): number | undefined {
+  const own = attrs['stroke-opacity']
+  if (index === 0 || index >= SKETCH_PASSES) return own
+  return own === undefined ? SECOND_PASS_OPACITY : own * SECOND_PASS_OPACITY
+}
 
 function renderCrispShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   // Non-rect silhouettes come from the shared decomposition (one producer
@@ -261,13 +285,13 @@ export function renderSketchEdge(
     el(
       'g',
       { 'stroke-linecap': 'round', 'stroke-linejoin': 'round' },
-      strokes.strokes.map((d) =>
+      strokes.strokes.map((d, pass) =>
         el('path', {
           d,
           fill: 'none',
           stroke: paint.stroke,
           'stroke-width': paint['stroke-width'],
-          'stroke-opacity': paint['stroke-opacity'],
+          'stroke-opacity': passOpacity(pass, paint),
           'stroke-dasharray': paint['stroke-dasharray'],
           role: PRESENTATION,
         }),

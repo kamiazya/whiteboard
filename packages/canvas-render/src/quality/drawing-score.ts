@@ -1,6 +1,6 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '@kamiazya/whiteboard-scene'
 import { sceneBounds } from '../scene-bounds.js'
-import type { BoundingBox, ResolvedEdgeNode, Scene, TextRunNode } from '../scene-graph.js'
 import {
   bends,
   crossings as crossingsOf,

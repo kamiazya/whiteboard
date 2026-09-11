@@ -1,12 +1,13 @@
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
+  createSpatialTheme,
   outlineContentBox,
   type SceneNode,
   SPATIAL_THEME_GEOMETRY,
+  type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { CommentThread, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { createEditorAppearance, editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { TextAnchor } from '../../lib/text-anchor.js'
 import type { ResolvedTheme } from '../../lib/theme.js'
 import { type GestureState, reduceGesture } from './gestures.js'
@@ -29,6 +30,7 @@ export function MarkdownBodyEditorOverlay({
   onRequestComment,
   zoom,
   theme,
+  palette,
   canvas,
   gestureState,
   applyResult,
@@ -42,7 +44,13 @@ export function MarkdownBodyEditorOverlay({
   readonly threads: readonly CommentThread[] | undefined
   readonly onRequestComment: (anchor: TextAnchor) => boolean
   readonly zoom: number
+  /** The UI mode the board is drawn in. */
   readonly theme: ResolvedTheme
+  /**
+   * The palette the board is drawn in: the draft is typed in its ink, and
+   * the opaque cover below is the node's own fill under it.
+   */
+  readonly palette: SpatialPalette
   readonly canvas: SpatialCanvas
   readonly gestureState: GestureState
   readonly applyResult: (result: ReturnType<typeof reduceGesture>) => void
@@ -84,18 +92,18 @@ export function MarkdownBodyEditorOverlay({
         // node's text. An offloaded canvas lags one worker round trip
         // behind the suppression change, so for that gap the overlay
         // keeps the old opaque cover — otherwise the committed text
-        // shows doubled under the draft.
+        // shows doubled under the draft. The cover is the node's own
+        // fill under the board's palette, so it hides the committed
+        // text without changing the node's colour; a fill-less node
+        // gets the paper it sits on, which is what shows through it.
         background: sceneCurrent
           ? 'transparent'
           : (() => {
-              const fill = createEditorAppearance(theme).resolveNode(node).appearance?.fill
-              return fill !== undefined && fill !== 'none'
-                ? fill
-                : theme === 'dark'
-                  ? 'oklch(0.145 0 0)'
-                  : '#ffffff'
+              const fill = createSpatialTheme({ mode: theme, palette }).resolveNode(node).appearance
+                ?.fill
+              return fill !== undefined && fill !== 'none' ? fill : palette.surface
             })(),
-        color: editorTextFill(theme),
+        color: palette.labelFill,
         fontFamily,
         fontSize: BODY_FONT_SIZE_PX,
         // The overlay must advance by the SAME line box the committed

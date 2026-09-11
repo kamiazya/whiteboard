@@ -12,12 +12,16 @@ describe('x-whiteboard JSON Schema artifact', () => {
     await expect(generated).toMatchFileSnapshot('../../../docs/reference/x-whiteboard.schema.json')
   })
 
-  it('describes both extension sites as draft 2020-12 definitions', () => {
+  it('describes all three extension sites as draft 2020-12 definitions', () => {
     const schema = xWhiteboardJsonSchema()
     expect(schema.$schema).toBe('https://json-schema.org/draft/2020-12/schema')
     const defs = schema.$defs as Record<string, Record<string, unknown>>
-    expect(Object.keys(defs).sort()).toEqual(['canvasExtension', 'nodeExtension'])
+    expect(Object.keys(defs).sort()).toEqual(['canvasExtension', 'edgeExtension', 'nodeExtension'])
     expect(defs.canvasExtension.type).toBe('object')
+    // The edge site is facets and nothing else — no embed variant, so no
+    // union: an edge has no content JSON Canvas cannot express.
+    expect(defs.edgeExtension.type).toBe('object')
+    expect('anyOf' in defs.edgeExtension).toBe(false)
     // The node site is a UNION since ADR-0013: an embed variant and a
     // facets-only variant, each an object.
     const nodeVariants = defs.nodeExtension.anyOf as { type?: string }[]
@@ -26,6 +30,7 @@ describe('x-whiteboard JSON Schema artifact', () => {
     // Neither def re-declares a root `$schema` of its own.
     expect('$schema' in defs.canvasExtension).toBe(false)
     expect('$schema' in defs.nodeExtension).toBe(false)
+    expect('$schema' in defs.edgeExtension).toBe(false)
   })
 
   it('the canvas facets bucket publishes the facet-key grammar, not any-string keys', () => {

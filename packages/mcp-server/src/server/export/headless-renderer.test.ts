@@ -248,14 +248,13 @@ describe('headless-renderer', () => {
     // Spy on the build seam (the font measurer factory) to prove the
     // singleton's in-flight promise is shared, not raced: N concurrent
     // first callers must invoke it exactly once, not N times.
-    const buildSpy = vi.fn(async () => () => ({
-      advanceWidth: 0,
-      ascent: 0,
-      descent: 0,
-      lineGap: 0,
+    const buildSpy = vi.fn(async () => ({
+      measure: () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 }),
+      measurableFamilies: new Set(['Roboto']),
     }))
     vi.doMock('./measure-text.js', () => ({
-      createOpentypeMeasureText: buildSpy,
+      createExportTextMeasurer: buildSpy,
+      createOpentypeMeasureText: async () => (await buildSpy()).measure,
       _resetExportMeasureTextCacheForTests: vi.fn(),
       // These mocks replace the module WHOLESALE, so every export
       // `headless-renderer` reaches for has to be answered here — an omission
@@ -284,10 +283,13 @@ describe('headless-renderer', () => {
 
   it('rebuilds after a failed first build instead of permanently replaying the rejection', async () => {
     vi.doMock('./measure-text.js', () => ({
-      createOpentypeMeasureText: vi
+      createExportTextMeasurer: vi
         .fn()
         .mockRejectedValueOnce(new Error('boom'))
-        .mockResolvedValue(() => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })),
+        .mockResolvedValue({
+          measure: () => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 }),
+          measurableFamilies: new Set(['Roboto']),
+        }),
       _resetExportMeasureTextCacheForTests: vi.fn(),
       // These mocks replace the module WHOLESALE, so every export
       // `headless-renderer` reaches for has to be answered here — an omission
@@ -308,7 +310,7 @@ describe('headless-renderer', () => {
 
   it('prewarmHeadlessExporter never rejects, even when the underlying build throws', async () => {
     vi.doMock('./measure-text.js', () => ({
-      createOpentypeMeasureText: vi.fn().mockRejectedValue(new Error('font load failed')),
+      createExportTextMeasurer: vi.fn().mockRejectedValue(new Error('font load failed')),
       _resetExportMeasureTextCacheForTests: vi.fn(),
       // These mocks replace the module WHOLESALE, so every export
       // `headless-renderer` reaches for has to be answered here — an omission
@@ -340,8 +342,14 @@ describe('headless-renderer', () => {
   })
 
   it('degrades to system fonts with a single warning when the font asset is missing', async () => {
-    vi.doMock('./export-font.js', () => ({
-      EXPORT_FONT_FAMILY: 'Roboto',
+    // PARTIAL, unlike the measure-text mocks above: the only thing this test
+    // needs is a missing asset. A wholesale replacement leaves every other
+    // export of the module undefined for whoever imports it next — `doUnmock`
+    // does not reach a module instance already resolved — and the reader used
+    // to build the unresolved-families report answered `undefined` for every
+    // face two describes later, reporting nothing.
+    vi.doMock('./export-font.js', async (importOriginal) => ({
+      ...(await importOriginal<typeof import('./export-font.js')>()),
       resolveExportFontFaces: vi.fn(async () => ({
         regular: null,
         bold: null,

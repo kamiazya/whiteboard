@@ -29,7 +29,7 @@ const root = resolve(__dirname, '../..')
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
 const entry = resolve(
   root,
-  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts',
+  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/stdio.ts',
 )
 
 process.on('SIGINT', () => process.exit(130))

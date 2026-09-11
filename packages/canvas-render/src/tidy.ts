@@ -46,12 +46,42 @@
  *    the edge optimizer re-routes and re-sides edges on the
  *    committed render.
  *
+ * **The answer is a SETTLED state, and `tidyNodes` checks.** Every rule
+ * above is local, so idempotence is a property of all of them together and
+ * no single one can be held responsible for it — on a board with a FRAME it
+ * did not hold at all: 11853 of 20000 crowded generated boards moved again
+ * on a second tidy, a few of them for ever. Two local fixes closed all but
+ * a tail — a member's grid laid from its FRAME's corner rather than the
+ * board's zero, and a band that may not push one back out past the margin —
+ * and `tidyNodes` closes the tail by re-entering until the state repeats,
+ * which is the only thing that can answer for all of them at once. What
+ * that costs is one more settling pass on a board tidy actually changed,
+ * roughly double: 19ms -> 45ms on a 300-box, 8-frame board, which a tap can
+ * pay.
+ *
  * Pure and total: returns ONLY the boxes that actually move (a frame that
  * grew carries its new size); degenerate input never throws. Locked nodes
  * never move and stand as fixed obstacles, and a frame holding one is held
  * by it (moving the frame would carry it away from a member that cannot
  * follow); out-of-scope units likewise.
  */
+import {
+  buildUnits,
+  overlapsWithMargin,
+  type Point,
+  type Rect,
+  rectOf,
+  TIDY_BAND_PX,
+  TIDY_GRID_PX,
+  TIDY_MARGIN_PX,
+  type TidyNode,
+  type TidyOptions,
+  type Unit,
+  usable,
+} from './tidy-units.js'
+
+export type { TidyNode, TidyOptions } from './tidy-units.js'
+
 export interface TidyMove {
   readonly id: string
   readonly x: number
@@ -61,64 +91,28 @@ export interface TidyMove {
   readonly height?: number
 }
 
-export interface TidyNode {
-  readonly id: string
-  readonly type: 'text' | 'file' | 'link' | 'group'
-  readonly x: number
-  readonly y: number
-  readonly width: number
-  readonly height: number
-}
-
-export interface TidyOptions {
-  /** Unit roots outside this set stay put (undefined = whole canvas). */
-  readonly scope?: ReadonlySet<string>
-  readonly locked?: (id: string) => boolean
-  /**
-   * The canvas's edges, by node id. With them a row is ORDERED as well as
-   * aligned: a box whose connections along its own row all lie to one side
-   * swaps with the nearest of them, so a hub that fans out sits between the
-   * boxes it fans out to. Without them rows keep the order they were drawn.
-   */
-  readonly edges?: readonly { readonly fromNode: string; readonly toNode: string }[]
-}
-
-const TIDY_BAND_PX = 24
-const TIDY_GRID_PX = 8
-const TIDY_MARGIN_PX = 32
 /**
- * Best-effort ceiling: movable units beyond this stay put (the rest of
- * the tidy still applies). Same class of bound as the edge optimizer's
- * CROSSING_OPT_MAX_EDGES — this runs on a phone.
+ * The grid is laid from an ORIGIN, which inside a frame is the frame's own
+ * corner rather than the board's zero.
+ *
+ * A frame is snapped to the board's grid like anything else, so it moves by
+ * whatever it was off by — and every member placed against the board's grid
+ * before that move is carried the same distance OFF it. The next tidy put
+ * them back, which is what made tidy non-idempotent on any board holding a
+ * frame drawn off the grid (2446 of 3000 generated boards). Laid from the
+ * frame's corner instead, a member's position is a fact about the frame,
+ * and moving the frame carries it and its grid together.
+ *
+ * The visible cost, stated because a reader will find it: a member of an
+ * off-grid frame is off the BOARD's grid by the frame's own offset. That is
+ * the frame's alignment to answer for, and it is answered — the frame
+ * itself takes the board's grid — where a member 3px off the row inside its
+ * own frame answers for nothing.
  */
-const TIDY_MAX_UNITS = 300
-
-interface Rect {
-  x: number
-  y: number
-  w: number
-  h: number
-}
-
-interface Point {
-  readonly x: number
-  readonly y: number
-}
-
-interface Unit {
-  readonly rootId: string
-  /** Every node of the unit, the root included. */
-  readonly members: readonly TidyNode[]
-  /** Member node ids that move with the unit (locked members excluded). */
-  readonly movableIds: readonly string[]
-  bbox: Rect
-  readonly movable: boolean
-  dx: number
-  dy: number
-}
-
-const roundToGrid = (v: number) => Math.round(v / TIDY_GRID_PX) * TIDY_GRID_PX
-const ceilToGrid = (v: number) => Math.ceil(v / TIDY_GRID_PX) * TIDY_GRID_PX
+const roundToGrid = (v: number, origin = 0) =>
+  origin + Math.round((v - origin) / TIDY_GRID_PX) * TIDY_GRID_PX
+const ceilToGrid = (v: number, origin = 0) =>
+  origin + Math.ceil((v - origin) / TIDY_GRID_PX) * TIDY_GRID_PX
 
 /**
  * The anchors of what this level holds that a frame does not, and that the
@@ -157,125 +151,6 @@ function anchorsToYieldTo(
 const onSomeAnchor = (value: number, anchors: readonly number[]): boolean =>
   anchors.some((anchor) => Math.abs(anchor - value) <= 0.5)
 
-function fullyContains(outer: Rect, inner: Rect): boolean {
-  return (
-    inner.x >= outer.x &&
-    inner.y >= outer.y &&
-    inner.x + inner.w <= outer.x + outer.w &&
-    inner.y + inner.h <= outer.y + outer.h
-  )
-}
-
-/**
- * Membership by MAJORITY, not by containment: a box more than half inside a
- * frame's own box is one of its members.
- *
- * A drawer who puts a box across a frame's edge means it to be in the frame
- * — but `fullyContains` said no, so it became its own unit and the overlap
- * pass hopped it clear of the frame entirely, leaving a member orphaned
- * OUTSIDE the group it was drawn in. Nothing caught that: JSON Canvas
- * membership is containment, so the drawing had quietly lost a member, and
- * every debt column of the drawing score reads zero on the result (the
- * straddle is gone precisely because the box no longer touches the frame).
- * Claimed instead, it is tidied among its fellow members and the frame
- * grows to hold it — passes that already existed.
- *
- * Majority rather than contact, so a frame does not swallow a neighbour it
- * overlaps by a corner. Frames that overlap each other are resolved by
- * document order, first claim winning, the same rule the scoop already had.
- */
-function mostlyInside(outer: Rect, inner: Rect): boolean {
-  const area = inner.w * inner.h
-  if (area <= 0) return fullyContains(outer, inner)
-  const w = Math.min(outer.x + outer.w, inner.x + inner.w) - Math.max(outer.x, inner.x)
-  const h = Math.min(outer.y + outer.h, inner.y + inner.h) - Math.max(outer.y, inner.y)
-  return w > 0 && h > 0 && w * h * 2 > area
-}
-
-function overlapsWithMargin(a: Rect, b: Rect): boolean {
-  return (
-    a.x < b.x + b.w + TIDY_MARGIN_PX &&
-    b.x < a.x + a.w + TIDY_MARGIN_PX &&
-    a.y < b.y + b.h + TIDY_MARGIN_PX &&
-    b.y < a.y + a.h + TIDY_MARGIN_PX
-  )
-}
-
-const rectOf = (n: TidyNode): Rect => ({ x: n.x, y: n.y, w: n.width, h: n.height })
-
-function usable(nodes: readonly TidyNode[]): TidyNode[] {
-  return nodes.filter(
-    (n) =>
-      Number.isFinite(n.x) &&
-      Number.isFinite(n.y) &&
-      Number.isFinite(n.width) &&
-      Number.isFinite(n.height),
-  )
-}
-
-/**
- * Outermost-rooted single-scoop units: a group is a unit root iff no other
- * group's box fully contains it (identical boxes tie-break to the earlier
- * document index); each root claims every yet-unclaimed node its box
- * contains in ONE flat scoop, so nested groups and their members can never
- * be double-assigned. Everything else is a singleton unit.
- */
-function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
-  const locked = options.locked ?? (() => false)
-  const inScope = (id: string) => options.scope === undefined || options.scope.has(id)
-  const groups = nodes.filter((n) => n.type === 'group')
-  const isRoot = (g: TidyNode, index: number) =>
-    !groups.some(
-      (h, hIndex) =>
-        h.id !== g.id &&
-        fullyContains(rectOf(h), rectOf(g)) &&
-        (!fullyContains(rectOf(g), rectOf(h)) || hIndex < index),
-    )
-  const claimed = new Set<string>()
-  const units: Unit[] = []
-  let movableCount = 0
-  const pushUnit = (rootId: string, memberNodes: readonly TidyNode[], bbox: Rect) => {
-    // A frame holding a locked member is held by it: moving the unit would
-    // carry the frame away from a member that cannot follow.
-    const movable =
-      inScope(rootId) &&
-      !locked(rootId) &&
-      !memberNodes.some((m) => locked(m.id)) &&
-      movableCount < TIDY_MAX_UNITS
-    if (movable) movableCount++
-    units.push({
-      rootId,
-      members: memberNodes,
-      movableIds: memberNodes.filter((m) => !locked(m.id)).map((m) => m.id),
-      bbox: { ...bbox },
-      movable,
-      dx: 0,
-      dy: 0,
-    })
-  }
-  for (const [index, node] of nodes.entries()) {
-    if (claimed.has(node.id)) continue
-    if (node.type === 'group' && isRoot(node, groups.indexOf(node))) {
-      void index
-      const members = nodes.filter(
-        (m) => !claimed.has(m.id) && (m.id === node.id || mostlyInside(rectOf(node), rectOf(m))),
-      )
-      for (const m of members) claimed.add(m.id)
-      pushUnit(node.id, members, rectOf(node))
-    }
-  }
-  for (const node of nodes) {
-    if (claimed.has(node.id)) continue
-    claimed.add(node.id)
-    pushUnit(node.id, [node], rectOf(node))
-  }
-  // Units participate in document order of their root — rebuild that order
-  // (group roots were emitted before later singletons above).
-  const orderOf = new Map(nodes.map((n, i) => [n.id, i]))
-  units.sort((a, b) => (orderOf.get(a.rootId) ?? 0) - (orderOf.get(b.rootId) ?? 0))
-  return units
-}
-
 /**
  * Banded alignment along one axis, by each anchor a drawer sets: the near
  * edge, then the centre, then on x the far edge — a width is named, a
@@ -285,7 +160,7 @@ function buildUnits(nodes: readonly TidyNode[], options: TidyOptions): Unit[] {
  * which a reader calls lined up and an edge band could never see. Units
  * in no band at all take the grid at their edge.
  */
-function alignBands(units: Unit[], axis: 'x' | 'y'): void {
+function alignBands(units: Unit[], axis: 'x' | 'y', origin: number, floor?: number): void {
   const edge = (u: Unit) => (axis === 'x' ? u.bbox.x : u.bbox.y)
   const extent = (u: Unit) => (axis === 'x' ? u.bbox.w : u.bbox.h)
   const shift = (unit: Unit, delta: number) => {
@@ -311,6 +186,23 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
         : { ...unit.bbox, y: unit.bbox.y + delta }
     return units.every((other) => other === unit || !overlapsWithMargin(moved, other.bbox))
   }
+  /**
+   * Inside a frame, a band may not push a unit back OUT past the margin.
+   *
+   * The floor runs once, before these passes, so without this a band undoes
+   * it — and that is not merely cosmetic, it is what made tidy grow a frame
+   * for ever. Measured: a far-edge band snapped one member's left edge to
+   * the grid, dragged its row-mate 3px left of the margin, the frame grew to
+   * hold the escapee, and the level's own snap then carried the whole unit
+   * back — 3px wider on every tidy, with no member moving at all.
+   *
+   * Applying the floor again AFTER the passes was tried instead and is worse
+   * than the bug: the overlap pass no longer gets the last word, and the
+   * grouped corpus went from 0 overlapping pairs to 109.
+   */
+  const insideMargin = (unit: Unit, delta: number): boolean =>
+    floor === undefined || edge(unit) + delta >= floor - 0.5
+
   const lined = new Set<Unit>()
   for (const fraction of axis === 'x' ? [0, 0.5, 1] : [0, 0.5]) {
     const anchor = (u: Unit) => edge(u) + extent(u) * fraction
@@ -331,8 +223,10 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
       const partner = fixed ?? first
       if (guarded && !clearAfter(partner, 0)) continue
       if (fixed === undefined) {
-        const toGrid = roundToGrid(edge(first)) - edge(first)
-        if (!guarded || clearAfter(first, toGrid)) shift(first, toGrid)
+        const toGrid = roundToGrid(edge(first), origin) - edge(first)
+        if ((!guarded || clearAfter(first, toGrid)) && insideMargin(first, toGrid)) {
+          shift(first, toGrid)
+        }
       }
       const target = anchor(partner)
       for (const unit of band) {
@@ -342,6 +236,7 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
         // snap the rounding undoes is not a snap.
         const delta = Math.round(edge(unit) + target - anchor(unit)) - edge(unit)
         if (guarded && delta !== 0 && !clearAfter(unit, delta)) continue
+        if (!insideMargin(unit, delta)) continue
         shift(unit, delta)
       }
       // Lined up means sharing the anchor with SOMETHING, to the half pixel
@@ -353,7 +248,8 @@ function alignBands(units: Unit[], axis: 'x' | 'y'): void {
   }
   for (const unit of units) {
     if (!unit.movable || lined.has(unit)) continue
-    shift(unit, roundToGrid(edge(unit)) - edge(unit))
+    const toGrid = roundToGrid(edge(unit), origin) - edge(unit)
+    if (insideMargin(unit, toGrid)) shift(unit, toGrid)
   }
 }
 
@@ -445,7 +341,7 @@ function orderRowsByEdges(
  * far. Monotone in one direction, so it terminates after at most one hop
  * per obstacle.
  */
-function resolveOverlaps(units: Unit[]): void {
+function resolveOverlaps(units: Unit[], origin: Point): void {
   const occupied: Rect[] = units.filter((u) => !u.movable).map((u) => u.bbox)
   for (const unit of units) {
     if (!unit.movable) continue
@@ -468,10 +364,13 @@ function resolveOverlaps(units: Unit[]): void {
         // Hops land ON the grid, rounding AWAY from the collider so the
         // clearance never shrinks — off-grid spots would feed the next
         // pass's banding and unsettle the fixpoint.
+        const from = axis === 'x' ? origin.x : origin.y
         const snapAway = (v: number) =>
-          dir === 1
-            ? Math.ceil(v / TIDY_GRID_PX) * TIDY_GRID_PX
-            : Math.floor(v / TIDY_GRID_PX) * TIDY_GRID_PX
+          from +
+          (dir === 1
+            ? Math.ceil((v - from) / TIDY_GRID_PX)
+            : Math.floor((v - from) / TIDY_GRID_PX)) *
+            TIDY_GRID_PX
         const next =
           axis === 'x'
             ? dir === 1
@@ -517,6 +416,9 @@ function tidyLevel(
   // rule cannot move, for the margin snap to yield to. Empty at the top
   // level, which has no frame around it.
   outside: { readonly x: readonly number[]; readonly y: readonly number[] },
+  // Where this level's grid is laid FROM: the board's zero at the top
+  // level, a frame's own corner inside one (see `roundToGrid`).
+  origin: Point,
   // Inside a frame: the margin its members start at, as an ANCHOR rather
   // than only a floor. A member hugging the frame's top or left edge is
   // moved in to it rather than the frame grown around it — the frame's
@@ -541,6 +443,19 @@ function tidyLevel(
     units.flatMap((u) => (u.members.length > 1 ? u.members.map((m) => m.id) : [])),
   )
   const settled = new Map<string, Rect>(nodes.map((n) => [n.id, rectOf(n)]))
+  /**
+   * Tidy each frame's members inside it, and grow it to hold them.
+   *
+   * Runs ONCE, before the level's own passes. Running it inside the loop
+   * instead was implemented and measured and did NOT pay: it settles more
+   * boards in a single pass (400 of 20000 crowded generated boards still
+   * needed a second, against 1394), and the second pass is cheaper than
+   * doing this work every iteration — 1.6s against 2.4s over those 20000
+   * boards, and 45ms against 56ms on a 300-box, 8-frame one, with the
+   * output and every scoreboard column identical. What makes the leftovers
+   * safe is `tidyNodes` settling to a fixpoint, below; this would only make
+   * them rarer, for more work.
+   */
   for (const unit of units) {
     const inner = unit.members.filter((m) => m.id !== unit.rootId)
     if (inner.length === 0) continue
@@ -554,9 +469,21 @@ function tidyLevel(
         new Set(inner.map((m) => m.id)),
         (id) => inScope(id) && !locked(id) && framed.has(id),
       ),
+      // A frame that can MOVE lays the grid from its own corner, because the
+      // members it carries have to stay where they are relative to it. One
+      // that cannot move never carries anything, so it keeps the grid its
+      // level already has — and its members stay on the board's, which is
+      // what a reader lines them up against. (Nested: an immobile frame
+      // inside a movable one is carried, so it inherits its level's origin
+      // rather than falling back to the board.)
+      unit.movable ? { x: frame.x, y: frame.y } : origin,
       {
-        x: ceilToGrid(frame.x + TIDY_MARGIN_PX),
-        y: ceilToGrid(frame.y + TIDY_MARGIN_PX),
+        // On the frame's own grid the margin is a whole number of steps, so
+        // this is `frame.{x,y} + TIDY_MARGIN_PX` exactly. Written through
+        // the same helper because that is what makes it true rather than a
+        // coincidence of today's two constants.
+        x: ceilToGrid(frame.x + TIDY_MARGIN_PX, frame.x),
+        y: ceilToGrid(frame.y + TIDY_MARGIN_PX, frame.y),
       },
     )
     for (const [id, rect] of innerSettled) settled.set(id, rect)
@@ -566,7 +493,8 @@ function tidyLevel(
     settled.set(unit.rootId, grown)
     unit.bbox = { ...grown }
   }
-  if (floor !== undefined) {
+  const applyFloor = () => {
+    if (floor === undefined) return
     for (const unit of units) {
       if (!unit.movable) continue
       for (const axis of ['x', 'y'] as const) {
@@ -589,6 +517,7 @@ function tidyLevel(
       }
     }
   }
+  applyFloor()
   // Run the passes to an internal FIXPOINT (bounded): an overlap hop can
   // land a unit near a band boundary and vice versa, so a single sweep is
   // not always stable. Iterating until nothing moves makes tidy's output
@@ -609,10 +538,10 @@ function tidyLevel(
   const seen = new Set<string>([signature()])
   const TIDY_MAX_ITERATIONS = 8
   for (let i = 0; i < TIDY_MAX_ITERATIONS; i++) {
-    alignBands(units, 'x')
-    alignBands(units, 'y')
+    alignBands(units, 'x', origin.x, floor?.x)
+    alignBands(units, 'y', origin.y, floor?.y)
     if (options.edges !== undefined) orderRowsByEdges(units, options.edges)
-    resolveOverlaps(units)
+    resolveOverlaps(units, origin)
     const now = signature()
     if (seen.has(now)) break
     seen.add(now)
@@ -628,13 +557,69 @@ function tidyLevel(
   return settled
 }
 
+/** Rounded, because that is the state a caller applies and re-enters with. */
+function settleOnce(nodes: readonly TidyNode[], options: TidyOptions): TidyNode[] {
+  const settled = tidyLevel(nodes, options, { x: [], y: [] }, { x: 0, y: 0 })
+  return nodes.map((node) => {
+    const rect = settled.get(node.id)
+    if (rect === undefined) return node
+    const next = {
+      ...node,
+      x: Math.round(rect.x),
+      y: Math.round(rect.y),
+      width: Math.round(rect.w),
+      height: Math.round(rect.h),
+    }
+    return [next.x, next.y, next.width, next.height].every(Number.isFinite) ? next : node
+  })
+}
+
+/**
+ * Tidy SETTLES: it returns a state it would not move again, by checking.
+ *
+ * Every rule below this line is local — a band, a hop, a margin, a frame
+ * growing — and idempotence is a property of all of them together, which no
+ * one of them can be responsible for. Two fixes each closed a family and
+ * left a smaller one; the rest is not a family at all, it is the tail of a
+ * fixpoint nobody was computing.
+ *
+ * So the entry point computes it. It settles, re-enters, and stops when the
+ * state repeats — stopping at a state already SEEN rather than at one that
+ * stopped moving, for the reason the level's own loop does: the passes can
+ * CYCLE, and a repeated state is the one re-entry reproduces. Six boards in
+ * 40000 do exactly that, so this is not a theoretical case.
+ *
+ * The cost is one confirming pass on a board that was already settled,
+ * which is what most are: measured 19ms -> 45ms on a 300-box, 8-frame
+ * board. A tap can pay that; a caller who could not is `layoutSpatialEdges`,
+ * and tidy is not on its path.
+ *
+ * The CEILING is a measurement, not a guess. Over 40000 boards drawn the way
+ * the property draws them — one or two frames, a lock always, a partial
+ * scope half the time — reaching a repeated state took 2 passes on 34885 of
+ * them, 3 on 4759, and 7 at the worst. A ceiling of 4 shipped, and CI's
+ * stress lane found the board that needs 5 within the hour: a locked frame
+ * overlapping a scoped one, where each pass moved a member the next pass had
+ * to grow the frame around.
+ */
+const TIDY_MAX_SETTLE_PASSES = 12
+
 export function tidyNodes(
   nodes: readonly TidyNode[],
   options: TidyOptions = {},
 ): readonly TidyMove[] {
   const clean = usable(nodes)
   if (clean.length < 2) return []
-  const settled = tidyLevel(clean, options, { x: [], y: [] })
+  const positions = (ns: readonly TidyNode[]) =>
+    ns.map((n) => `${n.x} ${n.y} ${n.width} ${n.height}`).join('|')
+  let current = clean
+  const seen = new Set<string>()
+  for (let i = 0; i < TIDY_MAX_SETTLE_PASSES; i++) {
+    seen.add(positions(current))
+    current = settleOnce(current, options)
+    if (seen.has(positions(current))) break
+  }
+  const settled = new Map(current.map((n) => [n.id, { x: n.x, y: n.y, w: n.width, h: n.height }]))
   const moves: TidyMove[] = []
   for (const node of clean) {
     const rect = settled.get(node.id)

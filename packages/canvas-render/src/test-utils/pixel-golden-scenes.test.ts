@@ -1,10 +1,12 @@
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene, SceneNode } from '../scene-graph.js'
 import {
   buildArrowheadsScene,
   buildJumpHopScene,
+  buildNeonLookScene,
   buildRoundedCornersScene,
   buildRoundedRectScene,
+  buildSketchLookScene,
 } from './pixel-golden-scenes.js'
 
 /**
@@ -60,6 +62,30 @@ describe('pixel-golden fixtures stay text-free and integer-aligned', () => {
       for (const value of collectCoordinates(node)) {
         expect(Number.isInteger(value)).toBe(true)
       }
+    }
+  })
+})
+
+/**
+ * The two LOOK fixtures are laid out by `layoutSpatialCanvas` rather than
+ * hand-authored, so their coordinates are the layout's and only the
+ * text-free half of the contract above applies — ink jitter is fractional
+ * by design. What this guards is the one property their baselines depend
+ * on and nothing else asserts: a body that starts rendering glyphs makes
+ * the golden a claim about the machine's fonts.
+ */
+const LOOK_SCENES = [
+  ['sketch', buildSketchLookScene],
+  ['neon', buildNeonLookScene],
+] as const
+
+describe('themed look fixtures stay text-free', () => {
+  it.each(LOOK_SCENES)('%s draws only geometry-only node kinds', (_name, build) => {
+    const { scene } = build()
+    // A count, so an empty scene cannot pass this vacuously.
+    expect(scene.nodes.length).toBeGreaterThanOrEqual(8)
+    for (const node of scene.nodes) {
+      expect(GEOMETRY_ONLY_KINDS).toContain(node.kind)
     }
   })
 })

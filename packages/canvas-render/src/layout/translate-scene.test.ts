@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest'
 import type {
   ListBlockNode,
   ListItemNode,
@@ -6,7 +5,8 @@ import type {
   ResolvedEdgeNode,
   Scene,
   TableBlockNode,
-} from '../scene-graph.js'
+} from '@kamiazya/whiteboard-scene'
+import { describe, expect, it } from 'vitest'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { translateScene } from './translate-scene.js'
 

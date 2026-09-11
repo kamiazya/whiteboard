@@ -1,7 +1,7 @@
 import { chmod, mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { Migrator } from 'kysely'
+import { Migrator } from 'kysely/migration'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { CAN_DENY_FILE_READ } from '../../../shared/test-utils/can-deny-file-read.js'
 

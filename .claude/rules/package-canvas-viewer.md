@@ -39,8 +39,10 @@ paths:
   thrown `ViewerSceneError` at this one imperative boundary.
 - `widget/`: the self-contained single-file MCP Apps widget build —
   build-time font embedding (`build-fonts-module.ts`), the widget entry
-  bootstrap, the refresh/comment controls, and the click-to-canvas-point
-  mapping (`canvas-point.ts`).
+  bootstrap, the refresh/comment controls, the click-to-canvas-point
+  mapping (`canvas-point.ts`), and `theme-font.ts`: the widget's ONE
+  outbound request (ADR-0011's 2026-09-10 note), gated on a pinned
+  catalogue origin the widget holds itself.
 
 ## What does NOT belong here
 
@@ -138,6 +140,13 @@ paths:
   answers false on purpose — Canvas 2D would draw it and the daemon's
   export could not, and a face the two sides disagree on moves every
   wrapped line.
+
+- The widget PAINTS the theme's paper: `widget-entry.ts` resolves
+  `resolveCanvasPalette(scene, 'light', { style }).surface` and passes it
+  to `mountCanvasViewer`'s `background`, which is canvas-render's
+  background rect rather than a CSS colour. `'light'` restates
+  `CanvasViewer`'s own default, since the paper has to come from the mode
+  the layout drew in.
 
 - `registerFontBytes(family, bytes)` registers a face from bytes in THIS
   realm — a window's document or a worker's global — and records the family

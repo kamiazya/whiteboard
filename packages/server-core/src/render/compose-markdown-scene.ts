@@ -1,4 +1,9 @@
-import type { MeasureText, ReferenceSeams, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  MeasureText,
+  ReferenceSeams,
+  Scene,
+  SpatialRenderStyle,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutMdastBlocks,
   MARKDOWN_THEME_DOCUMENT,
@@ -18,6 +23,18 @@ const MARKDOWN_SCENE_WIDTH_PX = 720
 export interface ComposeMarkdownSceneOptions {
   /** The bundle `referenceSeams` builds; absent keeps every embed a placeholder. */
   readonly references?: ReferenceSeams
+  /**
+   * Which look a canvas the body embeds is drawn in. A markdown host has no
+   * theme of its own, so this reaches the embed's own `visual.theme/v0`
+   * (ADR-0030 decision 5) rather than a host theme; absent draws clean.
+   */
+  readonly style?: SpatialRenderStyle
+  /**
+   * Whether a family a theme names may be declared, for the canvases the
+   * body embeds — the measurer's answer (`fontAvailableOf`), the same one the
+   * board gets rendered on its own. Absent declares the bundled family alone.
+   */
+  readonly fontAvailable?: (family: string) => boolean
 }
 
 /**
@@ -38,5 +55,7 @@ export function composeMarkdownScene(
     theme: MARKDOWN_THEME_DOCUMENT,
     canvasAppearance: MCP_SCENE_APPEARANCE,
     ...(options?.references !== undefined ? { references: options.references } : {}),
+    ...(options?.style !== undefined ? { style: options.style } : {}),
+    ...(options?.fontAvailable !== undefined ? { fontAvailable: options.fontAvailable } : {}),
   })
 }

@@ -282,7 +282,7 @@ describe('resolveTsxWatchSpawn', () => {
   it('spawns node directly against tsx dist/cli.mjs, not the node_modules/.bin shim', () => {
     const result = resolveTsxWatchSpawn(
       '/repo/packages/mcp-server',
-      '/repo/packages/mcp-server/src/server/index.ts',
+      '/repo/packages/mcp-server/src/server/daemon-entry.ts',
       ['--foo'],
       { execPath: '/usr/local/bin/node' },
     )
@@ -292,7 +292,7 @@ describe('resolveTsxWatchSpawn', () => {
       args: [
         resolve('/repo/packages/mcp-server/node_modules/tsx/dist/cli.mjs'),
         'watch',
-        '/repo/packages/mcp-server/src/server/index.ts',
+        '/repo/packages/mcp-server/src/server/daemon-entry.ts',
         '--foo',
       ],
     })

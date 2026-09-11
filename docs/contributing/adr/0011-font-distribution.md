@@ -94,6 +94,11 @@ reader sees. `ServerDeps.measure` is the existing seam and both sides go through
 it. A future provider registry supplies faces to that seam and to resvg from one
 place, never two.
 
+*2026-09-10 note: the seam is now `ServerDeps.textMeasurer`, and it carries the
+families the measurer holds a face for beside the measurer itself — so
+`wb_scene_render` declares a theme's family from the same set the export
+measures with, rather than declaring the bundled one unconditionally.*
+
 ### 5. The whole-font fallback is a declared exception, and stays one
 
 `headless-renderer.ts` uses `{ loadSystemFonts: true }` when the vendored
@@ -166,3 +171,39 @@ path**, which is what a font package provides.
 - The provider registry is not built yet. Until it is, a deployment that needs
   CJK export can pass font paths to resvg directly — this ADR fixes what the
   eventual mechanism must satisfy, not its API.
+
+**2026-09-10 — the zero-network property gains its ONE exception, in the
+widget.** The MCP Apps widget may fetch a theme's family, and nothing else:
+only while drawing a canvas in a theme that names one, only from the pinned
+catalogue origin (`https://raw.githubusercontent.com`, the same file the
+daemon's installer takes), and only after the widget re-checks that origin
+against a constant it holds itself. Everything else stays exactly as decided
+above — no font is fetched at startup, none for a plain render, and the
+export path is untouched.
+
+Why the property was worth breaking here. ADR-0030's themes name a family
+(`visual.sketch` names Yomogi), and the widget is the one surface with no way
+to obtain one: the editor asks the daemon or the catalogue, and the daemon's
+export reads its own disk. A themed board drawn in the widget was therefore
+the theme's strokes in the bundled lettering — which reads as the theme half
+working rather than as a font that is missing.
+
+Why a direct fetch and not the two alternatives:
+
+- **Inline the bytes in the widget bundle.** Yomogi alone is 4.0 MB against a
+  built widget of 1.9 MB, served on every view, for a family most canvases do
+  not name. It also does not generalise: the catalogue has nine families.
+- **Fetch through the daemon.** The widget is sandboxed markup that
+  deliberately holds no daemon URL and no credentials, and the daemon is not
+  reachable from the host's iframe origin anyway (it is loopback, and there is
+  no CORS grant). Routing it through `callServerTool` would put the megabytes
+  through the model's context, which is what carrying a URL avoids.
+
+What holds the exception to its size: the widget's own pinned origin constant
+(`widget/theme-font.ts`, mutation-checked by a test that a URL anywhere else
+is refused and never requested), the `_meta.ui.csp` the `ui://whiteboard/
+canvas-view` resource declares (that origin and no other, so a host's CSP
+enforces the same bound), and `smoke-widget.mjs`, which still asserts **zero**
+requests for a plain render and asserts **exactly one**, to that URL, for a
+themed one. A host that narrows CSP further simply gets the bundled family —
+the degradation ADR-0030 already declares.

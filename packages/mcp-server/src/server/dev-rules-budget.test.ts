@@ -99,7 +99,14 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // under the boundary, so 294 of the 295 characters this row added are
   // charged to a step it did not take — a coarse instrument bills the whole
   // bucket to whoever crosses it.
-  '.claude/rules/architecture-map.md': 16,
+  // 17 for the cycle paragraph's rewrite: KNOWN_PACKAGE_CYCLES went empty
+  // when `packages/scene` took the renderer/plugin contract, and the
+  // paragraph now records what the entry WAS plus a correction — the
+  // extraction's commit gave a reason ("a router returns a scene node") the
+  // router contract then did not need. A reader who trusts a wrong reason
+  // extracts the wrong thing next time, so the correction is the rule's own
+  // business rather than only the commit's.
+  '.claude/rules/architecture-map.md': 17,
   // 27 since `ci-gate` — the one required check ci.yml's jobs aggregate into.
   // It belongs here rather than in a skill because it changes what a session
   // must do when it shards a job: nothing, where before it had to ask a human
@@ -124,7 +131,12 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   // the Comment row. It sat 23 characters under the boundary beforehand, so
   // this bucket bought about 200 characters of prose, not a thousand — a
   // coarse instrument charges the whole step to whoever crosses it.
-  '.claude/rules/vocabulary.md': 16,
+  //
+  // 17 for the **Stencil** and **Recipe** rows (ADR-0034). Two words a design
+  // is about to be built in, fixed here BEFORE the code so the naming is not
+  // settled by whichever file happens to be written first — which is the one
+  // thing this table is for, and what it costs is a bucket.
+  '.claude/rules/vocabulary.md': 17,
 }
 
 /**
@@ -142,12 +154,17 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
  * has to say, to sit under a bucket, is the trade this test exists to make
  * visible rather than to force.
  *
+ * 24 since `vocabulary.md` gained the **Stencil** and **Recipe** rows
+ * (ADR-0034), at 96017. The same shape as the crossing before it: two rows of
+ * about 700 characters carried the corpus over a grain the 3500 characters
+ * accumulated since 91762 had already brought it to.
+ *
  * Worth knowing when this fails on a diff that touches no rule file: the
  * total is the reading most likely to be stale, and the four `it`s below
  * separate the cases — a per-file failure names the file that grew, this
  * one names only the corpus.
  */
-const ALWAYS_ON_TOTAL_BUDGET = 23
+const ALWAYS_ON_TOTAL_BUDGET = 24
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
@@ -250,7 +267,30 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // frame-idempotence bug the same investigation surfaced, with the evidence
 // that it predates this session and the three partial fixes that did not
 // close it.
-const CANVAS_RENDER_BUDGET = 117
+// 120 when that bug was CLOSED: the standing-bug paragraph became the fix —
+// three measured changes, the structural one that was measured and dropped
+// for costing 50% more time to reach the same answer, and the 11853-of-20000
+// -> 0 reading either half of it has to be judged against. A later session
+// asking "was that ever fixed, and what did it cost" reads it here rather
+// than reconstructing it from four commits.
+// 121 for where that fix's SETTLING CEILING came from: the pass
+// distribution over 40000 boards, the six that never reach a fixpoint at
+// all, and the fact that a guessed ceiling of 4 shipped and CI's stress
+// lane found the board needing 5. A ceiling with no measurement beside it
+// is the next session's guess as well.
+// 127 since a contribution may supply the edge ALGORITHM: what crosses the
+// seam (a route, never a scene node) and why, that the side pass runs first
+// so sides are a router's input, the four ways it falls back, and the
+// measured reason selection is a reader rather than a widened payload —
+// with the half of that measurement that the schema-drawn generator has
+// since retired, said plainly so the surviving half stays readable.
+//
+// 131 for the THIRD axis (ADR-0033, `quality/facet-score.ts`): what a board
+// says with appearance rather than with position, and the first reading of
+// it — every board in the corpus, the hand-drawn references included, spends
+// one treatment and owes all 22 constructs. A reader who does not know that
+// will read the scoreboard's zeroes as health.
+const CANVAS_RENDER_BUDGET = 131
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {

@@ -160,6 +160,16 @@ describe('theme fonts', () => {
     hasLoadedFace.mockReturnValue(false)
   })
 
+  // What a list surface's render key carries, so a picture drawn before a
+  // face landed is not the answer to an ask made after it.
+  it('reports the held faces as one sorted key, empty until the first lands', async () => {
+    const mod = await import('./theme-fonts.js')
+    expect(mod.themeFacesKey()).toBe('')
+    const { fetchFn } = daemonFetch([{ id: 'yomogi', family: 'Yomogi' }])
+    await mod.loadThemeFonts({ fetchFn, daemonBaseUrl: 'http://d' })
+    expect(mod.themeFacesKey()).toBe('Yomogi')
+  })
+
   it('names the held faces an SVG actually declares, for the PNG export to embed', async () => {
     const mod = await import('./theme-fonts.js')
     const { fetchFn } = daemonFetch([{ id: 'yomogi', family: 'Yomogi' }])

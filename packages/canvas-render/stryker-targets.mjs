@@ -33,6 +33,12 @@ export const MUTATED = [
   'src/scene-digest.ts',
   'src/layout/nodes/truncate.ts',
   'src/tidy.ts',
+  // Split out of `tidy.ts` and covered for that reason: `buildUnits` is
+  // where that file's mutation residue moved once its scoreboard existed,
+  // and `membershipOf` is what the idempotence fix reads. Leaving it out
+  // would have SHRUNK what the lane sees while the report kept looking the
+  // same, which is the failure this list's pinned counts exist to stop.
+  'src/tidy-units.ts',
   // A four-candidate search whose property scores the candidates from the
   // definition of overlap, sharing nothing with the search.
   'src/layout/comment-placement.ts',

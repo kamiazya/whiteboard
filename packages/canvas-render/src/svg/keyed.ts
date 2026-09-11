@@ -20,8 +20,8 @@
  * tool keep calling `renderSceneToSvg`, whose bytes carry no keys.
  */
 
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { sceneEntries } from '../scene-entry-keys.js'
-import type { Scene } from '../scene-graph.js'
 import { buildSvgDocumentParts, type SvgDocumentOptions } from './backend.js'
 import { formatCoord } from './format.js'
 import { serializeSvg, serializeSvgChild, serializeSvgChunks } from './serialize.js'

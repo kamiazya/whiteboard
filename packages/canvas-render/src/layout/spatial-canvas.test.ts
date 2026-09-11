@@ -1,7 +1,12 @@
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import type {
+  HeadingBlockNode,
+  Scene,
+  ShapeSceneNode,
+  TextRunNode,
+} from '@kamiazya/whiteboard-scene'
 import { describe, expect, it, vi } from 'vitest'
-import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { outlineContains } from './nodes/node-outline.js'
@@ -177,7 +182,8 @@ describe('layoutSpatialCanvas', () => {
     }
     const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
     const chrome = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+      (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
+        n.kind === 'shape' && n.id === 'a',
     )
     expect(chrome?.shape).toBe('visual.hexagon')
   })
@@ -299,14 +305,14 @@ describe('layoutSpatialCanvas', () => {
       baseOptions({ nodeOutlines: { a: 'visual.ellipse' } }),
     )
     const chrome = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+      (n): n is import('@kamiazya/whiteboard-scene').ShapeSceneNode =>
+        n.kind === 'shape' && n.id === 'a',
     )
     expect(chrome?.shape).toBe('visual.ellipse')
   })
 
   it('routes by the visual.edges facet when the canvas carries one', () => {
-    // The facet is the successor of the legacy edgeRouting preference
-    // (ADR-0013); resolution is canvas-render's own default so every
+    // Resolution is canvas-render's own default (ADR-0013), so every
     // surface — editor, export, viewer, widget — reads the same answer.
     const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
     const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
@@ -319,7 +325,7 @@ describe('layoutSpatialCanvas', () => {
       baseOptions(),
     )
     const routed = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
     )
     expect(routed).toBeDefined()
     // Diagonal neighbours under orthogonal routing draw an L, never a
@@ -327,25 +333,79 @@ describe('layoutSpatialCanvas', () => {
     expect(routed?.path.length).toBeGreaterThan(2)
   })
 
-  it('the facet takes whole-value precedence over the legacy edgeRouting preference', () => {
+  it('an edge that carries its own visual.edges facet routes by it, and its neighbour does not', () => {
+    // The edge slot (ADR-0013 decision 5): the same facet asked of a
+    // narrower object wins over the canvas's answer, which is the whole
+    // point of a per-edge override. Both edges are the same diagonal shape,
+    // so only the facet can separate them.
     const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
     const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
-    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const c = textNode({ id: 'c', x: 600, y: 400, width: 50, height: 50, text: 'c' })
     const scene = layoutSpatialCanvas(
       {
-        ...canvas([a, b], [edge]),
-        'x-whiteboard': {
-          edgeRouting: { style: 'orthogonal' },
-          facets: { 'visual.edges/v0': { routing: 'straight' } },
-        },
+        ...canvas(
+          [a, b, c],
+          [
+            {
+              id: 'bent',
+              fromNode: 'a',
+              toNode: 'b',
+              'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+            },
+            { id: 'plain', fromNode: 'b', toNode: 'c' },
+          ],
+        ),
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'straight' } } },
       },
       baseOptions(),
     )
-    const routed = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
-    )
-    expect(routed).toBeDefined()
-    expect(routed?.path.length).toBe(2)
+    const routed = (id: string) =>
+      scene.nodes.find(
+        (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode =>
+          n.kind === 'edge' && n.id === id,
+      )
+    expect(routed('bent')?.path.length).toBeGreaterThan(2)
+    expect(routed('plain')?.path.length).toBe(2)
+  })
+
+  it("an edge's own facet chooses whether it hops the lines it crosses", () => {
+    // Line jumps are drawn on the LATER edge of a crossing pair, so a
+    // per-edge answer means "does THIS edge hop", asked of the edge that
+    // would draw the arc.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 40, height: 40, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 0, width: 40, height: 40, text: 'b' })
+    const c = textNode({ id: 'c', x: 150, y: -150, width: 40, height: 40, text: 'c' })
+    const d = textNode({ id: 'd', x: 150, y: 150, width: 40, height: 40, text: 'd' })
+    const crossing = [
+      { id: 'first', fromNode: 'a', toNode: 'b' },
+      { id: 'second', fromNode: 'c', toNode: 'd' },
+    ]
+    const jumpsOf = (edges: CanvasEdge[]) => {
+      const scene = layoutSpatialCanvas({ ...canvas([a, b, c, d], edges) }, baseOptions())
+      return scene.nodes
+        .filter(
+          (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
+        )
+        .map((n) => [n.id, n.jumps?.length ?? 0] as const)
+    }
+    // Nothing asked for: no arc anywhere.
+    expect(jumpsOf(crossing)).toEqual([
+      ['first', 0],
+      ['second', 0],
+    ])
+    // The later edge asks for its own: it hops, the earlier one does not.
+    expect(
+      jumpsOf([
+        crossing[0] as CanvasEdge,
+        {
+          ...(crossing[1] as CanvasEdge),
+          'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
+        },
+      ]),
+    ).toEqual([
+      ['first', 0],
+      ['second', 1],
+    ])
   })
 
   it('centers a multi-segment edge label at the arc-length midpoint, not a corner vertex', () => {
@@ -357,11 +417,14 @@ describe('layoutSpatialCanvas', () => {
     const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
     const edge = { id: 'e1', fromNode: 'a', toNode: 'b', label: 'L' }
     const scene = layoutSpatialCanvas(
-      { ...canvas([a, b], [edge]), 'x-whiteboard': { edgeRouting: { style: 'orthogonal' } } },
+      {
+        ...canvas([a, b], [edge]),
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      },
       baseOptions(),
     )
     const routed = scene.nodes.find(
-      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+      (n): n is import('@kamiazya/whiteboard-scene').ResolvedEdgeNode => n.kind === 'edge',
     )
     const label = scene.nodes.find((n): n is TextRunNode => n.kind === 'textRun' && n.text === 'L')
     expect(routed).toBeDefined()
@@ -753,7 +816,7 @@ describe('edge routing style from the canvas', () => {
   it('bends the edge when the canvas asks for orthogonal', () => {
     const path = edgePathOf({
       ...canvas(twoNodes, link),
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
     })
     expect(path.length).toBeGreaterThan(2)
   })
@@ -848,7 +911,7 @@ describe('layoutSpatialEdges', () => {
         { id: 'e1', fromNode: 'a', toNode: 'b', label: 'across' },
         { id: 'e2', fromNode: 'c', toNode: 'd' },
       ],
-      'x-whiteboard': { edgeRouting: { lineJumps: 'arc' } },
+      'x-whiteboard': { facets: { 'visual.edges/v0': { lineJumps: 'arc' } } },
     }
     const options = baseOptions()
     const full = layoutSpatialCanvas(canvas, options).nodes

@@ -77,7 +77,7 @@ export async function runCodexConfigSmoke({
     '[codex-config-smoke] published config is wired to npx @kamiazya/whiteboard-mcp@latest',
   )
 
-  const entry = resolve(packageRoot, 'dist/server/mcp/index.js')
+  const entry = resolve(packageRoot, 'dist/server/mcp/stdio.js')
   if (!existsSync(entry)) {
     throw new Error(
       `[codex-config-smoke] dist artifact missing: ${entry}\nRun pnpm build before mcp-distribution tests.`,

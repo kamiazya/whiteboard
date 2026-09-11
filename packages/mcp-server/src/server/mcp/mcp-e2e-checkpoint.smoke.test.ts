@@ -4,7 +4,7 @@ import { describe, it } from 'vitest'
 import { runE2eCheckpointSmoke } from './mcp-e2e-checkpoint.smoke-impl.js'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
-const entry = resolve(root, 'src/server/mcp/index.ts')
+const entry = resolve(root, 'src/server/mcp/stdio.ts')
 
 describe('e2e version smoke', () => {
   it('full MCP stdio flow: wb_workspace_edit → wb_facet_set → wb_version_save → wb_version_list → wb_version_restore', async () => {

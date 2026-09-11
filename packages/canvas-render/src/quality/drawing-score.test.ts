@@ -4,10 +4,10 @@
 // the score can be believed there — an instrument trusted before it is
 // calibrated is how `worstStallMs` reported 0.3ms for a 200ms stall.
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { Scene, SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { constantRatioMeasureText } from '../measure.js'
-import type { Scene, SceneNode } from '../scene-graph.js'
 import { DRAWING_CORPUS } from '../test-utils/drawing-corpus.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'

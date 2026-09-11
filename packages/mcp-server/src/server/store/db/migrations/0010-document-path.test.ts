@@ -1,4 +1,5 @@
-import { Kysely, type MigrationProvider, Migrator, SqliteDialect, sql } from 'kysely'
+import { Kysely, SqliteDialect, sql } from 'kysely'
+import { type MigrationProvider, Migrator } from 'kysely/migration'
 import LibsqlNativeDatabase from 'libsql'
 import { describe, expect, it } from 'vitest'
 import type { DatabaseSchema } from '../schema.js'

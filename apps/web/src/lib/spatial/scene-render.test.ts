@@ -97,7 +97,7 @@ describe('the editor draws the theme the document names (ADR-0030 decision 6)', 
     const { svg } = renderCanvasToSvg(themed, { measure: fakeMeasure, theme: 'dark' })
     expect(svg).toContain('wb-glow')
     // The neon dark palette, since the paper follows the UI mode.
-    expect(svg).toContain('#a5b4c7')
+    expect(svg).toContain('#7dd3fc')
   })
 
   it("style: 'clean' is the session override that draws the bundled look instead", () => {

@@ -23,7 +23,7 @@ const tmpDataDir = mkdtempSync(`${tmpdir()}/whiteboard-e2e-`)
 const entryArg = process.argv.find((arg) => arg.startsWith('--entry='))
 const entry = resolve(
   root,
-  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/index.ts',
+  entryArg ? entryArg.slice('--entry='.length) : 'src/server/mcp/stdio.ts',
 )
 const childArgs = entry.endsWith('.ts') ? ['--import', 'tsx/esm', entry] : [entry]
 
@@ -619,6 +619,78 @@ async function main() {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 
+  // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
+  // validates the result against `facetSetOutputSchema` at runtime. Written
+  // here rather than at the unit layer alone because the edge is the third
+  // `x-whiteboard` site, and the bucket has to survive the Loro field
+  // mapping in both directions — an earlier site did not, silently, because
+  // nothing read it back.
+  const edgeFacet = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    edgeId: 'link',
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+  })
+  if (edgeFacet.updated[0]?.facets?.['visual.edges/v0']?.routing !== 'orthogonal') {
+    throw new Error(
+      `edge-target wb_facet_set returned unexpected shape: ${JSON.stringify(edgeFacet)}`,
+    )
+  }
+  const afterEdgeFacet = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  const storedEdge = (afterEdgeFacet.edges ?? []).find((entry) => entry.id === 'link')
+  if (storedEdge === undefined) {
+    throw new Error(
+      `the edge vanished after an edge-target facet write: ${JSON.stringify(afterEdgeFacet.edges)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_set → edge-target facet stored on the edge')
+
+  // A node-target facet on an edge is refused by the same target check the
+  // canvas and node branches use, from the third side.
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentIds: [documentId],
+      edgeId: 'link',
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+    },
+    'with a node-target facet on an edge',
+    'targets an edge',
+  )
+  console.log('[e2e] wb_facet_set → a node-target facet is refused on an edge')
+
+  // A CONTRIBUTED router, end to end: `visual.path/v0` is the plugin's own
+  // facet, and the renderer draws it only through the router contribution
+  // point. Nothing in the type system connects the facet a tool writes to
+  // the polyline the daemon emits, so this is the step that would catch the
+  // contribution being dropped from the bundled plugin, or the bends being
+  // lost between the Loro edge bucket and the layout.
+  const BEND = { x: 4242, y: -1337 }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    edgeId: 'link',
+    facets: { 'visual.path/v0': { waypoints: [BEND] } },
+  })
+  const bent = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
+  if (typeof bent.svg !== 'string' || !bent.svg.includes(`${BEND.x},${BEND.y}`)) {
+    throw new Error('wb_scene_render drew no edge through the stored bend')
+  }
+  console.log('[e2e] wb_facet_set + wb_scene_render → the contributed router draws a stored bend')
+
+  // Cleared again, so every later step reads the canvas the rest of this
+  // smoke was written against.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    edgeId: 'link',
+    facets: { 'visual.path/v0': null },
+  })
+
   // Propose mode (ADR-0029). Through a real MCP client, so the SDK validates
   // the `proposed` payload against `proposalSchema` at runtime — the drift
   // the type system cannot see, and the reason this step is here rather than
@@ -951,6 +1023,35 @@ async function main() {
     '[e2e] wb_scene_render(markdown, embedReferences:true) → page with the embedded canvas',
   )
 
+  // The same page under `style: 'document'`. A markdown host names no theme,
+  // so what must be drawn is the EMBEDDED board's own (ADR-0030 decision 5) —
+  // the style argument reaching a nested layout is exactly what a type check
+  // cannot see, and the page renders happily without it.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.neon' } },
+  })
+  const styledMarkdown = await callTool('wb_scene_render', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+    embedReferences: true,
+    style: 'document',
+  })
+  if (!styledMarkdown.svg.includes('filterUnits="userSpaceOnUse"')) {
+    throw new Error(
+      `wb_scene_render(markdown, style: document) drew the embedded board clean: ${styledMarkdown.svg.slice(0, 300)}`,
+    )
+  }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  console.log("[e2e] wb_scene_render(markdown, style: 'document') → the embedded board's own theme")
+
   // `fragment` names a part the document must hold; an unknown one is a
   // tool error naming it, not a silent whole-document render.
   await expectToolError(
@@ -990,6 +1091,46 @@ async function main() {
     throw new Error(`canvas_view did not echo style: ${JSON.stringify(viewedStyled.style)}`)
   }
   console.log("[e2e] canvas_view(style: 'document') → style echoed for the widget")
+
+  // The widget draws in a bundled family unless it can measure the one the
+  // theme names, and it has no catalogue of its own — so the tool answers
+  // where that family lives. Only the ANSWER travels: a URL, never the 4 MB
+  // behind it. The SDK validates it against canvasViewOutputSchema, which is
+  // the point of doing it here.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': { theme: 'visual.sketch' } },
+  })
+  const sketched = await callTool('canvas_view', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    style: 'document',
+  })
+  if (sketched.themeFont?.family !== 'Yomogi') {
+    throw new Error(`canvas_view named no theme font: ${JSON.stringify(sketched.themeFont)}`)
+  }
+  if (!sketched.themeFont.url.startsWith('https://raw.githubusercontent.com/')) {
+    throw new Error(
+      `canvas_view's theme font URL left the catalogue origin: ${sketched.themeFont.url}`,
+    )
+  }
+  // The bundled look draws in the bundled family, so there is nothing to
+  // fetch and nothing to say — and the widget's fetch is gated on this.
+  const sketchedClean = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  if (sketchedClean.themeFont !== undefined) {
+    throw new Error(
+      `canvas_view named a theme font under the bundled look: ${JSON.stringify(sketchedClean.themeFont)}`,
+    )
+  }
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [documentId],
+    target: 'canvas',
+    facets: { 'visual.theme/v0': null },
+  })
+  console.log("[e2e] canvas_view(style: 'document') → themeFont for the widget; none under clean")
 
   // The widget's sticky-note append, in ITS EXACT argument shape (a text
   // node with no geometry, auto-placed server-side) — the runtime guard

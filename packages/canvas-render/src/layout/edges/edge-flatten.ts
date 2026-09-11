@@ -4,7 +4,7 @@
 // backend's emission branch for branch: plain segments hop every jump on
 // their segment; rounded paths truncate spans to the corner midpoints and
 // drop hops without arc clearance, exactly like `roundedPathData`.
-import type { EdgeJumpPoint } from '../../scene-graph.js'
+import type { EdgeJumpPoint } from '@kamiazya/whiteboard-scene'
 import { EDGE_JUMP_RADIUS_PX } from './edge-jumps.js'
 import { flattenRoundedEdgePath, roundedEdgeCorners } from './edge-rounding.js'
 

@@ -7,6 +7,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
 import { composeCanvasScene } from './compose-canvas-scene.js'
@@ -50,7 +51,7 @@ describe('composeCanvasScene', () => {
     // that a per-edge `routeEdge` call (with no anchors) never runs. The
     // theme's edge appearance is merged on top, matching what
     // layoutSpatialCanvas's own composeEdge does.
-    const style = canvas['x-whiteboard']?.edgeRouting?.style
+    const style = resolveCanvasEdgeStyle(canvas).style
     const anchors = assignEdgeAnchors(canvas.nodes, canvas.edges, style)
     const theme = createSpatialTheme({ mode: 'light' })
     const edgeNodes = scene.nodes.filter((n) => n.kind === 'edge')

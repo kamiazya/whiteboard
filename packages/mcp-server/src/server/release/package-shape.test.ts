@@ -48,7 +48,7 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
   })
 
   it('sideEffects is exactly the mcp server entry, no legacy browser-app CSS glob', () => {
-    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/index.js'])
+    expect(mcpPackage.sideEffects).toEqual(['./dist/server/mcp/stdio.js'])
   })
 
   it('vite.config.ts does not exist', () => {
@@ -59,8 +59,8 @@ describe('packages/mcp-server package shape (legacy build pipeline retired)', ()
 // The @kamiazya/whiteboard-* workspace packages are private and never
 // published, so a published `dependencies` entry for one is unresolvable:
 // `pnpm add <tarball>` fails with ERR_PNPM_FETCH_404 for every consumer.
-// tsup inlines them into dist instead (packaging decision B, see
-// tsup.config.ts). Without these two assertions the only thing that catches
+// the bundler inlines them into dist instead (packaging decision B, see
+// tsdown.config.ts). Without these two assertions the only thing that catches
 // the mistake is the packed-tarball smoke, which needs a full build plus a
 // real install — these fail in milliseconds instead.
 describe('daemon-client bundling shape', () => {
@@ -85,22 +85,22 @@ describe('private workspace packages are bundled, never published as deps', () =
     expect(workspaceDeps(mcpPackage.dependencies)).toEqual([])
   })
 
-  it('lists every source-imported workspace devDependency in tsup noExternal', () => {
-    const tsupConfig = readFileSync(resolve(PACKAGE_ROOT, 'tsup.config.ts'), 'utf-8')
+  it('lists every source-imported workspace devDependency in the bundler noExternal', () => {
+    const bundlerConfig = readFileSync(resolve(PACKAGE_ROOT, 'tsdown.config.ts'), 'utf-8')
     const expected = workspaceDeps(mcpPackage.devDependencies).filter(
       (name) => !NOT_BUNDLED.has(name),
     )
-    // Guards the mirror failure of the case above: a workspace dep that tsup
+    // Guards the mirror failure of the case above: a workspace dep that the bundler
     // does not inline leaves dist importing a specifier nothing can resolve.
     expect(expected.length).toBeGreaterThan(0)
     for (const name of expected) {
-      expect(tsupConfig).toContain(`'${name}'`)
+      expect(bundlerConfig).toContain(`'${name}'`)
     }
   })
 })
 
 // A dynamic `import()` of a third-party module is the one dependency edge
-// neither tsup nor typecheck can see: tsup leaves the specifier in the
+// neither the bundler nor typecheck can see: it leaves the specifier in the
 // bundle for the runtime to resolve, and TypeScript is satisfied by the
 // types resolving in the workspace. So a package the ROOT declares as a
 // devDependency works in every local check and every CI job, and throws
@@ -125,7 +125,7 @@ describe('runtime imports are declared by this package, not inherited from the r
       )) {
         const specifier = found[1]
         if (specifier.startsWith('.') || specifier.startsWith('node:')) continue
-        // Workspace packages are inlined into dist by tsup (see the
+        // Workspace packages are inlined into dist by the bundler (see the
         // noExternal assertions above), so they are deliberately absent.
         if (specifier.startsWith(WORKSPACE_SCOPE)) continue
         const packageName = specifier.startsWith('@')

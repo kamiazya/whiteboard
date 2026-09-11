@@ -49,6 +49,17 @@ export class NodeNotFoundError extends Error {
   }
 }
 
+/** Thrown when a tool targets an edgeId absent from the canvas. */
+export class EdgeNotFoundError extends Error {
+  constructor(
+    public readonly documentId: string,
+    public readonly edgeId: string,
+  ) {
+    super(`edge not found: ${edgeId} in canvas ${documentId}`)
+    this.name = 'EdgeNotFoundError'
+  }
+}
+
 /**
  * Thrown when a patch's merged result fails `spatialCanvasSchema`
  * validation — e.g. an edge patch retargets `fromNode`/`toNode` to a

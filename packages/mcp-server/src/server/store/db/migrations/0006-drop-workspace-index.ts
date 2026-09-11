@@ -1,4 +1,5 @@
-import type { Kysely, Migration } from 'kysely'
+import type { Kysely } from 'kysely'
+import type { Migration } from 'kysely/migration'
 
 // ADR-0008 (accepted): the WorkspaceIndex port and its five backing tables
 // were write-only — every mutation reindexed into them, nothing ever read

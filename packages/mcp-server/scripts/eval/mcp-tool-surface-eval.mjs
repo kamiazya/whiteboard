@@ -40,6 +40,7 @@ const {
   layoutSpatialCanvas,
   scoreComposition,
   scoreDrawing,
+  scoreFacets,
 } = await import('@kamiazya/whiteboard-canvas-render')
 const { parseSpatial } = await import('@kamiazya/whiteboard-codec')
 
@@ -88,11 +89,11 @@ const DEBT_COLUMNS = [
  * The non-zero debt columns by name, or the word for none — the line a
  * reader scans; a board the score could not read says so instead.
  */
-function debtLine({ score, composition, error }) {
+function debtLine({ score, composition, facets, error }) {
   if (score === undefined) return `not scored — ${error}`
   const debt = DEBT_COLUMNS.filter((c) => score[c] > 0).map((c) => `${c} ${score[c]}`)
   const price = `crossings ${score.crossings}, bends ${score.bends}, reversals ${score.reversals}, flow ${score.flow}${score.againstFlow > 0 ? ` (${score.againstFlow} against)` : ''}`
-  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; ${price}${compositionLine(composition)}`
+  return `${debt.length === 0 ? 'no debt' : debt.join(' ')}; ${price}${compositionLine(composition)}${facetLine(facets)}`
 }
 
 /**
@@ -109,6 +110,26 @@ function compositionLine(composition) {
     .filter((c) => composition[c] > 0)
     .map((c) => `${c} ${composition[c]}`)
   return `; composition ${owed.length === 0 ? 'clear' : owed.join(' ')}, perGuide ${composition.perGuide}, gaps ${composition.gaps}`
+}
+
+/**
+ * ADR-0033's axis, read beside the other two and never mixed into either:
+ * what the board says with APPEARANCE rather than with position. This lane
+ * IS that axis's scoreboard — the ADR chose it over an invented corpus,
+ * because the drawing corpus has no board that spends the channel and
+ * hand-writing one is how a fixture becomes the convention by accident.
+ *
+ * `constructs` prints always, and `deficit` beside it, because the whole
+ * first reading is the RATIO of the two: every board measured so far owes
+ * every construct it declares. A board declaring nothing is silent here and
+ * says so — that is the blind spot, not a clean bill.
+ */
+function facetLine(facets) {
+  if (facets === undefined) return ''
+  if (facets.constructs === 0) return '; facets: declares nothing'
+  const owed = ['overload', 'excess'].filter((c) => facets[c] > 0).map((c) => `${c} ${facets[c]}`)
+  const misuse = owed.length === 0 ? '' : `, ${owed.join(' ')}`
+  return `; facets deficit ${facets.deficit}/${facets.constructs}, treatments ${facets.treatments}, distance ${facets.distance}${misuse}`
 }
 
 /**
@@ -157,6 +178,7 @@ async function captureBoards(wb, task, trial) {
         board: path,
         score: scoreDrawing(canvas, scene),
         composition: scoreComposition(canvas, scene),
+        facets: scoreFacets(canvas),
       })
     } catch (error) {
       drawing.push({ board: path, error: error instanceof Error ? error.message : String(error) })

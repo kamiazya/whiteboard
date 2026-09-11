@@ -8,7 +8,6 @@ import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
 import { ensureWorkspaceId } from '../current-workspace.js'
-import { isDirectEntryPoint } from '../entrypoint.js'
 import { getDb } from '../store/db/index.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
@@ -187,12 +186,4 @@ export async function main() {
   })
 
   closeServer = () => handle.close()
-}
-
-const isEntryPoint = isDirectEntryPoint(import.meta.url)
-if (isEntryPoint) {
-  main().catch((err) => {
-    process.stderr.write(`MCP server error: ${err}\n`)
-    process.exit(1)
-  })
 }

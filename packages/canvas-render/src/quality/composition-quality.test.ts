@@ -71,7 +71,11 @@ describe('composition quality across the corpus', () => {
         // than fixed in the same increment that first measured it.
         groups: 3,
         apart: 1,
-        worstRatio: 1.4,
+        // 1.4 -> 1.16 with the idempotence fixes in `tidy.ts`: a member's
+        // grid is laid from its own frame's corner now, so Services holds
+        // its members a little tighter and its widest internal gap falls.
+        // Still at or above 1, so the owe stands — narrowed, not paid.
+        worstRatio: 1.16,
         guides: 16,
         offGuide: 0,
         perGuide: 2.63,

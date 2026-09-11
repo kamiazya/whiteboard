@@ -1,5 +1,5 @@
+import type { ResolvedEdgeNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { renderSceneToSvg } from './backend.js'
 
 const edge = (overrides: Partial<ResolvedEdgeNode>): ResolvedEdgeNode => ({

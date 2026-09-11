@@ -59,7 +59,6 @@
  */
 
 import type { MeasureText, ReferenceWire } from '@kamiazya/whiteboard-canvas-render'
-import { resolveCanvasPalette } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type {
   CommentThread,
@@ -91,7 +90,6 @@ import type { FileRefOption } from '../../lib/link-entries.js'
 import { hasCoarsePointer } from '../../lib/platform.js'
 import type { EditorCommand } from '../../lib/spatial/commands.js'
 import { applyCommand } from '../../lib/spatial/commands.js'
-import { editorTextFill } from '../../lib/spatial/editor-appearance.js'
 import type { SpatialEditorHandle } from '../../lib/spatial/editor-handle.js'
 import {
   distanceToPolyline,
@@ -103,6 +101,7 @@ import { requiredTextNodeHeight } from '../../lib/spatial/scene-render.js'
 import { keyedWithoutPrefix } from '../../lib/spatial/scene-render-core.js'
 import {
   canvasToScreen,
+  clientPointToRootLocal,
   fitViewportToBoxes,
   type Point,
   panBy,
@@ -124,6 +123,7 @@ import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
+import { EdgeBendLayer } from './EdgeBendLayer.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { isEditorOverlayTarget } from './editor-overlay.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
@@ -383,11 +383,6 @@ function travelled(from: Point, to: Point): number {
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const ZOOM_WHEEL_FACTOR = 1.1
-function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
-  const rect = root.getBoundingClientRect()
-  return { x: e.clientX - rect.left, y: e.clientY - rect.top }
-}
-
 /**
  * Pointer capture is best-effort chrome, not a correctness requirement: a
  * browser can reject it (e.g. `NotFoundError` for a pointerId the platform
@@ -571,6 +566,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     )
     const {
       keyed,
+      palette,
       edgePaths,
       commentChromeBoxes,
       proposalChromeBoxes,
@@ -587,6 +583,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       (edgeId: string) => edgePaths.find((entry) => entry.id === edgeId)?.path,
       [edgePaths],
     )
+    const selectedEdge =
+      selectedEdgeId === null ? undefined : canvas.edges.find((edge) => edge.id === selectedEdgeId)
     const {
       commentPlacementObstacles,
       hitTestComment,
@@ -1907,7 +1905,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // The paper is the palette's surface for the UI mode (ADR-0030):
             // a theme carries one per mode, and the bundled palette's is the
             // page background, so an unthemed canvas looks exactly as before.
-            backgroundColor: resolveCanvasPalette(canvas, theme).surface,
+            backgroundColor: palette.surface,
             // Without these a flex item refuses to shrink below its content,
             // and the gutter would come out of the page instead of the canvas.
             minWidth: 0,
@@ -2052,7 +2050,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
                 })()}
-                style={commentComposeStyle(theme)}
+                style={commentComposeStyle(palette)}
                 onReply={(body) =>
                   applyResult({
                     state: { kind: 'idle' },
@@ -2102,7 +2100,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
                   return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
                 })()}
-                theme={theme}
+                palette={palette}
                 onDecide={(decision, changes) => {
                   // Closed here rather than waiting for the write to come
                   // back: the card asked a question that has been answered,
@@ -2404,7 +2402,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               // carry its own `fill` presentation attribute is unaffected
               // (presentation attributes win over an inherited value), which
               // is every shape the selection overlay draws.
-              fill: editorTextFill(theme),
+              fill: palette.labelFill,
             }}
           >
             <div
@@ -2622,6 +2620,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             {selectedEdgeId !== null && (
               <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
             )}
+            {selectedEdge !== undefined && (
+              <EdgeBendLayer
+                edge={selectedEdge}
+                path={edgePathOf(selectedEdge.id) ?? []}
+                viewport={viewport}
+                begin={beginOverlayGesture}
+                dispatch={(event) => applyResult(reduceGesture(gestureState, canvas, event))}
+              />
+            )}
             {gestureState.kind === 'connecting' && (
               <ConnectOverlay
                 gestureState={gestureState}
@@ -2639,7 +2646,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 fontFamily={editingFontFamily}
                 edgePaths={edgePaths}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setEdgeLabelEditId(null)}
               />
@@ -2650,7 +2657,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 canvas={canvas}
                 fontFamily={editingFontFamily}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setGroupLabelEditId(null)}
               />
@@ -2663,7 +2670,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 obstacles={commentPlacementObstacles()}
                 createId={createId}
                 zoom={viewport.zoom}
-                theme={theme}
+                palette={palette}
                 applyResult={applyResult}
                 onClose={() => setCommentCompose(null)}
               />
@@ -2688,6 +2695,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   }}
                   zoom={viewport.zoom}
                   theme={theme}
+                  palette={palette}
                   canvas={canvas}
                   gestureState={gestureState}
                   applyResult={applyResult}
@@ -2697,25 +2705,52 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         </div>
         {facetPanelOpen &&
           (() => {
+            // The panel is ABOUT whatever is selected. An edge selection wins
+            // over a node one because selecting an edge clears the node
+            // selection, so the two are never both live.
+            const edgeTarget =
+              selectedEdgeId === null
+                ? undefined
+                : canvas.edges.find((entry) => entry.id === selectedEdgeId)
             const target = canvas.nodes.find((entry) => entry.id === selectedId)
-            // Nothing selected: the inspector is ABOUT a node, so there is
-            // nothing for it to be about. It closes rather than standing
-            // there saying so — the same thing a press on blank canvas does
-            // to the context menu, which is the semantic this matches. The
-            // flag is cleared during render just above, so re-opening it
-            // later is an ordinary open rather than a stuck true.
-            if (target === undefined) return null
+            // Nothing selected: there is nothing for the inspector to be
+            // about. It closes rather than standing there saying so — the
+            // same thing a press on blank canvas does to the context menu,
+            // which is the semantic this matches. The flag is cleared during
+            // render just above, so re-opening it later is an ordinary open
+            // rather than a stuck true.
+            if (edgeTarget === undefined && target === undefined) return null
             return (
               <FacetFormPanel
-                node={target}
+                subject={
+                  edgeTarget !== undefined
+                    ? { kind: 'edge', edge: edgeTarget }
+                    : { kind: 'node', node: target as SpatialNode }
+                }
                 registry={bundledFacetRegistry}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
+                  if (edgeTarget !== undefined) {
+                    // One edge, because an edge selection is one edge —
+                    // there is no multi-edge selection to fan out over.
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-edge-facet' as const, id: edgeTarget.id, key, payload },
+                      ],
+                    })
+                    return
+                  }
                   // Applies to the whole selection, the semantics the menu
                   // bands had: reshaping five selected nodes must not become
                   // five visits to this panel.
                   const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-                  const ids = members.has(target.id) ? [...members] : [target.id]
+                  const ids =
+                    target !== undefined && members.has(target.id)
+                      ? [...members]
+                      : target === undefined
+                        ? []
+                        : [target.id]
                   applyResult({
                     state: { kind: 'idle' },
                     commands: ids.map((id) => ({

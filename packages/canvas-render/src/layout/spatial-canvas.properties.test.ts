@@ -2,8 +2,8 @@ import { facetEntries } from '@kamiazya/whiteboard-facet-engine/testing'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import type { SceneNode } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { facetsArb } from '../test-utils/facet-arbitraries.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -459,6 +459,15 @@ const denseNodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
       ) as SpatialNode
     })
 
+/**
+ * Built ONCE. `facetsArbitrary` walks every facet's Zod schema and validates
+ * a sample at construction, and `denseEdgeArb` is called per edge per draw
+ * inside a `.chain` — rebuilding it there put every case seconds over the
+ * budget and the property reported a timeout, which reads exactly like a
+ * property that failed.
+ */
+const edgeFacetsArb = facetsArb(bundledFacetRegistry, 'edge')
+
 const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
   fc
     .record({
@@ -466,8 +475,43 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
       fromNode: fc.constantFrom(...denseIds),
       toNode: fc.constantFrom(...denseIds),
       label: fc.option(fc.constant('flow'), { nil: undefined }),
+      // The EDGE's own facets, off the registry like the nodes' and the
+      // canvas's. An edge carries per-edge routing and the bends a
+      // contributed router draws, and both change the geometry this
+      // property compares — so a generator that drew none would agree about
+      // canvases where the two entry points have nothing to disagree over.
+      facets: edgeFacetsArb,
     })
-    .map(({ label, ...edge }) => (label === undefined ? edge : { ...edge, label }))
+    .map(({ label, facets, ...edge }) => ({
+      ...edge,
+      ...(label === undefined ? {} : { label }),
+      ...(facets === undefined ? {} : { 'x-whiteboard': facets }),
+    }))
+
+/** The routing a scenario draws with, as the `visual.edges/v0` payload's two fields. */
+interface DrawnRouting {
+  readonly style: 'straight' | 'orthogonal' | 'curved' | undefined
+  readonly lineJumps: 'arc' | undefined
+}
+
+/**
+ * The envelope with the scenario's routing written into the canvas's
+ * `visual.edges/v0` facet, beside whatever facets the generator drew — the
+ * one stored shape routing has, since the pre-facet key was retired.
+ */
+function withEdgesFacet(
+  envelope: NonNullable<SpatialCanvas['x-whiteboard']> | undefined,
+  routing: DrawnRouting,
+): NonNullable<SpatialCanvas['x-whiteboard']> {
+  const payload = {
+    ...(routing.style === undefined ? {} : { routing: routing.style }),
+    ...(routing.lineJumps === undefined ? {} : { lineJumps: routing.lineJumps }),
+  }
+  return {
+    ...envelope,
+    facets: { ...envelope?.facets, 'visual.edges/v0': payload },
+  }
+}
 
 const dragScenarioArb = fc.record({
   nodes: fc.tuple(...denseIds.map(denseNodeArb)),
@@ -503,13 +547,13 @@ const dragScenarioArb = fc.record({
 function scenarioCanvas(scenario: {
   readonly nodes: readonly SpatialNode[]
   readonly edges: readonly CanvasEdge[]
-  readonly routing: NonNullable<SpatialCanvas['x-whiteboard']>['edgeRouting']
+  readonly routing: DrawnRouting
   readonly envelope: ReturnType<typeof facetsArb> extends fc.Arbitrary<infer T> ? T : never
 }): SpatialCanvas {
   return {
     nodes: [...scenario.nodes],
     edges: [...scenario.edges],
-    'x-whiteboard': { edgeRouting: scenario.routing, ...scenario.envelope },
+    'x-whiteboard': withEdgesFacet(scenario.envelope, scenario.routing),
   }
 }
 
@@ -532,13 +576,13 @@ describe('live-drag parity property (PBT)', () => {
     },
   )
 
-  it('every registered node and canvas facet is drawn by the generator', () => {
+  it('every registered node, canvas and edge facet is drawn by the generator', () => {
     // The mechanism's own failure mode: a facet the generator never produces
     // widens the property by nothing while it still reads as covering "the
     // facets". A construct the schema walk cannot express already throws at
     // construction naming the path; this is the other half — every facet
-    // the bundled registry holds for either target actually arrives.
-    for (const target of ['node', 'canvas'] as const) {
+    // the bundled registry holds for any of the three targets arrives.
+    for (const target of ['node', 'canvas', 'edge'] as const) {
       const seen = new Set<string>()
       for (const extension of fc.sample(facetsArb(bundledFacetRegistry, target), 300)) {
         for (const key of Object.keys(extension?.facets ?? {})) seen.add(key)
@@ -581,7 +625,32 @@ describe('live-drag parity property (PBT)', () => {
       const canvas: SpatialCanvas = {
         nodes: [...nodes],
         edges: [...edges],
-        'x-whiteboard': { edgeRouting: routing },
+        'x-whiteboard': withEdgesFacet(undefined, routing),
+      }
+      return (
+        JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
+        JSON.stringify(layoutSpatialCanvas(stripped(canvas), options).nodes)
+      )
+    })
+    expect(moved.length).toBeGreaterThanOrEqual(20)
+  })
+
+  it('the EDGE facets the generator draws actually change the layout it compares', () => {
+    // The third anti-vacuity guard, and the one this property shipped
+    // without: the edge target was opened while the generator still drew
+    // only node and canvas facets, so per-edge routing and the bends a
+    // contributed router draws were never in a compared canvas. The two
+    // entry points agreed for a reason unrelated to either.
+    const options = { measure, parseBody: fakeParseBody, appearance }
+    const stripped = (canvas: SpatialCanvas): SpatialCanvas => ({
+      ...canvas,
+      edges: canvas.edges.map(({ 'x-whiteboard': _facets, ...edge }) => edge as CanvasEdge),
+    })
+    const moved = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) => {
+      const canvas: SpatialCanvas = {
+        nodes: [...nodes],
+        edges: [...edges],
+        'x-whiteboard': withEdgesFacet(undefined, routing),
       }
       return (
         JSON.stringify(layoutSpatialCanvas(canvas, options).nodes) !==
@@ -598,7 +667,7 @@ describe('live-drag parity property (PBT)', () => {
         {
           nodes: [...nodes],
           edges: [...edges],
-          'x-whiteboard': { edgeRouting: { ...routing, lineJumps: 'arc' } },
+          'x-whiteboard': withEdgesFacet(undefined, { ...routing, lineJumps: 'arc' }),
         },
         options,
       ).some((node) => node.kind === 'edge' && (node.jumps?.length ?? 0) > 0),

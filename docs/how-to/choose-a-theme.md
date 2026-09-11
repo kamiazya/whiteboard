@@ -10,7 +10,9 @@ export that asks for it see the same look. Two themes ship with the bundled `vis
 | `visual.neon` | glowing strokes on a deep-navy night (light mode gets a pale paper and darker strokes) |
 
 The paper follows your UI mode: every theme carries a light and a dark palette, and the editor
-picks the one matching your settings.
+picks the one matching your settings. A themed export comes back on that same paper — the
+daemon's PNG and SVG routes use the theme's surface for the mode they were asked for, unless
+the request names a `background` of its own.
 
 ## From the editor
 
@@ -28,6 +30,11 @@ a screen reader, to hear its name.
 
 The colour swatches in a node's or edge's menu preview the theme's own palette, so the chip you
 pick is the stroke you get.
+
+A theme reaches inside a node whose text is markdown, too: the panel behind a code fence, a
+quote's rail and a task checkbox are drawn in the theme's own neutral rather than the bundled
+grey. Code stays in the theme's syntax colours, and the monospace face is the system one on
+every theme.
 
 A theme can carry its own **Edge routing** default (neon routes orthogonally; sketch keeps
 straight lines). The routing row draws each option as the line it makes — a diagonal, a
@@ -60,23 +67,39 @@ theme's jittered geometry or glow unless it asks. Pass `style`:
 - a theme id such as `"visual.sketch"` previews that theme without storing it.
 - `"clean"` (the default) ignores the document's theme.
 
+On a **markdown document** `style` reaches the boards its body embeds with `![[board]]`: a note
+rendered with `"document"` draws each embedded board in the theme that board names, and `"clean"`
+draws them all in the bundled look. A note has no theme of its own to choose.
+
 The daemon's PNG and SVG export routes take the same `style`, optional, with the same default.
-The web editor's own export draws what you see, theme included.
+The web editor's own export draws what you see, theme included. The web app's preview pane and
+the file rows' thumbnails always draw the document, so an embedded board looks there the way it
+looks on the canvas.
 
 ## Fonts
 
 The sketch theme names the **Yomogi** handwriting family (Japanese and Latin in one hand, OFL).
-It is not bundled — it is 4 MB — so the web app fetches it the first time a board you open draws
-in that theme, from the Google Fonts catalogue's own repository (the same file the daemon
-installs), and registers the face on the page and in its layout workers. The editor, the row
-thumbnails and the browser's own PNG export then draw the same glyphs, and so does the in-place
-editor when you double-click a node or a label; a board already open redraws when the face lands.
-Nothing is fetched for a board that names no theme, and the face is held for the tab.
+It is not bundled — it is 4 MB — so the web app fetches it the first time a board is drawn in
+that theme, from the Google Fonts catalogue's own repository (the same file the daemon
+installs), and registers the face on the page and in its layout workers. The first draw is
+whichever comes first: opening the board, or the file list drawing its row thumbnail and the
+preview pane beside it. The editor, the row thumbnails, the preview pane and the browser's own
+PNG export then draw the same glyphs, and so does the in-place editor when you double-click a
+node or a label. Everything already on screen redraws when the face lands — the open board, the
+rows, the pane. Nothing is fetched for a board that names no theme, and the face is held for
+the tab.
 
 For the daemon's own rendering — `wb_scene_render` and the export routes — open **Settings →
-Fonts** while connected and install **Yomogi**. The daemon keeps the file and measures and
-declares it from then on; the web app takes the daemon's copy when it has one, and the catalogue
-source otherwise.
+Fonts** while connected and install **Yomogi**. The daemon keeps the file, and lays text out
+with that face as well as naming it, so a wrapped line breaks where it is drawn; it reads the
+directory when it warms its renderer, so a face installed while it is running is used from its
+next start. The web app takes the daemon's copy when it has one, and the catalogue source
+otherwise.
+
+The inline canvas view in an MCP client does the same: when it draws a board in a theme that
+names a family, it fetches that one family from the same catalogue source — nothing else, ever,
+and nothing at all for an unthemed board. Some hosts restrict what a widget may load; where that
+happens the view keeps the bundled family and the rest of the theme is unaffected.
 
 Offline, or where the source cannot be reached, the theme still draws its hand-drawn strokes and
 the lettering uses the bundled family. The SVG names the family that was actually measured,

@@ -5,10 +5,10 @@
 //      into a canvas-render `Scene`, using the vendored opentype.js
 //      measurer (measure-text.ts) as the injected text-measurement seam,
 //      codec's `parseMarkdownBody` as the injected body parser, and
-//      canvas-render's shared `createSpatialTheme({ mode: 'light' })` as
-//      the injected appearance resolver — export is deliberately pinned to
-//      light (package-canvas-render.md decision #8) so a user's UI theme
-//      can never change exported bytes.
+//      canvas-render's shared `createSpatialTheme` for the requested mode as
+//      the injected appearance resolver. That mode is an explicit per-request
+//      argument and defaults to light (package-canvas-render.md decision #8),
+//      so a user's ambient UI theme can never change exported bytes.
 //   2. `renderSceneToSvg` (canvas-render) serializes the scene to an SVG
 //      string, with document options (padding/background) so the root
 //      carries a real `width`/`height`/`viewBox` envelope — canvas-render
@@ -32,15 +32,15 @@ import {
   createSpatialTheme,
   layoutSpatialCanvas,
   renderSceneToSvg as renderSceneToSvgString,
-  SPATIAL_DARK_PALETTE,
-  SPATIAL_LIGHT_PALETTE,
+  resolveCanvasPalette,
+  type SpatialPalette,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
-import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
+import { EXPORT_FONT_FAMILY, readFontFamilyName, resolveExportFontFaces } from './export-font.js'
 import { installedFontFiles } from './installed-fonts.js'
-import { createOpentypeMeasureText, loadExportFonts } from './measure-text.js'
+import { createExportTextMeasurer, loadExportFonts } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
 import { unresolvedFamilies } from './unresolved-families.js'
 
@@ -63,8 +63,9 @@ export interface HeadlessExportOptions {
   padding?: number
   // scale: pixel scale factor. 1 = 100%, 2 = retina-equivalent. Default 1.
   scale?: number
-  // background: CSS color or 'transparent'. Default '#ffffff' (or dark
-  // default when `theme` is 'dark' and no explicit background is supplied).
+  // background: CSS color or 'transparent'. Defaults to the surface of the
+  // palette this render draws in — the theme's when `style` names one, else
+  // the bundled light/dark surface for `theme`.
   background?: string
   // theme: forces light/dark background on the rendered scene. `frameId`
   // and `minFontPx` are accepted upstream (exportRequestSchema) for wire
@@ -81,11 +82,6 @@ export interface HeadlessExportOptions {
   style?: SpatialRenderStyle
 }
 
-// The mode surfaces come from the shared palette — the same color the
-// label halo knocks text backgrounds out with, so an exported label pill
-// is invisible against the export background.
-const DARK_DEFAULT_BACKGROUND = SPATIAL_DARK_PALETTE.surface
-const LIGHT_DEFAULT_BACKGROUND = SPATIAL_LIGHT_PALETTE.surface
 const DEFAULT_PADDING_PX = 10
 
 export interface HeadlessExportResult {
@@ -133,9 +129,28 @@ interface HeadlessExporter {
   renderSvg(canvas: SpatialCanvas, options: HeadlessExportOptions): Promise<HeadlessSvgExportResult>
 }
 
-function themeBackground(options: HeadlessExportOptions): string {
-  if (options.background) return options.background
-  return options.theme === 'dark' ? DARK_DEFAULT_BACKGROUND : LIGHT_DEFAULT_BACKGROUND
+/**
+ * The paper this render comes back on, and the ink a run inherits when it
+ * carries no fill of its own.
+ *
+ * `resolveCanvasPalette` is the same answer the editor paints its own paper
+ * from, under the same style — so a themed export is the picture that board
+ * shows, rather than the theme's strokes on the bundled sheet. It also keeps
+ * the halo agreed: the label halo knocks text backgrounds out with the
+ * palette's surface, which would otherwise be a visible pill on a themed
+ * ground.
+ */
+function exportPalette(canvas: SpatialCanvas, options: HeadlessExportOptions): SpatialPalette {
+  // `resolveCanvasPalette` defaults to the editor's `'document'`; export
+  // defaults to `'clean'`, matching `layoutSpatialCanvas`, so a theme never
+  // changes exported bytes unasked (ADR-0030 decision 6).
+  return resolveCanvasPalette(canvas, exportMode(options), { style: options.style ?? 'clean' })
+}
+
+// `theme` is an explicit per-request argument — the invariant that a user's
+// ambient UI theme never changes exported bytes is untouched.
+function exportMode(options: HeadlessExportOptions): ExportThemeMode {
+  return options.theme === 'dark' ? 'dark' : 'light'
 }
 
 /** Reports a layout degradation via `getLogger`, since canvas-render itself cannot log. */
@@ -209,49 +224,42 @@ function buildSvg(
   options: HeadlessExportOptions,
   measure: MeasureText,
   fontAvailable: (family: string) => boolean,
-): { svg: string; scene: Scene } {
-  // `theme` is an explicit per-request argument — the invariant that a
-  // user's ambient UI theme never changes exported bytes is untouched.
-  const mode: ExportThemeMode = options.theme === 'dark' ? 'dark' : 'light'
+): { svg: string; scene: Scene; background: string } {
+  const mode = exportMode(options)
+  const palette = exportPalette(canvas, options)
+  // An empty string is not a colour: it reads as unset, the way an absent
+  // field does, rather than as a background nobody can name.
+  const background = options.background ? options.background : palette.surface
   const scene = buildSpatialScene(canvas, measure, mode, options.style, fontAvailable)
   const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
-    background: themeBackground(options),
+    background,
     // Dark node chrome uses transparent fills, so body runs sit directly on
     // the dark background — the root-level inheritable fill is what keeps
     // them legible. Light stays byte-identical (no root fill).
-    ...(mode === 'dark' ? { textFill: SPATIAL_DARK_PALETTE.labelFill } : {}),
+    ...(mode === 'dark' ? { textFill: palette.labelFill } : {}),
   })
-  return { svg, scene }
+  return { svg, scene, background }
 }
 
 /**
  * The families the loaded faces actually provide, for `unresolvedFamilies`.
  *
- * The name lives under a PLATFORM record, and which one a face carries is not
- * fixed — the vendored Roboto has `windows` and nothing else, while
- * opentype.js's typings advertise a flat `names.fontFamily` that is undefined
- * there. Reading only the typed path returned no families at all, which made
- * every declaration resolve against an empty set and the report silently
- * empty. All three shapes are read, and the English entry preferred because
- * that is what a `font-family` declaration is written against.
+ * A DIFFERENT question from which families may be declared: this one is about
+ * what resvg can DRAW with (every registered file), while the declaration is
+ * gated on what the measurer holds. A face can draw a family this export would
+ * never declare — that is the fallback doing its job.
  */
 async function availableFamilies(): Promise<readonly string[]> {
   const fonts = await loadExportFonts()
   return fonts.flatMap((font) => {
-    const names = font.names as unknown as Record<string, Record<string, unknown> | undefined>
-    for (const record of [names.windows, names.macintosh, names]) {
-      const family = record?.fontFamily as Record<string, string> | string | undefined
-      const name =
-        typeof family === 'string' ? family : (family?.en ?? Object.values(family ?? {})[0])
-      if (typeof name === 'string' && name !== '') return [name]
-    }
-    return []
+    const name = readFontFamilyName(font)
+    return name === undefined ? [] : [name]
   })
 }
 
 async function buildExporter(): Promise<HeadlessExporter> {
-  const measure = await createOpentypeMeasureText()
+  const { measure, measurableFamilies } = await createExportTextMeasurer()
   const { Resvg } = await import('@resvg/resvg-js')
   const faces = await resolveExportFontFaces()
   if (!faces.regular) {
@@ -275,17 +283,17 @@ async function buildExporter(): Promise<HeadlessExporter> {
     ? { fontFiles, loadSystemFonts: false, defaultFontFamily: EXPORT_FONT_FAMILY }
     : { loadSystemFonts: true }
   // A theme may name a family; it is DECLARED only where this exporter can
-  // MEASURE it (the vendored faces), so the family in the SVG is always the
-  // family the coordinates came from. A user-installed face (ADR-0012) is
-  // registered with resvg for drawing but not with the measurer, which is
-  // why it is not enough to declare on its own — the layout reports the
-  // family as missing and falls back to the bundled one.
-  const measurable = new Set([EXPORT_FONT_FAMILY, ...(await availableFamilies())])
-  const fontAvailable = (family: string): boolean => measurable.has(family)
+  // MEASURE it, so the family in the SVG is always the family the coordinates
+  // came from. That set comes from the measurer itself rather than from a
+  // second scan of the same directory — two lists is how a family gets
+  // declared from one and measured from the other. A family neither the
+  // vendored faces nor an installed one provides is reported as missing and
+  // falls back to the bundled family.
+  const fontAvailable = (family: string): boolean => measurableFamilies.has(family)
 
   return {
     async render(canvas, options) {
-      const { svg, scene } = buildSvg(canvas, options, measure, fontAvailable)
+      const { svg, scene, background } = buildSvg(canvas, options, measure, fontAvailable)
       const scale = options.scale ?? 1
       // A non-finite, zero, or negative scale is not a valid zoom factor for
       // resvg (it throws on a zero/negative target size) — degrade to an
@@ -296,7 +304,7 @@ async function buildExporter(): Promise<HeadlessExporter> {
           : ({ mode: 'original' } as const)
       const installed = await installedFontFiles()
       const resvg = new Resvg(svg, {
-        background: themeBackground(options),
+        background,
         font: { ...fontOption, fontFiles: [...(fontOption.fontFiles ?? []), ...installed] },
         fitTo,
       })

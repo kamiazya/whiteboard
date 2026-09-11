@@ -8,8 +8,9 @@
 // Measured before this, with a 100x100 square in a 48px box:
 //   <symbol viewBox="0 0 24 24"><g fill="none" stroke-width="2">
 //     <rect x="0" y="0" width="100" height="100"/>
+
+import type { Scene } from '@kamiazya/whiteboard-scene'
 import { describe, expect, it } from 'vitest'
-import type { Scene } from '../scene-graph.js'
 import { renderSceneToSvg } from './backend.js'
 
 const sceneWith = (icon: string): Scene => ({
