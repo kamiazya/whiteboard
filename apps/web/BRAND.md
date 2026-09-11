@@ -11,11 +11,27 @@ brand-surface change.
 The signature is a single pen squiggle:
 
 ```text
-M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x66 box)
+M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x56 box)
 ```
 
-Every brand surface renders this exact path. Two optional companions exist,
-and each appears only where it earns its keep:
+Every brand surface renders this exact path, and
+`tools/arch-lint/src/brand-signature.test.ts` holds it there — the sentence was
+prose alone while the mark sat copied into thirteen files, none pinned against
+any other. The guard reads the canonical path AND the box from the block
+ABOVE, so this file stays the one place either is written; a copy that is
+edited or truncated anywhere fails, naming the file. The one deliberate
+divergence, the error mark's scribble, is listed there with its reason.
+
+**The box said `88x66` here until 2026-09-11 and the mark's own surfaces all
+drew `88x56`** — the doc was the odd one out, not them (user decision). A
+surface that draws the bare signature uses the box above; one that COMPOSES
+it needs its own, and the two are told apart in the guard rather than left to
+a reader. The framed variants are the clearest case: the board frame is a
+`84x62` rect at `(2,2)`, so its bottom edge plus stroke reaches y≈65.3 and a
+56-tall box would clip it. That is why the OG card and the not-found mark are
+66 tall, and why "unify on 88x56" does not reach them.
+
+Two optional companions exist, and each appears only where it earns its keep:
 
 - **The board frame** (rounded rect, the whiteboard the squiggle sits on) —
   a *container*. It appears only where the mark needs containment, and it

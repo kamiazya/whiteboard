@@ -160,16 +160,22 @@ Three consequences, each with its guard:
   swatches (`colorRow`, resolved once by `CanvasContextMenu`), the minimap's
   preset boxes, the comment compose bubble, the proposal card, and the
   in-place drafts (node body, edge label, group label) all read the one
-  `resolveCanvasPalette(canvas, theme, { style })` lookup — the SESSION's
-  style, so **Draw as: clean** takes the chrome back to the bundled look with
-  the scene. `useSceneProjection` resolves it beside the scene it projects and
-  hands it out; the editor threads it down. Passing a mode instead is how a
-  neon board came to show bundled tints in its overview and type its drafts in
-  the bundled ink over the theme's night. `resolveCanvasPalette` is a
-  canvas-render export, so the point-owning surfaces still name no facet
-  domain (`facet-wiring-guard.test.ts`). Pinned by
-  `use-scene-projection.test.ts`, `comment-compose-style.test.ts`,
-  `editor-chrome-palette.test.tsx` and `SpatialEditor.style.test.tsx`.
+  `resolveCanvasPalette(canvas, theme)` lookup — the palette the BOARD is
+  drawn in, which is the theme it names. `useSceneProjection` resolves it
+  beside the scene it projects and hands it out; the editor threads it down.
+  Passing a mode instead is how a neon board came to show bundled tints in
+  its overview and type its drafts in the bundled ink over the theme's night.
+  `resolveCanvasPalette` is a canvas-render export, so the point-owning
+  surfaces still name no facet domain (`facet-wiring-guard.test.ts`). Pinned
+  by `use-scene-projection.test.ts`, `comment-compose-style.test.ts`,
+  `editor-chrome-palette.test.tsx` and `SpatialEditor.theme.test.tsx`.
+
+  This bullet took a `{ style }` and named **Draw as: clean** until that row
+  was deleted, and said so for one commit after — a merge reconciled the
+  cache paragraph above and left this one describing a control that no
+  longer exists, pointing at a test file renamed in the same change. Nothing
+  catches a rule naming a deleted test, which is why it is written down here
+  rather than only fixed.
 
 The Theme row in the Display panel is `derivedCanvasFacetRow` in
 `facet-widgets/index.tsx`: `facet-ui`'s `DerivedFacetForm` over the plugin's
