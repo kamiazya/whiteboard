@@ -134,6 +134,48 @@ exempted: `mcp/session-resolver.ts` had stopped being an MCP concern the moment
 `http-server.ts` called it, so it is now `server/current-workspace.ts` — which
 also retires a name that said `session` about a workspace.
 
+## `brand-signature.test.ts`
+
+BRAND.md says "Every brand surface renders this exact path" and, until this
+scan, nothing checked it. The mark is copied into thirteen places across both
+composition roots, two packages and `docs/` — a React component, five
+standalone SVGs, two PNG generators, the widget's inline splash, a plugin's
+registered geometry, and one prose comment quoting it — and none was pinned
+against any other. A copy edited or truncated in one surface would have left
+the product with two signatures, silently.
+
+Three decisions worth not re-litigating:
+
+- **The canonical path is READ FROM BRAND.md**, not written in the test. That
+  file governs the mark; a guard with its own copy would be a fourteenth to
+  keep in step, and the first to drift, since nothing would check it. What the
+  test asserts about the doc instead is that what it quotes is a WHOLE path —
+  the way the single source could itself go wrong.
+- **It matches a PREFIX and then captures.** Matching the full path would find
+  only the copies that are already correct and report a clean sweep. The
+  capture's charset is SVG path COMMANDS and nothing else, which is what stops
+  it running off the end of a sentence: `favicon.ts` quotes the mark mid-prose
+  (`… 68 25 in`), and a general `[a-z]` swallows the `in` and reports that copy
+  as divergent.
+- **The scan skips its own file**, because it holds the prefix it searches for.
+  Its first run reported itself — the same shape `selection-surface.test.ts`
+  hit, where a file that NAMES a marker is not one that draws it. Every other
+  test stays in scope on purpose: a fixture asserting a stale path is exactly
+  the load-bearing copy a sweep leaves behind (`.claude/rules/vocabulary.md`
+  records that trap).
+
+`DIVERGENT` holds the one copy that deliberately differs — `error-mark.svg`,
+where the signature carries on into a scribble — and is guarded from both
+sides plus a reason check, mutation-verified in five directions: a truncated
+copy, a nudged coordinate, a dropped entry, a fabricated entry, and a bare
+one-word reason each fail, naming the file.
+
+What it does NOT pin is the VIEW BOX. Five surfaces use `88 56`, the OG
+generator uses `88 66`, and BRAND.md's parenthetical says `88x66` — a real
+inconsistency, but the box is padding around a path that fits in both, and
+which one is canonical is a decision this guard should not make by picking
+the majority.
+
 ## `vocabulary-check.test.ts`
 
 The one part of `.claude/rules/vocabulary.md` that can be mechanical rather

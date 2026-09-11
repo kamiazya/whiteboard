@@ -14,8 +14,15 @@ The signature is a single pen squiggle:
 M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25   (in an 88x66 box)
 ```
 
-Every brand surface renders this exact path. Two optional companions exist,
-and each appears only where it earns its keep:
+Every brand surface renders this exact path, and
+`tools/arch-lint/src/brand-signature.test.ts` holds it there — the sentence was
+prose alone while the mark sat copied into thirteen files, none pinned against
+any other. The guard reads the canonical path from the block ABOVE, so this
+file stays the one place it is written; a copy that is edited or truncated
+anywhere fails, naming the file. The one deliberate divergence, the error
+mark's scribble, is listed there with its reason.
+
+Two optional companions exist, and each appears only where it earns its keep:
 
 - **The board frame** (rounded rect, the whiteboard the squiggle sits on) —
   a *container*. It appears only where the mark needs containment, and it
