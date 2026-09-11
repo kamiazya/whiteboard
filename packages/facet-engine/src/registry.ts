@@ -1,5 +1,5 @@
 import type { z } from 'zod'
-import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
+import { deriveFacetForm, type FacetEditorSpec, type FacetForm, resolveEditorSpec } from './form.js'
 import { type StencilAsset, type StencilAssetInput, stencilAssetSchema } from './stencil.js'
 import {
   type IconAsset,
@@ -112,9 +112,13 @@ export function defineFacet<S extends z.ZodTypeAny>(
   if (definition.targets.length === 0) {
     throw new Error(`facet "${definition.name}" declares no targets`)
   }
-  if (definition.editor !== undefined) {
-    assertEditorSpecFits(definition.name, definition.schema, definition.editor)
-  }
+  // Checked AND normalised: a picker's options come back carrying the value
+  // the schema parses them to, so a declaration and a stored payload cannot
+  // disagree over a default the schema fills in. See `resolveEditorSpec`.
+  const editor =
+    definition.editor === undefined
+      ? undefined
+      : resolveEditorSpec(definition.name, definition.schema, definition.editor)
   if (definition.assetRefs !== undefined) {
     assertAssetRefsFit(definition.name, definition.schema, definition.assetRefs)
   }
@@ -125,7 +129,7 @@ export function defineFacet<S extends z.ZodTypeAny>(
       )
     }
   }
-  return definition
+  return editor === undefined ? definition : { ...definition, editor }
 }
 
 export function definePlugin(plugin: FacetPlugin): FacetPlugin {
@@ -230,6 +234,17 @@ export interface FacetRegistry {
   readonly themeAsset: (id: string) => ThemeTokens | undefined
   readonly iconAsset: (id: string) => IconAsset | undefined
   readonly stencilAsset: (id: string) => StencilAsset | undefined
+  /**
+   * The editor form for a facet — its `editor` spec refined by what its
+   * schema derives — or `unsupported` for a key nothing registers.
+   *
+   * Here rather than at each vessel because a vessel that derives the form
+   * itself is a vessel that can derive it DIFFERENTLY, which is the drift
+   * a declared editor exists to close: one surface would draw the picker
+   * the plugin declared and the next would draw the schema's own fields,
+   * from the same registration.
+   */
+  readonly facetForm: (key: string) => FacetForm
 }
 
 /**
@@ -264,6 +279,8 @@ function parseKey(key: string): { namespace: string; name: string; version: stri
   if (namespace === undefined || name === undefined || version === undefined) return null
   return { namespace, name, version }
 }
+
+const UNSUPPORTED_FORM: FacetForm = { kind: 'unsupported' }
 
 export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
   const byId = new Map<string, FacetPlugin>()
@@ -350,6 +367,20 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
   return {
     plugins,
     assetIds: (kind) => [...tableOf(kind).keys()],
+    facetForm(key) {
+      const parsed = parseKey(key)
+      if (parsed === null) return UNSUPPORTED_FORM
+      const definition = definitionOf(parsed.namespace, parsed.name)
+      if (definition === undefined) return UNSUPPORTED_FORM
+      // The SAME version rule `validateFacetWrite` applies, for the same
+      // reason. Writes always target the current version (ADR-0013
+      // decision 7); an older key exists only as read-side compat. Deriving
+      // the current schema's form for one would draw a working-looking
+      // control whose every write is refused — the "a choice that silently
+      // does nothing" shape a declared picker exists to make impossible.
+      if (parsed.version !== definition.version) return UNSUPPORTED_FORM
+      return deriveFacetForm(definition.schema, definition.editor)
+    },
     themeAsset: (id) => themes.get(id),
     iconAsset: (id) => icons.get(id),
     stencilAsset: (id) => stencils.get(id),

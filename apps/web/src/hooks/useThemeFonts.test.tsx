@@ -1,5 +1,5 @@
 // The editor asks for the family its canvas draws in: once per family, from
-// the catalogue source, and not at all for a look that names none.
+// the catalogue source, and not at all for a canvas naming no theme.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { renderHook } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
@@ -23,18 +23,16 @@ afterEach(() => loadThemeFontFromSource.mockClear())
 describe('useThemeFaceFor', () => {
   it('asks for the family the canvas draws in, once per family across re-renders', () => {
     const { rerender } = renderHook(
-      ({ canvas, style }: { canvas: SpatialCanvas; style?: 'clean' | 'document' }) =>
-        useThemeFaceFor(canvas, style),
-      { initialProps: { canvas: sketched, style: undefined as 'clean' | 'document' | undefined } },
+      ({ canvas }: { canvas: SpatialCanvas }) => useThemeFaceFor(canvas),
+      { initialProps: { canvas: sketched } },
     )
     expect(loadThemeFontFromSource).toHaveBeenCalledWith('Yomogi')
-    rerender({ canvas: { ...sketched, nodes: [] }, style: 'document' })
+    rerender({ canvas: { ...sketched, nodes: [] } })
     expect(loadThemeFontFromSource).toHaveBeenCalledTimes(1)
   })
 
-  it('asks for nothing under the clean look or on an unthemed canvas', () => {
-    renderHook(() => useThemeFaceFor(sketched, 'clean'))
-    renderHook(() => useThemeFaceFor({ nodes: [], edges: [] }, undefined))
+  it('asks for nothing on a canvas naming no theme', () => {
+    renderHook(() => useThemeFaceFor({ nodes: [], edges: [] }))
     expect(loadThemeFontFromSource).not.toHaveBeenCalled()
   })
 })

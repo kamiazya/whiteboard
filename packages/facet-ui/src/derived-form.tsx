@@ -12,14 +12,11 @@
  * properties, never utility class names — a class named inside a workspace
  * package is never generated and fails silently.
  */
-import {
-  deriveFacetForm,
-  type FacetForm,
-  type FacetFormField,
-  type FacetRegistry,
-} from '@kamiazya/whiteboard-facet-engine'
+import type { FacetForm, FacetFormField, FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
 import { type CSSProperties, useState } from 'react'
 import { glyphIcon } from './glyph.js'
+import { FacetOption, FacetOptionGroup } from './option-group.js'
 
 /** The host supplies these; the literal is what a bare page falls back to. */
 const INK = 'var(--foreground, #171717)'
@@ -38,6 +35,14 @@ const ROW: CSSProperties = {
   rowGap: '0.25rem',
   fontSize: '0.75rem',
 }
+/** A card grid takes the whole width, so its name sits above rather than beside. */
+const STACKED_ROW: CSSProperties = {
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'stretch',
+  gap: '0.375rem',
+  fontSize: '0.75rem',
+}
 const CONTROL: CSSProperties = {
   border: `1px solid ${LINE}`,
   background: SURFACE,
@@ -45,14 +50,6 @@ const CONTROL: CSSProperties = {
   borderRadius: '0.25rem',
   padding: '0.25rem 0.5rem',
   fontSize: '0.75rem',
-}
-const SEGMENT: CSSProperties = {
-  ...CONTROL,
-  display: 'inline-flex',
-  alignItems: 'center',
-  gap: '0.25rem',
-  padding: '0.25rem 0.375rem',
-  cursor: 'pointer',
 }
 const BUTTON: CSSProperties = {
   border: `1px solid ${LINE}`,
@@ -77,6 +74,7 @@ function FieldInput({
   title,
   field,
   value,
+  registry,
   onChange,
   onClear,
 }: {
@@ -85,6 +83,8 @@ function FieldInput({
   readonly title: string
   readonly field: FacetFormField
   readonly value: unknown
+  /** Only the `asset` glyph arm needs it — it resolves registered geometry. */
+  readonly registry: FacetRegistry
   readonly onChange: (next: unknown) => void
   /**
    * A segmented option carrying `value: null` means the facet should not
@@ -114,54 +114,34 @@ function FieldInput({
     )
   }
   if (field.control.kind === 'segmented') {
+    // Bound before the map: TypeScript re-widens `field.control` inside a
+    // callback, and the layout is read there.
+    const control = field.control
+    // NOT wrapped in anything labelable, and the caller does not wrap this
+    // arm in a `<label>` either (see the field list below). A `<label>`
+    // inside a `<label>` is invalid, and the browser resolves a click on
+    // the inner one against the OUTER label's control — so the option a
+    // person pressed is not the one that takes the press. The group's own
+    // `aria-label` is what names it.
     return (
-      <span
-        id={id}
-        role="radiogroup"
-        aria-label={name}
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          alignItems: 'center',
-          justifyContent: 'flex-end',
-          gap: '0.125rem',
-        }}
-      >
-        {/* Real radios rather than buttons wearing the role: the keyboard
-            behaviour a segmented control needs comes free with the element. */}
-        {field.control.options.map((option) => {
-          const glyph = glyphIcon(option.glyph)
-          return (
-            // A declared glyph is DRAWN, the way the quick band draws it —
-            // a shape picker spelling "Parallelogram" is both wider and
-            // slower to read than the shape itself. The word stays as the
-            // accessible name, so nothing is lost for a screen reader, and
-            // an option with no glyph still shows its label.
-            <label
+      // A card grid must fill the row it stands in, and an inline span does
+      // not — so the wrapper becomes a block when it holds one.
+      <span id={id} {...(control.layout === 'cards' ? { style: { display: 'block' } } : {})}>
+        <FacetOptionGroup label={name} layout={control.layout}>
+          {control.options.map((option) => (
+            <FacetOption
               key={option.label}
-              title={glyph === undefined ? undefined : option.label}
-              style={SEGMENT}
-            >
-              <input
-                type="radio"
-                name={id}
-                aria-label={option.label}
-                checked={option.value === null ? value === undefined : value === option.value}
-                onChange={() => (option.value === null ? onClear() : onChange(option.value))}
-              />
-              {glyph === undefined ? (
-                option.label
-              ) : (
-                <span
-                  aria-hidden="true"
-                  style={{ display: 'inline-flex', width: '1rem', height: '1rem' }}
-                >
-                  {glyph}
-                </span>
-              )}
-            </label>
-          )
-        })}
+              name={id}
+              layout={control.layout}
+              label={option.label}
+              selected={option.value === null ? value === undefined : value === option.value}
+              onSelect={() => (option.value === null ? onClear() : onChange(option.value))}
+              {...(glyphIcon(option.glyph, registry) === undefined
+                ? {}
+                : { glyph: glyphIcon(option.glyph, registry) })}
+            />
+          ))}
+        </FacetOptionGroup>
       </span>
     )
   }
@@ -228,18 +208,11 @@ export function DerivedFacetForm({
   registry,
   onWrite,
 }: DerivedFacetFormProps) {
-  // Derived HERE rather than passed in: a caller computing the form itself
-  // is a caller that can compute it differently, which is the drift this
-  // move exists to close.
-  const definition = registry.plugins
-    .flatMap((plugin) =>
-      plugin.facets.map((facet) => [`${plugin.id}.${facet.name}/${facet.version}`, facet] as const),
-    )
-    .find(([key]) => key === facetKey)?.[1]
-  const form: FacetForm =
-    definition === undefined
-      ? { kind: 'unsupported' }
-      : deriveFacetForm(definition.schema, definition.editor)
+  // Asked of the REGISTRY rather than derived here: a caller computing the
+  // form itself is a caller that can compute it differently, and this is
+  // no longer the only caller — the vessel that draws a facet whose
+  // effective value only it can resolve asks the same question.
+  const form: FacetForm = registry.facetForm(facetKey)
   // The draft follows the STORED payload: a Clear (or any write from
   // elsewhere) must empty the form, or the next Save would restore what
   // the human just removed. `useState`'s initializer runs once, so the
@@ -272,6 +245,54 @@ export function DerivedFacetForm({
         <span style={{ fontSize: '0.7rem', color: MUTED }}>
           This facet needs its own editor; shown read-only.
         </span>
+      </div>
+    )
+  }
+
+  /**
+   * A PICKER is the whole form: one control, whole payloads, and the
+   * facet's absence as an ordinary option rather than a button beside it.
+   *
+   * That last part is why there is no Clear here. The derived form used to
+   * offer one whenever anything was stored, and the theme row ended up
+   * with two ways to say "no theme" — a `Default` segment and a `Clear`
+   * whose visible text named nothing it would clear. One control, one way.
+   */
+  if (form.kind === 'picker') {
+    // Keyed rather than stringified directly: a stored payload's key order
+    // is its WRITER's, and `wb_facet_set` or a document authored elsewhere
+    // has no reason to match this declaration's. Compared raw, such a value
+    // matches no option and the picker draws with nothing selected.
+    const current = facetPayloadKey(stored)
+    // The same shape a field of the same layout takes, so a panel holding
+    // both does not lay out two rows two ways: a CHIP row is name-left /
+    // options-right, and a CARD row is a full-width grid under its name,
+    // because cells that share a line with a label are no longer cells.
+    return (
+      <div style={form.layout === 'cards' ? STACKED_ROW : ROW}>
+        <span style={{ color: MUTED }}>{title}</span>
+        <FacetOptionGroup label={title} layout={form.layout}>
+          {form.options.map((option) => {
+            const glyph = glyphIcon(option.glyph, registry)
+            return (
+              <FacetOption
+                key={option.label}
+                name={`facet-picker-${facetKey}`}
+                layout={form.layout}
+                label={option.label}
+                selected={facetPayloadKey(option.payload) === current}
+                // Straight through the write path, the same as every other
+                // control here: `null` clears, anything else is validated
+                // before it is stored. A picker payload was already parsed
+                // at definition time, so this is the second of two nets.
+                onSelect={() =>
+                  onWrite(facetKey, option.payload === null ? undefined : option.payload)
+                }
+                {...(glyph === undefined ? {} : { glyph })}
+              />
+            )
+          })}
+        </FacetOptionGroup>
       </div>
     )
   }
@@ -333,31 +354,43 @@ export function DerivedFacetForm({
           </select>
         </label>
       )}
-      {fields.map((field) => (
-        <label
-          key={field.name}
-          htmlFor={`facet-field-${facetKey}-${field.name}`}
-          // Wraps for the same reason the menu's option rows do: a segmented
-          // control with six options does not fit a phone beside its label,
-          // and the options past the edge are the ones nobody can tap.
-          style={ROW}
-        >
-          {/* A single-field facet usually labels its field the way the facet
-              itself is named ("Shape" under "Shape"). Printing it twice adds
-              a line and says nothing; the accessible name still carries it. */}
-          <span style={{ color: MUTED, fontWeight: field.required ? 500 : 400 }}>
-            {field.label === title ? '' : field.label}
-          </span>
-          <FieldInput
-            facetKey={facetKey}
-            title={title}
-            field={field}
-            value={draft[field.name]}
-            onChange={(next) => change(field, next)}
-            onClear={() => onWrite(facetKey, undefined)}
-          />
-        </label>
-      ))}
+      {fields.map((field) => {
+        // A SEGMENTED field is its own radio group and carries its own
+        // accessible name, so it takes a plain wrapper: nesting its option
+        // labels inside a field `<label>` is invalid HTML, and a click on an
+        // inner label resolves against the outer one's control. Every other
+        // control here is a single labelable element, which is what a
+        // `<label htmlFor>` is for.
+        const Row = field.control.kind === 'segmented' ? 'div' : 'label'
+        const cards = field.control.kind === 'segmented' && field.control.layout === 'cards'
+        return (
+          <Row
+            key={field.name}
+            {...(Row === 'label' ? { htmlFor: `facet-field-${facetKey}-${field.name}` } : {})}
+            // Wraps for the same reason the menu's option rows do: a segmented
+            // control with six options does not fit a phone beside its label,
+            // and the options past the edge are the ones nobody can tap. A
+            // CARD grid takes the whole width instead, so its name sits above.
+            style={cards ? STACKED_ROW : ROW}
+          >
+            {/* A single-field facet usually labels its field the way the facet
+                itself is named ("Shape" under "Shape"). Printing it twice adds
+                a line and says nothing; the accessible name still carries it. */}
+            <span style={{ color: MUTED, fontWeight: field.required ? 500 : 400 }}>
+              {field.label === title ? '' : field.label}
+            </span>
+            <FieldInput
+              facetKey={facetKey}
+              title={title}
+              field={field}
+              value={draft[field.name]}
+              registry={registry}
+              onChange={(next) => change(field, next)}
+              onClear={() => onWrite(facetKey, undefined)}
+            />
+          </Row>
+        )
+      })}
       {error !== undefined && (
         <span role="alert" style={{ fontSize: '0.7rem', color: DANGER }}>
           {error}

@@ -241,10 +241,10 @@ describe('DaemonDocumentPage', () => {
     })
 
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Reached through the document's ⋯ now, not a gear of its own — the
-    // leading `Display…` row. Radix opens the menu on pointerDown.
-    fireEvent.pointerDown(screen.getByLabelText('More actions'), { button: 0, ctrlKey: false })
-    expect(await screen.findByRole('menuitem', { name: 'Display…' })).toBeTruthy()
+    // Reached from the inspect segment now, not a gear of its own and not
+    // the ⋯ menu: it is a panel in the page's one inspector slot, in the
+    // leading place a markdown document's Properties takes.
+    expect(await screen.findByRole('button', { name: 'Display' })).toBeTruthy()
   })
 
   it('shows the Connections chip with the backlink count and switches to a source on click', async () => {

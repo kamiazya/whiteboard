@@ -145,9 +145,9 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
   | role | asks | where it lives |
   |---|---|---|
   | **identity** | where am I? | the mark (workspace), the document's title, the way back |
-  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties, comments, connections, history |
+  | **inspect** | what am I looking at, beside the document? | ONE slot, exclusive: properties/display, comments, proposals, connections, history |
   | **act** | what do I do to this document? | ONE `⋯`, in ADR-0006's band order |
-  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display…` inside the `⋯` (subject: this canvas) |
+  | **view** | how much of the screen, and how is it drawn? | fullscreen in the SHELL row (subject: the app), `Display` in the inspect slot (subject: this canvas) |
 
   Two things follow, and both were violations before this rule existed:
 
@@ -156,14 +156,25 @@ write), a filled cap on a broken stroke is the daemon's "not keeping"
     said they were alternatives. Captured on a phone before the retune: the
     display popover, the comments rail and the history sheet all up at
     once, over an editor with room for one. `lib/inspector.ts` declares the
-    union and `InspectorPanel` is the single vessel — a fifth panel joins
+    union and `InspectorPanel` is the single vessel — a new panel joins
     them rather than opening beside them.
+
+    The display panel took the longest to arrive, and it is the one that
+    was in that screenshot. It stayed outside as a popover off the `⋯`
+    until a phone measurement said what that costs: 424px of panel against
+    a 390px screen, dismissible only by an outside click or Escape, and a
+    phone has neither a keyboard nor much outside. A surface with no way
+    out is the strongest argument for the slot there is.
   - **A view control's ROW follows its subject, not its convenience.**
     Fullscreen asks how much screen the app gets, which does not change
     when a document opens, so it is the shell's. Display settings ask how
-    THIS canvas is drawn, so they are the document's — and being one
-    plugin's worth of edge routing, they earn a menu row rather than an
-    icon in a row the title wants.
+    THIS canvas is drawn, so they are the document's — and since what they
+    answer is "what is this document like", they are its `properties` under
+    another name, which is the place they take: the leading member of the
+    inspect segment, drawn for a spatial document exactly where a markdown
+    one draws Properties. The two are never offered together, so the row
+    spends no extra width — which was the whole reason they were exiled to
+    a menu row in the first place.
 
   What this rule refuses is the control with no answer: an affordance added
   to whichever row its implementing file already rendered. That is how the
@@ -585,14 +596,16 @@ share (ADR-0026 decision 5; `useCommentsRail` holds its state,
 `CommentsRailAside` is its vessel — a column where there is width, a bottom
 sheet over the editor under 768px, since a 288px column beside a 412px phone
 screen left the editor a strip a finger could not write in). The rail is one
-of five panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
-vessel `InspectorPanel`): a markdown document's properties, its comments, the
-changes somebody wants made to it, the documents linking to it (a daemon
-keeper only), its history. Opening any one
+of the panels sharing the page's ONE inspector slot (`lib/inspector.ts`,
+vessel `InspectorPanel`): a document's own attributes (a markdown one's
+properties, a spatial one's display settings), its comments, the changes
+somebody wants made to it, the documents linking to it (a daemon keeper
+only), its history. Opening any one
 closes the others and every opener reads released, because two panels beside
 one editor — measured on a phone as the display popover, the comments sheet
 and the history sheet all open at once — is what the header retune set out to
-end; the properties editor and the connections list used to overlay UNDER the
+end (the display popover was the last of the three to join the slot, and
+joined because on a phone it could not be closed at all); the properties editor and the connections list used to overlay UNDER the
 header instead, a third shape for the same job. The rail carries
 the conversation's own verbs beside its reply box — Resolve/Reopen and Edit
 of the opening message — because a NOTE's thread has no card, and the rail
@@ -1023,6 +1036,91 @@ annotation entry. The verbs return the moment that bar goes (a desktop, or
 a caret outside the editor), so the swap costs nothing and the duplicate
 row is spent on the one affordance that had no button anywhere.
 
+## Pick one of N is one control
+
+A control that chooses AMONG ALTERNATIVES — edge routing, a theme, a
+symbol, a colour — is
+`facet-ui`'s `FacetOptionGroup` / `FacetOption`, and nothing else.
+`selection-surface.test.ts` (in `tools/arch-lint`, so it reaches the
+packages too) holds it.
+
+It is not the same rule as the one below. A TOGGLE turns one thing on;
+this is N alternatives where exactly one is current, and the two want
+different elements. `aria-pressed` on a button announces "pressed" rather
+than "1 of 3", and a button promises no arrow-key movement between the
+options — so the primitive wraps a real radio, visually hidden, and gets
+that behaviour from the element.
+
+Six spellings of this were in the tree, four of them inside the display
+panel alone: an `aria-pressed` button row, a `menuitemradio` row, a
+radiogroup with hidden radios, a radiogroup with VISIBLE radios beside a
+word, a bordered glyph pill, and a `<select>`. Measured in that panel — 9
+`aria-pressed` buttons, 3 visible radios, 12 hidden radios, and
+`role="radiogroup"` on two of five rows. Nobody chose any of it; each was
+somebody drawing the control again in a file that could not see the last
+one.
+
+Three things follow:
+
+- **One look, two ARIA shells.** Inside a MENU a radio input is the wrong
+  element and would break the menu's own keyboard model, so `shell="menu"`
+  puts `role="menuitemradio"` on a button instead. That is the correct role
+  there, not a second idiom — what must not differ is what a selected
+  option looks like.
+- **A plugin composes it; it does not replace it.** This is
+  `createFacetWriter`'s bargain applied to drawing (ADR-0013 decision 10, as
+  amended): a plugin chooses what its options ARE and their order, not what
+  a selected one looks like. Before it, a package could not use this app's
+  utility classes at all — Tailwind's content detection stops at the app,
+  silently — so every package-side control was drawn by hand.
+- **"None" is an option, never a second control.** The theme row offered a
+  `Default` segment AND a `Clear` button whose visible text named nothing it
+  would clear. A picker carries absence as an ordinary option.
+- **Every option is a PICTURE, in one of two layouts.** One control shape
+  landed first and the display panel still read as a list of sentences —
+  five rows, four of them entirely words, twelve of twenty-four options
+  spelled out. A person scanning it read instead of recognising, and the
+  widest row set the panel's width. So no option is a bare word, and the
+  row declares how its picture is presented:
+
+  | layout | is | for |
+  |---|---|---|
+  | `cards` | the picture over its word, in a bordered cell | a short vocabulary whose NAMES carry meaning a picture cannot fully take on — Edge routing, Line jumps, Theme |
+  | `chips` | the picture alone, its word the `aria-label` and the `title` | a palette where the count makes labels impossible and the glyph is the whole affordance — Symbol's twelve, a colour swatch |
+
+  `cards` is the shape Settings already gives theme and tab icon, so the
+  two surfaces stopped being two languages. The one difference is the
+  element: Settings puts `role="radio"` on a `<button>` with a lint
+  exemption, and this wraps a real hidden radio, which gets arrow keys from
+  the element rather than from nothing.
+
+  **A count cannot decide which**, which is why the plugin declares it.
+  `visual.shape`'s six silhouettes would fit as cards and are still better
+  as chips, because "Hexagon" tells a reader nothing the hexagon has not
+  said. And a row does not stay words because it "only has two": `Line
+  jumps` is on/off and is drawn as a crossing with and without a hop.
+
+  `canvas-settings.browser.test.tsx` holds the panel to it: every option
+  carries a glyph, each card row prints its word (and then carries no
+  tooltip repeating it), and each chip row prints none.
+
+  Where the picture comes from is the plugin's, as DATA. Three glyph arms
+  draw a VALUE (a core silhouette, a character, registered geometry) and a
+  fourth draws a LOOK: `{ kind: 'theme' }` renders registered geometry the
+  way a registered theme inks it, which is how the theme row shows the
+  signature mark three times — plain, hand-drawn, lit — rather than three
+  identical strokes beside three words. See BRAND.md for the mark itself.
+
+What this rule does NOT claim is that every choice in the app looks
+identical — only that the difference is a DECLARED layout rather than a
+file that could not see the last one. The card grid used to be the standing
+example of a legitimate difference, and `layout: 'cards'` is that same
+shape brought inside the vocabulary; Settings' own two grids are the
+remaining exemptions in the guard, written against the DOM directly rather
+than through the primitive. Each says what shape it is and why the chip is
+the wrong instrument, and an exemption naming a file that no longer holds a
+control fails.
+
 ## A toggle looks toggled, and says so once
 
 A control that switches something on — a rail, a popover, a tool, a filter —
@@ -1048,9 +1146,10 @@ anyone maintaining a name list.
 
 **A control may keep its own look.** The segmented control in the markdown
 toolbar raises its selected segment instead of filling it
-(`aria-pressed:bg-background aria-pressed:shadow-sm`), and the edge-routing
-options add `aria-pressed:font-medium`. What the rule fixes is where the
-state is written, not what it looks like.
+(`aria-pressed:bg-background aria-pressed:shadow-sm`). What the rule fixes
+is where the state is written, not what it looks like. (The edge-routing
+options used to be listed here too. They were never a toggle — they are
+three alternatives — and they now go through the section above.)
 
 Exemptions are listed in the guard with a reason each: a tree row's
 disclosure triangle expresses itself by ROTATING, and the canvas context

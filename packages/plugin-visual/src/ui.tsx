@@ -7,102 +7,11 @@
  * and this one behind `/ui`. What the core supplies is a library
  * (`facet-ui`), not the components.
  */
-import { definePluginUi, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
-import { Ban } from 'lucide-react'
+import { definePluginUi } from '@kamiazya/whiteboard-facet-ui'
 import { createElement, type ReactNode } from 'react'
-import { type VisualSymbolFacet, visualSymbolFacetSchema } from './data.js'
+import type { VisualSymbolFacet } from './data.js'
 import type { LucideIconElement } from './icons/icons.js'
-import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
-
-/**
- * The symbol picker. Icons come from this plugin's own vendored set — the same
- * table `visual.symbol`'s schema enumerates and the renderer draws from, so
- * the row can never offer a name the canvas would silently drop; the emoji arm
- * carries a small starter set — a free-entry field is the editor-spec tier's
- * job, not a quick band's.
- */
-const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
-
-const symbolEditor: FacetEditor = ({ value, write }) => {
-  const current = visualSymbolFacetSchema.safeParse(value)
-  const selected = current.success ? current.data : undefined
-  const option = (
-    key: string,
-    label: string,
-    content: ReactNode,
-    on: boolean,
-    payload: VisualSymbolFacet | undefined,
-  ) => (
-    // Real radios rather than buttons wearing the role: the roving-focus
-    // and arrow-key behaviour a segmented control needs comes free with the
-    // element, and the same choice was made for the declared controls.
-    // Styled with values and the host's own theme CUSTOM PROPERTIES, not
-    // with utility class names. Measured: a class name inside a workspace
-    // package is never generated — tailwind's content detection stops at
-    // the app — and a `@source` line per vessel is an opt-in step that gets
-    // missed. A package that carries its own styles renders the same
-    // wherever it is mounted.
-    <label
-      key={key}
-      style={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        height: '1.75rem',
-        minWidth: '1.75rem',
-        padding: '0 0.25rem',
-        borderRadius: '0.25rem',
-        fontSize: '0.75rem',
-        cursor: 'pointer',
-        background: on ? 'var(--accent, #f2f2f2)' : 'transparent',
-        color: on ? 'var(--foreground, #171717)' : 'var(--muted-foreground, #737373)',
-      }}
-    >
-      <input
-        type="radio"
-        name="visual-symbol"
-        aria-label={label}
-        checked={on}
-        onChange={() => write(payload)}
-        style={{
-          position: 'absolute',
-          width: 1,
-          height: 1,
-          overflow: 'hidden',
-          clip: 'rect(0 0 0 0)',
-          whiteSpace: 'nowrap',
-        }}
-      />
-      <span aria-hidden="true" style={{ display: 'inline-flex', width: '1rem', height: '1rem' }}>
-        {content}
-      </span>
-    </label>
-  )
-  return (
-    <span
-      role="radiogroup"
-      aria-label="Symbol"
-      style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '0.125rem' }}
-    >
-      {option('none', 'No symbol', <Ban />, selected === undefined, undefined)}
-      {BUILT_IN_ICON_NAMES.map((name) =>
-        option(
-          name,
-          `Icon ${name}`,
-          <BuiltInIcon name={name} />,
-          selected?.kind === 'icon' && selected.name === name,
-          { kind: 'icon', name },
-        ),
-      )}
-      {EMOJI_CHOICES.map((char) =>
-        option(char, `Emoji ${char}`, char, selected?.kind === 'emoji' && selected.char === char, {
-          kind: 'emoji',
-          char,
-        }),
-      )}
-    </span>
-  )
-}
+import { LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
  * Draws a vendored icon by name, from the SAME geometry the canvas renders,
@@ -173,7 +82,15 @@ export const visualUi = definePluginUi({
     // shape is what a person reaches for most, and the symbol belongs beside
     // it rather than after the text setting.
     { title: 'Shape', facet: 'shape' },
-    { title: 'Symbol', facet: 'symbol', component: symbolEditor },
+    // No `component`. Symbol had one — the only tier-3 editor this
+    // codebase ever shipped — because its twelve choices straddle two
+    // schema arms and a field-level control could not express them. The
+    // facet-level picker can, so the declaration in `data.ts` is the whole
+    // UI now and every vessel draws it the same way. `component` stays a
+    // real point with no bundled user, deliberately, the way
+    // `RenderContribution.decorations` does: it is the contract with every
+    // plugin, not a convenience for this one.
+    { title: 'Symbol', facet: 'symbol' },
     { title: 'Text placement', facet: 'text' },
   ],
 })

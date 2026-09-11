@@ -1,4 +1,3 @@
-import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import {
   lazy,
   type ReactNode,
@@ -118,10 +117,6 @@ function DocumentPageBody({
   versionRefreshSignal: number
 }) {
   const { sync, documentKind, documentKey, versions, files, threads } = model
-  // The session's look override (ADR-0030 decision 6): what THIS tab draws
-  // this document as, never written to it. Per document: a preview chosen
-  // for one board must not follow the reader to the next.
-  const [drawAs, setDrawAs] = useState<SpatialRenderStyle | undefined>(undefined)
 
   // Stable across re-renders so the settings payload isn't re-read from
   // localStorage on every render. Owned here rather than threaded down from
@@ -190,7 +185,6 @@ function DocumentPageBody({
   useEffect(() => {
     setBookmarkArmed(0)
     setPreview(null)
-    setDrawAs(undefined)
   }, [model.scopeKey])
 
   // Mirrors the scope itself, rewritten every render: an async save that
@@ -327,6 +321,19 @@ function DocumentPageBody({
         // Facets are OKF frontmatter, so only a markdown document has any
         // (ADR-0009 decision 3); the keeper answers none for a spatial one.
         ...(model.properties.facets === undefined ? {} : { properties: {} }),
+        // The spatial document's own attributes, in the place the markdown
+        // document's frontmatter takes: a canvas has no frontmatter and a
+        // note has no canvas, so the two never appear together and the
+        // segment reads the same length either way.
+        //
+        // No `preview === null` guard, and that is checked rather than
+        // assumed: this panel writes the LIVE document, so drawing it over
+        // a past state would be a write against a canvas nobody is looking
+        // at — but the state cannot arise. `WorkspaceTopBar` replaces the
+        // whole row while previewing, so no opener renders, and `preview`
+        // is set only by `VersionPanel`, which needs the slot to be holding
+        // `history`. Pinned in versions.browser.test.tsx.
+        ...(documentKind === 'spatial' ? { display: {} } : {}),
         comments: { count: commentsRail.openThreadCount },
         // Always offered, and pressable at nought (user decision,
         // 2026-09-07): a document with no proposals is a fact worth being
@@ -360,23 +367,6 @@ function DocumentPageBody({
       )}
       <DocumentMenu
         onExport={(format) => void handleExport(format)}
-        // Canvas-level display settings, gated on kind the same way the
-        // facet disclosure is: a markdown document has no canvas to
-        // configure. They live in the menu's leading band rather than as a
-        // gear of their own — the row's only VIEW control, against width
-        // the title wanted.
-        {...(documentKind === 'spatial'
-          ? {
-              display: (
-                <CanvasDisplaySettings
-                  canvas={sync.canvas}
-                  onChange={sync.onChange}
-                  style={drawAs}
-                  onStyleChange={setDrawAs}
-                />
-              ),
-            }
-          : {})}
         {...(versions.enabled ? { onBookmark: requestBookmark } : {})}
         {...(model.slots.menuTriggerRef === undefined
           ? {}
@@ -486,6 +476,19 @@ function DocumentPageBody({
                 : { onChange: model.properties.onFacetsChange })}
             />
           </InspectorPanel>
+        ) : inspector === 'display' && documentKind === 'spatial' ? (
+          /* Canvas-wide display settings, in the slot the other panels
+             share. They were a popover off the ⋯ kebab until this, which
+             on a phone had no way out at all: Radix dismisses a popover on
+             an outside click or Escape, and at 424px of panel against a
+             390px screen there was neither a keyboard nor much outside.
+             Here the sheet brings its own close, and opening any other
+             panel takes the slot back. */
+          <InspectorPanel kind="display" onClose={() => setInspector(null)}>
+            <div className="p-3">
+              <CanvasDisplaySettings canvas={sync.canvas} onChange={sync.onChange} />
+            </div>
+          </InspectorPanel>
         ) : undefined
       }
       header={
@@ -588,7 +591,6 @@ function DocumentPageBody({
                   onChange={sync.onChange}
                   externalVersion={sync.externalVersion}
                   theme={resolvedTheme}
-                  style={drawAs}
                   // File-node reference = the target's immutable id; the
                   // same rows the link picker offers (open document
                   // excluded), so the two pickers cannot label one

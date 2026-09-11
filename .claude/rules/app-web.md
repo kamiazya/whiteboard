@@ -116,31 +116,40 @@ the preview pane, the export — pictures the same look. The layout worker
 runs the same composition, so the two threads cannot default apart. The
 look, its resolver and where a theme's family counts as available are
 `editorLayoutBase`, which the edge overlay a drag re-routes per frame
-takes too — it used to build its own options and drew every edge clean. The
-session override (decision 6) is the one thing that crosses: `DocumentPage`
-holds it per tab and document, the Display panel's **Draw as** row sets it
-(`onStyleChange`, offered only where a host passes one; the theme ids come
-from the registry's `assetIds('themes')`, never a facet key), and it threads
-`SpatialEditor` → `useWorkerScene` → the `LayoutRequest.style` field and
-the drag layers alike. Absent means `'document'` on both threads.
+takes too — it used to build its own options and drew every edge clean.
+
+**Nothing in this app passes `style` any more** (ADR-0030 decision 6's
+2026-09-11 addendum): the Display panel's **Draw as** row was the only
+setter, and the chain it fed — `DocumentPage`'s `drawAs` state,
+`SpatialEditorPane`'s and `SpatialEditor`'s prop, `useWorkerScene`'s and
+`use-drag-layers`' option, `CanvasContextMenu`'s swatch palette, and the
+`style` parameter of `useThemeFaceFor` / `useEditingFontFamily` — went with
+it. The argument survives one layer down, at `lib/spatial/scene-render*`,
+`lib/theme-fonts` and `LayoutRequest.style`, where a headless caller still
+asks for `'clean'`; the editor reaches all of them with the `'document'`
+default. `SpatialEditor.theme.test.tsx` pins that the editor draws the theme
+the canvas names and reads it from the canvas rather than hardcoding one
+look — two themes, because one case passes against a hardcode too.
 
 Three consequences, each with its guard:
 
-- **The render key gains no axis, and the two LAYOUT caches do.** The theme
-  is a canvas facet, so a document's content digest already changes when its
-  theme does, and the registered assets are part of the build id. The session
-  override reaches the editor alone — never the list surfaces — so no keyed
-  surface draws a document in two looks, which is what would need an axis on
-  `render-key.ts`. The caches the override DOES reach are the other answer to
-  the same question: the layout worker's body-memo store
+- **The render key gains no axis, and the two LAYOUT caches still carry
+  one.** The theme is a canvas facet, so a document's content digest already
+  changes when its theme does, and the registered assets are part of the
+  build id. No surface in this app draws a document in two looks, which is
+  what would need an axis on `render-key.ts`. The caches are the other
+  answer to the same question, and they keep their axis because `style`
+  still crosses below the chrome: the layout worker's body-memo store
   (`lib/layout-content-caches.ts`) is keyed on the UI mode AND the request's
   `style` — absent normalised to `'document'`, the default both threads take
   — and canvas-render's own text-node body key carries the resolved theme id.
   Without them a `'clean'` request and a `'document'` one of the same node
-  shared an entry, and whichever was laid out first answered the other, so
-  toggling **Draw as** could serve a body painted in the other look's ink. An
-  un-themed canvas keys identically under every style, so nothing else's
-  cache churns.
+  shared an entry, and whichever was laid out first answered the other, so a
+  body could be served painted in the other look's ink. The **Draw as** row
+  that made that reachable from the UI is gone (see above), and the axis
+  stays: a headless caller still asks for `'clean'` through the same
+  composition. An un-themed canvas keys identically under every style, so
+  nothing else's cache churns.
 - **The paper is the palette's surface for the UI mode**, painted by
   `SpatialEditor` on its root (`resolveCanvasPalette(canvas, theme).surface`).
   The bundled palette's surface IS the page background in both modes, so an

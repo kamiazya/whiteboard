@@ -1,17 +1,18 @@
-// Canvas-wide routing style, set from the canvas row's settings popover.
+// Canvas-wide routing style, set from the display settings panel.
 //
 // The rendering assertions are the point here: a pick must not just record
 // the extension on the canvas, it must change what the scene DRAWS. The
-// host composes the popover and the editor over one canvas state, exactly
-// as the page does; the popover's own wiring is pinned in
-// canvas-settings.browser.test.tsx.
+// host composes the panel and the editor over one canvas state, the way
+// the page does. The panel's own VESSEL — the inspector slot, its close
+// and its fit on a phone — is pinned at the page level in
+// BrowserDocumentPage.display-panel.browser.test.tsx; nothing here needs
+// to open anything, so the panel is simply mounted.
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
-import { cleanup, fireEvent, render } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
-import { DocumentMenu } from '../workspace-top-bar/DocumentMenu.js'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -35,9 +36,9 @@ function makeHost() {
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
-        <DocumentMenu
-          display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
-        />
+        <div data-testid="display-settings">
+          <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+        </div>
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -53,35 +54,23 @@ function makeHost() {
 // Radix's DropdownMenuTrigger opens on pointerDown and its Item selects on
 // pointerUp, so neither step is a plain click.
 async function openSettings(container: HTMLElement) {
-  fireEvent.pointerDown(container.querySelector('[aria-label="More actions"]') as HTMLElement, {
-    button: 0,
-    ctrlKey: false,
+  await vi.waitFor(() => {
+    expect(container.querySelector('[data-testid="display-settings"]')).not.toBeNull()
   })
-  const row = await vi.waitFor(() => {
-    const found = [...document.querySelectorAll('[role="menuitem"]')].find(
-      (item) => item.textContent?.trim() === 'Display…',
-    )
-    expect(found).toBeDefined()
-    return found as HTMLElement
-  })
-  fireEvent.pointerUp(row)
 }
 
-// The popover renders in a portal, so options are queried from the document.
-const optionButton = (_container: HTMLElement, label: string) =>
-  [...document.querySelectorAll('[data-testid="canvas-settings-menu"] button')].find(
-    (button) => button.textContent?.trim() === label,
-  ) as HTMLButtonElement | undefined
+const optionButton = (container: HTMLElement, label: string) =>
+  container.querySelector(`[data-testid="display-settings"] input[aria-label="${label}"]`) as
+    | HTMLInputElement
+    | undefined
 
-it('offers the routing style from the settings popover, not the creation menu', async () => {
+it('offers the routing style from the display panel, not the creation menu', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   await openSettings(container)
 
-  await vi.waitFor(() => {
-    expect(document.querySelector('[data-testid="canvas-settings-menu"]')).not.toBeNull()
-  })
-  expect(document.body.textContent).toContain('Edge routing')
+  expect(container.querySelector('[data-testid="display-settings"]')).not.toBeNull()
+  expect(container.textContent).toContain('Edge routing')
   expect(optionButton(container, 'Orthogonal')).toBeDefined()
 
   // The dock's "+" menu is for what does not exist yet; a canvas-wide setting
@@ -123,7 +112,7 @@ it('drops the setting again when the style returns to straight', async () => {
   optionButton(container, 'Orthogonal')?.click()
   await vi.waitFor(() => expect(edgesFacetOf(latest.canvas)?.routing).toBe('orthogonal'))
 
-  // The popover stays open after a pick — flip straight from the same surface.
+  // The panel stays put after a pick — flip straight from the same surface.
   await vi.waitFor(() => expect(optionButton(container, 'Straight')).toBeDefined())
   optionButton(container, 'Straight')?.click()
 
@@ -174,9 +163,9 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     latest.canvas = canvas
     return (
       <div style={{ width: 900, height: 700 }}>
-        <DocumentMenu
-          display={<CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />}
-        />
+        <div data-testid="display-settings">
+          <CanvasDisplaySettings canvas={canvas} onChange={(next) => setCanvas(next)} />
+        </div>
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
@@ -203,7 +192,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
     expect(arcPath).toBeDefined()
   })
 
-  // Off leaves no trace on the canvas (same open popover).
+  // Off leaves no trace on the canvas (same open panel).
   await vi.waitFor(() => expect(optionButton(container, 'Off')).toBeDefined())
   optionButton(container, 'Off')?.click()
   await vi.waitFor(() => {
@@ -227,7 +216,9 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
     }
     return (
       <div style={{ width: 900, height: 700 }}>
-        <DocumentMenu display={<CanvasDisplaySettings canvas={canvas} onChange={deferSet} />} />
+        <div data-testid="display-settings">
+          <CanvasDisplaySettings canvas={canvas} onChange={deferSet} />
+        </div>
         <SpatialEditor defaultTool="select" canvas={canvas} onChange={deferSet} theme="light" />
       </div>
     )
