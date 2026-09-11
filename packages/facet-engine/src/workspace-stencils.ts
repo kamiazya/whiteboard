@@ -31,17 +31,11 @@
  */
 import {
   createFacetRegistry,
-  type FacetPlugin,
+  defineWorkspaceStencilPlugin,
   type FacetRegistry,
-  validatePluginForEngine,
+  WORKSPACE_PLUGIN_ID,
 } from './registry.js'
 import type { StencilAssetInput } from './stencil.js'
-
-/**
- * The id the synthetic plugin takes, so a library's stencils read
- * `workspace.<name>`. `definePlugin` refuses it to everyone else.
- */
-export const WORKSPACE_PLUGIN_ID = 'workspace'
 
 /** What a workspace's library holds: stencils by BARE name. */
 export type WorkspaceStencils = Readonly<Record<string, StencilAssetInput>>
@@ -61,20 +55,14 @@ export function withWorkspaceStencils(
   base: FacetRegistry,
   stencils: WorkspaceStencils,
 ): FacetRegistry {
-  if (Object.keys(stencils).length === 0) return base
-  return createFacetRegistry([...base.plugins, workspacePlugin(stencils)])
-}
-
-/**
- * Held to every rule a plugin author's definition is held to, minus the
- * reserved-id one — so a library gets the same refusals, by the same
- * messages, as a plugin that shipped the same mistake.
- */
-function workspacePlugin(stencils: WorkspaceStencils): FacetPlugin {
-  return validatePluginForEngine({
-    id: WORKSPACE_PLUGIN_ID,
-    displayName: 'This workspace',
-    facets: [],
-    assets: { stencils },
-  })
+  // Any library `base` already carries is REPLACED, not appended to.
+  // Composing twice is reachable — a re-read after the library document
+  // changed — and appending blindly would hand `createFacetRegistry` two
+  // `workspace` plugins, which it refuses. Dropping first also makes the
+  // empty case mean what it says: no library, whatever was composed before.
+  const deployment = base.plugins.filter((plugin) => plugin.id !== WORKSPACE_PLUGIN_ID)
+  if (Object.keys(stencils).length === 0) {
+    return deployment.length === base.plugins.length ? base : createFacetRegistry(deployment)
+  }
+  return createFacetRegistry([...deployment, defineWorkspaceStencilPlugin(stencils)])
 }

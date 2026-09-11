@@ -85,3 +85,28 @@ describe('a workspace stencil library', () => {
     ).toThrow(/Not A Name/)
   })
 })
+
+describe('the reserved namespace, as a public surface', () => {
+  it('exposes no way to define a workspace plugin by hand', async () => {
+    // The reservation is the whole safety of composing a synthetic plugin:
+    // `createFacetRegistry` throws on a duplicate plugin id, so a public
+    // bypass would turn "a deployment may not take this id" into a crash the
+    // first time a workspace grew a library. `definePlugin` refuses it; the
+    // engine's own validator must not be reachable to undo that.
+    //
+    // lazy-import: the SUBJECT is the module's export surface, so it has to
+    // be read as a whole rather than named import by import.
+    const engine = await import('./index.js')
+    expect(Object.keys(engine)).not.toContain('validatePluginForEngine')
+  })
+
+  it('composes over a registry that already carries a library, rather than colliding', () => {
+    // Reachable by any caller that composes twice — a re-read after the
+    // library document changed, say. Appending blindly would hand
+    // `createFacetRegistry` two `workspace` plugins and throw.
+    const once = withWorkspaceStencils(baseRegistry(), { bucket: { displayName: 'Bucket' } })
+    const twice = withWorkspaceStencils(once, { crate: { displayName: 'Crate' } })
+
+    expect(twice.assetIds('stencils')).toEqual(['visualish.datastore', 'workspace.crate'])
+  })
+})

@@ -17,6 +17,7 @@ import {
   type SpatialNode,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -273,7 +274,24 @@ export function createFacetSetTool(deps: ServerDeps) {
       // own library defines must be writable HERE too, or the two paths that
       // dress a box disagree — `wb_canvas_edit` applying an id this tool
       // refuses is the shape a single composer exists to prevent.
-      const registry = await workspaceFacetRegistry(deps, input.workspaceId)
+      //
+      // Resolved only when this batch writes a facet that TAKES a stencil.
+      // A library can add nothing but stencil assets, so every other write —
+      // a tag, a deletion, a shape — gets an identical answer from the
+      // deployment's registry and must not pay a document listing for it.
+      // Asked of the registry rather than against a hardcoded
+      // `visual.stencil/v0`: which facets take a stencil is a plugin's
+      // declaration, and a server spelling one plugin's key is a server no
+      // other plugin extends.
+      const deploymentRegistry = deps.facetRegistry ?? bundledFacetRegistry
+      const writesAStencilRef = Object.entries(input.facets ?? {}).some(
+        ([key, payload]) =>
+          payload !== null &&
+          Object.values(deploymentRegistry.assetRefsOf(key) ?? {}).includes('stencils'),
+      )
+      const registry = writesAStencilRef
+        ? await workspaceFacetRegistry(deps, input.workspaceId)
+        : deploymentRegistry
       const requiredTarget: FacetTarget =
         input.nodeId !== undefined
           ? 'node'
