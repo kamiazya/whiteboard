@@ -144,6 +144,17 @@ rather than in a string, so joining its runs yields `tightenthis`.
   than whatever order the caller's object carried. Nothing pins key order, and the artifact it
   changes is the JSON embedded in an exported PNG's `iTXt` chunk — stated here because it is a
   real change to a persisted artifact that no test would have reported.
+- **The loss table is PUBLISHED, and generated** (`spatial/loss-table.ts` ->
+  `docs/reference/json-canvas-loss.md`, a vitest file snapshot; regenerate with
+  `pnpm vitest run --project codec-node loss-table -u`). ADR-0033 decision 2 replaces "the model
+  IS the format" with two checkable claims — the round-trip property over the expressible subset,
+  and a published table for everything else — and this is the second one. Generated for the same
+  reason the JSON Schema is: a hand-kept table describing a format promise goes stale in silence.
+  The snapshot alone would record a table that quietly stopped listing half the model, so a
+  second test asserts the rows ARE the census, in both directions, and a third pins the headline
+  count to the ledger rather than to a literal. Scoped to the model's own positions: what a
+  deployment's plugins put inside a facet bucket is theirs, and every bit of it is lost in
+  `strict` whatever it is.
 - **`spatial/json-canvas.ts` is this package's own declaration of the wire shape**, and the
   home of the extension contract: `x-whiteboard` is the ONLY non-standard key an emitted
   document may carry, at three sites and no more. The published artifact

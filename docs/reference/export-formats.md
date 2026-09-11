@@ -108,6 +108,12 @@ What may appear inside `x-whiteboard` is machine-readable:
 draft 2020-12) is generated from the same Zod schemas the code validates
 with, so it cannot drift from the implementation.
 
+**What each mode costs, field by field**, is
+[what a JSON Canvas export costs](json-canvas-loss.md) — every position the
+document model can hold, and whether the format states it, rounds it, carries
+it on the extension key, or cannot take it. Generated from the projection
+itself for the same reason the JSON Schema is.
+
 ## Characters the exporter cannot draw
 
 The daemon rasterises with the fonts **it** has — a vendored Latin face plus

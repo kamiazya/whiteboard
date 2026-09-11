@@ -9,6 +9,7 @@ Reference pages:
 - **[configuration](configuration.md)** — runtime environment variables and storage layout.
 - **[keyboard shortcuts](keyboard-shortcuts.md)** — every canvas-editor binding and its pointer equivalent.
 - **[export formats](export-formats.md)** — OKF Markdown / JSON Canvas via `wb_document_get`, SVG via `wb_scene_render`.
+- **[what a JSON Canvas export costs](json-canvas-loss.md)** — every field position the model can hold, and which of them the format states, rounds, carries on `x-whiteboard`, or cannot take. Generated from the projection itself.
 - **MCP tools** — the tools the MCP server exposes (entry point to the live `tools/list`) _(planned)_.
 
 ← Back to [documentation home](../)
