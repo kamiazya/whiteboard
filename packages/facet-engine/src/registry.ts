@@ -143,16 +143,54 @@ export function defineFacet<S extends z.ZodTypeAny>(
  * the first time a workspace grew a library — a long way from the cause, and
  * in front of a user rather than an author.
  */
-const RESERVED_PLUGIN_IDS: ReadonlySet<string> = new Set(['workspace'])
+export const WORKSPACE_PLUGIN_ID = 'workspace'
+const RESERVED_PLUGIN_IDS: ReadonlySet<string> = new Set([WORKSPACE_PLUGIN_ID])
 
 export function definePlugin(plugin: FacetPlugin): FacetPlugin {
-  if (!SEGMENT_PATTERN.test(plugin.id)) {
-    throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
-  }
   if (RESERVED_PLUGIN_IDS.has(plugin.id)) {
     throw new Error(
       `plugin id "${plugin.id}" is reserved by the engine — a workspace's own stencil library registers under it`,
     )
+  }
+  return validatePlugin(plugin)
+}
+
+/**
+ * The one definition the engine makes for ITSELF: a workspace's stencil
+ * library, under the reserved id (see `workspace-stencils.ts`).
+ *
+ * Narrow on purpose. The obvious shape was to export the validator without
+ * the reserved-id check and let the composer assemble the plugin — but
+ * `index.ts` re-exports this module wholesale, so that would have handed
+ * every deployment a way to define a `workspace` plugin of its own, and
+ * `createFacetRegistry` throws on a duplicate id. The reservation would then
+ * have become a crash the first time a workspace grew a library. This can
+ * only ever produce the plugin the composer wants, so there is nothing to
+ * bypass; the validator below stays module-private.
+ */
+export function defineWorkspaceStencilPlugin(
+  stencils: Readonly<Record<string, StencilAssetInput>>,
+): FacetPlugin {
+  return validatePlugin({
+    id: WORKSPACE_PLUGIN_ID,
+    displayName: 'This workspace',
+    facets: [],
+    assets: { stencils },
+  })
+}
+
+/**
+ * Everything `definePlugin` checks EXCEPT the reserved-id rule, so the
+ * engine's own definition is held to the same bar as a plugin an author
+ * wrote.
+ *
+ * Split out rather than given a bypass flag: a flag would let a caller turn
+ * off whichever check it found inconvenient, and the reservation is the only
+ * rule that is about WHO is defining rather than about what.
+ */
+function validatePlugin(plugin: FacetPlugin): FacetPlugin {
+  if (!SEGMENT_PATTERN.test(plugin.id)) {
+    throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
   }
   if (plugin.displayName.trim() === '') {
     throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)
@@ -245,6 +283,16 @@ export interface FacetRegistry {
   /** The source plugin list, in registration order (contributions sort by id). */
   readonly plugins: readonly FacetPlugin[]
   readonly targetsOf: (key: string) => readonly FacetTarget[] | undefined
+  /**
+   * Which REGISTERED ASSETS writing this facet depends on, by field — the
+   * declaration `validateFacetWrite` refuses an unknown id against.
+   *
+   * The sibling of `targetsOf`, and it exists for the same reason: a caller
+   * that wants to know whether a write depends on a particular asset kind
+   * must be able to ASK, rather than spell one plugin's facet key. A server
+   * that hardcodes `visual.stencil/v0` is a server no other plugin extends.
+   */
+  readonly assetRefsOf: (key: string) => Readonly<Record<string, AssetKind>> | undefined
   readonly validateFacetWrite: (key: string, payload: unknown) => FacetWriteResult
   readonly resolveFacetPayload: (key: string, payload: unknown) => FacetResolution
   /** Registered asset ids of one kind, `<plugin>.<name>`, in registration order. */
@@ -453,6 +501,12 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
       if (parsed === null) return undefined
       const definition = definitionOf(parsed.namespace, parsed.name)
       return definition?.targets
+    },
+    assetRefsOf(key) {
+      const parsed = parseKey(key)
+      if (parsed === null) return undefined
+      const definition = definitionOf(parsed.namespace, parsed.name)
+      return definition?.assetRefs
     },
 
     validateFacetWrite(key, payload) {
