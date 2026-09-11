@@ -171,6 +171,84 @@ describe('facet vocabulary: discriminability', () => {
   })
 })
 
+describe('facet vocabulary: a stencil is a declared distinction', () => {
+  // ADR-0034 decision 5's load-bearing half. A stencil EXPANDS onto the node
+  // (so every reader draws it) and RECORDS which one it was — and the record
+  // is a partition the document states about its own boxes. Without reading
+  // it, a board dressed by kind shows distinctions matching nothing declared,
+  // which is exactly `excess`: the axis would score a real improvement as a
+  // defect.
+  const stencilled = (id: string) => ({
+    'x-whiteboard': { facets: { 'visual.stencil/v0': { stencil: id } } },
+  })
+  const dressed = (id: string, colour: string, shape: string) => ({
+    ...stencilled(id),
+    color: colour,
+    'x-whiteboard': {
+      facets: {
+        'visual.stencil/v0': { stencil: id },
+        'visual.shape/v0': { kind: shape },
+      },
+    },
+  })
+
+  it('reads the stencil a node wears as a partition, so a dressed board owes nothing', () => {
+    // Two frames, and each frame's boxes dressed as one kind. Under frames
+    // alone this is two carried constructs; the stencil partition agrees
+    // with it rather than cutting it, so nothing is owed and nothing is
+    // excess.
+    const s = score([
+      ...plain.slice(0, 2),
+      box('a', 40, 60, dressed('visual.datastore', '5', 'cylinder')),
+      box('b', 260, 60, dressed('visual.datastore', '5', 'cylinder')),
+      box('c', 640, 60, dressed('visual.queue', '6', 'parallelogram')),
+      box('d', 860, 60, dressed('visual.queue', '6', 'parallelogram')),
+    ])
+    expect([s.deficit, s.overload, s.excess]).toEqual([0, 0, 0])
+    expect(s.treatments).toBe(2)
+  })
+
+  it('is what keeps a board dressed ACROSS frames out of the excess column', () => {
+    // The case the record exists for: one box of each frame is a datastore.
+    // By frame membership alone that appearance cuts both classes and reads
+    // as `excess` — a distinction the reader looks for and does not find.
+    // The stencil the document names IS that distinction, so it is declared.
+    const nodes = [
+      ...plain.slice(0, 2),
+      box('a', 40, 60, dressed('visual.datastore', '5', 'cylinder')),
+      box('b', 260, 60),
+      box('c', 640, 60, dressed('visual.datastore', '5', 'cylinder')),
+      box('d', 860, 60),
+    ]
+    expect(score(nodes).excess).toBe(0)
+  })
+
+  it('counts a stencil partition only when the board declares two of them', () => {
+    // One stencil across every box distinguishes nothing, exactly as one
+    // frame holding every box does.
+    const s = score([
+      box('a', 0, 0, dressed('visual.service', '4', 'hexagon')),
+      box('b', 300, 0, dressed('visual.service', '4', 'hexagon')),
+    ])
+    expect([s.partitions, s.constructs]).toEqual([0, 0])
+  })
+
+  it('ignores a record naming a stencil with no appearance on the node', () => {
+    // A record without the expansion is a claim the drawing does not make.
+    // It still DECLARES the partition — the document says these differ — so
+    // the board owes the constructs rather than being let off them.
+    const s = score([
+      ...plain.slice(0, 2),
+      box('a', 40, 60, stencilled('visual.datastore')),
+      box('b', 260, 60, stencilled('visual.datastore')),
+      box('c', 640, 60, stencilled('visual.queue')),
+      box('d', 860, 60, stencilled('visual.queue')),
+    ])
+    expect(s.deficit).toBe(s.constructs)
+    expect(s.treatments).toBe(1)
+  })
+})
+
 describe('facet vocabulary: what carries a distinction, and what does not', () => {
   it('reads a badge as a channel of its own', () => {
     const s = score([

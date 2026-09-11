@@ -7,7 +7,9 @@
  * third-party plugin is shaped exactly the same way, and the only thing
  * "bundled" means is that this repo ships it.
  */
+export * from './apply-stencil.js'
 export * from './data.js'
 export type { LucideIconElement } from './icons/icons.js'
 export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX, VISUAL_ICONS } from './icons/icons.js'
+export * from './stencils.js'
 export * from './themes.js'

@@ -1947,6 +1947,18 @@ Three things the calibration decided that a reader would otherwise re-derive:
   them: the sequence diagrams. Pinned in the scoreboard rather than only in a
   unit test.
 
+**A STENCIL is the third declared partition** (ADR-0034): `visual.stencil/v0`
+records which registered vocabulary entry a box wears, and `scoreFacets` reads
+it beside frame membership and node kind. Measured when it landed, it buys
+EXACTLY ONE case that the other two cannot reach — an appearance that CUTS the
+frames, one datastore inside each of two frames, which by geometry alone is
+`excess`. A board whose frames each hold one kind is already carried by frame
+membership, and a board with no frame declares nothing either way. Without the
+record, dressing a board by kind would score a real improvement as a defect,
+which is why ADR-0034 makes the record load-bearing rather than bookkeeping.
+The corpus baseline does not move: no corpus board wears a stencil, so the
+partition has one class and is dropped.
+
 The score is OUTSIDE the mutation lane, for the reason the other two
 instruments are. Hand-checked instead, and that check earned its place: it
 found a treatment map keyed by the node where an id was wanted — which made
