@@ -731,6 +731,9 @@ importers:
       '@kamiazya/whiteboard-daemon-client':
         specifier: workspace:*
         version: link:../daemon-client
+      '@kamiazya/whiteboard-facet-engine':
+        specifier: workspace:*
+        version: link:../facet-engine
       '@kamiazya/whiteboard-history':
         specifier: workspace:*
         version: link:../history
@@ -740,6 +743,9 @@ importers:
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model
+      '@kamiazya/whiteboard-plugin-visual':
+        specifier: workspace:*
+        version: link:../plugin-visual
       '@kamiazya/whiteboard-ports':
         specifier: workspace:*
         version: link:../ports
