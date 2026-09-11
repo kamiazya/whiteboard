@@ -17,7 +17,11 @@
  * the caller).
  */
 
-import { pairingTokenResponseSchema } from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
+import {
+  type DaemonConnectionTarget,
+  daemonConnectionTargetSchema,
+  pairingTokenResponseSchema,
+} from '@kamiazya/whiteboard-daemon-client/api-contracts/index'
 import { z } from 'zod'
 import { bareOriginSchema } from '../runtime-config.js'
 import {
@@ -41,6 +45,12 @@ const pairingTransactionSchema = z.object({
   state: z.string().min(1),
   codeVerifier: z.string().min(1),
   daemonBaseUrl: bareOriginSchema,
+  // What the pairing link asked to open, carried across the top-level
+  // navigation to the daemon's consent page and back. Validated with the
+  // SHARED target schema rather than a second hand-written copy, so it
+  // cannot drift from what a `#wb=` payload can express. Absent for a
+  // pairing the user started from the app itself, which has no target.
+  target: daemonConnectionTargetSchema.optional(),
 })
 
 interface StorageLike {
@@ -73,17 +83,24 @@ export async function beginPairingGrant({
   hostedOrigin,
   sessionStorage,
   navigate,
+  target,
 }: {
   daemonBaseUrl: string
   hostedOrigin: string
   sessionStorage: StorageLike
   navigate: (url: string) => void
+  target?: DaemonConnectionTarget
 }): Promise<void> {
   const { codeVerifier, codeChallenge } = await createPkcePair()
   const state = randomBase64Url(16)
   sessionStorage.setItem(
     TRANSACTION_KEY,
-    JSON.stringify({ state, codeVerifier, daemonBaseUrl: daemonBaseUrl.replace(/\/+$/, '') }),
+    JSON.stringify({
+      state,
+      codeVerifier,
+      daemonBaseUrl: daemonBaseUrl.replace(/\/+$/, ''),
+      ...(target !== undefined ? { target } : {}),
+    }),
   )
   const url = new URL('/pair', daemonBaseUrl)
   url.searchParams.set('origin', hostedOrigin)
@@ -107,7 +124,7 @@ export function parseGrantFragment(
 }
 
 export type GrantConsumeResult =
-  | { status: 'paired'; daemonBaseUrl: string; token: string }
+  | { status: 'paired'; daemonBaseUrl: string; token: string; target?: DaemonConnectionTarget }
   | { status: 'none' }
   | { status: 'error'; detail: string }
   /** A PINNED daemon answered with a wrong/missing identity signature.
@@ -203,7 +220,12 @@ export async function consumeGrantFragment({
         pinStorage,
       )
     }
-    return { status: 'paired', daemonBaseUrl: transaction.daemonBaseUrl, token: body.token }
+    return {
+      status: 'paired',
+      daemonBaseUrl: transaction.daemonBaseUrl,
+      token: body.token,
+      ...(transaction.target !== undefined ? { target: transaction.target } : {}),
+    }
   } catch (error) {
     return { status: 'error', detail: `token exchange failed: ${String(error)}` }
   }

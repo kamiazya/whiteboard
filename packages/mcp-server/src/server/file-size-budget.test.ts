@@ -167,7 +167,15 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.
-  'apps/web/src/App.tsx': 962,
+  // Raised deliberately, +24, when the `#wb=` pairing link stopped carrying
+  // the daemon's bearer token: the link became an INTENT App has to resolve
+  // through the pairing grant, which is a responsibility the root did not
+  // have before. Three modules were extracted rather than inlined for it
+  // (lib/link-pairing.ts, hooks/useLinkPairing.ts,
+  // components/LinkPairingPending.tsx) and two dead locals deleted; what is
+  // left is the wiring itself, and shaving it further would be shuffling
+  // lines to satisfy a number.
+  'apps/web/src/App.tsx': 986,
   'apps/web/src/components/workspace-files/WorkspaceFilesPanel.tsx': 1196,
   // Raised from 1032 by the document PLANE primitives — a mergeable child
   // map on a document's node, and the read that never opens one. They sit

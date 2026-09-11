@@ -15,7 +15,6 @@ import {
   decodeBase64UrlText,
   encodeBase64UrlText,
   isBareHttpOrigin,
-  MIN_BOOTSTRAP_TOKEN_LENGTH,
 } from './pairing-link.js'
 
 describe('isBareHttpOrigin', () => {
@@ -47,37 +46,32 @@ describe('daemonConnectionPayloadSchema', () => {
     workspaceId: 'ws1',
     path: 'canvas-a',
     fullscreen: true,
-    authMode: 'bootstrap' as const,
-    bootstrapToken: 'x'.repeat(24),
   }
 
-  it('accepts a well-formed bootstrap payload', () => {
+  it('accepts a well-formed credential-free payload', () => {
     expect(daemonConnectionPayloadSchema.safeParse(valid).success).toBe(true)
   })
 
-  it('accepts authMode "none" with no bootstrapToken', () => {
-    expect(
-      daemonConnectionPayloadSchema.safeParse({ baseUrl: valid.baseUrl, authMode: 'none' }).success,
-    ).toBe(true)
+  it('accepts a bare daemon target with nothing to open', () => {
+    expect(daemonConnectionPayloadSchema.safeParse({ baseUrl: valid.baseUrl }).success).toBe(true)
   })
 
-  it('rejects authMode "bootstrap" without a bootstrapToken', () => {
-    const { bootstrapToken: _omit, ...missing } = valid
-    expect(daemonConnectionPayloadSchema.safeParse(missing).success).toBe(false)
+  // The whole point of the field set: a link must not be able to carry the
+  // daemon's bearer token. `.strict()` is what enforces it, so these pin the
+  // legacy shape as REFUSED rather than parsed-and-ignored — a link minted by
+  // an older daemon embeds a live full-authority credential, and silently
+  // accepting it (dropping the extra keys) would keep that link working.
+  it.each([
+    ['bootstrapToken', { bootstrapToken: 'x'.repeat(24) }],
+    ['authMode', { authMode: 'bootstrap' }],
+    ['both', { authMode: 'bootstrap', bootstrapToken: 'x'.repeat(24) }],
+  ])('rejects a legacy credential-carrying payload (%s)', (_label, legacy) => {
+    expect(daemonConnectionPayloadSchema.safeParse({ ...valid, ...legacy }).success).toBe(false)
   })
 
   it('rejects a path without workspaceId', () => {
     const { workspaceId: _omit, ...withoutWorkspace } = valid
     expect(daemonConnectionPayloadSchema.safeParse(withoutWorkspace).success).toBe(false)
-  })
-
-  it('rejects a bootstrapToken shorter than MIN_BOOTSTRAP_TOKEN_LENGTH', () => {
-    expect(
-      daemonConnectionPayloadSchema.safeParse({
-        ...valid,
-        bootstrapToken: 'x'.repeat(MIN_BOOTSTRAP_TOKEN_LENGTH - 1),
-      }).success,
-    ).toBe(false)
   })
 
   it('rejects a non-bare-origin baseUrl', () => {
@@ -119,19 +113,14 @@ describe('base64url text codec', () => {
         .record({
           baseUrl: fc.constantFrom('http://127.0.0.1:54231', 'https://example.pages.dev'),
           workspaceId: fc.option(fc.string({ minLength: 1, maxLength: 20 }), { nil: undefined }),
-          bootstrapToken: fc.option(
-            fc.string({ minLength: MIN_BOOTSTRAP_TOKEN_LENGTH, maxLength: 40 }),
-            { nil: undefined },
-          ),
           fullscreen: fc.option(fc.boolean(), { nil: undefined }),
           // Non-ASCII generator: exercises the encoder's UTF-8 path, which the
           // hand-rolled charCode loop in a naive implementation gets wrong.
           note: fc.string({ minLength: 0, maxLength: 12, unit: 'grapheme-composite' }),
         })
-        .map(({ baseUrl, workspaceId, bootstrapToken, fullscreen, note }) => {
-          const authMode = bootstrapToken !== undefined ? ('bootstrap' as const) : ('none' as const)
+        .map(({ baseUrl, workspaceId, fullscreen, note }) => {
           const path = workspaceId !== undefined && note.length > 0 ? note : undefined
-          return { baseUrl, workspaceId, path, bootstrapToken, fullscreen, authMode }
+          return { baseUrl, workspaceId, path, fullscreen }
         }),
     ],
     withDefaults(),

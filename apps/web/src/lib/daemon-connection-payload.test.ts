@@ -16,7 +16,6 @@ describe('daemonConnectionPayloadSchema', () => {
   it('accepts a minimal valid payload', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'none',
     })
     expect(result.success).toBe(true)
   })
@@ -26,8 +25,6 @@ describe('daemonConnectionPayloadSchema', () => {
       baseUrl: 'https://daemon.example.com',
       workspaceId: 'ws-1',
       path: 'canvas-path',
-      bootstrapToken: 'a-long-enough-token',
-      authMode: 'bootstrap',
       fullscreen: true,
     })
     expect(result.success).toBe(true)
@@ -36,7 +33,6 @@ describe('daemonConnectionPayloadSchema', () => {
   it('rejects baseUrl with a path component', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099/foo',
-      authMode: 'none',
     })
     expect(result.success).toBe(false)
   })
@@ -44,24 +40,6 @@ describe('daemonConnectionPayloadSchema', () => {
   it('rejects a non-http(s) baseUrl scheme', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'ftp://127.0.0.1:3099',
-      authMode: 'none',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects unknown authMode values', () => {
-    const result = daemonConnectionPayloadSchema.safeParse({
-      baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'oauth',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('rejects too-short bootstrapToken', () => {
-    const result = daemonConnectionPayloadSchema.safeParse({
-      baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'bootstrap',
-      bootstrapToken: 'x',
     })
     expect(result.success).toBe(false)
   })
@@ -70,7 +48,6 @@ describe('daemonConnectionPayloadSchema', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-1',
-      authMode: 'none',
     })
     expect(result.success).toBe(true)
   })
@@ -79,7 +56,6 @@ describe('daemonConnectionPayloadSchema', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
       path: 'my-canvas',
-      authMode: 'none',
     })
     expect(result.success).toBe(false)
   })
@@ -87,26 +63,9 @@ describe('daemonConnectionPayloadSchema', () => {
   it('rejects extra unknown keys (strict)', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'none',
       extra: 'nope',
     })
     expect(result.success).toBe(false)
-  })
-
-  it('rejects authMode "bootstrap" with no bootstrapToken', () => {
-    const result = daemonConnectionPayloadSchema.safeParse({
-      baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'bootstrap',
-    })
-    expect(result.success).toBe(false)
-  })
-
-  it('accepts authMode "none" with no bootstrapToken', () => {
-    const result = daemonConnectionPayloadSchema.safeParse({
-      baseUrl: 'http://127.0.0.1:3099',
-      authMode: 'none',
-    })
-    expect(result.success).toBe(true)
   })
 })
 
@@ -115,8 +74,6 @@ describe('parseDaemonConnectionFragment', () => {
     baseUrl: 'http://127.0.0.1:3099',
     workspaceId: 'ws-1',
     path: 'my-canvas',
-    bootstrapToken: 'a-long-enough-token',
-    authMode: 'bootstrap' as const,
     fullscreen: true,
   }
 
@@ -157,7 +114,7 @@ describe('parseDaemonConnectionFragment', () => {
   })
 
   it('reports invalid for JSON that fails schema validation', () => {
-    const badPayload = encodeRawBase64Url(JSON.stringify({ authMode: 'none' }))
+    const badPayload = encodeRawBase64Url(JSON.stringify({ notABaseUrl: true }))
     const result = parseDaemonConnectionFragment(`#wb=${badPayload}`)
     expect(result.status).toBe('invalid')
   })
