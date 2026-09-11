@@ -27,10 +27,16 @@
  *
  * Picks apply immediately and the panel stays open — these are property
  * pickers, and closing per pick would force a reopen for every adjustment.
+ *
+ * It carried a **Draw as** row too — ADR-0030 decision 6's session look
+ * override, `As saved` / `Clean` / a preview per registered theme. Removed
+ * (user decision, 2026-09-10): it was the panel's widest row and the one
+ * that could not be drawn, since "preview neon" and "neon" differ by
+ * whether the pick is SAVED, which no glyph says. Its `style` argument
+ * survives at every render entry point as decision 6 describes — headless
+ * defaults to `clean`, the editor to `document` — with no UI that sets it.
  */
-import type { SpatialRenderStyle } from '@kamiazya/whiteboard-canvas-render'
 import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
-import { FacetOption, FacetOptionGroup } from '@kamiazya/whiteboard-facet-ui'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { Fragment, useEffect, useMemo, useRef, useState } from 'react'
@@ -46,19 +52,6 @@ export interface CanvasDisplaySettingsProps {
   readonly facetRegistry?: FacetRegistry
   /** Widget lookup; a test seam — production uses the registered widgets. */
   readonly widgets?: Readonly<Record<string, CanvasSettingsWidget>>
-  /**
-   * The session's look override (ADR-0030 decision 6), held by the host for
-   * this tab: absent draws what the document says. The row is offered only
-   * where a host passes `onStyleChange`, since a setting nobody can hold is
-   * a control that does nothing.
-   */
-  readonly style?: SpatialRenderStyle
-  readonly onStyleChange?: (style: SpatialRenderStyle | undefined) => void
-}
-
-/** A theme id's bare name, read for a person: `visual.sketch` → `sketch`. */
-function themeLabel(id: string): string {
-  return id.slice(id.indexOf('.') + 1)
 }
 
 export function CanvasDisplaySettings({
@@ -66,8 +59,6 @@ export function CanvasDisplaySettings({
   onChange,
   facetRegistry = bundledFacetRegistry,
   widgets = CANVAS_SETTINGS_WIDGETS,
-  style,
-  onStyleChange,
 }: CanvasDisplaySettingsProps) {
   // Eager command chaining: two picks from the same open popover can land
   // before a slow parent commits the first, and the second must build on
@@ -126,32 +117,6 @@ export function CanvasDisplaySettings({
       {active?.widgets.map(({ key, widget }) => (
         <Fragment key={key}>{widget({ canvas, run, facetRegistry })}</Fragment>
       ))}
-      {onStyleChange !== undefined && (
-        // This tab's look, apart from the document's: the one row here that
-        // writes nothing. The theme ids come from the registry's assets, so
-        // a plugin that registers a theme gets its preview without this
-        // surface naming it.
-        <div className="mt-2 flex items-center justify-between gap-3 border-t border-border pt-2">
-          <span className="text-xs text-muted-foreground">Draw as</span>
-          <FacetOptionGroup label="Draw as">
-            {[
-              { value: undefined, label: 'As saved' },
-              { value: 'clean' as const, label: 'Clean' },
-              ...facetRegistry
-                .assetIds('themes')
-                .map((id) => ({ value: id, label: `Preview ${themeLabel(id)}` })),
-            ].map(({ value, label }) => (
-              <FacetOption
-                key={label}
-                name="canvas-draw-as"
-                label={label}
-                selected={style === value}
-                onSelect={() => onStyleChange(value)}
-              />
-            ))}
-          </FacetOptionGroup>
-        </div>
-      )}
     </>
   )
 }

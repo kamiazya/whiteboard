@@ -178,6 +178,28 @@ The render broker's cache key (ADR-0027) gains this axis beside `theme`
 (mode); a document-borne style changes the bytes for a given document and
 state, so it must be in the key.
 
+**Addendum (2026-09-11): the session override has no UI.** The editor's
+Display panel carried a **Draw as** row that set it — `As saved` / `Clean` /
+a preview per registered theme — and it is removed. Not a reversal of this
+decision: `style` still reaches every render entry point above, headless
+callers still default to `'clean'`, and the editor still defaults to
+`'document'`. What is gone is the row and its wiring down through
+`DocumentPage` → `SpatialEditorPane` → `SpatialEditor` → `useWorkerScene`
+and the drag layers, which existed for nothing else.
+
+The reason is the one this ADR cannot see from the render side: the row was
+the Display panel's widest and the only one that could not be DRAWN. Every
+other row picks a value a glyph can show; `Preview neon` and `neon` differ
+by whether the pick is SAVED, and no picture says that. Previewing a theme
+before choosing it is what the Theme row already does — the canvas redraws
+on the pick and `Default` undoes it — so the override bought a second way to
+do the same thing at the cost of the panel's one unpicturable control.
+
+Anything that wants the argument back has it: it was never removed from the
+render composition, only from the chrome. A future surface that genuinely
+needs an unsaved look (a side-by-side compare, say) passes it at the render
+entry point rather than threading a prop back through the editor.
+
 ### 7. Geometry: decision #10, restated as binding for this increment
 
 - One pure decomposition per primitive in `layout/` — rect, ellipse,

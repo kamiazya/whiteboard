@@ -29,7 +29,6 @@ type PassedThrough = Pick<
   | 'onChange'
   | 'externalVersion'
   | 'theme'
-  | 'style'
   | 'fileRefOptions'
   | 'missingFileRef'
   | 'lockedNodeIds'
@@ -91,7 +90,6 @@ export function SpatialEditorPane({
   onChange,
   externalVersion,
   theme,
-  style,
   fileRefOptions,
   missingFileRef,
   lockedNodeIds,
@@ -133,7 +131,6 @@ export function SpatialEditorPane({
         onChange={onChange}
         externalVersion={externalVersion}
         theme={theme}
-        style={style}
         fileRefOptions={fileRefOptions}
         onOpenFileRef={onOpenDocument}
         missingFileRef={missingFileRef}

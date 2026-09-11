@@ -21,11 +21,6 @@ picks the one matching your settings.
 3. **Default** removes the theme again.
 4. Press **Display** again, or the **×** on the sheet, to close it.
 
-The same panel has a **Draw as** row for this tab only: **As saved** draws what the document
-says, **Clean** draws the bundled look, and **Preview sketch** / **Preview neon** try a theme
-without storing it. Nothing here is written to the document or seen by anyone else, and the
-row thumbnails in the document list keep drawing the saved look.
-
 The colour swatches in a node's or edge's menu preview the theme's own palette, so the chip you
 pick is the stroke you get.
 

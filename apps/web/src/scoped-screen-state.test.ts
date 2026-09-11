@@ -377,10 +377,6 @@ const DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',
-  // The session's look override (ADR-0030 decision 6) is a preview chosen
-  // FOR ONE BOARD: carried across a switch it would draw the arrived
-  // document in a look nobody picked for it.
-  drawAs: 'cleared on switch',
   currentScopeRef:
     'no subject: mirrors the scope itself, reassigned every render — it is what a save outliving its document asks to find out whether its outcome still belongs on screen',
   versionRefreshSignal:
