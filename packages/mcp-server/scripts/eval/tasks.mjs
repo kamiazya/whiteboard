@@ -698,6 +698,15 @@ export const TASKS = [
       )
       const missing = wanted.filter((_, i) => found[i] === undefined)
       if (missing.length > 0) return { ok: false, detail: `missing: ${missing.join(', ')}` }
+      // One box may not answer for two kinds. `nodes.find()` per word can
+      // return the SAME node twice — "Orders Payments Service" matches both
+      // — and the verdict would then claim seven boxes over six. Six kinds
+      // drawn as six boxes is not the drawing the prompt asked for, whatever
+      // the labels add up to.
+      const shared = wanted.filter((_, i) => found.findIndex((n) => n?.id === found[i]?.id) !== i)
+      if (shared.length > 0) {
+        return { ok: false, detail: `one box answers for two kinds: ${shared.join(', ')}` }
+      }
       const flows = [
         ['Shopper', 'gateway'],
         ['gateway', 'Orders'],
@@ -716,12 +725,12 @@ export const TASKS = [
         return { ok: false, detail: `verifier names boxes it does not want: ${unnamed.join(', ')}` }
       }
       const idOf = (word) => found[wanted.indexOf(word)].id
+      // DIRECTED, unlike the shared `linked` helper above. The prompt says a
+      // Shopper hits the gateway and the gateway calls the services, so a
+      // board with the arrows reversed makes a different claim about the
+      // system rather than the same one drawn differently.
       const linked = (a, b) =>
-        board.edges.some(
-          (e) =>
-            (e.fromNode === idOf(a) && e.toNode === idOf(b)) ||
-            (e.fromNode === idOf(b) && e.toNode === idOf(a)),
-        )
+        board.edges.some((e) => e.fromNode === idOf(a) && e.toNode === idOf(b))
       const unlinked = flows.filter(([a, b]) => !linked(a, b)).map(([a, b]) => `${a}->${b}`)
       if (unlinked.length > 0) return { ok: false, detail: `not connected: ${unlinked.join(', ')}` }
       const collision = firstOverlap(board.nodes.filter((n) => n.type !== 'group'))

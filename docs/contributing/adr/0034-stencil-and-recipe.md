@@ -308,6 +308,20 @@ was there. It matches the single word `gateway` now — the verifier judges
 WHICH BOXES EXIST, and how well a label fits its box is the drawing score's
 `textOverflow` column.
 
+Review then found two more of its own, both of which would have passed a
+board the prompt did not ask for: one box could answer for two kinds (a
+`nodes.find()` per word can return the same node twice, so `Orders Payments
+Service` satisfied both and the verdict still claimed seven boxes), and the
+flow check accepted an edge in either direction, so a board with every arrow
+reversed passed. Both are fixed, and `tasks.test.ts` now drives the verifier
+over planted boards — an instrument nothing checked until it had been wrong
+twice.
+
+**Tightening it does not move the numbers above**, and that was checked
+rather than assumed: the three recorded runs carry seven distinct labels and
+draw all six flows in the prompt's direction, so each still passes under the
+stricter rule.
+
 ### What this does NOT show
 
 - **One task, one model, three trials.** It says the surface CAN be reached,

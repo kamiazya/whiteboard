@@ -129,10 +129,10 @@ const keyOf = (t: Treatment) => `${t.colour}|${t.shape}`
 const DEFAULT_KEY = keyOf(DEFAULT_TREATMENT)
 
 /**
- * Read through `plugin-visual`'s own resolvers rather than the stored bucket:
- * they are the one read path for what a node draws, compat chain and schema
+ * Read through `plugin-visual`'s own resolver rather than the stored bucket:
+ * it is the one read path for what a node draws, compat chain and schema
  * included, so an unresolvable payload means here exactly what it means at
- * draw time — no badge, no silhouette.
+ * draw time — no silhouette, and the default rect.
  */
 function treatmentOf(node: SpatialNode): Treatment {
   return { colour: node.color ?? '', shape: resolveNodeShape(node) ?? '' }
