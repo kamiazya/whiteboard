@@ -1,6 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { strictDegrade } from './degrade.js'
-import { type JsonCanvasDocument, jsonCanvasDocumentSchema, toJsonCanvas } from './projection.js'
+import { type JsonCanvasDocument, jsonCanvasDocumentSchema } from './json-canvas.js'
+import { toJsonCanvas } from './projection.js'
 
 export type SpatialSerializeMode = 'strict' | 'extended'
 

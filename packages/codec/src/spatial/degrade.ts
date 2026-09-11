@@ -1,5 +1,5 @@
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
-import type { JsonCanvasDocument } from './projection.js'
+import type { JsonCanvasDocument } from './json-canvas.js'
 
 /**
  * Strict JSON Canvas 1.0 has no room for the `x-whiteboard` extension.

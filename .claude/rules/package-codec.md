@@ -129,11 +129,14 @@ rather than in a string, so joining its runs yields `tightenthis`.
   than whatever order the caller's object carried. Nothing pins key order, and the artifact it
   changes is the JSON embedded in an exported PNG's `iTXt` chunk — stated here because it is a
   real change to a persisted artifact that no test would have reported.
-- **`jsonCanvasDocumentSchema` is an ALIAS of the model's schema today, and that is the debt,
-  not a claim.** ADR-0033 slices the model away from the format one dimension at a time; a
-  second hand-written copy of a schema meant to be identical would drift in comments and buy
-  nothing the round-trip property does not already prove. The moment the model holds a field
-  the format cannot (slice 2), this becomes this package's own declaration.
+- **`spatial/json-canvas.ts` is this package's own declaration of the wire shape**, no longer an
+  alias of the model's. It was LIFTED from the model rather than written beside it, and
+  `json-canvas.test.ts` is what makes that a relocation instead of a fork: the two generate an
+  identical JSON Schema (structural, total) and accept the same documents with the same parsed
+  value (behavioural, since refinements — unique ids, an edge whose endpoints exist — are
+  invisible to JSON Schema). **Both checks are DELETED, never weakened, when the model gains its
+  first field the format cannot hold**; the round-trip property carries the claim from then on,
+  and an equivalence test kept alive past that point is the fork it exists to rule out.
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys
   on an imported document are stripped and never re-emitted — is pinned by
   `spatial/extension-contract.property.test.ts`; its machine-readable half is

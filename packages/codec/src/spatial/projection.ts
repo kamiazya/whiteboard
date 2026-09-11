@@ -1,26 +1,10 @@
+import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type {
-  CanvasEdge,
-  SpatialCanvas,
-  SpatialNode,
+  JsonCanvasDocument,
+  JsonCanvasEdge,
+  JsonCanvasNode,
   XWhiteboard,
-} from '@kamiazya/whiteboard-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
-
-/**
- * The JSON Canvas 1.0 wire shape — JSON Canvas plus the one `x-whiteboard`
- * key the format leaves room for.
- *
- * Today it IS the model's schema, because the model still is the format.
- * [ADR-0033](../../../../docs/contributing/adr/0033-model-and-format.md) names
- * that the debt and slices it away one dimension at a time, and an alias is
- * the honest form of the state in between: a second hand-written copy of a
- * schema meant to be identical drifts from it in comments within a week, and
- * buys nothing the round-trip property below does not already prove. The
- * moment the model holds its first field the format cannot (slice 2), this
- * stops being an alias and becomes this package's own declaration.
- */
-export const jsonCanvasDocumentSchema = spatialCanvasSchema
-export type JsonCanvasDocument = SpatialCanvas
+} from './json-canvas.js'
 
 /** What a field position costs when a document is projected onto JSON Canvas. */
 export type FieldProjection =
@@ -205,7 +189,7 @@ export function fromJsonCanvas(document: JsonCanvasDocument): SpatialCanvas {
   return toJsonCanvas(document)
 }
 
-function projectNode(node: SpatialNode): SpatialNode {
+function projectNode(node: SpatialNode): JsonCanvasNode {
   const shared = {
     id: node.id,
     x: node.x,
@@ -240,7 +224,7 @@ function projectNode(node: SpatialNode): SpatialNode {
   }
 }
 
-function projectEdge(edge: CanvasEdge): CanvasEdge {
+function projectEdge(edge: CanvasEdge): JsonCanvasEdge {
   return {
     id: edge.id,
     fromNode: edge.fromNode,

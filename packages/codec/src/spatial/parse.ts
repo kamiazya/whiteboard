@@ -1,6 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
-import { fromJsonCanvas, jsonCanvasDocumentSchema } from './projection.js'
+import { jsonCanvasDocumentSchema } from './json-canvas.js'
+import { fromJsonCanvas } from './projection.js'
 
 /**
  * Read JSON Canvas text as a document. The text is validated against the WIRE
