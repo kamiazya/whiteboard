@@ -282,6 +282,18 @@ function parseKey(key: string): { namespace: string; name: string; version: stri
 
 const UNSUPPORTED_FORM: FacetForm = { kind: 'unsupported' }
 
+/**
+ * A registered thing's own name, humanized from its bare segment when the
+ * asset declares none. A stencil carries a `displayName`; a theme and an
+ * icon do not, and `pack.public-subnet` reads worse in a picker than
+ * "Public subnet" does.
+ */
+function assetLabel(id: string, declared: string | undefined): string {
+  if (declared !== undefined && declared.trim() !== '') return declared
+  const bare = id.slice(id.indexOf('.') + 1).replace(/-/g, ' ')
+  return bare.charAt(0).toUpperCase() + bare.slice(1)
+}
+
 export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegistry {
   const byId = new Map<string, FacetPlugin>()
   for (const plugin of plugins) {
@@ -345,6 +357,40 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     kind === 'themes' ? themes : kind === 'icons' ? icons : stencils
 
   /**
+   * An asset-ref field's OPTIONS come from THIS registry, replacing whatever
+   * the definition declared (ADR-0034 decision 4's UI half).
+   *
+   * The definition declares the WIDGET; the registry owns the VALUES,
+   * because it is the only thing that knows what this deployment has. Before
+   * this, `visual.theme` and `visual.stencil` each listed their ids by hand,
+   * so a pack could register a stencil that the tool applied and the picker
+   * did not offer — registered but unselectable, which is the one state an
+   * ecosystem cannot ship.
+   *
+   * A `null` leads, because an asset ref is optional and "no stencil" is a
+   * real answer — without it a picker can dress a box and never undress it.
+   * Only fields named in `assetRefs` are touched: a plain enum is the
+   * plugin's own vocabulary and none of the registry's business.
+   */
+  const withAssetOptions = (form: FacetForm, definition: FacetDefinition): FacetForm => {
+    const refs = definition.assetRefs
+    if (refs === undefined || form.kind !== 'fields') return form
+    const fields = form.fields.map((field) => {
+      const kind = refs[field.name]
+      if (kind === undefined || field.control.kind !== 'segmented') return field
+      const options = [
+        { value: null, label: 'None' },
+        ...[...tableOf(kind).keys()].map((id) => ({
+          value: id,
+          label: assetLabel(id, kind === 'stencils' ? stencils.get(id)?.displayName : undefined),
+        })),
+      ]
+      return { ...field, control: { ...field.control, options } }
+    })
+    return { ...form, fields }
+  }
+
+  /**
    * After the schema has accepted the payload: every ref field that carries
    * a value must name a registered asset. The message lists what IS
    * registered, because "unknown theme" alone sends an author to the docs
@@ -379,7 +425,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
       // control whose every write is refused — the "a choice that silently
       // does nothing" shape a declared picker exists to make impossible.
       if (parsed.version !== definition.version) return UNSUPPORTED_FORM
-      return deriveFacetForm(definition.schema, definition.editor)
+      return withAssetOptions(deriveFacetForm(definition.schema, definition.editor), definition)
     },
     themeAsset: (id) => themes.get(id),
     iconAsset: (id) => icons.get(id),

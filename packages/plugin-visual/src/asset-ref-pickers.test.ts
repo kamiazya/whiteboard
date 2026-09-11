@@ -15,9 +15,14 @@
 // Forcing each to declare a widget is how a check gets satisfied
 // mechanically instead of read. The rule is about what this repo SHIPS, so
 // it is scoped to what this repo ships.
-import { facetPayloadKey } from '@kamiazya/whiteboard-facet-engine'
+import {
+  createFacetRegistry,
+  definePlugin,
+  facetPayloadKey,
+} from '@kamiazya/whiteboard-facet-engine'
 import { describe, expect, it } from 'vitest'
 import { bundledFacetRegistry, bundledPlugins } from './data.js'
+import { VISUAL_STENCILS } from './stencils.js'
 
 describe('a shipped facet that names an asset offers a picker', () => {
   it('offers a picked value, never free entry, for every assetRefs field', () => {
@@ -94,4 +99,46 @@ describe('a shipped facet that names an asset offers a picker', () => {
     )
     expect(judged.sort()).toEqual(['stencil', 'theme'])
   })
+
+  it('offers every bundled stencil, now that the options come from the registry', () => {
+    // The static list this replaced was at least visible in the diff. With
+    // the registry filling the options, nothing in THIS package noticed when
+    // the fill was removed — measured: dropping it failed five facet-engine
+    // tests and left all 86 here green, over a picker that offered nothing.
+    const options = segmentedOptions(bundledFacetRegistry, 'visual.stencil/v0', 'stencil')
+    expect(options.map((option) => option.value)).toEqual([
+      null,
+      ...Object.keys(VISUAL_STENCILS).map((name) => `visual.${name}`),
+    ])
+  })
+
+  it('grows the picker when a deployment registers its own, which is the point', () => {
+    const pack = definePlugin({
+      id: 'pack',
+      displayName: 'Pack',
+      facets: [],
+      assets: { stencils: { bucket: { displayName: 'Bucket' } } },
+    })
+    const options = segmentedOptions(
+      createFacetRegistry([...bundledPlugins, pack]),
+      'visual.stencil/v0',
+      'stencil',
+    )
+    expect(options.find((option) => option.value === 'pack.bucket')?.label).toBe('Bucket')
+  })
 })
+
+/** The options a segmented field actually offers, or a throw naming why not. */
+function segmentedOptions(
+  registry: ReturnType<typeof createFacetRegistry>,
+  key: string,
+  field: string,
+) {
+  const form = registry.facetForm(key)
+  if (form.kind !== 'fields') throw new Error(`${key}: expected a fields form, got ${form.kind}`)
+  const found = form.fields.find((candidate) => candidate.name === field)
+  if (found?.control.kind !== 'segmented') {
+    throw new Error(`${key}.${field}: expected a segmented control, got ${found?.control.kind}`)
+  }
+  return found.control.options
+}
