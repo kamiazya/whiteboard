@@ -24,6 +24,7 @@ import {
   spatialCanvasSchema,
   spatialNodeSchema,
 } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import type { z } from 'zod'
 import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import { resolveTextMeasurer } from '../render/text-measurer.js'
@@ -173,6 +174,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
+      // The DEPLOYMENT's registry, not the bundled one: a stencil this repo
+      // did not ship still has to apply, and `wb_facet_list` reports it from
+      // this same seam (ADR-0034 decision 4).
+      const facetRegistry = deps.facetRegistry ?? bundledFacetRegistry
       // An omitted mode proposes only a batch every op of which COULD be
       // proposed; see the field's own note for why that line and not
       // "propose unless told otherwise".
@@ -571,7 +576,10 @@ export function createCanvasEditTool(deps: ServerDeps) {
                 growToHold(index, op.op, group, [parsed.data])
               }
             }
-            nodes = [...nodes, dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color)]
+            nodes = [
+              ...nodes,
+              dressWithStencil(index, op.op, parsed.data, op.stencil, draft.color, facetRegistry),
+            ]
             touchedNodes.add(id)
             if (!positioned) geometry.set(id, { id, ...at, width, height })
             if (!positioned && group === undefined && draft.type === 'group') {
@@ -596,7 +604,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
               const stencil = op.stencil
               nodes = nodes.map((node) =>
                 ids.includes(node.id)
-                  ? dressWithStencil(index, op.op, node, stencil, op.patch.color)
+                  ? dressWithStencil(index, op.op, node, stencil, op.patch.color, facetRegistry)
                   : node,
               )
             }

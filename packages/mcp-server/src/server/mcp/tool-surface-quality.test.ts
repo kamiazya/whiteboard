@@ -203,9 +203,17 @@ describe('what the tool table costs to read', () => {
       // is a saving per errand against a cost per turn. What the field buys
       // is on ADR-0033's axis, not this one: a board that declares what its
       // kinds are instead of spending a scheme invented per drawing.
+      // 13466 -> 13502 swapping the stencil ENUM for a validated string that
+      // points at `wb_facet_list`. Within 36 bytes of each other at the
+      // bundled six — and only one of them scales. Measured: the enum costs
+      // ~38 bytes per stencil per op, so 120 stencils reads +4838 here,
+      // 13% of the whole table, on every turn, for a vocabulary most
+      // conversations never touch. A library is meant to grow; a cost that
+      // grows with it is the wrong shape, so discovery moved to a runtime
+      // answer that costs nothing until asked.
       wb_canvas_edit: {
-        visibleBytes: 13466,
-        wireBytes: 37256,
+        visibleBytes: 13502,
+        wireBytes: 37292,
         descriptionWords: 169,
         parameters: 153,
         undescribed: 123,
@@ -254,11 +262,21 @@ describe('what the tool table costs to read', () => {
         strays: 'refused',
         names: [],
       },
+      // +224 for the registered ASSETS (ADR-0034 decision 4): the stencil,
+      // theme and icon ids a deployment registered, with an `assetKind`
+      // filter. This tool already existed to answer "what did this
+      // deployment register", so the ecosystem's discovery reuses a seam
+      // instead of adding a tool or growing `wb_canvas_edit`'s schema —
+      // where the same information would have cost 13% of the table at a
+      // hundred-icon pack.
+      //
+      // `undescribed` stays 1: the new parameter carries its own
+      // `.describe()`, because C3 counts down and never up.
       wb_facet_list: {
-        visibleBytes: 429,
-        wireBytes: 1110,
-        descriptionWords: 30,
-        parameters: 1,
+        visibleBytes: 653,
+        wireBytes: 1623,
+        descriptionWords: 46,
+        parameters: 2,
         undescribed: 1,
         strays: 'refused',
         names: [],
@@ -405,11 +423,12 @@ describe('what the tool table costs to read', () => {
       // them (see wb_canvas_edit); wire moves on every tool whose output
       // carries a node.
       // +124 for `within` on node.add (see wb_canvas_edit).
-      // +480 for `stencil` on node.add and node.patch (see wb_canvas_edit),
-      // where the choice between its three shapes is measured.
-      visibleBytes: 36409,
-      wireBytes: 111051,
-      parameters: 275,
+      // +516 for `stencil` on node.add and node.patch plus the registered
+      // assets on wb_facet_list — the two halves of one decision, since the
+      // field is a plain string precisely because the list lives there.
+      visibleBytes: 36669,
+      wireBytes: 111600,
+      parameters: 276,
       undescribed: 191,
     })
   })

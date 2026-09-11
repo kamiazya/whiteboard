@@ -2,6 +2,8 @@
  * What `wb_canvas_edit` accepts and answers: the op union and the input and
  * output schemas, in one place a model reads and the tool executes.
  */
+
+import { namespacedIdSchema } from '@kamiazya/whiteboard-facet-engine'
 import {
   annotationIdSchema,
   canvasCommentDraftSchema,
@@ -17,28 +19,8 @@ import {
   workspaceIdSchema,
   type XWhiteboard,
 } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import { canvasSnapshotSchema } from './canvas-snapshot.js'
-
-/**
- * The registered stencil ids, as an ENUM rather than as a namespaced-id
- * string with the ids listed in prose. Measured on the rung-1 scoreboard,
- * against the same short description: the enum costs `wb_canvas_edit` 480
- * visible bytes and the prose listing costs 776, and the enum is the form a
- * model reads as "these are the values" rather than as a sentence it has to
- * parse. Dropping the list entirely is cheaper still (356) and leaves no way
- * to learn the vocabulary at all, which is the one thing this field needs.
- *
- * ponytail: read from the BUNDLED registry at module load, so a deployment
- * that registers its own plugins gets a schema that refuses their stencils
- * even though `applyStencil` would apply them. Nothing can hit that today —
- * server-core builds this schema with no access to a per-deployment registry
- * — and the upgrade path is to build the op schema from the registry the
- * server is constructed with, which is the same change ADR-0034's
- * document-backed libraries need anyway.
- */
-const BUNDLED_STENCIL_IDS = bundledFacetRegistry.assetIds('stencils') as [string, ...string[]]
 
 // Derived from the stored node schemas rather than restated beside them, so
 // a field added to a node type reaches this tool's input for free. Only the
@@ -151,22 +133,43 @@ const exactlyOneTarget = {
 }
 
 /**
- * A registered STENCIL ([ADR-0034](../../../../docs/contributing/adr/0034-stencil-and-recipe.md)),
- * naming what a box IS: one field where the alternative is a colour, a
- * silhouette and a badge written by hand, per box, in a vocabulary invented
- * per board.
+ * A registered STENCIL naming what a box is
+ * ([ADR-0034](../../../../docs/contributing/adr/0034-stencil-and-recipe.md)).
  *
- * It sits beside `op` rather than inside `node` deliberately, and the reason
- * is the one `draftKeysBelongInside` above already learned: a key inside
- * `node` is part of the node's STORED shape, and this is not — it is an
- * instruction to expand a vocabulary into that shape. `within` sits here for
- * the same reason, so a caller reading one op generalises correctly to the
- * other.
+ * It sits beside `op` rather than inside `node`, like `within`: a key inside
+ * `node` is part of the node's STORED shape, and this is an instruction to
+ * expand a vocabulary into that shape.
+ *
+ * **A validated STRING, not a `z.enum` of the registered ids**, and that is a
+ * measurement rather than a preference. An enum's cost grows with the
+ * vocabulary, and this field exists so a vocabulary can GROW — a deployment
+ * or a community pack registers its own. Measured on the rung-1 scoreboard,
+ * against the 12986-byte baseline before stencils existed:
+ *
+ * | stencils | `wb_canvas_edit` visible bytes | over baseline |
+ * |---|---|---|
+ * | 6 | 13492 | +506 |
+ * | 30 | 14404 | +1418 |
+ * | 60 | 15544 | +2558 |
+ * | 120 | 17824 | +4838 |
+ *
+ * ~38 bytes per stencil per op, paid on EVERY turn of every conversation
+ * with this server attached, for a vocabulary most conversations never
+ * touch. A hundred-icon cloud pack would add 13% to the whole tool table.
+ * The string form is constant at roughly +356 whatever the library holds.
+ *
+ * So discovery moves off the static schema onto two runtime answers that
+ * cost nothing until somebody wants them: `wb_facet_list` reports the
+ * registered assets, and a refusal here names what IS registered. That is
+ * the question `wb_facet_list` already exists to answer — "what did this
+ * deployment register" — so the ecosystem reuses a seam rather than growing
+ * the table.
  */
-const STENCIL_FIELD = z
-  .enum(BUNDLED_STENCIL_IDS)
+const STENCIL_FIELD = namespacedIdSchema
   .optional()
-  .describe('What this box IS. Sets colour, silhouette and badge together; an explicit color wins.')
+  .describe(
+    'What this box IS, as a registered stencil id — sets colour, silhouette and badge together; an explicit color wins. wb_facet_list reports the ids this deployment has.',
+  )
 
 /**
  * `node.patch`'s fields, with ONE redirect on top of the stored schema:

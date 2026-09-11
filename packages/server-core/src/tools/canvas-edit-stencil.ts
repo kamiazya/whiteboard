@@ -8,8 +8,9 @@
  * closes over the batch, so there was nothing to keep inside it.
  */
 
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { applyStencil, bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
+import { applyStencil } from '@kamiazya/whiteboard-plugin-visual'
 import { CanvasEditError } from './canvas-edit-error.js'
 
 /**
@@ -36,16 +37,24 @@ export function dressWithStencil(
    * "whatever the box happens to be".
    */
   requestedColor: string | undefined,
+  /**
+   * The DEPLOYMENT's registry, which is the whole point of ADR-0034
+   * decision 4: a vocabulary this repo did not ship still has to apply.
+   * `facet-set` and `facet-list` already read `deps.facetRegistry`; this
+   * path did not, so a stencil `wb_facet_list` reported was refused here.
+   */
+  registry: FacetRegistry,
 ): SpatialNode {
   if (stencil === undefined) return node
-  const applied = applyStencil(node, stencil)
+  const applied = applyStencil(node, stencil, registry)
   if (applied === undefined) {
     throw new CanvasEditError(
       index,
       opName,
-      `no stencil "${stencil}" is registered — registered: ${bundledFacetRegistry
-        .assetIds('stencils')
-        .join(', ')}`,
+      // The refusal is one of the two runtime discovery paths the tool
+      // schema deliberately gave up (see `STENCIL_FIELD`), so it lists the
+      // DEPLOYMENT's ids — the bundled list would teach the wrong set.
+      `no stencil "${stencil}" is registered — registered: ${registry.assetIds('stencils').join(', ')}`,
     )
   }
   return requestedColor === undefined ? applied : { ...applied, color: requestedColor }
