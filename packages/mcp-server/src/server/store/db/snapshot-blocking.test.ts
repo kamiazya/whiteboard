@@ -78,6 +78,13 @@ describe('the hot snapshot', () => {
   // rounds plus up to five snapshots blew the project's 10s default. 60s is
   // sized from that measurement, not the seed/timeout confusion the
   // integrator flow warns about — the property itself never failed.
+  //
+  // It broke anyway, at 85941ms on a runner ~36% slower than the one the
+  // ceiling was sized against, and raising it would only move the cliff to
+  // the next slower runner. So the cost came down instead of the ceiling
+  // going up: batching the fixture writes (below) cut the whole file from
+  // 10.58s to 4.12s here, all of it out of the insert phase, leaving the
+  // measurement it exists to take untouched.
   it('blocks the event loop for its whole duration', { timeout: 60_000 }, async () => {
     // The fixture GROWS until the snapshot is long enough for the answer to
     // mean anything, rather than being a size someone measured once.
@@ -96,9 +103,21 @@ describe('the hot snapshot', () => {
       // Doubling, so a fast machine reaches the floor in a few rounds
       // instead of creeping. `VACUUM INTO` refuses an existing target, so
       // each attempt writes its own.
-      for (let i = 0; i < 64 * 2 ** attempt; i++) {
-        await sql`insert into bulk (payload) values (${payload})`.execute(handle.db)
-      }
+      // ONE transaction per round, not one per row. These rows are fixture,
+      // never subject — what is measured is the `VACUUM INTO` that follows
+      // them — and written row by row each insert is its own commit and its
+      // own fsync. That phase is where the budget goes: measured at 512 rows,
+      // 1125ms written one by one against 311ms in a single transaction, with
+      // the snapshot that follows unchanged (290ms against 261ms). A loaded
+      // runner inflates the same term until the file exceeds its ceiling,
+      // which is a fixture cost reported as a blocking-behaviour failure.
+      // Batching removes it without touching the floor, the growth loop or
+      // the assertion.
+      await handle.db.transaction().execute(async (trx) => {
+        for (let i = 0; i < 64 * 2 ** attempt; i++) {
+          await sql`insert into bulk (payload) values (${payload})`.execute(trx)
+        }
+      })
       const destPath = join(root, `snapshot-${attempt}.db`)
       availability = (
         await measureLoopAvailability(() => snapshotDatabaseInto(join(root, 'data'), destPath), {

@@ -55,6 +55,7 @@ import { isProposableOp, storeCanvasProposal } from './canvas-propose.js'
 import { projectCanvasSnapshot } from './canvas-snapshot.js'
 import { loadDocument, saveDocumentBodySnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
+import { workspaceFacetRegistry } from './stencil-library.js'
 
 export { canvasEditInputSchema } from './canvas-edit-ops.js'
 export { PLACEMENT_COLUMNS, PLACEMENT_GUTTER_PX } from './canvas-edit-placement.js'
@@ -176,10 +177,25 @@ export function createCanvasEditTool(deps: ServerDeps) {
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
-      // The DEPLOYMENT's registry, not the bundled one: a stencil this repo
-      // did not ship still has to apply, and `wb_facet_list` reports it from
-      // this same seam (ADR-0034 decision 4).
-      const facetRegistry = deps.facetRegistry ?? bundledFacetRegistry
+      // The deployment's registry PLUS this workspace's own stencil library,
+      // which is a document in it (ADR-0034 decision 4). Two scopes: a
+      // plugin set is chosen once per server because facet schemas are fixed
+      // at distribution time, and a library is content that belongs to the
+      // workspace holding it. A workspace with no library gets the base
+      // registry back unchanged, same instance.
+      //
+      // Resolved only for a batch that NAMES a stencil. Finding the library
+      // costs a document listing plus a read, and this is the hottest write
+      // tool there is — the overwhelming majority of batches move boxes and
+      // draw lines, and none of them should pay for a vocabulary they do not
+      // mention. `facetRegistry` is used for stencils and nothing else here,
+      // which is what makes that safe rather than clever.
+      const namesAStencil = input.ops.some(
+        (op) => 'stencil' in op && (op as { stencil?: string }).stencil !== undefined,
+      )
+      const facetRegistry = namesAStencil
+        ? await workspaceFacetRegistry(deps, input.workspaceId, 'deployment')
+        : (deps.facetRegistry ?? bundledFacetRegistry)
       // An omitted mode proposes only a batch every op of which COULD be
       // proposed; see the field's own note for why that line and not
       // "propose unless told otherwise".

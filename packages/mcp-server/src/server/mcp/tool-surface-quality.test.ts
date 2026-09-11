@@ -357,11 +357,25 @@ describe('what the tool table costs to read', () => {
       //
       // `undescribed` stays 1: the new parameter carries its own
       // `.describe()`, because C3 counts down and never up.
+      //
+      // +274 visible bytes again for `workspaceId` (足場4b), and this row is
+      // the one place the trade is stated. C1 goes UP, which for an addition
+      // is the only direction it can go; what it buys is C5 — an errand step
+      // that had no tool behind it at all. A workspace's stencil library is
+      // CONTENT, so no registry a deployment composes can see it, and the
+      // ids it defines were reachable only by opening the library document
+      // and reading its frontmatter. The how-to shipped that as a stated
+      // limit one increment ago; this retires it.
+      //
+      // The cost is paid ONCE, in the table, and never per stencil: the ids
+      // stay out of every schema for the reason the assets half of this
+      // tool exists (+4838 to `wb_canvas_edit` at 120 stencils). A library
+      // that grows to a hundred adds nothing to what a model reads.
       wb_facet_list: {
-        visibleBytes: 653,
-        wireBytes: 1623,
-        descriptionWords: 46,
-        parameters: 2,
+        visibleBytes: 927,
+        wireBytes: 1897,
+        descriptionWords: 63,
+        parameters: 3,
         undescribed: 1,
         strays: 'refused',
         names: [],
@@ -528,32 +542,25 @@ describe('what the tool table costs to read', () => {
       // referenced at each of its four sites (`from` and `to`, on `edge.add`
       // and on `edge.patch`).
       //
-      // The naming is the whole reason this reads 37,522 rather than 40,315.
-      // Inlined — which is zod's default and what the SDK's conversion path
-      // gives you unless a schema is registered — the four sites are 4,579
-      // bytes; referenced they are 1,786. That 2,793 is the difference
-      // between this table sitting under ADR-0031 §5's ~40,000 and being the
-      // first reading ever to cross it.
+      // The naming is the whole reason this sits under ADR-0031 §5's ~40,000
+      // rather than over it. Inlined — zod's default, and what the SDK's
+      // conversion path gives you unless a schema is registered — the four
+      // sites are 4,579 bytes against 1,786 referenced, and the table read
+      // 40,315: the first reading ever to cross that line. The 2,793 is what
+      // this row gives back, and it is why the `workspaceId` below and any
+      // next addition have room rather than a decision to make.
       //
       // Measured against `origin/main` rather than inferred: `wb_canvas_edit`
       // is the ONLY row whose visible bytes move, and inline it was +3,799 of
       // which the endpoint union was +3,440 — the growth was DUPLICATION, not
       // expressiveness, and duplication is the one kind of growth a schema
       // can give back without giving anything up.
-      visibleBytes: 37522,
-      // The same naming pays here twice over, because the tools that merely
-      // ECHO an edge (wb_body_edit, canvas_view, wb_canvas_snapshot) carry it
-      // in their OUTPUT schemas: 130,394 inlined against 111,622 referenced.
-      // Paid by the client once on connect rather than by the model every
-      // turn, which is why this column has no threshold beside it.
-      wireBytes: 111622,
-      // BELOW main's 276, on a schema that says strictly more: a referenced
-      // subschema is walked once instead of once per site.
-      parameters: 272,
-      // Also below main's 191, and for the same reason. The `kind`
-      // discriminators are still undescribed — the endpoint FIELD's own
-      // description spells both arms literally beside a JSON Schema `const` —
-      // but there are two of them now rather than eight.
+      // +274 for `workspaceId` on wb_facet_list (足場4b): the one parameter
+      // that makes a WORKSPACE's own stencil vocabulary discoverable, paid
+      // once in the table and never per stencil.
+      visibleBytes: 37796,
+      wireBytes: 111896,
+      parameters: 273,
       undescribed: 185,
     })
   })

@@ -36,6 +36,16 @@ export interface Errand {
   readonly seedDocuments: number
   /** What kind the seeded documents are; spatial unless the errand says. */
   readonly seedKind?: 'spatial' | 'markdown'
+  /**
+   * Stencils to seed as this workspace's LIBRARY — a markdown document at
+   * the library path carrying `visual.stencils/v0` — before the errand
+   * runs.
+   *
+   * A precondition, never part of the count: somebody authored the
+   * vocabulary in an earlier conversation, and what is being measured is
+   * what it costs an agent to find and use it afterwards.
+   */
+  readonly seedStencilLibrary?: Readonly<Record<string, { displayName: string; color?: string }>>
   /** What the errand is FOR, in the caller's terms rather than the tool's. */
   readonly run: (context: ErrandContext) => Promise<void>
 }
@@ -165,6 +175,59 @@ export const MCP_ERRAND_CORPUS: readonly Errand[] = [
           },
           stencil,
         })),
+      })
+    },
+  },
+  {
+    // A DISCOVERY errand, and the one 足場4b is judged by. A workspace has
+    // its own stencil library (ADR-0034 decision 4); an agent that has
+    // never seen it has to LEARN the vocabulary before it can dress
+    // anything with it.
+    //
+    // Two calls: ask what may be named, then name it. The id is read out of
+    // the answer rather than written into the errand, because an errand
+    // that hard-codes `workspace.lakehouse` measures an agent that already
+    // knew — which is the one thing this increment does not assume.
+    //
+    // The path it replaces cost THREE, and none of them was discovery: list
+    // the workspace's documents, get the one at `stencils`, and parse its
+    // frontmatter by hand — which also required knowing that a library
+    // lives at that path and that its facet key is `visual.stencils/v0`.
+    // Neither is written anywhere a model reads. So 3 -> 2 understates it:
+    // the old route was not a more expensive way to succeed, it was a way
+    // to succeed only if you already knew where to look.
+    name: 'wear a stencil this workspace defines',
+    seedDocuments: 1,
+    seedStencilLibrary: { lakehouse: { displayName: 'Lakehouse', color: '3' } },
+    run: async (context) => {
+      const listed = await call(context, 'wb_facet_list', {
+        workspaceId: context.workspaceId,
+        assetKind: 'stencils',
+      })
+      const assets = (listed.structuredContent as { assets?: { id: string }[] } | undefined)?.assets
+      const stencil = assets?.find((asset) => asset.id.startsWith('workspace.'))?.id
+      if (stencil === undefined) {
+        throw new Error('wb_facet_list answered no workspace stencil to wear')
+      }
+      await call(context, 'wb_canvas_edit', {
+        workspaceId: context.workspaceId,
+        documentId: context.documentIds[0],
+        mode: 'apply',
+        ops: [
+          {
+            op: 'node.add',
+            node: {
+              id: 'lake',
+              type: 'text',
+              x: 0,
+              y: 200,
+              width: 200,
+              height: 80,
+              text: 'orders',
+            },
+            stencil,
+          },
+        ],
       })
     },
   },

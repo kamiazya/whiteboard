@@ -334,6 +334,38 @@ stricter rule.
 - **The `distance 1` trial was taken BEFORE the strict draft landed**, so the
   reading does not show what that fix is worth. The next reading does.
 
+## Second reading (2026-09-11): what the strict draft was worth
+
+Same task, same three trials, the only change being the three fixes above.
+
+| | first reading | second |
+|---|---|---|
+| `deficit` / `constructs` | 0 / 6 | 0 / 6 |
+| `treatments` | 6 | 6 |
+| `distance` | 2, 2, **1** | **2, 2, 2** |
+| drawing debt | none / `textOverflow 2` / `nearMisses 1` | **none, all three** |
+| `debtFree pass^k` | 0 | **1** |
+| `pass^k` | 1 | 1 |
+| `meanCalls` | 9.67 (4, 4, **21**) | **4.67 (5, 5, 4)** |
+| tool errors | 0 | 0 |
+
+Every trial now dresses all seven boxes in ONE `wb_canvas_edit` batch with
+`stencil` beside `op`, and three of three also called `tidy` in the same
+batch. The hand-rolled-vocabulary path is gone, and so is the board it
+produced.
+
+**Stated at the strength three trials a side support.** This is not "the fix
+saves five calls per errand": the 21-call trial was a single observation, and
+n=3 each side cannot separate a mean from the variance around it. What it
+does say is that the recovery path the silent drop forced — notice from the
+render, rebuild by hand, land one channel apart — did not occur in any of
+three trials, and no trial exceeded five calls. That is the claim the fix was
+made on, and it holds.
+
+The debt columns moving with it is a bonus rather than the point, and the
+honest reading of `textOverflow 2` / `nearMisses 1` disappearing is that both
+came from trials that spent their turns recovering rather than drawing.
+
 ## Amendment (2026-09-11): the two SCOPES, and what a workspace library is
 
 Decision 4 said a library is "a DOCUMENT in a workspace" and left a fork
@@ -396,12 +428,139 @@ optional `workspaceId` and the answer widens. That is a tool-surface change
 and goes through ADR-0031's scoreboards like any other; it is named here so
 the increment that does it expects the cost instead of discovering it.
 
-### Not decided here
+**Landed 2026-09-11, and the cost was what this paragraph expected: +274
+model-visible bytes on `wb_facet_list` (653 -> 927), +274 on the whole table
+(36,516 -> 36,790, +0.75%).** C1 goes UP, which is the only direction it can
+go for an addition; what it buys is C5 — an errand step with no tool behind
+it. The rung-2 errand *wear a stencil this workspace defines* measures the
+new route at **2 calls**; the route it replaces cost 3 and, more to the
+point, was reachable only by an agent that already knew a library lives at
+the path `stencils` under the key `visual.stencils/v0`, neither of which is
+written anywhere a model reads. The 274 bytes are paid ONCE in the table and
+never per stencil — the ids stay out of every schema, which is the whole
+reason the assets half of that tool exists.
 
-How a library is AUTHORED — a document kind, an OKF body with a facets
-block, or a JSON canvas convention — and how a community distributes one.
-Those need a reading of what people actually do with the first version, and
-deciding them now would be inventing the fixture that justifies the change.
+Two things the increment decided that this paragraph had not:
+
+- **An unknown workspace is REFUSED here, where the write tools degrade.**
+  `wb_canvas_edit` and `wb_facet_set` answer as though the workspace had no
+  library, because each is about to refuse the same id more specifically;
+  `wb_facet_list` has no better refusal to make room for, and answering the
+  deployment's six would read as "this workspace defines none". The choice
+  is now a parameter every caller states rather than a default (`'deployment'`
+  / `'refuse'`), because it was got wrong once already.
+- **A library's stencils are answered BY NAME.** A deployment's assets keep
+  registration order and that order means something; a library has none that
+  survives, since the record round-trips through the document's CRDT map and
+  came back `ledger` before `lakehouse` for a document authored the other way
+  round. A name sort is the only order a caller can predict.
+
+#### The rung-3 reading: pass^3 = 1, and what it cost
+
+The lane gained a task — *dress a box with a style this workspace defines* —
+because everything below it answers by construction. Every unit test and the
+smoke hand the tool a `workspaceId` because the test wrote it; what none of
+them can say is whether a model reaches for the tool at all when the id it
+needs appears in no schema it reads. The fixture workspace therefore keeps a
+library of two stencils the bundled set does not cover, seeded as ordinary
+content the way a team would have agreed it earlier.
+
+| | reading |
+|---|---|
+| pass^3 | **1** (3 of 3 trials) |
+| mean calls | 3 — `wb_document_list`, `wb_facet_list`, `wb_canvas_edit[node.add]` |
+| tool errors | **0** |
+| cost | $0.21 for the three trials |
+
+Every trial reached `wb_facet_list`, every trial passed `assetKind:
+'stencils'` beside the `workspaceId`, and every trial then wore
+`workspace.lakehouse`. The capability is not merely reachable; it is
+reliably reached. The prompt named no tool, no parameter and no id — only
+that the style belonged to this workspace rather than to the server, which
+is the distinction a person would make and without which `visual.datastore`
+would have been a defensible answer.
+
+#### What the reading found that the diff does not contain
+
+`debtFreePowK` is **0**: all three boards score `nearMisses 1`, and the
+fixture's own architecture board scores no debt at all before the task runs.
+So the near miss is the added box, every time.
+
+It is not a placement mistake and not a model mistake. **All three trials
+declared no geometry whatsoever** — no x, y, width or height — leaving it to
+the tool, which is what the surface asks for. Reproduced with no model in the
+loop, and with a counterfactual that could have refuted it:
+
+| the same `node.add`, same position `(0, 940)` | `nearMisses` |
+|---|---|
+| default size, 260x120 | **1** |
+| the board's prevailing size, 200x80 | **0** |
+
+Every other box on that board is 200x80. At 260x120 the new box's left edge
+still lands on the column, and its centre and right edge miss every anchor
+there is.
+
+**That refines this ADR's own plan rather than confirming it.** The
+unimplemented half named above is a stencil's DEFAULT SIZE, and a default
+size cannot fix this: a stencil is authored once for every board, so
+whatever size `lakehouse` declares will be wrong on the boards drawn at
+another scale. What the measurement points at instead is placement adopting
+the PREVAILING size of the board it is placing into — which fixes every
+auto-placed box rather than only the stencil-dressed ones. Recorded, not
+chased: it is a `wb_canvas_edit` question and this increment is a discovery
+one.
+
+### Decided (user, 2026-09-11): a document facet, `visual.stencils/v0`
+
+This section said the authoring format was not decided, and it stayed
+undecided exactly as long as it could: until the increment that builds a
+library had to put one somewhere. Of the three shapes on the table — a
+document facet, a spatial board where each node IS a stencil, and a
+dedicated document kind — the first was chosen.
+
+**A library is an ordinary OKF markdown document carrying
+`visual.stencils/v0`**, whose payload is `{ stencils: { <bare name>:
+<stencil asset> } }`. What that buys:
+
+- It is written with `wb_facet_set` (`target: 'document'`). No new tool, no
+  new document kind, no new storage — and a library therefore syncs,
+  versions, forks and travels exactly as every other document does, which is
+  the whole content-not-configuration claim above made real rather than
+  asserted.
+- The payload is `stencilAssetSchema`, the engine's own, so a library
+  stencil is the same shape as a bundled one and gets the same refusals.
+- The BODY is free prose, so a vocabulary documents itself in the same file
+  it is defined in.
+
+A wrapper object rather than a bare record, because ADR-0013 lets an
+optional field arrive without a version bump and a bare record has nowhere
+to put one.
+
+**Where it lives is a CONVENTION**: the document at the workspace path
+`stencils`. The facet is what makes a document a library — that is the
+definition — but nothing can ask the index *which documents carry a facet*,
+so finding it otherwise means opening every markdown document in the
+workspace on every write that names a stencil. One well-known path costs one
+lookup and gives "where do I put my stencils" a single answer, which is
+worth more to a model than flexibility. The upgrade is named: when an index
+can answer that question, the path becomes a default rather than a rule.
+
+**Resolved only for a batch that names a stencil.** Finding a library is a
+listing plus a read, and `wb_canvas_edit` is the hottest write tool there
+is; a batch that moves boxes does not pay for a vocabulary it never
+mentions. Pinned by a test that counts index listings, because a cost
+decision nothing measures is a comment.
+
+The SECOND shape — a board where each node is a stencil, authored by drawing
+— is not refuted and is not gone. It sits naturally ON TOP of this one as an
+authoring surface that writes the facet, and choosing the storage first is
+what keeps it available.
+
+### Still not decided here
+
+How a community DISTRIBUTES a library. That needs a reading of what people
+do with the first version, and deciding it now would be inventing the
+fixture that justifies the change.
 
 ## Consequences
 

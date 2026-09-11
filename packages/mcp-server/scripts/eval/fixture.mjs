@@ -80,6 +80,24 @@ export const MEETING = okf(
  *
  * @param {{ call: (name: string, args: Record<string, unknown>) => Promise<any> }} wb
  */
+/**
+ * The body of this workspace's stencil library. A library is a DOCUMENT, so
+ * its prose is where a team says what its vocabulary is for; the stencils
+ * themselves are the facet written just after it is created.
+ */
+export const STENCILS = okf(
+  ['type: note'],
+  [
+    '# Our box styles',
+    '',
+    'Two shapes the built-in set does not have, agreed in the data-platform',
+    'review. Use these rather than inventing a colour per board.',
+    '',
+    '- **Lakehouse** — a store we query but do not own the schema of.',
+    '- **Batch job** — something that runs on a schedule, not on a request.',
+  ],
+)
+
 export async function seed(wb) {
   const created = await wb.call('wb_workspace_edit', {
     workspaceId: WORKSPACE_ID,
@@ -97,9 +115,40 @@ export async function seed(wb) {
       },
       { op: 'document.create', path: 'boards/architecture', kind: 'spatial' },
       { op: 'document.create', path: 'boards/roadmap', kind: 'spatial' },
+      // This workspace's own STENCIL LIBRARY (ADR-0034 decision 4). Seeded
+      // as ordinary content, the way a team would have agreed it in an
+      // earlier conversation — so a task about it measures whether an agent
+      // can FIND a vocabulary somebody else wrote, not whether it can write
+      // one.
+      //
+      // Neither member is something the bundled six cover, deliberately: a
+      // library that duplicated `visual.datastore` could be satisfied by
+      // reaching for the built-in and the task would measure nothing.
+      { op: 'document.create', path: 'stencils', kind: 'markdown', markdown: STENCILS },
     ],
   })
   const ids = Object.fromEntries(created.results.map((r) => [r.path, r.documentId]))
+
+  await wb.call('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [ids.stencils],
+    facets: {
+      'visual.stencils/v0': {
+        stencils: {
+          lakehouse: {
+            displayName: 'Lakehouse',
+            color: '3',
+            facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+          },
+          batchjob: {
+            displayName: 'Batch job',
+            color: '6',
+            facets: { 'visual.shape/v0': { kind: 'parallelogram' } },
+          },
+        },
+      },
+    },
+  })
 
   const box = (id, text, x, y) => ({
     op: 'node.add',

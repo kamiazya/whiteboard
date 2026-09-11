@@ -176,7 +176,10 @@ const FILE_SIZE_GRANDFATHER: Record<string, number> = {
   // `node.patch` could carry content at all. This file grew and the REPO
   // shrank — body-patch.ts (134) and its two test files (165 + 106) are
   // deleted, so 14 files come to 295 insertions against 541 deletions.
-  'packages/server-core/src/tools/canvas-edit.ts': 1098,
+  // +7 where two increments met: this file gained a workspace stencil
+  // library's resolution from main and the endpoint helpers from the model
+  // move, and neither alone crossed the line it was already over.
+  'packages/server-core/src/tools/canvas-edit.ts': 1105,
   // Shrunk from 973: the effect that fetches a theme's family from the
   // daemon became `hooks/useDaemonThemeFonts.ts`, which is where a
   // daemon-keyed effect belongs — App composes, it does not fetch.

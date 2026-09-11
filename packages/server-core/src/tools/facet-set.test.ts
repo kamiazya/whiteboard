@@ -908,3 +908,36 @@ describe('tags (OKF core), the errand a caller is usually doing', () => {
     expect(tool.description).toMatch(/\btags?\b/)
   })
 })
+
+describe('wb_facet_set and a workspace stencil library', () => {
+  // The same cost decision `wb_canvas_edit` makes, pinned the same way.
+  // A library can only change which STENCIL ASSETS are registered, so a
+  // write that names no stencil-ref field gets an identical answer from the
+  // deployment's registry — and must not pay a document listing for it.
+  //
+  // Asked of the REGISTRY rather than of a hardcoded `visual.stencil/v0`:
+  // which facets take a stencil is a plugin's declaration, and a server that
+  // spells one plugin's key cannot be a server other plugins extend.
+  test('lists no documents when the batch names no facet that takes a stencil', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeDocumentKind(doc, 'markdown')
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
+    let listings = 0
+    const listDocuments = store.documentIndex.listDocuments.bind(store.documentIndex)
+    store.documentIndex.listDocuments = (arg) => {
+      listings += 1
+      return listDocuments(arg)
+    }
+    const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
+
+    await createFacetSetTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentIds: [DOCUMENT_ID],
+      facets: { 'example.kanban/v1': { status: 'todo' } },
+    } as never)
+
+    expect(listings).toBe(0)
+  })
+})
