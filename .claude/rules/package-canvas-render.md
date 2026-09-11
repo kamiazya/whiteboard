@@ -1895,3 +1895,60 @@ path makes is a route through its own boxes, so it is overruled into a
 visible route around the pair. The lane board with the sides the model
 named is debt-free (`edgeThroughNode` 2 to 0, bends 6 to 4, reversals 4
 to 2).
+
+## The facet score judges what the board SAYS, not where it puts things
+
+`quality/facet-score.ts` (`scoreFacets(canvas)`) is
+[ADR-0033](../../docs/contributing/adr/0033-facet-vocabulary-axis.md)'s third
+axis. The drawing score and the composition axis both read GEOMETRY; a
+drawing also distinguishes things by APPEARANCE, which says two things differ
+in KIND rather than in position, and nothing else here could see it.
+
+It reads a document's DECLARED partitions — a frame's membership, and a
+node's kind — against the TREATMENT each box wears: `node.color`,
+`visual.shape/v0` and `visual.symbol/v0`, read through `plugin-visual`'s own
+resolvers so an unresolvable payload means here exactly what it means at draw
+time. `visual.text/v0` is placement rather than kind, and `visual.theme/v0`
+and `visual.edges/v0` are canvas-wide, so none of the three is a distinction
+channel. The columns are Moody's semiotic clarity (*The Physics of
+Notations*, IEEE TSE 2009): `deficit` (a construct nothing visible carries),
+`overload` (one treatment worn by two whole constructs), `excess` (a
+treatment whose wearers cut a construct rather than covering it), plus
+`distance` (visual distance, the fewest channels two treatments differ on)
+and the reported-only `treatments` and `redundancy`.
+
+**More facets is not better, and the columns are shaped so it cannot be.**
+A coverage count would reward exactly the board this axis exists to catch.
+
+**The first reading is the finding, and it is stark**: every board in the
+corpus — the hand-drawn REFERENCES included — spends one treatment, reads
+`distance 0`, and owes every one of the 22 constructs the corpus declares.
+The channel is not under-used, it is unopened, and by everyone rather than
+only by the model: the lane boards and the references read identically. So
+`facet-quality.test.ts` is a BASELINE, not a set of owes to burn down, and it
+deliberately carries none of the reference-beats-draft / tidy-never-adds-debt
+validity tests the other two scoreboards do — with every board identical on
+every column those pass vacuously, which is the failure ADR-0031 §7 names.
+What it pins instead is the uniformity, so the first board to spend anything
+is loud, plus one recoloured board proving the columns are not dead.
+
+Three things the calibration decided that a reader would otherwise re-derive:
+
+- **Overload and excess are EXCLUSIVE**, and the first implementation charged
+  both on the same board because it tested them independently: spanning two
+  classes also fails the "inside one class" test. Worn inside one class
+  carries that construct; worn by whole classes carries several (overload);
+  worn across a class boundary carries none (excess).
+- **`distance 0` means "fewer than two treatments exist"**, never "two
+  symbols collide" — two DISTINCT treatments differ on at least one channel
+  by construction, so the value cannot mean both.
+- **A board with no frame and one node kind declares nothing**, so every
+  column is silent on it. That is the blind spot, and the corpus has three of
+  them: the sequence diagrams. Pinned in the scoreboard rather than only in a
+  unit test.
+
+The score is OUTSIDE the mutation lane, for the reason the other two
+instruments are. Hand-checked instead, and that check earned its place: it
+found a treatment map keyed by the node where an id was wanted — which made
+every board read as spending nothing, the very answer the corpus was expected
+to give.

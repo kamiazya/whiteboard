@@ -131,9 +131,17 @@ describe('the mutation lane covers what it says it covers', () => {
     // is: the split moved `buildUnits` — where `tidy.ts`'s own survivors had
     // migrated — so leaving it out would have quietly reduced the lane's
     // reach while the report read the same.
+    // 69 since `quality/facet-score.ts`, OUTSIDE the lane for the reason
+    // `drawing-score.ts` and `composition-score.ts` are: an instrument whose
+    // calibration plants one defect and reads one column is exactly the
+    // shape a mutation run reports as unsurprising survivors. Hand-checked
+    // instead, and the check found two real defects rather than none — a
+    // treatment lookup keyed by the node where an id was wanted, so every
+    // board read as spending nothing, and overload and excess both firing on
+    // the same board because they were tested independently.
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
       mutated: 13,
-      production: 68,
+      production: 69,
     })
   })
 

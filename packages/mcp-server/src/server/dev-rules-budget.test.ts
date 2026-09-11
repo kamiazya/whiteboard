@@ -268,13 +268,19 @@ const ALWAYS_ON_TOTAL_BUDGET = 23
 // all, and the fact that a guessed ceiling of 4 shipped and CI's stress
 // lane found the board needing 5. A ceiling with no measurement beside it
 // is the next session's guess as well.
-// 123 since a contribution may supply the edge ALGORITHM: what crosses the
+// 127 since a contribution may supply the edge ALGORITHM: what crosses the
 // seam (a route, never a scene node) and why, that the side pass runs first
 // so sides are a router's input, the four ways it falls back, and the
 // measured reason selection is a reader rather than a widened payload —
 // with the half of that measurement that the schema-drawn generator has
 // since retired, said plainly so the surviving half stays readable.
-const CANVAS_RENDER_BUDGET = 127
+//
+// 131 for the THIRD axis (ADR-0033, `quality/facet-score.ts`): what a board
+// says with appearance rather than with position, and the first reading of
+// it — every board in the corpus, the hand-drawn references included, spends
+// one treatment and owes all 22 constructs. A reader who does not know that
+// will read the scoreboard's zeroes as health.
+const CANVAS_RENDER_BUDGET = 131
 
 describe('always-on rule context budget', () => {
   it('charges every session exactly the files this budget names', () => {
