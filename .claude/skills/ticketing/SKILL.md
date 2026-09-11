@@ -45,9 +45,17 @@ the standalone ones are retired.
 ### Reading issues
 
 ```
-wb_document_list  → { workspaceId: "default" }              # every document, open and closed
-wb_document_get   → { workspaceId: "default", documentId }  # read it as OKF markdown
+wb_document_list → { workspaceId: "default" }                 # every document, open and closed
+wb_document_get  → { workspaceId: "default", documentIds: [ … ] }
 ```
+
+`wb_document_get` is a BATCH read: `documentIds` is an array, and it answers
+`{ documents, failed }`. Each entry is `{ documentId, kind, content,
+frontmatter? }` — the body is **`content`**, not `markdown`, and `frontmatter`
+is present only for a markdown document (a JSON Canvas document has none, per
+ADR-0009 decision 3). A document it could not read lands in `failed` with a
+reason rather than failing the call, so **check `failed`**: a caller that reads
+`documents[0]` alone treats an unreadable document as an empty one.
 
 ### Updating an issue
 
@@ -79,8 +87,8 @@ old convention that cost nothing, because the document was about to be deleted.
 Now it is the whole point.
 
 ```
-wb_document_get → { workspaceId: "default", documentId }
-# take the returned markdown, change ONLY these, keep everything else:
+wb_document_get → { workspaceId: "default", documentIds: [documentId] }
+# take the returned `content`, change ONLY these, keep everything else:
 #   type:  issue -> note
 #   title: prefixed "RESOLVED — "
 #   body:  a line at the top saying what closed it
