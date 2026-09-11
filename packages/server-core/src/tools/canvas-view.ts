@@ -3,11 +3,11 @@ import {
   resolveCanvasThemeFontFamily,
   spatialRenderStyleSchema,
 } from '@kamiazya/whiteboard-canvas-render'
+import { jsonCanvasDocumentSchema } from '@kamiazya/whiteboard-codec'
 import { readAnnotations } from '@kamiazya/whiteboard-loro-adapter'
 import {
   commentThreadSchema,
   documentIdSchema,
-  spatialCanvasSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
@@ -42,7 +42,7 @@ export const canvasViewReferenceSchema = z
     /** Present only for a markdown document: its raw body. */
     body: z.string().optional(),
     /** Present only for a spatial document: its canvas. */
-    canvas: spatialCanvasSchema.optional(),
+    canvas: jsonCanvasDocumentSchema.optional(),
   })
   .strict()
 
@@ -71,7 +71,7 @@ export const canvasViewOutputSchema = z
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     /** The document itself: the widget lays it out, it is not pre-rendered. */
-    scene: spatialCanvasSchema,
+    scene: jsonCanvasDocumentSchema,
     /**
      * The document's conversations, for what the scene's flat projection
      * cannot carry: a passage's words, a node set's outline. The pins still

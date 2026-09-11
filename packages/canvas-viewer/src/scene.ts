@@ -1,17 +1,20 @@
 import type { CodecParseError, CodecParseResult } from '@kamiazya/whiteboard-codec'
 import {
+  type JsonCanvasDocument,
+  jsonCanvasDocumentSchema,
   parseSpatial,
   type SpatialSerializeMode,
   serializeSpatial,
 } from '@kamiazya/whiteboard-codec'
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 
-// The viewer's scene model IS model's spatial canvas — re-exported,
-// never redeclared. A second spatial schema here would be exactly the
-// drift class this repo's zod-schema-discipline forbids.
-export const viewerSceneSchema = spatialCanvasSchema
-export type ViewerScene = SpatialCanvas
+// What this widget accepts is a JSON CANVAS document — a file another tool
+// may have written — so the contract it publishes is codec's wire schema,
+// re-exported and never redeclared. It deliberately does NOT follow the
+// product's own model: ADR-0033 moves that away from the format, and a
+// published input contract that tracked it would break every third-party
+// document the moment it did.
+export const viewerSceneSchema = jsonCanvasDocumentSchema
+export type ViewerScene = JsonCanvasDocument
 
 /**
  * Total parser: never throws a raw ZodError/SyntaxError, mirroring
@@ -23,7 +26,7 @@ export type ViewerScene = SpatialCanvas
 export function parseViewerScene(input: unknown): CodecParseResult<ViewerScene> {
   if (typeof input === 'string') return parseSpatial(input)
 
-  const parsed = spatialCanvasSchema.safeParse(input)
+  const parsed = jsonCanvasDocumentSchema.safeParse(input)
   if (!parsed.success) {
     const error: CodecParseError = {
       stage: 'json-canvas-schema',
