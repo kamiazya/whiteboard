@@ -627,6 +627,49 @@ async function main() {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
 
+  // A WORKSPACE's own stencil library (ADR-0034 decision 4), end to end,
+  // because nothing below this line can see the round trip: the library is a
+  // record of records in a document facet, so it is serialised into OKF
+  // frontmatter, parsed back, composed into a synthetic plugin, and only
+  // then does an id become applicable. Every unit test of that path uses a
+  // fake store and a hand-built bucket; this is the only place the real
+  // codec is asked whether a vocabulary survives being written down.
+  const libraryDoc = await createDocument({ path: 'stencils', kind: 'markdown' })
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentIds: [libraryDoc.documentId],
+    facets: {
+      'visual.stencils/v0': {
+        stencils: {
+          lakehouse: {
+            displayName: 'Lakehouse',
+            color: '3',
+            facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+          },
+        },
+      },
+    },
+  })
+  const dressedFromLibrary = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'apply',
+    ops: [
+      {
+        op: 'node.add',
+        node: { id: 'lake', type: 'text', x: 800, y: 0, width: 200, height: 100, text: 'events' },
+        stencil: 'workspace.lakehouse',
+      },
+    ],
+  })
+  const lake = dressedFromLibrary.snapshot.nodes.find((n) => n.id === 'lake')
+  if (lake?.color !== '3') {
+    throw new Error(
+      `a library stencil did not dress the box: ${JSON.stringify(dressedFromLibrary.snapshot.nodes)}`,
+    )
+  }
+  console.log('[e2e] wb_facet_set + wb_canvas_edit → a stencil the WORKSPACE defines dresses a box')
+
   // The EDGE slot (ADR-0013 decision 5), through a real client so the SDK
   // validates the result against `facetSetOutputSchema` at runtime. Written
   // here rather than at the unit layer alone because the edge is the third

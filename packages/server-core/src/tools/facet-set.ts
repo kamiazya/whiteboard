@@ -17,7 +17,6 @@ import {
   type SpatialNode,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -28,6 +27,7 @@ import {
   FacetWriteRejectedError,
   NodeNotFoundError,
 } from './errors.js'
+import { workspaceFacetRegistry } from './stencil-library.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -269,7 +269,11 @@ export function createFacetSetTool(deps: ServerDeps) {
       // payload is shared, so a rejected facet is rejected for every
       // document and there is nothing to be gained by discovering it on the
       // third one after the first two were already written.
-      const registry = deps.facetRegistry ?? bundledFacetRegistry
+      // The workspace's registry, not only the deployment's: a stencil its
+      // own library defines must be writable HERE too, or the two paths that
+      // dress a box disagree — `wb_canvas_edit` applying an id this tool
+      // refuses is the shape a single composer exists to prevent.
+      const registry = await workspaceFacetRegistry(deps, input.workspaceId)
       const requiredTarget: FacetTarget =
         input.nodeId !== undefined
           ? 'node'

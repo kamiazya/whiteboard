@@ -59,8 +59,15 @@ describe('wb_facet_list', () => {
       'visual.symbol/v0',
       'visual.theme/v0',
     ])
+    // `visual.stencils/v0` is a document facet for a reason worth reading
+    // off this list: it is what makes a document a stencil LIBRARY, so it
+    // attaches to the document rather than to anything drawn.
     const documentOnly = await tool().execute({ target: 'document' })
-    expect(documentOnly.facets.map((f) => f.key)).toEqual(['planning.due/v0', 'visual.symbol/v0'])
+    expect(documentOnly.facets.map((f) => f.key)).toEqual([
+      'planning.due/v0',
+      'visual.stencils/v0',
+      'visual.symbol/v0',
+    ])
   })
 
   test('the output validates against its own schema', async () => {
